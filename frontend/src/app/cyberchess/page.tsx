@@ -4151,7 +4151,8 @@ export default function CyberChessPage(){
     pzTimerIntervalRef.current=setInterval(()=>sPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);};
 
   // Next puzzle helper
-  const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
+  // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
+  const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
 
   /* ── Puzzle hotkeys — H: подсказка · N/→: следующий · R: рестарт текущего.
@@ -4338,11 +4339,11 @@ export default function CyberChessPage(){
 
   // Auto-advance to next puzzle in rush/timed modes after a correct solve
   useEffect(()=>{
-    if(pzAttempt!=="correct"||pzMode==="learn")return;
-    const delay=pzMode==="rush"?600:1200;
+    if(pzAttempt!=="correct")return; // авто-переход во ВСЕХ режимах (поток как на lichess/chess.com)
+    const delay=pzMode==="rush"?600:pzMode==="learn"?1100:1200;
     const t=setTimeout(()=>{
       if(!fPz.length)return;
-      const nextIdx=(pzI+1)%fPz.length;
+      const n=fPz.length;let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n; // СЛУЧАЙНЫЙ следующий
       const pz=fPz[nextIdx];if(!pz)return;
       const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
       sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
@@ -4354,17 +4355,21 @@ export default function CyberChessPage(){
   // Auto-load first puzzle when filters change
   useEffect(()=>{
     if(tab!=="puzzles"||!fPz.length)return;
-    // Load first puzzle from filtered list
-    const pz=fPz[0];
+    // СЛУЧАЙНЫЙ пазл из отфильтрованного списка (рандомное распределение). Срабатывает и
+    // на смену режима (pzMode в deps) — поэтому вход в Rush/Timed сразу загружает пазл (фикс:
+    // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
+    const idx=Math.floor(Math.random()*fPz.length);
+    const pz=fPz[idx];
     const g=new Chess(pz.fen);
-    setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");
+    setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
     else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
+    else if(pzMode==="rush")sPzTimeLeft(rushDuration);
     else sPzTimeLeft(0);
-  },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
+  },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab,pzMode,rushDuration,pzCustomSec]);
 
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async(depth=16)=>{
@@ -8162,7 +8167,7 @@ export default function CyberChessPage(){
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Анализирую… {analysisProgress}%</div>}
 
           {/* Move list + premoves — hidden in info/coach sub-tabs during active play */}
-          {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+          {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",flex:"1 1 auto",minHeight:160,display:"flex",flexDirection:"column"}}>
             {/* Premove queue — sits ABOVE the move list so the user can see what's queued.
                 Each chip has a per-premove ✕ for surgical removal; the toolbar at the right
                 has ↶ (undo last) and ✕ (clear all). User feedback: clicking the chip's ✕
@@ -8251,7 +8256,7 @@ export default function CyberChessPage(){
                   previewLeaveTimer.current=null;
                 },80);
               }}
-              style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
+              style={{flex:"1 1 auto",minHeight:140,maxHeight:tab==="analysis"?640:"none",overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
               {hist.length?(()=>{
                 // Smart phase detection: find first pair where major+minor pieces drop thresholds
                 const cntMM=(fen:string)=>(fen.split(" ")[0].match(/[nbrqNBRQ]/g)||[]).length;
@@ -8857,8 +8862,8 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                     {[["all","Все"],["Mate","Мат"],["Best move","Лучший ход"]].map(([g,l])=>
                       <button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"5px 12px",borderRadius:6,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
-                    {pzFilterGoal==="Mate"&&[1,2,3].map(n=>
-                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
+                    {pzFilterGoal==="Mate"&&[1,2,3,4,5].map(n=>
+                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} title={`Мат в ${n}`} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
                   </div>
                 </div>
                 <div>

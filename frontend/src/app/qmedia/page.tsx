@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type Track = {
   id: string;
@@ -173,6 +174,9 @@ export default function QMediaPage() {
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: "0 0 6px" }}>🎵 QMedia</h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Music, video and creative tools — all in one place.</p>
+          <div style={{ marginTop: 12 }}>
+            <ModulePricingChip moduleId="qmedia" />
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>

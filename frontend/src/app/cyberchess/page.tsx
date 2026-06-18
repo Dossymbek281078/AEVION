@@ -1273,6 +1273,19 @@ export default function CyberChessPage(){
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
+  // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
+  // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
+  const firstRunRef=useRef(false);
+  // Закрытие приветствия-награды: на первом визите далее запускаем тур (если не виден).
+  const closeDailyReward=useCallback(()=>{
+    const wasWelcome=dailyReward?.isWelcome;
+    sDailyReward(null);
+    if(wasWelcome&&firstRunRef.current){
+      firstRunRef.current=false;
+      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+      if(!tourSeen)setTimeout(()=>sTourStep(0),300);
+    }
+  },[dailyReward]);
   const[dueReminders,sDueReminders]=useState<Array<{entryId:string;milestone:1|3|7;daysSinceStudy:number}>>([]);
   const[hotseat,sHotseat]=useState(false);
   const[showEndgames,sShowEndgames]=useState(false);
@@ -2038,13 +2051,15 @@ export default function CyberChessPage(){
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
     // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
-    let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
     // First-time onboarding overlay (3-step color/AI/time choice) — runs BEFORE tour.
     if(!hasCompletedOnboarding())setTimeout(()=>sShowOnboarding(true),400);
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
-      setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),800);
-      if(!tourSeen)setTimeout(()=>sTourStep(0),2200);
+      // Первый визит: НЕ стопкой. Очередь — онбординг → приветствие → тур.
+      // Приветствие триггерит OnboardingOverlay.onComplete/onSkip; тур — closeDailyReward.
+      // Если онбординг уже пройден (edge) — приветствие сразу, тур после него.
+      firstRunRef.current=true;
+      if(hasCompletedOnboarding())setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),600);
     }else if(c.lastDaily!==tk){
       // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
@@ -10519,7 +10534,7 @@ ${question.trim()}`;
     {/* Daily Login Reward modal */}
     {dailyReward&&<div role="dialog" aria-modal="true"
       style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16}}
-      onClick={()=>sDailyReward(null)}>
+      onClick={closeDailyReward}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
         borderRadius:20,maxWidth:360,width:"100%",padding:"28px 32px",textAlign:"center",
@@ -10555,7 +10570,7 @@ ${question.trim()}`;
         <div style={{fontSize:11,color:"#94a3b8",marginBottom:16}}>
           {dailyReward.streak>=14?"Следующий бонус: +200 (14 дней)":dailyReward.streak>=7?"Следующий рубеж: 14 дней → +200":dailyReward.streak>=3?"Следующий рубеж: 7 дней → +100":"Следующий рубеж: 3 дня → +30"}
         </div>
-        <button onClick={()=>sDailyReward(null)} style={{
+        <button onClick={closeDailyReward} style={{
           width:"100%",padding:"12px 20px",borderRadius:12,border:"none",
           background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
           fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
@@ -10629,8 +10644,12 @@ ${question.trim()}`;
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
         sShowOnboarding(false);
+        // Очередь первого визита: следом — приветствие (+50), затем тур (см. closeDailyReward).
+        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
       }}
-      onSkip={()=>{markOnboardingDone();sShowOnboarding(false)}}
+      onSkip={()=>{markOnboardingDone();sShowOnboarding(false);
+        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
+      }}
     />}
 
     {/* Coach SR reminders — surfaced as a single toast-card if any 1/3/7-day milestones are due */}

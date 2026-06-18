@@ -149,7 +149,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         {bundle && (
           <>
             <span style={{ color: palette.muted }}>·</span>
-            <span>{BUNDLE_NAME[bundle.id]} bundle <strong style={{ fontWeight: 800 }}>{fmt(bundle.monthly[currency], currency)}</strong> ({bundle.modules.length} mods)</span>
+            <span>{BUNDLE_NAME[bundle.id]} bundle <strong style={{ fontWeight: 800 }}>{fmt(bundle.monthly[currency], currency)}</strong> · {bundle.modules.length} mods</span>
           </>
         )}
         <span style={{ color: palette.muted }}>·</span>

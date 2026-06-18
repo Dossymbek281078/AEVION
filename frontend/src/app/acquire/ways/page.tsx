@@ -3,9 +3,9 @@
  * partner (Anthropic / AI lab). Open in browser → Ctrl/Cmd+P → "Save as PDF".
  * Attach to outbound email or show on a call. B/W, A4, high contrast.
  *
- * Core message: the deal does NOT start with a $1B wire. Founder asks for
- * little now and ties upside to whether the planet works. Pay in resources,
- * not capital; big money only on real success.
+ * Core message: one offer, a partnership, not a buyout. A $10M repayable
+ * advance + a 51/49 revenue split in the founder's favour. Founder keeps 51%
+ * and stays Chief Idea Officer; partner pays mostly in resources, not capital.
  */
 
 const css = `
@@ -38,67 +38,39 @@ export default function AcquireWaysPage() {
       <div className="print-root">
         {/* PAGE 1 — Ways + principle */}
         <div className="eyebrow">Ways to participate · for a platform partner · Confidential · 2026</div>
-        <h1>This does not start<br />with a $1B wire.</h1>
+        <h1>One offer.<br />A partnership, not a buyout.</h1>
         <p>
           AEVION is the first self-contained planet built on your base — AI tools, games, a bank, payments,
-          IP, identity and commerce under one login, where the user never needs to leave. There are several
-          ways to participate, and the ones below cost almost no cash: you pay in what you already have in
-          abundance — <strong>compute, engineers, distribution, brand</strong> — not in scarce capital.
+          IP, identity and commerce under one login, where the user never needs to leave. There is one offer,
+          and it costs almost no cash: the partner pays in what it already has in
+          abundance — <strong>compute, engineers, distribution, brand</strong> — plus a small repayable advance,
+          not scarce capital.
         </p>
 
         <div className="ask-box">
           <div className="eyebrow">The headline ask · small and recoverable</div>
-          <div className="price">$10M now — as a repayable advance. I keep 35%.</div>
+          <div className="price">$10M now — a repayable advance. We split AEVION&apos;s revenue 51/49 in my favour (for now).</div>
           <p style={{ margin: 0 }}>
-            You get the $10M back, out of revenue, once we reach $100M. You and your partners take control of
-            the rest (~65%), paid mostly in <strong>compute, a team, distribution, brand</strong> — not capital.
-            If you believe in this, the $10M is an investment that returns to you; I am tied to the upside of my
-            <strong> 35%</strong> as the planet grows. A small check, recoverable, and I only grow rich if you do.
+            The $10M is returned to the partner out of the founder&apos;s share as the project grows; it frees the
+            founder from current companies and salaried work to go full-time on AEVION&apos;s ideas. The founder keeps
+            <strong> 51%</strong> and stays Chief Idea Officer — author and driver of the next ideas. The partner
+            contributes mostly in <strong>compute, engineers, distribution, brand</strong> + the small repayable
+            advance. A small, recoverable check; the partner risks resources and time, not capital up front.
           </p>
         </div>
 
-        <h2>The doors (from near-zero risk upward)</h2>
+        <h2>The single offer</h2>
         <table>
           <thead>
-            <tr><th style={{ width: "22%" }}>Door</th><th>What you contribute</th><th>What you get</th><th style={{ width: "16%" }}>Cash now</th></tr>
+            <tr><th style={{ width: "22%" }}>Element</th><th>What the partner contributes</th><th>What the partner gets</th></tr>
           </thead>
           <tbody>
-            <tr><td><strong>V0 · Showcase &amp; Credits</strong></td><td>Compute credits + brand “first planet on Claude” + access</td><td>A flagship case, a hand on the pulse, zero obligation</td><td>≈ $0</td></tr>
-            <tr><td><strong>V1 · Small stake 1–10%</strong></td><td>$10.5M–$105M at one valuation (~$1.05B), milestone tranches</td><td>De-risked exposure, no operational load</td><td>Small</td></tr>
-            <tr><td><strong>V2 · Planet Co-Build ⭐</strong></td><td>A team + resources (+ modest cash)</td><td>Control 80–90%; founder keeps 10–20% (vesting) as Chief Idea Officer</td><td>Modest</td></tr>
-            <tr><td><strong>V3 · Full buyout</strong></td><td>$1B for 95%</td><td>The whole engine; founder → Senior Advisor</td><td>Large (last door)</td></tr>
-          </tbody>
-        </table>
-
-        {/* PAGE 2 — phased policy + anti-clone */}
-        <div className="page-break" />
-        <div className="eyebrow">Recommended structure</div>
-        <h2>Founder-light, success-heavy — three phases</h2>
-        <table>
-          <thead>
-            <tr><th style={{ width: "26%" }}>Phase</th><th>What happens</th><th style={{ width: "20%" }}>Cash to founder</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>1. Incubate (0–6 mo)</strong></td>
-              <td>Founder joins as Head of Planet / EIR on a modest salary. You give compute + 2–3 engineers + the “first planet on Claude” brand. IP contributed into a new entity; <strong>the AEV token is ring-fenced / paused</strong>. Reversible.</td>
-              <td>Small (salary + token signing)</td>
-            </tr>
-            <tr>
-              <td><strong>2. Planet JV (6–18 mo)</strong></td>
-              <td>You take control (80–90%) mostly via <strong>resources</strong> + modest cash; founder keeps 10–20% vesting over 4 years + performance. Present valuation set modestly ($50–150M, not $1B) — diligence-friendly.</td>
-              <td>Still little; wealth = vesting equity</td>
-            </tr>
-            <tr>
-              <td><strong>3. Scale &amp; liquidity (18+ mo)</strong></td>
-              <td>Earnouts on real metrics (MAU, planet GMV, modules in prod). Liquidity via your IPO / secondary / the planet’s own monetization.</td>
-              <td><strong>Large</strong> — but earned on success</td>
-            </tr>
+            <tr><td><strong>$10M repayable advance</strong></td><td>Compute, engineers, distribution, brand + a small repayable advance</td><td>49% of AEVION&apos;s revenue (starting frame); advance returned from the founder&apos;s share as the project grows</td></tr>
           </tbody>
         </table>
         <p style={{ fontSize: "9.5pt", color: "#555" }}>
-          The trillion is a <strong>trajectory</strong>, not today’s price. Shares are struck off a modest present
-          valuation; the path toward a trillion accrues mostly to the controlling side — that is the incentive.
+          The trillion is a <strong>trajectory</strong>, not today&apos;s price. The founder keeps 51% and stays
+          Chief Idea Officer; the big money comes on real growth, not at the start — that is the incentive for both sides.
         </p>
 
         <h3>And if your instinct is “we could build this ourselves”</h3>
@@ -143,8 +115,8 @@ export default function AcquireWaysPage() {
         </ul>
         <p style={{ fontSize: "9.5pt", color: "#555" }}>
           Figures illustrative; the order of magnitude is the point — one vertical of one country is hundreds
-          of millions a year, recurring. That is why “a billion today, a trillion as trajectory” is arithmetic,
-          not a slogan. Full detail: promo/26_PLANET_UTILITY_SOVEREIGN.md.
+          of millions a year, recurring. That is why “a sketch of direction today, a trillion as trajectory” is
+          arithmetic, not a slogan. Full detail: promo/26_PLANET_UTILITY_SOVEREIGN.md.
         </p>
 
         <div className="footer">

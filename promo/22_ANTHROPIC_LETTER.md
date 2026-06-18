@@ -10,9 +10,9 @@
 > стадия — исполнение, а это по определению команда. «Слабость — один человек без рук» истинна только в
 > одиночку: руки у Anthropic, значит это не слабость, а шов стыковки.
 > **Ask:** довести идею с их командой до реальных пользователей. **Сделка (мягко, в конце, маленькая):**
-> 1% от AEVION (он встраивается в Anthropic как единое целое) + $10M возвратным авансом против этого 1%,
-> чтобы освободить основателя от других дел и уйти в идеи фул-тайм. **Опция выкупа идеи:** $10M сейчас
-> net (КЗ-налог ~40% → брутто ≈ $16.7M или налог на покупателе) + 1% роялти от прибыли.
+> $10M возвратным авансом (возврат из доли основателя по мере роста) + партнёрская доля в доходе
+> проекта AEVION: **51% основатель / 49% Anthropic** — стартовая рамка, дальше обсуждается. Одно
+> предложение, без отдельной опции выкупа.
 > **Концовка (вар. A):** ведёт в ПЕРЕПИСКУ (англ. — второй язык основателя, точнее в письме), созвон —
 > опция; «если дойдёт до разговора — это уже знак интереса». НЕ форсить живой англоязычный звонок.
 > Старые денежные доки ($10.5M/1%, $1B-лестница в `02_DEAL_TERMS`/`25`) — архив, НЕ для этого захода.
@@ -121,17 +121,18 @@ take this, with your platform, your people and your reach, and bring it live to 
 the open internet. Let us find out together whether the idea carries to the goal.
 
 Let me be concrete about the one practical thing — kept small, and at the end, where it
-belongs. I am not pricing the result, and I am not asking for a share of Anthropic; you are
-already a trillion-dollar company, and if AEVION proves worth it you would integrate or absorb
-it, and it becomes one whole with you. In that world the realized value is built by your team
-and the specialists you bring — so my claim is deliberately modest: 1% of AEVION, as it lives
-inside Anthropic.
+belongs. I am not pricing the result, and I am not here to be bought out — I am proposing a
+partnership. AEVION is my creation and I remain its engine, so I see the economics of the
+project as a partnership: 51% on my side, as its author and ongoing source of ideas, and 49% on
+yours, for the platform, team and reach that turn a sketch into a living product. This is a
+starting frame, not an ultimatum — the exact split is something we settle calmly once we see
+together whether the idea carries to the goal.
 
-The one thing I ask for now is time. $10M, as a repayable advance against that future 1% — not
-a payday. It buys exactly one thing: it frees me from the companies and the day-job I still run
-every weekday, so I can give all of myself to the only thing I am uniquely good at — inventing
-ideas and seeing them realized. You recover it from my own 1% as the thing grows; if it never
-grows, I never earned it.
+The one thing I ask for now is time. $10M, as a repayable advance — not a payday. It buys
+exactly one thing: it frees me from the companies and the day-job I still run every weekday, so
+I can give all of myself to the only thing I am uniquely good at — inventing ideas and seeing
+them realized. You recover it from my own share of the project as it grows; if it never grows,
+I never earned it.
 
 And let me make that advance concrete and low-risk, with the one example I can speak to as an
 expert rather than as a founder. I am a Candidate Master in chess — so I can judge a chess
@@ -142,10 +143,7 @@ Taken to market with your distribution, that single module could return the $10M
 a year of launch — not immediately, but on its own. So the advance is not a bet on the whole
 planet; even one vertical can repay it. The planet is the upside; chess is the floor.
 
-Or, if you would rather buy the idea outright, the same shape works as a clean acquisition:
-$10M now, net of tax (Kazakhstan's rate is roughly 40%, so the gross is structured accordingly),
-plus a 1% profit royalty. Either way the number is small, the risk is yours to size, and I am
-tied to your success — not to a cheque.
+The number is small, the risk is yours to size, and I am tied to your success — not to a cheque.
 
 And if your instinct is that you could simply build this yourselves — the modules can be copied;
 the person who produced them in six months, alone, and will produce the next thirty, cannot.
@@ -249,17 +247,18 @@ AI-шлюз, dev-платформа — и связную «планету», п
 охватом, и вывести в живой интернет, к реальным пользователям. Давайте вместе выясним, доводит ли идея
 до цели.
 
-Теперь конкретно об одной практической вещи — намеренно маленькой и в самом конце, где ей и место. Я не
-назначаю цену за результат и не прошу долю Anthropic; вы уже компания на триллион, и если AEVION докажет
-ценность, вы интегрируете или поглотите его, и он станет единым целым с вами. В этом мире реализованную
-ценность создаёт ваша команда и приглашённые спецы — поэтому моя претензия намеренно скромна: 1% от
-AEVION в том виде, как он живёт внутри Anthropic.
+Теперь конкретно об одной практической вещи — в самом конце, где ей и место. Я не назначаю цену за
+результат и не прихожу, чтобы меня выкупили, — я предлагаю партнёрство. AEVION — моё создание, и я
+остаюсь его двигателем; поэтому экономику проекта вижу как партнёрство: 51% — моя сторона как автора и
+постоянного источника идей, 49% — ваша за платформу, команду и охват, которые превращают эскиз в живой
+продукт. Это стартовая рамка, а не ультиматум — конкретные доли мы спокойно обсудим, когда вместе
+увидим, доводит ли идея до цели.
 
-Единственное, о чём я прошу сейчас, — время. $10M возвратным авансом против этого будущего 1% — не
-выплата-состояние. Это покупает ровно одно: освобождает меня от компаний и работы по найму, которыми я
-по-прежнему занят каждый будний день, чтобы я мог отдать всего себя единственному, в чём я уникально
-хорош, — придумывать идеи и доводить их до реализации. Вы возвращаете эти деньги из моего же 1% по мере
-роста; если он не вырастет — я их и не заработал.
+Единственное, о чём я прошу сейчас, — время. $10M возвратным авансом — не выплата-состояние. Это
+покупает ровно одно: освобождает меня от компаний и работы по найму, которыми я по-прежнему занят
+каждый будний день, чтобы я мог отдать всего себя единственному, в чём я уникально хорош, — придумывать
+идеи и доводить их до реализации. Вы возвращаете эти деньги из моей же доли в проекте по мере роста;
+если он не вырастет — я их и не заработал.
 
 И сделаю этот аванс конкретным и низкорисковым на одном примере, о котором могу судить как эксперт,
 а не как основатель. Я кандидат в мастера спорта по шахматам — поэтому шахматный продукт я оцениваю
@@ -270,10 +269,7 @@ AEVION в том виде, как он живёт внутри Anthropic.
 рынок — не сразу, но сам по себе. Значит аванс — не ставка на всю планету: даже одна вертикаль его
 отбивает. Планета — это апсайд; шахматы — это пол.
 
-Либо, если вам ближе выкупить идею сразу, та же форма работает как чистая покупка: $10M сейчас, net
-после налога (ставка в Казахстане ~40%, поэтому брутто структурируется соответственно), плюс 1% роялти
-от прибыли. В любом случае сумма маленькая, размер риска выбираете вы, и я привязан к вашему успеху — не
-к чеку.
+Сумма маленькая, размер риска выбираете вы, и я привязан к вашему успеху — не к чеку.
 
 И если внутри мелькнёт «да мы и сами это построим» — модули копируются; человек, который сделал их за 6
 месяцев в одиночку и сделает следующие тридцать, — нет. Именно его я предлагаю оставить на вашей стороне:

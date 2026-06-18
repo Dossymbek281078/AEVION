@@ -561,6 +561,7 @@ C) [третий вариант]
 
 ## Недавно сдано (кратко, последние 5 пунктов)
 
+- **2026-06-18 — q-модули prod-readiness sweep (aevion-core/main).** Прогон всех q-модулей вне соседних вкладок (cyberchess/devhub/qpaynet+qcontract/qright). Итог: ВСЕ смонтированы в `index.ts` (потери строк после squash нет), у ВСЕХ есть prod-smoke, i18n глобально через `AutoTranslate` (ClientProviders). Единственный gap — отсутствовал `ModulePricingChip` на 6 платных модулях. Добавлен: **qstore, qlearn, qmedia, qnews, qevents, qai** (da9045f7..2739b4d5, по 1 файлу на коммит). frontend tsc=0. Готовы: qsign/qcoreai/qfusionai/qpersona/qlife/qtradeoffline/qgood/qmaskcard/qchaingov (чип уже был) + qjobs/qsocial/quantum-shield/qtrade (бесплатные/infra).
 - *(добавляйте сверху; старое удаляйте)*
 
 ---

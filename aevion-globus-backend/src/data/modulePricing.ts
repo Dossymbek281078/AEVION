@@ -5,7 +5,10 @@
 // Design (per design doc 2026-05-22):
 //   - Solo (à la carte): 3 compute tiers — light $5, standard $9, heavy $15.
 //   - Bundles: fintech, build, ai, gaming — priced at ~50% of sum-of-solos.
-//   - All-Access: $59/mo, covers every module shipped now and in the future.
+//   - All-Access: $49/mo, covers every module shipped now and in the future.
+//     Kept in lockstep with the GTM "Full" tier in data/pricing.ts ($49) so the
+//     ModulePricingChip's "All-Access" line matches the price actually charged
+//     at checkout. If you re-price Full, re-price ALL_ACCESS_USD with it.
 //   - Annual billing -20% (stored as annualPerMonth for display).
 //   - 4 currencies pre-computed: USD, EUR, KZT, RUB. FX freshness in
 //     currencyRatesAt so the frontend can warn if rates are stale.
@@ -35,7 +38,7 @@ const BUNDLE_USD: Record<BundleId, number> = {
   gaming: 19,
 };
 
-const ALL_ACCESS_USD = 59;
+const ALL_ACCESS_USD = 49;
 
 // Annual discount applied to the monthly price.
 const ANNUAL_DISCOUNT = 0.20;

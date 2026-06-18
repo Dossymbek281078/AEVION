@@ -59,6 +59,7 @@ const CC_DARK = {
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
+import StreamMenu from "./StreamMenu";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -4866,21 +4867,22 @@ export default function CyberChessPage(){
           aria-label="Music player"
           style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
         >🎵</button>
-        {/* Stream sidebar toggle — 📺 открывает/закрывает медиа-панель с YT/Twitch */}
-        <button
-          onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
-          title={wsPreset==="stream"?"Скрыть стрим-панель":"📺 Открыть стрим-панель (YT/Twitch)"}
-          style={{
-            padding:"6px 10px",minHeight:36,minWidth:36,
-            border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
-            borderRadius:RADIUS.md,
-            background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
-            color:wsPreset==="stream"?CC.brand:"inherit",
-            cursor:"pointer",fontSize:15,fontWeight:700,
-            display:"inline-flex",alignItems:"center",justifyContent:"center",
-            transition:`all 150ms`,
+        {/* Единый вход «смотреть стрим» — медиа-панель / PiP / мульти-панель.
+            Заменил разрозненные header-кнопку 📺 + quick-bar (📺/PiP/Панели). */}
+        <StreamMenu
+          mediaActive={wsPreset==="stream"}
+          pipOpen={pip.open}
+          onToggleMedia={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
+          onClosePiP={()=>pip.hide()}
+          onOpenMulti={()=>sShowMultiPanel(true)}
+          onOpenPiP={()=>{
+            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
+            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
+            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
+            if(!url)return;const src=detectMediaSource(url.trim());
+            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
           }}
-        >📺</button>
+        />
         <button
           onClick={()=>{
             const el=document.documentElement;
@@ -4948,42 +4950,9 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Workspace quick-bar — PiP + Multi-panel + stream toggle; compact 1 row.
-          Hidden during active play to maximize board space (media features → Ctrl+K / workspace dropdown). */}
-      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&!(on&&tab==="play")&&(
-        <div style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,flexWrap:"nowrap"}}>
-          <button onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
-            title={wsPreset==="stream"?"Скрыть медиа-панель (YT/Twitch)":"Открыть медиа-панель (YT/Twitch)"}
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
-              background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
-              color:wsPreset==="stream"?CC.brand:CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",transition:"all 0.12s",whiteSpace:"nowrap"}}>
-            <span>📺</span><span>{wsPreset==="stream"?"Медиа ✓":"Медиа"}</span>
-          </button>
-          <button onClick={()=>{
-            if(pip.open){pip.hide();return}
-            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
-            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
-            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
-            if(!url)return;const src=detectMediaSource(url.trim());
-            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
-          }} title="Floating PiP — видео поверх доски"
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${pip.open?"#fb923c":CC.border}`,
-              background:pip.open?"rgba(251,146,60,0.1)":CC.surface1,
-              color:pip.open?"#ea580c":CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span>{pip.open?"⏏":"⊡"}</span><span>PiP</span>
-          </button>
-          <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel (несколько стримов)"
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span>⊞</span><span>Панели</span>
-          </button>
-        </div>
-      )}
+      {/* Workspace quick-bar удалён 2026-06-18 — все входы «смотреть стрим»
+          (медиа-панель / PiP / мульти-панель) теперь в едином StreamMenu (📺 Стрим)
+          в хедере. Освобождает строку и убирает наезд на низ доски. */}
 
       {/* LAUNCHPAD DASHBOARD */}
       {setup&&tab==="play"&&!streamerMode&&(()=>{

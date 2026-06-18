@@ -764,7 +764,7 @@ export default function AcquirePage() {
 }
 
 function PitchMedia() {
-  const [lang, setLang] = useState<"ru" | "en">("ru");
+  const [lang, setLang] = useState<"ru" | "en">("en");
   const [hasAudio, setHasAudio] = useState<boolean | null>(null);
   const [hasVideo, setHasVideo] = useState<boolean | null>(null);
   const audioSrc = lang === "ru" ? "/promo/aevion-acquire-ru.mp3" : "/promo/aevion-acquire-en.mp3";
@@ -779,7 +779,13 @@ function PitchMedia() {
     ]).then(([a, v]) => {
       if (cancelled) return;
       setHasAudio(a.status === "fulfilled" && a.value.ok);
-      setHasVideo(v.status === "fulfilled" && v.value.ok);
+      // A missing video on Vercel resolves to the SPA HTML fallback with HTTP 200,
+      // so `.ok` alone is a false positive — require a real video content-type.
+      const vOk =
+        v.status === "fulfilled" &&
+        v.value.ok &&
+        (v.value.headers.get("content-type") || "").toLowerCase().startsWith("video");
+      setHasVideo(vOk);
     });
     return () => { cancelled = true; };
   }, [audioSrc, videoSrc]);

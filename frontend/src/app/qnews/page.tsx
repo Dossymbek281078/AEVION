@@ -5,6 +5,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -437,6 +438,9 @@ export default function QNewsPage() {
               Отраслевые новости экосистемы AEVION — tech, crypto, AI, business, science.
               {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#0d9488" }}>{stats.total} статей</span>}
             </p>
+            <div style={{ marginTop: 10 }}>
+              <ModulePricingChip moduleId="qnews" />
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <a

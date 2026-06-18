@@ -7,7 +7,9 @@
 import React, { useState } from "react";
 import { WORKSPACE_META, type WorkspacePreset } from "./useWorkspace";
 
-const ALL: WorkspacePreset[] = ["focus", "standard", "stream", "study", "coach"];
+// "stream" намеренно исключён из layout-меню — вход в медиа-панель теперь
+// единый, через StreamMenu (📺 Стрим) в хедере. См. StreamMenu.tsx.
+const ALL: WorkspacePreset[] = ["focus", "standard", "study", "coach"];
 
 const PRESET_DESC: Record<WorkspacePreset, string> = {
   focus:    "Только доска — никакого шума",

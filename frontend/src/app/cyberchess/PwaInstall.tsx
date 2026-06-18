@@ -69,14 +69,18 @@ function wasInstalledBefore(): boolean {
 
 /* ============================ Styles ============================ */
 
+// Прижат к левому нижнему углу (а не центру) — центрированная плашка наезжала на
+// низ доски. Правый нижний угол занят AI-коучем/подсказками, поэтому уходим влево.
+// (Пункт 6 polish 2026-06-18.)
 const banner: React.CSSProperties = {
   position: 'fixed',
   left: 16,
-  right: 16,
+  right: 'auto',
   bottom: 16,
   zIndex: 1000,
-  maxWidth: 560,
-  margin: '0 auto',
+  width: 'min(360px, calc(100vw - 32px))',
+  maxWidth: 360,
+  margin: 0,
   padding: '14px 16px',
   borderRadius: 14,
   border: '1px solid rgba(16,185,129,0.45)',

@@ -729,6 +729,16 @@ button:focus:not(:focus-visible) {
     padding-right: 0 !important;
   }
 }
+/* Ultrawide (≥1600px): правый WorkspaceDock резервирует 56px справа (инлайном из
+   page.tsx). Без зеркального левого отступа группа доска+рейл+панель центрируется в
+   области [0, vw−56] и визуально съезжает влево → справа кажется «пустое поле».
+   Добавляем равный левый gutter ⇒ трио центрируется по-настоящему. Запас по ширине
+   на таких экранах большой, overflow исключён. (Пункт 5 polish 2026-06-18.) */
+@media (min-width: 1600px) {
+  .cc-main-row {
+    padding-left: 56px;
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    CyberChess Mobile Layout — responsive overrides for ≤ 768px

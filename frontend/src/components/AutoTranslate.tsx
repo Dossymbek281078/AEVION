@@ -387,10 +387,15 @@ const WS_LEAD = /^\s*/;
 const WS_TRAIL = /\s*$/;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
 
-export function AutoTranslate({ children }: { children: React.ReactNode }) {
+export function AutoTranslate({ children, observe = true }: { children: React.ReactNode; observe?: boolean }) {
   const { lang } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
+  // observe=false → один стартовый проход перевода, БЕЗ live-MutationObserver.
+  // Нужно для full-app оболочек (CyberChess и т.п.): там DOM меняется постоянно
+  // (часы тикают, доска ходит, eval стримит), и подписка observer на весь субтри
+  // с characterData гоняла walk() синхронно на каждый ход → «ходы буксуют».
+  // Эти приложения RU-нативные и имеют свой LocaleSwitcher, live-перевод им не нужен.
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
@@ -487,16 +492,20 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
 
     apply(root);
 
-    obs = new MutationObserver((muts) => {
-      obs?.disconnect();
-      for (const m of muts) {
-        if (m.type === "childList") m.addedNodes.forEach(walk);
-        else if (m.type === "characterData") walk(m.target);
-      }
-      if (!destroyed && obs) obs.observe(root, { childList: true, subtree: true, characterData: true });
-      if (pending.size > 0) scheduleFlush();
-    });
-    obs.observe(root, { childList: true, subtree: true, characterData: true });
+    // Live-наблюдатель только когда observe=true. На full-app оболочках его НЕ
+    // ставим — иначе каждый ход/тик часов триггерит синхронный walk() и лагает.
+    if (observe) {
+      obs = new MutationObserver((muts) => {
+        obs?.disconnect();
+        for (const m of muts) {
+          if (m.type === "childList") m.addedNodes.forEach(walk);
+          else if (m.type === "characterData") walk(m.target);
+        }
+        if (!destroyed && obs) obs.observe(root, { childList: true, subtree: true, characterData: true });
+        if (pending.size > 0) scheduleFlush();
+      });
+      obs.observe(root, { childList: true, subtree: true, characterData: true });
+    }
 
     if (pending.size > 0) scheduleFlush();
 
@@ -506,7 +515,7 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
       obs?.disconnect();
       obs = null;
     };
-  }, [lang]);
+  }, [lang, observe]);
 
   return <div ref={ref} key={lang} style={{ display: "contents" }}>{children}</div>;
 }

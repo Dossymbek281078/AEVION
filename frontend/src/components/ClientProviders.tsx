@@ -24,7 +24,10 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <I18nProvider>
-      <AutoTranslate>
+      {/* observe={!isApp}: на full-app оболочках (CyberChess, build, qright…)
+          оставляем разовый стартовый перевод, но НЕ вешаем live-MutationObserver —
+          он гонял walk() на каждый ход/тик часов и лагал механику ходов. */}
+      <AutoTranslate observe={!isApp}>
         {!isApp && <SiteHeader />}
         {isApp && <AppShellLanguagePill />}
         <ToastProvider>

@@ -10849,7 +10849,9 @@ ${question.trim()}`;
     {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
     {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
       style={{
-        position:"fixed",bottom:16,right:16,zIndex:Z.sticky,
+        // bottom:64 (не 16) — пилюля AI-коуча уже сидит в правом нижнем углу;
+        // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
+        position:"fixed",bottom:64,right:16,zIndex:Z.sticky,
         display:"inline-flex",alignItems:"center",gap:6,
         padding:"6px 12px 6px 6px",
         background:CC.surface1,

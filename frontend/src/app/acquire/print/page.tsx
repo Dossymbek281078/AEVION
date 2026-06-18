@@ -44,7 +44,7 @@ export default function AcquirePrintPage() {
       <style dangerouslySetInnerHTML={{ __html: css }} />
       <div className="print-root">
         {/* PAGE 1 — Cover */}
-        <div className="eyebrow">Acquisition Brief · $10.5M за 1% · Confidential · 2026</div>
+        <div className="eyebrow">Partnership Brief · $10M возвратный аванс · доход 51/49 · Confidential · 2026</div>
         <h1>Planet AEVION.<br />One settlement unit.<br />30+ modules in production.</h1>
         <p>
           Все деньги, всё IP и весь dev-цикл переезжают в интернет. AEVION — единственное место, где все три перехода
@@ -53,12 +53,13 @@ export default function AcquirePrintPage() {
         </p>
 
         <div className="ask-box">
-          <div className="eyebrow">Одна цена · выбор глубины</div>
-          <div className="price">$10.5M за 1%</div>
+          <div className="eyebrow">Одно предложение · партнёрство, не выкуп</div>
+          <div className="price">$10M возвратный аванс</div>
           <p style={{ margin: 0 }}>
-            Единая оценка ≈ $1.05B. Цена за процент постоянна — инвестор выбирает только долю (1% → 95%).<br />
-            Полный выкуп: <strong>95% = $1 000 000 000 USD net</strong> (после налогов), основатель → Senior Advisor 24 мес.
-            Бренд AEVION сохраняется · AEV cap 21M зафиксирован.
+            $10M возвратным авансом — возврат из доли основателя по мере роста проекта; аванс освобождает основателя
+            от текущих компаний и работы по найму.<br />
+            Доход проекта делится 51/49 (основатель/партнёр), дальше обсуждается; основатель остаётся Chief Idea Officer.
+            Бренд AEVION сохраняется · AEV token вынесен из периметра сделки (ring-fenced).
           </p>
         </div>
 
@@ -143,46 +144,27 @@ export default function AcquirePrintPage() {
         {/* PAGE 4 — Deal */}
         <div className="page-break" />
         <div className="eyebrow">Условия</div>
-        <h2>Выбор входа — одна цена $10.5M / 1%</h2>
+        <h2>Одно предложение</h2>
         <table>
-          <thead>
-            <tr><th>Вход</th><th>Доля</th><th>Чек</th><th>Основателю</th></tr>
-          </thead>
           <tbody>
-            <tr><td>Angel</td><td>1%</td><td>$10.5M</td><td>99% · $1 042M</td></tr>
-            <tr><td>Minority</td><td>10%</td><td>$105M</td><td>90% · $947M</td></tr>
-            <tr><td>Strategic</td><td>25%</td><td>$263M</td><td>75% · $789M</td></tr>
-            <tr><td>Partner</td><td>49%</td><td>$516M</td><td>51% · $537M</td></tr>
-            <tr><td>Control</td><td>75%</td><td>$789M</td><td>25% · $263M</td></tr>
-            <tr><td><strong>Full acquisition</strong></td><td><strong>95%</strong></td><td><strong>$1 000M net</strong></td><td>5% · $53M + $1B net</td></tr>
+            <tr><th style={{ width: "32%" }}>Предложение</th><td>$10M возвратным авансом — возврат из доли основателя по мере роста проекта</td></tr>
+            <tr><th>Доход проекта</th><td>51% основатель / 49% партнёр — стартовая рамка, дальше обсуждается</td></tr>
+            <tr><th>Что покупает аванс</th><td>Освобождает основателя от текущих компаний и работы по найму → фул-тайм на идеях AEVION</td></tr>
+            <tr><th>Роль основателя</th><td>Chief Idea Officer · автор и двигатель следующих идей (мажоритарная доля, остаётся)</td></tr>
+            <tr><th>Риск партнёра</th><td>Время + небольшая возвратная сумма; большие деньги — по факту роста, не на старте</td></tr>
           </tbody>
         </table>
-        <p style={{ fontSize: "9.5pt", color: "#555" }}>
-          Оценка ≈ $1.05B константа. Цена за 1% = $10.5M на всех уровнях. Малая доля — primary (капитал в рост, основатель у руля); 95% — secondary (полный выкуп, $1B net основателю; DIFC 0% CGT либо gross-up).
-        </p>
-        <h3>Неизменные условия (все уровни)</h3>
+        <h3>Неизменные условия</h3>
         <table>
           <tbody>
-            <tr><th style={{ width: "32%" }}>Должность основателя</th><td>Зависит от доли: Founder-CEO/CIO → Senior Advisor (95%) · 24 мес</td></tr>
-            <tr><th>Право вето</th><td>AEV cap supply и Constitution v1 — только с письменного согласия</td></tr>
-            <tr><th>Бренд</th><td>AEVION сохраняется (не merge в покупателя)</td></tr>
-            <tr><th>AEV token</th><td>Cap 21M зафиксирован навсегда. Treasury → покупателю при выкупе</td></tr>
-            <tr><th>Эксклюзивность</th><td>60 дней · breakup fee $5M (если виноват покупатель)</td></tr>
-            <tr><th>Юрисдикция</th><td>Делавэр US / DIFC Dubai / Singapore — на выбор покупателя</td></tr>
+            <tr><th style={{ width: "32%" }}>Бренд</th><td>AEVION сохраняется (не merge в покупателя)</td></tr>
+            <tr><th>AEV token</th><td>Вынесен из периметра сделки (ring-fenced)</td></tr>
+            <tr><th>Юрисдикция</th><td>Делавэр US / DIFC Dubai / Singapore — на выбор партнёра</td></tr>
             <tr><th>Контакт</th><td><strong>yahiin1978@gmail.com</strong></td></tr>
           </tbody>
         </table>
 
-        <h3>Чего в LOI быть не должно</h3>
-        <ul>
-          <li>Earn-out с открытыми KPI («to be defined later»)</li>
-          <li>Контроль над AEV cap supply на стороне покупателя</li>
-          <li>Отказ от бренда AEVION</li>
-          <li>Non-compete шире, чем «единая платформа для денег+IP+dev»</li>
-          <li>Retention-условие, привязанное к чужим продуктам покупателя</li>
-        </ul>
-
-        <p>LOI с восемью пунктами выше — подписываем в течение 5 рабочих дней.</p>
+        <p>Условия выше — готовы подписать term sheet в течение 5 рабочих дней.</p>
 
         {/* PAGE 5 — Comparables + close */}
         <div className="page-break" />
@@ -200,15 +182,16 @@ export default function AcquirePrintPage() {
         </table>
         <p>
           AEVION = <strong>Plaid + GitHub + ранний Stripe + Figma + on-chain notary</strong> в одном контуре.
-          Оценка $1.05B при $10.5M за 1% — оптимизирована на быстрый closing. Mark-to-market lower-bound сумма по столпам — $5B
-          (подробный расчёт — `promo/05_FINANCIAL_APPENDIX.md`).
+          Это сравнимые по масштабу рынки — но предложение одно, и это не выкуп: $10M возвратным авансом
+          и партнёрская доля дохода 51/49 (подробнее — `promo/05_FINANCIAL_APPENDIX.md`).
         </p>
 
         <h2>Закрытие</h2>
         <p>
-          Одна цена — $10.5M за 1% при оценке $1.05B. Вы выбираете только глубину: от 1% до полного
-          выкупа 95% за $1 000 000 000 USD net. Цена за процент не торгуется — торговать не о чем, кроме объёма.
-          Если LOI на этих условиях — подписываем в течение пяти рабочих дней.
+          Одно предложение — $10M возвратным авансом + доход проекта 51/49 (основатель/партнёр), дальше
+          обсуждается. Основатель сохраняет мажоритарную долю и остаётся Chief Idea Officer; партнёр рискует
+          ресурсами и небольшой возвратной суммой, не капиталом на старте. Готовы подписать term sheet
+          в течение пяти рабочих дней.
         </p>
 
         <div className="footer">

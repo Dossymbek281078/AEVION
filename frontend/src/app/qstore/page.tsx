@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface Product {
   id: string;
@@ -339,6 +340,9 @@ export default function QStorePage() {
       <Wave1Nav />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 16px 16px" }}>
         <PaddleUpgradeButton variant="banner" appId="qstore" label="QStore Pro — безлимитные листинги, 14 дней бесплатно" />
+        <div style={{ marginTop: 10 }}>
+          <ModulePricingChip moduleId="qstore" />
+        </div>
       </div>
       <ProductPageShell>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px 80px" }}>

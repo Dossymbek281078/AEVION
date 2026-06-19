@@ -737,7 +737,14 @@ export function buildQuote(input: {
     });
   }
 
-  // 3) Add-on модули
+  // 3) Add-on модули.
+  //
+  // Lite = «1 продукт на выбор» с полным доступом к нему. Модуль(и), покрытые
+  // module-лимитом Lite, НЕ тарифицируются как add-on — иначе двойной счёт
+  // (Lite + qsign дал бы $19 + $9 = $28 вместо $19). Логика зеркалит
+  // routes/checkout.ts, чтобы quote == итоговый charge.
+  const freeChoiceSlots = tier.id === "lite" ? (tier.limits.modules ?? 0) : 0;
+  let usedChoiceSlots = 0;
   for (const mid of input.modules ?? []) {
     const m = getModulePrice(mid);
     if (!m) {
@@ -745,6 +752,11 @@ export function buildQuote(input: {
       continue;
     }
     if (m.includedIn.includes(tier.id)) continue; // уже в тарифе
+    if (usedChoiceSlots < freeChoiceSlots) {
+      usedChoiceSlots++;
+      notes.push(`Модуль ${m.id} включён в Lite (1 продукт на выбор)`);
+      continue;
+    }
     if (m.addonMonthly === null) {
       notes.push(`Модуль "${mid}" доступен только по запросу (Enterprise / Sales)`);
       continue;

@@ -14,6 +14,7 @@ import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQLifeTables, isQLifeDbReady, getQLifeDbError } from "../lib/ensureQLifeTables";
+import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
 
@@ -254,7 +255,11 @@ qlifeRouter.get("/biomarkers/trends", readLimit, async (_req: Request, res: Resp
 qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) => {
   try {
     const type   = typeof req.query.type   === "string" ? req.query.type   : undefined;
-    const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+    // Privacy: a reader only ever sees their own data (JWT sub) or the shared
+    // anonymous bucket — never another user's biomarkers via a client-supplied
+    // ?userId. Health data must not be enumerable across users.
+    const auth   = verifyBearerOptional(req);
+    const userId = auth?.sub ?? "anonymous";
     const limit  = Math.min(Number(req.query.limit) || 30, 200);
 
     if (type && !VALID_TYPES.includes(type as BiomarkerType)) {
@@ -275,7 +280,11 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
 /** POST /api/qlife/biomarkers */
 qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) => {
   try {
-    const { userId, type, value, unit, notes, measuredAt } = req.body ?? {};
+    const { type, value, unit, notes, measuredAt } = req.body ?? {};
+    // Bind the reading to the authenticated user (JWT sub) — never trust a
+    // client-supplied userId, which would let anyone write into another user's
+    // health record. No token → the shared "anonymous" bucket (unchanged UX).
+    const auth = verifyBearerOptional(req);
 
     if (!type || !VALID_TYPES.includes(type as BiomarkerType)) {
       res.status(400).json({
@@ -294,7 +303,7 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
     }
 
     const fields: Omit<BiomarkerRecord, "id"> = {
-      user_id:     userId ? String(userId).slice(0, 128) : "anonymous",
+      user_id:     auth?.sub ? String(auth.sub).slice(0, 128) : "anonymous",
       type:        type as BiomarkerType,
       value:       Number(value),
       unit:        String(unit).slice(0, 32),

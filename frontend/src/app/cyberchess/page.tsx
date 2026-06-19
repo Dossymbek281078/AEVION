@@ -150,8 +150,13 @@ const ALS: AL[] = [
   {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
   {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
   {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
+  // Максимум: полная сила Stockfish 18 — глубокий поиск (depth 20), без рандома.
+  // Практически непобедим для человека (~3500). thinkMs 0 — без искусственной задержки.
+  {name:"Stockfish",elo:3500,depth:8,color:"#06b6d4",rand:0,thinkMs:0},
 ];
-const SFD: Record<number,number> = {3:8,4:12,5:16};
+// Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
+// Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
+const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
@@ -5259,11 +5264,11 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
-                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?5:4}
-                    value={Math.min(aiI,(chessy.owned.master_ai||isPro)?5:4)}
-                    onChange={e=>{const v=+e.target.value;if(v===5&&!(chessy.owned.master_ai||isPro)){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                    value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
+                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI===5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
                 {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"

@@ -89,10 +89,20 @@ checkoutRouter.post("/session", async (req, res) => {
       totalUsd += 5 * extraSeats * (period === "annual" ? 12 : 1);
     }
 
-    // Add-on modules
+    // Add-on modules.
+    //
+    // Lite grants "1 product of your choice" with full access to it (see its
+    // tagline/features in data/pricing.ts). The chosen module covered by Lite's
+    // module allowance must NOT also be billed its à-la-carte add-on — that
+    // would double-charge the very thing Lite buys (e.g. Lite + qsign would
+    // wrongly come to $19 + $9 = $28 instead of $19). Modules beyond the
+    // allowance, or on tiers without a free-choice slot, still incur the add-on.
+    const freeChoiceSlots = tier.id === "lite" ? (tier.limits.modules ?? 0) : 0;
+    let usedChoiceSlots = 0;
     for (const mid of body.modules ?? []) {
       const m = getModulePrice(mid);
       if (!m || m.includedIn.includes(tier.id)) continue;
+      if (usedChoiceSlots < freeChoiceSlots) { usedChoiceSlots++; continue; }
       if (!m.addonMonthly) continue;
       totalUsd += m.addonMonthly * (period === "annual" ? 12 : 1);
     }

@@ -9419,9 +9419,40 @@ ${question.trim()}`;
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);
                   const apiMsgs=[...coachChat,{role:"user" as const,content:contextBlock}].map(m=>({role:m.role,content:typeof m==="object"&&"content" in m?m.content:""}));
+                  const body=JSON.stringify({system:SYSTEM,messages:apiMsgs,maxTokens:600});
+                  // 1) Стрим — живая печать токен за токеном. При любом сбое тихо
+                  //    падаем на обычный /chat ниже (он остаётся рабочим фоллбэком).
+                  let streamed=false,placeholderAdded=false;
+                  try{
+                    const sres=await fetch(`${BACKEND}/api/coach/chat/stream`,{
+                      method:"POST",headers:{"Content-Type":"application/json"},body,signal:ctrl.signal});
+                    if(sres.ok&&sres.body){
+                      const reader=sres.body.getReader();const dec=new TextDecoder();let buf="",acc="";
+                      try{
+                        for(;;){
+                          const{done,value}=await reader.read();if(done)break;
+                          buf+=dec.decode(value,{stream:true});
+                          let nl;while((nl=buf.indexOf("\n"))>=0){
+                            const line=buf.slice(0,nl).trim();buf=buf.slice(nl+1);
+                            if(!line.startsWith("data:"))continue;
+                            const payload=line.slice(5).trim();if(!payload||payload==="[DONE]")continue;
+                            let ev:any;try{ev=JSON.parse(payload)}catch{continue}
+                            if(ev?.type==="content_block_delta"&&ev.delta?.type==="text_delta"&&typeof ev.delta.text==="string"){
+                              acc+=ev.delta.text;const snap=acc;
+                              if(!placeholderAdded){placeholderAdded=true;sCoachChat([...newMsgs,{role:"assistant",content:snap,ts:Date.now()}]);}
+                              else sCoachChat(prev=>{if(!prev.length)return prev;const c=prev.slice();c[c.length-1]={...c[c.length-1],content:snap};return c;});
+                            }
+                          }
+                        }
+                      }catch{/* обрыв стрима */}
+                      if(acc.trim())streamed=true; // даже частичный ответ считаем выданным (не дублируем через /chat)
+                    }
+                  }catch{/* стрим недоступен — фоллбэк ниже */}
+                  if(streamed){clearTimeout(tId);return;}
+                  // 2) Обычный /chat — фоллбэк, если стрим не сработал
                   const res=await fetch(`${BACKEND}/api/coach/chat`,{
                     method:"POST",headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify({system:SYSTEM,messages:apiMsgs,maxTokens:600}),
+                    body,
                     signal:ctrl.signal
                   });
                   clearTimeout(tId);

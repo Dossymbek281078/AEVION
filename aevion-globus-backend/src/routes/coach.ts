@@ -32,6 +32,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "crypto";
+import { Readable } from "stream";
 import { requireAuth } from "../lib/authJwt";
 
 export const coachRouter = Router();
@@ -192,6 +193,79 @@ coachRouter.post("/chat", async (req: Request, res: Response) => {
     return res.status(500).json({
       error: err?.message || "Internal server error",
     });
+  }
+});
+
+// ─── /chat/stream — Anthropic proxy с потоковой выдачей (SSE) ────────────────
+// Аддитивный эндпоинт: /chat выше остаётся нетронутым как фоллбэк. Здесь шлём
+// stream:true и проксируем Anthropic SSE прямо клиенту — коуч печатает ответ
+// токен за токеном (живая печать, lichess/ChatGPT-стиль). Фронт парсит
+// content_block_delta (delta.type==="text_delta") и дописывает текст.
+// Без thinking — быстрый первый токен для коротких подсказок.
+coachRouter.post("/chat/stream", async (req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY not set" });
+    }
+    const { system, messages, maxTokens } = (req.body || {}) as {
+      system?: string;
+      messages?: Array<{ role: "user" | "assistant"; content: string }>;
+      maxTokens?: number;
+    };
+    // Валидация — те же лимиты, что и в /chat (дублируем намеренно, чтобы не
+    // трогать рабочий /chat рефактором).
+    if (!system || typeof system !== "string" || system.length > MAX_SYSTEM_CHARS) {
+      return res.status(400).json({ error: "Missing or invalid `system`" });
+    }
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
+      return res.status(400).json({ error: "Missing or invalid `messages`" });
+    }
+    for (const m of messages) {
+      if (!m || typeof m !== "object") return res.status(400).json({ error: "Malformed message" });
+      if (m.role !== "user" && m.role !== "assistant") return res.status(400).json({ error: `Invalid role: ${m.role}` });
+      if (typeof m.content !== "string" || m.content.length === 0 || m.content.length > MAX_CONTENT_CHARS) {
+        return res.status(400).json({ error: "Message content must be non-empty and within limit" });
+      }
+    }
+    if (messages[0].role !== "user") {
+      return res.status(400).json({ error: "First message must have role=user" });
+    }
+    let resolvedMaxTokens = DEFAULT_MAX_TOKENS;
+    if (typeof maxTokens === "number" && maxTokens > 0) {
+      resolvedMaxTokens = Math.min(Math.floor(maxTokens), MAX_TOKENS_CEILING);
+    }
+
+    const upstream = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({ model: DEFAULT_MODEL, max_tokens: resolvedMaxTokens, system, messages, stream: true }),
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      const data = await upstream.json().catch(() => null);
+      const errMsg = (data && (data.error?.message || data.message)) || `Upstream error (HTTP ${upstream.status})`;
+      console.error("[coach] Anthropic stream error:", upstream.status, errMsg);
+      return res.status(upstream.status || 502).json({ error: errMsg });
+    }
+
+    // Проксируем SSE как есть — фронт сам разбирает content_block_delta.
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // не буферизовать в nginx
+    const nodeStream = Readable.fromWeb(upstream.body as any);
+    req.on("close", () => { try { nodeStream.destroy(); } catch { /* ignore */ } });
+    nodeStream.on("error", () => { try { res.end(); } catch { /* ignore */ } });
+    nodeStream.pipe(res);
+  } catch (err: any) {
+    console.error("[coach] Unexpected stream error:", err);
+    if (!res.headersSent) res.status(500).json({ error: err?.message || "Internal server error" });
+    else { try { res.end(); } catch { /* ignore */ } }
   }
 });
 

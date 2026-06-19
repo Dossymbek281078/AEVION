@@ -145,11 +145,11 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         style={{ display: "inline-flex", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
         title="Сравнить тарифы — Lite, Medium, Full"
       >
-        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · Lite</span>
+        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no">Lite</span></span>
         {medium && medium.priceMonthly != null && (
           <>
             <span style={{ color: palette.muted }}>·</span>
-            <span>Medium {fmt(medium.priceMonthly, currency, data.currencies)}</span>
+            <span><span translate="no">Medium</span> {fmt(medium.priceMonthly, currency, data.currencies)}</span>
           </>
         )}
         {full && full.priceMonthly != null && (

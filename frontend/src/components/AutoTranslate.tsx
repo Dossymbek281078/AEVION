@@ -435,8 +435,13 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
     const walk = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) { applyText(node as Text); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (SKIP_TAGS.has((node as Element).tagName)) return;
-      applyEl(node as HTMLElement);
+      const el = node as HTMLElement;
+      if (SKIP_TAGS.has(el.tagName)) return;
+      // Honor the standard `translate="no"` attribute (and the `notranslate`
+      // class) — brand tokens like tier names (Lite/Medium/Full) opt out of
+      // DOM translation so "Medium" never becomes "Средне".
+      if (el.getAttribute("translate") === "no" || el.classList?.contains("notranslate")) return;
+      applyEl(el);
       node.childNodes.forEach(walk);
     };
 

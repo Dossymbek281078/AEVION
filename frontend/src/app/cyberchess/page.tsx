@@ -4990,6 +4990,15 @@ export default function CyberChessPage(){
         }
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
 
+          {/* ─── Медиа-панель (YouTube/Twitch) на стартовом экране ───
+              Раньше WorkspaceMediaPane рендерился только внутри cc-main-row (в игре),
+              поэтому 📺→Медиа-панель на лаунчпаде ничего не показывала («нет окна
+              ютюба/твича»). Теперь панель появляется и здесь — фикс. Высота фикс,
+              т.к. в колонке нет flex-stretch контекста доски. */}
+          {wsShowMedia&&<div style={{height:380,display:"flex",flexShrink:0}}>
+            <WorkspaceMediaPane/>
+          </div>}
+
           {/* ─── Session stats pill strip ─── */}
           {totalGames>0&&<div style={{
             display:"flex",gap:6,alignItems:"center",

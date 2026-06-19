@@ -27,7 +27,10 @@ type State = {
 };
 
 const STORAGE = "aevion_chess_media_pane_v4";
-const EMPTY_PANE: PaneState = { tab: "youtube", yt: "", tw: "", url: "", notes: "" };
+// Дефолт-вкладка Twitch: там список каналов в один клик (GMHikaru, Chess.com…),
+// поэтому «окно твича» работает сразу. YouTube требует вставить ссылку — менее
+// очевидно для первого открытия. Касается только новых юзеров (без сохранёнки).
+const EMPTY_PANE: PaneState = { tab: "twitch", yt: "", tw: "", url: "", notes: "" };
 const DEFAULT: State = {
   layout: 1,
   active: 0,

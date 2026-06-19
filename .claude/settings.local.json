@@ -98,7 +98,9 @@
       "mcp__playwright__browser_evaluate",
       "Bash(grep -q \"Ready in\" \"C:/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-cyberchess/cf6f8cbb-359e-4216-a927-daef2fa58183/tasks/b3o2o4y6h.output\")",
       "Bash(break)",
-      "mcp__playwright__browser_console_messages"
+      "mcp__playwright__browser_console_messages",
+      "Bash(curl -sI http://localhost:3005/cyberchess)",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }

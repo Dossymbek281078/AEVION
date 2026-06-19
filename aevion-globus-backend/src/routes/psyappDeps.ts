@@ -28,6 +28,7 @@ import {
 } from "../lib/ensurePsyAppTables";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
+import { verifyBearerOptional } from "../lib/authJwt";
 
 export const psyappDepsRouter = Router();
 
@@ -59,6 +60,8 @@ interface PsyAppUser {
   started_at: string;
   streak_start_at: string;
   total_relapses: number;
+  /** JWT sub that claimed this alias. null = legacy anonymous (open) alias. */
+  owner_user_id?: string | null;
 }
 
 interface TriggerRecord {
@@ -89,6 +92,13 @@ function aliasValid(alias: string): boolean {
   return /^[a-z0-9_-]{2,40}$/i.test(alias);
 }
 
+// A claimed alias (owner_user_id set) may only be read/mutated by its owner
+// (matching JWT sub). Unclaimed aliases (owner null) stay open — preserves the
+// anonymous-pseudonym MVP flow for users who never sign in.
+function ownerBlocks(existing: PsyAppUser | null | undefined, sub: string | null): boolean {
+  return !!(existing && existing.owner_user_id && existing.owner_user_id !== sub);
+}
+
 function toIsoString(v: unknown): string {
   if (v instanceof Date) return v.toISOString();
   return String(v);
@@ -105,16 +115,21 @@ function streakDays(streakStartIso: string): number {
 async function dbUpsertUser(
   alias: string,
   addiction: Addiction,
-  startedAtIso: string | null
+  startedAtIso: string | null,
+  sub: string | null
 ): Promise<PsyAppUser> {
   const startedAt = startedAtIso ?? new Date().toISOString();
+  // COALESCE claims ownership only when the alias is currently unowned and a
+  // sub is provided; an already-owned alias keeps its owner. The endpoint
+  // rejects cross-owner access BEFORE calling this, so the upsert is safe.
   const { rows } = await pool.query(
-    `INSERT INTO psyapp_users (alias, addiction, started_at, streak_start_at)
-     VALUES ($1, $2, $3, $3)
+    `INSERT INTO psyapp_users (alias, addiction, started_at, streak_start_at, owner_user_id)
+     VALUES ($1, $2, $3, $3, $4)
      ON CONFLICT (alias) DO UPDATE
-       SET addiction = EXCLUDED.addiction
-     RETURNING alias, addiction, started_at, streak_start_at, total_relapses`,
-    [alias, addiction, startedAt]
+       SET addiction = EXCLUDED.addiction,
+           owner_user_id = COALESCE(psyapp_users.owner_user_id, EXCLUDED.owner_user_id)
+     RETURNING alias, addiction, started_at, streak_start_at, total_relapses, owner_user_id`,
+    [alias, addiction, startedAt, sub]
   );
   const r = rows[0];
   return {
@@ -123,12 +138,13 @@ async function dbUpsertUser(
     started_at: toIsoString(r.started_at),
     streak_start_at: toIsoString(r.streak_start_at),
     total_relapses: Number(r.total_relapses ?? 0),
+    owner_user_id: r.owner_user_id ?? null,
   };
 }
 
 async function dbGetUser(alias: string): Promise<PsyAppUser | null> {
   const { rows } = await pool.query(
-    `SELECT alias, addiction, started_at, streak_start_at, total_relapses
+    `SELECT alias, addiction, started_at, streak_start_at, total_relapses, owner_user_id
      FROM psyapp_users WHERE alias = $1`,
     [alias]
   );
@@ -140,6 +156,7 @@ async function dbGetUser(alias: string): Promise<PsyAppUser | null> {
     started_at: toIsoString(r.started_at),
     streak_start_at: toIsoString(r.streak_start_at),
     total_relapses: Number(r.total_relapses ?? 0),
+    owner_user_id: r.owner_user_id ?? null,
   };
 }
 
@@ -232,10 +249,12 @@ async function dbStats(): Promise<{
 }
 
 // ─── In-memory mirrors ────────────────────────────────────────────────────────
-function memUpsertUser(alias: string, addiction: Addiction, startedAtIso: string | null): PsyAppUser {
+function memUpsertUser(alias: string, addiction: Addiction, startedAtIso: string | null, sub: string | null): PsyAppUser {
   const existing = memUsers.get(alias);
   if (existing) {
     existing.addiction = addiction;
+    // Claim ownership if currently unowned and a sub is provided.
+    if (!existing.owner_user_id && sub) existing.owner_user_id = sub;
     return existing;
   }
   const startedAt = startedAtIso ?? new Date().toISOString();
@@ -245,6 +264,7 @@ function memUpsertUser(alias: string, addiction: Addiction, startedAtIso: string
     started_at: startedAt,
     streak_start_at: startedAt,
     total_relapses: 0,
+    owner_user_id: sub ?? null,
   };
   memUsers.set(alias, record);
   return record;
@@ -342,10 +362,17 @@ psyappDepsRouter.post("/users/:alias/start", writeLimit, async (req: Request, re
       });
     }
     const startedAtIso = body.startedAt ? new Date(String(body.startedAt)).toISOString() : null;
+    const sub = verifyBearerOptional(req)?.sub ?? null;
+
+    // Reject if this alias was already claimed by a different signed-in user.
+    const existing = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
+    if (ownerBlocks(existing, sub)) {
+      return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
+    }
 
     const user = isPsyAppDbReady()
-      ? await dbUpsertUser(alias, addiction as Addiction, startedAtIso)
-      : memUpsertUser(alias, addiction as Addiction, startedAtIso);
+      ? await dbUpsertUser(alias, addiction as Addiction, startedAtIso, sub)
+      : memUpsertUser(alias, addiction as Addiction, startedAtIso, sub);
 
     return res.status(201).json({
       ok: true,
@@ -364,8 +391,12 @@ psyappDepsRouter.get("/users/:alias", readLimit, async (req: Request, res: Respo
     if (!aliasValid(alias)) {
       return res.status(400).json({ ok: false, error: "alias invalid" });
     }
+    const sub = verifyBearerOptional(req)?.sub ?? null;
     const user = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
     if (!user) return res.status(404).json({ ok: false, error: "user_not_found" });
+    if (ownerBlocks(user, sub)) {
+      return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
+    }
     return res.json({ ok: true, user, streak_days: streakDays(user.streak_start_at) });
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
@@ -383,6 +414,12 @@ psyappDepsRouter.post("/users/:alias/relapse", writeLimit, async (req: Request, 
     const reason = typeof reasonRaw === "string" && reasonRaw.trim().length > 0
       ? reasonRaw.trim().slice(0, 500)
       : null;
+    const sub = verifyBearerOptional(req)?.sub ?? null;
+
+    const existing = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
+    if (ownerBlocks(existing, sub)) {
+      return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
+    }
 
     const user = isPsyAppDbReady()
       ? await dbRelapse(alias, reason)
@@ -424,6 +461,12 @@ psyappDepsRouter.post("/triggers", writeLimit, async (req: Request, res: Respons
     const copedHowRaw = body.copedHow ?? body.coped_how;
     const copedHow = typeof copedHowRaw === "string" ? copedHowRaw.trim().slice(0, 500) : null;
 
+    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const ownerRow = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
+    if (ownerBlocks(ownerRow, sub)) {
+      return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
+    }
+
     const fields = {
       alias,
       trigger_type: triggerType as TriggerType,
@@ -445,6 +488,11 @@ psyappDepsRouter.get("/triggers/:alias", readLimit, async (req: Request, res: Re
     const alias = String(req.params.alias || "").trim();
     if (!aliasValid(alias)) {
       return res.status(400).json({ ok: false, error: "alias invalid" });
+    }
+    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const ownerRow = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
+    if (ownerBlocks(ownerRow, sub)) {
+      return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 200);
     const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);

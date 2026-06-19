@@ -44,9 +44,15 @@ export async function ensurePsyAppTables(pool: PgPoolInstance): Promise<void> {
         addiction        TEXT NOT NULL CHECK (addiction IN ('alcohol','smoking','other')),
         started_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         streak_start_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        total_relapses   INTEGER NOT NULL DEFAULT 0
+        total_relapses   INTEGER NOT NULL DEFAULT 0,
+        owner_user_id    TEXT
       );
     `);
+
+    // Owner binding: claims an alias to a JWT sub so another authenticated user
+    // can't read/mutate someone's recovery data. NULL = legacy anonymous alias
+    // (unchanged behavior). ALTER covers tables created before this column.
+    await pool.query(`ALTER TABLE psyapp_users ADD COLUMN IF NOT EXISTS owner_user_id TEXT;`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS psyapp_triggers (

@@ -4175,6 +4175,30 @@ export default function CyberChessPage(){
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
+  // Проиграть решение пазла НА ДОСКЕ (визуальный разбор, lichess-style). Сбрасывает
+  // позицию к старту и анимированно прокатывает всю линию sol[] (ходы игрока +
+  // ответы соперника попеременно). Помечает как "shown" — без награды (это обучение,
+  // не решение). Доступно на idle/wrong/shown, где sol[] ещё целая (correct режет её).
+  const pzSolPlayingRef=useRef(false);
+  const playPuzzleSolution=useCallback(()=>{
+    if(!pzCurrent||!pzCurrent.sol?.length||pzSolPlayingRef.current)return;
+    const sol=pzCurrent.sol.slice();const startFen=pzCurrent.fen;
+    pzSolPlayingRef.current=true;
+    const g=new Chess(startFen);
+    setGame(g);sBk(k=>k+1);sLm(null);sHist([]);sFenHist([startFen]);sSel(null);sVm(new Set());sPms([]);sPmSel(null);
+    sPzAttempt("shown");
+    let i=0;
+    const step=()=>{
+      if(i>=sol.length){pzSolPlayingRef.current=false;showToast("Это и было решение — попробуй повторить на следующей","info");return}
+      const u=sol[i];
+      try{const mv=g.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:(u[4] as any)||"q"});
+        if(mv){sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,g.fen()]);sBk(k=>k+1);snd(mv.captured?"capture":"move")}
+      }catch{}
+      i++;
+      if(i<sol.length)setTimeout(step,750);else{pzSolPlayingRef.current=false;}
+    };
+    setTimeout(step,300);
+  },[pzCurrent,snd,showToast]);
 
   /* ── Puzzle hotkeys — H: подсказка · N/→: следующий · R: рестарт текущего.
      Отдельный хэндлер (определён ПОСЛЕ nextPz во избежание TDZ). Глобальный хэндлер
@@ -8686,7 +8710,8 @@ export default function CyberChessPage(){
                   <Btn size="md" variant="secondary" onClick={randomPz} title="Случайная">🎲</Btn>
                   <Btn size="md" variant="secondary" onClick={()=>pzFileInputRef.current?.click()} title="Загрузить позицию FEN/PGN">📂</Btn>
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
-                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}}>Заново</Btn>}
+                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
+                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}

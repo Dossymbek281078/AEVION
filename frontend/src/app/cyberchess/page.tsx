@@ -9405,8 +9405,27 @@ ${question.trim()}`;
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
                   sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
                 }catch(e:any){
-                  const errMsg=e?.name==="AbortError"?"⏱ Coach думал слишком долго — попробуй ещё раз":/fetch|network|Failed/i.test(e?.message||"")?"⚠ Не могу связаться с Coach AI. Бэкенд недоступен — попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.":`Ошибка: ${e?.message||"unknown"}`;
-                  sCoachChat([...newMsgs,{role:"assistant",content:errMsg,ts:Date.now()}]);
+                  // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
+                  // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара
+                  // (consistent с тем, что игрок уже видит). Коуч всегда что-то отвечает.
+                  const localBest=()=>new Promise<string|undefined>((resolve)=>{
+                    const sf=sfR.current;
+                    if(!sf?.ready()){resolve(undefined);return}
+                    let done=false;
+                    const to=setTimeout(()=>{if(!done){done=true;resolve(undefined)}},4500);
+                    try{sf.go(fen,14,(f,t,p)=>{if(done)return;done=true;clearTimeout(to);resolve(f&&t?`${f}${t}${p||""}`:undefined)})}
+                    catch{clearTimeout(to);resolve(undefined)}
+                  });
+                  let bestSan="";
+                  try{
+                    const uci=await localBest();
+                    if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
+                  }catch{}
+                  const base=e?.name==="AbortError"?"⏱ Coach AI думал слишком долго.":"⚠ Coach AI недоступен (бэкенд).";
+                  const tip=bestSan
+                    ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
+                    :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
+                  sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);
                 }

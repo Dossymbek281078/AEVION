@@ -8,7 +8,7 @@
 
 ## 1. STRIPE — Patrick Collison (CEO) + David Singleton (CTO)
 
-**Subject:** AEVION — IP attestation + dev-agent layer for the Stripe stack ($1B floor)
+**Subject:** AEVION — IP attestation + dev-agent layer for the Stripe stack (partnership)
 
 **Send to:** `patrick@stripe.com` (он отвечает на холодные письма с TL;DR) + CC `bd@stripe.com`
 **LinkedIn warm intro:** через любого Stripe AI/infra eng если есть.
@@ -36,10 +36,14 @@ These extend Stripe's payments rail into IP+dev without competing with your
 core network. Closest comp transactions: Plaid/Visa $5.3B, GitHub/Microsoft
 $7.5B. AEVION sits at the intersection.
 
-One price: $10.5M per 1% (~$1.05B valuation); you choose the depth. Full
-buyout: 95% for $1B USD net, founder remains as Senior
-Advisor 24m, brand kept, AEV cap immutable. Full brief: https://aevion.app/acquire
-(short link with 5-page printable PDF). 90-second pitch video on the same page.
+On structure: this is a partnership, not a buyout. Stripe would enter mostly
+with resources (compute, engineers, distribution, brand) plus a small $10M
+returnable advance that frees me to work full-time on AEVION's next ideas;
+project income starts at 51% founder / 49% partner, so the upside accrues
+to you as the project grows. I stay on as Chief Idea Officer, the AEVION
+brand is kept, and the AEV token is ring-fenced. Full brief:
+https://aevion.app/acquire (short link with 5-page printable PDF). 90-second
+pitch video on the same page.
 
 30-min call this week? My calendar is light.
 
@@ -51,7 +55,7 @@ yahiin1978@gmail.com
 
 ## 2. VISA — Jack Forestell (CPO) + Visa Ventures
 
-**Subject:** AEVION — Plaid-style API + post-quantum attestation ($1B floor)
+**Subject:** AEVION — Plaid-style API + post-quantum attestation (partnership)
 
 **Send to:** `venture@visa.com` (Visa Ventures intake) + LinkedIn `jack.forestell`
 
@@ -77,10 +81,15 @@ For Visa, the relevant pillars:
   - DevHub — single AEV-billed workspace across nine SaaS integrations.
     Distribution channel for Visa-attached merchants.
 
-One price $10.5M/1% (~$1.05B); choose your stake. Full buyout 95% = $1B USD net + Senior Advisor 24m + brand kept + AEV cap immutable.
+On structure: this is a partnership, not a buyout. Visa would enter mostly
+with resources (compute, engineers, distribution, brand) plus a small $10M
+returnable advance that frees me to work full-time on AEVION's next ideas;
+project income starts at 51% founder / 49% partner, so the upside accrues to
+you as the project grows. I stay on as Chief Idea Officer, the AEVION brand
+is kept, and the AEV token is ring-fenced.
 Full brief, 5-page printable, 90-sec video: https://aevion.app/acquire
 
-We're targeting a closing window inside 60-day exclusivity. Open to a 30-min
+We're targeting a window inside 60-day exclusivity. Open to a 30-min
 intro call next week.
 
 — [Founder name]
@@ -121,8 +130,13 @@ Plus 7+ consumer-product proofs (CyberChess, HealthAI, Multichat...) to
 demonstrate the layer holds real users at scale.
 
 Comp: Microsoft × GitHub 2018 was $7.5B. AEVION as the next layer above
-that thesis: one price $10.5M/1% (~$1.05B), choose your stake; full buyout 95% = $1B USD net + Senior Advisor 24m + brand kept. Five-page
-printable + 90-sec video: https://aevion.app/acquire
+that thesis. On structure: this is a partnership, not a buyout. Microsoft
+would enter mostly with resources (compute, engineers, distribution, brand)
+plus a small $10M returnable advance that frees me to work full-time on
+AEVION's next ideas; project income starts at 51% founder / 49% partner, so
+the upside accrues to you as the project grows. I stay on as Chief Idea
+Officer, the AEVION brand is kept, and the AEV token is ring-fenced.
+Five-page printable + 90-sec video: https://aevion.app/acquire
 
 30-min call worth a calendar slot?
 
@@ -134,7 +148,7 @@ yahiin1978@gmail.com
 
 ## 4. PLAID — Zach Perret (CEO)
 
-**Subject:** AEVION — the platform Plaid almost became (merger-of-equals optionality)
+**Subject:** AEVION — the platform Plaid almost became (partnership)
 
 **Send to:** Zach Perret LinkedIn direct + email через mutual SF contact if possible.
 
@@ -150,15 +164,16 @@ Thirty-plus modules live, single settlement unit (AEV, hard cap 21M),
 Constitution v1 attested. Daily smoke 24/24, transparent health board.
 
 I'm reaching out specifically because Plaid is the most natural strategic
-partner / counterparty for AEVION, in two possible structures:
-
-  1. Acquisition — one price $10.5M/1% (~$1.05B), full buyout 95% = $1B USD net + founder stays as Senior Advisor 24m,
-     brand kept, AEV cap immutable. Comparable to the unwound Visa deal but
-     into a much wider product surface.
-
-  2. Merger of equals / equity roll — combined entity has the financial-API
-     core Plaid built plus the IP+dev+consumer layers we've shipped. Fresh
-     cap table, joint cap, joint board, joint roadmap.
+partner for AEVION. The frame is a partnership, not a buyout — Plaid enters
+mostly with resources (compute, engineers, distribution, brand) plus a small
+$10M returnable advance that frees me to work full-time on AEVION's next
+ideas. Project income starts at 51% founder / 49% partner, so the upside
+accrues to you as the project grows; I stay on as Chief Idea Officer, the
+AEVION brand is kept, and the AEV token is ring-fenced. There's natural
+optionality on how deep the partnership goes — from a resource-and-advance
+arrangement to a joint roadmap combining Plaid's financial-API core with the
+IP+dev+consumer layers we've shipped — but the shape stays the same:
+founder stays, partner backs it mostly with resources.
 
 Five-page printable brief + 90-sec pitch video: https://aevion.app/acquire
 
@@ -186,7 +201,7 @@ yahiin1978@gmail.com
 
 | Target | Subject | Inflection |
 |--------|---------|------------|
-| Google CapitalG | AEVION — AI-native multi-pillar infra ($1B floor) | QCoreAI + DevHub for Google AI thesis |
+| Google CapitalG | AEVION — AI-native multi-pillar infra (partnership) | QCoreAI + DevHub for Google AI thesis |
 | Cloudflare | AEVION — IP attestation + threshold secrets on Cloudflare edge | QShield + DevHub edge-native |
 | Atlassian | AEVION — QBuild ATS + DevHub for the post-Jira dev | QBuild + DevHub for IT teams |
 | ServiceNow | AEVION — trust infrastructure for enterprise workflow | QShield + QSign for ServiceNow Now Platform |

@@ -9,14 +9,15 @@
 
 ---
 
-## ★★ ОФФЕР-ВЫБОР — одно письмо, три типа, единая цена (ОСНОВНАЯ ВЕРСИЯ)
+## ★★ ЕДИНОЕ ПАРТНЁРСТВО — одно письмо, три типа, одно предложение (ОСНОВНАЯ ВЕРСИЯ)
 
-> Эта версия добавляет к нарративу **оффер с выбором входа по постоянной цене**.
-> Скептик берёт малую де-рискованную долю, визионер — партнёрскую, идея-first/покупатель — полный выкуп.
-> Никакого торга по оценке — только выбор глубины. Это снимает главный спор скептика (оценку)
+> Эта версия добавляет к нарративу **единое партнёрское предложение** — не выкуп и не выбор доли.
+> Скептик видит минимальный риск, визионер — совместное строительство будущего, идея-first — двигатель,
+> который остаётся включённым. Оценки и цены за долю нет вовсе: вход — это ресурсы партнёра плюс
+> небольшой возвратный аванс. Это снимает главный спор скептика (оценку — её просто не существует)
 > и даёт каждому типу его собственную дверь в один и тот же актив.
 
-**Subject:** `One price. You choose how much of the engine you own.`
+**Subject:** `Not a buyout. A partnership — the engine stays on.`
 **Send:** вторник-четверг, 08:00–10:00 по времени адресата. Plain-text, без attachments. Ссылка одна — /acquire.
 
 ### ПИСЬМО (EN — send-ready)
@@ -44,28 +45,32 @@ signature on earth must be reissued — NIST FIPS 204), banking without branches
 (who made this, and when?). Whoever owns the layer beneath these owns a toll
 booth on the digital economy.
 
-So I am not handing you one fixed deal to take or leave. I bring one price and
-let you choose your depth. AEVION is valued at ~$1.05B, and the price is constant:
-$10.5M per 1%. You decide only how much you buy:
+So I am not selling you a slice of a company at a price you'd have to argue down.
+There is no valuation to negotiate and no stake to buy — because this is a
+partnership, not a buyout. You come in with resources — compute, engineers,
+distribution, brand — plus a small recoverable advance, and the big money arrives
+only as the project grows. The structure is one offer, not a menu:
 
-  - Proof before scale? Enter at 1-10% ($10.5M-$105M). It funds the build; I keep
-    control and skin in the game; we tie the tranches to milestones.
-  - Build the future with me? Take a partner stake of 25-49% ($263M-$516M).
-    Shared board, I stay CEO/CIO.
-  - Own the engine outright? 95% for $1B net to me; I keep 5% and stay as Chief
-    Innovation Officer for years.
+  - You put in $10M as a recoverable advance — its only purpose is to free me from
+    my current companies so I can build AEVION's ideas full-time. It is repaid out
+    of my share as we grow, not a payout to walk away on.
+  - Project income is split 51% to me, 49% to you — a starting frame, refined in
+    the term sheet. You mostly pay in resources, not scarce cash.
+  - I stay as Chief Idea Officer with the majority share — the author and engine of
+    AEVION's next ideas. The AEVION brand stays. The AEV token is ring-fenced.
 
-The price per percent never changes — there is nothing to haggle but the size of
-your conviction. And I earn only when you earn; I am not selling and walking away.
-So whatever brought you here — proof, scale, or a mind that sees what others don't
-— our goal is the same one. The only open question is how much of it you want to own.
+There is nothing to haggle over, because there is no price per percent — only the
+size of the engine we build together. And I earn only when you earn; I am not
+selling and walking away. So whatever brought you here — proof, scale, or a mind
+that sees what others don't — our goal is the same one. The only open question is
+how soon we start.
 
-The full ladder, live and verifiable, is at https://aevion.app/acquire.
+The full proposal, live and verifiable, is at https://aevion.app/acquire.
 
 Thirty minutes this week?
 
 — Dosymbek Zhakiya
-Founder & Chief Innovation Officer, AEVION
+Founder & Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/acquire
 ```
 
@@ -94,55 +99,62 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 (кто это создал и когда?). Кто владеет слоем под ними — владеет будкой сбора
 пошлины на всей цифровой экономике.
 
-Поэтому я не даю вам одну фиксированную сделку «бери или уходи». Я даю одну цену
-и право выбрать глубину. AEVION оценена в ~$1.05B, и цена постоянна: $10.5M за 1%.
-Вы решаете только сколько берёте:
+Поэтому я не продаю вам долю компании по цене, которую пришлось бы сбивать. Нет
+оценки, которую нужно торговать, и нет доли, которую нужно покупать, — потому что
+это партнёрство, а не выкуп. Вы входите ресурсами — compute, инженеры, дистрибуция,
+бренд — плюс небольшой возвратный аванс, а большие деньги приходят только по мере
+роста проекта. Структура — одно предложение, не меню:
 
-  - Нужны доказательства до масштаба? Вход 1-10% ($10.5M-$105M). Деньги идут в
-    рост; я сохраняю контроль и шкуру в игре; транши привязываем к майлстоунам.
-  - Хотите строить будущее вместе? Партнёрская доля 25-49% ($263M-$516M).
-    Совместный борд, я остаюсь CEO/CIO.
-  - Хотите владеть двигателем целиком? 95% за $1B net мне; я оставляю 5% и
-    остаюсь Chief Innovation Officer на годы.
+  - Вы вносите $10M возвратным авансом — его единственный смысл освободить меня от
+    моих текущих компаний, чтобы строить идеи AEVION фул-тайм. Аванс возвращается
+    из моей доли по мере роста, это не выплата, чтобы я ушёл.
+  - Доход проекта делится 51% мне, 49% вам — стартовая рамка, уточняется в терм-шите.
+    Вы платите в основном ресурсами, а не дефицитным кэшем.
+  - Я остаюсь Chief Idea Officer с мажоритарной долей — автор и двигатель следующих
+    идей AEVION. Бренд AEVION сохраняется. Токен AEV вынесен из периметра.
 
-Цена за процент не меняется — торговать не о чем, кроме размера вашей убеждённости.
-И я зарабатываю только когда зарабатываете вы; я не продаю и не ухожу. Что бы вас
-сюда ни привело — доказательства, масштаб или мышление, которое видит то, чего не
-видят другие — наша цель одна. Открыт только один вопрос: какой долей вы хотите владеть.
+Торговать не о чем, потому что нет цены за процент — есть только размер двигателя,
+который мы строим вместе. И я зарабатываю только когда зарабатываете вы; я не продаю
+и не ухожу. Что бы вас сюда ни привело — доказательства, масштаб или мышление, которое
+видит то, чего не видят другие — наша цель одна. Открыт только один вопрос: как скоро
+мы начнём.
 
-Полная лестница, живая и проверяемая, — на https://aevion.app/acquire.
+Полное предложение, живое и проверяемое, — на https://aevion.app/acquire.
 
 Тридцать минут на этой неделе?
 
 — Досымбек Жакия
-Основатель и Chief Innovation Officer, AEVION
+Основатель и Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/acquire
 ```
 
-### Единая ценовая лестница (приложение к письму = /acquire)
+### Единое партнёрское предложение (приложение к письму = /acquire)
 
-| Доля инвестору | Цена (= доля × $10.5M) | Доля основателю | Стоимость доли осн.¹ | Характер | Роль основателя |
-|---|---|---|---|---|---|
-| 1% | $10.5M | 99% | $1 042M | primary | Founder-CEO · полный контроль |
-| 10% | $105M | 90% | $947M | primary | Founder-CEO |
-| 25% | $263M | 75% | $789M | primary | Founder-CEO · борд-место инвестору |
-| 49% | $516M | 51% | $537M | primary + secondary | Founder-CEO/CIO |
-| 75% | $789M | 25% | $263M | secondary-heavy | Founder-CIO · advisor |
-| **95%** | **$1 000M net** | **5%** | **$53M + $1B net** | secondary · выкуп | Senior Advisor · 24 мес |
+| Условие | Значение |
+|---|---|
+| Форма | **Партнёрство**, не выкуп. Основатель не уходит. |
+| Возвратный аванс | **$10M** от партнёра — чтобы освободить основателя для фул-тайма на идеях; возврат из доли основателя по мере роста |
+| Деление дохода | **51% основатель / 49% партнёр** — стартовая рамка, уточняется в терм-шите |
+| Чем платит партнёр | В основном ресурсами: compute, инженеры, дистрибуция, бренд + небольшой возвратный аванс. Большие деньги — по факту роста |
+| Роль основателя | **Chief Idea Officer** — автор и двигатель следующих идей, мажоритарная доля. Не уходит. |
+| Бренд | AEVION сохраняется (не merge в партнёра) |
+| Токен AEV | Вынесен из периметра (ring-fenced) |
+| Эксклюзивность | 60 дней с подписания LOI |
+| Due diligence | Tech + legal + financial, 30 дней |
+| Юрисдикция | Delaware US / DIFC Dubai / Singapore — на выбор |
 
-¹ Оценка post-money ≈ $1.05B константа. Цена за 1% = $10.5M на всех уровнях. Стоимость доли осн. = доля осн. × оценка.
-Флагман $1B — net основателю (DIFC 0% CGT либо gross-up на стороне покупателя).
+Цены за долю нет вовсе: вход — это ресурсы партнёра плюс небольшой возвратный аванс, а не покупка процента.
 
-### Разбор: кто какой вход выбирает сам (для тебя, не для инвестора)
+### Разбор: кого что цепляет в едином предложении (для тебя, не для инвестора)
 
-| Тип инвестора | Какой вход выбирает сам | Почему оффер-выбор его обезоруживает |
+| Тип инвестора | Что видит в предложении | Почему единое партнёрство его обезоруживает |
 |---|---|---|
-| **Скептик** | 1-10% ($10.5M-$105M), транши под майлстоуны | Спорить не о чем: цена фиксирована, оценка не торгуется. Он входит малой де-рискованной долей, я сохраняю шкуру — его осторожность удовлетворена самой структурой. |
-| **Визионер** | 25-49% партнёрская | Он берёт значимую долю будущего по дешёвой ранней цене и строит его со мной. «Дёшево до того, как очевидно». |
-| **Идея-first / стратег / суверенный фонд** | 95% полный выкуп | Покупает двигатель целиком; я остаюсь CIO как гарантия, что двигатель не остановится. $1B net мне. |
+| **Скептик** | Минимальный риск: партнёр входит ресурсами + возвратным авансом, апсайд 49%, без покупки доли | Спорить не о чем: оценки и цены за долю просто нет. Большие деньги — по факту роста, аванс возвращается. Его осторожность удовлетворена самой структурой. |
+| **Визионер** | Совместное строительство будущего, 49% апсайда, основатель остаётся двигателем | Он берёт значимую часть будущего и строит его со мной — без выкупа и без переплаты на старте. «Внутри до того, как очевидно». |
+| **Идея-first / стратег / суверенный фонд** | Двигатель, который остаётся включённым: основатель — Chief Idea Officer | Получает доступ к источнику идей; я остаюсь Chief Idea Officer как гарантия, что двигатель не остановится. Партнёр платит ресурсами, не дефицитным кэшем. |
 
-**Ключевой приём оффера-выбора:** единая цена за процент убирает торг по оценке (главное оружие скептика)
-и превращает разговор из «сколько это стоит» в «сколько ты хочешь взять». Каждый тип сам выбирает свою дверь —
+**Ключевой приём единого предложения:** отсутствие оценки и цены за долю убирает главный спор скептика (торг по оценке)
+и превращает разговор из «сколько это стоит» в «как скоро начнём». Каждый тип находит свою дверь —
 мы никому ничего не навязали, но всех привели в один актив, и на каждом уровне мой интерес = его интерес.
 
 ---
@@ -194,14 +206,14 @@ is everywhere — the only scarce resource left is the idea. You are not buying
 and the right to everything it produces next.
 
 I am not selling and walking away. I keep a major stake and stay as Chief
-Innovation Officer for years. I earn only when you earn. So whatever brought
+Idea Officer for years. I earn only when you earn. So whatever brought
 you here — proof, scale, or a mind that sees what others don't — our goal is
 the same one.
 
 Thirty minutes this week?
 
 — Dosymbek Zhakiya
-Founder & Chief Innovation Officer, AEVION
+Founder & Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/partner
 ```
 
@@ -250,14 +262,14 @@ is everywhere — the only scarce resource left is the idea. You are not buying
 and the right to everything it produces next.
 
 I am not selling and walking away. I keep a major stake and stay as Chief
-Innovation Officer for years. I earn only when you earn. So whatever brought
+Idea Officer for years. I earn only when you earn. So whatever brought
 you here — proof, scale, or a mind that sees what others don't — our goal is
 the same one.
 
 Thirty minutes this week?
 
 — Dosymbek Zhakiya
-Founder & Chief Innovation Officer, AEVION
+Founder & Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/partner
 ```
 
@@ -316,7 +328,7 @@ yahiin1978@gmail.com · https://aevion.app/partner
 копируются. Вы покупаете двигатель, который их произвёл, и право на всё, что
 он произведёт дальше.
 
-Я не продаю и не ухожу. Я сохраняю крупную долю и остаюсь Chief Innovation
+Я не продаю и не ухожу. Я сохраняю крупную долю и остаюсь Chief Idea
 Officer на годы. Я зарабатываю только когда зарабатываете вы. И что бы вас
 сюда ни привело — доказательства, масштаб или мышление, которое видит то, чего
 не видят другие — наша цель одна.
@@ -324,7 +336,7 @@ Officer на годы. Я зарабатываю только когда зар�
 Тридцать минут на этой неделе?
 
 — Досымбек Жакия
-Основатель и Chief Innovation Officer, AEVION
+Основатель и Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/partner
 ```
 

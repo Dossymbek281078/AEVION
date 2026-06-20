@@ -15,7 +15,7 @@
 > предложение, без отдельной опции выкупа.
 > **Концовка (вар. A):** ведёт в ПЕРЕПИСКУ (англ. — второй язык основателя, точнее в письме), созвон —
 > опция; «если дойдёт до разговора — это уже знак интереса». НЕ форсить живой англоязычный звонок.
-> Старые денежные доки ($10.5M/1%, $1B-лестница в `02_DEAL_TERMS`/`25`) — архив, НЕ для этого захода.
+> Старая модель сделки ($10.5M/1%, $1B-лестница, выкуп, Senior Advisor) полностью выведена из пакета — её больше нет ни в `02_DEAL_TERMS`, ни в `25`. Только партнёрство.
 
 ---
 
@@ -162,7 +162,7 @@ is my second language, so I'm most precise in writing; we can also talk by call 
 suits you. If we reach a conversation at all, it already tells me the idea resonated.
 
 — Dosymbek Zhakiya
-Founder & Chief Innovation Officer, AEVION
+Founder & Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/acquire
 ```
 
@@ -287,7 +287,7 @@ AI-шлюз, dev-платформа — и связную «планету», п
 вообще дойдёт — это уже знак, что идея откликнулась.
 
 — Досымбек Жакия
-Основатель и Chief Innovation Officer, AEVION
+Основатель и Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/acquire
 ```
 

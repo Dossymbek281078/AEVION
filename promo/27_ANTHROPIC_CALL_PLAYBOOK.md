@@ -44,8 +44,9 @@
 **EN:**
 > "I'm not asking you to become a consumer company. I'm offering the consumer and economic layer that sits
 > on top of your model — the place where your capability becomes somewhere people live and transact. As AI
-> commoditizes, that layer is the scarce thing, and it anchors users and governments to your base. The
-> lightest version is a showcase and compute; the fullest is control of the first planet. You choose the depth."
+> commoditizes, that layer is the scarce thing, and it anchors users and governments to your base. This is a
+> partnership, not a buyout: you bring resources and a small $10M returnable advance, we split the upside 49% to you,
+> and I stay as Chief Idea Officer to keep building it."
 
 *RU-пометка:* переводи разговор с «покупка компании» на «слой поверх вашей модели». Им это ближе.
 

@@ -41,7 +41,7 @@
 | 6 | 0:48 | 1:00 | 12 с | **Три макроволны** — три круга (Banking → API, IP → on-chain, Dev → agent-layer), сходятся в центр | Resolve Fusion или AE |
 | 7 | 1:00 | 1:14 | 14 с | **Что уже работает** — быстрый коллаж скриншотов: `/constitution`, `/planet`, `/cyberchess`, `/healthai`, `/qsign`, `/devhub`, `/transparency` с зелёной «LIVE» точкой на каждом | **OBS screencaps нужны** |
 | 8 | 1:14 | 1:24 | 10 с | **Зачем покупать** — на чёрном фоне 4 строки: «AEV — нельзя купить», «Constitution — нельзя написать», «9 интеграций — не пройти комплаенс», «30 модулей — не собрать» | text-on-screen typewriter effect |
-| 9 | 1:24 | 1:30 | 6 с | **Сделка** — emerald фон, $1B USD net + Senior Advisor + acquire@aevion.app | hero card, fade to music tail |
+| 9 | 1:24 | 1:30 | 6 с | **Сделка** — emerald фон, «Партнёрство, не выкуп» + «$10M возвратным авансом · 49% дохода — партнёру» + yahiin1978@gmail.com | hero card, fade to music tail |
 
 ---
 

@@ -1,6 +1,7 @@
-# Целевые покупатели — outbound priority list
+# Целевые партнёры — outbound priority list
 
 > 28 имён. Для каждого: какой столп AEVION закрывает его слабость, **первая точка входа** (имя + публичный канал), **главный risk-line**.
+> Модель — **партнёрство, не выкуп**: партнёр входит в основном ресурсами (compute, инженеры, дистрибуция, бренд) + небольшой возвратный аванс $10M; деление дохода 51% основатель / 49% партнёр; основатель остаётся Chief Idea Officer. Ниже под «закрывает» читать «получает доступ через партнёрство», а не «покупает».
 > Сортировка — от «горячих» (явно ищут такую платформу) к «холодным» (стратегическая инвестиция, не операционная нужда).
 > Все имена — публичная информация. Источники: 10-K, press releases, M&A history, отраслевые отчёты.
 
@@ -13,7 +14,7 @@
 - **Pillar fit:** Финансовый (overlap) + **Защита+Право (главное)** + Dev.
 - **Точка входа:** Sales/BD через `stripe.com/en/contact/sales` → запрос на «strategic partnerships»; параллельно публичный outreach к **Patrick Collison** через прямой email (он отвечает на холодные письма с грамотным TL;DR) + LinkedIn в его команду M&A.
 - **Risk-line:** «Plaid+Visa scenario» — антимонопольный откат. Митигация: AEVION не угрожает их core — мы поверх, а не вместо.
-- **Цена-якорь:** $1B = 1-2% от их private mark $50-95B. Pocket change.
+- **Партнёрский якорь:** вход в основном ресурсами (compute, дистрибуция, бренд) + $10M возвратный аванс — для Stripe это шум на фоне private mark $50-95B, а взамен 49% апсайда растущей платформы.
 
 ### 2. Visa (Jack Forestell, Chief Product Officer; Antony Cahill, ex-COO)
 - **Закрывает:** Plaid-style API-агрегатор + IP-attestation (отсутствует в их portfolio после провала Plaid-deal 2020).
@@ -58,8 +59,8 @@
 ### 8. Google / Alphabet (Sundar Pichai; Google Ventures; CapitalG)
 - **Закрывает:** QCoreAI + DevHub как extension к Google AI/Cloud; consumer-витрины (CyberChess vs Google Stadia-legacy gap).
 - **Pillar fit:** Dev + Consumer.
-- **Точка входа:** CapitalG (`capitalg@google.com`) — крупные late-stage чеки + потенциальный exit channel.
-- **Risk-line:** Google не покупает агрессивно после DoubleClick-era. Митигация: позиционировать как CapitalG-investment с opt-to-acquire.
+- **Точка входа:** CapitalG (`capitalg@google.com`) — стратегический партнёр с ресурсами Google Cloud/AI.
+- **Risk-line:** Google не покупает агрессивно после DoubleClick-era. Митигация: партнёрство (Cloud-ресурсы + дистрибуция за 49% апсайда) не требует выкупа.
 
 ### 9. Amazon / AWS (Adam Selipsky; AWS Marketplace leadership)
 - **Закрывает:** DevHub как «AWS Marketplace для не-AWS услуг» + QShield как сложный compliance product.
@@ -71,7 +72,7 @@
 - **Закрывает:** QBuild как vertical-recruiting extension к Jira/Confluence + DevHub.
 - **Pillar fit:** Dev.
 - **Точка входа:** Atlassian Ventures (`ventures@atlassian.com`).
-- **Risk-line:** Atlassian осторожен с M&A после Trello, Mindville. $1B стол требует board approval.
+- **Risk-line:** Atlassian осторожен с M&A после Trello, Mindville. Партнёрство (вход ресурсами, без выкупа) снижает порог board approval против полноценной M&A.
 
 ### 11. ServiceNow (Bill McDermott)
 - **Закрывает:** Trust+Защита layer как extension к их enterprise-workflow.
@@ -131,16 +132,16 @@
 - **Risk-line:** Volatile, depending on Vision Fund III status.
 
 ### 20. Sequoia (Roelof Botha)
-- **Закрывает:** Stripe-investor → potential bridge к Stripe deal.
+- **Закрывает:** Stripe-investor → potential bridge к Stripe partnership.
 - **Pillar fit:** Financial intro to all pillars.
 - **Точка входа:** Sequoia Heritage или Sequoia Growth.
-- **Risk-line:** Sequoia любит continuation, не одноразовые $1B чеки.
+- **Risk-line:** Sequoia любит continuation. Партнёрская рамка (ресурсы + возвратный аванс, без выкупа) ближе к их логике, чем одноразовый крупный чек.
 
 ### 21. Andreessen Horowitz (Marc Andreessen, Ben Horowitz; Chris Dixon a16z crypto)
 - **Закрывает:** crypto+fintech+AI thesis — AEVION под три темы одновременно.
 - **Pillar fit:** Весь стек.
 - **Точка входа:** a16z partners directly via X/Twitter; через portfolio companies warm intro.
-- **Risk-line:** Late-stage чеки от a16z обычно $200-500M, не $1B solo. **Идеален как lead-investor + syndicate.**
+- **Risk-line:** Партнёрская модель не требует крупного solo-чека — вход ресурсами + возвратный аванс. **Идеален как lead-partner + syndicate.**
 
 ---
 
@@ -166,13 +167,13 @@
 - **Закрывает:** CIS regional dominance + готовы платить за финансовую инфра у потенциального конкурента-партнёра.
 - **Pillar fit:** Финансовый.
 - **Точка входа:** Прямой outreach (региональный, RU-speaking advantage).
-- **Risk-line:** Цена-якорь для Kaspi $1B = stretch, но **бренд-fit для региона уникален**.
+- **Risk-line:** Полный выкуп для Kaspi был бы stretch — но партнёрство (вход ресурсами + возвратный аванс, 49% апсайда) убирает этот барьер, а **бренд-fit для региона уникален**.
 
 ### 26. Halyk Bank Kazakhstan
 - **Закрывает:** Региональная BaaS-инфраструктура; AEVION может быть «their stack».
 - **Pillar fit:** Финансовый.
 - **Точка входа:** Halyk Digital subsidiary.
-- **Risk-line:** Цена $1B = stretch. Возможен partial-buy + JV.
+- **Risk-line:** Полный выкуп = stretch. Партнёрская рамка (ресурсы + возвратный аванс + JV-логика) ложится естественно.
 
 ### 27. Reliance Jio (Mukesh Ambani; Akash Ambani)
 - **Закрывает:** India digital stack + AEV как international settlement.
@@ -203,7 +204,7 @@
 ## Шаблон outbound-письма
 
 ```
-Subject: AEVION acquisition brief — Planet-scale infra, $1B floor
+Subject: AEVION partnership brief — Planet-scale infra, ресурсы за 49% апсайда
 
 Здравствуйте [имя],
 
@@ -217,7 +218,10 @@ envelope (FIPS 204 ML-DSA-65 GA). DevHub проксирует 9 интеграц
 Для [имя компании] AEVION закрывает [тот столп, который им нужнее всего] —
 конкретно [имя пары релевантных модулей].
 
-Floor цена exit: $1B USD net + retained brand + Senior Advisor seat 24 мес.
+Предлагаю не выкуп, а партнёрство: вы входите в основном ресурсами (compute,
+инженеры, дистрибуция, бренд) + небольшой возвратный аванс $10M; доход делится
+51/49; я остаюсь Chief Idea Officer и двигаю следующие 30 модулей. Бренд AEVION
+сохраняется, токен AEV вынесен из периметра.
 Полный пакет: https://aevion.app/acquire
 
 Готов организовать 30-мин звонок в течение недели.

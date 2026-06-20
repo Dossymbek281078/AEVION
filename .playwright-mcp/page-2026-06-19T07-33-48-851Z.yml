@@ -1,0 +1,370 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - button "🇷🇺 RU ▼" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: 🇷🇺
+      - generic [ref=e8]: RU
+      - generic [ref=e9]: ▼
+    - generic [ref=e10]:
+      - main [ref=e11]:
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]:
+              - generic [ref=e20]: ♞
+              - generic [ref=e21]:
+                - generic [ref=e23]: CyberChess
+                - generic [ref=e24]: SF18 · 10818 puzzles
+            - button "⌕ Команды ⌃K" [ref=e25] [cursor=pointer]:
+              - generic [ref=e26]: ⌕
+              - generic [ref=e27]: Команды
+              - generic [ref=e28]: ⌃K
+            - generic [ref=e29]:
+              - generic [ref=e30]: Профиль
+              - generic [ref=e31]:
+                - generic "Rating 800 · Novice" [ref=e32]:
+                  - generic [ref=e33]: ◆
+                  - generic [ref=e34]:
+                    - generic [ref=e35]: "800"
+                    - generic [ref=e36]: NOVICE
+                - generic [ref=e37]:
+                  - button "Chessy shop" [ref=e38] [cursor=pointer]:
+                    - img [ref=e39]:
+                      - generic [ref=e41]: C
+                    - generic [ref=e42]: "100"
+                  - button "Chessy info" [ref=e43] [cursor=pointer]:
+                    - img [ref=e44]
+            - generic [ref=e47]:
+              - generic [ref=e48]: Инструменты
+              - generic [ref=e49]:
+                - button "Настройки" [ref=e50] [cursor=pointer]:
+                  - img [ref=e51]
+                - button "Keyboard shortcuts" [ref=e54] [cursor=pointer]:
+                  - img [ref=e55]
+                - button "Mute" [ref=e58] [cursor=pointer]:
+                  - img [ref=e59]
+                - button "Music player" [ref=e62] [cursor=pointer]: 🎵
+                - button "Смотреть стрим" [ref=e64] [cursor=pointer]:
+                  - generic [ref=e65]: 📺
+                  - generic [ref=e66]: Стрим
+                  - generic [ref=e67]: ▾
+                - button "⛶" [ref=e68] [cursor=pointer]
+            - generic [ref=e69]:
+              - generic [ref=e70]: Навигация
+              - generic [ref=e71]:
+                - button "▦ Standard ▾" [ref=e73] [cursor=pointer]:
+                  - generic [ref=e74]: ▦
+                  - generic [ref=e75]: Standard
+                  - generic [ref=e76]: ▾
+                - button "🇷🇺 ru ▼" [ref=e78] [cursor=pointer]:
+                  - generic [ref=e79]: 🇷🇺
+                  - generic [ref=e80]: ru
+                  - generic [ref=e81]: ▼
+                - button "A AEVION ▾" [ref=e83] [cursor=pointer]:
+                  - generic [ref=e84]: A
+                  - generic [ref=e85]: AEVION
+                  - generic [ref=e86]: ▾
+          - generic [ref=e87]:
+            - button "📊 Анализ" [ref=e88] [cursor=pointer]:
+              - generic [ref=e89]: 📊
+              - generic [ref=e90]: Анализ
+            - button "🧠 Коуч" [ref=e91] [cursor=pointer]:
+              - generic [ref=e92]: 🧠
+              - generic [ref=e93]: Коуч
+            - button "🧩 Пазлы" [ref=e94] [cursor=pointer]:
+              - generic [ref=e95]: 🧩
+              - generic [ref=e96]: Пазлы
+            - button "📡 Стрим" [ref=e97] [cursor=pointer]:
+              - generic [ref=e98]: 📡
+              - generic [ref=e99]: Стрим
+            - button "📺 Видео" [ref=e100] [cursor=pointer]:
+              - generic [ref=e101]: 📺
+              - generic [ref=e102]: Видео
+            - button "⚙ Ещё" [ref=e103] [cursor=pointer]:
+              - generic [ref=e104]: ⚙
+              - generic [ref=e105]: Ещё
+          - generic [ref=e106]:
+            - complementary [ref=e107]:
+              - generic [ref=e108]:
+                - generic [ref=e109]: Оценка
+                - generic [ref=e110]: "+0.0"
+              - generic [ref=e114]:
+                - generic [ref=e115]: Материал
+                - generic [ref=e116]: Равенство
+                - generic [ref=e117]: —
+                - generic [ref=e118]: —
+              - generic [ref=e119]:
+                - generic [ref=e120]: Партия
+                - generic [ref=e121]: "Ход: 1"
+                - generic [ref=e122]: "Движок: Stockfish 18 · d22"
+                - generic [ref=e123]: "Коуч: супер-GM"
+            - generic [ref=e124]:
+              - generic [ref=e126]:
+                - generic [ref=e127]:
+                  - generic [ref=e128]: 🤖
+                  - generic [ref=e130]:
+                    - generic [ref=e131]: Club AI
+                    - generic [ref=e132]: "1200"
+                - generic [ref=e133]:
+                  - img [ref=e134]
+                  - generic [ref=e137]: 5:00
+              - generic [ref=e138]:
+                - generic [ref=e139]:
+                  - generic [ref=e140]: "8"
+                  - generic [ref=e141]: "7"
+                  - generic [ref=e142]: "6"
+                  - generic [ref=e143]: "5"
+                  - generic [ref=e144]: "4"
+                  - generic [ref=e145]: "3"
+                  - generic [ref=e146]: "2"
+                  - generic [ref=e147]: "1"
+                - generic [ref=e148]:
+                  - generic [ref=e149]:
+                    - generic:
+                      - img
+                    - generic: "8"
+                  - generic [ref=e150]:
+                    - generic:
+                      - img
+                  - generic [ref=e151]:
+                    - generic:
+                      - img
+                  - generic [ref=e152]:
+                    - generic:
+                      - img
+                  - generic [ref=e153]:
+                    - generic:
+                      - img
+                  - generic [ref=e154]:
+                    - generic:
+                      - img
+                  - generic [ref=e155]:
+                    - generic:
+                      - img
+                  - generic [ref=e156]:
+                    - generic:
+                      - img
+                  - generic [ref=e157]:
+                    - generic:
+                      - img
+                    - generic: "7"
+                  - generic [ref=e158]:
+                    - generic:
+                      - img
+                  - generic [ref=e159]:
+                    - generic:
+                      - img
+                  - generic [ref=e160]:
+                    - generic:
+                      - img
+                  - generic [ref=e161]:
+                    - generic:
+                      - img
+                  - generic [ref=e162]:
+                    - generic:
+                      - img
+                  - generic [ref=e163]:
+                    - generic:
+                      - img
+                  - generic [ref=e164]:
+                    - generic:
+                      - img
+                  - generic [ref=e165]:
+                    - generic: "6"
+                  - generic [ref=e173]:
+                    - generic: "5"
+                  - generic [ref=e181]:
+                    - generic: "4"
+                  - generic [ref=e189]:
+                    - generic: "3"
+                  - generic [ref=e197]:
+                    - generic:
+                      - img
+                    - generic: "2"
+                  - generic [ref=e198]:
+                    - generic:
+                      - img
+                  - generic [ref=e199]:
+                    - generic:
+                      - img
+                  - generic [ref=e200]:
+                    - generic:
+                      - img
+                  - generic [ref=e201]:
+                    - generic:
+                      - img
+                  - generic [ref=e202]:
+                    - generic:
+                      - img
+                  - generic [ref=e203]:
+                    - generic:
+                      - img
+                  - generic [ref=e204]:
+                    - generic:
+                      - img
+                  - generic [ref=e205]:
+                    - generic:
+                      - img
+                    - generic: "1"
+                    - generic: a
+                  - generic [ref=e206]:
+                    - generic:
+                      - img
+                    - generic: b
+                  - generic [ref=e207]:
+                    - generic:
+                      - img
+                    - generic: c
+                  - generic [ref=e208]:
+                    - generic:
+                      - img
+                    - generic: d
+                  - generic [ref=e209]:
+                    - generic:
+                      - img
+                    - generic: e
+                  - generic [ref=e210]:
+                    - generic:
+                      - img
+                    - generic: f
+                  - generic [ref=e211]:
+                    - generic:
+                      - img
+                    - generic: g
+                  - generic [ref=e212]:
+                    - generic:
+                      - img
+                    - generic: h
+                  - generic "Потяни чтобы изменить размер доски" [ref=e213]
+              - generic [ref=e214]:
+                - generic [ref=e215]:
+                  - generic [ref=e216]: a
+                  - generic [ref=e217]: b
+                  - generic [ref=e218]: c
+                  - generic [ref=e219]: d
+                  - generic [ref=e220]: e
+                  - generic [ref=e221]: f
+                  - generic [ref=e222]: g
+                  - generic [ref=e223]: h
+                - generic [ref=e224]:
+                  - 'button "Тема: AEVION" [ref=e225] [cursor=pointer]'
+                  - 'button "Тема: Янтарь" [ref=e226] [cursor=pointer]'
+                  - 'button "Тема: Emerald" [ref=e227] [cursor=pointer]'
+                  - 'button "Тема: Ocean" [ref=e228] [cursor=pointer]'
+                  - 'button "Тема: Purple" [ref=e229] [cursor=pointer]'
+                  - 'button "Тема: Wood" [ref=e230] [cursor=pointer]'
+                  - 'button "Тема: Dark" [ref=e231] [cursor=pointer]'
+                  - 'button "Тема: Ice" [ref=e232] [cursor=pointer]'
+                  - button "−" [ref=e234] [cursor=pointer]
+                  - generic "Размер доски" [ref=e235]: 100%
+                  - button "+" [ref=e236] [cursor=pointer]
+              - generic [ref=e237]:
+                - generic [ref=e238]:
+                  - generic [ref=e239]: 👤
+                  - generic [ref=e241]:
+                    - generic [ref=e242]: Вы
+                    - generic [ref=e243]: "800"
+                    - generic [ref=e244]: Novice
+                - generic [ref=e245]: 4:59
+              - generic [ref=e246]:
+                - button "Flip" [ref=e247] [cursor=pointer]:
+                  - img [ref=e248]
+                  - text: Flip
+                - button "New Game" [ref=e253] [cursor=pointer]
+                - button "🪞" [ref=e254] [cursor=pointer]
+                - button "🎤 Голос" [ref=e255] [cursor=pointer]
+                - button "⌨️ Ход текстом" [ref=e256] [cursor=pointer]
+              - generic [ref=e257]:
+                - button "🏳 Resign" [ref=e258] [cursor=pointer]
+                - button "½ Draw" [ref=e259] [cursor=pointer]
+                - button "↩ Undo" [ref=e260] [cursor=pointer]:
+                  - img [ref=e261]
+                  - text: ↩ Undo
+            - generic [ref=e264]:
+              - generic [ref=e265]:
+                - button "Ходы" [ref=e266] [cursor=pointer]
+                - button "Инфо" [ref=e267] [cursor=pointer]
+                - button "Коуч" [ref=e268] [cursor=pointer]
+              - generic [ref=e269]:
+                - button "🌡 Heatmap" [ref=e270] [cursor=pointer]
+                - button "🔊 Whisper" [ref=e271] [cursor=pointer]
+              - generic [ref=e272]:
+                - generic [ref=e273]: 🤖
+                - generic [ref=e275]:
+                  - generic [ref=e276]: Club
+                  - generic [ref=e277]: "1200"
+              - generic [ref=e279]:
+                - img [ref=e280]
+                - generic [ref=e283]: Your move
+              - generic [ref=e284]:
+                - generic [ref=e285]: 👤
+                - generic [ref=e288]:
+                  - generic [ref=e289]: You
+                  - generic [ref=e290]: "800"
+                  - generic [ref=e291]: ◆ Novice
+              - generic [ref=e292]:
+                - generic [ref=e294]: Ходы
+                - generic [ref=e297]:
+                  - generic [ref=e298]: ♟
+                  - generic [ref=e299]: Пока нет ходов
+                  - generic [ref=e300]: Сделай первый ход — история появится здесь
+              - generic [ref=e302]:
+                - generic [ref=e303]:
+                  - generic [ref=e304]: 🔍 Анализ варианта
+                  - generic [ref=e305]: Двигай за обе стороны не ломая партию
+                - button "Войти →" [ref=e306] [cursor=pointer]
+              - generic [ref=e307]:
+                - generic [ref=e308]:
+                  - generic [ref=e309]: "0"
+                  - generic [ref=e310]: W
+                - generic [ref=e311]:
+                  - generic [ref=e312]: "0"
+                  - generic [ref=e313]: L
+                - generic [ref=e314]:
+                  - generic [ref=e315]: "0"
+                  - generic [ref=e316]: D
+          - button "? горячие клавиши" [ref=e317] [cursor=pointer]:
+            - generic [ref=e318]: "?"
+            - generic [ref=e319]: горячие клавиши
+        - button "Развернуть AI Voice Coach" [ref=e320] [cursor=pointer]:
+          - generic [ref=e321]: 🎙️
+          - generic [ref=e322]: AI Коуч
+          - generic [ref=e323]: ▲
+        - generic [ref=e324]:
+          - button "💰" [ref=e325] [cursor=pointer]
+          - button "🎯" [ref=e326] [cursor=pointer]
+          - button "📝" [ref=e327] [cursor=pointer]
+          - button "🔗" [ref=e328] [cursor=pointer]
+          - button "⌨" [ref=e329] [cursor=pointer]
+      - region "Установка приложения" [ref=e330]:
+        - generic [ref=e331]:
+          - generic [ref=e332]: ♞
+          - generic [ref=e333]: Установи CyberChess как приложение
+          - button "Скрыть" [ref=e334] [cursor=pointer]: ✕
+        - list [ref=e335]:
+          - listitem [ref=e336]:
+            - generic [ref=e337]: ⚡
+            - generic [ref=e338]: Запуск с домашнего экрана — без браузера и адресной строки
+          - listitem [ref=e339]:
+            - generic [ref=e340]: 📶
+            - generic [ref=e341]: Работает офлайн — играй с AI без сети
+          - listitem [ref=e342]:
+            - generic [ref=e343]: 🔔
+            - generic [ref=e344]: Ежедневные напоминания о пазле — держи серию
+        - generic [ref=e345]:
+          - button "Установить" [ref=e346] [cursor=pointer]:
+            - generic [ref=e347]: 📲
+            - generic [ref=e348]: Установить
+          - button "Инструкция" [ref=e349] [cursor=pointer]:
+            - generic [ref=e350]: "?"
+            - generic [ref=e351]: Инструкция
+    - status [ref=e352]:
+      - generic [ref=e353]: i
+      - generic [ref=e354]: Playing White
+      - button "Закрыть" [ref=e355] [cursor=pointer]: ×
+    - region "PWA install prompt" [ref=e356]:
+      - generic [ref=e357]: 📲
+      - generic [ref=e358]:
+        - generic [ref=e359]: Установить AEVION
+        - generic [ref=e360]: Offline-режим, нативный доступ к QTrade и AEV-кошельку
+      - button "Install" [ref=e361] [cursor=pointer]
+      - button "Скрыть install prompt" [ref=e362] [cursor=pointer]: ✕

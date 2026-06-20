@@ -1,0 +1,10 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - button "🇺🇸 EN ▼" [ref=e5] [cursor=pointer]:
+      - generic [ref=e6]: 🇺🇸
+      - generic [ref=e7]: EN
+      - generic [ref=e8]: ▼
+    - main [ref=e10]:
+      - generic [ref=e15]: Подгружаю шахматы…
+  - button "Open Next.js Dev Tools" [ref=e21] [cursor=pointer]:
+    - img [ref=e22]

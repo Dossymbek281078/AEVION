@@ -1,0 +1,9 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - button "🇷🇺 RU ▼" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: 🇷🇺
+      - generic [ref=e8]: RU
+      - generic [ref=e9]: ▼
+    - main [ref=e11]:
+      - generic [ref=e16]: Подгружаю шахматы…

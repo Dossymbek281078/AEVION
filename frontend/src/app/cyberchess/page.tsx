@@ -59,6 +59,7 @@ const CC_DARK = {
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
+import StreamMenu from "./StreamMenu";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -149,8 +150,13 @@ const ALS: AL[] = [
   {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
   {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
   {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
+  // Максимум: полная сила Stockfish 18 — глубокий поиск (depth 20), без рандома.
+  // Практически непобедим для человека (~3500). thinkMs 0 — без искусственной задержки.
+  {name:"Stockfish",elo:3500,depth:8,color:"#06b6d4",rand:0,thinkMs:0},
 ];
-const SFD: Record<number,number> = {3:8,4:12,5:16};
+// Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
+// Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
+const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
@@ -1272,6 +1278,19 @@ export default function CyberChessPage(){
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
+  // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
+  // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
+  const firstRunRef=useRef(false);
+  // Закрытие приветствия-награды: на первом визите далее запускаем тур (если не виден).
+  const closeDailyReward=useCallback(()=>{
+    const wasWelcome=dailyReward?.isWelcome;
+    sDailyReward(null);
+    if(wasWelcome&&firstRunRef.current){
+      firstRunRef.current=false;
+      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+      if(!tourSeen)setTimeout(()=>sTourStep(0),300);
+    }
+  },[dailyReward]);
   const[dueReminders,sDueReminders]=useState<Array<{entryId:string;milestone:1|3|7;daysSinceStudy:number}>>([]);
   const[hotseat,sHotseat]=useState(false);
   const[showEndgames,sShowEndgames]=useState(false);
@@ -2037,13 +2056,15 @@ export default function CyberChessPage(){
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
     // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
-    let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
     // First-time onboarding overlay (3-step color/AI/time choice) — runs BEFORE tour.
     if(!hasCompletedOnboarding())setTimeout(()=>sShowOnboarding(true),400);
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
-      setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),800);
-      if(!tourSeen)setTimeout(()=>sTourStep(0),2200);
+      // Первый визит: НЕ стопкой. Очередь — онбординг → приветствие → тур.
+      // Приветствие триггерит OnboardingOverlay.onComplete/onSkip; тур — closeDailyReward.
+      // Если онбординг уже пройден (edge) — приветствие сразу, тур после него.
+      firstRunRef.current=true;
+      if(hasCompletedOnboarding())setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),600);
     }else if(c.lastDaily!==tk){
       // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
@@ -4154,6 +4175,36 @@ export default function CyberChessPage(){
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
+  // Проиграть решение пазла НА ДОСКЕ (визуальный разбор, lichess-style). Сбрасывает
+  // позицию к старту и анимированно прокатывает всю линию sol[] (ходы игрока +
+  // ответы соперника попеременно). Помечает как "shown" — без награды (это обучение,
+  // не решение). Доступно на idle/wrong/shown, где sol[] ещё целая (correct режет её).
+  const pzSolPlayingRef=useRef(false);
+  const playPuzzleSolution=useCallback(()=>{
+    if(!pzCurrent||!pzCurrent.sol?.length||pzSolPlayingRef.current)return;
+    const sol=pzCurrent.sol.slice();const startFen=pzCurrent.fen;
+    pzSolPlayingRef.current=true;
+    const g=new Chess(startFen);
+    setGame(g);sBk(k=>k+1);sLm(null);sHist([]);sFenHist([startFen]);sSel(null);sVm(new Set());sPms([]);sPmSel(null);
+    sPzAttempt("shown");
+    let i=0;
+    const step=()=>{
+      if(i>=sol.length){pzSolPlayingRef.current=false;showToast("Это и было решение — попробуй повторить на следующей","info");return}
+      const u=sol[i];
+      let mv:any=null;
+      try{mv=g.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:(u[4] as any)||"q"})}catch{mv=null}
+      if(!mv){
+        // Битый/нелегальный ход в линии решения — не крутим вхолостую остаток, чистый стоп.
+        pzSolPlayingRef.current=false;
+        showToast(i===0?"Решение недоступно для этого пазла":"Показал решение до конца доступной линии","info");
+        return;
+      }
+      sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,g.fen()]);sBk(k=>k+1);snd(mv.captured?"capture":"move");
+      i++;
+      if(i<sol.length)setTimeout(step,750);else{pzSolPlayingRef.current=false;}
+    };
+    setTimeout(step,300);
+  },[pzCurrent,snd,showToast]);
 
   /* ── Puzzle hotkeys — H: подсказка · N/→: следующий · R: рестарт текущего.
      Отдельный хэндлер (определён ПОСЛЕ nextPz во избежание TDZ). Глобальный хэндлер
@@ -4866,21 +4917,22 @@ export default function CyberChessPage(){
           aria-label="Music player"
           style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
         >🎵</button>
-        {/* Stream sidebar toggle — 📺 открывает/закрывает медиа-панель с YT/Twitch */}
-        <button
-          onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
-          title={wsPreset==="stream"?"Скрыть стрим-панель":"📺 Открыть стрим-панель (YT/Twitch)"}
-          style={{
-            padding:"6px 10px",minHeight:36,minWidth:36,
-            border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
-            borderRadius:RADIUS.md,
-            background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
-            color:wsPreset==="stream"?CC.brand:"inherit",
-            cursor:"pointer",fontSize:15,fontWeight:700,
-            display:"inline-flex",alignItems:"center",justifyContent:"center",
-            transition:`all 150ms`,
+        {/* Единый вход «смотреть стрим» — медиа-панель / PiP / мульти-панель.
+            Заменил разрозненные header-кнопку 📺 + quick-bar (📺/PiP/Панели). */}
+        <StreamMenu
+          mediaActive={wsPreset==="stream"}
+          pipOpen={pip.open}
+          onToggleMedia={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
+          onClosePiP={()=>pip.hide()}
+          onOpenMulti={()=>sShowMultiPanel(true)}
+          onOpenPiP={()=>{
+            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
+            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
+            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
+            if(!url)return;const src=detectMediaSource(url.trim());
+            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
           }}
-        >📺</button>
+        />
         <button
           onClick={()=>{
             const el=document.documentElement;
@@ -4948,42 +5000,9 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Workspace quick-bar — PiP + Multi-panel + stream toggle; compact 1 row.
-          Hidden during active play to maximize board space (media features → Ctrl+K / workspace dropdown). */}
-      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&!(on&&tab==="play")&&(
-        <div style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,flexWrap:"nowrap"}}>
-          <button onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
-            title={wsPreset==="stream"?"Скрыть медиа-панель (YT/Twitch)":"Открыть медиа-панель (YT/Twitch)"}
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
-              background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
-              color:wsPreset==="stream"?CC.brand:CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",transition:"all 0.12s",whiteSpace:"nowrap"}}>
-            <span>📺</span><span>{wsPreset==="stream"?"Медиа ✓":"Медиа"}</span>
-          </button>
-          <button onClick={()=>{
-            if(pip.open){pip.hide();return}
-            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
-            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
-            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
-            if(!url)return;const src=detectMediaSource(url.trim());
-            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
-          }} title="Floating PiP — видео поверх доски"
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${pip.open?"#fb923c":CC.border}`,
-              background:pip.open?"rgba(251,146,60,0.1)":CC.surface1,
-              color:pip.open?"#ea580c":CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span>{pip.open?"⏏":"⊡"}</span><span>PiP</span>
-          </button>
-          <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel (несколько стримов)"
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
-              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span>⊞</span><span>Панели</span>
-          </button>
-        </div>
-      )}
+      {/* Workspace quick-bar удалён 2026-06-18 — все входы «смотреть стрим»
+          (медиа-панель / PiP / мульти-панель) теперь в едином StreamMenu (📺 Стрим)
+          в хедере. Освобождает строку и убирает наезд на низ доски. */}
 
       {/* LAUNCHPAD DASHBOARD */}
       {setup&&tab==="play"&&!streamerMode&&(()=>{
@@ -5005,6 +5024,15 @@ export default function CyberChessPage(){
           else break;
         }
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+
+          {/* ─── Медиа-панель (YouTube/Twitch) на стартовом экране ───
+              Раньше WorkspaceMediaPane рендерился только внутри cc-main-row (в игре),
+              поэтому 📺→Медиа-панель на лаунчпаде ничего не показывала («нет окна
+              ютюба/твича»). Теперь панель появляется и здесь — фикс. Высота фикс,
+              т.к. в колонке нет flex-stretch контекста доски. */}
+          {wsShowMedia&&<div style={{height:380,display:"flex",flexShrink:0}}>
+            <WorkspaceMediaPane/>
+          </div>}
 
           {/* ─── Session stats pill strip ─── */}
           {totalGames>0&&<div style={{
@@ -5266,11 +5294,11 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
-                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?5:4}
-                    value={Math.min(aiI,(chessy.owned.master_ai||isPro)?5:4)}
-                    onChange={e=>{const v=+e.target.value;if(v===5&&!(chessy.owned.master_ai||isPro)){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                    value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
+                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI===5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
                 {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
@@ -8688,7 +8716,8 @@ export default function CyberChessPage(){
                   <Btn size="md" variant="secondary" onClick={randomPz} title="Случайная">🎲</Btn>
                   <Btn size="md" variant="secondary" onClick={()=>pzFileInputRef.current?.click()} title="Загрузить позицию FEN/PGN">📂</Btn>
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
-                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}}>Заново</Btn>}
+                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
+                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
@@ -9396,9 +9425,40 @@ ${question.trim()}`;
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);
                   const apiMsgs=[...coachChat,{role:"user" as const,content:contextBlock}].map(m=>({role:m.role,content:typeof m==="object"&&"content" in m?m.content:""}));
+                  const body=JSON.stringify({system:SYSTEM,messages:apiMsgs,maxTokens:600});
+                  // 1) Стрим — живая печать токен за токеном. При любом сбое тихо
+                  //    падаем на обычный /chat ниже (он остаётся рабочим фоллбэком).
+                  let streamed=false,placeholderAdded=false;
+                  try{
+                    const sres=await fetch(`${BACKEND}/api/coach/chat/stream`,{
+                      method:"POST",headers:{"Content-Type":"application/json"},body,signal:ctrl.signal});
+                    if(sres.ok&&sres.body){
+                      const reader=sres.body.getReader();const dec=new TextDecoder();let buf="",acc="";
+                      try{
+                        for(;;){
+                          const{done,value}=await reader.read();if(done)break;
+                          buf+=dec.decode(value,{stream:true});
+                          let nl;while((nl=buf.indexOf("\n"))>=0){
+                            const line=buf.slice(0,nl).trim();buf=buf.slice(nl+1);
+                            if(!line.startsWith("data:"))continue;
+                            const payload=line.slice(5).trim();if(!payload||payload==="[DONE]")continue;
+                            let ev:any;try{ev=JSON.parse(payload)}catch{continue}
+                            if(ev?.type==="content_block_delta"&&ev.delta?.type==="text_delta"&&typeof ev.delta.text==="string"){
+                              acc+=ev.delta.text;const snap=acc;
+                              if(!placeholderAdded){placeholderAdded=true;sCoachChat([...newMsgs,{role:"assistant",content:snap,ts:Date.now()}]);}
+                              else sCoachChat(prev=>{if(!prev.length)return prev;const c=prev.slice();c[c.length-1]={...c[c.length-1],content:snap};return c;});
+                            }
+                          }
+                        }
+                      }catch{/* обрыв стрима */}
+                      if(acc.trim())streamed=true; // даже частичный ответ считаем выданным (не дублируем через /chat)
+                    }
+                  }catch{/* стрим недоступен — фоллбэк ниже */}
+                  if(streamed){clearTimeout(tId);return;}
+                  // 2) Обычный /chat — фоллбэк, если стрим не сработал
                   const res=await fetch(`${BACKEND}/api/coach/chat`,{
                     method:"POST",headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify({system:SYSTEM,messages:apiMsgs,maxTokens:600}),
+                    body,
                     signal:ctrl.signal
                   });
                   clearTimeout(tId);
@@ -9407,8 +9467,27 @@ ${question.trim()}`;
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
                   sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
                 }catch(e:any){
-                  const errMsg=e?.name==="AbortError"?"⏱ Coach думал слишком долго — попробуй ещё раз":/fetch|network|Failed/i.test(e?.message||"")?"⚠ Не могу связаться с Coach AI. Бэкенд недоступен — попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.":`Ошибка: ${e?.message||"unknown"}`;
-                  sCoachChat([...newMsgs,{role:"assistant",content:errMsg,ts:Date.now()}]);
+                  // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
+                  // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара
+                  // (consistent с тем, что игрок уже видит). Коуч всегда что-то отвечает.
+                  const localBest=()=>new Promise<string|undefined>((resolve)=>{
+                    const sf=sfR.current;
+                    if(!sf?.ready()){resolve(undefined);return}
+                    let done=false;
+                    const to=setTimeout(()=>{if(!done){done=true;resolve(undefined)}},4500);
+                    try{sf.go(fen,14,(f,t,p)=>{if(done)return;done=true;clearTimeout(to);resolve(f&&t?`${f}${t}${p||""}`:undefined)})}
+                    catch{clearTimeout(to);resolve(undefined)}
+                  });
+                  let bestSan="";
+                  try{
+                    const uci=await localBest();
+                    if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
+                  }catch{}
+                  const base=e?.name==="AbortError"?"⏱ Coach AI думал слишком долго.":"⚠ Coach AI недоступен (бэкенд).";
+                  const tip=bestSan
+                    ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
+                    :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
+                  sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);
                 }
@@ -10550,7 +10629,7 @@ ${question.trim()}`;
     {/* Daily Login Reward modal */}
     {dailyReward&&<div role="dialog" aria-modal="true"
       style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16}}
-      onClick={()=>sDailyReward(null)}>
+      onClick={closeDailyReward}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
         borderRadius:20,maxWidth:360,width:"100%",padding:"28px 32px",textAlign:"center",
@@ -10586,7 +10665,7 @@ ${question.trim()}`;
         <div style={{fontSize:11,color:"#94a3b8",marginBottom:16}}>
           {dailyReward.streak>=14?"Следующий бонус: +200 (14 дней)":dailyReward.streak>=7?"Следующий рубеж: 14 дней → +200":dailyReward.streak>=3?"Следующий рубеж: 7 дней → +100":"Следующий рубеж: 3 дня → +30"}
         </div>
-        <button onClick={()=>sDailyReward(null)} style={{
+        <button onClick={closeDailyReward} style={{
           width:"100%",padding:"12px 20px",borderRadius:12,border:"none",
           background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
           fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
@@ -10660,8 +10739,12 @@ ${question.trim()}`;
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
         sShowOnboarding(false);
+        // Очередь первого визита: следом — приветствие (+50), затем тур (см. closeDailyReward).
+        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
       }}
-      onSkip={()=>{markOnboardingDone();sShowOnboarding(false)}}
+      onSkip={()=>{markOnboardingDone();sShowOnboarding(false);
+        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
+      }}
     />}
 
     {/* Coach SR reminders — surfaced as a single toast-card if any 1/3/7-day milestones are due */}
@@ -10861,7 +10944,9 @@ ${question.trim()}`;
     {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
     {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
       style={{
-        position:"fixed",bottom:16,right:16,zIndex:Z.sticky,
+        // bottom:64 (не 16) — пилюля AI-коуча уже сидит в правом нижнем углу;
+        // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
+        position:"fixed",bottom:64,right:16,zIndex:Z.sticky,
         display:"inline-flex",alignItems:"center",gap:6,
         padding:"6px 12px 6px 6px",
         background:CC.surface1,

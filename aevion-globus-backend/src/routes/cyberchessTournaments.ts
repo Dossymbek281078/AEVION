@@ -732,6 +732,86 @@ function sortStandings(t: Tournament): Player[] {
   });
 }
 
+// ── cross-tournament leaderboard ───────────────────────────────────
+// Aggregates final placements across ALL tournaments into a single global
+// ranking (player → tournaments / wins / podiums / points). This is the
+// piece the Tournament Hub (/cyberchess/tournament) needs but didn't have:
+// per-tournament standings existed, a cross-tournament view did not.
+
+export interface CrossLeaderboardEntry {
+  player: string;
+  tournaments: number;
+  wins: number; // 1st places
+  podiums: number; // top-3 finishes
+  points: number;
+}
+
+/**
+ * Derive (playerName → placement) for one tournament.
+ *  - swiss / round_robin: rank by standings (score → buchholz → rating)
+ *  - single_elimination: derive from the bracket — final winner = 1, final
+ *    loser = 2, semifinal losers = 3. Only counts when results exist.
+ * Returns [] when no placements are derivable yet (no results played).
+ */
+function placementsForTournament(t: Tournament): { name: string; placement: number }[] {
+  if ((t.format === "swiss" || t.format === "round_robin") && t.roster.length > 0) {
+    // Only meaningful once at least one game has been played.
+    const played = t.roster.some((p) => p.opponentIds.length > 0);
+    if (!played) return [];
+    return sortStandings(t).map((p, i) => ({ name: p.name, placement: i + 1 }));
+  }
+  if (t.format === "single_elimination" && t.rounds.length > 0) {
+    const out: { name: string; placement: number }[] = [];
+    const finalRound = t.rounds[t.rounds.length - 1];
+    const finalMatch = finalRound?.matches[0];
+    if (finalMatch && finalMatch.status === "done" && finalMatch.winner && finalMatch.winner !== "draw") {
+      const champ = finalMatch.winner === "white" ? finalMatch.white : finalMatch.black;
+      const runner = finalMatch.winner === "white" ? finalMatch.black : finalMatch.white;
+      if (champ) out.push({ name: champ, placement: 1 });
+      if (runner) out.push({ name: runner, placement: 2 });
+    }
+    if (t.rounds.length >= 2) {
+      const sf = t.rounds[t.rounds.length - 2];
+      for (const m of sf.matches) {
+        if (m.status === "done" && m.winner && m.winner !== "draw") {
+          const loser = m.winner === "white" ? m.black : m.white;
+          if (loser && !out.some((o) => o.name === loser)) out.push({ name: loser, placement: 3 });
+        }
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
+export function computeCrossTournamentLeaderboard(tournaments: Tournament[]): CrossLeaderboardEntry[] {
+  const map = new Map<string, CrossLeaderboardEntry>();
+  for (const t of tournaments) {
+    for (const { name, placement } of placementsForTournament(t)) {
+      let e = map.get(name);
+      if (!e) {
+        e = { player: name, tournaments: 0, wins: 0, podiums: 0, points: 0 };
+        map.set(name, e);
+      }
+      e.tournaments += 1;
+      if (placement === 1) e.wins += 1;
+      if (placement <= 3) e.podiums += 1;
+    }
+  }
+  // Same formula as the frontend's computeTournamentLeaderboard so hub numbers
+  // stay consistent whether served from mock or backend.
+  for (const e of map.values()) {
+    e.points = 10 * e.wins + 5 * (e.podiums - e.wins) + e.tournaments;
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.wins - a.wins ||
+      b.podiums - a.podiums ||
+      a.player.localeCompare(b.player),
+  );
+}
+
 function applyResultToMatch(
   t: Tournament,
   match: BracketMatch,
@@ -930,6 +1010,18 @@ router.get("/list", (req: Request, res: Response): void => {
     realPlayers: !!t.realPlayers,
   }));
   res.json({ ok: true, count: slim.length, tournaments: slim });
+});
+
+// GET /leaderboard — cross-tournament global ranking.
+// MUST be declared before GET /:id, otherwise "leaderboard" is captured as an id.
+router.get("/leaderboard", (_req: Request, res: Response): void => {
+  const leaderboard = computeCrossTournamentLeaderboard(TOURNAMENTS);
+  res.json({
+    ok: true,
+    count: leaderboard.length,
+    leaderboard,
+    formula: "points = 10·wins + 5·(podiums − wins) + tournaments",
+  });
 });
 
 // GET /:id

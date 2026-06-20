@@ -9,9 +9,9 @@ vi.mock("next/link", () => ({
 }));
 
 describe("PipelineSteps", () => {
-  it("renders all 5 step labels", () => {
+  it("renders all 6 step labels", () => {
     render(<PipelineSteps current="auth" />);
-    for (const label of ["Auth", "QRight", "QSign", "Bureau", "Planet"]) {
+    for (const label of ["Auth", "QRight", "QSign", "Shield", "Bureau", "Planet"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
@@ -28,11 +28,12 @@ describe("PipelineSteps", () => {
     expect(checks.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("renders 5 anchors with hrefs to correct routes", () => {
+  it("renders 6 anchors with hrefs to correct routes", () => {
     const { container } = render(<PipelineSteps current="qright" />);
     const anchors = container.querySelectorAll("a");
-    expect(anchors).toHaveLength(5);
+    expect(anchors).toHaveLength(6);
     expect(anchors[0].getAttribute("href")).toBe("/auth");
-    expect(anchors[4].getAttribute("href")).toBe("/planet");
+    expect(anchors[3].getAttribute("href")).toBe("/quantum-shield");
+    expect(anchors[5].getAttribute("href")).toBe("/planet");
   });
 });

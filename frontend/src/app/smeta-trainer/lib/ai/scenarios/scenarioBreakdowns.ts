@@ -25,6 +25,7 @@ export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
   "waste-factor-missing",
   "overhead-mismatch",
   "index-double",
+  "coef-unjustified",
 ]);
 
 function normName(s: string): string {
@@ -307,6 +308,30 @@ export function explainIndexDouble(lsr: Lsr, notice: AiNotice): string | null {
   return lines.join("\n");
 }
 
+/** Разбор коэффициента условий без обоснования. */
+export function explainCoefUnjustified(lsr: Lsr, notice: AiNotice): string | null {
+  const found = findPosition(lsr, notice.context.positionId);
+  if (!found) return null;
+  const { position } = found;
+  const coefs = position.coefficients ?? [];
+  const weak = coefs.filter((c) => !c.justification || c.justification.trim().length < 3);
+  const target = weak[0] ?? coefs[0];
+  if (!target) return null;
+
+  const lines: string[] = [];
+  lines.push(`**Позиция ${position.rateCode} — коэффициент «${target.kind}» = ${target.value} без обоснования.**`);
+  lines.push("");
+  lines.push(`Коэффициенты условий производства удорожают позицию (здесь на ${Math.round((target.value - 1) * 100)}%),`);
+  lines.push(`поэтому методика РК применяет их **только при документальном обосновании**:`);
+  lines.push(`   • стеснённые / охранные зоны — ППР или схема производства работ;`);
+  lines.push(`   • действующий объект — приказ/договор о работах на эксплуатируемом объекте;`);
+  lines.push(`   • высота — проектная отметка/схема высотных работ.`);
+  lines.push("");
+  lines.push(`Без документа экспертиза снимает коэффициент, и смета оказывается завышенной. Заполните`);
+  lines.push(`поле обоснования коэффициента ссылкой на конкретный документ.`);
+  return lines.join("\n");
+}
+
 /** Готовый текст разбора по замечанию или null (тогда — общий AI-разбор). */
 export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | null {
   switch (notice.scenario) {
@@ -333,6 +358,8 @@ export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | nul
       return explainOverhead(lsr, notice);
     case "index-double":
       return explainIndexDouble(lsr, notice);
+    case "coef-unjustified":
+      return explainCoefUnjustified(lsr, notice);
     default:
       return null;
   }

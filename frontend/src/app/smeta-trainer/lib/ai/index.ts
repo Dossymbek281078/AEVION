@@ -19,6 +19,7 @@ import { checkDuplicateMaterial } from "./scenarios/duplicateMaterial";
 import { checkMaterialPriceUnjustified } from "./scenarios/materialPriceUnjustified";
 import { checkCoefDouble } from "./scenarios/coefDouble";
 import { checkIndexDouble } from "./scenarios/indexDouble";
+import { checkCoefUnjustified } from "./scenarios/coefUnjustified";
 
 /** Запустить все AI-проверки на ЛСР. */
 export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
@@ -46,5 +47,7 @@ export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
   notices.push(...checkMaterialPriceUnjustified(lsr));
   notices.push(...checkCoefDouble(lsr));
   notices.push(...checkIndexDouble(lsr));
+  // Обоснование коэффициентов условий (batch E — урок 2.6)
+  notices.push(...checkCoefUnjustified(lsr));
   return notices;
 }

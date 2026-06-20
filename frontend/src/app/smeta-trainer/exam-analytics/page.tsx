@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EXAM_TASKS } from "../lib/examTasks";
 import { computeStats, commonMistakes, loadAttempts, type JournalStats, type MistakeAggregate } from "../lib/examJournal";
 import { gradeExam } from "../lib/examGrader";
-import { scenarioLabel, NEW_DETECTOR_SCENARIOS } from "../lib/ai/scenarioLabels";
+import { scenarioLabel, TRACKED_NEW_SCENARIOS } from "../lib/ai/scenarioLabels";
 
 type ScenarioStat = {
   scenario: string;
@@ -58,12 +58,12 @@ export default function ExamAnalyticsPage() {
     [scenarioCountMap]
   );
 
-  // Сводка по новым детекторам (batch D): покрытие банка экзаменов.
+  // Сводка по новым детекторам (batch D + E): покрытие банка экзаменов.
   // Нулевое срабатывание = тип ошибки не воспроизводится ни одним стартовым
   // шаблоном → методисту стоит добавить задачу, где эта ловушка проявится.
   const batchDProfile = useMemo(
     () =>
-      NEW_DETECTOR_SCENARIOS.map((code) => {
+      TRACKED_NEW_SCENARIOS.map((code) => {
         const stat = scenarioCountMap.get(code);
         return {
           scenario: code,
@@ -288,10 +288,10 @@ export default function ExamAnalyticsPage() {
           )}
         </section>
 
-        {/* Сводка по новым детекторам batch D — для куратора/методиста */}
+        {/* Сводка по новым детекторам batch D/E — для куратора/методиста */}
         <section className="bg-white border border-indigo-200 rounded-lg p-4 mb-4">
           <h2 className="text-base font-semibold text-indigo-900 mb-1">
-            🆕 Новые детекторы (batch D) — покрытие банка
+            🆕 Новые детекторы (batch D/E) — покрытие банка
           </h2>
           <p className="text-[11px] text-slate-500 mb-3 italic">
             Детекторы ресурсной части и коэффициентов (урок 2.6). Сколько стартовых шаблонов их

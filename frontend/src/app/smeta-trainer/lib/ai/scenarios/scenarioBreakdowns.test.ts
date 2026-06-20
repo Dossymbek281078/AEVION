@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deterministicBreakdown, explainDoubleCount, explainMissingCoef } from "./scenarioBreakdowns";
+import { deterministicBreakdown, explainDoubleCount, explainMissingCoef, explainCoefUnjustified } from "./scenarioBreakdowns";
 import type { Lsr, AiNotice, SmetaPosition } from "../../types";
 
 function pos(id: string, rateCode: string): SmetaPosition {
@@ -53,6 +53,23 @@ describe("explainMissingCoef", () => {
     expect(txt).toContain("Демонтаж");
     expect(txt).toContain("15%");
     expect(txt).toContain("+К");
+  });
+});
+
+describe("explainCoefUnjustified", () => {
+  it("называет коэффициент и удорожание", () => {
+    const p: SmetaPosition = { id: "p1", rateCode: "ШТ-13", volume: 1, coefficients: [{ kind: "стеснённые", value: 1.15, justification: "" }] };
+    const l = lsr([{ id: "s1", title: "Штукатурка", category: "отделочные", positions: [p] }]);
+    const txt = explainCoefUnjustified(l, notice({ scenario: "coef-unjustified", context: { positionId: "p1" } }))!;
+    expect(txt).toContain("ШТ-13");
+    expect(txt).toContain("стеснённые");
+    expect(txt).toContain("15%");
+  });
+
+  it("маршрутизируется через deterministicBreakdown", () => {
+    const p: SmetaPosition = { id: "p1", rateCode: "ШТ-13", volume: 1, coefficients: [{ kind: "высота", value: 1.2, justification: "" }] };
+    const l = lsr([{ id: "s1", title: "Штукатурка", category: "отделочные", positions: [p] }]);
+    expect(deterministicBreakdown(l, notice({ scenario: "coef-unjustified", context: { positionId: "p1" } }))).toContain("ШТ-13");
   });
 });
 

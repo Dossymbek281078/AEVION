@@ -31,6 +31,7 @@ export const SCENARIO_LABELS: Record<string, ScenarioLabel> = {
   "material-price-unjustified": { label: "Цена без обоснования", short: "Индивидуальная цена материала без ссылки на прайс/КП." },
   "coef-double": { label: "Двойной коэффициент", short: "Перекрывающиеся/повторённые коэффициенты условий." },
   "index-double": { label: "Двойной индекс", short: "Текущая цена материала умножается на индекс повторно." },
+  "coef-unjustified": { label: "Коэф. без обоснования", short: "Коэффициент условий применён без подтверждающего документа." },
 };
 
 export function scenarioLabel(code: string): ScenarioLabel {
@@ -48,3 +49,14 @@ export const NEW_DETECTOR_SCENARIOS: string[] = [
   "coef-double",
   "index-double",
 ];
+
+/**
+ * Сценарии «batch E» — обоснование коэффициентов условий (урок 2.6, продолжение).
+ * Отслеживаются в аналитике куратора вместе с batch D как «новые детекторы».
+ */
+export const BATCH_E_SCENARIOS: string[] = [
+  "coef-unjustified",
+];
+
+/** Все детекторы, добавленные после первичной серии (D + E) — покрытие банка. */
+export const TRACKED_NEW_SCENARIOS: string[] = [...NEW_DETECTOR_SCENARIOS, ...BATCH_E_SCENARIOS];

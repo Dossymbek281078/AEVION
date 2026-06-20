@@ -751,7 +751,10 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
 
-  const ownerId = payload.ownerId || auth.sub;
+  // Owner is always the authenticated JWT sub — never a client-supplied
+  // payload.ownerId, which would let any logged-in user create submissions
+  // attributed to (and polluting the compliance record of) another user.
+  const ownerId = auth.sub;
 
   const artifactType = payload.artifactType as string;
   const title = payload.title as string;
@@ -1327,7 +1330,11 @@ planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, r
 
   const payload = req.body || {};
   const submissionId = req.params.submissionId;
-  const ownerId = payload.ownerId || auth.sub;
+  // Owner is the authenticated JWT sub — never a client-supplied payload.ownerId.
+  // Trusting it let any logged-in user target another user's submission: read
+  // their latest artifact version (codeIndex / media descriptors) and append a
+  // resubmit version into someone else's lineage.
+  const ownerId = auth.sub;
 
   const recent = await pool.query(
     `

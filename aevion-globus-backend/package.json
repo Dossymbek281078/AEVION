@@ -72,7 +72,7 @@
     "nodemailer": "^8.0.7",
     "opentimestamps": "^0.4.9",
     "pdfkit": "^0.18.0",
-    "pg": "^8.19.0",
+    "pg": "^8.22.0",
     "qrcode": "^1.5.4",
     "secrets.js-grempe": "^2.0.0",
     "stripe": "^22.1.1",

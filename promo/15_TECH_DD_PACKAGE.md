@@ -148,7 +148,7 @@ Storage:  Railway volumes + Cloudflare (static assets)
 | **HealthAI** | 85% | Медицинская верификация контента |
 | **QShield** | 90% | Enterprise onboarding |
 | **Planet** | 85% | Legal opinion на attestation |
-| **Constitution** | 95% | Маркетинг на corpora
+| **Constitution** | 95% | Маркетинг на corpora |
 
 ### MVP (нужна команда для продакшна)
 

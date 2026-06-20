@@ -107,7 +107,8 @@
       "Bash(echo \"tsc-done\\(exit=$?\\)\")",
       "Bash(grep -nE \"^#{1,4} |урок|Урок|модул|Модул|2\\\\.[0-9]\" 01-модули.md)",
       "Bash(npm -v)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(echo \"BUILD:$?\")"
     ]
   }
 }

@@ -91,7 +91,7 @@
 6. **F2 phase-3** — Stockfish multiPV depth 25+ (сейчас depth 18 для recall). Точнее CPI, но медленнее. Toggle в settings.
 
 ### Дизайн/UX долг
-7. ✅ **Tournament UI page** — DONE. `/cyberchess/tournament` (hub, bracket/leaderboard/badges), `/cyberchess/tournaments` (список + API-fallback), `/cyberchess/tournaments/[id]` (детальная, polling+SSE matchmaking). **2026-06-20:** hub подключён к реальным трофеям игрока (`ldTrophies()`), игрок «Ты» вливается в лидерборд. Осталось — backend cross-tournament API.
+7. ✅ **Tournament UI page** — DONE. `/cyberchess/tournament` (hub, bracket/leaderboard/badges), `/cyberchess/tournaments` (список + API-fallback), `/cyberchess/tournaments/[id]` (детальная, polling+SSE matchmaking). **2026-06-20:** hub подключён к реальным трофеям игрока (`ldTrophies()`), игрок «Ты» вливается в лидерборд. Cross-tournament leaderboard backend готов: `GET /api/cyberchess-tournaments/leaderboard` (агрегатор `computeCrossTournamentLeaderboard`, +vitest 5 кейсов), hub тянет live с фоллбэком на демо.
 8. **Time-control selector в Setup screen** — сейчас Quick Game / Variants есть, но фактический TC иногда теряется.
 9. **Mobile playboard** — адаптив есть (resize-логика + media-queries + user-scale `cc_board_scale_v1`), доска clamp'ится до окна. Можно дошлифовать тач-зоны, но не блокер.
 10. ✅ **Dark/Light theme toggle** — DONE. `themeMode` (localStorage `aevion_chess_color_theme_v1`), `CC_DARK`/`CC_LIGHT`, CSS-vars `data-cc-theme`, переключатель в Настройках → «Внешний вид».

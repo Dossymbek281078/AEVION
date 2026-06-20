@@ -82,12 +82,12 @@
 ### Кадр 9 — 1:24–1:30 — «Сделка»
 
 - **Визуал:** на эмеральд-фоне:
-  > **$1 000 000 000 USD net**
-  > **+ Senior Advisor on AEVION matters**
-  > **acquire@aevion.app**
+  > **Партнёрство, не выкуп**
+  > **$10M возвратным авансом · 49% дохода — партнёру**
+  > **yahiin1978@gmail.com**
 - **Звук:** тема замолкает на сильной ноте.
-- **VO (ru):** «Один миллиард долларов. После налогов. Поговорим.»
-- **VO (en):** "One billion. Net. Let's talk."
+- **VO (ru):** «Партнёрство, не выкуп. Десять миллионов возвратным авансом. Сорок девять процентов дохода — партнёру. Поговорим.»
+- **VO (en):** "Partnership, not a buyout. Ten million as a returnable advance. Forty-nine percent of the upside to the partner. Let's talk."
 
 ---
 
@@ -106,7 +106,7 @@
     "ru": "Adam-clone-deep-male-ru",
     "en": "Rachel-or-Adam-en"
   },
-  "pacing": "слегка медленнее обычного на ключевых фразах ($1B, Constitution, AEV)"
+  "pacing": "слегка медленнее обычного на ключевых фразах (партнёрство, Constitution, AEV)"
 }
 ```
 
@@ -130,7 +130,7 @@
 [pause 0.4s]
 То, что мы построили, нельзя купить за месяц. Только купить нас.
 [pause 0.6s]
-Один миллиард долларов. После налогов. Поговорим.
+Партнёрство, не выкуп. Десять миллионов возвратным авансом. Сорок девять процентов дохода — партнёру. Поговорим.
 ```
 
 ### Полный EN-скрипт
@@ -153,7 +153,7 @@ Thirty-plus modules in production. AEV circulating. Two-hundred-thirty-five test
 [pause 0.4s]
 What we've built can't be acquired in a month. Only we can.
 [pause 0.6s]
-One billion. Net. Let's talk.
+Partnership, not a buyout. Ten million as a returnable advance. Forty-nine percent of the upside to the partner. Let's talk.
 ```
 
 ---
@@ -197,7 +197,7 @@ Length: 92 seconds.
 
 - 0:00–0:08 — «15 вкладок».
 - 0:08–0:18 — «Planet AEVION. Один кабинет».
-- 0:18–0:30 — «$1B net. Senior Advisor. Поговорим.»
+- 0:18–0:30 — «Партнёрство, не выкуп. $10M возвратным авансом. 49% дохода — партнёру. Поговорим.»
 
 ---
 

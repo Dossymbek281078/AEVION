@@ -85,7 +85,7 @@
 
 Не просто деньги. Не просто команду. Партнёра, у которого есть и то, и другое — и который понимает, что идеи, которые переживут эту индустрию, рождаются не в акселераторах, а у людей, которые годами смотрели на проблему изнутри.
 
-Я остаюсь в компании как Chief Innovation Officer. Следующая волна идей уже готовится. Всегда будет готовиться.
+Я остаюсь в компании как Chief Idea Officer. Следующая волна идей уже готовится. Всегда будет готовиться.
 
 ### Кто я, когда закрываю ноутбук
 
@@ -115,7 +115,7 @@ In six months: 30+ working products across five domains — post-quantum signatu
 
 ### What I'm looking for
 
-Not just money. Not just a team. A partner who has both — and who understands that the ideas which outlast an industry are born not in accelerators, but in people who spent years staring at the problem from the inside. I stay on as Chief Innovation Officer. The next wave of ideas is already forming. It always will be.
+Not just money. Not just a team. A partner who has both — and who understands that the ideas which outlast an industry are born not in accelerators, but in people who spent years staring at the problem from the inside. I stay on as Chief Idea Officer. The next wave of ideas is already forming. It always will be.
 
 ---
 

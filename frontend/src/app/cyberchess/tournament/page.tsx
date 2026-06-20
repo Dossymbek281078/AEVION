@@ -4,17 +4,19 @@
 // визуализирует bracket / badges / leaderboard из tournament.ts.
 // Zone: aevion-core/main owns frontend/src/app/cyberchess/**
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   buildBracket,
   awardBadges,
   computeTournamentLeaderboard,
+  ldTrophies,
   type BracketRound,
   type TournamentBadge,
   type TournamentHistoryEntry,
   type LeaderboardEntry,
   type LeaderboardHistoryEntry,
+  type Trophy,
 } from "../tournament";
 
 const C = {
@@ -94,6 +96,15 @@ const BADGE_META: Record<TournamentBadge, { emoji: string; label: string; desc: 
   "champion":       { emoji: "🏆", label: "Champion",       desc: "Победа в турнире (1 место)", color: C.gold },
   "perfect-run":    { emoji: "💎", label: "Perfect Run",    desc: "5+ побед без поражений и ничьих в одном турнире", color: C.cyan },
   "comeback-king":  { emoji: "👑", label: "Comeback King",  desc: "Победа в турнире после проигрыша первого матча", color: C.purple },
+};
+
+// Place (1|2|3|4|8) → medal/label for the player's own trophy cards.
+const PLACE_META: Record<1 | 2 | 3 | 4 | 8, { emoji: string; label: string; color: string }> = {
+  1: { emoji: "🥇", label: "Чемпион",         color: C.gold },
+  2: { emoji: "🥈", label: "Финалист",        color: C.silver },
+  3: { emoji: "🥉", label: "3-е место",       color: C.bronze },
+  4: { emoji: "4️⃣", label: "Полуфиналист",    color: C.cyan },
+  8: { emoji: "🎯", label: "Четвертьфиналист", color: C.faint },
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -190,8 +201,24 @@ function BadgeShowcase({ playerId, badges }: { playerId: string; badges: Tournam
 export default function TournamentHubPage() {
   const [selectedTournament, setSelectedTournament] = useState<"spring-cup-01">("spring-cup-01");
 
+  // Реальные трофеи игрока из localStorage (пишет tournament.ts при завершении турнира).
+  // Грузим в effect, а не в useState-инициализаторе — иначе SSR отрисует пусто, а клиент
+  // с данными → hydration mismatch. Стартуем пустым, доливаем после маунта.
+  const [trophies, setTrophies] = useState<Trophy[]>([]);
+  useEffect(() => { setTrophies(ldTrophies()); }, []);
+
   const bracket = useMemo(() => buildBracket(MOCK_PLAYERS, MOCK_RESULTS), []);
-  const leaderboard = useMemo(() => computeTournamentLeaderboard(MOCK_LEADERBOARD_HISTORY), []);
+
+  // Лидерборд: демо-поле + сам игрок («Ты»), если у него есть реальные результаты.
+  // Каждый трофей = одно участие в турнире (placement = trophy.place напрямую: 1/2/3/4/8).
+  const leaderboard = useMemo(() => {
+    const mine: LeaderboardHistoryEntry[] = trophies.map((t) => ({
+      player: "Ты",
+      placement: t.place,
+      tournamentId: `t-${t.ts}`,
+    }));
+    return computeTournamentLeaderboard([...MOCK_LEADERBOARD_HISTORY, ...mine]);
+  }, [trophies]);
 
   const playerBadges = useMemo(() => {
     const map = new Map<string, TournamentBadge[]>();
@@ -235,14 +262,60 @@ export default function TournamentHubPage() {
             Tournament <span style={{ color: C.purple }}>Hub</span>
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 700 }}>
-            Bracket-визуализация + cross-tournament leaderboard + бейджи достижений.
-            Все турниры single-elimination или round-robin. Mock-данные —{" "}
+            Твои трофеи и место в лидерборде — <strong style={{ color: C.green }}>реальные</strong> (из сыгранных
+            турниров). Демо-сетка и бейджи соперников — витрина, пока cross-tournament{" "}
             <code style={{ fontSize: 12, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>
               /api/cyberchess/tournament/...
             </code>{" "}
             backend в roadmap.
           </p>
         </div>
+
+        {/* Твои трофеи — реальные данные игрока из localStorage (tournament.ts) */}
+        <section style={{ marginBottom: 28 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>
+            🏅 Твои трофеи
+          </h2>
+          {trophies.length === 0 ? (
+            <div style={{
+              background: C.panel, border: `1px dashed ${C.border}`, borderRadius: 12,
+              padding: "20px 18px", fontSize: 13, color: C.dim, lineHeight: 1.6,
+            }}>
+              Ты ещё не завершил ни одного турнира. Сыграй 8-местный нокаут —{" "}
+              <Link href="/cyberchess" style={{ color: C.green, fontWeight: 700, textDecoration: "none" }}>
+                начать турнир →
+              </Link>
+              {" "}— и твои медали появятся здесь, а сам ты встанешь в лидерборд ниже.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))", gap: 10 }}>
+              {trophies.map((t, i) => {
+                const m = PLACE_META[t.place];
+                return (
+                  <div key={`${t.ts}-${i}`} style={{
+                    background: C.panel, border: `1px solid ${m.color}40`,
+                    borderLeft: `3px solid ${m.color}`, borderRadius: 10, padding: "12px 14px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 22 }}>{m.emoji}</span>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: m.color }}>{m.label}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
+                      {t.variant && t.variant !== "standard" && (
+                        <span style={{ color: C.purple, fontWeight: 700 }}>{t.variant} · </span>
+                      )}
+                      Побеждённые: {t.defeated.length > 0 ? t.defeated.join(", ") : "—"}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11 }}>
+                      <span style={{ color: C.gold, fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>+{t.reward} 🪙</span>
+                      <span style={{ color: C.faint }}>{new Date(t.ts).toLocaleDateString("ru-RU")}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* Tournament selector */}
         <div style={{ marginBottom: 24, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -311,14 +384,18 @@ export default function TournamentHubPage() {
                 <tbody>
                   {leaderboard.map((e, i) => {
                     const rankColor = i === 0 ? C.gold : i === 1 ? C.silver : i === 2 ? C.bronze : C.dim;
+                    const isYou = e.player === "Ты";
                     return (
-                      <tr key={e.player} style={{ borderTop: i === 0 ? "none" : `1px solid ${C.border}` }}>
+                      <tr key={e.player} style={{
+                        borderTop: i === 0 ? "none" : `1px solid ${C.border}`,
+                        background: isYou ? "rgba(52,211,153,0.10)" : undefined,
+                      }}>
                         <td style={{ padding: "10px 14px", color: rankColor, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
                           {i + 1}
                         </td>
-                        <td style={{ padding: "10px 14px", color: C.text, fontWeight: 700 }}>
+                        <td style={{ padding: "10px 14px", color: isYou ? C.green : C.text, fontWeight: isYou ? 900 : 700 }}>
                           {i === 0 && "👑 "}
-                          {e.player}
+                          {e.player}{isYou && " ⬅"}
                         </td>
                         <td style={{ padding: "10px 14px", textAlign: "right", color: C.dim, fontFamily: "ui-monospace, monospace" }}>{e.tournaments}</td>
                         <td style={{ padding: "10px 14px", textAlign: "right", color: C.green, fontFamily: "ui-monospace, monospace", fontWeight: 700 }}>{e.wins}</td>

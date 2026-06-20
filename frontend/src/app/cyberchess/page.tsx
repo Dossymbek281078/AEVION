@@ -4191,9 +4191,15 @@ export default function CyberChessPage(){
     const step=()=>{
       if(i>=sol.length){pzSolPlayingRef.current=false;showToast("Это и было решение — попробуй повторить на следующей","info");return}
       const u=sol[i];
-      try{const mv=g.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:(u[4] as any)||"q"});
-        if(mv){sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,g.fen()]);sBk(k=>k+1);snd(mv.captured?"capture":"move")}
-      }catch{}
+      let mv:any=null;
+      try{mv=g.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:(u[4] as any)||"q"})}catch{mv=null}
+      if(!mv){
+        // Битый/нелегальный ход в линии решения — не крутим вхолостую остаток, чистый стоп.
+        pzSolPlayingRef.current=false;
+        showToast(i===0?"Решение недоступно для этого пазла":"Показал решение до конца доступной линии","info");
+        return;
+      }
+      sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,g.fen()]);sBk(k=>k+1);snd(mv.captured?"capture":"move");
       i++;
       if(i<sol.length)setTimeout(step,750);else{pzSolPlayingRef.current=false;}
     };

@@ -36,13 +36,18 @@ describe("coef-unjustified", () => {
     expect(notices[0].context.positionId).toBe("p1");
   });
 
-  it("срабатывает на расплывчатое обоснование без документа", () => {
-    const lsr = mkLsr({ kind: "стеснённые", value: 1.15, justification: "узко" });
+  it("срабатывает на обоснование из одних знаков-заглушек", () => {
+    const lsr = mkLsr({ kind: "стеснённые", value: 1.15, justification: " — " });
     expect(checkCoefUnjustified(lsr)).toHaveLength(1);
   });
 
   it("молчит, когда обоснование ссылается на документ", () => {
     const lsr = mkLsr({ kind: "стеснённые", value: 1.15, justification: "ППР со схемой стеснённых условий" });
+    expect(checkCoefUnjustified(lsr)).toHaveLength(0);
+  });
+
+  it("молчит на содержательном обосновании без слова-«документа» (нет ложных срабатываний на эталонах)", () => {
+    const lsr = mkLsr({ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует (СН РК 8.02-10)" });
     expect(checkCoefUnjustified(lsr)).toHaveLength(0);
   });
 

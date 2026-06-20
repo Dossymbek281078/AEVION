@@ -113,15 +113,15 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | 12 | Awards | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Music + Film tracks; admin bulk #59; Sentry #86 |
-| 13 | CyberChess | (n/a) | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | tournaments + variants + brilliancy + bot personas |
-| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | 10 killer features (#62); UI polish in `port-qbuild-v3` |
-| 15 | смета (smeta) | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | merged in #76; ESН РК corpus + export |
+| 13 | CyberChess | (n/a) | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | tournaments + variants + brilliancy + bot personas; June layout/polish + in-game PiP + puzzles-flow (#372-#377); active in `feat/cyberchess-polish-0613` |
+| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | 10 killer features (#62); docs/portfolio + push events (#184-#185); UI polish in `port-qbuild-v3` |
+| 15 | смета (smeta) | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ✅ | ⚠ | **full product now** — exam mode + auto-graded LSR/AI scoring, 499 rates catalog + facets, volume calc, 15 pre-exam lessons, 3-tier QR cert, 250+ object corpus batches (#317-#360, May 18-25) |
 
 ### Tier 3 — Intelligence + cross-platform
 
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 16 | QCoreAI multi-agent | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | V1-V6 (PRs #3-#31); judge + comparison + Redis |
+| 16 | QCoreAI multi-agent | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | V1-V70 (PRs #3-#193); judge + comparison + Redis + run-branching + A/B + cohort analytics + AI memory; SDK v1.0.0 final (#187) |
 | 17 | Multichat Engine | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | beta status; landing wired |
 | 18 | Modules registry | ✅ | ✅ | ✅ | ⚠ | ✅ | ✅ | ⚠ | Tier 3 amplifier; admin bulk; webhooks |
 
@@ -138,8 +138,17 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 
 23 — QFusionAI · QPayNet · QMaskCard · VeilNetX · HealthAI · QLife · QGood · PsyApp · QPersona · Kids-AI · Voice of Earth · Startup-Exchange · DeepSan · MapReality · Z-Tide · QContract · ShadowNet · LifeBox · QChainGov
 
-These are landing pages + roadmap entries only. **Do not** build backend
-without explicit user direction.
+> **Update 2026-06-20:** the original "landing-only" status no longer holds — a
+> May 14-15 MVP wave shipped real backends/frontends for many of these:
+> HealthAI v3 (#275), QFusionAI (#280), QPersona (#281), DeepSan (#283),
+> QLife (#285), QGood (#286), LifeBox (#291), PsyApp-Deps (#292),
+> ShadowNet (#293), MapReality (#266/#269), Voice-of-Earth (#267/#268),
+> Kids-AI (#265/#271), Startup-Exchange (#263/#270), QTradeOffline (#273).
+> They are MVP-grade (no prod-hardening/Sentry/smoke). Treat as **Tier 4.5**:
+> exists, not launch-ready. Still **do not** invest deeper without user direction.
+
+These are landing pages + roadmap entries only (pre-2026-05-14). **Do not** build
+backend further without explicit user direction.
 
 ---
 
@@ -275,6 +284,19 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-06-20  #382 docs(promo): unify entire pitch on single partnership deal model ($10M returnable advance + 51/49 + Chief Idea Officer)
+2026-06-20  —    security sweep (parallel): qtrade balance-leak fix + quantum-shield Shamir-shard IDOR fix
+2026-06-18  #378-#380 feat(acquire+letter): single partnership offer live on /acquire + internal docs aligned (51/49 + $10M advance)
+2026-06-14  #372-#377 CyberChess polish — lichess/chess.com-grade layout, in-game YouTube/Twitch PiP, puzzles flow (Rush/auto-advance)
+2026-05-18  #317-#360 смета-trainer → full product: exam mode + AI scoring, 499-rate catalog, volume calc, 15 lessons, 3-tier QR cert, 250+ object batches
+2026-05-15  #299 qsign-v2: real ML-DSA-65 Dilithium + SDK publish prep + Sentry hook
+2026-05-15  #300-#301 platform: Pipeline + QShield Tier 2 + bureau/planet SDKs + status page + qshield /verify-batch
+2026-05-15  #298 payments: Resend receipts + disputes + webhook retry queue (Upstash)
+2026-05-14-15  #263-#293 MVP wave — HealthAI v3, QFusionAI, QPersona, DeepSan, QLife, QGood, LifeBox, PsyApp, ShadowNet, MapReality, Voice-of-Earth, Kids-AI, Startup-Exchange, QTradeOffline
+2026-05-11  #204 DevHub V1 — AI-powered app builder (editor, deploy, templates)
+2026-05-10  #186-#193 QCoreAI V51-V70 — run-branching, A/B, cohort analytics, AI memory, SDK v1.0.0 final
+2026-05-10  #192 fix(backend): restore 20 missing router mounts — prod 404s on QContract/QPayNet/HealthAI/CyberChess/Awards/QBuild
+2026-05-10-11  #196-#210 route bare fetch() through apiUrl() proxy (qpaynet/qsign/qcontract/smeta/multichat) + mobile audits
 2026-05-08  —    P4-4 design — public API quotas (4 tiers) + GET /api/quotas + design doc PUBLIC_API_QUOTAS.md
 2026-05-08  —    Launch-status page live — /launch-status auto-refresh dashboard (backend, modules, API quotas, CI links)
 2026-05-08  —    P4-4 v1.1.0 — quotas tier names aligned with public pricing (Developer/Build/Scale/Enterprise)
@@ -366,4 +388,12 @@ so cross-window readers keep stable references.
 
 ---
 
-End of plan. Last edit: 2026-05-03 (initial publish).
+End of plan. Last edit: 2026-06-20 (refresh: §3 cells #13/#14/#15/#16 + Tier 5
+MVP wave + §6 cheat-sheet May 8 → June 20). Initial publish: 2026-05-03.
+
+> **State as of 2026-06-20:** Phase 0 (P0-1 DNS cutover + P0-2 remove Vercel SSO
+> gating) still appears **OPEN** — no infra PR found in the May 8 → June 20 merge
+> log, and `*.vercel.app` remained SSO-gated per memory
+> `reference_prod_deploy_state_2026-05-03`. This is still the single biggest
+> unblock: every shipped module stays invisible to crawlers/partners/investors
+> until it lands. Verify current Vercel/DNS state before assuming otherwise.

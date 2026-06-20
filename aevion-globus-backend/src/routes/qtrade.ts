@@ -268,6 +268,12 @@ qtradeRouter.get("/cap-status", (req, res) => {
 // Email → accountId lookup (for P2P transfer UX)
 // =======================
 qtradeRouter.get("/accounts/lookup", async (req, res) => {
+  // Must be authenticated: looking up a recipient by email is only meaningful
+  // for a logged-in sender, and gating it stops anonymous enumeration of which
+  // emails are registered / hold accounts.
+  if (!ownerEmail(req)) {
+    return res.status(401).json({ error: "auth required" });
+  }
   const emailRaw = req.query.email;
   if (typeof emailRaw !== "string" || !emailRaw.trim()) {
     return res.status(400).json({ error: "email required" });
@@ -297,14 +303,16 @@ qtradeRouter.get("/accounts/lookup", async (req, res) => {
       userExists,
     });
   }
-  // Return primary (oldest) plus full list so callers can pick.
+  // Return primary (oldest) plus full list so callers can pick. Only the
+  // account id is exposed — a sender resolving a recipient must never see that
+  // recipient's balance (the transfer flow needs the id, nothing more).
   const primary = owned.reduce((a, b) =>
     a.createdAt < b.createdAt ? a : b,
   );
   res.json({
     email,
-    primary: { id: primary.id, balance: primary.balance },
-    accounts: owned.map((a) => ({ id: a.id, balance: a.balance, createdAt: a.createdAt })),
+    primary: { id: primary.id },
+    accounts: owned.map((a) => ({ id: a.id, createdAt: a.createdAt })),
     userExists,
   });
 });

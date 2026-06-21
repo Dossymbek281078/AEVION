@@ -2112,7 +2112,13 @@ healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => 
   const snap = await store.getPlanSnapshot(qstr(req.params.id));
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
   // A snapshot inherits the ownership of the profile it was generated for.
-  const access = await guardProfile(req, String(snap.profileId ?? ""), { requireExists: false });
+  // A snapshot with no profileId is orphaned/corrupt — fail closed rather than
+  // passing the string "null" into guardProfile (which, with requireExists
+  // false, would resolve to no-profile and wrongly allow the read).
+  if (!snap.profileId) {
+    return res.status(403).json({ error: "snapshot-not-owned" });
+  }
+  const access = await guardProfile(req, String(snap.profileId), { requireExists: false });
   if (!access.ok) return res.status(access.status).json({ error: access.error });
   res.json(snap);
 });

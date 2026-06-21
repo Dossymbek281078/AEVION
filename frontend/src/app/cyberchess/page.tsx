@@ -1080,6 +1080,7 @@ export default function CyberChessPage(){
   const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
+  const[showSections,sShowSections]=useState(false); // навигационный хаб «Все разделы»
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
   const[showQuickSetupModal,sShowQuickSetupModal]=useState(false);
@@ -4797,6 +4798,19 @@ export default function CyberChessPage(){
             padding:"1px 5px",borderRadius:3,
             background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
           }}>⌃K</kbd>
+        </button>
+        {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
+            киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
+            доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}
+        <button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:6,
+            padding:"5px 11px",borderRadius:RADIUS.full,
+            border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
+            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+          }}>
+          <span style={{fontSize:13}}>☰</span>
+          <span>Все разделы</span>
         </button>
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
@@ -10941,6 +10955,68 @@ ${question.trim()}`;
       </div>)}
     </Modal>
 
+    {/* ☰ Навигационный хаб «Все разделы» — делает обнаружимыми ВСЕ маршруты и киллер-фичи.
+        Раньше 12 из 14 разделов были «сиротами» (только прямой URL / Ctrl+K). Теперь всё
+        сгруппировано и видно: Играть · Учиться · Соревноваться · Смотреть · Экономика. */}
+    <Modal open={showSections} onClose={()=>sShowSections(false)} size="lg" title="☰ Все разделы CyberChess">
+      <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Все режимы, обучение, соревнования, трансляции и экономика — в одном месте.</div>
+      {(()=>{
+        const go=(fn:()=>void)=>{sShowSections(false);fn();};
+        const GROUPS:{title:string;items:{e:string;t:string;d:string;to?:string;act?:()=>void;hot?:boolean}[]}[]=[
+          {title:"Играть",items:[
+            {e:"♟",t:"Быстрая игра",d:"Партия против ИИ или человека",act:()=>{sTab("play");sSetup(true);}},
+            {e:"🎲",t:"12 вариантов",d:"Atomic · Fischer960 · KotH · Crazyhouse…",act:()=>sShowVariants(true),hot:true},
+            {e:"🏆",t:"Турнир-нокаут",d:"8 игроков · bracket · трофеи Chessy",act:()=>sShowTournament(true)},
+            {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
+          ]},
+          {title:"Учиться",items:[
+            {e:"🎓",t:"AI-Коуч",d:"Разбор уровня супер-GM (Opus 4.8)",act:()=>sTab("coach"),hot:true},
+            {e:"🧩",t:"Пазлы",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
+            {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
+            {e:"📚",t:"Репертуар",d:"Тренажёр дебютов + Lichess Masters",to:"/cyberchess/repertoire"},
+            {e:"🎯",t:"Тренинг",d:"Ежедневный хаб упражнений",to:"/cyberchess/training"},
+            {e:"📅",t:"Задача дня",d:"Один пазл в день, серия",to:"/cyberchess/daily"},
+          ]},
+          {title:"Соревноваться",items:[
+            {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
+            {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · лидерборд",to:"/cyberchess/tournament"},
+            {e:"📈",t:"CPI рейтинг",d:"Композитный рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
+            {e:"🏅",t:"CPI лидерборд",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
+          ]},
+          {title:"Смотреть",items:[
+            {e:"👁",t:"Спектатор",d:"Смотреть живые партии",to:"/cyberchess/spectator"},
+            {e:"🎬",t:"Реплеи",d:"Записи партий с разбором",to:"/cyberchess/replays"},
+            {e:"🎥",t:"Студия",d:"Стрим-оверлеи и продакшн",to:"/cyberchess/studio"},
+          ]},
+          {title:"Экономика",items:[
+            {e:"🪙",t:"Chessy Экономика",d:"Аукцион · аренда коуча · подписки",to:"/cyberchess/economy",hot:true},
+            {e:"🛒",t:"Магазин",d:"Буст-пазлы · щит серии · темы",act:()=>sShowShop(true)},
+          ]},
+        ];
+        const cardStyle={display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,textDecoration:"none",cursor:"pointer",textAlign:"left" as const,width:"100%",position:"relative" as const};
+        const inner=(it:{e:string;t:string;d:string;hot?:boolean})=><>
+          <span style={{fontSize:22,flexShrink:0,width:26,textAlign:"center" as const}}>{it.e}</span>
+          <span style={{lineHeight:1.25,minWidth:0}}>
+            <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:CC.text}}>
+              {it.t}{it.hot&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.6,textTransform:"uppercase" as const,color:CC.brand,background:CC.brandSoft,padding:"1px 5px",borderRadius:RADIUS.full}}>топ</span>}
+            </span>
+            <span style={{display:"block",fontSize:11,color:CC.textDim,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.d}</span>
+          </span>
+        </>;
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[4]}}>
+          {GROUPS.map(g=><div key={g.title}>
+            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:8}}>{g.title}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,230px),1fr))",gap:8}}>
+              {g.items.map(it=>it.to
+                ? <Link key={it.t} href={it.to} onClick={()=>sShowSections(false)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</Link>
+                : <button key={it.t} onClick={()=>go(it.act!)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</button>
+              )}
+            </div>
+          </div>)}
+        </div>;
+      })()}
+    </Modal>
+
     {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
     {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
       style={{
@@ -13662,6 +13738,18 @@ ${question.trim()}`;
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
         {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
         {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
+
+        // ── РАЗДЕЛЫ — навигация на маршруты, которые раньше были доступны только по URL ──
+        {id:"nav-sections", icon:"☰", group:"Разделы", label:"Все разделы",          hint:"Навигационный хаб — все режимы и киллер-фичи", run:()=>sShowSections(true)},
+        {id:"nav-tourn",    icon:"🏆",group:"Разделы", label:"Турниры онлайн",        hint:"Swiss · Round-robin · нокаут",  run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/tournaments"}},
+        {id:"nav-economy",  icon:"🪙",group:"Разделы", label:"Chessy Экономика",      hint:"Аукцион · аренда коуча · подписки", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/economy"}},
+        {id:"nav-training", icon:"🎯",group:"Разделы", label:"Тренинг-хаб",           hint:"Ежедневные упражнения",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/training"}},
+        {id:"nav-cpi",      icon:"📈",group:"Разделы", label:"CPI рейтинг",           hint:"Композитный рейтинг по 11 факторам", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/dashboard"}},
+        {id:"nav-cpi-lb",   icon:"🏅",group:"Разделы", label:"CPI лидерборд",         hint:"Топ по любому фактору силы",    run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/leaderboard"}},
+        {id:"nav-replays",  icon:"🎬",group:"Разделы", label:"Реплеи",               hint:"Записи партий с разбором",       run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/replays"}},
+        {id:"nav-spectate", icon:"👁",group:"Разделы", label:"Спектатор",            hint:"Смотреть живые партии",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/spectator"}},
+        {id:"nav-studio",   icon:"🎥",group:"Разделы", label:"Студия",               hint:"Стрим-оверлеи и продакшн",      run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/studio"}},
+        {id:"nav-repertoire",icon:"📚",group:"Разделы",label:"Репертуар дебютов",     hint:"Тренажёр + Lichess Masters",    run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/repertoire"}},
       ];
       // ── BOOKMARKS — dynamic per-position commands. Each saved FEN gets its own
       //    "Открыть закладку: <label>" entry. Plus a delete-all utility at the end.

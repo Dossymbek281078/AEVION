@@ -64,14 +64,34 @@ Before merging a route that touches user-owned data:
 6. **Anonymous/legacy rows:** only leave them open if a no-token flow already
    depends on it; document why inline.
 
-## Still open (other zones — need that session/owner)
+## Cross-zone follow-up (verified 2026-06-21 — all CLEAN, no action)
 
-- `qcoreai.ts:4507` — `req.body.userId` (frontend-qcore zone).
-- `build/{verification,documents,portfolio-photos,…}.ts` — `req.params.userId`
-  reads, incl. verification documents (QBuild zone, `aevion-build` worktree).
-- `qpaynet.ts` `req.params.ownerId` (KYC) — confirm admin-gated.
+The grep that surfaced these flagged the *string* `userId`/`ownerId`, not an
+actual trust boundary. On reading each route, all turned out already safe — no
+issues filed (filing false positives would just churn other sessions):
 
-These were **not** changed here; hand off to the owning session.
+- `qcoreai.ts:4507` — `req.body.userId` is the **target member** being added to
+  an org; the route first checks `org.ownerId !== auth.sub → 403`. Owner-gated.
+- `build/verification.ts`, `build/admin.ts` — every `:userId` route is behind
+  `requireBuildAuth` + `auth.role !== "ADMIN" → 403`.
+- `build/documents.ts` — `/me` scoped to `auth.sub`; `/user/:userId` is public
+  but projects only `{id,docType,status,verifiedAt}` of `VERIFIED` docs (no
+  content/URL); `/admin/*` admin-gated.
+- `qpaynet.ts` — `POST /kyc/submit` binds `ownerId = auth.sub`; the
+  `/admin/kyc/:ownerId/*` routes check `isAdmin(auth.email) → 403`.
+
+## Review follow-up (code-reviewer, 2026-06-21)
+
+- **Fixed:** `healthai GET /plan/snapshot/:id` passed `String(snap.profileId ??
+  "")` → a null profileId became `"null"` and slipped past `guardProfile`
+  (orphaned snapshots readable). Now fails closed (403) on missing profileId —
+  commit `0102c9fe`.
+- **Known low-priority / pre-existing (not regressions):**
+  `healthai /leaderboard` exposes raw profileIds (enumeration only — reads are
+  now guarded); PHQ-9/GAD-7 "last" in-memory maps aren't evicted on the
+  anonymous→claim lifecycle; `quantum-shield POST /verify` legacy string match
+  isn't timing-safe; `qtrade /accounts/lookup` still returns recipient
+  `createdAt`. Track separately if they matter.
 
 ## Process note
 

@@ -701,6 +701,14 @@ healthaiRouter.post("/profile", async (req: Request, res: Response) => {
   };
 
   const saved = await store.upsertProfile(profile);
+
+  // Claim transition: a profile that had no owner is now bound to this
+  // authenticated user. Evict any screener results cached during the prior
+  // anonymous phase so they don't carry into the freshly owned profile.
+  if (auth?.sub && !existing?.userId && saved.userId === auth.sub) {
+    clearScreenerCache(id);
+  }
+
   res.json({
     profile: saved,
     bmi: bmi(saved.heightCm, saved.weightKg),
@@ -1747,6 +1755,15 @@ healthaiRouter.get(
  *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-21: severe
  */
 const GAD7_LAST = new Map<string, { score: number; severity: string; answers: number[]; createdAt: string }>();
+
+// Drop any cached PHQ-9 / GAD-7 "last result" for a profile id. Called when a
+// profile is claimed by an authenticated owner (POST /profile) so screener
+// answers entered during the prior anonymous phase don't surface to the new
+// owner. (Function declaration — hoisted, so POST /profile above can call it.)
+function clearScreenerCache(profileId: string): void {
+  PHQ9_LAST.delete(profileId);
+  GAD7_LAST.delete(profileId);
+}
 
 function gad7Severity(score: number): { severity: string; advice: string } {
   if (score <= 4)

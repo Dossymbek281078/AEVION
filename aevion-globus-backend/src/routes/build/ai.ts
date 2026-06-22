@@ -38,6 +38,19 @@ const aiRateLimiter = rateLimit({
   },
 });
 
+// Every /api/build/ai/* surface needs Anthropic. When the key is absent
+// (early deploys, dev without a key) return a clear 503 instead of a scary
+// generic 500 from deep inside each handler — frontends can show "AI
+// unavailable" and smoke treats it as SKIP via the details string.
+aiRouter.use((_req, res, next) => {
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    return fail(res, 503, "ai_not_configured", {
+      details: "ANTHROPIC_API_KEY not configured",
+    });
+  }
+  next();
+});
+
 // POST /api/build/ai/consult — chat turn with the QBuild career coach.
 aiRouter.post("/consult", aiRateLimiter, async (req, res) => {
   try {

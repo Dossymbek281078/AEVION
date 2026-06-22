@@ -102,7 +102,9 @@
       "Bash(curl -sI http://localhost:3005/cyberchess)",
       "Bash(echo \"exit $?\")",
       "Skill(claude-api)",
-      "PowerShell(Get-Process *)"
+      "PowerShell(Get-Process *)",
+      "PowerShell(Set-Location C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\frontend; $ErrorActionPreference='Continue'; node .\\\\node_modules\\\\typescript\\\\bin\\\\tsc --noEmit; \"EXIT: $LASTEXITCODE\")",
+      "Bash(grep -nE \"🤖 AI|🤖.{0,3}AI|aiCoachOn|sAiCoach|coachAi\" frontend/src/app/cyberchess/page.tsx)"
     ]
   }
 }

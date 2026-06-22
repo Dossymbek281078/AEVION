@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capturePaymentsError = makeServiceCapture("payments");
 
 export const paymentsRouter = Router();
 
@@ -72,6 +75,7 @@ paymentsRouter.post("/gumroad/create-transaction", async (req, res) => {
       provider: "gumroad",
     });
   } catch (e: any) {
+    capturePaymentsError(e, { route: "gumroad-create-transaction" });
     res.status(500).json({ error: e?.message || "create transaction failed" });
   }
 });
@@ -100,6 +104,7 @@ paymentsRouter.post("/gumroad/create-subscription", async (req, res) => {
       provider: "gumroad",
     });
   } catch (e: any) {
+    capturePaymentsError(e, { route: "gumroad-create-subscription" });
     res.status(500).json({ error: e?.message || "create subscription failed" });
   }
 });
@@ -161,7 +166,7 @@ paymentsRouter.post("/paybox/init", async (req, res) => {
     const urlMatch = text.match(/<pg_redirect_url>(.*?)<\/pg_redirect_url>/);
     if (urlMatch?.[1]) return res.json({ paymentUrl: urlMatch[1], orderId, amount });
     res.json({ paymentUrl: `https://api.paybox.money/stubpay?order=${orderId}`, orderId, amount, mode: "fallback" });
-  } catch { res.status(500).json({ error: "paybox init failed" }); }
+  } catch (err) { capturePaymentsError(err, { route: "paybox-init" }); res.status(500).json({ error: "paybox init failed" }); }
 });
 
 paymentsRouter.post("/paybox/callback", (_req, res) => {

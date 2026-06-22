@@ -5,6 +5,9 @@ import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 import { requireAuth } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { consumeDailyCap, peekDailyCap } from "../lib/dailyCap";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureQtradeError = makeServiceCapture("qtrade");
 
 export const qtradeRouter = Router();
 
@@ -601,6 +604,7 @@ qtradeRouter.get("/statement.pdf", async (req, res, next) => {
 
     doc.end();
   } catch (e) {
+    captureQtradeError(e, { route: "statement-pdf" });
     next(e);
   }
 });
@@ -721,6 +725,7 @@ qtradeRouter.get("/receipt/:opId.pdf", async (req, res, next) => {
 
     doc.end();
   } catch (e) {
+    captureQtradeError(e, { route: "receipt-pdf" });
     next(e);
   }
 });

@@ -2,6 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import crypto from "crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getQSignSecret } from "../lib/qsignSecret";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureQsignError = makeServiceCapture("qsign");
 
 export const qsignRouter = Router();
 
@@ -83,6 +86,7 @@ qsignRouter.post(
         createdAt: new Date().toISOString(),
       });
     } catch (e: unknown) {
+      captureQsignError(e, { route: "sign" });
       const msg = e instanceof Error ? e.message : "sign_failed";
       const code = msg.startsWith("QSIGN_SECRET") ? 500 : 400;
       res.status(code).json({ error: msg });
@@ -105,6 +109,7 @@ qsignRouter.post(
       // Never echo `expected` — that's a forgery oracle. Just yes/no + algo.
       res.json({ valid, algo: "HMAC-SHA256" });
     } catch (e: unknown) {
+      captureQsignError(e, { route: "verify" });
       const msg = e instanceof Error ? e.message : "verify_failed";
       const code = msg.startsWith("QSIGN_SECRET") ? 500 : 400;
       res.status(code).json({ error: msg });

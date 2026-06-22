@@ -1147,7 +1147,6 @@ const T18_STARTER = mkLsr({
  * ========================================================================= */
 const T19_OBJECT: LearningObject = {
   id: "exam-overhead-mismatch",
-  occupied: true,
   title: "СОШ №47, демонтаж отделки кабинета",
   type: "капремонт",
   region: REGION,

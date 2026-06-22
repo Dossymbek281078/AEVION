@@ -2390,7 +2390,7 @@ healthaiRouter.get("/referrals", async (req, res) => {
 
 healthaiRouter.get("/leaderboard", async (_req, res) => {
   const ids = await store.allProfileIdsWithLogs();
-  const board: Array<{ profileId: string; streak: number; logs: number }> = [];
+  const board: Array<{ anonId: string; streak: number; logs: number }> = [];
   for (const profileId of ids) {
     const lgs = await store.getLogs(profileId);
     const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -2410,8 +2410,16 @@ healthaiRouter.get("/leaderboard", async (_req, res) => {
       if (cur > streak) streak = cur;
       prevDate = d;
     }
-    board.push({ profileId, streak, logs: lgs.length });
+    // Anonymize: never expose raw profileIds in a public gamification board —
+    // a profileId is the key used to address a health record, so listing them
+    // is an enumeration surface. A stable one-way hash keeps rows
+    // distinguishable (a caller can hash their own id to find their row)
+    // without revealing real ids.
+    const anonId = crypto.createHash("sha256").update(profileId).digest("hex").slice(0, 12);
+    board.push({ anonId, streak, logs: lgs.length });
   }
   board.sort((a, b) => b.streak - a.streak || b.logs - a.logs);
-  res.json({ leaderboard: board.slice(0, 20) });
+  res.json({
+    leaderboard: board.slice(0, 20).map((row, i) => ({ rank: i + 1, ...row })),
+  });
 });

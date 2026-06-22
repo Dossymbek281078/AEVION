@@ -9841,9 +9841,10 @@ ${question.trim()}`;
             </div>
             {/* Combined AI Toggle + Level selector */}
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"8px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:11,color:T.dim,fontWeight:800}}>Режим тренера:</span>
               <div style={{display:"flex",gap:4}}>
-                <button onClick={()=>sCoachAIEnabled(true)} style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 AI</button>
-                <button onClick={()=>sCoachAIEnabled(false)} style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
+                <button onClick={()=>sCoachAIEnabled(true)} title="AI-разбор: ИИ-тренер анализирует позицию движком (Stockfish) и объясняет на уровне супер-GM — отвечает на вопросы, показывает планы и ошибки." style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 AI-разбор</button>
+                <button onClick={()=>sCoachAIEnabled(false)} title="Свободный чат без авто-разбора позиции — просто диалог с тренером." style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
               </div>
               {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
               <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:</span>

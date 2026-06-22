@@ -284,6 +284,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-06-22  —    PROD EVIDENCE: read-only smoke suite 40/40 PASS against live Railway backend (https://aevion-production-a70c.up.railway.app, health 200) — auth/qtrade/bureau/qsign/planet/pipeline/qshield/modules/pricing/healthai/qcore/hub/ecosystem + all q-zone. Backend API is prod-ready; only Phase 0 (public domain + SSO removal) gates "100% publicly visible".
+2026-06-22  —    deps: merged backend-patch (#389) + frontend-patch (#390) dependabot groups
 2026-06-22  —    readiness: Sentry capture wired into auth/payments/qtrade/modules/qsign (47 catches, makeServiceCapture) + /qsign SEO metadata+JSON-LD (was bare client page) — closes Sentry ⚠ for Auth/Bank/QTrade/AEV/Payments/Modules in §3
 2026-06-21  —    security sweep cont.: planet owner-spoof + pipeline author-email leak + healthai screener fixes; SECURITY_SWEEP_2026-06-20.md (full IDOR sweep, 5 modules; cross-zone verified clean)
 2026-06-20  #382 docs(promo): unify entire pitch on single partnership deal model ($10M returnable advance + 51/49 + Chief Idea Officer)

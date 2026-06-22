@@ -10,7 +10,38 @@ import { findRate } from "../../corpus";
 export function checkHeightCoefficient(lsr: Lsr, object: LearningObject): AiNotice[] {
   const notices: AiNotice[] = [];
 
-  // Триггер: в объекте есть геометрия с высотой ≥ 4 м, либо тип объекта намекает на высотность
+  // Объект-управляемый триггер: работы на высоте, не видной из geometry
+  // (например, высотный электромонтаж). Если коэффициент «высота» не применён
+  // НИ К ОДНОЙ позиции — студент забыл его совсем. Один сигнал на смету.
+  if (object.atHeight) {
+    const hasHeightCoef = lsr.sections.some((s) =>
+      s.positions.some((p) => p.coefficients.some((c) => c.kind === "высота"))
+    );
+    if (!hasHeightCoef) {
+      for (const section of lsr.sections) {
+        const pos = section.positions[0];
+        if (!pos) continue;
+        return [
+          {
+            id: `height-coef-${pos.id}`,
+            severity: "warning",
+            scenario: "height-coefficient",
+            context: { positionId: pos.id, sectionId: section.id },
+            title: "Забыт коэффициент работы на высоте",
+            message:
+              `Объект «${object.title}» — работы на высоте (≥ 8 м / с лесов), ` +
+              `но коэффициент «высота» (К=1.05..1.20) не применён ни к одной позиции сметы.`,
+            suggestion:
+              "Добавьте коэффициент «высота» к позициям высотных работ кнопкой +К " +
+              "(ЕНиР, общая часть, прил. 1, п. 4 «Производство работ на высоте»).",
+            reference: "ЕНиР, общая часть, прил. 1, п. 4 «Производство работ на высоте».",
+          },
+        ];
+      }
+    }
+  }
+
+  // Триггер по геометрии: в объекте есть room-геометрия с высотой ≥ 4 м
   const geomHeight = object.geometry?.kind === "room" ? object.geometry.height : 0;
   const isHighRise = geomHeight >= 4;
   if (!isHighRise) return notices;

@@ -27,7 +27,7 @@ export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
   // Базовые проверки (предыдущая серия)
   notices.push(...detectMissingOpeningSubtraction(lsr, object));
   notices.push(...checkDoubleCount(lsr));
-  notices.push(...checkMissingCoefficient(lsr));
+  notices.push(...checkMissingCoefficient(lsr, object));
   notices.push(...checkWinterSurcharge(lsr));
   notices.push(...checkIndexMismatch(lsr));
   notices.push(...checkOverheadMismatch(lsr));

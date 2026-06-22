@@ -44,6 +44,7 @@ function mkLsr(args: { id: string; title: string; objectId: string; sections: Ls
  * ========================================================================= */
 const T1_OBJECT: LearningObject = {
   id: "exam-school-47-classroom",
+  occupied: true,
   title: "СОШ №47, восстановление двух классов",
   type: "капремонт",
   region: REGION,
@@ -553,6 +554,7 @@ const T8_STARTER = mkLsr({
  * ========================================================================= */
 const T9_OBJECT: LearningObject = {
   id: "exam-school-corridor-electrical",
+  occupied: true,
   title: "Электрика школьного коридора с антивандальной защитой",
   type: "капремонт",
   region: REGION,
@@ -876,6 +878,7 @@ const T13_STARTER = mkLsr({
  * ========================================================================= */
 const T14_OBJECT: LearningObject = {
   id: "exam-high-rise-electrical",
+  atHeight: true,
   title: "Электромонтаж в 12-этажном жилом доме",
   type: "новое-строительство",
   region: REGION,
@@ -1095,6 +1098,7 @@ const T17_STARTER = mkLsr({
  * ========================================================================= */
 const T18_OBJECT: LearningObject = {
   id: "exam-coef-double",
+  occupied: true,
   title: "СОШ №47, окраска коридора в действующем здании",
   type: "капремонт",
   region: REGION,
@@ -1143,6 +1147,7 @@ const T18_STARTER = mkLsr({
  * ========================================================================= */
 const T19_OBJECT: LearningObject = {
   id: "exam-overhead-mismatch",
+  occupied: true,
   title: "СОШ №47, демонтаж отделки кабинета",
   type: "капремонт",
   region: REGION,
@@ -1218,6 +1223,7 @@ const T20_STARTER = mkLsr({
  * ========================================================================= */
 const T21_OBJECT: LearningObject = {
   id: "exam-coef-unjustified",
+  occupied: true,
   title: "СОШ №47, штукатурка лестничной клетки",
   type: "капремонт",
   region: REGION,

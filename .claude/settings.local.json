@@ -105,7 +105,9 @@
       "Bash(sed -n '24,40p' corpus.ts)",
       "Bash(grep -rln \"registerRuntimeRate\" ai/ *.test.ts)",
       "Bash(echo \"tsc-done\\(exit=$?\\)\")",
-      "Bash(grep -nE \"^#{1,4} |урок|Урок|модул|Модул|2\\\\.[0-9]\" 01-модули.md)"
+      "Bash(grep -nE \"^#{1,4} |урок|Урок|модул|Модул|2\\\\.[0-9]\" 01-модули.md)",
+      "Bash(tasklist)",
+      "Bash(schtasks //query //fo LIST)"
     ]
   }
 }

@@ -305,14 +305,15 @@ qtradeRouter.get("/accounts/lookup", async (req, res) => {
   }
   // Return primary (oldest) plus full list so callers can pick. Only the
   // account id is exposed — a sender resolving a recipient must never see that
-  // recipient's balance (the transfer flow needs the id, nothing more).
+  // recipient's balance OR account age (the transfer flow needs the id and
+  // nothing more; createdAt is needless info disclosure about a third party).
   const primary = owned.reduce((a, b) =>
     a.createdAt < b.createdAt ? a : b,
   );
   res.json({
     email,
     primary: { id: primary.id },
-    accounts: owned.map((a) => ({ id: a.id, createdAt: a.createdAt })),
+    accounts: owned.map((a) => ({ id: a.id })),
     userExists,
   });
 });

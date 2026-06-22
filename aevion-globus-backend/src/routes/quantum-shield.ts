@@ -1527,6 +1527,19 @@ quantumShieldRouter.post("/:id/verify", async (req, res) => {
  * (or `POST /api/pipeline/reconstruct`) for authenticated reconstruction.
  * Kept for backward compatibility; will be removed in a future release.
  */
+// Constant-time string equality. Hash both sides first so the comparison is
+// length-independent and timingSafeEqual always gets equal-length buffers.
+// Used on the legacy shard string-match path below so it can't be turned into
+// a timing oracle that recovers correct shard values byte-by-byte.
+function timingSafeStrEq(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(a).digest();
+  const hb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function safeShardEq(stored: unknown, input: string): boolean {
+  return typeof stored === "string" && timingSafeStrEq(stored, input);
+}
+
 quantumShieldRouter.post("/verify", async (req, res) => {
   if (!rateLimit(verifyRateLimiter, req, res)) return;
   try {
@@ -1577,9 +1590,9 @@ quantumShieldRouter.post("/verify", async (req, res) => {
         typeof input === "string"
           ? storedShards.some(
               (s) =>
-                (s as { sssShare?: string }).sssShare === input ||
-                (s as unknown as { data?: string }).data === input ||
-                (s as unknown as { id?: string }).id === input,
+                safeShardEq((s as { sssShare?: string }).sssShare, input) ||
+                safeShardEq((s as unknown as { data?: string }).data, input) ||
+                safeShardEq((s as unknown as { id?: string }).id, input),
             )
           : false,
       ).length;

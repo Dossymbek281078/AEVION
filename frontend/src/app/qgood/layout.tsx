@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import ComplianceBanner from "@/components/ComplianceBanner";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
@@ -19,5 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function QGoodLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <ComplianceBanner variant="medical" />
+      {children}
+    </>
+  );
 }

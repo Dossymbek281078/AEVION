@@ -102,7 +102,14 @@
       "Bash(curl -sI http://localhost:3005/cyberchess)",
       "Bash(echo \"exit $?\")",
       "Skill(claude-api)",
-      "PowerShell(Get-Process *)"
+      "PowerShell(Get-Process *)",
+      "PowerShell(Set-Location C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\frontend; $ErrorActionPreference='Continue'; node .\\\\node_modules\\\\typescript\\\\bin\\\\tsc --noEmit; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Set-Location C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\frontend; $env:PORT=3000; Start-Process -NoNewWindow -FilePath \"node\" -ArgumentList \"node_modules\\\\next\\\\dist\\\\bin\\\\next\",\"dev\",\"-p\",\"3000\" -RedirectStandardOutput \"C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.log\" -RedirectStandardError \"C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.err.log\"; Start-Sleep -Seconds 3; \"started; pid check:\"; \\(Get-Process node -ErrorAction SilentlyContinue | Measure-Object\\).Count)",
+      "PowerShell(Start-Sleep -Seconds 20; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.log -Tail 15 -ErrorAction SilentlyContinue; \"--- ERR ---\"; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.err.log -Tail 15 -ErrorAction SilentlyContinue)",
+      "PowerShell(Set-Location C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\frontend; if \\(\\(Get-Item node_modules -ErrorAction SilentlyContinue\\).LinkType\\) { cmd /c rmdir node_modules; \"junction removed\" } else { \"not a junction or absent\" }; Test-Path node_modules)",
+      "PowerShell(npm install *)",
+      "PowerShell(Start-Sleep -Seconds 12; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.log -Tail 8 -ErrorAction SilentlyContinue; \"--- ERR tail ---\"; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.err.log -Tail 6 -ErrorAction SilentlyContinue)",
+      "PowerShell(\"=== port 3000 listening? ===\"; \\(Test-NetConnection -ComputerName localhost -Port 3000 -WarningAction SilentlyContinue\\).TcpTestSucceeded; \"=== dev err tail ===\"; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.err.log -Tail 12 -ErrorAction SilentlyContinue; \"=== dev log tail ===\"; Get-Content C:\\\\Users\\\\user\\\\aevion-cyberchess\\\\.devserver.log -Tail 6 -ErrorAction SilentlyContinue)"
     ]
   }
 }

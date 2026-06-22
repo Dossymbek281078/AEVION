@@ -66,18 +66,18 @@
 ### Кадр 7 — 1:00–1:14 — «Что уже работает»
 
 - **Визуал:** быстрый коллаж скриншотов: `/constitution`, `/planet`, `/cyberchess`, `/healthai`, `/qsign`, `/devhub`, `/transparency`. На каждом — мигающая зелёная точка «LIVE».
-- **VO (ru):** «Тридцать с лишним модулей в проде. AEV в обращении. Двести тридцать пять тестов проходят. Constitution версии один — опубликована.»
-- **VO (en):** "Thirty-plus modules in production. AEV circulating. Two-hundred-thirty-five tests passing. Constitution v1 published."
+- **VO (ru):** «Тридцать с лишним модулей в проде. AEV в обращении. Более четырёхсот девяноста тестов проходят. Constitution версии один — опубликована.»
+- **VO (en):** "Thirty-plus modules in production. AEV circulating. Over four hundred ninety tests passing. Constitution v1 published."
 
-### Кадр 8 — 1:14–1:24 — «Зачем покупать»
+### Кадр 8 — 1:14–1:24 — «Зачем партнёрство»
 
 - **Визуал:** на чёрном фоне — четыре строки:
   - «AEV — нельзя купить за деньги»
   - «Constitution — нельзя написать за месяц»
   - «9 интеграций — нельзя пройти комплаенс за квартал»
   - «30 модулей — нельзя собрать за год»
-- **VO (ru):** «То, что мы построили, нельзя купить за месяц. Только купить нас.»
-- **VO (en):** "What we've built can't be acquired in a month. Only we can."
+- **VO (ru):** «То, что мы построили, нельзя скопировать за месяц. А двигатель, который это создал, — не нанять.»
+- **VO (en):** "What we've built can't be copied in a month — and the engine that built it can't be hired away."
 
 ### Кадр 9 — 1:24–1:30 — «Сделка»
 
@@ -126,9 +126,9 @@
 [pause 0.4s]
 Деньги уходят в интернет. Право — тоже. И разработка — тоже. Всё это сходится в одной точке.
 [pause 0.4s]
-Тридцать с лишним модулей в проде. AEV в обращении. Двести тридцать пять тестов проходят. Constitution версии один — опубликована.
+Тридцать с лишним модулей в проде. AEV в обращении. Более четырёхсот девяноста тестов проходят. Constitution версии один — опубликована.
 [pause 0.4s]
-То, что мы построили, нельзя купить за месяц. Только купить нас.
+То, что мы построили, нельзя скопировать за месяц. А двигатель, который это создал, — не нанять.
 [pause 0.6s]
 Партнёрство, не выкуп. Десять миллионов возвратным авансом. Сорок девять процентов дохода — партнёру. Поговорим.
 ```
@@ -149,9 +149,9 @@ Nine integrations in production. GitHub, Vercel, ElevenLabs, Stripe, Cloudflare 
 [pause 0.4s]
 Money is moving online. So is IP. So is development. They converge in one place.
 [pause 0.4s]
-Thirty-plus modules in production. AEV circulating. Two-hundred-thirty-five tests passing. Constitution v1 published.
+Thirty-plus modules in production. AEV circulating. Over four hundred ninety tests passing. Constitution v1 published.
 [pause 0.4s]
-What we've built can't be acquired in a month. Only we can.
+What we've built can't be copied in a month — and the engine that built it can't be hired away.
 [pause 0.6s]
 Partnership, not a buyout. Ten million as a returnable advance. Forty-nine percent of the upside to the partner. Let's talk.
 ```

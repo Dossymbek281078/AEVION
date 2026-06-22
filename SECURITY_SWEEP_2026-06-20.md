@@ -86,12 +86,15 @@ issues filed (filing false positives would just churn other sessions):
   "")` → a null profileId became `"null"` and slipped past `guardProfile`
   (orphaned snapshots readable). Now fails closed (403) on missing profileId —
   commit `0102c9fe`.
-- **Known low-priority / pre-existing (not regressions):**
-  `healthai /leaderboard` exposes raw profileIds (enumeration only — reads are
-  now guarded); PHQ-9/GAD-7 "last" in-memory maps aren't evicted on the
-  anonymous→claim lifecycle; `quantum-shield POST /verify` legacy string match
-  isn't timing-safe; `qtrade /accounts/lookup` still returns recipient
-  `createdAt`. Track separately if they matter.
+- **Also hardened (2026-06-21, low-pri from review):**
+  `healthai /leaderboard` now emits a SHA-256 anonId + rank instead of raw
+  profileIds (`cb4bd06c`); `qtrade /accounts/lookup` no longer returns recipient
+  `createdAt` (`4bf487e9`); `quantum-shield POST /verify` legacy string match is
+  now constant-time (`66baec4a`).
+- **Still open (design-level, not a regression):** PHQ-9/GAD-7 "last" in-memory
+  maps aren't evicted on the anonymous→claim profile lifecycle — a value written
+  anonymously persists after the profile is later claimed. Track separately if
+  the anonymous-then-claim flow is kept.
 
 ## Process note
 

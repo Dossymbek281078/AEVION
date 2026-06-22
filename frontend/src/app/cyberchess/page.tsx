@@ -1011,6 +1011,15 @@ export default function CyberChessPage(){
   const[bestMissedArrow,sBestMissedArrow]=useState<{from:string;to:string}|null>(null);
   // Hover arrow from engine PV lines — transient, cleared on mouse-leave
   const[pvHoverArrow,sPvHoverArrow]=useState<{from:string;to:string;c:string}|null>(null);
+  // Персистентная стрелка лучшего хода движка в анализе (как у lichess). По умолчанию вкл.
+  const[showEngBest,sShowEngBest]=useState(true);
+  // Лучший ход из multiPV[0] → {from,to} для авто-стрелки на доске (только в анализе).
+  const engBestArrow=useMemo(()=>{
+    if(tab!=="analysis"||!showEngBest||mpvLines.length===0)return null;
+    const u=mpvLines[0]?.moves?.[0];
+    if(typeof u!=="string"||u.length<4)return null;
+    return{from:u.slice(0,2),to:u.slice(2,4)};
+  },[tab,showEngBest,mpvLines]);
   // Eval graph hover — show crosshair + tooltip; null when not hovering
   const[evalGraphHover,sEvalGraphHover]=useState<number|null>(null);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
@@ -5825,6 +5834,44 @@ export default function CyberChessPage(){
             </Card>;
           })()}
 
+          {/* ─── Киллер-фичи на home — видны ВСЕМ (а не только новичкам). Закрывает главный
+               разрыв аудита: глубину продукта (турниры/экономика/CPI/варианты) не было видно
+               на первом экране. Дополняет навигационный хаб «☰ Все разделы» в хедере. ─── */}
+          {!streamerMode&&(()=>{
+            const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
+              {emoji:"🏆",title:"Турниры онлайн",desc:"Swiss · Round-robin · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
+              {emoji:"📈",title:"CPI рейтинг",desc:"Композитный рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
+              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
+              {emoji:"🎲",title:"12 вариантов",desc:"Atomic · Fischer960 · KotH · Crazyhouse · Knight Riders и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
+            ];
+            return <Card padding={SPACE[3]} elevation="sm">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[2],marginBottom:SPACE[3],flexWrap:"wrap"}}>
+                <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const}}>
+                  ⭐ Чего нет у конкурентов
+                </div>
+                <button onClick={()=>sShowSections(true)} style={{fontSize:11,fontWeight:900,color:CC.brand,background:"none",border:"none",cursor:"pointer",letterSpacing:0.3}}>
+                  ☰ Все разделы →
+                </button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
+                {killer.map(t=><button key={t.title} onClick={t.onClick} style={{
+                  padding:SPACE[3],borderRadius:RADIUS.md,
+                  background:CC.surface2,border:`1px solid ${CC.border}`,
+                  textAlign:"left" as const,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:SPACE[1],
+                  transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.fast} ${MOTION.ease}`,
+                }}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=t.accent;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
+                  <div style={{fontSize:28,lineHeight:1}}>{t.emoji}</div>
+                  <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
+                  <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
+                  <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>
+                </button>)}
+              </div>
+            </Card>;
+          })()}
+
           {/* ─── Инфографика по форматам + ошибки по фазам ─── */}
           {savedGames.length>=3&&(()=>{
             const cats=["Bullet","Blitz","Rapid","Classical"] as const;
@@ -6356,8 +6403,10 @@ export default function CyberChessPage(){
                   <line x1={x1} y1={y1} x2={tx} y2={ty} stroke="#a78bfa" strokeWidth="1.6" strokeLinecap="round" markerEnd="url(#ah-book)" opacity="0.5" strokeDasharray="3 2"/>
                 </svg>;
               })()}
-              {/* Arrow / highlight overlay */}
-              {(arrows.length>0||sqHL.length>0)&&(()=>{
+              {/* Arrow / highlight overlay — рендерим, если есть ЛЮБОЙ источник стрелок, а не
+                  только пользовательские (раньше движковые/премув-стрелки были заперты за
+                  arrows.length>0 и не показывались сами по себе). */}
+              {(arrows.length>0||sqHL.length>0||!!bestMissedArrow||!!pvHoverArrow||!!engineHintArrow||!!engBestArrow)&&(()=>{
                 const sqXY=(sq:Square):[number,number]=>{
                   const f=FILES.indexOf(sq[0]);const r=8-parseInt(sq[1]);
                   const c=flip?7-f:f;const rr=flip?7-r:r;
@@ -6406,6 +6455,18 @@ export default function CyberChessPage(){
                     return <>
                       <circle cx={ex1} cy={ey1} r="5.8" fill="rgba(6,182,212,0.18)" stroke="#06b6d4" strokeWidth="0.9"/>
                       <line x1={ex1} y1={ey1} x2={etx} y2={ety} stroke="#06b6d4" strokeWidth="2.6" strokeLinecap="round" markerEnd="url(#ah-06b6d4)" opacity="0.85"/>
+                    </>;
+                  })()}
+                  {/* Engine BEST move arrow — персистентная стрелка лучшего хода (lichess-style),
+                      авто-обновляется по multiPV[0] в анализе. Тумблер в панели «Варианты». */}
+                  {engBestArrow&&(()=>{
+                    const[gx1,gy1]=sqXY(engBestArrow.from as Square);
+                    const[gx2,gy2]=sqXY(engBestArrow.to as Square);
+                    const gdx=gx2-gx1,gdy=gy2-gy1,glen=Math.max(0.01,Math.hypot(gdx,gdy));
+                    const gtx=gx2-(gdx/glen)*3.5,gty=gy2-(gdy/glen)*3.5;
+                    return <>
+                      <circle cx={gx1} cy={gy1} r="5.8" fill="rgba(6,182,212,0.16)" stroke="#06b6d4" strokeWidth="0.9"/>
+                      <line x1={gx1} y1={gy1} x2={gtx} y2={gty} stroke="#06b6d4" strokeWidth="2.8" strokeLinecap="round" markerEnd="url(#ah-06b6d4)" opacity="0.9"/>
                     </>;
                   })()}
                   {/* Premove drag preview arrow — shown while dragging on opponent's turn */}
@@ -8079,7 +8140,16 @@ export default function CyberChessPage(){
           {tab==="analysis"&&mpvLines.length>0&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"#faf5ff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:T.purple}}>🌳 Варианты · d{mpvLines[0]?.depth||mpvDepth}</span>
-              <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{mpvLines.length} {mpvLines.length===1?"линия":"линий"}</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>sShowEngBest(v=>!v)} title="Стрелка лучшего хода движка на доске (как у lichess)"
+                  style={{fontSize:10,fontWeight:800,cursor:"pointer",padding:"2px 8px",borderRadius:999,
+                    border:`1px solid ${showEngBest?"#06b6d4":T.border}`,
+                    background:showEngBest?"rgba(6,182,212,0.10)":"transparent",
+                    color:showEngBest?"#0e7490":T.dim}}>
+                  ➤ Стрелка {showEngBest?"вкл":"выкл"}
+                </button>
+                <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{mpvLines.length} {mpvLines.length===1?"линия":"линий"}</span>
+              </div>
             </div>
             <div style={{maxHeight:180,overflowY:"auto"}}>
               {mpvLines.map((line,i)=>{

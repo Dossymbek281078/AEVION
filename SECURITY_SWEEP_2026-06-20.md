@@ -91,10 +91,14 @@ issues filed (filing false positives would just churn other sessions):
   profileIds (`cb4bd06c`); `qtrade /accounts/lookup` no longer returns recipient
   `createdAt` (`4bf487e9`); `quantum-shield POST /verify` legacy string match is
   now constant-time (`66baec4a`).
-- **Still open (design-level, not a regression):** PHQ-9/GAD-7 "last" in-memory
-  maps aren't evicted on the anonymous→claim profile lifecycle — a value written
-  anonymously persists after the profile is later claimed. Track separately if
-  the anonymous-then-claim flow is kept.
+- **Fixed (2026-06-22):** PHQ-9/GAD-7 "last" in-memory maps are now evicted when
+  a previously-unowned profile is claimed via `POST /profile`
+  (`clearScreenerCache`), so screener answers from the anonymous phase don't
+  carry to the new owner (`488d3eb9`).
+
+**Sweep status: fully closed** — all findings (5 primary IDOR/leak + plan/snapshot
+guard + 3 low-pri review items + this screener-cache item) are resolved on
+`main`. Cross-zone flags (qcoreai/QBuild/qpaynet) were verified clean.
 
 ## Process note
 

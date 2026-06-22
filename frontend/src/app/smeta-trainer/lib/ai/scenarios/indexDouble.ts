@@ -17,7 +17,6 @@ import { findRate, findIndex } from "../../corpus";
  * обоснования; здесь — методическая ошибка именно базисно-индексного метода.
  */
 const INDEX_MEANINGFUL = 1.05; // индекс материалов считаем значимым от +5%
-const ALREADY_CURRENT = 0.85; // цена ≥ нормативная × индекс × 0.85 → уже текущая
 
 function normName(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -46,8 +45,12 @@ export function checkIndexDouble(lsr: Lsr): AiNotice[] {
         const base = baseline.get(normName(r.name));
         if (base === undefined || base <= 0) continue;
         const ratio = r.basePrice / base;
-        // Цена уже выглядит «текущей»: близка к базисной × индекс (или выше).
-        if (ratio < idx.toMaterials * ALREADY_CURRENT) continue;
+        // Цена ближе к «текущей» (база × индекс), чем к базисной → выглядит уже
+        // пересчитанной. Порог-середина устойчив при любом индексе: и при крупном
+        // историческом (×8), и при реальном современном РК (×1.1) — обычная
+        // базисная цена (ratio≈1) не флагуется.
+        const midpoint = (1 + idx.toMaterials) / 2;
+        if (ratio < midpoint) continue;
 
         const afterIndex = Math.round(r.basePrice * idx.toMaterials);
         notices.push({

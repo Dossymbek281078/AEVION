@@ -104,8 +104,9 @@ describe("checkIndexDouble", () => {
   const biLsr = (positions: SmetaPosition[]): Lsr => ({ ...lsr(positions), method: "базисно-индексный" });
 
   it("флагует текущую цену материала при базисно-индексном методе", () => {
-    // baseline 2000, индекс Алматы 2026-Q2 = ×8.7 → 16000 уже текущая (ratio 8 ≥ 8.7×0.85)
-    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]);
+    // baseline 2000, индекс Алматы 2026-Q2 = ×1.1 → «текущая» ≈ 2200 (ratio 1.1 ≥ midpoint 1.05).
+    // Завышенная цена (16000) тем более ловится.
+    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2200)] })]);
     const n = checkIndexDouble(l);
     expect(n).toHaveLength(1);
     expect(n[0].scenario).toBe("index-double");
@@ -113,12 +114,13 @@ describe("checkIndexDouble", () => {
   });
 
   it("не флагует при ресурсном методе", () => {
-    const l = lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]); // ресурсный
+    const l = lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2200)] })]); // ресурсный
     expect(checkIndexDouble(l)).toHaveLength(0);
   });
 
   it("не флагует базисную цену", () => {
-    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2100)] })]);
+    // Цена ≈ нормативная (база) — ниже середины между базой и «текущей», не флагуется.
+    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2000)] })]);
     expect(checkIndexDouble(l)).toHaveLength(0);
   });
 });
@@ -191,6 +193,6 @@ describe("deterministicBreakdown — batch D", () => {
     const l: Lsr = { ...lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]), method: "базисно-индексный" };
     const txt = deterministicBreakdown(l, mk("index-double", { positionId: "p1" }));
     expect(txt).toBeTruthy();
-    expect(txt!).toContain("8.7");
+    expect(txt!).toContain("индекс материалов");
   });
 });

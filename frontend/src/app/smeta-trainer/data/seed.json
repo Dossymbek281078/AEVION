@@ -23245,26 +23245,26 @@
     {
       "region": "Алматы",
       "quarter": "2026-Q2",
-      "toFOT": 12.5,
-      "toEM": 10.2,
-      "toMaterials": 8.7,
-      "toSMR": 9.4
+      "toFOT": 1.12,
+      "toEM": 1.08,
+      "toMaterials": 1.1,
+      "toSMR": 1.1
     },
     {
       "region": "Астана",
       "quarter": "2026-Q2",
-      "toFOT": 13.1,
-      "toEM": 10.5,
-      "toMaterials": 9,
-      "toSMR": 9.8
+      "toFOT": 1.15,
+      "toEM": 1.11,
+      "toMaterials": 1.13,
+      "toSMR": 1.13
     },
     {
       "region": "Шымкент",
       "quarter": "2026-Q2",
-      "toFOT": 11.8,
-      "toEM": 9.7,
-      "toMaterials": 8.3,
-      "toSMR": 9
+      "toFOT": 1.09,
+      "toEM": 1.06,
+      "toMaterials": 1.08,
+      "toSMR": 1.08
     }
   ],
   "objects": [

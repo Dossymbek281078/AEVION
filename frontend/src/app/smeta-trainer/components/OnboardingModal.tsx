@@ -45,6 +45,10 @@ export function OnboardingModal() {
     try {
       if (!localStorage.getItem(STORAGE_KEY)) setVisible(true);
     } catch {}
+    // Повторный запуск онбординга из «Справки» / страницы-инструкции.
+    const reopen = () => { setStep(0); setVisible(true); };
+    window.addEventListener("smeta-open-onboarding", reopen);
+    return () => window.removeEventListener("smeta-open-onboarding", reopen);
   }, []);
 
   function finish() {

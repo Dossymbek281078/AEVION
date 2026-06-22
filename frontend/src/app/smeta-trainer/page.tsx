@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -15,9 +16,16 @@ export default function SmetaTrainerPage() {
           <span className="text-[10px] bg-emerald-700 text-emerald-200 px-2 py-0.5 rounded-full">beta</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-[10px] text-slate-400 hidden sm:block">
+          <div className="text-[10px] text-slate-400 hidden md:block">
             НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
           </div>
+          <Link
+            href="/smeta-trainer/guide"
+            className="text-[11px] text-slate-200 hover:text-emerald-400 px-2 py-0.5 border border-slate-700 rounded"
+            title="Как пользоваться тренажёром"
+          >
+            ❓ Инструкция
+          </Link>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
             className="hidden sm:block text-[10px] text-slate-400 hover:text-emerald-400 px-1.5 py-0.5 border border-slate-700 rounded font-mono"

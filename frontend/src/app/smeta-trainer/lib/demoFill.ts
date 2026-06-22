@@ -23,8 +23,8 @@ export function applyDemoFill(lsr: Lsr): Lsr {
         case "l2-s1": return {
           ...s,
           positions: [
-            { id: "d-dem-1", rateCode: "ЭСНСб15-01.Д-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "ЕНиР прил. 1 п. 2 — школа действующая" }], formula: "32 × (90 − 3.78 − 1.89) = 32 × 84.33 = 2699 м² / 100 = 26.99", drawingRef: "ОР-05" },
-            { id: "d-dem-2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "ЕНиР прил. 1 п. 2" }], formula: "1800 м² (крыло Б, все этажи) / 100 = 18.00", drawingRef: "ОР-05" },
+            { id: "d-dem-1", rateCode: "ЭСНСб15-01.Д-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "СН РК 8.02-05 — школа действующая" }], formula: "32 × (90 − 3.78 − 1.89) = 32 × 84.33 = 2699 м² / 100 = 26.99", drawingRef: "ОР-05" },
+            { id: "d-dem-2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "СН РК 8.02-05" }], formula: "1800 м² (крыло Б, все этажи) / 100 = 18.00", drawingRef: "ОР-05" },
             { id: "d-dem-3", rateCode: "ЭСНСб10-01.Д-001", volume: 64,    coefficients: [], formula: "32 кл × 2 окна = 64 шт", drawingRef: "ОР-07" },
             { id: "d-dem-4", rateCode: "ЭСНСб10-02.Д-001", volume: 32,    coefficients: [], formula: "32 кл × 1 дверь = 32 шт", drawingRef: "ОР-07" },
           ],
@@ -32,7 +32,7 @@ export function applyDemoFill(lsr: Lsr): Lsr {
         case "l2-s2": return {
           ...s,
           positions: [
-            { id: "d-sht-1", rateCode: "ЭСНСб15-13-01-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "ЕНиР прил. 1 п. 2" }], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
+            { id: "d-sht-1", rateCode: "ЭСНСб15-13-01-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "СН РК 8.02-05" }], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
             { id: "d-sht-2", rateCode: "ЭСНСб15-15-02-003", volume: 26.99, coefficients: [], formula: "26.99 (100 м²)", drawingRef: "ОР-06" },
           ],
         };

@@ -545,6 +545,10 @@ export function LevelHome() {
         </div>
 
         {/* Карточки уровней */}
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+          Уровни открыты все сразу — можно проходить по порядку (рекомендуется) или сразу к нужной теме.{" "}
+          <Link href="/smeta-trainer/guide" className="text-emerald-700 dark:text-emerald-400 underline">Как пользоваться тренажёром →</Link>
+        </p>
         <div className="grid grid-cols-1 gap-4">
           {LEVELS.map((level) => {
             const lvProgress = progress.levels[level.num] ?? { status: "open" };
@@ -580,6 +584,7 @@ export function LevelHome() {
                       )}
                     </div>
                     <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">{level.title}</h2>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 font-medium">🎯 {level.objective}</p>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">{level.description}</p>
                     <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                       <span>⏱ ~{level.timeHours} ч</span>

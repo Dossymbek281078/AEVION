@@ -96,17 +96,17 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | Auth | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | Security pass C1+C2+H1-3 in #74; H4+M5+M6 in PR #80 (open) |
+| 1 | Auth | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | ⚠ | Security pass #74/#80/#85; smoke:auth-prod+replay; Sentry wired 2026-06-22 |
 | 2 | QRight v3 | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | crypto stack done; Sentry wired #86 |
 | 3 | QSign v2 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | P1-P9 + investor polish merged 2026-04-26 (PR #2) |
 | 4 | Quantum Shield | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | Working v1 in PR #23; Tier 3 amplifier wired |
 | 5 | Bureau | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Phase A/B/C merged (#9, #75); Sentry wired #86 |
 | 6 | Pipeline (IPCertificate) | ✅ | (in /bureau) | ⚠ | ✅ | ✅ | ✅ | ⚠ | dilithium + cosign + Sentry #86 |
 | 7 | Planet Compliance | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | quorum + Merkle + Sentry #86 |
-| 8 | Bank | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | 273-commit prod-ready PR #5; AEC + Trust Score |
-| 9 | QTrade | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | Full trading platform + AEV in PR #72 |
-| 10 | AEV token | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | bundled with QTrade (#72) |
-| 11 | Payments Rail | ✅ | ✅ | ✅ | ⚠ | ✅ | — | ⚠ | v1.0-v1.3 (#19); 12 surfaces + 8 v1 endpoints |
+| 8 | Bank | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | ⚠ | 273-commit prod-ready PR #5; AEC + Trust Score; payments.ts Sentry wired 2026-06-22 |
+| 9 | QTrade | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | ⚠ | Full trading platform + AEV (#72); smoke:qtrade-prod; Sentry wired 2026-06-22; i18n global |
+| 10 | AEV token | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | ⚠ | bundled with QTrade (#72); Sentry via qtrade.ts 2026-06-22 |
+| 11 | Payments Rail | ✅ | ✅ | ✅ | ✅ | ✅ | — | ⚠ | v1.0-v1.3 (#19); 12 surfaces + 8 v1 endpoints; Sentry wired 2026-06-22 |
 
 ### Tier 2 — Creator products (revenue path)
 
@@ -123,7 +123,7 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 |---|---|---|---|---|---|---|---|---|---|
 | 16 | QCoreAI multi-agent | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | V1-V70 (PRs #3-#193); judge + comparison + Redis + run-branching + A/B + cohort analytics + AI memory; SDK v1.0.0 final (#187) |
 | 17 | Multichat Engine | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | beta status; landing wired |
-| 18 | Modules registry | ✅ | ✅ | ✅ | ⚠ | ✅ | ✅ | ⚠ | Tier 3 amplifier; admin bulk; webhooks |
+| 18 | Modules registry | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | Tier 3 amplifier; admin bulk; webhooks; Sentry wired 2026-06-22 |
 
 ### Tier 4 — Marketing surfaces
 
@@ -284,6 +284,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-06-22  —    readiness: Sentry capture wired into auth/payments/qtrade/modules/qsign (47 catches, makeServiceCapture) + /qsign SEO metadata+JSON-LD (was bare client page) — closes Sentry ⚠ for Auth/Bank/QTrade/AEV/Payments/Modules in §3
+2026-06-21  —    security sweep cont.: planet owner-spoof + pipeline author-email leak + healthai screener fixes; SECURITY_SWEEP_2026-06-20.md (full IDOR sweep, 5 modules; cross-zone verified clean)
 2026-06-20  #382 docs(promo): unify entire pitch on single partnership deal model ($10M returnable advance + 51/49 + Chief Idea Officer)
 2026-06-20  —    security sweep (parallel): qtrade balance-leak fix + quantum-shield Shamir-shard IDOR fix
 2026-06-18  #378-#380 feat(acquire+letter): single partnership offer live on /acquire + internal docs aligned (51/49 + $10M advance)

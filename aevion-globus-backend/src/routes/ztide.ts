@@ -94,6 +94,17 @@ function rankFor(score: number): { id: string; label: string; min: number; next:
   return { ...current, next };
 }
 
+// Build a SQL CASE expression that maps a score column to a rank id, mirroring
+// rankFor(). Driven entirely by the constant RANKS array (no user input), so it
+// is safe to inline. Highest threshold wins, hence we iterate descending.
+function rankCaseSql(scoreExpr: string): string {
+  const branches = [...RANKS]
+    .sort((a, b) => b.min - a.min)
+    .map((r) => `WHEN ${scoreExpr} >= ${r.min} THEN '${r.id}'`)
+    .join(" ");
+  return `(CASE ${branches} ELSE '${RANKS[0].id}' END)`;
+}
+
 function isServiceCaller(req: import("express").Request): boolean {
   // Service-mode for backend-to-backend ingestion. Compare against env.
   const key = req.header("x-ztide-service-key") || "";
@@ -186,23 +197,31 @@ ztideRouter.post("/events", writeLimit, async (req, res) => {
       [id, userId, kind, sourceModule, weight, JSON.stringify(safeMeta)],
     );
 
-    // Upsert rolling score. Simple sum here; decay applied in /me read path.
+    // Upsert rolling score. NOTE: this is a raw cumulative sum — the decayed-EMA
+    // described in the module header is NOT yet implemented (no decay is applied
+    // on read or write). Deferred: scoring-algorithm change pending product sign-off.
+    // Score and rank are written in a single statement so a concurrent event
+    // can't leave "rank" desynced from "score" — we derive the rank id from the
+    // post-upsert score inline rather than in a separate UPDATE.
     const upR = await pool.query(
-      `INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
-       VALUES ($1, $2, 1, NOW(), 'seedling')
-       ON CONFLICT ("userId") DO UPDATE SET
-         "score" = "ZTideScore"."score" + EXCLUDED."score",
-         "eventCount" = "ZTideScore"."eventCount" + 1,
-         "lastEventAt" = NOW()
-       RETURNING "score","eventCount"`,
+      `WITH upserted AS (
+         INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
+         VALUES ($1, $2, 1, NOW(), 'seedling')
+         ON CONFLICT ("userId") DO UPDATE SET
+           "score" = "ZTideScore"."score" + EXCLUDED."score",
+           "eventCount" = "ZTideScore"."eventCount" + 1,
+           "lastEventAt" = NOW()
+         RETURNING "userId","score","eventCount"
+       )
+       UPDATE "ZTideScore" s
+         SET "rank" = ${rankCaseSql("u.score")}
+         FROM upserted u
+         WHERE s."userId" = u."userId"
+         RETURNING u."score" AS score, u."eventCount" AS "eventCount"`,
       [userId, weight],
     );
-    const newScore = Number((upR.rows[0] as { score: string | number }).score);
+    const newScore = Number((upR.rows[0] as { score: string | number | null }).score ?? 0);
     const newRank = rankFor(newScore);
-    await pool.query(
-      `UPDATE "ZTideScore" SET "rank" = $1 WHERE "userId" = $2 AND "rank" != $1`,
-      [newRank.id, userId],
-    );
 
     res.status(201).json({
       id, userId, kind, weight,
@@ -275,22 +294,27 @@ ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
       [id, auth.sub, "login-streak", "auth", weight, JSON.stringify({})],
     );
 
+    // Atomic score+rank upsert (see /events): rank is derived inline so it can
+    // never desync from score under concurrent claims.
     const upR = await pool.query(
-      `INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
-       VALUES ($1, $2, 1, NOW(), 'seedling')
-       ON CONFLICT ("userId") DO UPDATE SET
-         "score" = "ZTideScore"."score" + EXCLUDED."score",
-         "eventCount" = "ZTideScore"."eventCount" + 1,
-         "lastEventAt" = NOW()
-       RETURNING "score","eventCount"`,
+      `WITH upserted AS (
+         INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
+         VALUES ($1, $2, 1, NOW(), 'seedling')
+         ON CONFLICT ("userId") DO UPDATE SET
+           "score" = "ZTideScore"."score" + EXCLUDED."score",
+           "eventCount" = "ZTideScore"."eventCount" + 1,
+           "lastEventAt" = NOW()
+         RETURNING "userId","score","eventCount"
+       )
+       UPDATE "ZTideScore" s
+         SET "rank" = ${rankCaseSql("u.score")}
+         FROM upserted u
+         WHERE s."userId" = u."userId"
+         RETURNING u."score" AS score, u."eventCount" AS "eventCount"`,
       [auth.sub, weight],
     );
-    const newScore = Number((upR.rows[0] as { score: string | number }).score);
+    const newScore = Number((upR.rows[0] as { score: string | number | null }).score ?? 0);
     const newRank = rankFor(newScore);
-    await pool.query(
-      `UPDATE "ZTideScore" SET "rank" = $1 WHERE "userId" = $2 AND "rank" != $1`,
-      [newRank.id, auth.sub],
-    );
 
     res.status(201).json({
       ok: true, userId: auth.sub, kind: "login-streak", weight,
@@ -361,7 +385,16 @@ ztideRouter.get("/stats", readLimit, async (_req, res) => {
         (SELECT COALESCE(SUM("weight"),0) FROM "ZTideEvent")::bigint  AS total_weight,
         (SELECT MAX("score") FROM "ZTideScore")         AS top_score
     `);
-    res.json({ ...r.rows[0], service: "ztide", ranks: RANKS });
+    // top_score is a BIGINT via MAX() — null on an empty table — and pg returns
+    // BIGINT as a string. Null-guard so consumers always get a number, not NaN.
+    const statRow = (r.rows[0] ?? {}) as { active_users?: number; total_events?: number; total_weight?: string | number | null; top_score?: string | number | null };
+    res.json({
+      ...statRow,
+      total_weight: Number(statRow.total_weight ?? 0),
+      top_score: Number(statRow.top_score ?? 0),
+      service: "ztide",
+      ranks: RANKS,
+    });
   } catch (err: unknown) {
     console.error("[ztide] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });

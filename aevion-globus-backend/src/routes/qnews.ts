@@ -404,9 +404,10 @@ qnewsRouter.post("/ai/digest", aiLimiter, async (_req: Request, res: Response) =
       0.4,
     );
     return res.json({ digest: result.reply, articlesUsed: selectedArticles.length });
-  } catch {
+  } catch (e) {
+    console.error("[QNews] AI digest provider error", e);
     const stub = `Today's highlights: ${selectedArticles.slice(0, 3).map((a) => a.title).join("; ")}. Configure an AI provider for a full digest.`;
-    return res.json({ digest: stub, articlesUsed: selectedArticles.length });
+    return res.status(502).json({ error: "ai_provider_error", message: e instanceof Error ? e.message : String(e), digest: stub, articlesUsed: selectedArticles.length });
   }
 });
 
@@ -456,10 +457,13 @@ qnewsRouter.post("/ai/summarize", aiLimiter, async (req: Request, res: Response)
     } catch {
       return res.json({ summary: raw, keyPoints: [] });
     }
-  } catch {
-    // Stub response when provider unavailable
+  } catch (e) {
+    // Stub response when provider unavailable — surface the underlying error
+    console.error("[QNews] AI summarize provider error", e);
     const words = contentToSummarize.split(/\s+/).slice(0, 30).join(" ");
-    return res.json({
+    return res.status(502).json({
+      error: "ai_provider_error",
+      message: e instanceof Error ? e.message : String(e),
       summary: `${words}... (AI summarization requires a configured LLM provider)`,
       keyPoints: [
         "Key insight from the article",

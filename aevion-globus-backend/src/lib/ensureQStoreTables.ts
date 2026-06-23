@@ -38,11 +38,16 @@ export async function ensureQStoreTables(pool: PgPoolInstance): Promise<void> {
         "previewUrl"  TEXT,
         "tags"        TEXT[] DEFAULT '{}',
         "salesCount"  INTEGER NOT NULL DEFAULT 0,
+        "avgRating"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "reviewCount" INTEGER NOT NULL DEFAULT 0,
         "isPublic"    BOOLEAN NOT NULL DEFAULT TRUE,
         "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // Back-fill columns on pre-existing tables (selected in /products and /featured)
+    await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "avgRating" DOUBLE PRECISION NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "reviewCount" INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "QStoreProduct_cat_idx"
         ON "QStoreProduct" ("category", "salesCount" DESC);
@@ -65,6 +70,21 @@ export async function ensureQStoreTables(pool: PgPoolInstance): Promise<void> {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "QStorePurchase_buyer_idx"
         ON "QStorePurchase" ("buyerId");
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QStoreReview" (
+        "id"        TEXT PRIMARY KEY,
+        "productId" TEXT NOT NULL,
+        "userId"    TEXT NOT NULL,
+        "rating"    INTEGER NOT NULL,
+        "comment"   TEXT,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE ("productId", "userId")
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QStoreReview_product_idx"
+        ON "QStoreReview" ("productId", "createdAt" DESC);
     `);
     dbReady = true;
     console.log("[QStore] Tables ready");

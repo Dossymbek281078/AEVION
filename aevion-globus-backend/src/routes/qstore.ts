@@ -324,9 +324,10 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       const qstoreRef = "qstore";
       if (gumroadConfigured(qstoreRef) && pRow.price > 0) {
         const currency = (pRow.currency || "KZT").toUpperCase();
-        const amountCents = currency === "KZT"
-          ? Math.round(pRow.price)       // QStore stores KZT as integer tenge
-          : Math.round(pRow.price * 100); // USD/other — cents
+        // QStore stores "price" already in the currency's minor unit
+        // (USD/EUR cents — see frontend create form `Number(price) * 100`;
+        // KZT integer tenge). It must NOT be multiplied again here.
+        const amountCents = Math.round(pRow.price);
 
         try {
           const intent = await gumroadPaymentProvider.createIntent({
@@ -421,12 +422,47 @@ qstoreRouter.post("/products/:id/review", async (req: Request, res: Response) =>
 
   const reviewKey = `${productId}:${auth.sub}`;
   const reviewId = crypto.randomUUID();
+  const trimmedComment = comment ? String(comment).trim() : null;
+
+  if (isQStoreDbReady()) {
+    try {
+      // Upsert: one review per user per product
+      const upserted = await pool.query(
+        `INSERT INTO "QStoreReview" ("id","productId","userId","rating","comment","createdAt")
+         VALUES ($1,$2,$3,$4,$5,NOW())
+         ON CONFLICT ("productId","userId")
+         DO UPDATE SET "rating" = EXCLUDED."rating", "comment" = EXCLUDED."comment", "createdAt" = NOW()
+         RETURNING "id"`,
+        [reviewId, productId, auth.sub, rating, trimmedComment],
+      );
+      const storedReviewId = upserted.rows[0]?.id ?? reviewId;
+      // Recalculate aggregate rating for the product
+      await pool.query(
+        `UPDATE "QStoreProduct" SET
+           "reviewCount" = sub."cnt",
+           "avgRating"   = sub."avg",
+           "updatedAt"   = NOW()
+         FROM (
+           SELECT COUNT(*)::int AS "cnt", COALESCE(AVG("rating"), 0) AS "avg"
+           FROM "QStoreReview" WHERE "productId" = $1
+         ) sub
+         WHERE "QStoreProduct"."id" = $1`,
+        [productId],
+      );
+      res.status(201).json({ reviewId: storedReviewId, rating });
+      return;
+    } catch (e) {
+      console.error("[QStore] review error:", e instanceof Error ? e.message : e);
+      // fall through to in-memory
+    }
+  }
+
   const review: Review = {
     id: reviewId,
     productId,
     userId: auth.sub,
     rating,
-    comment: comment ? String(comment).trim() : null,
+    comment: trimmedComment,
     createdAt: new Date().toISOString(),
   };
   memReviews.set(reviewKey, review);
@@ -444,8 +480,23 @@ qstoreRouter.post("/products/:id/review", async (req: Request, res: Response) =>
 });
 
 // GET /api/qstore/products/:id/reviews — list reviews for a product
-qstoreRouter.get("/products/:id/reviews", (req: Request, res: Response) => {
+qstoreRouter.get("/products/:id/reviews", async (req: Request, res: Response) => {
   const productId = param(req, "id");
+
+  if (isQStoreDbReady()) {
+    try {
+      const rows = await pool.query(
+        `SELECT "id","productId","userId","rating","comment","createdAt"
+         FROM "QStoreReview" WHERE "productId" = $1 ORDER BY "createdAt" DESC`,
+        [productId],
+      );
+      res.json({ reviews: rows.rows, total: rows.rowCount ?? rows.rows.length });
+      return;
+    } catch {
+      // fall through to in-memory
+    }
+  }
+
   const reviews = Array.from(memReviews.values())
     .filter((r) => r.productId === productId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

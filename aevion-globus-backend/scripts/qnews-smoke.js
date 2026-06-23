@@ -67,7 +67,7 @@ async function run() {
     console.log("\n8. Authenticated flow");
     const authH = { Authorization: `Bearer ${JWT}` };
     const create = await req("POST", "/api/qnews/articles",
-      { title: "Smoke Test Article", summary: "Test summary", url: "https://aevion.app/smoke-test", source: "smoke", category: "technology", tags: ["test"] },
+      { title: "Smoke Test Article", summary: "Test summary", url: "https://aevion.app/smoke-test", source: "smoke", category: "tech", tags: ["test"] },
       authH);
     assert("POST /articles → 201", create.status === 201);
     const aid = create.body?.article?.id;

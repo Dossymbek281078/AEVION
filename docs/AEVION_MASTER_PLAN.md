@@ -146,6 +146,13 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 > Kids-AI (#265/#271), Startup-Exchange (#263/#270), QTradeOffline (#273).
 > They are MVP-grade (no prod-hardening/Sentry/smoke). Treat as **Tier 4.5**:
 > exists, not launch-ready. Still **do not** invest deeper without user direction.
+>
+> **Update 2026-06-23 (Wave 3):** prod-readiness sweep applied to all Tier 4.5/5 modules:
+> QSocial (#422), QEvents (#421), QJobs (#409), QLearn (#408), QStore (#416), QPersona (#415),
+> QNews (#414), QChaingov (#412), Startup-Exchange (#411), Voice-of-Earth (#410), QMedia (#419),
+> ShadowNet (#420), Kids-AI (#417), Communities (#418), Deepsan (#413), DevHub (#423),
+> LifeBox (#428), VeilNetX (#427), Coach (#429), Z-Tide (#430). QBuild AI-503 fix (#404) +
+> i18n (#407) also merged. Main CI ✅. These are now **prod-hardened**.
 
 These are landing pages + roadmap entries only (pre-2026-05-14). **Do not** build
 backend further without explicit user direction.
@@ -286,6 +293,7 @@ If a user asks "is X done?" check this list **before** starting work on it.
 ```
 2026-06-22  —    PROD EVIDENCE: read-only smoke suite 40/40 PASS against live Railway backend (https://aevion-production-a70c.up.railway.app, health 200) — auth/qtrade/bureau/qsign/planet/pipeline/qshield/modules/pricing/healthai/qcore/hub/ecosystem + all q-zone. Backend API is prod-ready; only Phase 0 (public domain + SSO removal) gates "100% publicly visible".
 2026-06-22  —    deps: merged backend-patch (#389) + frontend-patch (#390) dependabot groups
+2026-06-23  —    Wave 3 prod-hardening COMPLETE: 20 modules hardened (#408-#430 + #404/#407) — qsocial/qevents/qjobs/qlearn/qstore/qpersona/qnews/qchaingov/startup-exchange/voe/qmedia/shadownet/kids-ai/communities/deepsan/devhub/lifebox/veilnetx/coach/z-tide. QBuild AI-503+i18n merged. Main CI ✅. All Tier 4.5/5 modules now prod-hardened. Remaining blocker: Phase 0 DNS+SSO.
 2026-06-22  —    readiness: Sentry capture wired into auth/payments/qtrade/modules/qsign (47 catches, makeServiceCapture) + /qsign SEO metadata+JSON-LD (was bare client page) — closes Sentry ⚠ for Auth/Bank/QTrade/AEV/Payments/Modules in §3
 2026-06-21  —    security sweep cont.: planet owner-spoof + pipeline author-email leak + healthai screener fixes; SECURITY_SWEEP_2026-06-20.md (full IDOR sweep, 5 modules; cross-zone verified clean)
 2026-06-20  #382 docs(promo): unify entire pitch on single partnership deal model ($10M returnable advance + 51/49 + Chief Idea Officer)

@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { captureException } from "../lib/sentry";
 
 export const devhubRouter = Router();
 
@@ -23,8 +24,9 @@ const pool = getPool();
 (async () => {
   try {
     await ensureDevHubTables(pool);
-  } catch {
-    // silent — in-memory fallback active
+  } catch (e) {
+    captureException(e, { route: "devhub/bootstrap", op: "ensureDevHubTables" });
+    // in-memory fallback active
   }
 })();
 
@@ -463,6 +465,7 @@ devhubRouter.post("/projects", async (req, res) => {
   try {
     await dbSaveProject(project);
   } catch (e: any) {
+    captureException(e, { route: "devhub/projects:create", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.status(201).json({ project });
@@ -476,6 +479,7 @@ devhubRouter.get("/projects", async (req, res) => {
     const projects = await dbListProjects(userId);
     res.json({ projects, total: projects.length });
   } catch (e: any) {
+    captureException(e, { route: "devhub/projects:list", userId });
     const projects = [...memProjects.values()].filter((p) => p.userId === userId);
     res.json({ projects, total: projects.length });
   }
@@ -520,7 +524,8 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/projects:update", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ project });
@@ -541,7 +546,8 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   }
   try {
     await dbDeleteProject(req.params.id);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/projects:delete", projectId: req.params.id });
     memProjects.delete(req.params.id);
     for (const [fid, f] of memFiles) {
       if (f.projectId === req.params.id) memFiles.delete(fid);
@@ -649,7 +655,8 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
   };
   try {
     await dbUpsertFile(file);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/files:put", projectId: req.params.id, path: filePath });
     const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
     if (existing) {
       existing.content = file.content;
@@ -688,7 +695,8 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   };
   try {
     await dbUpsertFile(file);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/files:putByPath", projectId: req.params.id, path: filePath });
     const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
     if (existing) {
       existing.content = file.content;
@@ -1043,7 +1051,8 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.status(201).json({ collaborators: project.collaborators });
@@ -1067,7 +1076,8 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/collaborators:delete", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, collaborators: project.collaborators });
@@ -1169,7 +1179,8 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     project.updatedAt = now();
     try {
       await dbSaveProject(project);
-    } catch {
+    } catch (e) {
+      captureException(e, { route: "devhub/github:push", projectId: project.id });
       memProjects.set(project.id, project);
     }
 
@@ -1405,7 +1416,8 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/env:put", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, key });
@@ -1429,7 +1441,8 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/env:delete", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, key });
@@ -1463,7 +1476,8 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/domain:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({
@@ -1611,7 +1625,8 @@ devhubRouter.post("/snippets", async (req, res) => {
   };
   try {
     await dbSaveSnippet(snippet);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
   }
   res.status(201).json({ snippet });
@@ -1643,7 +1658,8 @@ devhubRouter.post("/snippets/:id/star", async (req, res) => {
   snippet.updatedAt = now();
   try {
     await dbSaveSnippet(snippet);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/snippets:star", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
   }
   res.json({ ok: true, stars: snippet.stars });

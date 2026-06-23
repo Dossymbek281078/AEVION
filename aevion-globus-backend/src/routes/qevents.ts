@@ -504,7 +504,7 @@ qeventsRouter.post("/events/:id/waitlist", async (req: Request, res: Response) =
         `SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`,
         [eventId],
       );
-      const position = list.findIndex((r) => r.userId === auth.sub) + 1;
+      const position = list.findIndex((r: { userId?: string }) => r.userId === auth.sub) + 1;
       return res.json({ position });
     }
     const event = memEvents.get(eventId);
@@ -535,7 +535,7 @@ qeventsRouter.get("/events/:id/waitlist", async (req: Request, res: Response) =>
         `SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`,
         [eventId],
       );
-      const waitlist = list.map((r) => r.userId);
+      const waitlist = list.map((r: { userId?: string }) => r.userId);
       return res.json({ waitlist, count: waitlist.length });
     }
     const event = memEvents.get(eventId);

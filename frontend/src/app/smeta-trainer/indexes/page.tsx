@@ -125,12 +125,16 @@ export default function IndexesPage() {
           </section>
 
           <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-            <div className="font-semibold mb-1">Как применять</div>
-            Коэффициент пересчёта переводит базисную стоимость объекта (на 1 января
-            2001 г.) в текущий уровень цен. Для сметы за III кв. 2025 г. коэффициент
-            ≈ 7.103 × 1.0192 = ... (см. полный расчёт в курсе, урок 2.5).
-            <div className="mt-1 text-[10px] text-amber-600">
-              Источник: {data.approvedBy}. Заменяет: {data.supersedes}.
+            <div className="font-semibold mb-1">Как применять (учебный пример)</div>
+            Коэффициент пересчёта — небольшой (~1.04) — переводит цену сборника
+            на дату его выхода в уровень квартала расчёта. Для сметы за II кв. 2026 г.:
+            цена ССЦ × <strong>1.0388</strong> = текущий уровень.
+            Метод «база-2001 × 7–13» — историческая практика, в РК больше не применяется.
+            <div className="mt-1 text-[10px] text-emerald-700 font-medium">
+              Источник: {data.approvedBy}.
+            </div>
+            <div className="mt-0.5 text-[10px] text-slate-400">
+              В учебном расчёте применяется индекс II кв. 2026 = 1.0388 из этого документа.
             </div>
           </div>
         </div>

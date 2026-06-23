@@ -16,8 +16,6 @@ import { findRate, findIndex } from "../../corpus";
  * Отличие от material-price-unjustified: там — любое отклонение цены без
  * обоснования; здесь — методическая ошибка именно базисно-индексного метода.
  */
-const INDEX_MEANINGFUL = 1.05; // индекс материалов считаем значимым от +5%
-
 function normName(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -27,7 +25,9 @@ export function checkIndexDouble(lsr: Lsr): AiNotice[] {
   if (lsr.method !== "базисно-индексный") return notices;
 
   const idx = findIndex(lsr.indexRegion, lsr.indexQuarter);
-  if (!idx || idx.toMaterials < INDEX_MEANINGFUL) return notices;
+  // Детектор работает при любом положительном индексе (>1.0): даже при малом
+  // квартальном коэффициенте двойное применение значимо завышает стоимость.
+  if (!idx || idx.toMaterials <= 1.0) return notices;
 
   for (const section of lsr.sections) {
     for (const pos of section.positions) {

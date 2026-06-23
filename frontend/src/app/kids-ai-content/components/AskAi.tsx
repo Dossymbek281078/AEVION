@@ -12,6 +12,7 @@ interface Message {
   role: "user" | "ai";
   text: string;
   provider?: string;
+  source?: "ai" | "fallback";
 }
 
 const wrapStyle: React.CSSProperties = {
@@ -106,13 +107,18 @@ export default function AskAi({ lessonId, lang }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lessonId, question: q, lang }),
       });
-      const data = (await r.json()) as { answer?: string; provider?: string };
+      const data = (await r.json()) as {
+        answer?: string;
+        provider?: string;
+        source?: "ai" | "fallback";
+      };
       setMessages((m) => [
         ...m,
         {
           role: "ai",
           text: data.answer ?? "...",
           provider: data.provider,
+          source: data.source,
         },
       ]);
     } catch {

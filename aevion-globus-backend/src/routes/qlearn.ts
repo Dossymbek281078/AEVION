@@ -395,16 +395,19 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
       const courseRow = await pool.query(`SELECT "id" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
       if (courseRow.rows.length === 0) { res.status(404).json({ error: "Course not found" }); return; }
       const enrollmentId = crypto.randomUUID();
-      await pool.query(
+      const inserted = await pool.query(
         `INSERT INTO "QLearnEnrollment" ("id","courseId","userId","progress","enrolledAt")
          VALUES ($1,$2,$3,0,NOW())
-         ON CONFLICT ("courseId","userId") DO NOTHING`,
+         ON CONFLICT ("courseId","userId") DO NOTHING
+         RETURNING "id"`,
         [enrollmentId, courseId, auth.sub],
       );
-      await pool.query(
-        `UPDATE "QLearnCourse" SET "enrollmentCount" = "enrollmentCount" + 1 WHERE "id" = $1`,
-        [courseId],
-      );
+      if (inserted.rowCount && inserted.rowCount > 0) {
+        await pool.query(
+          `UPDATE "QLearnCourse" SET "enrollmentCount" = "enrollmentCount" + 1 WHERE "id" = $1`,
+          [courseId],
+        );
+      }
       res.status(201).json({ enrollmentId });
       return;
     } catch {

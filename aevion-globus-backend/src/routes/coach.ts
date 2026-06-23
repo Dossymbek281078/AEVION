@@ -40,7 +40,7 @@ export const coachRouter = Router();
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
-// Opus 4.7 — Anthropic's flagship, strongest chess reasoning ($15 in / $75 out per M tokens).
+// Opus 4.8 — Anthropic's flagship, strongest chess reasoning ($15 in / $75 out per M tokens).
 // Each Coach request ≈ $0.015-0.02, acceptable for premium experience. Override via env.
 const DEFAULT_MODEL = process.env.COACH_MODEL || "claude-opus-4-8";
 

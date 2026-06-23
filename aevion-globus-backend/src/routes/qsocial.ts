@@ -117,7 +117,7 @@ function addNotification(toUserId: string, notif: Omit<QNotification, "id" | "re
          VALUES ($1,$2,$3,$4,FALSE,NOW())`,
         [id, toUserId, notif.type, message],
       )
-      .catch((e) => console.error("[QSocial] addNotification DB error", e));
+      .catch((e: unknown) => console.error("[QSocial] addNotification DB error", e));
     return;
   }
 

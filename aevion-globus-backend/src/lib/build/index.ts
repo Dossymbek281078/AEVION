@@ -250,10 +250,13 @@ async function _doEnsureBuildTables(): Promise<void> {
       "slug" TEXT NOT NULL UNIQUE,
       "name" TEXT NOT NULL,
       "specialty" TEXT,
+      "description" TEXT,
       "memberCount" INTEGER NOT NULL DEFAULT 0,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Backfill "description" on tables created before it was added (idempotent).
+  await pool.query(`ALTER TABLE "BuildCommunity" ADD COLUMN IF NOT EXISTS "description" TEXT;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildCommunityMember" (
       "communityId" TEXT NOT NULL,

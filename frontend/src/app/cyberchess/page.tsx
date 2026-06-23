@@ -202,8 +202,14 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
         // Threads: leave 1 core for UI/render. SAB-enabled context required
         // for >1 thread to actually parallelize; we set COEP=credentialless
         // globally in next.config.ts so SAB should be available.
-        const cores=typeof navigator!=="undefined"&&navigator.hardwareConcurrency?Math.max(1,navigator.hardwareConcurrency-1):4;
-        this.w!.postMessage(`setoption name Threads value ${cores}`);
+        // ⚠️ КРИТИЧНО: stockfish-18-lite.js — WASM-pthread требует OS-level shared memory.
+        // Даже при crossOriginIsolated=true WASM может упасть в «Local memory fallback»
+        // («Shared memory not supported by the OS»). В этом случае Threads≥2 вешает движок
+        // (race conditions в shared state → ни info, ни bestmove). JS-чек
+        // typeof SharedArrayBuffer не надёжен — он true, но WASM всё равно не получает
+        // shared mem. Диагностика 2026-06-23: Threads 1 работает ВСЕГДА. Lite-версия
+        // одним потоком даёт depth 13-22 за <1с — этого хватает для всех наших задач.
+        this.w!.postMessage("setoption name Threads value 1");
         // Hash 1024 MB — quadruple vs prior 256. Modern machines (≥8 GB) handle this comfortably,
         // and transposition-table hits dominate analysis throughput. Worth ~2-3x on long thinks.
         this.w!.postMessage("setoption name Hash value 1024");
@@ -4573,9 +4579,12 @@ export default function CyberChessPage(){
 
   /* ── MultiPV analysis ── */
   const runMultiPV=useCallback(()=>{
-    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
+    // Выделенный анализ-воркер (нет контеншна с live-eval). Фоллбэк на общий sfR,
+    // пока анализ-воркер грузит WASM.
+    const eng=sfR.current;
+    if(!eng?.ready()){showToast("Stockfish loading...","error");return}
     const fen=game.fen();sAnalFen(fen);sMpvRunning(true);sMpvLines([]);
-    sfR.current.multiPV(fen,mpvDepth,mpvCount,(lines)=>{
+    eng.multiPV(fen,mpvDepth,mpvCount,(lines)=>{
       const turn=fen.split(" ")[1];const sign=turn==="w"?1:-1;
       sMpvLines(lines.map(l=>({...l,cp:l.cp*sign,mate:l.mate*sign})));
       sMpvRunning(false);

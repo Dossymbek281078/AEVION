@@ -56,7 +56,13 @@ function isAdmin(auth: { email?: string } | null): boolean {
   if (!auth?.email) return false;
   const list = (process.env.QCHAINGOV_ADMIN_EMAILS || "").toLowerCase()
     .split(",").map(s => s.trim()).filter(Boolean);
-  return list.length === 0 ? false : list.includes(auth.email.toLowerCase());
+  if (list.length === 0) {
+    // Without this, /open /close /execute silently 403 for everyone and the
+    // cause (unset env) is undiagnosable from logs. Make it explicit.
+    console.error("[qchaingov] admin emails not configured: QCHAINGOV_ADMIN_EMAILS is empty — all admin actions (open/close/execute) will be denied");
+    return false;
+  }
+  return list.includes(auth.email.toLowerCase());
 }
 
 let tablesReady = false;
@@ -359,8 +365,16 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
     const totalVotes = tally.reduce((s, r) => s + (r.votes || 0), 0);
     const totalWeight = tally.reduce((s, r) => s + (r.weight || 0), 0);
 
-    // Soft-quorum: documented MVP-cheat — see header comment.
-    const quorumMet = totalVotes > 0 && totalVotes >= proposal.quorumPercent;
+    // Quorum: quorumPercent is a 0..100 percentage and must NOT be compared
+    // against a raw vote count. With no registered-voter table, we derive an
+    // eligible-voter denominator from QCHAINGOV_ELIGIBLE_VOTERS (operator-set
+    // electorate size); the required participation = ceil(eligible * pct/100).
+    // If the electorate size is not configured we fall back to requiring at
+    // least one vote (prior soft behaviour) so quorum never silently blocks.
+    const eligibleVoters = parseInt(String(process.env.QCHAINGOV_ELIGIBLE_VOTERS || ""), 10);
+    const quorumMet = Number.isFinite(eligibleVoters) && eligibleVoters > 0
+      ? totalVotes >= Math.ceil((eligibleVoters * proposal.quorumPercent) / 100)
+      : totalVotes > 0;
 
     let passed = false;
     let achievedPct = 0;

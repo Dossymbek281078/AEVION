@@ -65,6 +65,19 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+// Validate an ISO-8601 datetime string that is not in the past.
+// Returns the normalized ISO string, or null if invalid/past.
+function validStartAt(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  // Require an explicit ISO-ish date (reject things like "tomorrow" that Date won't parse anyway,
+  // and loose numeric strings that coerce unexpectedly).
+  if (!/\d{4}-\d{2}-\d{2}/.test(raw)) return null;
+  if (d.getTime() < Date.now()) return null;
+  return d.toISOString();
+}
+
 // ─── GET /api/qevents/health ──────────────────────────────────────────────────
 qeventsRouter.get("/health", (_req: Request, res: Response) => {
   res.json({
@@ -183,6 +196,11 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "title and startAt required" });
   }
 
+  const normalizedStartAt = validStartAt(startAt);
+  if (!normalizedStartAt) {
+    return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
+  }
+
   const event: QEvent = {
     id: crypto.randomUUID(),
     organizerId: auth.sub,
@@ -190,7 +208,7 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     description: typeof description === "string" ? description.trim() : null,
     category: typeof category === "string" && EVENT_CATEGORIES.includes(category) ? category : "tech",
     location: typeof location === "string" ? location.trim() : "Online",
-    startAt,
+    startAt: normalizedStartAt,
     endAt: typeof endAt === "string" ? endAt : null,
     capacity: typeof capacity === "number" && capacity > 0 ? capacity : 100,
     price: typeof price === "number" && price >= 0 ? price : 0,
@@ -228,13 +246,22 @@ qeventsRouter.patch("/me/events/:id", async (req: Request, res: Response) => {
 
   const id = param(req, "id");
 
+  const patchBody = req.body as Partial<QEvent>;
+  if (patchBody.startAt !== undefined) {
+    const normalized = validStartAt(patchBody.startAt);
+    if (!normalized) {
+      return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
+    }
+    patchBody.startAt = normalized;
+  }
+
   try {
     if (isQEventsDbReady()) {
       const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
       if (rows[0].organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
       const ev = rows[0];
-      const b = req.body as Partial<QEvent>;
+      const b = patchBody;
       const { rows: updated } = await pool.query(
         `UPDATE "QEvent" SET "title"=$1,"description"=$2,"category"=$3,"location"=$4,"startAt"=$5,"endAt"=$6,"capacity"=$7,"price"=$8,"updatedAt"=NOW()
          WHERE "id"=$9 RETURNING *`,
@@ -256,7 +283,7 @@ qeventsRouter.patch("/me/events/:id", async (req: Request, res: Response) => {
     const event = memEvents.get(id);
     if (!event) return res.status(404).json({ error: "not_found" });
     if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
-    Object.assign(event, { ...req.body, updatedAt: nowIso() });
+    Object.assign(event, { ...patchBody, updatedAt: nowIso() });
     return res.json({ event });
   } catch {
     return res.status(500).json({ error: "internal_error" });
@@ -419,55 +446,127 @@ qeventsRouter.get("/me/rsvps", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qevents/calendar ────────────────────────────────────────────────
-qeventsRouter.get("/calendar", (_req: Request, res: Response) => {
+qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
   const year = parseInt(String(_req.query.year ?? new Date().getFullYear()), 10);
   const month = parseInt(String(_req.query.month ?? new Date().getMonth() + 1), 10);
   const ym = `${year}-${String(month).padStart(2, "0")}`;
   const days: Record<string, QEvent[]> = {};
-  for (const ev of memEvents.values()) {
-    if (!ev.isPublic) continue;
-    if (!ev.startAt.startsWith(ym)) continue;
-    const day = ev.startAt.slice(0, 10);
-    if (!days[day]) days[day] = [];
-    days[day].push(ev);
+  try {
+    if (isQEventsDbReady()) {
+      const monthStart = `${ym}-01T00:00:00.000Z`;
+      const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
+      const { rows } = await pool.query(
+        `SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
+        [monthStart, monthEnd],
+      );
+      for (const ev of rows as QEvent[]) {
+        const iso = typeof ev.startAt === "string" ? ev.startAt : new Date(ev.startAt).toISOString();
+        const day = iso.slice(0, 10);
+        if (!days[day]) days[day] = [];
+        days[day].push(ev);
+      }
+      return res.json({ year, month, days });
+    }
+    for (const ev of memEvents.values()) {
+      if (!ev.isPublic) continue;
+      if (!ev.startAt.startsWith(ym)) continue;
+      const day = ev.startAt.slice(0, 10);
+      if (!days[day]) days[day] = [];
+      days[day].push(ev);
+    }
+    return res.json({ year, month, days });
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
   }
-  return res.json({ year, month, days });
 });
 
 // ─── POST /api/qevents/events/:id/waitlist ────────────────────────────────────
-qeventsRouter.post("/events/:id/waitlist", (req: Request, res: Response) => {
+qeventsRouter.post("/events/:id/waitlist", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const eventId = param(req, "id");
-  const event = memEvents.get(eventId);
-  if (!event) return res.status(404).json({ error: "not_found" });
-  if (event.attendeeCount < event.capacity) {
-    return res.status(400).json({ error: "Event is not full, RSVP directly" });
+  try {
+    if (isQEventsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT "attendeeCount","capacity" FROM "QEvent" WHERE "id"=$1`,
+        [eventId],
+      );
+      if (!rows[0]) return res.status(404).json({ error: "not_found" });
+      if (rows[0].attendeeCount < rows[0].capacity) {
+        return res.status(400).json({ error: "Event is not full, RSVP directly" });
+      }
+      await pool.query(
+        `INSERT INTO "QEventWaitlist" ("id","eventId","userId","createdAt") VALUES ($1,$2,$3,NOW())
+         ON CONFLICT ("eventId","userId") DO NOTHING`,
+        [crypto.randomUUID(), eventId, auth.sub],
+      );
+      const { rows: list } = await pool.query(
+        `SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`,
+        [eventId],
+      );
+      const position = list.findIndex((r) => r.userId === auth.sub) + 1;
+      return res.json({ position });
+    }
+    const event = memEvents.get(eventId);
+    if (!event) return res.status(404).json({ error: "not_found" });
+    if (event.attendeeCount < event.capacity) {
+      return res.status(400).json({ error: "Event is not full, RSVP directly" });
+    }
+    const list = memWaitlist.get(eventId) ?? [];
+    if (!list.includes(auth.sub)) list.push(auth.sub);
+    memWaitlist.set(eventId, list);
+    return res.json({ position: list.indexOf(auth.sub) + 1 });
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
   }
-  const list = memWaitlist.get(eventId) ?? [];
-  if (!list.includes(auth.sub)) list.push(auth.sub);
-  memWaitlist.set(eventId, list);
-  return res.json({ position: list.indexOf(auth.sub) + 1 });
 });
 
 // ─── GET /api/qevents/events/:id/waitlist — owner only ────────────────────────
-qeventsRouter.get("/events/:id/waitlist", (req: Request, res: Response) => {
+qeventsRouter.get("/events/:id/waitlist", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const eventId = param(req, "id");
-  const event = memEvents.get(eventId);
-  if (!event) return res.status(404).json({ error: "not_found" });
-  if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
-  const list = memWaitlist.get(eventId) ?? [];
-  return res.json({ waitlist: list, count: list.length });
+  try {
+    if (isQEventsDbReady()) {
+      const { rows } = await pool.query(`SELECT "organizerId" FROM "QEvent" WHERE "id"=$1`, [eventId]);
+      if (!rows[0]) return res.status(404).json({ error: "not_found" });
+      if (rows[0].organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+      const { rows: list } = await pool.query(
+        `SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`,
+        [eventId],
+      );
+      const waitlist = list.map((r) => r.userId);
+      return res.json({ waitlist, count: waitlist.length });
+    }
+    const event = memEvents.get(eventId);
+    if (!event) return res.status(404).json({ error: "not_found" });
+    if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    const list = memWaitlist.get(eventId) ?? [];
+    return res.json({ waitlist: list, count: list.length });
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // ─── POST /api/qevents/events/:id/share ──────────────────────────────────────
-qeventsRouter.post("/events/:id/share", (req: Request, res: Response) => {
+qeventsRouter.post("/events/:id/share", async (req: Request, res: Response) => {
   const id = param(req, "id");
-  const event = memEvents.get(id);
-  if (!event) return res.status(404).json({ error: "not_found" });
-  return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+  try {
+    if (isQEventsDbReady()) {
+      const { rows } = await pool.query(`SELECT "id" FROM "QEvent" WHERE "id"=$1`, [id]);
+      if (!rows[0]) return res.status(404).json({ error: "not_found" });
+      await pool.query(
+        `INSERT INTO "QEventShare" ("id","eventId","createdAt") VALUES ($1,$2,NOW())`,
+        [crypto.randomUUID(), id],
+      );
+      return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+    }
+    const event = memEvents.get(id);
+    if (!event) return res.status(404).json({ error: "not_found" });
+    return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // ─── GET /api/qevents/events/:id/ics — iCal export ───────────────────────────

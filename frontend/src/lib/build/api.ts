@@ -1662,8 +1662,10 @@ export const buildApi = {
     call<{ community: { id: string; slug: string; name: string; specialty: string; description: string | null; memberCount: number; joined?: boolean }; messages: Array<{ id: string; userId: string; content: string; createdAt: string; authorName: string | null; authorPhoto: string | null; buildRole: string | null }> }>("GET", `/api/build/communities/${id}`),
   joinCommunity: (id: string) =>
     call<{ joined: boolean }>("POST", `/api/build/communities/${id}/join`, {}),
-  sendCommunityMessage: (id: string, text: string) =>
-    call<{ id: string; text: string; createdAt: string }>("POST", `/api/build/communities/${id}/messages`, { text }),
+  leaveCommunity: (id: string) =>
+    call<{ left: boolean }>("POST", `/api/build/communities/${id}/leave`, {}),
+  sendCommunityMessage: (id: string, content: string) =>
+    call<{ id: string; content: string; createdAt: string }>("POST", `/api/build/communities/${id}/messages`, { content }),
 
   // Video rooms
   createVideoRoom: (input: { title?: string; maxParticipants?: number; guestId?: string; scheduledAt?: string }) =>

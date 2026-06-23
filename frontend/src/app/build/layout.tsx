@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ServiceWorkerRegister } from "@/components/build/ServiceWorkerRegister";
+import { AutoTranslate } from "@/components/AutoTranslate";
 
 export const metadata: Metadata = {
   title: "AEVION QBuild — Construction & Recruiting",
@@ -74,7 +75,11 @@ export default function BuildLayout({ children }: { children: React.ReactNode })
         dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_LD) }}
       />
       <ServiceWorkerRegister />
-      {children}
+      {/* QBuild is an app-shell, so the global AutoTranslate runs with
+          observe=false. Re-enable a live observer scoped to /build so every
+          page (and async-loaded content) translates into all 11 AEVION
+          languages when the user switches via the app-shell language pill. */}
+      <AutoTranslate observe>{children}</AutoTranslate>
     </>
   );
 }

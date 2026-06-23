@@ -276,8 +276,12 @@ qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
       return res.json({ lyrics: `[Verse 1]\nIn the ${mood || "bright"} ${genre || "music"} night\nEvery beat feels just right\n${theme || "We dance"} under stars above\n\n[Chorus]\nOh ${theme || "music"}, carry me away\nThrough the ${mood || "beautiful"} day`, mode: "stub" });
     }
     const numLines = typeof lines === "number" ? lines : 8;
-    const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
-    res.json({ lyrics: result.reply });
+    try {
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
+      res.json({ lyrics: result.reply });
+    } catch {
+      res.json({ lyrics: `[Verse 1]\nIn the ${mood || "bright"} ${genre || "music"} night\nEvery beat feels just right\n${theme || "We dance"} under stars above\n\n[Chorus]\nOh ${theme || "music"}, carry me away\nThrough the ${mood || "beautiful"} day`, mode: "stub" });
+    }
   } catch { res.status(500).json({ error: "generate lyrics failed" }); }
 });
 
@@ -288,7 +292,12 @@ qmediaRouter.post("/ai/generate-title", async (req, res) => {
     if (!provider) {
       return res.json({ titles: [`${mood || "Beautiful"} ${genre || "Song"}`, `The ${mood || "Magic"} Beat`, `${genre || "Music"} Dreams`, `${mood || "Pure"} Harmony`, `Sound of Life`], mode: "stub" });
     }
-    const result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${genre || "pop"} song with a ${mood || "upbeat"} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8);
+    let result;
+    try {
+      result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${genre || "pop"} song with a ${mood || "upbeat"} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8);
+    } catch {
+      return res.json({ titles: [`${mood || "Beautiful"} ${genre || "Song"}`, `The ${mood || "Magic"} Beat`, `${genre || "Music"} Dreams`, `${mood || "Pure"} Harmony`, `Sound of Life`], mode: "stub" });
+    }
     try {
       const raw = result.reply.trim();
       const jsonStr = raw.startsWith("[") ? raw : raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
@@ -320,8 +329,12 @@ qmediaRouter.post("/ai/describe-video", async (req, res) => {
     const { title, category } = req.body || {};
     const provider = getProviders().find(p => p.configured);
     if (!provider) return res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
-    const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
-    res.json({ description: result.reply.trim() });
+    try {
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
+      res.json({ description: result.reply.trim() });
+    } catch {
+      res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
+    }
   } catch { res.status(500).json({ error: "describe video failed" }); }
 });
 

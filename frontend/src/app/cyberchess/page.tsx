@@ -597,7 +597,10 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
       :null}
     {/* Кольцо захвата: iV&&hasPiece (clicked) или iHoverCap (hover) */}
     {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:`inset 0 0 0 clamp(3px,9%,9px) ${dotOnDark?"rgba(255,255,255,0.45)":"rgba(15,23,42,0.28)"}`,pointerEvents:"none"}}/>}
-    {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {/* data-piece — НЕСУЩИЙ контракт для drag-механики (useBoardInput ищет фигуру по нему,
+        чтобы клонировать ghost и скрыть оригинал). НЕ удалять при правках стиля/размера фигуры —
+        иначе захват фигуры мышью «слетит». Размер 88% теперь лишь визуальный, не точка связи. */}
+    {hasPiece&&<div key={snapNonce} data-piece="1" className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {/* Last-move marker — чёткий amber inset-ring, читается даже под фигурой
         (bg-тинта T.last мало: фигура занимает 88% клетки). Не рисуем на клетке

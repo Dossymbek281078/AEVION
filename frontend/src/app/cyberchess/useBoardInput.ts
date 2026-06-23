@@ -264,6 +264,13 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document === "undefined") return null;
     const cell = document.querySelector(`[data-sq="${from}"]`);
     if (!cell) return null;
+    // Strategy 0 (PRIMARY, stable contract): piece wrapper carries data-piece,
+    // set explicitly in page.tsx's board cell. Этот атрибут — единственная точка
+    // связи между разметкой и input-слоем; пока он на месте, механика НЕ слетает
+    // от любых изменений размера/стиля/структуры фигуры. Строковые проверки ниже —
+    // только запасной путь на случай рассинхрона.
+    const tagged = cell.querySelector('[data-piece]') as HTMLElement | null;
+    if (tagged) return tagged;
     // Strategy 1: direct child with width:88% height:88% inline style
     const children = cell.children;
     for (let i = 0; i < children.length; i++) {
@@ -379,15 +386,19 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document !== "undefined") {
       const srcCell = document.querySelector(`[data-sq="${from}"]`);
       if (srcCell) {
-        const allDivs = srcCell.querySelectorAll("div");
-        for (let i = 0; i < allDivs.length; i++) {
-          const c = allDivs[i] as HTMLElement;
-          if (c.style && c.style.width === "88%" && c.style.height === "88%") {
-            c.dataset.ghostHidden = "1";
-            c.style.opacity = "0";
-            c.style.transition = "opacity 60ms linear"; // smoother than instant
-            break;
+        // Stable contract first: [data-piece]. Fallback: legacy 88% style match.
+        let target = srcCell.querySelector('[data-piece]') as HTMLElement | null;
+        if (!target) {
+          const allDivs = srcCell.querySelectorAll("div");
+          for (let i = 0; i < allDivs.length; i++) {
+            const c = allDivs[i] as HTMLElement;
+            if (c.style && c.style.width === "88%" && c.style.height === "88%") { target = c; break; }
           }
+        }
+        if (target) {
+          target.dataset.ghostHidden = "1";
+          target.style.opacity = "0";
+          target.style.transition = "opacity 60ms linear"; // smoother than instant
         }
       }
       document.body.style.cursor = "grabbing";

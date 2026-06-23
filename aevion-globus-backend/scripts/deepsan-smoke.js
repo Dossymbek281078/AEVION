@@ -45,7 +45,15 @@ async function run() {
       const done = await req("PATCH", `/api/deepsan/focus/${focusId}/done`, {});
       assert("PATCH focus done → 200", done.status === 200);
     }
+
+    const del = await req("DELETE", `/api/deepsan/tasks/${taskId}`);
+    assert("DELETE /tasks/:id → 200", del.status === 200, String(del.status));
+    assert("task deleted", del.body?.data?.deleted === taskId);
   }
+
+  const status = await req("GET", "/api/deepsan/status");
+  assert("GET /status → 200", status.status === 200, String(status.status));
+  assert("status.module deepsan", status.body?.module === "deepsan");
 
   const stats = await req("GET", "/api/deepsan/stats");
   assert("GET /stats → 200", stats.status === 200);

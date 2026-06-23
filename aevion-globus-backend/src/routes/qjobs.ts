@@ -523,7 +523,7 @@ qjobsRouter.post("/jobs/:id/save", async (req: Request, res: Response) => {
         return res.json({ saved: false });
       } else {
         await pool.query(
-          `INSERT INTO "QJobsSavedJob"("id","userId","jobId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          `INSERT INTO "QJobsSavedJob"("id","userId","jobId") VALUES($1,$2,$3) ON CONFLICT ("userId","jobId") DO NOTHING`,
           [crypto.randomUUID(), auth.sub, jobId],
         );
         return res.json({ saved: true });

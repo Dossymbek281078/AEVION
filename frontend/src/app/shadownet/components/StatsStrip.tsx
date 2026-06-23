@@ -18,15 +18,28 @@ function fmtBytes(n: number): string {
 
 export default function StatsStrip() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch(apiUrl("/api/shadownet/stats"), { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`stats request failed (${r.status})`);
+        return r.json();
+      })
       .then((d) => { if (!cancelled) setStats(d); })
-      .catch(() => null);
+      .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, []);
+
+  if (error) {
+    return (
+      <div style={S.cell}>
+        <div style={S.value}>—</div>
+        <div style={S.label}>Stats unavailable</div>
+      </div>
+    );
+  }
 
   if (!stats) return null;
 

@@ -161,6 +161,8 @@ function fail(res: Response, message: string, status = 400): void {
   res.status(status).json({ success: false, error: message });
 }
 
+const MAX_CIPHERTEXT_BYTES = 1024 * 256; // 256KB ciphertext payload cap
+
 function isNonEmptyString(v: unknown, maxLen = 1024 * 256): v is string {
   return typeof v === "string" && v.length > 0 && v.length <= maxLen;
 }
@@ -366,7 +368,12 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
     return fail(res, "salt required (string, ≤256 chars)");
   }
 
-  const sizeBytes = ciphertext.length;
+  // Payload size guard: cap on actual byte length (UTF-8 can be multi-byte,
+  // so a char-count check alone underestimates the stored/transmitted size).
+  const sizeBytes = Buffer.byteLength(ciphertext, "utf8");
+  if (sizeBytes > MAX_CIPHERTEXT_BYTES) {
+    return fail(res, "ciphertext too large (≤256KB)", 413);
+  }
 
   if (isShadowNetDbReady()) {
     try {

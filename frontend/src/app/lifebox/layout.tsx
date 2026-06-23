@@ -14,6 +14,7 @@ export const metadata: Metadata = {
     title: "LifeBox — Digital Safe for Future Self",
     description: "100-year storage · Shamir inheritance · QSign access audit · trigger-based unlock.",
     siteName: "AEVION",
+    images: [{ url: `${SITE}/lifebox/opengraph-image`, width: 1200, height: 630 }],
   },
   robots: { index: true, follow: true },
 };

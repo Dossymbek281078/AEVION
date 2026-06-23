@@ -109,15 +109,11 @@ export default function QMediaPage() {
   }, [active, playing]);
 
   const playList = useCallback((list: Track[], startIdx = 0) => {
-    const playable = list.filter((t) => !!t.url);
-    if (playable.length === 0) {
-      // Allow play attempt even without url — player will show "no source"
-      setQueue(list);
-      setActiveIdx(startIdx);
-    } else {
-      setQueue(list);
-      setActiveIdx(startIdx);
-    }
+    if (list.length === 0) return;
+    // Allow play attempt even without url — player will show "no source"
+    setQueue(list);
+    setActiveIdx(startIdx);
+    setCurrent(0);
     setPlaying(true);
   }, []);
 

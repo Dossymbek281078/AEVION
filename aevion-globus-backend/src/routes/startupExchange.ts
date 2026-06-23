@@ -370,8 +370,8 @@ async function ensureAiScoreColumn(): Promise<void> {
     );
     aiScoreColEnsured = true;
   } catch {
-    // Non-fatal — column may already exist or pool may be unavailable.
-    aiScoreColEnsured = true;
+    // Non-fatal — pool may be transiently unavailable. Do NOT latch the flag:
+    // leave it false so the next call retries once Postgres recovers.
   }
 }
 
@@ -471,11 +471,20 @@ startupExchangeRouter.post(
     }
 
     // ── Persist ───────────────────────────────────────────────────────────────
+    // Only mark the idea "scored" when parsing actually produced a score.
+    // A parse failure (aiScore === null) must NOT stamp ai_scored_at.
+    if (!aiScore) {
+      return res.status(200).json({
+        success: true,
+        data: { id, aiScore: null, error: "ai_parse_failed" },
+      });
+    }
+
     if (isStartupExchangeDbReady()) {
       try {
         await pool.query(
           `UPDATE startup_ideas SET ai_score=$1, ai_scored_at=$2 WHERE id=$3`,
-          [aiScore ? JSON.stringify(aiScore) : null, scoredAt, id],
+          [JSON.stringify(aiScore), scoredAt, id],
         );
       } catch (e) {
         console.error("[StartupX] POST /ideas/:id/ai-score DB save error", e);

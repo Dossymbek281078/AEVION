@@ -243,3 +243,30 @@ jobs:
           name: constitution-prod-smoke-${{ github.run_id }}
           path: /tmp/constitution-smoke-${{ github.run_id }}.json
           retention-days: 30
+
+  prod-readonly-sweep:
+    name: Prod read-only smoke sweep (live Railway)
+    # Cron + manual dispatch only — never on push. READ_ONLY=1 so it only runs
+    # the safe read-only smokes and never writes to the live prod DB. Monitors
+    # the whole public deploy (all modules) end-to-end, beyond just bank/hub.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Read-only smoke sweep against live prod
+        run: BASE="$PROD_BASE" READ_ONLY=1 node scripts/all-smokes.js
+        env:
+          PROD_BASE: ${{ secrets.PROD_SMOKE_BASE || 'https://aevion-production-a70c.up.railway.app' }}

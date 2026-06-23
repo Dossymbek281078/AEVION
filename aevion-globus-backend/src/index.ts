@@ -534,12 +534,33 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       // Coach — AI coaching / goal-tracking
       "/api/coach/health": { get: { summary: "Coach health + provider config", security: [] } },
+      "/api/coach/chat": {
+        post: { summary: "Anthropic chat proxy — stateless coaching reply (public)", security: [] },
+      },
+      "/api/coach/chat/stream": {
+        post: { summary: "Anthropic chat proxy — streamed SSE coaching reply (public)", security: [] },
+      },
       "/api/coach/sessions": {
         get: { summary: "List user coaching sessions (Bearer required)" },
-        post: { summary: "Create new session with goal (Bearer required)" },
+      },
+      "/api/coach/sessions/start": {
+        post: { summary: "Start a coaching session (Bearer required)" },
       },
       "/api/coach/sessions/{id}": {
-        get: { summary: "Get session with conversation history (Bearer required)" },
+        get: { summary: "Get a single coaching session (Bearer required)" },
+      },
+      "/api/coach/sessions/{id}/end": {
+        post: { summary: "End an active coaching session (Bearer required)" },
+      },
+      "/api/coach/goals": {
+        get: { summary: "List user coaching goals (Bearer required)" },
+        post: { summary: "Create a coaching goal (Bearer required)" },
+      },
+      "/api/coach/goals/{id}/complete": {
+        post: { summary: "Mark a coaching goal complete (Bearer required)" },
+      },
+      "/api/coach/goals/{id}": {
+        delete: { summary: "Delete a coaching goal (Bearer required)" },
       },
       // Multichat — multi-agent chat (fully Bearer-gated on prod)
       "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },

@@ -1,0 +1,232 @@
+/**
+ * Platform-wide module paywall gate.
+ *
+ * Generalises the constitution Pro gate (lib/constitutionGate.ts) to ALL
+ * modules. The policy — "which subscription tier unlocks which module" — is
+ * derived from MODULES_PRICING[].includedIn in data/pricing.ts. That is the
+ * single source of truth, shared with the public pricing page, so the paywall
+ * a user hits can never disagree with what they were sold.
+ *
+ * SAFETY — dormant by default. A module is only enforced when its id is listed
+ * in env PAYWALL_MODULES (comma-separated, or "*" for every module). With the
+ * env unset, every requireModule() gate is a transparent no-op: existing free
+ * traffic and the prod smoke suite are unaffected until the paywall is
+ * deliberately switched on (after the frontend 402 UX + pricing pages ship).
+ *
+ * Enabling on Railway, once the frontend can render the 402 paywall:
+ *   PAYWALL_MODULES=qcoreai,qfusionai,healthai   # gate a curated set
+ *   PAYWALL_MODULES=*                            # gate everything priced full-only
+ *   PAYWALL_DISABLED=1                           # global kill-switch (overrides all)
+ */
+
+import type { Request, Response, NextFunction } from "express";
+import { verifyBearerOptional } from "./authJwt";
+import { readLatestSubscription } from "../routes/provisioning";
+import { MODULES_PRICING, type TierId } from "../data/pricing";
+
+const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+
+const ALLOWLIST = (process.env.PAYWALL_ALLOWLIST || "")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+/* ───── Tier model ──────────────────────────────────────────────── */
+
+/** Canonical, public-facing tiers, ordered low → high. */
+export type CanonicalTier = "free" | "lite" | "medium" | "full" | "enterprise";
+
+const TIER_RANK: Record<CanonicalTier, number> = {
+  free: 0, lite: 1, medium: 2, full: 3, enterprise: 4,
+};
+
+/**
+ * Normalise any stored/legacy tier id to a canonical tier. Legacy aliases
+ * (`pro`, `business`) are still written by older Gumroad/LemonSqueezy
+ * webhook paths (see provisioning.ts) — map them so the gate stays correct
+ * regardless of which checkout path produced the subscription.
+ *   pro → lite ("1 product of choice"),  business → full ("all-access").
+ */
+export function normalizeTier(tier: string | null | undefined): CanonicalTier {
+  switch ((tier ?? "free").toLowerCase()) {
+    case "lite":
+    case "pro":
+      return "lite";
+    case "medium":
+      return "medium";
+    case "full":
+    case "business":
+      return "full";
+    case "enterprise":
+      return "enterprise";
+    default:
+      return "free";
+  }
+}
+
+/* ───── Plan resolution ─────────────────────────────────────────── */
+
+export interface ResolvedPlan {
+  /** Canonical tier the request is entitled to. */
+  tier: CanonicalTier;
+  email: string | null;
+  /** How the tier was decided — for debugging / the /me/entitlements payload. */
+  reason: string;
+  /** Modules explicitly chosen on a Lite ("1 of choice") subscription. */
+  chosenModules: string[];
+}
+
+/**
+ * Single source of truth for platform plan resolution. Mirrors the priority
+ * order of the constitution gate so behaviour is consistent across modules.
+ *
+ * Priority: env allowlist (full) → JWT payload.plan → active paid
+ * subscription (data/subscriptions.jsonl) → free.
+ */
+export function resolveUserPlan(req: Request): ResolvedPlan {
+  const payload = verifyBearerOptional(req) as Record<string, unknown> | null;
+  const email = payload && typeof payload.email === "string" ? payload.email.toLowerCase() : null;
+
+  if (email && ALLOWLIST.includes(email)) {
+    return { tier: "full", email, reason: "allowlist", chosenModules: [] };
+  }
+
+  // A tier baked into the JWT wins over the subscription store (used for
+  // impersonation / comped accounts). Only trust it if it names a real tier.
+  if (payload && typeof payload.plan === "string" && payload.plan !== "free") {
+    const t = normalizeTier(payload.plan);
+    if (t !== "free") return { tier: t, email, reason: "jwt-plan", chosenModules: [] };
+  }
+
+  if (email) {
+    const sub = readLatestSubscription(email);
+    if (sub) {
+      const expired = sub.validUntil ? new Date(sub.validUntil).getTime() < Date.now() : false;
+      if (!expired && sub.tierId !== "free") {
+        return {
+          tier: normalizeTier(sub.tierId),
+          email,
+          reason: `subscription:${sub.tierId}`,
+          chosenModules: Array.isArray(sub.modules) ? sub.modules : [],
+        };
+      }
+    }
+  }
+
+  return { tier: "free", email, reason: "default", chosenModules: [] };
+}
+
+/* ───── Entitlement policy (derived from MODULES_PRICING) ───────── */
+
+const PRICING_BY_ID = new Map(MODULES_PRICING.map((m) => [m.id, m]));
+
+/** Tiers (incl. free) that include this module without an add-on purchase. */
+export function tiersForModule(moduleId: string): TierId[] {
+  return PRICING_BY_ID.get(moduleId)?.includedIn ?? ["full", "enterprise"];
+}
+
+/**
+ * Does `plan` grant access to `moduleId`?
+ *   - full / enterprise are all-access (the whole ecosystem), always true.
+ *   - otherwise the module's `includedIn` must list the canonical tier.
+ *   - Lite is "1 product of choice": granted when the module was the one
+ *     chosen on the subscription, even if not in `includedIn`.
+ */
+export function isModuleEntitled(plan: ResolvedPlan, moduleId: string): boolean {
+  if (plan.tier === "full" || plan.tier === "enterprise") return true;
+  const included = tiersForModule(moduleId).map(normalizeTier);
+  if (included.includes(plan.tier)) return true;
+  if (plan.tier === "lite" && plan.chosenModules.includes(moduleId)) return true;
+  return false;
+}
+
+/* ───── Enforcement switch ──────────────────────────────────────── */
+
+function enforcedModuleSet(): Set<string> | "all" | null {
+  if (process.env.PAYWALL_DISABLED === "1") return null;
+  const raw = (process.env.PAYWALL_MODULES || "").trim();
+  if (!raw) return null;
+  if (raw === "*") return "all";
+  return new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+}
+
+/** Is the paywall actively enforced for this module right now? */
+export function paywallEnabledFor(moduleId: string): boolean {
+  const set = enforcedModuleSet();
+  if (set === null) return false;
+  if (set === "all") return true;
+  return set.has(moduleId.toLowerCase());
+}
+
+/** Sub-paths that stay open even on a gated module (introspection / health). */
+function isExemptPath(req: Request): boolean {
+  if (req.method === "OPTIONS") return true;
+  const p = req.path.toLowerCase();
+  return (
+    p === "/health" || p.endsWith("/health") ||
+    p === "/me/plan" || p.endsWith("/me/plan") ||
+    p === "/me/entitlements" || p.endsWith("/me/entitlements") ||
+    p === "/providers" || p.endsWith("/providers") ||
+    p === "/status" || p.endsWith("/status")
+  );
+}
+
+function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
+  const requiredTiers = tiersForModule(moduleId).map(normalizeTier)
+    .filter((t) => TIER_RANK[t] > TIER_RANK.free);
+  res.status(402).json({
+    error: "upgrade_required",
+    module: moduleId,
+    plan: plan.tier,
+    requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
+    upgradeUrl: `${PUBLIC_BASE}/pricing`,
+    message: `Модуль «${moduleId}» доступен на тарифах: ${requiredTiers.join(", ") || "full"}. Upgrade → ${PUBLIC_BASE}/pricing`,
+  });
+}
+
+/**
+ * Middleware factory: gate a module's routes behind its required tier.
+ *
+ * Usage (mount-level, no edits inside the module's route file):
+ *   app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
+ *
+ * No-op unless the module is listed in PAYWALL_MODULES, so attaching it is
+ * always safe; flip the env to switch enforcement on.
+ */
+export function requireModule(moduleId: string) {
+  return function moduleGate(req: Request, res: Response, next: NextFunction): void {
+    if (!paywallEnabledFor(moduleId)) { next(); return; }
+    if (isExemptPath(req)) { next(); return; }
+    const plan = resolveUserPlan(req);
+    if (isModuleEntitled(plan, moduleId)) { next(); return; }
+    upgradeResponse(res, moduleId, plan);
+  };
+}
+
+/* ───── Introspection (for GET /api/me/entitlements & /paywall/policy) ── */
+
+export interface ModuleEntitlement {
+  module: string;
+  /** Tiers that unlock the module (canonical, excluding free). */
+  requiredTiers: CanonicalTier[];
+  /** Whether the current plan can access it. */
+  entitled: boolean;
+  /** Whether the paywall is actively enforced for this module right now. */
+  enforced: boolean;
+}
+
+/** Full per-module entitlement map for the resolved request plan. */
+export function getEntitlements(req: Request): {
+  plan: CanonicalTier;
+  email: string | null;
+  reason: string;
+  modules: ModuleEntitlement[];
+} {
+  const plan = resolveUserPlan(req);
+  const modules: ModuleEntitlement[] = MODULES_PRICING.map((m) => ({
+    module: m.id,
+    requiredTiers: tiersForModule(m.id).map(normalizeTier)
+      .filter((t) => TIER_RANK[t] > TIER_RANK.free),
+    entitled: isModuleEntitled(plan, m.id),
+    enforced: paywallEnabledFor(m.id),
+  }));
+  return { plan: plan.tier, email: plan.email, reason: plan.reason, modules };
+}

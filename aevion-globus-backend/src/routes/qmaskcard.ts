@@ -279,8 +279,19 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
       geoCountry: geoCountry ? String(geoCountry).slice(0, 4) : undefined,
     });
 
-    // For single-use masks: auto-revoke after first successful authorization.
+    // Atomic debit FIRST — the WHERE guard makes the balance check and the
+    // decrement a single statement, so two concurrent charges can't both pass
+    // the earlier `amount > remaining` check and overdraw the mask (double-spend).
     const chargeId = crypto.randomUUID();
+    const debit = await pool.query(
+      `UPDATE "QMaskCardMask" SET "remainingCents" = "remainingCents" - $1
+       WHERE "id" = $2 AND "remainingCents" >= $1 AND "revokedAt" IS NULL
+       RETURNING "remainingCents"`,
+      [amount, maskId],
+    );
+    if ((debit.rowCount ?? 0) === 0) {
+      return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "insufficient_balance");
+    }
     await pool.query(
       `INSERT INTO "QMaskCardCharge" ("id","maskId","userId","amountCents","currency","merchantName","merchantCategory","geoCountry","status","riskScore","paymentRef")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'authorized',$9,$10)`,
@@ -292,10 +303,6 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
         riskScore,
         paymentRef ? String(paymentRef).slice(0, 100) : null,
       ],
-    );
-    await pool.query(
-      `UPDATE "QMaskCardMask" SET "remainingCents" = "remainingCents" - $1 WHERE "id" = $2`,
-      [amount, maskId],
     );
     if (mask.kind === "single-use") {
       await pool.query(`UPDATE "QMaskCardMask" SET "revokedAt" = NOW() WHERE "id" = $1`, [maskId]);

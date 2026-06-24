@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -99,6 +100,15 @@ async function ensureDb(): Promise<void> {
 void ensureDb();
 
 const INITIAL_AIRDROP = 100;
+// Cap a single /sync batch so one request can't exhaust the connection pool
+// (each transfer opens its own DB transaction in a loop).
+const MAX_SYNC_BATCH = 100;
+
+// Wallets are anonymous by design (the client-held ECDSA P-256 keypair IS the
+// identity — no AEVION JWT), so we can't bind to a user. Rate-limit per IP to
+// stop trivial farming of the demo airdrop and abuse of the sync loop.
+const registerLimit = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
+const syncLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 function canonicalJson(value: unknown): string {
@@ -179,7 +189,7 @@ qtradeOfflineRouter.get("/health", async (_req, res) => {
   res.json({ service: "qtradeoffline", status: "ok", db: "memory", wallets: memWallets.size, transfers: memLedger.length, nonces: memNonces.size });
 });
 
-qtradeOfflineRouter.post("/wallet/register", async (req: Request, res: Response) => {
+qtradeOfflineRouter.post("/wallet/register", registerLimit, async (req: Request, res: Response) => {
   await ensureDb();
   const { publicKeyJwk } = req.body || {};
   if (!isJwkPublicKey(publicKeyJwk)) return res.status(400).json({ error: "publicKeyJwk (EC P-256) required" });
@@ -192,7 +202,8 @@ qtradeOfflineRouter.post("/wallet/register", async (req: Request, res: Response)
       const wallet = await dbUpsertWallet(id, publicKeyJwk, INITIAL_AIRDROP);
       return res.json({ wallet, airdropped: true });
     } catch (e) {
-      return res.status(500).json({ error: "db_error", detail: e instanceof Error ? e.message : "unknown" });
+      console.error("[QTradeOffline] register_failed", e instanceof Error ? e.message : e);
+      return res.status(500).json({ error: "db_error" });
     }
   }
 
@@ -255,10 +266,13 @@ qtradeOfflineRouter.get("/leaderboard", async (_req, res) => {
 });
 
 /** Batch-sync: атомарная обработка офлайн-переводов с проверкой подписей. */
-qtradeOfflineRouter.post("/sync", async (req: Request, res: Response) => {
+qtradeOfflineRouter.post("/sync", syncLimit, async (req: Request, res: Response) => {
   await ensureDb();
   const transfers: unknown = req.body?.transfers;
   if (!Array.isArray(transfers)) return res.status(400).json({ error: "transfers[] required" });
+  if (transfers.length > MAX_SYNC_BATCH) {
+    return res.status(400).json({ error: "too_many_transfers", max: MAX_SYNC_BATCH });
+  }
 
   const results: SyncResultEntry[] = [];
 

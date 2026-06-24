@@ -780,11 +780,12 @@ applicationsRouter.post("/bulk-message/:vacancyId", async (req, res) => {
     let extra = "";
     if (statusFilter !== "ALL") {
       params.push(statusFilter);
-      extra = ` AND a."status" = $2`;
+      extra = ` AND a."status" = $${params.length}`;
     }
+    params.push(auth.sub);
     const recipients = await pool.query(
       `SELECT DISTINCT a."userId" FROM "BuildApplication" a
-       WHERE a."vacancyId" = $1${extra} AND a."userId" <> '${auth.sub.replace(/'/g, "''")}'`,
+       WHERE a."vacancyId" = $1${extra} AND a."userId" <> $${params.length}`,
       params,
     );
 

@@ -15,6 +15,8 @@ import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
+import { entitlementsRouter } from "./routes/entitlements";
+import { requireModule } from "./lib/planGate";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
@@ -239,7 +241,10 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 app.use("/api/status", statusRouter);
 
-app.use("/api/qcoreai", qcoreaiRouter);
+// Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
+// (see lib/planGate.ts). qcoreai is the flagship gated module (AI compute =
+// real OPEX); enforcement stays off until PAYWALL_MODULES is set on Railway.
+app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);
@@ -899,6 +904,8 @@ app.use("/api/healthai", healthaiRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
+// Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
+app.use("/api", entitlementsRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);

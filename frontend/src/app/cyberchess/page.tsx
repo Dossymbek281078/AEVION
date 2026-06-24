@@ -163,7 +163,11 @@ type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:
 
 /* ═══ Stockfish with MultiPV ═══ */
 type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
-class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
+// Serialized engine job. Все запросы (go/eval/multiPV) проходят через очередь,
+// поэтому конкурентные вызовы из разных эффектов больше не обнуляют колбэки
+// друг друга и каждый запрос доходит до bestmove. См. _submit/_pump/_finish.
+type SFJob={kind:"go"|"eval"|"multiPV";cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
+class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
   private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
@@ -186,12 +190,7 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
         this.mpvLines.sort((a,b)=>a.pv-b.pv);
       }
     }
-    if(l.startsWith("bestmove")){
-      // Флашим отложенную оценку — финальный eval должен осесть сразу по окончании счёта.
-      if(this.ecbTimer){clearTimeout(this.ecbTimer);this.ecbTimer=null;}
-      if(this.ecb&&this.pendingEval){const p=this.pendingEval;this.pendingEval=null;this.ecb(p.cp,p.mate,p.depth);}
-      if(this.mpvCb){this.mpvCb([...this.mpvLines]);this.mpvCb=null;this.mpvLines=[]}
-      const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
+    if(l.startsWith("bestmove")){this._finish(l.split(" ")[1]||"")}
     if(l==="uciok"){
       // ── Stockfish performance tuning ────────────────────────────────────
       // To compete with Lichess (depth 40+) we maximize cores, RAM, and
@@ -223,11 +222,41 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       this.ok=true;this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:(best?:string)=>void){if(!this.w)return done();this.cb=(f,t,p)=>done(f&&t?`${f}${t}${p||""}`:undefined);this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];try{this.w.postMessage("stop")}catch{};this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  // ── Очередь запросов ──────────────────────────────────────────────────────
+  // Один Stockfish-воркер обслуживает все запросы строго по очереди: пока текущий
+  // поиск не закончится bestmove'ом, следующий не стартует. Это убирает взаимное
+  // обнуление cb/ecb/mpvCb (из-за которого панель «Варианты» висла на «Analyzing…»,
+  // а стрелка лучшего хода не появлялась — два эффекта stop+go'или друг друга).
+  private _submit(job:SFJob){
+    // В очереди держим максимум по одному запросу каждого вида: устаревшие
+    // (для прошлой позиции) отбрасываем, остаётся только самый свежий.
+    this.q=this.q.filter(j=>j.kind!==job.kind);
+    this.q.push(job);this._pump();
+  }
+  private _pump(){
+    if(this.cur||!this.w)return;
+    const job=this.q.shift();if(!job)return;
+    this.cur=job;this.cb=job.cb;this.ecb=job.ecb;this.mpvCb=job.mpvCb;this.mpvLines=[];this.pendingEval=null;
+    if(this.ecbTimer){clearTimeout(this.ecbTimer);this.ecbTimer=null;}
+    try{this.w.postMessage("stop")}catch{}
+    for(const c of job.cmds){try{this.w.postMessage(c)}catch{}}
+  }
+  private _finish(bm:string){
+    if(!this.cur)return; // защитный no-op: bestmove без активного запроса (напр. после stop вхолостую)
+    // Флашим отложенную оценку — финальный eval должен осесть сразу по окончании счёта.
+    if(this.ecbTimer){clearTimeout(this.ecbTimer);this.ecbTimer=null;}
+    if(this.ecb&&this.pendingEval){const p=this.pendingEval;this.ecb(p.cp,p.mate,p.depth);}
+    this.pendingEval=null;
+    if(this.mpvCb)this.mpvCb([...this.mpvLines]);
+    if(bm&&bm.length>=4&&this.cb)this.cb(bm.slice(0,2),bm.slice(2,4),bm.length>4?bm[4]:undefined);
+    this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.cur=null;
+    this._pump();
+  }
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void){if(!this.w)return cb("","");this._submit({kind:"go",cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb,ecb:ecb||null,mpvCb:null})}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:(best?:string)=>void){if(!this.w)return done();this._submit({kind:"eval",cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:(f,t,p)=>done(f&&t?`${f}${t}${p||""}`:undefined),ecb,mpvCb:null})}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this._submit({kind:"multiPV",cmds:[`setoption name MultiPV value ${pvCount}`,"ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:null,ecb:null,mpvCb:cb})}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
-  terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
+  terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.q=[];this.cur=null}}}
 
 /* ═══ Minimax ═══ */
 const PV:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:0};
@@ -4579,8 +4608,8 @@ export default function CyberChessPage(){
 
   /* ── MultiPV analysis ── */
   const runMultiPV=useCallback(()=>{
-    // Выделенный анализ-воркер (нет контеншна с live-eval). Фоллбэк на общий sfR,
-    // пока анализ-воркер грузит WASM.
+    // Общий воркер sfR, но запросы сериализуются очередью внутри SF, поэтому
+    // live-eval больше не обрывает multiPV — поиск гарантированно доходит до bestmove.
     const eng=sfR.current;
     if(!eng?.ready()){showToast("Stockfish loading...","error");return}
     const fen=game.fen();sAnalFen(fen);sMpvRunning(true);sMpvLines([]);

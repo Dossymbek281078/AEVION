@@ -20,6 +20,7 @@ import { checkMaterialPriceUnjustified } from "./scenarios/materialPriceUnjustif
 import { checkCoefDouble } from "./scenarios/coefDouble";
 import { checkIndexDouble } from "./scenarios/indexDouble";
 import { checkCoefUnjustified } from "./scenarios/coefUnjustified";
+import { checkCoefOverLimit } from "./scenarios/coefOverLimit";
 
 /** Запустить все AI-проверки на ЛСР. */
 export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
@@ -49,5 +50,7 @@ export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
   notices.push(...checkIndexDouble(lsr));
   // Обоснование коэффициентов условий (batch E — урок 2.6)
   notices.push(...checkCoefUnjustified(lsr));
+  // Завышенные коэффициенты условий сверх типового норматива (batch F — урок 2.6)
+  notices.push(...checkCoefOverLimit(lsr));
   return notices;
 }

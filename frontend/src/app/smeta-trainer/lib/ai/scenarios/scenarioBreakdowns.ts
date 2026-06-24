@@ -10,6 +10,7 @@
 import type { Lsr, AiNotice } from "../../types";
 import { findRate, findIndex, findOverhead } from "../../corpus";
 import { MATERIAL_LOSS_RULES } from "./wasteFactorMissing";
+import { COEF_TYPICAL_MAX } from "./coefOverLimit";
 
 /** Сценарии с собственным детерминированным разбором (помимо проёмов). */
 export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
@@ -26,6 +27,7 @@ export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
   "overhead-mismatch",
   "index-double",
   "coef-unjustified",
+  "coef-over-limit",
 ]);
 
 function normName(s: string): string {
@@ -332,6 +334,34 @@ export function explainCoefUnjustified(lsr: Lsr, notice: AiNotice): string | nul
   return lines.join("\n");
 }
 
+/** Разбор завышенного коэффициента условий: какое значение, типовой предел, как чинить. */
+export function explainCoefOverLimit(lsr: Lsr, notice: AiNotice): string | null {
+  const found = findPosition(lsr, notice.context.positionId);
+  if (!found) return null;
+  const { position } = found;
+  const coefs = position.coefficients ?? [];
+  const over = coefs.find((c) => {
+    const cap = COEF_TYPICAL_MAX[c.kind];
+    return cap !== undefined && c.value > cap;
+  });
+  if (!over) return null;
+  const cap = COEF_TYPICAL_MAX[over.kind];
+
+  const lines: string[] = [];
+  lines.push(`**Позиция ${position.rateCode} — коэффициент «${over.kind}» = ${over.value} выше типового К=${cap}.**`);
+  lines.push("");
+  lines.push(`Коэффициенты условий производства начисляются к ОЗП и ЭМ в пределах нормативных значений`);
+  lines.push(`(СН РК 8.02-05, общая часть; ЕНиР, прил. 1). Для условия «${over.kind}» типовой коэффициент —`);
+  lines.push(`**К≈${cap}** (удорожание +${Math.round((cap - 1) * 100)}%), а здесь применено +${Math.round((over.value - 1) * 100)}%.`);
+  lines.push("");
+  lines.push(`Частая причина — опечатка (1.5 вместо 1.15) или попытка отразить несколько условий одним`);
+  lines.push(`«крупным» коэффициентом. Экспертиза срежет превышение до норматива, смета завысится.`);
+  lines.push("");
+  lines.push(`Исправьте значение на **К=${cap}**. Если повышенный коэффициент действительно обоснован`);
+  lines.push(`проектом/ПОС (нетиповые условия) — приложите расчёт и сохраните обоснование в позиции.`);
+  return lines.join("\n");
+}
+
 /** Готовый текст разбора по замечанию или null (тогда — общий AI-разбор). */
 export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | null {
   switch (notice.scenario) {
@@ -360,6 +390,8 @@ export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | nul
       return explainIndexDouble(lsr, notice);
     case "coef-unjustified":
       return explainCoefUnjustified(lsr, notice);
+    case "coef-over-limit":
+      return explainCoefOverLimit(lsr, notice);
     default:
       return null;
   }

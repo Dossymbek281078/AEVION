@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import crypto from "node:crypto";
 import {
   callProvider,
@@ -31,11 +32,32 @@ interface QaiSession {
   messages: ChatMessage[];
   personaId: string | null;
   createdAt: string;
+  lastSeenAt: number;
   ip: string;
 }
 
 // In-memory session store — Map<sessionId, QaiSession>
 const sessions = new Map<string, QaiSession>();
+
+// Eviction policy — keep the in-memory store bounded (no TTL/eviction = OOM).
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const SESSION_MAX_ENTRIES = 10_000;
+
+// Prune sessions older than TTL (by lastSeenAt), then enforce a hard cap by
+// evicting the oldest entries. Cheap and self-contained (no deps, no timers).
+function evictSessions(): void {
+  const now = Date.now();
+  for (const [id, s] of sessions) {
+    if (now - s.lastSeenAt > SESSION_TTL_MS) sessions.delete(id);
+  }
+  if (sessions.size > SESSION_MAX_ENTRIES) {
+    const oldestFirst = Array.from(sessions.values()).sort(
+      (a, b) => a.lastSeenAt - b.lastSeenAt,
+    );
+    const overflow = sessions.size - SESSION_MAX_ENTRIES;
+    for (let i = 0; i < overflow; i++) sessions.delete(oldestFirst[i].id);
+  }
+}
 
 function getIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -45,19 +67,25 @@ function getIp(req: Request): string {
 }
 
 function getOrCreateSession(sessionId: string | undefined, ip: string): QaiSession {
+  evictSessions();
   const id = sessionId && sessions.has(sessionId) ? sessionId : crypto.randomUUID();
   if (!sessions.has(id)) {
-    sessions.set(id, { id, title: null, messages: [], personaId: null, createdAt: new Date().toISOString(), ip });
+    sessions.set(id, { id, title: null, messages: [], personaId: null, createdAt: new Date().toISOString(), lastSeenAt: Date.now(), ip });
   }
-  return sessions.get(id)!;
+  const session = sessions.get(id)!;
+  session.lastSeenAt = Date.now();
+  return session;
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Rate limiter for chat endpoints — 20 requests / minute / IP.
+const chatRateLimit = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false });
+
 // POST /api/qai/chat
-qaiRouter.post("/chat", async (req: Request, res: Response) => {
+qaiRouter.post("/chat", chatRateLimit, async (req: Request, res: Response) => {
   const { message, sessionId, personaId, model: reqModel, provider: reqProvider } = req.body as {
     message?: string;
     sessionId?: string;
@@ -132,7 +160,7 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
 });
 
 // POST /api/qai/chat/stream — SSE streaming chat (word-by-word, 40ms cadence)
-qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
+qaiRouter.post("/chat/stream", chatRateLimit, async (req: Request, res: Response) => {
   const { message, sessionId, personaId } = req.body as {
     message?: string;
     sessionId?: string;

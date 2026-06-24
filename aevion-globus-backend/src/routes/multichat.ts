@@ -262,14 +262,16 @@ async function searchConvs(userId: string, q: string, limit: number, offset: num
   const off = Math.max(0, offset);
   if (isPg()) {
     await ensureSchema();
+    // Escape ILIKE wildcards so user-supplied %/_ are matched literally.
+    const escaped = q.replace(/[%_\\]/g, (m) => "\\" + m);
     const r = await getPool().query(
       `SELECT id, user_id AS "userId", title, share_token AS "shareToken",
               created_at AS "createdAt", updated_at AS "updatedAt"
        FROM multichat_conversations
-       WHERE user_id = $1 AND title ILIKE $2
+       WHERE user_id = $1 AND title ILIKE $2 ESCAPE '\\'
        ORDER BY updated_at DESC
        LIMIT $3 OFFSET $4`,
-      [userId, `%${q}%`, lim, off],
+      [userId, `%${escaped}%`, lim, off],
     );
     return r.rows.map((row: any) => ({
       ...row,
@@ -337,6 +339,7 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   const userId = req.auth!.sub;
   const conversationId = String(req.params.id);
 
+  try {
   const conv = await findConv(conversationId, userId);
   if (!conv) return res.status(404).json({ error: "conversation not found" });
 
@@ -438,6 +441,9 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     results,
     completedAt: new Date().toISOString(),
   });
+  } catch (err: any) {
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // ─── Phase 2: lifecycle + sharing + export + search ────────────────────────
@@ -587,8 +593,8 @@ multichatRouter.delete("/conversations/:id/share", async (req, res) => {
 multichatRouter.get("/search", async (req, res) => {
   const userId = req.auth!.sub;
   const q = (req.query.q as string | undefined)?.trim() ?? "";
-  const limit = Number(req.query.limit ?? 50);
-  const offset = Number(req.query.offset ?? 0);
+  const limit = Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50);
+  const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
   if (!q) return res.json({ items: [], total: 0 });
   try {
     const items = await searchConvs(userId, q, limit, offset);

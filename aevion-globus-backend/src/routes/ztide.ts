@@ -98,41 +98,49 @@ function isServiceCaller(req: import("express").Request): boolean {
   // Service-mode for backend-to-backend ingestion. Compare against env.
   const key = req.header("x-ztide-service-key") || "";
   const expected = (process.env.ZTIDE_SERVICE_KEY || "").trim();
-  if (!expected) return false;
-  return key.length > 0 && crypto.timingSafeEqual(
-    Buffer.from(key.padEnd(64, "0").slice(0, 64)),
-    Buffer.from(expected.padEnd(64, "0").slice(0, 64)),
-  );
+  // Misconfigured (unset/empty/short) keys must not be brute-bypassable.
+  if (expected.length < 32) return false;
+  const keyBuf = Buffer.from(key);
+  const expBuf = Buffer.from(expected);
+  // Constant-time compare requires equal-length buffers; reject on mismatch.
+  if (keyBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(keyBuf, expBuf);
 }
 
 let tablesReady = false;
 async function ensureTables(): Promise<void> {
   if (tablesReady) return;
   const pool = getPool();
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "ZTideEvent" (
-      "id"          TEXT PRIMARY KEY,
-      "userId"      TEXT NOT NULL,
-      "kind"        TEXT NOT NULL,
-      "sourceModule" TEXT NOT NULL,
-      "weight"      INT NOT NULL,
-      "meta"        JSONB NOT NULL DEFAULT '{}'::jsonb,
-      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideEvent_user_idx" ON "ZTideEvent" ("userId", "createdAt" DESC);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideEvent_source_idx" ON "ZTideEvent" ("sourceModule", "createdAt" DESC);`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "ZTideScore" (
-      "userId"       TEXT PRIMARY KEY,
-      "score"        BIGINT NOT NULL DEFAULT 0,
-      "eventCount"   INT NOT NULL DEFAULT 0,
-      "rank"         TEXT NOT NULL DEFAULT 'seedling',
-      "lastEventAt"  TIMESTAMPTZ
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideScore_score_idx" ON "ZTideScore" ("score" DESC);`);
-  tablesReady = true;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "ZTideEvent" (
+        "id"          TEXT PRIMARY KEY,
+        "userId"      TEXT NOT NULL,
+        "kind"        TEXT NOT NULL,
+        "sourceModule" TEXT NOT NULL,
+        "weight"      INT NOT NULL,
+        "meta"        JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideEvent_user_idx" ON "ZTideEvent" ("userId", "createdAt" DESC);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideEvent_source_idx" ON "ZTideEvent" ("sourceModule", "createdAt" DESC);`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "ZTideScore" (
+        "userId"       TEXT PRIMARY KEY,
+        "score"        BIGINT NOT NULL DEFAULT 0,
+        "eventCount"   INT NOT NULL DEFAULT 0,
+        "rank"         TEXT NOT NULL DEFAULT 'seedling',
+        "lastEventAt"  TIMESTAMPTZ
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "ZTideScore_score_idx" ON "ZTideScore" ("score" DESC);`);
+    tablesReady = true;
+  } catch (err: unknown) {
+    // Leave tablesReady=false so a transient DDL failure can retry next request.
+    console.error("[ztide] ensure_tables_failed", err instanceof Error ? err.message : err);
+    throw err;
+  }
 }
 
 ztideRouter.get("/health", (_req, res) => {
@@ -297,7 +305,8 @@ ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
 ztideRouter.get("/leaderboard", readLimit, async (req, res) => {
   try {
     await ensureTables();
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 200);
+    const parsed = parseInt(String(req.query.limit ?? "50"), 10);
+    const limit = Math.min(Math.max(parsed || 1, 1), 200);
     const pool = getPool();
     const r = await pool.query(
       `SELECT "userId","score","eventCount","rank","lastEventAt"

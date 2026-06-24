@@ -14,6 +14,7 @@
  *   DELETE /api/lifebox/capsules/:id           — hard delete
  */
 
+import { randomUUID } from "crypto";
 import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
@@ -31,6 +32,15 @@ const pool = getPool();
 (async () => {
   try {
     await ensureLifeBoxTables(pool);
+    // Defense-in-depth migration (same CREATE/ALTER IF NOT EXISTS pattern as
+    // ensureLifeBoxTables): add a server-side secret edit token used to gate
+    // PATCH/DELETE. Idempotent and safe to run on every boot. Only attempt it
+    // when the DB is actually ready (otherwise we're on the in-memory fallback).
+    if (isLifeBoxDbReady()) {
+      await pool.query(
+        `ALTER TABLE lifebox_capsules ADD COLUMN IF NOT EXISTS edit_token TEXT`
+      );
+    }
   } catch {
     // in-memory fallback active
   }
@@ -68,6 +78,13 @@ interface CapsuleRecord {
   unlock_at: string;
   created_at: string;
   unlocked_at: string | null;
+  /**
+   * Server-side random secret returned ONCE to the creator. Required (in
+   * addition to the alias) to PATCH/DELETE a capsule. Defense-in-depth on top
+   * of the anonymous alias model — never exposed in list/unlock responses.
+   * May be null for legacy rows created before this column existed.
+   */
+  edit_token: string | null;
 }
 
 // ─── In-memory fallback ────────────────────────────────────────────────────────
@@ -153,15 +170,16 @@ function rowToCapsule(row: any): CapsuleRecord {
         ? row.unlocked_at.toISOString()
         : String(row.unlocked_at))
       : null,
+    edit_token: row.edit_token != null ? String(row.edit_token) : null,
   };
 }
 
 async function dbInsert(fields: Omit<CapsuleRecord, "id" | "created_at" | "unlocked_at">): Promise<CapsuleRecord> {
   const { rows } = await pool.query(
-    `INSERT INTO lifebox_capsules (alias, title, content, category, unlock_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO lifebox_capsules (alias, title, content, category, unlock_at, edit_token)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [fields.alias, fields.title, fields.content, fields.category, fields.unlock_at]
+    [fields.alias, fields.title, fields.content, fields.category, fields.unlock_at, fields.edit_token]
   );
   return rowToCapsule(rows[0]);
 }
@@ -256,6 +274,15 @@ function sanitizeAlias(raw: unknown): string | null {
   return trimmed;
 }
 
+/** Reads the defense-in-depth edit token from header `x-lifebox-token` or body. */
+function readEditToken(req: Request): string | null {
+  const header = req.header("x-lifebox-token");
+  if (typeof header === "string" && header.trim()) return header.trim();
+  const fromBody = (req.body ?? {}).editToken;
+  if (typeof fromBody === "string" && fromBody.trim()) return fromBody.trim();
+  return null;
+}
+
 function daysUntil(target: string | Date): number {
   const t = target instanceof Date ? target.getTime() : new Date(target).getTime();
   const diffMs = t - Date.now();
@@ -309,7 +336,8 @@ lifeboxRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
     const stats = isLifeBoxDbReady() ? await dbStats() : memStats();
     res.json({ ok: true, ...stats });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] stats_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -355,23 +383,32 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
       return;
     }
 
+    // Defense-in-depth secret. Returned ONCE in the create response below and
+    // never again — the caller must keep it to PATCH/DELETE this capsule.
+    const editToken = randomUUID();
+
     const fields: Omit<CapsuleRecord, "id" | "created_at" | "unlocked_at"> = {
-      alias:     cleanAlias,
-      title:     String(title).trim().slice(0, 200),
-      content:   String(content).slice(0, 20_000),
-      category:  category as Category,
-      unlock_at: unlockDate.toISOString(),
+      alias:      cleanAlias,
+      title:      String(title).trim().slice(0, 200),
+      content:    String(content).slice(0, 20_000),
+      category:   category as Category,
+      unlock_at:  unlockDate.toISOString(),
+      edit_token: editToken,
     };
 
     const capsule = isLifeBoxDbReady() ? await dbInsert(fields) : memInsert(fields);
 
     // For the create response we deliberately mask content (capsule is locked).
+    // editToken is surfaced here ONLY — it is the one-time secret the creator
+    // needs for later edits/deletes and is intentionally absent from publicView.
     res.status(201).json({
-      ok:      true,
-      capsule: publicView(capsule),
+      ok:        true,
+      editToken: capsule.edit_token,
+      capsule:   publicView(capsule),
     });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] create_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -412,7 +449,8 @@ lifeboxRouter.get("/capsules/:alias", readLimit, async (req: Request, res: Respo
       capsules: capsules.map((c) => publicView(c)),
     });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] list_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -473,11 +511,22 @@ lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: R
       },
     });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] unlock_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
-/** PATCH /api/lifebox/capsules/:id — only allowed while still locked */
+/**
+ * PATCH /api/lifebox/capsules/:id — only allowed while still locked.
+ *
+ * AUTH MODEL: capsules are anonymous and addressed by a user-chosen `alias`
+ * (which is also exposed in list responses), so alias alone is NOT a secret.
+ * As defense-in-depth we additionally require the server-issued `editToken`
+ * (header `x-lifebox-token` or body `editToken`) that was returned ONCE at
+ * creation. Both the alias AND a matching editToken must be supplied to edit.
+ * Legacy capsules created before the edit_token column have a null token and
+ * therefore cannot be edited via this path (alias is no longer sufficient).
+ */
 lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -491,6 +540,11 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
       res.status(400).json({ ok: false, error: "alias is required in body" });
       return;
     }
+    const editToken = readEditToken(req);
+    if (!editToken) {
+      res.status(400).json({ ok: false, error: "editToken is required (header x-lifebox-token or body)" });
+      return;
+    }
 
     const capsule = isLifeBoxDbReady() ? await dbFindById(id) : memFindById(id);
     if (!capsule) {
@@ -499,6 +553,10 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
     }
     if (capsule.alias !== cleanAlias) {
       res.status(403).json({ ok: false, error: "alias does not match" });
+      return;
+    }
+    if (!capsule.edit_token || capsule.edit_token !== editToken) {
+      res.status(403).json({ ok: false, error: "editToken does not match" });
       return;
     }
     if (isUnlocked(capsule)) {
@@ -536,11 +594,20 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
 
     res.json({ ok: true, capsule: publicView(updated) });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] patch_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
-/** DELETE /api/lifebox/capsules/:id — hard delete; alias must match */
+/**
+ * DELETE /api/lifebox/capsules/:id — hard delete.
+ *
+ * AUTH MODEL: same as PATCH — alias is a public identifier, not a secret, so we
+ * additionally require the server-issued `editToken` (header `x-lifebox-token`
+ * or body `editToken`) returned ONCE at creation. Both alias AND a matching
+ * editToken are required. Legacy capsules with a null token cannot be deleted
+ * via this path.
+ */
 lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -553,6 +620,11 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
       res.status(400).json({ ok: false, error: "alias is required (query or body)" });
       return;
     }
+    const editToken = readEditToken(req);
+    if (!editToken) {
+      res.status(400).json({ ok: false, error: "editToken is required (header x-lifebox-token or body)" });
+      return;
+    }
 
     const capsule = isLifeBoxDbReady() ? await dbFindById(id) : memFindById(id);
     if (!capsule) {
@@ -563,11 +635,16 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
       res.status(403).json({ ok: false, error: "alias does not match" });
       return;
     }
+    if (!capsule.edit_token || capsule.edit_token !== editToken) {
+      res.status(403).json({ ok: false, error: "editToken does not match" });
+      return;
+    }
 
     const ok = isLifeBoxDbReady() ? await dbDelete(id) : memDelete(id);
     res.json({ ok, deletedId: id });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    console.error("[lifebox] delete_failed", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 

@@ -296,38 +296,45 @@ qcontractRouter.post("/documents", async (req, res) => {
 
   if (!title?.trim()) return res.status(400).json({ error: "title_required" });
   if (!content?.trim()) return res.status(400).json({ error: "content_required" });
+  if (content.length > 500_000) return res.status(400).json({ error: "content_too_large" });
+  if (!["text", "url", "html"].includes(contentType)) return res.status(400).json({ error: "invalid_content_type" });
 
-  const id = randomUUID();
-  const accessToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
-  const passwordHash = password ? hashPassword(password) : null;
-  const pool = getPool();
+  try {
+    const id = randomUUID();
+    const accessToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+    const passwordHash = password ? hashPassword(password) : null;
+    const pool = getPool();
 
-  await pool.query(
-    `INSERT INTO qcontract_documents
-       (id, owner_id, title, content, content_type, access_token, password_hash,
-        max_views, expires_at, require_signature, qright_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [
+    await pool.query(
+      `INSERT INTO qcontract_documents
+         (id, owner_id, title, content, content_type, access_token, password_hash,
+          max_views, expires_at, require_signature, qright_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        id,
+        auth.sub ?? auth.email ?? "unknown",
+        title.trim(),
+        content.trim(),
+        contentType,
+        accessToken,
+        passwordHash,
+        maxViews ?? null,
+        expiresAt ?? null,
+        requireSignature,
+        qrightId?.trim() || null,
+      ],
+    );
+
+    const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
+    res.status(201).json({
       id,
-      auth.sub ?? auth.email ?? "unknown",
-      title.trim(),
-      content.trim(),
-      contentType,
       accessToken,
-      passwordHash,
-      maxViews ?? null,
-      expiresAt ?? null,
-      requireSignature,
-      qrightId?.trim() || null,
-    ],
-  );
-
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
-  res.status(201).json({
-    id,
-    accessToken,
-    shareUrl: `${frontendBase}/qcontract/v/${accessToken}`,
-  });
+      shareUrl: `${frontendBase}/qcontract/v/${accessToken}`,
+    });
+  } catch (err) {
+    console.warn("[qcontract] document create failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "document_create_failed" });
+  }
 });
 
 // GET /api/qcontract/documents
@@ -553,18 +560,23 @@ qcontractRouter.post("/view/:token", async (req, res) => {
   const ua = req.headers["user-agent"] ?? null;
   const signedAt = doc.require_signature && viewerEmail ? new Date().toISOString() : null;
 
+  const incr = await pool.query(
+    `UPDATE qcontract_documents SET view_count = view_count + 1, updated_at = NOW()
+     WHERE id = $1 AND (max_views IS NULL OR view_count < max_views)
+     RETURNING view_count, max_views`,
+    [doc.id],
+  );
+  if (incr.rowCount === 0) return res.status(410).json({ error: "document_expired", title: doc.title });
+
   await pool.query(
     `INSERT INTO qcontract_views (id, document_id, viewer_ip, viewer_ua, viewer_email, signed_at)
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [randomUUID(), doc.id, ip, ua, viewerEmail?.trim() ?? null, signedAt],
   );
-  await pool.query(
-    `UPDATE qcontract_documents SET view_count = view_count + 1, updated_at = NOW() WHERE id = $1`,
-    [doc.id],
-  );
 
-  const newCount = doc.view_count + 1;
-  const isLastView = doc.max_views != null && newCount >= doc.max_views;
+  const newCount = incr.rows[0].view_count;
+  const maxViews = incr.rows[0].max_views;
+  const isLastView = maxViews != null && newCount >= maxViews;
 
   res.json({
     title: doc.title,

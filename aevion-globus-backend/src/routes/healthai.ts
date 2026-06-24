@@ -665,14 +665,23 @@ healthaiRouter.get("/health", async (_req, res) => {
 
 healthaiRouter.post("/profile", async (req: Request, res: Response) => {
   const body = req.body || {};
-  const id = body.id || newId("hp");
-  const existing = await store.getProfile(id);
   const auth = verifyBearerOptional(req);
 
-  // Если профиль уже принадлежит другому юзеру — отказать (если предъявлен токен).
-  if (existing?.userId && auth?.sub && existing.userId !== auth.sub) {
-    return res.status(403).json({ error: "profile-belongs-to-another-user" });
+  // Resolve the target profile. A client-supplied id may ONLY address an
+  // existing profile that the caller already owns (userId === auth.sub).
+  // Otherwise we always mint a fresh server-generated id, so a client can
+  // neither pick an arbitrary PK nor claim an anonymous (null-owner) profile
+  // by guessing its id.
+  let existing = body.id ? await store.getProfile(qstr(body.id)) : null;
+  if (existing && !(auth?.sub && existing.userId === auth.sub)) {
+    // Not the owner (anonymous profile, or someone else's) — refuse to bind
+    // to this id and treat the request as a brand-new profile creation.
+    if (existing.userId && auth?.sub && existing.userId !== auth.sub) {
+      return res.status(403).json({ error: "profile-belongs-to-another-user" });
+    }
+    existing = null;
   }
+  const id = existing?.id || newId("hp");
 
   const profile: HealthProfile = {
     id,
@@ -2183,6 +2192,7 @@ const POP_BASELINE = {
 };
 
 healthaiRouter.get("/population/:profileId", async (req, res) => {
+  try {
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
@@ -2194,7 +2204,12 @@ healthaiRouter.get("/population/:profileId", async (req, res) => {
     }
   }
 
-  const ids = await store.allProfileIdsWithLogs();
+  // Hard cap the profile scan so the per-profile getLogs() fan-out (N+1)
+  // cannot blow up on large datasets. Averages over the first 500 profiles
+  // are statistically representative for a population baseline.
+  const POP_SCAN_LIMIT = 500;
+  const allIds = await store.allProfileIdsWithLogs();
+  const ids = allIds.slice(0, POP_SCAN_LIMIT);
   const profiles: HealthProfile[] = [];
   for (const id of ids) {
     const p = await store.getProfile(id);
@@ -2300,6 +2315,10 @@ healthaiRouter.get("/population/:profileId", async (req, res) => {
           : round(selfExercise - popExercise, 0),
     },
   });
+  } catch (e) {
+    console.error("[HealthAI] /population error:", e instanceof Error ? e.message : e);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 /**
@@ -2406,7 +2425,12 @@ healthaiRouter.get("/referrals", async (req, res) => {
 });
 
 healthaiRouter.get("/leaderboard", async (_req, res) => {
-  const ids = await store.allProfileIdsWithLogs();
+  try {
+  // Hard cap the profile scan so the per-profile getLogs() fan-out (N+1)
+  // cannot blow up on large datasets. The board only surfaces the top 20.
+  const LB_SCAN_LIMIT = 500;
+  const allIds = await store.allProfileIdsWithLogs();
+  const ids = allIds.slice(0, LB_SCAN_LIMIT);
   const board: Array<{ anonId: string; streak: number; logs: number }> = [];
   for (const profileId of ids) {
     const lgs = await store.getLogs(profileId);
@@ -2439,4 +2463,8 @@ healthaiRouter.get("/leaderboard", async (_req, res) => {
   res.json({
     leaderboard: board.slice(0, 20).map((row, i) => ({ rank: i + 1, ...row })),
   });
+  } catch (e) {
+    console.error("[HealthAI] /leaderboard error:", e instanceof Error ? e.message : e);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });

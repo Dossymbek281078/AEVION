@@ -588,60 +588,84 @@ quantumShieldRouter.get("/admin/whoami", (req, res) => {
 quantumShieldRouter.get("/admin/shields", async (req, res) => {
   const a = isQShieldAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
-  await ensureShieldTable();
-  const status = String(req.query.status || "").trim();
-  const policy = String(req.query.policy || "").trim();
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
-  const conds: string[] = [];
-  const args: unknown[] = [];
-  if (status) { args.push(status); conds.push(`"status" = $${args.length}`); }
-  if (policy) { args.push(policy); conds.push(`"distribution_policy" = $${args.length}`); }
-  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-  args.push(limit);
-  const r = await pool.query(
-    `SELECT "id","objectId","objectTitle","threshold","totalShards","status",
-            "distribution_policy","verifiedCount","createdAt","ownerUserId"
-     FROM "QuantumShield" ${where}
-     ORDER BY "createdAt" DESC LIMIT $${args.length}`,
-    args
-  );
-  res.json({ items: r.rows });
+  try {
+    await ensureShieldTable();
+    const status = String(req.query.status || "").trim();
+    const policy = String(req.query.policy || "").trim();
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+    const conds: string[] = [];
+    const args: unknown[] = [];
+    if (status) { args.push(status); conds.push(`"status" = $${args.length}`); }
+    if (policy) { args.push(policy); conds.push(`"distribution_policy" = $${args.length}`); }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+    args.push(limit);
+    const r = await pool.query(
+      `SELECT "id","objectId","objectTitle","threshold","totalShards","status",
+              "distribution_policy","verifiedCount","createdAt","ownerUserId"
+       FROM "QuantumShield" ${where}
+       ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args
+    );
+    res.json({ items: r.rows });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] admin list shields error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // 🔹 Admin: force-revoke a shield (reason required, audit logged via QuantumShieldAudit).
 quantumShieldRouter.post("/admin/shields/:id/revoke", async (req, res) => {
   const a = isQShieldAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
-  await ensureShieldTable();
-  const shieldId = String(req.params.id);
-  const reason = String(req.body?.reason || "").trim().slice(0, 500);
-  if (!reason) return res.status(400).json({ error: "reason_required" });
-  const cur = await pool.query(`SELECT "id","status" FROM "QuantumShield" WHERE "id" = $1`, [shieldId]);
-  if (cur.rowCount === 0) return res.status(404).json({ error: "shield_not_found" });
-  if (cur.rows[0].status === "revoked") return res.status(409).json({ error: "already_revoked" });
-  await pool.query(`UPDATE "QuantumShield" SET "status" = 'revoked' WHERE "id" = $1`, [shieldId]);
-  await audit(shieldId, "admin.force-revoke", req, { reason, actorEmail: a.email });
-  res.json({ ok: true });
+  try {
+    await ensureShieldTable();
+    const shieldId = String(req.params.id);
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (!reason) return res.status(400).json({ error: "reason_required" });
+    const cur = await pool.query(`SELECT "id","status" FROM "QuantumShield" WHERE "id" = $1`, [shieldId]);
+    if (cur.rowCount === 0) return res.status(404).json({ error: "shield_not_found" });
+    if (cur.rows[0].status === "revoked") return res.status(409).json({ error: "already_revoked" });
+    await pool.query(`UPDATE "QuantumShield" SET "status" = 'revoked' WHERE "id" = $1`, [shieldId]);
+    await audit(shieldId, "admin.force-revoke", req, { reason, actorEmail: a.email });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] admin revoke shield error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // 🔹 Admin: cross-shield audit reader.
 quantumShieldRouter.get("/admin/audit", async (req, res) => {
   const a = isQShieldAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
-  await ensureShieldTable();
-  const event = String(req.query.event || "").trim();
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
-  const args: unknown[] = [];
-  let where = "";
-  if (event) { args.push(event); where = `WHERE "event" = $1`; }
-  args.push(limit);
-  const r = await pool.query(
-    `SELECT "id","shieldId","event","actorUserId","actorIp","details","createdAt"
-     FROM "QuantumShieldAudit" ${where}
-     ORDER BY "createdAt" DESC LIMIT $${args.length}`,
-    args
-  );
-  res.json({ items: r.rows });
+  try {
+    await ensureShieldTable();
+    const event = String(req.query.event || "").trim();
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+    const args: unknown[] = [];
+    let where = "";
+    if (event) { args.push(event); where = `WHERE "event" = $1`; }
+    args.push(limit);
+    const r = await pool.query(
+      `SELECT "id","shieldId","event","actorUserId","actorIp","details","createdAt"
+       FROM "QuantumShieldAudit" ${where}
+       ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args
+    );
+    res.json({ items: r.rows });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] admin audit error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────

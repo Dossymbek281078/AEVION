@@ -4,7 +4,9 @@ import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
+import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
@@ -38,13 +40,13 @@ export default function PlaygroundPage() {
   const [results, setResults] = useState<PlayResult[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const loadProviders = useCallback(async () => {
     if (loaded) return;
     try {
-      const res = await fetch(apiUrl("/api/qcoreai/providers"));
-      const data = await res.json().catch(() => ({}));
+      const data = await apiFetchOrPaywall<{ providers?: ProviderInfo[] }>("/api/qcoreai/providers");
       if (data?.providers) {
         setProviders(data.providers);
         // Pre-select configured providers with their default model
@@ -54,7 +56,10 @@ export default function PlaygroundPage() {
         }
         setSelected(sel);
       }
-    } catch { /* noop */ }
+    } catch (e) {
+      if (e instanceof PaywallError) { setPaywall(e.payload); return; }
+      /* other errors swallowed — keep prior behaviour for transient failures */
+    }
     setLoaded(true);
   }, [loaded]);
 
@@ -99,6 +104,13 @@ export default function PlaygroundPage() {
           body: JSON.stringify({ messages, provider, model }),
           signal: abortRef.current?.signal,
         });
+        if (res.status === 402) {
+          const body = await res.json().catch(() => null);
+          if (body && body.error === "upgrade_required") {
+            setPaywall(body as PaywallPayload);
+            return;
+          }
+        }
         const data = await res.json().catch(() => ({}));
         const durationMs = Date.now() - t0;
         setResults((prev) => prev.map((r) =>
@@ -123,6 +135,10 @@ export default function PlaygroundPage() {
     abortRef.current?.abort();
     setRunning(false);
   };
+
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/qcoreai" backLabel="← QCoreAI" />;
+  }
 
   return (
     <main>

@@ -112,3 +112,51 @@ const TIER_LABELS: Record<CanonicalTier, string> = {
 export function tierLabel(t: CanonicalTier): string {
   return TIER_LABELS[t] ?? t;
 }
+
+/** Pretty tier list for display, e.g. ["full"] → "Full" (free is dropped). */
+export function formatTiers(tiers: CanonicalTier[]): string {
+  return tiers.filter((t) => t !== "free").map(tierLabel).join(" / ");
+}
+
+/* ───── Global fetch interceptor → window event ─────────────────────────────
+ *
+ * fetchOrPaywall()/apiFetchOrPaywall() above are opt-in per call (used by RSC
+ * pages + PaywallScreen). To also catch 402s from modules that fetch directly,
+ * we monkeypatch window.fetch ONCE so any upgrade_required answer raises a
+ * window event. <PaywallModal/> (mounted once in ClientProviders) listens and
+ * renders the overlay. The interceptor is transparent: it never alters the
+ * response the caller receives — it only side-channels the event.
+ */
+
+export const PAYWALL_EVENT = "aevion:paywall";
+
+/** Fire the global paywall event so <PaywallModal/> can surface. */
+export function triggerPaywall(payload: PaywallPayload): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<PaywallPayload>(PAYWALL_EVENT, { detail: payload }));
+}
+
+const INSTALLED = Symbol.for("aevion.paywall.fetchPatched");
+
+/** Monkeypatch window.fetch once. Idempotent and SSR-safe. */
+export function installPaywallInterceptor(): void {
+  if (typeof window === "undefined") return;
+  const w = window as unknown as Record<symbol, boolean> & { fetch: typeof fetch };
+  if (w[INSTALLED]) return;
+  w[INSTALLED] = true;
+
+  const original = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const res = await original(input, init);
+    // Only 402s are interesting; everything else passes straight through
+    // untouched (no clone → no overhead, streaming responses unaffected).
+    if (res.status !== 402) return res;
+    try {
+      const body = await res.clone().json();
+      if (isPaywallPayload(body)) triggerPaywall(body);
+    } catch {
+      /* not a JSON upgrade_required body — leave it to the caller */
+    }
+    return res;
+  };
+}

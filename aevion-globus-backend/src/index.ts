@@ -248,7 +248,7 @@ app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);
-app.use("/api/multichat", multichatRouter);
+app.use("/api/multichat", requireModule("multichat-engine"), multichatRouter);
 
 /** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
  *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */
@@ -885,6 +885,56 @@ app.get("/api/openapi.json", (_req, res) => {
     tags: [...FINTECH_OPENAPI_TAGS, ...NEW_WAVE_OPENAPI_TAGS],
   });
 });
+
+// ============================================================
+// Platform module paywall — centralised gate registration.
+//
+// One source of truth mapping each monetised module's API prefix to its
+// module id in MODULES_PRICING. Registered BEFORE the route mounts below so
+// Express runs the gate ahead of the matching router (middleware runs in
+// registration order). DORMANT by default: requireModule() is a no-op unless
+// the id is listed in env PAYWALL_MODULES (see lib/planGate.ts), so this is
+// safe to wire everywhere and flip on per-module from Railway.
+//
+// Deliberately NOT gated here: globus (free/public portal), cyberchess*,
+// smeta-trainer, qbuild/build (active work in other worktrees), and
+// constitution* (has its own dedicated gate in lib/constitutionGate.ts).
+// qcoreai and multichat-engine are gated inline above (mounted earlier).
+const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ["/api/qfusionai", "qfusionai"],
+  ["/api/qright", "qright"],
+  ["/api/qsign", "qsign"], // also covers /api/qsign/v2
+  ["/api/bureau", "aevion-ip-bureau"],
+  ["/api/qtradeoffline", "qtradeoffline"],
+  ["/api/qpaynet", "qpaynet-embedded"],
+  ["/api/qmaskcard", "qmaskcard"],
+  ["/api/veilnetx", "veilnetx"],
+  ["/api/veilnetx-ledger", "veilnetx"],
+  ["/api/healthai", "healthai"],
+  ["/api/qai", "qai"],
+  ["/api/qlearn", "qlearn"],
+  ["/api/qnews", "qnews"],
+  ["/api/qstore", "qstore"],
+  ["/api/qmedia", "qmedia"],
+  ["/api/qlife", "qlife"],
+  ["/api/qgood", "qgood"],
+  ["/api/psyapp-deps", "psyapp-deps"],
+  ["/api/qpersona", "qpersona"],
+  ["/api/kids-ai", "kids-ai-content"],
+  ["/api/voice-of-earth", "voice-of-earth"],
+  ["/api/startupx", "startup-exchange"],
+  ["/api/deepsan", "deepsan"],
+  ["/api/mapreality", "mapreality"],
+  ["/api/qevents", "qevents"],
+  ["/api/ztide", "z-tide"],
+  ["/api/qcontract", "qcontract"],
+  ["/api/shadownet", "shadownet"],
+  ["/api/lifebox", "lifebox"],
+  ["/api/qchaingov", "qchaingov"],
+];
+for (const [prefix, moduleId] of MODULE_GATE_PREFIXES) {
+  app.use(prefix, requireModule(moduleId));
+}
 
 // ==========================
 // QRight — патентирование

@@ -9,6 +9,7 @@ import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PaywallModal } from "@/components/PaywallModal";
 
 // Prefixes where standalone app shells take over — no global header/footer.
 // These pages are full apps (game, dashboards, trading) — the global product nav
@@ -37,6 +38,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         <ServiceWorkerRegister />
         <WebVitals />
         <InstallPrompt />
+        <PaywallModal />
       </AutoTranslate>
     </I18nProvider>
   );

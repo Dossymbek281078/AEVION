@@ -983,8 +983,17 @@ async function handleList(req: Request, res: Response): Promise<void> {
       `SELECT COUNT(*)::int AS total FROM "QuantumShield" ${where}`,
       mineOnly && auth?.sub ? [auth.sub] : [],
     );
+    const isAdmin = auth?.role === "admin";
     const records = rows.map((r: Record<string, unknown>) => {
-      const shards = parseShards(r.shards, { shieldId: r.id as string });
+      // Shards are the secret material — a threshold reconstructs the protected
+      // key. This list (without ?mine=1) returns records across all owners for
+      // the public transparency wall, so shards must only be attached for the
+      // caller's own records (or for an admin); anonymous/cross-owner listings
+      // get metadata only.
+      const ownsThis = (!!auth?.sub && r.ownerUserId === auth.sub) || isAdmin;
+      const shards = ownsThis
+        ? parseShards(r.shards, { shieldId: r.id as string })
+        : undefined;
       const status =
         (r.status as string) || (r.legacy === true ? "legacy" : "active");
       return {
@@ -1216,13 +1225,33 @@ quantumShieldRouter.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Shield record not found" });
     }
     const r = rows[0] as Record<string, unknown>;
-    const shards = parseShards(r.shards, { shieldId: r.id as string });
-    res.json({
-      ...r,
-      shards,
+    // Shards are the secret material — a threshold of them reconstructs the
+    // protected Ed25519 key, so they must NEVER reach a non-owner (the sibling
+    // /:id/public route deliberately omits them, and the UI states "shards are
+    // NOT exposed publicly"). This raw route used to SELECT * and return every
+    // shard to any anonymous caller, defeating the whole Shamir threshold. Now
+    // only the authenticated owner or an admin gets the shards back; everyone
+    // else gets the record without shards or ownerUserId.
+    const auth = verifyBearerOptional(req);
+    const isOwner = !!auth?.sub && r.ownerUserId === auth.sub;
+    const isAdmin = auth?.role === "admin";
+    const { shards: rawShards, ownerUserId, ...rest } = r;
+    const base = {
+      ...rest,
       legacy: r.legacy === true,
       hmacKeyVersion: r.hmac_key_version ?? 1,
-    });
+    };
+    if (isOwner || isAdmin) {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json({
+        ...base,
+        ownerUserId,
+        shards: parseShards(rawShards, { shieldId: r.id as string }),
+      });
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(base);
+    }
   } catch (err) {
     console.error(
       "[QuantumShield] get error:",
@@ -1498,6 +1527,19 @@ quantumShieldRouter.post("/:id/verify", async (req, res) => {
  * (or `POST /api/pipeline/reconstruct`) for authenticated reconstruction.
  * Kept for backward compatibility; will be removed in a future release.
  */
+// Constant-time string equality. Hash both sides first so the comparison is
+// length-independent and timingSafeEqual always gets equal-length buffers.
+// Used on the legacy shard string-match path below so it can't be turned into
+// a timing oracle that recovers correct shard values byte-by-byte.
+function timingSafeStrEq(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(a).digest();
+  const hb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function safeShardEq(stored: unknown, input: string): boolean {
+  return typeof stored === "string" && timingSafeStrEq(stored, input);
+}
+
 quantumShieldRouter.post("/verify", async (req, res) => {
   if (!rateLimit(verifyRateLimiter, req, res)) return;
   try {
@@ -1548,9 +1590,9 @@ quantumShieldRouter.post("/verify", async (req, res) => {
         typeof input === "string"
           ? storedShards.some(
               (s) =>
-                (s as { sssShare?: string }).sssShare === input ||
-                (s as unknown as { data?: string }).data === input ||
-                (s as unknown as { id?: string }).id === input,
+                safeShardEq((s as { sssShare?: string }).sssShare, input) ||
+                safeShardEq((s as unknown as { data?: string }).data, input) ||
+                safeShardEq((s as unknown as { id?: string }).id, input),
             )
           : false,
       ).length;

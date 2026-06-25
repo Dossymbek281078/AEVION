@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -587,7 +587,7 @@ export default function OpenApiExplorerPage() {
     return entries.filter(([p]) => p.toLowerCase().includes(q));
   }, [view.paths, search]);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
   const fullUrl = `${apiBase}/api/aevion/openapi.json`;
   const curl = `curl -s '${fullUrl}' | jq .`;
   const rapidoc = `<rapi-doc spec-url="${fullUrl}" theme="light" render-style="read"></rapi-doc>

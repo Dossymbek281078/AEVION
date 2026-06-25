@@ -8,7 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
 interface LeadForm {
   name: string;
@@ -46,7 +46,7 @@ function ContactInner() {
     const industry = sp.get("industry");
     setForm((f) => ({
       ...f,
-      tier: tier && ["free", "pro", "business", "enterprise"].includes(tier) ? tier : f.tier,
+      tier: tier && ["free", "lite", "medium", "full", "enterprise"].includes(tier) ? tier : f.tier,
       industry: industry ?? f.industry,
     }));
   }, [sp]);
@@ -248,8 +248,9 @@ function ContactInner() {
               style={inputStyle}
             >
               <option value="">{tp("contact.placeholder.tier")}</option>
-              <option value="pro">Pro</option>
-              <option value="business">Business</option>
+              <option value="lite">Lite</option>
+              <option value="medium">Medium</option>
+              <option value="full">Full</option>
               <option value="enterprise">Enterprise</option>
             </select>
           </Field>

@@ -5,20 +5,18 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
+import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useABVariant } from "@/lib/abVariant";
+import NewStructureShowcase from "./_components/NewStructureShowcase";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
-// Paddle Price IDs — production live
-const PADDLE_PRICE_IDS: Partial<Record<`${TierId}_${BillingPeriod}`, string>> = {
-  pro_monthly:      "pri_01krzxq0t2rmy9erdv54c9ny3w",
-  pro_annual:       "pri_01krzyf5trnvptmpwdxz570mpf",
-  business_monthly: "pri_01krzy7zgqn32xc52qjbkfhvz0",
-};
+// Все тиры идут через бэкенд /api/pricing/checkout/session — он сам выбирает
+// процессинг (LemonSqueezy primary → Gumroad fallback → stub).
 
 interface TierLimits {
   modules: number | null;
@@ -191,7 +189,12 @@ export default function PricingPage() {
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
   // Калькулятор сметы
-  const [calcTier, setCalcTier] = useState<TierId>("pro");
+  // Lite = 1 продукт на выбор: выбранный модуль для чекаута Lite
+  const [liteModule, setLiteModule] = useState<string>("");
+  // Модуль из deep-link (?module=) — для prominent hero-баннера «Купить <модуль>».
+  const [heroModule, setHeroModule] = useState<string>("");
+
+  const [calcTier, setCalcTier] = useState<TierId>("medium");
   const [calcModules, setCalcModules] = useState<string[]>([]);
   const [calcSeats, setCalcSeats] = useState(1);
   const [calcPromo, setCalcPromo] = useState("");
@@ -246,47 +249,21 @@ export default function PricingPage() {
       },
     });
     try {
-      const period = opts.period ?? "monthly";
-      const priceKey = `${opts.tierId}_${period}` as keyof typeof PADDLE_PRICE_IDS;
-      const priceId = PADDLE_PRICE_IDS[priceKey];
-
-      if (priceId) {
-        // Paddle checkout (primary)
-        const r = await fetch(apiUrl("/api/paddle/checkout"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            priceId,
-            appId: "platform",
-            tierId: opts.tierId,
-          }),
-        });
-        const j = await r.json();
-        if (j.url) {
-          window.location.href = j.url;
-        } else if (j.error?.includes("checkout_not_enabled")) {
-          setCheckoutNotice("Платёжный шлюз проходит верификацию — будет доступен в течение 1-3 дней. Напишите нам на support@aevion.app и мы оформим вручную.");
-          setCheckingOut(null);
-        } else {
-          console.error("[paddle checkout] no url", j);
-          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или напишите на support@aevion.app");
-          setCheckingOut(null);
-        }
+      // Единая точка: backend /checkout/session сам выбирает процессинг.
+      // Прокидываем выбранную валюту: currency=KZT → backend ведёт на PayBox
+      // (локальные карты КЗ + Kaspi), иначе USD → LemonSqueezy → Gumroad → stub.
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...opts, currency }),
+      });
+      const j = await r.json();
+      if (j.url) {
+        window.location.href = j.url;
       } else {
-        // Free или Enterprise — старый flow
-        const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(opts),
-        });
-        const j = await r.json();
-        if (j.url) {
-          window.location.href = j.url;
-        } else {
-          console.error("[checkout] no url returned", j);
-          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
-          setCheckingOut(null);
-        }
+        console.error("[checkout] no url returned", j);
+        setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
+        setCheckingOut(null);
       }
     } catch (e) {
       console.error("[checkout] failed", e);
@@ -344,6 +321,25 @@ export default function PricingPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroVariant, tierCardsVariant]);
+
+  // Deep-link c модульной страницы: /pricing?module=<id> предвыбирает продукт
+  // для тарифа Lite (последняя миля — посетитель приходит с /cyberchess,
+  // /healthai и т.п. и сразу видит свой продукт в Lite, не ищет в дропдауне).
+  // ?period=annual переключает на годовой период. Без useSearchParams, чтобы
+  // не плодить Suspense-boundary в этом большом client-компоненте.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mod = params.get("module");
+    if (mod && data?.modules?.some((m) => m.id === mod)) {
+      setLiteModule(mod);
+      setHeroModule(mod);
+    }
+    if (params.get("period") === "annual") {
+      setPeriod("annual");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const symbol = data?.currencies[currency].symbol ?? "$";
   const rate = data?.currencies[currency].rate ?? 1;
@@ -428,6 +424,70 @@ export default function PricingPage() {
 
   return (
     <ProductPageShell maxWidth={1280}>
+      {/* Module deep-link hero — prominent «Купить <модуль>» когда пришли с
+          страницы продукта (/pricing?module=<id>). Закрывает последнюю милю:
+          заметная кнопка покупки именно этого продукта, валюта (вкл. KZT/PayBox)
+          берётся из общего тумблера ниже. */}
+      {heroModule && (() => {
+        const m = data.modules.find((x) => x.id === heroModule);
+        const lite = data.tiers.find((t) => t.id === "lite");
+        if (!m) return null;
+        const litePrice = period === "annual" ? (lite?.priceAnnualTotal ?? null) : (lite?.priceMonthly ?? null);
+        return (
+          <section
+            style={{
+              margin: "24px auto 0",
+              maxWidth: 760,
+              padding: "20px 24px",
+              borderRadius: 18,
+              background: "linear-gradient(135deg, rgba(13,148,136,0.10), rgba(14,165,233,0.10))",
+              border: "1px solid rgba(13,148,136,0.30)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              textAlign: "left",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                Тариф Lite — 1 продукт
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
+                {m.name}
+                {litePrice !== null && (
+                  <span style={{ fontWeight: 700, color: "#334155", fontSize: 16 }}>
+                    {" "}— {displayPrice(litePrice)}/{period === "annual" ? "год" : "мес"}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+                Оплата картой. {currency === "KZT" ? "KZT → локальные карты КЗ + Kaspi (PayBox)." : "USD через LemonSqueezy."}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={checkingOut === "lite"}
+              onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
+              style={{
+                padding: "12px 28px",
+                fontSize: 15,
+                fontWeight: 900,
+                borderRadius: 12,
+                border: "none",
+                cursor: checkingOut === "lite" ? "wait" : "pointer",
+                color: "#fff",
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                whiteSpace: "nowrap",
+                opacity: checkingOut === "lite" ? 0.7 : 1,
+              }}
+            >
+              {checkingOut === "lite" ? "Открываем оплату…" : `Купить ${m.name}`}
+            </button>
+          </section>
+        );
+      })()}
       {/* Hero */}
       <section style={{ textAlign: "center", padding: "40px 0 32px" }}>
         <div
@@ -658,6 +718,10 @@ export default function PricingPage() {
         </div>
       )}
 
+      {/* New 3-tier monetization structure (Solo / Bundles / All-Access).
+          Lives above the legacy Paddle tiers until Phase 3 retires them. */}
+      <NewStructureShowcase currency={currency} billingPeriod={period} />
+
       {/* Tier cards */}
       <section
         style={{
@@ -670,14 +734,14 @@ export default function PricingPage() {
         {data.tiers.map((tier) => {
           // A/B/C variant for tier-cards:
           //   A — no highlight (control)
-          //   B — highlight Pro
-          //   C — highlight Business
+          //   B — highlight Medium (popular)
+          //   C — highlight Full
           const isHighlight =
             tierCardsVariant === "A"
               ? false
               : tierCardsVariant === "B"
-                ? tier.id === "pro"
-                : tier.id === "business";
+                ? tier.id === "medium"
+                : tier.id === "full";
           const showPrice =
             period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
           return (
@@ -787,6 +851,31 @@ export default function PricingPage() {
                   {tier.ctaLabel}
                 </Link>
               ) : (
+                <>
+                {tier.id === "lite" && (
+                  <select
+                    value={liteModule}
+                    onChange={(e) => setLiteModule(e.target.value)}
+                    aria-label="Выберите продукт для Lite"
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: isHighlight ? "1px solid rgba(255,255,255,0.25)" : "1px solid rgba(13,148,136,0.4)",
+                      marginBottom: 8,
+                      background: isHighlight ? "rgba(255,255,255,0.06)" : "#fff",
+                      color: isHighlight ? "#e2e8f0" : "#0f172a",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">— выберите продукт —</option>
+                    {(data?.modules ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   disabled={checkingOut === tier.id}
                   style={{
@@ -806,12 +895,21 @@ export default function PricingPage() {
                     marginBottom: 8,
                     opacity: checkingOut === tier.id ? 0.7 : 1,
                   }}
-                  onClick={() =>
-                    startCheckout({ tierId: tier.id, period, seats: 1 })
-                  }
+                  onClick={() => {
+                    if (tier.id === "lite") {
+                      if (!liteModule) {
+                        setCheckoutNotice("Сначала выберите продукт для тарифа Lite");
+                        return;
+                      }
+                      startCheckout({ tierId: tier.id, period, seats: 1, modules: [liteModule] });
+                    } else {
+                      startCheckout({ tierId: tier.id, period, seats: 1 });
+                    }
+                  }}
                 >
                   {checkingOut === tier.id ? "Открываем оплату..." : tier.ctaLabel}
                 </button>
+                </>
               )}
               {tier.id !== "enterprise" && tier.id !== "free" && (
                 <>
@@ -831,7 +929,11 @@ export default function PricingPage() {
                       marginBottom: 6,
                     }}
                     onClick={() =>
-                      startCheckout({ tierId: tier.id, period, seats: 1, trial: true })
+                      startCheckout(
+                        tier.id === "lite" && liteModule
+                          ? { tierId: tier.id, period, seats: 1, trial: true, modules: [liteModule] }
+                          : { tierId: tier.id, period, seats: 1, trial: true },
+                      )
                     }
                   >
                     {tp("tier.tryTrial")}
@@ -989,10 +1091,28 @@ export default function PricingPage() {
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
                 {displayPrice(b.priceMonthly)}
                 <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> /мес</span>
               </div>
+              <a
+                href={gumroadCheckoutUrl({ key: b.id })}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "linear-gradient(135deg, #0d9488, #0891b2)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: "none",
+                }}
+              >
+                Get Access →
+              </a>
             </div>
           ))}
         </div>

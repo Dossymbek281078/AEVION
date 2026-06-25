@@ -1,0 +1,266 @@
+/**
+ * Gumroad webhook handler — platform-wide.
+ *
+ *   POST /api/gumroad/webhook
+ *
+ * Handles Gumroad "ping" events for ALL AEVION products:
+ *   - Bureau single-purchase (Verified tier, All-Access, bundles)
+ *   - Constitution Pro / Team memberships
+ *   - Any product whose Gumroad ping points to this URL
+ *
+ * Gumroad sends application/x-www-form-urlencoded POST.
+ * Required env: GUMROAD_ACCESS_TOKEN (for identity confirmation if needed)
+ * Optional env: GUMROAD_WEBHOOK_SECRET (for signature verification)
+ *
+ * Product routing:
+ *   product_id / short_product_id is matched against
+ *   GUMROAD_PRODUCT_<ID>=<reference>  env vars.
+ *   If no match, falls back to "default" → generic Pro upgrade.
+ *
+ * References:
+ *   https://help.gumroad.com/article/53-webhooks
+ *   https://help.gumroad.com/article/56-ping
+ */
+
+import { Router, type Request, type Response } from "express";
+import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import type { TierId } from "../data/pricing";
+import { getPool } from "../lib/dbPool";
+
+export const gumroadWebhookRouter = Router();
+
+const SEEN = new Set<string>();
+
+// Tier products are sold via the same GUMROAD_PERMALINK_TIER_* permalinks the
+// checkout layer builds the buy-URL from. Gumroad pings that permalink back, so
+// we can reverse-map it to a tier reference here — no separate opaque
+// GUMROAD_PRODUCT_<id> mapping needed for the four subscription tiers.
+const TIER_PERMALINK_ENV: Record<string, string> = {
+  GUMROAD_PERMALINK_TIER_LITE_MONTHLY: "tier_lite_monthly",
+  GUMROAD_PERMALINK_TIER_LITE_ANNUAL: "tier_lite_annual",
+  GUMROAD_PERMALINK_TIER_MEDIUM_MONTHLY: "tier_medium_monthly",
+  GUMROAD_PERMALINK_TIER_MEDIUM_ANNUAL: "tier_medium_annual",
+  GUMROAD_PERMALINK_TIER_FULL_MONTHLY: "tier_full_monthly",
+  GUMROAD_PERMALINK_TIER_FULL_ANNUAL: "tier_full_annual",
+};
+
+/** Last path segment of a Gumroad permalink or full product URL, lowercased.
+ *  "https://aevion.gumroad.com/l/xpxzam?x=1" → "xpxzam"; "xpxzam" → "xpxzam". */
+function permalinkSlug(v?: string | null): string {
+  if (!v) return "";
+  const noQuery = v.trim().replace(/\/+$/, "").split("?")[0];
+  return (noQuery.split("/").pop() ?? noQuery).toLowerCase();
+}
+
+function resolveReference(raw: Record<string, string>): string {
+  const pingSlug = permalinkSlug(raw.product_permalink ?? raw.permalink ?? raw.short_product_id);
+
+  // 0. Explicit external / non-AEVION products (e.g. books on the shared Gumroad
+  //    account) — comma-separated permalinks in GUMROAD_EXTERNAL_PERMALINKS.
+  //    Without this they hit the constitution-pro default and wrongly grant a
+  //    subscription to a book buyer.
+  if (pingSlug) {
+    const externals = (process.env.GUMROAD_EXTERNAL_PERMALINKS ?? "")
+      .split(",").map((s) => permalinkSlug(s)).filter(Boolean);
+    if (externals.includes(pingSlug)) return "external";
+  }
+
+  // 1. Subscription tiers — reverse-map the ping's permalink to a tier reference.
+  if (pingSlug) {
+    for (const [envKey, reference] of Object.entries(TIER_PERMALINK_ENV)) {
+      if (permalinkSlug(process.env[envKey]) === pingSlug && pingSlug) return reference;
+    }
+  }
+
+  // 2. Explicit per-product override by product_id.
+  const productId = raw.product_id ?? raw.short_product_id ?? "";
+  if (productId) {
+    const envKey = `GUMROAD_PRODUCT_${productId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+    const mapped = process.env[envKey];
+    if (mapped) return mapped;
+  }
+
+  // 3. Legacy catch-all — keep Constitution Pro working without explicit mapping.
+  return "constitution-pro";
+}
+
+function tierForReference(ref: string): TierId {
+  const r = ref.toLowerCase();
+  if (r.includes("medium")) return "medium";
+  // all-access / business / team / full → вся экосистема
+  if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
+  // lite / pro / constitution-pro → входной тир
+  return "lite";
+}
+
+function isConstitutionProduct(ref: string): boolean {
+  return ref.includes("constitution");
+}
+
+// Liveness probe — Gumroad sends only POST, but a GET in the browser used to
+// answer "Cannot GET" which looks like the URL is broken when configuring the
+// webhook. Return a tiny JSON manifest instead so admins can sanity-check the
+// endpoint by visiting it.
+gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    endpoint: "gumroad webhook",
+    accepts: "POST application/x-www-form-urlencoded",
+    signed: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    info: "Gumroad sends sale/refund pings here as POST form-encoded. GET is for liveness check only.",
+  });
+});
+
+gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
+  // Gumroad sends form-encoded — grab raw body for signature check
+  const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+  const rawBody = rawBuf ? rawBuf.toString("utf8") : "";
+
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (typeof v === "string") headers[k] = v;
+  }
+
+  let parsed: ReturnType<typeof gumroadPaymentProvider.parseWebhook>;
+  try {
+    parsed = gumroadPaymentProvider.parseWebhook(headers, rawBody);
+  } catch (err) {
+    console.error("[gumroad/webhook] parse error:", err);
+    return res.status(400).json({ ok: false, error: "parse_failed" });
+  }
+
+  const { result, eventId } = parsed;
+
+  // Reject a bad HMAC explicitly. parseWebhook signals a signature mismatch
+  // via reason:"invalid_signature" with an emptied raw — without this guard
+  // that would fall through to the no_email branch and answer 200, masking a
+  // forged/misconfigured ping as a benign "no email" and telling Gumroad the
+  // delivery succeeded. 401 makes rejection observable and retryable.
+  if (result.reason === "invalid_signature") {
+    console.warn("[gumroad/webhook] invalid signature — rejecting 401");
+    return res.status(401).json({ ok: false, error: "invalid_signature" });
+  }
+
+  const raw = result.raw as Record<string, string> | null ?? {};
+
+  const saleId = raw.sale_id ?? raw.id ?? eventId ?? "";
+  const email = (raw.email ?? "").trim().toLowerCase();
+  const productId = raw.product_id ?? raw.short_product_id ?? "";
+  const refunded = result.status === "refunded";
+  const failed = result.status === "failed";
+  const isMembership = raw.is_recurring_billing === "true";
+
+  if (!email) {
+    console.warn("[gumroad/webhook] missing email, ignoring");
+    return res.json({ ok: true, ignored: "no_email" });
+  }
+
+  // Dedup on sale_id + status
+  const dedupKey = `${saleId}:${result.status}`;
+  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
+  SEEN.add(dedupKey);
+
+  const reference = resolveReference(raw);
+
+  // Products from other services (book platform etc.) share this Gumroad account
+  // but don't need AEVION subscription provisioning — skip them silently.
+  if (reference === "external") {
+    console.log(`[gumroad/webhook] external product ${productId} — skipping`);
+    return res.json({ ok: true, ignored: "external_product" });
+  }
+
+  // Bureau Verified one-time upgrade: match by email to the latest pending
+  // BureauVerification row (KYC approved but payment not yet confirmed).
+  if (reference === "bureau-verified") {
+    if (refunded || failed) {
+      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — ignored (one-time, no downgrade)`);
+      return res.json({ ok: true, ignored: `bureau_${result.status}` });
+    }
+    if (result.status === "paid") {
+      try {
+        const pool = getPool();
+        const intentId = `gumroad:sale:${saleId}`;
+        const { rowCount } = await pool.query(
+          `UPDATE "BureauVerification"
+              SET "paymentStatus" = 'paid',
+                  "paymentProvider" = 'gumroad',
+                  "paymentIntentId" = $1
+            WHERE "email" = $2
+              AND "kycStatus" = 'approved'
+              AND "paymentStatus" = 'unpaid'
+              AND "id" = (
+                SELECT "id" FROM "BureauVerification"
+                 WHERE "email" = $2
+                   AND "kycStatus" = 'approved'
+                   AND "paymentStatus" = 'unpaid'
+                 ORDER BY "createdAt" DESC
+                 LIMIT 1
+              )`,
+          [intentId, email],
+        );
+        if ((rowCount ?? 0) > 0) {
+          console.log(`[gumroad/webhook] bureau paid — marked verification for ${email}`);
+          return res.json({ ok: true, action: "bureau_verified", email });
+        } else {
+          console.warn(`[gumroad/webhook] bureau paid — no pending verification for ${email}`);
+          return res.json({ ok: true, action: "bureau_no_match", email });
+        }
+      } catch (err) {
+        console.error("[gumroad/webhook] bureau DB error:", err instanceof Error ? err.message : err);
+        return res.status(500).json({ ok: false, error: "bureau_db_failed" });
+      }
+    }
+    return res.json({ ok: true, ignored: result.status });
+  }
+
+  try {
+    if (refunded || failed) {
+      // Downgrade to free
+      const downgrade: Subscription = {
+        id: `sub_gumroad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        ts: new Date().toISOString(),
+        email,
+        tierId: "free",
+        period: "monthly",
+        seats: 1,
+        modules: [],
+        trialDays: 0,
+        source: `gumroad:${result.status}`,
+      };
+      writeSubscription(downgrade);
+      console.log(`[gumroad/webhook] ${result.status} → downgraded ${email} to free`);
+      return res.json({ ok: true, action: "downgraded", email });
+    }
+
+    if (result.status === "paid") {
+      const tierId = tierForReference(reference);
+      const period = isMembership ? "monthly" : "monthly"; // Gumroad one-time → treat as monthly for provisioning
+
+      const provResult = await provisionSubscription({
+        email,
+        tierId,
+        period,
+        modules: [],
+        source: "gumroad",
+      });
+
+      console.log(`[gumroad/webhook] paid → provisioned ${tierId} for ${email} (ref=${reference} product=${productId})`);
+
+      return res.json({
+        ok: true,
+        action: "activated",
+        tierId,
+        email,
+        subscriptionId: provResult.subscription.id,
+        isConstitution: isConstitutionProduct(reference),
+      });
+    }
+
+    return res.json({ ok: true, ignored: result.status });
+  } catch (err) {
+    SEEN.delete(dedupKey);
+    console.error("[gumroad/webhook] handler error:", err instanceof Error ? err.message : err);
+    return res.status(500).json({ ok: false, error: "handler_failed" });
+  }
+});

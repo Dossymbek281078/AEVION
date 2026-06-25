@@ -6,6 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
@@ -234,6 +235,9 @@ export default function QCoreAIPage() {
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>QCoreAI</h1>
                 <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Multi-model AI assistant for the AEVION ecosystem</p>
+                <div style={{ marginTop: 10 }}>
+                  <ModulePricingChip moduleId="qcoreai" />
+                </div>
               </div>
             </div>
 

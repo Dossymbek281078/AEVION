@@ -392,33 +392,58 @@ export function assessKingSafety(fen: string): { white: string; black: string } 
   }
 }
 
-/** Генерируем текстовый анализ позиции для коуча */
-export function generatePositionExplanation(fen: string, plyCount: number, evalCp: number): string {
+/** Множественное число для «единица» (1 единицу / 2 единицы / 5 единиц) */
+function pluralUnit(n: number): string {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return "единиц";
+  if (b === 1) return "единицу";
+  if (b >= 2 && b <= 4) return "единицы";
+  return "единиц";
+}
+
+/** Генерируем текстовый анализ позиции для коуча.
+ *  evalCp / evalMate — БЕЛО-ОТНОСИТЕЛЬНАЯ оценка движка (mate>0 = мат за белых).
+ *  Если передан реальный eval — коуч говорит правду (мат/решающий перевес),
+ *  а не сыпет общими дебютными принципами «как безразрядник». */
+export function generatePositionExplanation(fen: string, plyCount: number, evalCp: number, evalMate: number = 0): string {
   const phase = detectPhase(fen, plyCount);
   const matBal = calcMaterialBalance(fen);
   const center = assessCenter(fen);
   const kingSafety = assessKingSafety(fen);
   const turn = fen.split(" ")[1] === "w" ? "белых" : "чёрных";
 
-  const phaseLabel = phase === "opening" ? "дебюте" : phase === "middlegame" ? "миттельшпиле" : "эндшпиле";
-  const evalLabel = Math.abs(evalCp) < 30 ? "равная позиция"
-    : evalCp > 300 ? "белые явно лучше"
-    : evalCp > 80 ? "небольшой перевес у белых"
-    : evalCp < -300 ? "чёрные явно лучше"
-    : evalCp < -80 ? "небольшой перевес у чёрных"
-    : "незначительный дисбаланс";
+  const phaseLabel = phase === "opening" ? "в дебюте" : phase === "middlegame" ? "в миттельшпиле" : "в эндшпиле";
 
-  const matLabel = matBal === 0 ? "материальное равенство" : matBal > 0 ? `белые опережают на ${matBal} единиц` : `чёрные опережают на ${Math.abs(matBal)} единиц`;
+  // Форсированный мат перекрывает всё остальное.
+  let evalLabel: string;
+  const decisive = evalMate !== 0 || Math.abs(evalCp) >= 300;
+  if (evalMate !== 0) {
+    const side = evalMate > 0 ? "белых" : "чёрных";
+    evalLabel = `⚠️ форсированный МАТ за ${side} в ${Math.abs(evalMate)}`;
+  } else {
+    evalLabel = Math.abs(evalCp) < 40 ? "позиция примерно равна"
+      : evalCp >= 500 ? "у белых решающий перевес"
+      : evalCp >= 300 ? "белые явно лучше"
+      : evalCp >= 80 ? "у белых небольшой перевес"
+      : evalCp <= -500 ? "у чёрных решающий перевес"
+      : evalCp <= -300 ? "чёрные явно лучше"
+      : evalCp <= -80 ? "у чёрных небольшой перевес"
+      : "примерное равенство с лёгким дисбалансом";
+  }
 
-  let advice = CHESS_PRINCIPLES[phase][Math.floor(Math.random() * CHESS_PRINCIPLES[phase].length)];
+  const matLabel = matBal === 0 ? "материальное равенство" : matBal > 0 ? `белые опережают на ${matBal} ${pluralUnit(matBal)}` : `чёрные опережают на ${Math.abs(matBal)} ${pluralUnit(matBal)}`;
 
-  return [
+  const lines = [
     `Сейчас ${phaseLabel}. Ход ${turn}. ${evalLabel}.`,
     `Материал: ${matLabel}. Центр: ${center}.`,
     `Безопасность королей: белые — ${kingSafety.white}; чёрные — ${kingSafety.black}.`,
-    ``,
-    `💡 Принцип: ${advice}`,
-  ].join("\n");
+  ];
+  // Общий принцип — только в спокойной позиции; при мате/решающем перевесе он неуместен.
+  if (!decisive) {
+    const advice = CHESS_PRINCIPLES[phase][Math.floor(Math.random() * CHESS_PRINCIPLES[phase].length)];
+    lines.push(``, `💡 Принцип: ${advice}`);
+  }
+  return lines.join("\n");
 }
 
 /** Объяснение конкретного хода */
@@ -475,7 +500,12 @@ export function spotTactics(fen: string): string[] {
       }
     }
 
-    // Проверяем шахи
+    // Мат в 1 — высший приоритет, всегда первым.
+    const mates = moves.filter(m => m.san.includes("#"));
+    if (mates.length > 0) {
+      hints.unshift(`🏆 МАТ В 1 ХОД: ${mates.map(m => m.san).join(", ")} — ставь немедленно!`);
+    }
+    // Проверяем шахи (но не дублируем мат)
     const checks = moves.filter(m => m.san.includes("+"));
     if (checks.length > 0 && hints.length === 0) {
       hints.push(`⚡ Есть возможность дать шах: ${checks.slice(0,3).map(c=>c.san).join(", ")}`);

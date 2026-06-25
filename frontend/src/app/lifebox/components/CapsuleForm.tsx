@@ -78,8 +78,9 @@ export default function CapsuleForm({
       return;
     }
     try {
-      // Convert YYYY-MM-DD → ISO at start of day, local-time.
-      const unlockISO = new Date(`${unlockDate}T00:00:00`).toISOString();
+      // Convert YYYY-MM-DD → ISO at start of day in UTC (avoid local-time
+      // parsing that shifts the calendar day across timezones).
+      const unlockISO = new Date(`${unlockDate}T00:00:00Z`).toISOString();
       await onCreate({
         alias,
         title: title.trim(),

@@ -628,7 +628,9 @@ qgoodRouter.post("/mood", moodLimit, async (req, res) => {
   }
   const emotion = body.emotion ? String(body.emotion).slice(0, 50) : null;
   const context = body.context ? String(body.context).slice(0, 500) : null;
-  const userId = body.userId ? String(body.userId).slice(0, 100) : "anonymous";
+  // Bind mental-health data to the authenticated user (JWT sub) — never trust
+  // a client-supplied userId. No token → shared "anonymous" bucket (unchanged).
+  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
 
   if (isQGoodDbReady()) {
     try {
@@ -661,7 +663,8 @@ qgoodRouter.post("/mood", moodLimit, async (req, res) => {
 qgoodRouter.get("/mood", readLimit, async (req, res) => {
   await initPsychTables();
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 100);
-  const userId = req.query.userId ? String(req.query.userId).slice(0, 100) : "anonymous";
+  // Privacy: read only own (JWT sub) or anonymous moods — never another user's.
+  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
 
   if (isQGoodDbReady()) {
     try {
@@ -684,7 +687,8 @@ qgoodRouter.get("/mood", readLimit, async (req, res) => {
 
 qgoodRouter.get("/mood/trends", readLimit, async (req, res) => {
   await initPsychTables();
-  const userId = req.query.userId ? String(req.query.userId).slice(0, 100) : "anonymous";
+  // Privacy: trends only over own (JWT sub) or anonymous moods.
+  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
 
   if (isQGoodDbReady()) {
     try {
@@ -802,8 +806,8 @@ qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
   if (!EXERCISES.find((e) => e.id === exerciseId)) {
     return res.status(404).json({ error: "exercise_not_found" });
   }
-  const body = req.body || {};
-  const userId = body.userId ? String(body.userId).slice(0, 100) : "anonymous";
+  // Bind completion to authenticated user (JWT sub); no token → anonymous.
+  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
 
   if (isQGoodDbReady()) {
     try {

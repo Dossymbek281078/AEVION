@@ -18,7 +18,7 @@ export function ProductPageShell({ children, maxWidth = 1100, fullWidth = false 
         padding: fullWidth ? "16px 10px 0" : "24px 20px 56px",
         width: "100%",
         boxSizing: "border-box",
-        ...(fullWidth ? { display: "flex", flexDirection: "column", flex: 1 } : {}),
+        ...(fullWidth ? { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" } : {}),
       }}
     >
       {children}

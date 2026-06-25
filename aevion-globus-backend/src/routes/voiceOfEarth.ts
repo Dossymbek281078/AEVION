@@ -332,6 +332,7 @@ voiceOfEarthRouter.post(
         return res.json({ ok: true, votes: rows[0]?.votes ?? 0 });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks/:id/vote DB error", e);
+        return res.status(500).json({ error: "vote_failed" });
       }
     }
 

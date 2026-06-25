@@ -101,8 +101,10 @@ test.describe("QEvents — Add to calendar (.ics)", () => {
   });
 
   test("ICS endpoint contract — content-type starts with text/calendar", async ({ page }) => {
-    // Direct fetch via Playwright's APIRequestContext bound to the page. We
-    // re-route in this test as well because routes are per-test.
+    // page.route() only intercepts browser-context requests; page.request.get()
+    // bypasses it and hits the real network (no backend → 404). Issue the
+    // fetch from inside the page so the mock applies.
+    await page.goto("/qevents");
     await page.route(`**/api/qevents/events/${MOCK_EVENT.id}/ics`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -110,9 +112,11 @@ test.describe("QEvents — Add to calendar (.ics)", () => {
         body: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
       });
     });
-    const resp = await page.request.get(`/api/qevents/events/${MOCK_EVENT.id}/ics`);
-    expect(resp.status()).toBe(200);
-    const ct = resp.headers()["content-type"] || "";
-    expect(ct).toMatch(/text\/calendar/);
+    const result = await page.evaluate(async (url) => {
+      const r = await fetch(url);
+      return { status: r.status, contentType: r.headers.get("content-type") || "" };
+    }, `/api/qevents/events/${MOCK_EVENT.id}/ics`);
+    expect(result.status).toBe(200);
+    expect(result.contentType).toMatch(/text\/calendar/);
   });
 });

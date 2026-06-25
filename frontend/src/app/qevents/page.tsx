@@ -5,6 +5,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -507,6 +508,9 @@ export default function QEventsPage() {
             <p style={{ margin: 0, color: "#64748b", fontSize: 15 }}>
               Discover and RSVP to upcoming events in the AEVION ecosystem.
             </p>
+            <div style={{ marginTop: 10 }}>
+              <ModulePricingChip moduleId="qevents" />
+            </div>
           </div>
           {currentUserId && (
             <button

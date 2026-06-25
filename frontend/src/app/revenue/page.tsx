@@ -8,6 +8,7 @@ interface RevenueOverview {
   liveApps: number;
   channelCoverage: Record<string, number>;
   providers: {
+    gumroad?: { configured: boolean; primary: boolean };
     paddle: { configured: boolean; sandbox: boolean };
     youtube: { configured: boolean };
     twitch: { configured: boolean };
@@ -16,28 +17,39 @@ interface RevenueOverview {
   apps: { appId: string; appName: string; channels: string[]; color: string }[];
 }
 
-interface PaddleRecent {
-  transactions: { id: string; appId: string; amountUsd: number; currency: string; status: string; date: string }[];
+interface GumroadRecent {
+  sales: {
+    id: string;
+    appId: string;
+    product: string;
+    email: string | null;
+    amountUsd: number;
+    currency: string;
+    refunded: boolean;
+    date: string | null;
+  }[];
   byApp: Record<string, { count: number; totalUsd: number }>;
-  sandbox?: boolean;
   stub?: boolean;
   message?: string;
-  setupGuide?: string;
 }
 
-interface PaddleBalance {
-  totalUsd?: number;
+interface GumroadBalance {
+  grossUsd?: number;
+  feesUsd?: number;
+  netUsd?: number;
   currency?: string;
-  sandbox?: boolean;
-  transactionCount?: number;
+  saleCount?: number;
+  refundedCount?: number;
   stub?: boolean;
   message?: string;
   setupGuide?: string;
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
-  paddle_subscription: "Paddle Sub",
-  paddle_onetime: "Paddle Pay",
+  gumroad_onetime: "Gumroad Pay",
+  gumroad_membership: "Gumroad Sub",
+  paddle_subscription: "Paddle Sub (legacy)",
+  paddle_onetime: "Paddle Pay (legacy)",
   paybox: "PayBox",
   kaspi: "Kaspi",
   youtube_adsense: "YouTube",
@@ -50,8 +62,10 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 const CHANNEL_COLORS: Record<string, string> = {
-  paddle_subscription: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  paddle_onetime: "bg-blue-400/20 text-blue-200 border-blue-400/30",
+  gumroad_onetime: "bg-pink-500/20 text-pink-300 border-pink-500/30",
+  gumroad_membership: "bg-pink-600/20 text-pink-200 border-pink-600/30",
+  paddle_subscription: "bg-gray-700/40 text-gray-500 border-gray-700",
+  paddle_onetime: "bg-gray-700/40 text-gray-500 border-gray-700",
   paybox: "bg-amber-500/20 text-amber-300 border-amber-500/30",
   kaspi: "bg-red-500/20 text-red-300 border-red-500/30",
   youtube_adsense: "bg-red-500/20 text-red-300 border-red-500/30",
@@ -65,15 +79,15 @@ const CHANNEL_COLORS: Record<string, string> = {
 
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
-  const [balance, setBalance] = useState<PaddleBalance | null>(null);
-  const [recent, setRecent] = useState<PaddleRecent | null>(null);
+  const [balance, setBalance] = useState<GumroadBalance | null>(null);
+  const [recent, setRecent] = useState<GumroadRecent | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/paddle/balance")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/paddle/recent")).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null),
     ]).then(([ov, bal, rec]) => {
       setOverview(ov);
       setBalance(bal);
@@ -91,7 +105,7 @@ export default function RevenuePage() {
   }
 
   const providers = overview?.providers;
-  const paddleConfigured = providers?.paddle?.configured;
+  const gumroadConfigured = providers?.gumroad?.configured;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -101,11 +115,11 @@ export default function RevenuePage() {
           <div>
             <h1 className="text-xl font-semibold text-white">AEVION Revenue Hub</h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              Paddle · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
+              Gumroad · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
-            <ProviderBadge name="Paddle" ok={providers?.paddle?.configured} sandbox={providers?.paddle?.sandbox} />
+            <ProviderBadge name="Gumroad" ok={providers?.gumroad?.configured} primary />
             <ProviderBadge name="PayBox" ok={providers?.paybox?.configured} />
             <ProviderBadge name="YouTube" ok={providers?.youtube?.configured} />
             <ProviderBadge name="Twitch" ok={providers?.twitch?.configured} />
@@ -115,45 +129,56 @@ export default function RevenuePage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-        {/* Paddle Balance */}
+        {/* Gumroad Balance */}
         <section>
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Paddle Balance {balance?.sandbox && <span className="ml-2 text-xs text-amber-400 normal-case">(sandbox)</span>}
+            Gumroad Balance <span className="ml-2 text-xs text-pink-400 normal-case">(live)</span>
           </h2>
           {balance?.stub ? (
-            <PaddleSetupCard />
+            <GumroadSetupCard />
           ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Завершённые транзакции</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Net (после комиссий)</div>
                 <div className="text-3xl font-semibold text-white">
-                  ${(balance?.totalUsd ?? 0).toFixed(2)}
+                  ${(balance?.netUsd ?? 0).toFixed(2)}
                   <span className="text-sm text-gray-400 ml-2">USD</span>
                 </div>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Всего транзакций</div>
-                <div className="text-3xl font-semibold text-white">{balance?.transactionCount ?? 0}</div>
+                <div className="text-xs text-gray-400 mb-2">Gross</div>
+                <div className="text-3xl font-semibold text-gray-200">${(balance?.grossUsd ?? 0).toFixed(2)}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Комиссия Gumroad</div>
+                <div className="text-3xl font-semibold text-gray-400">${(balance?.feesUsd ?? 0).toFixed(2)}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Продаж</div>
+                <div className="text-3xl font-semibold text-white">{balance?.saleCount ?? 0}</div>
+                {(balance?.refundedCount ?? 0) > 0 && (
+                  <div className="text-xs text-amber-400 mt-1">{balance?.refundedCount} возвратов</div>
+                )}
               </div>
             </div>
           )}
         </section>
 
-        {/* Recent Transactions */}
-        {paddleConfigured && (
+        {/* Recent Sales */}
+        {gumroadConfigured && (
           <section>
-            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние транзакции</h2>
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние продажи</h2>
             {recent?.stub ? (
-              <div className="bg-gray-900 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-400">Paddle не настроен</div>
+              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Gumroad не настроен</div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                {(recent?.transactions ?? []).length === 0 ? (
-                  <div className="p-4 text-sm text-gray-500">Нет транзакций пока</div>
+                {(recent?.sales ?? []).length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">Нет продаж пока</div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-800 text-gray-400 text-xs">
-                        <th className="text-left px-4 py-2.5">ID</th>
+                        <th className="text-left px-4 py-2.5">Продукт</th>
                         <th className="text-left px-4 py-2.5">Приложение</th>
                         <th className="text-left px-4 py-2.5">Сумма</th>
                         <th className="text-left px-4 py-2.5">Статус</th>
@@ -161,19 +186,19 @@ export default function RevenuePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(recent?.transactions ?? []).map((t) => (
-                        <tr key={t.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                          <td className="px-4 py-2 font-mono text-xs text-gray-400">{t.id.slice(0, 16)}…</td>
+                      {(recent?.sales ?? []).map((s) => (
+                        <tr key={s.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                          <td className="px-4 py-2 text-gray-200">{s.product}</td>
                           <td className="px-4 py-2">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{t.appId}</span>
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{s.appId}</span>
                           </td>
-                          <td className="px-4 py-2 font-medium">${t.amountUsd.toFixed(2)}</td>
+                          <td className="px-4 py-2 font-medium">${s.amountUsd.toFixed(2)}</td>
                           <td className="px-4 py-2">
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${t.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}`}>
-                              {t.status}
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${s.refunded ? "bg-amber-500/20 text-amber-400" : "bg-green-500/20 text-green-400"}`}>
+                              {s.refunded ? "refunded" : "paid"}
                             </span>
                           </td>
-                          <td className="px-4 py-2 text-gray-400 text-xs">{t.date ? new Date(t.date).toLocaleDateString("ru") : "—"}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{s.date ? new Date(s.date).toLocaleDateString("ru") : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -185,7 +210,7 @@ export default function RevenuePage() {
         )}
 
         {/* By-App breakdown */}
-        {paddleConfigured && recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
+        {gumroadConfigured && recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">По приложениям</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -193,7 +218,7 @@ export default function RevenuePage() {
                 <div key={appId} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-400 mb-1">{appId}</div>
                   <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
-                  <div className="text-xs text-gray-500">{data.count} транзакций</div>
+                  <div className="text-xs text-gray-500">{data.count} продаж</div>
                 </div>
               ))}
             </div>
@@ -228,17 +253,17 @@ export default function RevenuePage() {
         )}
 
         {/* Setup Guide */}
-        {!paddleConfigured && <PaddleSetupCard full />}
+        {!gumroadConfigured && <GumroadSetupCard full />}
       </div>
     </div>
   );
 }
 
-function ProviderBadge({ name, ok, sandbox }: { name: string; ok?: boolean; sandbox?: boolean }) {
+function ProviderBadge({ name, ok, sandbox, primary }: { name: string; ok?: boolean; sandbox?: boolean; primary?: boolean }) {
   return (
-    <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border ${ok ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-gray-800 text-gray-500 border-gray-700"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-green-400" : "bg-gray-600"}`} />
-      {name}{sandbox && ok ? " ·sandbox" : ""}
+    <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border ${ok ? "bg-green-500/10 text-green-400 border-green-500/30" : primary ? "bg-pink-500/10 text-pink-400 border-pink-500/30" : "bg-gray-800 text-gray-500 border-gray-700"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-green-400" : primary ? "bg-pink-400" : "bg-gray-600"}`} />
+      {name}{sandbox && ok ? " ·sandbox" : ""}{primary && !ok ? " ·setup" : ""}
     </div>
   );
 }
@@ -261,32 +286,33 @@ function AppCard({ app }: { app: { appId: string; appName: string; channels: str
   );
 }
 
-function PaddleSetupCard({ full }: { full?: boolean }) {
+function GumroadSetupCard({ full }: { full?: boolean }) {
   return (
-    <div className={`bg-gray-900 border border-amber-500/20 rounded-xl p-5 ${full ? "" : "text-sm"}`}>
+    <div className={`bg-gray-900 border border-pink-500/20 rounded-xl p-5 ${full ? "" : "text-sm"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="font-semibold text-amber-300 mb-1">Paddle не настроен</div>
+          <div className="font-semibold text-pink-300 mb-1">Gumroad не настроен</div>
           <div className="text-gray-400 text-sm mb-3">
-            Paddle — лучшая замена Stripe для Казахстана. Merchant of Record, выплаты на KZ банк, не нужен US entity.
+            Gumroad — единственный живой процессинг (Stripe/Paddle/LemonSqueezy не прошли KYC).
+            Merchant of Record, без US entity, вывод через Payoneer на KZ.
           </div>
           {full && (
             <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">
-              <li>Зарегистрируйся на <strong className="text-white">paddle.com</strong> (Individual + Kazakhstan)</li>
-              <li>Dashboard → Developer → Authentication → Generate API Key</li>
-              <li>Railway → Variables → <code className="bg-gray-800 px-1 rounded text-amber-200">PADDLE_API_KEY</code> = ключ</li>
-              <li>Railway → Variables → <code className="bg-gray-800 px-1 rounded text-amber-200">PADDLE_SANDBOX</code> = true</li>
-              <li>Проверь: <code className="bg-gray-800 px-1 rounded text-gray-300">/api/paddle/health</code></li>
+              <li>Зайди на <strong className="text-white">gumroad.com</strong> → Settings → Advanced → Applications</li>
+              <li>Generate application → скопируй <strong className="text-white">access token</strong></li>
+              <li>Railway → Variables → <code className="bg-gray-800 px-1 rounded text-pink-200">GUMROAD_ACCESS_TOKEN</code> = токен</li>
+              <li>Атрибуция: <code className="bg-gray-800 px-1 rounded text-pink-200">GUMROAD_APP_&lt;PERMALINK&gt;</code> = appId</li>
+              <li>Проверь: <code className="bg-gray-800 px-1 rounded text-gray-300">/api/revenue/gumroad/balance</code></li>
             </ol>
           )}
         </div>
         <a
-          href="https://paddle.com"
+          href="https://gumroad.com/settings/advanced"
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 text-xs px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors whitespace-nowrap"
+          className="shrink-0 text-xs px-4 py-2 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500/20 transition-colors whitespace-nowrap"
         >
-          Открыть Paddle →
+          Открыть Gumroad →
         </a>
       </div>
     </div>

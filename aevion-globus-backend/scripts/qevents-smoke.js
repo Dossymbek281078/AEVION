@@ -46,7 +46,7 @@ async function run() {
     description: "Automated smoke test — ignore",
     startAt: new Date(Date.now() + 86400000).toISOString(),
     endAt: new Date(Date.now() + 90000000).toISOString(),
-    category: "conference",
+    category: "networking",
     location: "Online",
   });
   assert("POST /me/events → 200/201 or 401", [200, 201, 401].includes(created.status), String(created.status));

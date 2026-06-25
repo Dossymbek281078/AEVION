@@ -6,6 +6,9 @@ import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureAuthError = makeServiceCapture("auth");
 
 export const authRouter = Router();
 
@@ -317,6 +320,7 @@ authRouter.post("/register", async (req, res) => {
     if (err?.code === "23505") {
       return res.status(409).json({ error: "email already exists" });
     }
+    captureAuthError(err, { route: "register" });
     res.status(500).json({ error: "register failed" });
   }
 });
@@ -358,6 +362,7 @@ authRouter.post("/login", loginIpRateLimit, async (req, res) => {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "login" });
     res.status(500).json({ error: "login failed" });
   }
 });
@@ -388,6 +393,7 @@ authRouter.get("/me", async (req, res) => {
       tokenPayload: payload,
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "me" });
     res.status(500).json({ error: "me failed" });
   }
 });
@@ -411,6 +417,7 @@ authRouter.patch("/me", async (req, res) => {
     recordAuthAudit(payload.sub, "profile.update", req, { name });
     res.json({ updated: true, name });
   } catch (err: any) {
+    captureAuthError(err, { route: "patch-me" });
     res.status(500).json({ error: "update failed" });
   }
 });
@@ -442,6 +449,7 @@ authRouter.delete("/account", async (req, res) => {
     recordAuthAudit(userId, "account.delete", req, null);
     res.json({ deleted: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "delete-account" });
     res.status(500).json({ error: "delete failed" });
   }
 });
@@ -479,6 +487,7 @@ authRouter.get("/sessions", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "sessions" });
     res.status(500).json({ error: "sessions failed" });
   }
 });
@@ -500,6 +509,7 @@ authRouter.delete("/sessions/:id", async (req, res) => {
     recordAuthAudit(payload.sub, "session.revoke", req, { sid });
     res.json({ id: sid, revoked: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "session-revoke" });
     res.status(500).json({ error: "revoke failed" });
   }
 });
@@ -525,6 +535,7 @@ authRouter.post("/logout", async (req, res) => {
     recordAuthAudit(payload.sub, "logout", req, { sid });
     res.json({ ok: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "logout" });
     res.status(500).json({ error: "logout failed" });
   }
 });
@@ -548,6 +559,7 @@ authRouter.post("/logout-all", async (req, res) => {
     recordAuthAudit(payload.sub, "logout-all", req, { revokedCount: r.rowCount });
     res.json({ ok: true, revokedCount: r.rowCount });
   } catch (err: any) {
+    captureAuthError(err, { route: "logout-all" });
     res.status(500).json({ error: "logout-all failed" });
   }
 });
@@ -599,6 +611,7 @@ authRouter.post("/password/change", async (req, res) => {
     recordAuthAudit(payload.sub, "password.change", req, null);
     res.json({ changed: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "password-change" });
     res.status(500).json({ error: "change failed" });
   }
 });
@@ -642,6 +655,7 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
       ...(dev && plaintext ? { devToken: plaintext } : {}),
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "password-reset-request" });
     res.status(500).json({ error: "reset request failed" });
   }
 });
@@ -705,6 +719,7 @@ authRouter.post("/password/reset/complete", async (req, res) => {
     recordAuthAudit(userId, "password.reset.complete", req, null);
     res.json({ reset: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "password-reset-complete" });
     res.status(500).json({ error: "reset failed" });
   }
 });
@@ -747,6 +762,7 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
       ...(dev ? { devToken: minted.plaintext } : {}),
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "email-verify-request" });
     res.status(500).json({ error: "verify request failed" });
   }
 });
@@ -787,6 +803,7 @@ authRouter.post("/email/verify/complete", async (req, res) => {
     recordAuthAudit(payload.sub, "email.verify.complete", req, null);
     res.json({ verified: true });
   } catch (err: any) {
+    captureAuthError(err, { route: "email-verify-complete" });
     res.status(500).json({ error: "verify failed" });
   }
 });
@@ -826,6 +843,7 @@ authRouter.get("/me/audit", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureAuthError(err, { route: "me-audit" });
     res.status(500).json({ error: "audit failed" });
   }
 });

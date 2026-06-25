@@ -1,5 +1,7 @@
 "use client";
 import React from "react";
+import Link from "next/link";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 const PROJECTS = [
   { id:"bureau",  name:"Патентное Бюро", emoji:"🏛", href:"/bureau",         tag:"IP · Патенты" },
@@ -73,14 +75,25 @@ export default function AevionProjectsBanner({ onHide }: Props) {
         ))}
       </div>
 
-      {/* Рекламный placeholder */}
+      {/* CyberChess pricing — live from /api/aevion/pricing */}
       <div style={{
-        height: 100, margin: "8px", flexShrink: 0,
-        border: "1px dashed #3d3b39", borderRadius: 6,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#5d5b59", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+        margin: "8px", padding: "10px 12px", flexShrink: 0,
+        border: "1px solid #3d3b39", borderRadius: 6,
+        background: "#262421",
       }}>
-        Реклама 300×250
+        <div style={{ fontSize: 9, fontWeight: 800, color: "#5d5b59", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>
+          CyberChess подписка
+        </div>
+        <ModulePricingChip moduleId="cyberchess" theme="dark" />
+        <Link
+          href="/pricing"
+          style={{
+            display: "block", marginTop: 8, fontSize: 10, fontWeight: 700,
+            color: "#34d399", textDecoration: "none", textAlign: "center",
+          }}
+        >
+          Все тарифы →
+        </Link>
       </div>
     </div>
   );

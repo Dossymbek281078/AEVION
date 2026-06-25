@@ -66,9 +66,9 @@ async function fetchSdks(): Promise<SdksResponse | null> {
   }
 }
 
-const SCOPE_BADGE: Record<string, { label: string; color: string }> = {
-  "@aevion-io": { label: "@aevion-io (official)", color: "#0d9488" },
-  "@dosymbek": { label: "@dosymbek (personal)", color: "#7c3aed" },
+const SCOPE_BADGE: Record<string, { label: string; color: string; verified: boolean; title: string }> = {
+  "@aevion-io": { label: "✓ verified publisher", color: "#0d9488", verified: true, title: "Official AEVION-org package on npm" },
+  "@dosymbek": { label: "personal package", color: "#7c3aed", verified: false, title: "Maintainer-personal scope on npm" },
 };
 
 function scopeOf(name: string): string {
@@ -130,13 +130,14 @@ export default async function SdksPage() {
           >
             {data.sdks.map((sdk) => {
               const scope = scopeOf(sdk.name);
-              const badge = SCOPE_BADGE[scope] ?? { label: scope, color: "#64748b" };
+              const badge = SCOPE_BADGE[scope] ?? { label: scope, color: "#64748b", verified: false, title: scope };
               return (
                 <article
                   key={sdk.id}
                   style={{
                     background: "#fff",
                     border: "1px solid rgba(15,23,42,0.08)",
+                    borderLeft: `4px solid ${badge.color}`,
                     borderRadius: 14,
                     padding: 24,
                     display: "flex",
@@ -148,6 +149,7 @@ export default async function SdksPage() {
                     <code style={{ fontSize: 17, fontWeight: 700, color: "#0f172a" }}>{sdk.name}</code>
                     <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}>v{sdk.version}</span>
                     <span
+                      title={badge.title}
                       style={{
                         fontSize: 11,
                         color: badge.color,

@@ -88,13 +88,17 @@ export default function CatalogExplorerPage() {
   const [responseMeta, setResponseMeta] = useState<{ status: number; ms: number; bytes: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  // apiBase is env-dependent (SSR: backend origin, client: "/api-backend"). Computing
+  // it during render diverged server vs client HTML → hydration mismatch (#418).
+  // Default to the client value so SSR and the first client render agree, then refine
+  // after mount.
+  const [apiBase, setApiBase] = useState<string>("/api-backend");
 
   const query = useMemo(
     () => buildQuery({ statuses, kinds, tags, fields, format }),
     [statuses, kinds, tags, fields, format],
   );
 
-  const apiBase = getApiBase();
   const fullUrl = `${apiBase}/api/aevion/catalog${query}`;
   const curl = `curl -s '${fullUrl}'${format === "json" ? " | jq ." : ""}`;
   const sdk = `import { AevionCatalog } from "@aevion-io/catalog-client";
@@ -106,6 +110,11 @@ const { items } = await cat.list({${
   }${fields.length ? `\n  fields: [${fields.map((s) => `"${s}"`).join(", ")}],` : ""}${
     statuses.length || kinds.length || tags.length || fields.length ? "\n" : ""
   }});`;
+
+  // Resolve the env-dependent API base on the client only (avoids #418 mismatch).
+  useEffect(() => {
+    setApiBase(getApiBase());
+  }, []);
 
   // Load top-20 tags once
   useEffect(() => {
@@ -369,7 +378,7 @@ const { items } = await cat.list({${
                 })()}
               </pre>
               <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>
-                Truncated after 30kb. Open <a href={apiUrl(`/api/aevion/catalog${query}`)} style={{ color: "#0d9488" }} target="_blank" rel="noreferrer">full response</a> for raw payload.
+                Truncated after 30kb. Open <a href={`${apiBase}/api/aevion/catalog${query}`} style={{ color: "#0d9488" }} target="_blank" rel="noreferrer">full response</a> for raw payload.
               </div>
             </div>
 

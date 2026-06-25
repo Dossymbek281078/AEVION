@@ -9,20 +9,24 @@
 
 import { Router, type Request } from "express";
 import { projects } from "../data/projects";
+import { buildPricingResponse } from "../data/modulePricing";
 
 export const aevionHubRouter = Router();
 
-const SUB_HEALTH = [
+// `id` (optional) = registry id from projects.ts, used ONLY for /stats coverage
+// matching. `name` is the display label probed by /health. They diverge where a
+// module's probe label differs from its registry id (e.g. qsign-legacy → "qsign").
+const SUB_HEALTH: { name: string; path: string; id?: string }[] = [
   { name: "pipeline", path: "/api/pipeline/health" },
   { name: "qsign-v2", path: "/api/qsign/v2/health" },
-  { name: "qsign-legacy", path: "/api/qsign/health" },
+  { name: "qsign-legacy", path: "/api/qsign/health", id: "qsign" },
   { name: "quantum-shield", path: "/api/quantum-shield/health" },
   { name: "qright", path: "/api/qright/health" },
   { name: "planet", path: "/api/planet/health" },
-  { name: "bureau", path: "/api/bureau/health" },
+  { name: "bureau", path: "/api/bureau/health", id: "aevion-ip-bureau" },
   { name: "auth", path: "/api/auth/health" },
   { name: "qcontract", path: "/api/qcontract/health" },
-  { name: "qpaynet", path: "/api/qpaynet/health" },
+  { name: "qpaynet", path: "/api/qpaynet/health", id: "qpaynet-embedded" },
   { name: "devhub", path: "/api/devhub/health" },
   { name: "smeta-trainer", path: "/api/smeta-trainer/health" },
   { name: "healthai", path: "/api/healthai/health" },
@@ -43,12 +47,31 @@ const SUB_HEALTH = [
   { name: "z-tide", path: "/api/z-tide/health" },
   { name: "lifebox", path: "/api/lifebox/health" },
   { name: "qchaingov", path: "/api/qchaingov/health" },
+  // Live modules previously missing from the probe list (all confirmed 200 on
+  // prod 2026-06-13). Adding them makes /health monitor the whole platform and
+  // /stats coverage reflect reality. multichat (401, auth-gated) and cyberchess
+  // (404, separate track) intentionally excluded so the hub stays green.
+  { name: "qcoreai", path: "/api/qcoreai/health" },
+  { name: "globus", path: "/api/globus/ping" },
+  { name: "qbuild", path: "/api/build/health" },
+  { name: "qnews", path: "/api/qnews/health" },
+  { name: "qmedia", path: "/api/qmedia/health" },
+  { name: "qai", path: "/api/qai/health" },
+  { name: "qlearn", path: "/api/qlearn/health" },
+  { name: "qstore", path: "/api/qstore/health" },
+  { name: "qevents", path: "/api/qevents/health" },
+  { name: "revenue-hub", path: "/api/revenue/overview" },
+  { name: "constitution", path: "/api/constitution/status" },
 ];
 
-const SUB_OPENAPI = [
-  { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2" },
+// `id` (optional) = registry id, used ONLY for /stats coverage matching (same
+// pattern as SUB_HEALTH). Most other modules genuinely serve no /openapi.json
+// yet (probed 2026-06-13: 404), so they are deliberately NOT listed here — the
+// index must not point at dead specs. Coverage ~49% is truthful, not an artifact.
+const SUB_OPENAPI: { name: string; path: string; title: string; id?: string }[] = [
+  { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2", id: "qsign" },
   { name: "quantum-shield", path: "/api/quantum-shield/openapi.json", title: "AEVION Quantum Shield" },
-  { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet" },
+  { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet", id: "qpaynet-embedded" },
   { name: "qcontract", path: "/api/qcontract/openapi.json", title: "AEVION QContract" },
   { name: "healthai", path: "/api/healthai/openapi.json", title: "AEVION HealthAI" },
   { name: "qtradeoffline", path: "/api/qtradeoffline/openapi.json", title: "AEVION QTradeOffline" },
@@ -620,8 +643,8 @@ aevionHubRouter.get("/stats", (req, res) => {
 
   // Coverage: how many modules have a /health probe wired in SUB_HEALTH,
   // and how many have a self-served /openapi.json wired in SUB_OPENAPI.
-  const healthIds = new Set(SUB_HEALTH.map((h) => h.name));
-  const openapiIds = new Set(SUB_OPENAPI.map((o) => o.name));
+  const healthIds = new Set(SUB_HEALTH.map((h) => h.id ?? h.name));
+  const openapiIds = new Set(SUB_OPENAPI.map((o) => o.id ?? o.name));
   let healthCovered = 0;
   let openapiCovered = 0;
   for (const p of projects) {
@@ -802,6 +825,32 @@ interface SdkStats {
 const SDK_STATS_CACHE = new Map<string, { stats: SdkStats; expiresAt: number }>();
 const SDK_STATS_TTL_MS = 3600 * 1000; // 1h
 
+// Track lastPublished we've already observed for each SDK. When a refresh
+// returns a newer timestamp (or first-ever seen), fire-and-forget the
+// /api/revalidate-sdks webhook so Vercel ISR pages update immediately
+// instead of waiting up to an hour. No-op if REVALIDATE_TOKEN is not set.
+const KNOWN_LAST_PUBLISHED = new Map<string, string>();
+
+function maybeRevalidate(observed: Array<{ name: string; lastPublished: string | null }>): void {
+  const token = process.env.REVALIDATE_TOKEN;
+  if (!token) return;
+  let changed = false;
+  for (const { name, lastPublished } of observed) {
+    if (!lastPublished) continue;
+    if (KNOWN_LAST_PUBLISHED.get(name) !== lastPublished) {
+      KNOWN_LAST_PUBLISHED.set(name, lastPublished);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const url = process.env.REVALIDATE_SDKS_URL ?? "https://aevion.app/api/revalidate-sdks";
+  void fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(4000),
+  }).catch(() => { /* fire-and-forget */ });
+}
+
 async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   const cached = SDK_STATS_CACHE.get(pkgName);
   const now = Date.now();
@@ -823,7 +872,7 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   };
   const [dlRes, regRes] = await Promise.allSettled([
     fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, fetchOpts),
-    fetch(`https://registry.npmjs.org/${enc}`, fetchOpts),
+    fetch(`https://registry.npmjs.org/${enc}`, { ...fetchOpts, method: "HEAD" }),
   ]);
 
   if (dlRes.status === "fulfilled" && dlRes.value.ok) {
@@ -833,10 +882,11 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
     } catch { /* leave null */ }
   }
   if (regRes.status === "fulfilled" && regRes.value.ok) {
-    try {
-      const j = await regRes.value.json() as { modified?: string };
-      if (typeof j.modified === "string") stats.lastPublished = j.modified;
-    } catch { /* leave null */ }
+    const lastMod = regRes.value.headers.get("last-modified");
+    if (lastMod) {
+      const iso = new Date(lastMod).toISOString();
+      if (!Number.isNaN(Date.parse(iso))) stats.lastPublished = iso;
+    }
   }
 
   // Only cache successful fetches for the full hour. If npm was slow this
@@ -845,6 +895,45 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   SDK_STATS_CACHE.set(pkgName, { stats, expiresAt: now + (ok ? SDK_STATS_TTL_MS : 60_000) });
   return stats;
 }
+
+// GET /api/aevion/pricing — single source of truth for module pricing.
+// Returns solo (per-module à la carte) + bundles (4 verticals) + all-access
+// in 4 currencies. See src/data/modulePricing.ts for the design + how to
+// update. Read-only, no auth, safe to cache for ~24h on the CDN edge.
+aevionHubRouter.get("/pricing", (_req, res) => {
+  res.set("Cache-Control", "public, max-age=86400");
+  res.json(buildPricingResponse());
+});
+
+// GET /api/aevion/sdks/diag — diagnostic: probe npm endpoints from this host
+// and return raw outcome (status, headers, error message). Read-only.
+aevionHubRouter.get("/sdks/diag", async (_req, res) => {
+  const enc = encodeURIComponent("@aevion-io/fintech-sdk");
+  const headers = {
+    "Accept": "application/json",
+    "User-Agent": "aevion-hub/1.0 (+https://github.com/Dossymbek281078/AEVION)",
+  };
+  async function probe(url: string, method: "GET" | "HEAD"): Promise<Record<string, unknown>> {
+    const started = Date.now();
+    try {
+      const r = await fetch(url, { method, headers, signal: AbortSignal.timeout(5000) });
+      return {
+        url, method, ok: r.ok, status: r.status,
+        elapsedMs: Date.now() - started,
+        lastModified: r.headers.get("last-modified"),
+        contentLength: r.headers.get("content-length"),
+      };
+    } catch (e) {
+      const err = e as Error;
+      return { url, method, ok: false, elapsedMs: Date.now() - started, errorName: err.name, errorMessage: err.message };
+    }
+  }
+  const [dl, reg] = await Promise.all([
+    probe(`https://api.npmjs.org/downloads/point/last-week/${enc}`, "GET"),
+    probe(`https://registry.npmjs.org/${enc}`, "HEAD"),
+  ]);
+  res.json({ probedAt: new Date().toISOString(), downloads: dl, registry: reg });
+});
 
 aevionHubRouter.get("/sdks", async (req, res) => {
   const sdks = [
@@ -911,6 +1000,7 @@ aevionHubRouter.get("/sdks", async (req, res) => {
       (sum, s) => (sum === null ? null : (s?.downloadsLastWeek ?? 0) + sum),
       0 as number | null,
     );
+    maybeRevalidate(sdks.map((s, i) => ({ name: s.name, lastPublished: stats[i]?.lastPublished ?? null })));
   }
 
   res.set("Cache-Control", "public, max-age=300");

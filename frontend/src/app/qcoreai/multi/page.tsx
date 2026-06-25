@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Types
@@ -5356,7 +5356,7 @@ function RunCard({
                   </button>
                 ) : null}
                 <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
+                  href={`${getClientApiBase()}/api/qcoreai/runs/${run.id}/export?format=md`}
                   target="_blank" rel="noreferrer"
                   style={{
                     padding: "5px 10px", borderRadius: 8,
@@ -5368,7 +5368,7 @@ function RunCard({
                   ⬇ Markdown
                 </a>
                 <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=json`}
+                  href={`${getClientApiBase()}/api/qcoreai/runs/${run.id}/export?format=json`}
                   target="_blank" rel="noreferrer"
                   style={{
                     padding: "5px 10px", borderRadius: 8,
@@ -5380,7 +5380,7 @@ function RunCard({
                   ⬇ JSON
                 </a>
                 <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+                  href={`${getClientApiBase()}/api/qcoreai/runs/${run.id}/export?format=csv`}
                   download
                   style={{
                     padding: "5px 10px", borderRadius: 8,

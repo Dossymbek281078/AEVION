@@ -30,6 +30,11 @@ import {
   nearestAnchor,
   FideFactorBreakdown,
 } from "./ratingCalibration";
+import {
+  loadCalibratedWeights,
+  estimateFideFromCPIWithFit,
+  CalibrationWeights,
+} from "./ratingCalibrationFit";
 
 type Props = {
   open: boolean;
@@ -84,14 +89,35 @@ export default function FideCalibrationPanel({
   // Local mutable copy — slider explorer
   const [metrics, setMetrics] = useState<CPIMetrics>(initialMetrics);
 
+  // Calibrated weights — lazy fetch from /calibration-weights.json. When
+  // present, the panel uses estimateFideFromCPIWithFit (richer model with
+  // up to 11 coefficients + optional floor-fit second pass). When absent
+  // or still loading, falls back to the original hardcoded formula.
+  const [weights, setWeights] = useState<CalibrationWeights | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadCalibratedWeights().then(w => { if (!cancelled) setWeights(w); });
+    return () => { cancelled = true; };
+  }, []);
+
   // Re-sync when external metrics change (e.g. user played new games)
   useEffect(() => {
     setMetrics(initialMetrics);
   }, [initialMetrics]);
 
-  // Run regression
-  const result = useMemo(() => estimateFideFromCPI(metrics), [metrics]);
-  const initialResult = useMemo(() => estimateFideFromCPI(initialMetrics), [initialMetrics]);
+  // Run regression — calibrated when weights load, hardcoded otherwise
+  const result = useMemo(
+    () => weights ? estimateFideFromCPIWithFit(metrics, weights) : estimateFideFromCPI(metrics),
+    [metrics, weights],
+  );
+  const initialResult = useMemo(
+    () => weights ? estimateFideFromCPIWithFit(initialMetrics, weights) : estimateFideFromCPI(initialMetrics),
+    [initialMetrics, weights],
+  );
+
+  // Floor-fit indicator — true when the primary prediction exceeded
+  // weights.floorFit.threshold and the bracket-specialized weights kicked in.
+  const floorFitActive = !!(weights?.floorFit && result.fide >= weights.floorFit.threshold);
 
   const anchor = useMemo(() => nearestAnchor(result.fide), [result.fide]);
   const initialAnchor = useMemo(() => nearestAnchor(initialResult.fide), [initialResult.fide]);
@@ -218,6 +244,48 @@ export default function FideCalibrationPanel({
             <div style={{ fontSize: 12, color: textDim, marginTop: 4 }}>
               {anchor.desc}
             </div>
+            {/* Calibration provenance badge — shows which weights produced
+                the estimate. Hover reveals coefficient count + RMSE + R²
+                + floor-fit activation state. */}
+            {weights && (
+              <div
+                title={
+                  `${t("fide.calib.tooltip_source")}: ${weights.sourceFile?.split(/[\\/]/).pop() || "unknown"}\n` +
+                  `${t("fide.calib.tooltip_samples")}: ${weights.samples}\n` +
+                  `${t("fide.calib.tooltip_features")}: ${Object.keys(weights.coefficients).length}\n` +
+                  (weights.fitStats
+                    ? `${t("fide.calib.tooltip_rmse")}: ±${Math.round(weights.fitStats.rmseElo)} Elo\n` +
+                      `${t("fide.calib.tooltip_r2")}: ${weights.fitStats.r2.toFixed(3)}\n`
+                    : "") +
+                  (weights.floorFit
+                    ? `${t("fide.calib.tooltip_floor")}: ≥${weights.floorFit.threshold} ` +
+                      `(±${Math.round(weights.floorFit.fitStats?.rmseElo ?? 0)} Elo, ` +
+                      `${floorFitActive ? t("fide.calib.floor_active") : t("fide.calib.floor_inactive")})`
+                    : "")
+                }
+                style={{
+                  marginTop: 10,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 8px",
+                  background: floorFitActive ? "#7c3aed22" : `${accent}22`,
+                  border: `1px solid ${floorFitActive ? "#7c3aed" : accent}55`,
+                  borderRadius: 6,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: floorFitActive ? "#7c3aed" : accent,
+                  letterSpacing: 0.3,
+                  textTransform: "uppercase" as const,
+                  cursor: "help",
+                }}
+              >
+                {floorFitActive ? "✦ " : "● "}
+                {t("fide.calib.badge")} · n={weights.samples}
+                {weights.fitStats ? ` · ±${Math.round(weights.fitStats.rmseElo)}` : ""}
+                {floorFitActive ? ` · ${t("fide.calib.floor_active")}` : ""}
+              </div>
+            )}
           </div>
 
           {/* Confidence interval whiskers */}
@@ -330,7 +398,11 @@ export default function FideCalibrationPanel({
           </div>
 
           {SLIDERS.map((s) => {
-            const val = metrics[s.key];
+            // CPIMetrics has optional fields (medianCpLoss, cpLossStd) so TS
+            // widens metrics[s.key] to number | undefined even though every
+            // SLIDERS entry references a required key. Default to 0 to satisfy
+            // strict null checks without narrowing SliderConfig's key type.
+            const val = metrics[s.key] ?? 0;
             const displayVal = s.step < 1
               ? val.toFixed(2)
               : Math.round(val).toString();

@@ -29,8 +29,17 @@ export function getProviders(): Provider[] {
     {
       id: "anthropic",
       name: "Claude (Anthropic)",
-      models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
-      defaultModel: "claude-sonnet-4-20250514",
+      // claude-opus-4-8 = рабочий конь для кодовых задач; claude-fable-5 = топ-тир
+      // под тяжёлое рассуждение (дороже: $10/$50 vs $5/$25). Старые id оставлены
+      // для совместимости. ВАЖНО: fable-5 / opus-4-7 / opus-4-8 НЕ принимают temperature.
+      models: [
+        "claude-opus-4-8",
+        "claude-fable-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-20250514",
+        "claude-haiku-4-5-20251001",
+      ],
+      defaultModel: process.env.QCOREAI_ANTHROPIC_MODEL || "claude-opus-4-8",
       envKey: "ANTHROPIC_API_KEY",
       configured: !!process.env.ANTHROPIC_API_KEY?.trim(),
     },
@@ -109,6 +118,18 @@ export type CallResult = {
   usage: any;
 };
 
+/**
+ * Fable 5 / Opus 4.7 / 4.8 убрали sampling-параметры: temperature, top_p, top_k
+ * возвращают 400. Для этих моделей temperature НЕ отправляем (иначе chat_failed).
+ */
+function anthropicRejectsSampling(model: string): boolean {
+  return (
+    model.startsWith("claude-fable-5") ||
+    model.startsWith("claude-opus-4-7") ||
+    model.startsWith("claude-opus-4-8")
+  );
+}
+
 async function callAnthropic(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -119,9 +140,9 @@ async function callAnthropic(messages: ChatMessage[], model: string, temperature
   const body: any = {
     model,
     max_tokens: 4096,
-    temperature,
     messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
   };
+  if (!anthropicRejectsSampling(model)) body.temperature = temperature;
   if (systemMsg) body.system = systemMsg.content;
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -281,10 +302,10 @@ async function* streamAnthropic(
   const body: any = {
     model,
     max_tokens: 4096,
-    temperature,
     stream: true,
     messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
   };
+  if (!anthropicRejectsSampling(model)) body.temperature = temperature;
   if (systemMsg) body.system = systemMsg.content;
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {

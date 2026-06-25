@@ -28,6 +28,10 @@ export interface PaymentIntentInput {
   /** Description shown on hosted checkout page. */
   description: string;
   email?: string | null;
+  /** Extra key/values echoed back in the webhook's custom_data (e.g. the chosen
+   *  module for a Lite subscription). Provider-specific: LemonSqueezy forwards
+   *  it on subscription events. */
+  customData?: Record<string, string>;
 }
 
 export interface PaymentIntent {

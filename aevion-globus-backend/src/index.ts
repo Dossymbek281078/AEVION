@@ -15,15 +15,22 @@ import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
+import { entitlementsRouter } from "./routes/entitlements";
+import { requireModule } from "./lib/planGate";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
+import { attachConstitutionCollab } from "./services/constitution/collab";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
+import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
+import { payboxWebhookRouter } from "./routes/payboxWebhook";
+import { paypalWebhookRouter } from "./routes/paypalWebhook";
 import { healthaiRouter } from "./routes/healthai";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
@@ -41,8 +48,20 @@ import cyberchessAnticheatRouter from "./routes/cyberchessAnticheat";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
+import { i18nRouter } from "./routes/i18n";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { planetConstitutionRouter } from "./routes/planetConstitution";
+import { constitutionAiRouter } from "./routes/constitutionAi";
+import { constitutionPublicRouter } from "./routes/constitutionPublic";
+import { constitutionPdfRouter } from "./routes/constitutionPdf";
+import { constitutionProRouter } from "./routes/constitutionPro";
+import { constitutionAdminRouter, constitutionTelemetry, constitutionBanGate } from "./routes/constitutionAdmin";
+import { constitutionFunnelTrackRouter, constitutionFunnelAdminRouter } from "./routes/constitutionFunnel";
+import { constitutionWaitlistRouter, constitutionWaitlistAdminRouter } from "./routes/constitutionWaitlist";
+import { constitutionStatusRouter, startUptimeChecker } from "./routes/constitutionStatus";
+import { constitutionCheckoutRouter } from "./routes/constitutionCheckout";
+import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
@@ -109,6 +128,18 @@ app.use(cors());
 // /api/checkout/webhook, etc.). All other handlers ignore rawBody.
 app.use(express.json({
   limit: "10mb",
+  verify: (req, _res, buf) => {
+    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
+// Gumroad pings arrive as application/x-www-form-urlencoded. express.json
+// ignores that content-type, so without this parser req.rawBody is never
+// populated for form posts and /api/gumroad/webhook reads an empty body
+// (→ every real ping silently ignored as no_email). Same verify hook stashes
+// the raw bytes for the provider's optional HMAC signature check.
+app.use(express.urlencoded({
+  extended: false,
+  limit: "1mb",
   verify: (req, _res, buf) => {
     (req as unknown as { rawBody?: Buffer }).rawBody = buf;
   },
@@ -210,7 +241,10 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 app.use("/api/status", statusRouter);
 
-app.use("/api/qcoreai", qcoreaiRouter);
+// Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
+// (see lib/planGate.ts). qcoreai is the flagship gated module (AI compute =
+// real OPEX); enforcement stays off until PAYWALL_MODULES is set on Railway.
+app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);
@@ -223,7 +257,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.7.1",
+      version: "0.8.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -416,12 +450,12 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Provisioning subsystem health: storage path, email mode" },
       },
       // Revenue Hub
-      "/api/revenue/health": { get: { summary: "Revenue Hub health — Stripe/YouTube/Twitch config status" } },
+      "/api/revenue/health": { get: { summary: "Revenue Hub health — Gumroad (primary)/Paddle/YouTube/Twitch config status" } },
       "/api/revenue/apps": { get: { summary: "List 12 AEVION apps with monetization channels" } },
       "/api/revenue/apps/{appId}": { get: { summary: "Single app revenue config + channel stubs" } },
       "/api/revenue/overview": { get: { summary: "Global monetization overview — channel coverage, app counts" } },
-      "/api/revenue/stripe/balance": { get: { summary: "Stripe balance (KZT + USD)" } },
-      "/api/revenue/stripe/recent": { get: { summary: "Recent Stripe payments grouped by AEVION app" } },
+      "/api/revenue/gumroad/balance": { get: { summary: "Gumroad net balance (gross - fees, USD) — live processor" } },
+      "/api/revenue/gumroad/recent": { get: { summary: "Recent Gumroad sales grouped by AEVION app" } },
       "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
       "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
       "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
@@ -500,12 +534,33 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       // Coach — AI coaching / goal-tracking
       "/api/coach/health": { get: { summary: "Coach health + provider config", security: [] } },
+      "/api/coach/chat": {
+        post: { summary: "Anthropic chat proxy — stateless coaching reply (public)", security: [] },
+      },
+      "/api/coach/chat/stream": {
+        post: { summary: "Anthropic chat proxy — streamed SSE coaching reply (public)", security: [] },
+      },
       "/api/coach/sessions": {
         get: { summary: "List user coaching sessions (Bearer required)" },
-        post: { summary: "Create new session with goal (Bearer required)" },
+      },
+      "/api/coach/sessions/start": {
+        post: { summary: "Start a coaching session (Bearer required)" },
       },
       "/api/coach/sessions/{id}": {
-        get: { summary: "Get session with conversation history (Bearer required)" },
+        get: { summary: "Get a single coaching session (Bearer required)" },
+      },
+      "/api/coach/sessions/{id}/end": {
+        post: { summary: "End an active coaching session (Bearer required)" },
+      },
+      "/api/coach/goals": {
+        get: { summary: "List user coaching goals (Bearer required)" },
+        post: { summary: "Create a coaching goal (Bearer required)" },
+      },
+      "/api/coach/goals/{id}/complete": {
+        post: { summary: "Mark a coaching goal complete (Bearer required)" },
+      },
+      "/api/coach/goals/{id}": {
+        delete: { summary: "Delete a coaching goal (Bearer required)" },
       },
       // Multichat — multi-agent chat (fully Bearer-gated on prod)
       "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },
@@ -659,6 +714,170 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Generate AI wellness plan — rule-based + LLM-enhanced (Anthropic/OpenAI/Gemini chain)" },
       },
       "/api/healthai/check": { post: { summary: "Symptom check + rule-based advice" } },
+      // Universal Search
+      "/api/search/health": { get: { summary: "Search service health — sources list", security: [] } },
+      "/api/search": {
+        get: {
+          summary: "Universal Search — queries QStore/QLearn/QNews/QEvents/QJobs/QRight in parallel",
+          security: [],
+          parameters: [
+            { name: "q", in: "query", required: true, schema: { type: "string", minLength: 2, maxLength: 100 } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+            { name: "types", in: "query", schema: { type: "string", description: "Comma-separated: qstore,qlearn,qnews,qevents,qjobs,qright" } },
+          ],
+        },
+      },
+      // Paddle Billing v2
+      "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
+      "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
+      "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
+      "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
+      "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
+      "/api/paddle/checkout": {
+        post: {
+          summary: "Create Paddle transaction → returns checkout URL",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
+        },
+      },
+      "/api/paddle/webhook": {
+        post: {
+          summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
+          security: [],
+        },
+      },
+      "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
+      "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+      // Lemon Squeezy — recurring subscription webhook
+      "/api/lemonsqueezy/webhook": {
+        post: {
+          summary:
+            "Lemon Squeezy subscription webhook — verifies x-signature (HMAC-SHA256), maps subscription_* events to plan provisioning",
+          description:
+            "Activation events (subscription_created, subscription_updated, subscription_resumed, subscription_unpaused) call provisionSubscription: All-Access variant → 'business' tier, any bundle variant → 'pro', unrecognised/unset variant → 'pro'. Deactivation events (subscription_cancelled, subscription_expired, subscription_paused) write a tierId:'free' downgrade record. Other subscription_* events are acknowledged but ignored. Signature is HMAC-SHA256 of the raw body keyed by LEMON_SQUEEZY_WEBHOOK_SECRET, compared to the x-signature header; when the secret is unset the route is a 200 no-op stub. Delivery is at-least-once — handler dedups on subscription id + event + timestamp.",
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    meta: {
+                      type: "object",
+                      properties: {
+                        event_name: {
+                          type: "string",
+                          enum: [
+                            "subscription_created",
+                            "subscription_updated",
+                            "subscription_resumed",
+                            "subscription_unpaused",
+                            "subscription_cancelled",
+                            "subscription_expired",
+                            "subscription_paused",
+                          ],
+                        },
+                        custom_data: {
+                          type: "object",
+                          properties: {
+                            reference: { type: "string", example: "bundle:fintech" },
+                            email: { type: "string", format: "email" },
+                          },
+                        },
+                      },
+                      required: ["event_name"],
+                    },
+                    data: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        attributes: {
+                          type: "object",
+                          properties: {
+                            user_email: { type: "string", format: "email" },
+                            variant_id: { type: "integer" },
+                            status: { type: "string", example: "active" },
+                            renews_at: { type: "string", format: "date-time", nullable: true },
+                            ends_at: { type: "string", format: "date-time", nullable: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  required: ["meta"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Acknowledged. Body indicates the action taken: { ok, action: 'activated'|'downgraded', tierId? } | { ok, ignored } | { ok, deduped } | { ok, mode: 'stub' }",
+            },
+            "400": { description: "Body is not JSON, or subscription event missing user_email" },
+            "401": { description: "x-signature header missing or HMAC mismatch" },
+            "500": { description: "Provisioning failed — LS will retry (dedup entry released)" },
+          },
+        },
+      },
+      // Gumroad — platform-wide ping webhook (form-encoded)
+      "/api/gumroad/webhook": {
+        get: {
+          summary: "Gumroad webhook liveness probe — returns JSON manifest (real Gumroad pings come on POST)",
+          security: [],
+          responses: { "200": { description: "Tiny JSON: { ok, endpoint, accepts, signed, info }" } },
+        },
+        post: {
+          summary:
+            "Gumroad ping webhook (application/x-www-form-urlencoded) — maps sale/refund/cancel to plan provisioning",
+          description:
+            "Gumroad sends form-encoded pings for all AEVION products. product_id is matched against GUMROAD_PRODUCT_<ID>=<reference> env to pick the tier (all-access/business → 'business', else 'pro'); unmatched falls back to constitution-pro. A paid sale calls provisionSubscription (writes subscriptions.jsonl, same store /me/plan and the Pro gates read); refunded/disputed/subscription_cancelled/subscription_failed write a tierId:'free' downgrade record. Missing email → ignored. Optional HMAC: if GUMROAD_WEBHOOK_SECRET is set, x-gumroad-signature (or a signature field) must match HMAC-SHA256 of the raw body. Dedup on sale_id + status.",
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/x-www-form-urlencoded": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    sale_id: { type: "string" },
+                    email: { type: "string", format: "email" },
+                    product_id: { type: "string" },
+                    short_product_id: { type: "string" },
+                    is_recurring_billing: { type: "string", example: "true" },
+                    refunded: { type: "string", example: "false" },
+                    disputed: { type: "string", example: "false" },
+                    subscription_cancelled: { type: "string" },
+                    subscription_failed: { type: "string" },
+                    sale_timestamp: { type: "string", format: "date-time" },
+                  },
+                  required: ["email"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Acknowledged: { ok, action: 'activated'|'downgraded', tierId? } | { ok, ignored } | { ok, deduped }",
+            },
+            "400": { description: "Webhook body could not be parsed" },
+            "401": { description: "Signature mismatch (GUMROAD_WEBHOOK_SECRET set and x-gumroad-signature invalid)" },
+            "500": { description: "Provisioning failed — dedup entry released for retry" },
+          },
+        },
+      },
+      // Pricing — subscription self-service
+      "/api/pricing/subscription/me": {
+        get: { summary: "Latest subscription for authenticated user (JWT)" },
+      },
+      "/api/pricing/subscriptions/purge": {
+        post: {
+          summary: "Admin: purge all subscriptions.jsonl records by email (GDPR / test cleanup)",
+          description: "Requires X-Admin-Token. Body: { email }. Atomic .tmp+rename rewrite. Returns { ok, email, removed, remaining }.",
+        },
+      },
+      "/api/pricing/cases": { get: { summary: "Customer case stories with ROI metrics" } },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,
     },
@@ -706,15 +925,19 @@ app.use("/api/healthai", healthaiRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
+// Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
+app.use("/api", entitlementsRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
 app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
-app.use("/api/pricing", pricingRouter);
-app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/pricing/events", eventsRouter);
+app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
+app.use("/api/gumroad", gumroadWebhookRouter);
+app.use("/api/paybox", payboxWebhookRouter);
+app.use("/api/paypal", paypalWebhookRouter);
 // ==========================
 // Auth
 // ==========================
@@ -726,12 +949,29 @@ app.use("/api/auth/oauth", authOauthRouter);
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
 app.use("/api/planet", planetPayoutsRouter);
+// Telemetry + ban-gate cover the entire constitution surface
+app.use(["/api/constitution", "/api/planet/constitution-artifacts"], constitutionTelemetry);
+app.use(["/api/constitution", "/api/planet/constitution-artifacts"], constitutionBanGate);
+app.use("/api/admin/constitution", constitutionAdminRouter);
+app.use("/api/admin/constitution/funnel", constitutionFunnelAdminRouter);
+app.use("/api/constitution/funnel", constitutionFunnelTrackRouter);
+app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
+app.use("/api/admin/constitution/waitlist", constitutionWaitlistAdminRouter);
+app.use("/api/constitution/status", constitutionStatusRouter);
+app.use("/api/constitution/checkout", constitutionCheckoutRouter);
+app.use("/api/planet/constitution-artifacts", planetConstitutionRouter);
+app.use("/api/constitution", constitutionAiRouter);
+app.use("/api/constitution", constitutionPdfRouter);
+app.use("/api/constitution", constitutionProRouter);
+app.use("/api/constitution/public", constitutionPublicRouter);
+app.use("/api/planet/constitution-artifacts", planetConstitutionSocialRouter);
 app.use("/api/awards", awardsRouter);
 
 // ==========================
 // AEVION Hub — composite cross-product health + OpenAPI index
 // ==========================
 app.use("/api/aevion", aevionHubRouter);
+app.use("/api/i18n", i18nRouter);
 
 // Internal: synthetic webhook dispatcher used by /bank/diagnostics.
 app.use("/api/bank", bankTestRouter);
@@ -861,6 +1101,8 @@ const httpServer = app.listen(PORT, () => {
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
 // but lets clients interject mid-run guidance on the same connection.
 attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");
+attachConstitutionCollab(httpServer, "/api/constitution/collab");
+startUptimeChecker(PORT);
 
 // QCoreAI scheduler — polls for due scheduled batches every minute.
 startScheduler();

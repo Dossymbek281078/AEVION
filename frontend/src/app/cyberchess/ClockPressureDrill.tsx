@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useCcI18n } from "./i18n";
 
 const PIECE_MAP: Record<string, string> = {
   K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘",P:"♙",
@@ -57,6 +58,7 @@ function squareToUci(row: number, col: number): string {
 }
 
 export default function ClockPressureDrill({ open, onClose, puzzles, surface1, surface2, border, text, textDim, accent }: Props) {
+  const { t } = useCcI18n();
   const [puzzleIdx, setPuzzleIdx] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
   const [selected, setSelected] = useState<string | null>(null);
@@ -217,21 +219,21 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
           </div>
           <div style={{ textAlign: "center", padding: "12px 0" }}>
             <div style={{ fontSize: 56, fontWeight: 900, color: accent, lineHeight: 1 }}>{score}<span style={{ fontSize: 24, color: textDim }}>/10</span></div>
-            <div style={{ fontSize: 14, color: textDim, marginTop: 6 }}>Правильных ответов</div>
+            <div style={{ fontSize: 14, color: textDim, marginTop: 6 }}>{t("drill.correct_count")}</div>
           </div>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <div style={{ background: surface2, borderRadius: 10, padding: "10px 18px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: finalAccuracy >= 70 ? "#22c55e" : finalAccuracy >= 40 ? "#eab308" : "#ef4444" }}>{finalAccuracy}%</div>
-              <div style={{ fontSize: 11, color: textDim }}>Точность</div>
+              <div style={{ fontSize: 11, color: textDim }}>{t("drill.accuracy")}</div>
             </div>
             <div style={{ background: surface2, borderRadius: 10, padding: "10px 18px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: text }}>🔥{bestStreak}</div>
-              <div style={{ fontSize: 11, color: textDim }}>Лучшая серия</div>
+              <div style={{ fontSize: 11, color: textDim }}>{t("drill.best_streak")}</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 4 }}>
-            <button onClick={handleRestart} style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Заново</button>
-            <button onClick={onClose} style={{ background: surface2, color: text, border: `1px solid ${border}`, borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Закрыть</button>
+            <button onClick={handleRestart} style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{t("drill.restart")}</button>
+            <button onClick={onClose} style={{ background: surface2, color: text, border: `1px solid ${border}`, borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{t("common.close")}</button>
           </div>
         </div>
       </div>
@@ -242,8 +244,8 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
     return (
       <div style={overlayStyle} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
         <div style={boxStyle}>
-          <div style={{ color: textDim, textAlign: "center", padding: 32 }}>Пазлы не загружены. Загрузите базу пазлов.</div>
-          <button onClick={onClose} style={{ background: surface2, color: text, border: `1px solid ${border}`, borderRadius: 8, padding: "8px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer", alignSelf: "center" }}>Закрыть</button>
+          <div style={{ color: textDim, textAlign: "center", padding: 32 }}>{t("drill.no_puzzles")}</div>
+          <button onClick={onClose} style={{ background: surface2, color: text, border: `1px solid ${border}`, borderRadius: 8, padding: "8px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer", alignSelf: "center" }}>{t("common.close")}</button>
         </div>
       </div>
     );
@@ -279,7 +281,7 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
         {/* Puzzle meta */}
         {currentPuzzle.theme && (
           <div style={{ fontSize: 11, color: textDim }}>
-            Тема: <span style={{ color: accent, fontWeight: 700 }}>{currentPuzzle.theme}</span>
+            {t("drill.theme")}: <span style={{ color: accent, fontWeight: 700 }}>{currentPuzzle.theme}</span>
             <span style={{ marginLeft: 10 }}>#{puzzleIdx + 1}/{Math.min(PUZZLES_PER_SESSION, session.length)}</span>
           </div>
         )}
@@ -339,11 +341,11 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
 
         {/* Status message */}
         <div style={{ textAlign: "center", fontWeight: 700, fontSize: 14, minHeight: 20, marginTop: 8 }}>
-          {result === "idle" && !selected && <span style={{ color: textDim }}>Выберите фигуру и ход</span>}
-          {result === "idle" && selected && <span style={{ color: accent }}>Выбрано: {selected} → кликните цель</span>}
-          {result === "correct" && <span style={{ color: "#22c55e" }}>✓ Верно! +1</span>}
-          {result === "wrong" && <span style={{ color: "#ef4444" }}>✗ Неверно. Правильно: {currentPuzzle.solution}</span>}
-          {result === "timeout" && <span style={{ color: "#ef4444" }}>⏱ Время вышло! Ответ: {currentPuzzle.solution}</span>}
+          {result === "idle" && !selected && <span style={{ color: textDim }}>{t("drill.choose_piece")}</span>}
+          {result === "idle" && selected && <span style={{ color: accent }}>{t("drill.selected")}: {selected} {t("drill.click_target")}</span>}
+          {result === "correct" && <span style={{ color: "#22c55e" }}>{t("drill.correct")}</span>}
+          {result === "wrong" && <span style={{ color: "#ef4444" }}>{t("drill.wrong")} {currentPuzzle.solution}</span>}
+          {result === "timeout" && <span style={{ color: "#ef4444" }}>{t("drill.timeout")} {currentPuzzle.solution}</span>}
         </div>
       </div>
     </div>

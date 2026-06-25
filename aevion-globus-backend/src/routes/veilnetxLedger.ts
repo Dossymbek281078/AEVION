@@ -35,6 +35,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { canonicalJson } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
 
 export const veilnetxLedgerRouter = Router();
@@ -152,7 +153,9 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const safeMeta = (meta && typeof meta === "object") ? meta : {};
-    const metaJson = JSON.stringify(safeMeta);
+    // Canonical (key-sorted) JSON so the hash is independent of Postgres JSONB
+    // key reordering — keeps POST insert, /chain/verify and rebuild script in sync.
+    const metaJson = canonicalJson(safeMeta);
 
     // Serialize head-read + insert via Postgres advisory lock — same key as
     // lib/ecosystemEvents.ts so HTTP-path and lib-path emits never race.
@@ -254,7 +257,7 @@ veilnetxLedgerRouter.get("/entries/:id", readLimit, async (req, res) => {
       blindedTo: String(row.blindedTo),
       amountCents: String(row.amountCents),
       currency: String(row.currency),
-      metaJson: JSON.stringify(row.meta ?? {}),
+      metaJson: canonicalJson(row.meta ?? {}),
       createdAt: new Date(String(row.createdAt)).toISOString(),
     });
     res.json({ entry: row, integrity: recomputed === row.entryHash ? "ok" : "broken", recomputedHash: recomputed });
@@ -333,7 +336,7 @@ veilnetxLedgerRouter.get("/chain/verify", readLimit, async (_req, res) => {
         blindedTo: String(row.blindedTo),
         amountCents: String(row.amountCents),
         currency: String(row.currency),
-        metaJson: JSON.stringify(row.meta ?? {}),
+        metaJson: canonicalJson(row.meta ?? {}),
         createdAt: (row.createdAt instanceof Date ? row.createdAt : new Date(String(row.createdAt))).toISOString(),
       });
       if (recomputed !== row.entryHash || row.prevHash !== prevHash) {

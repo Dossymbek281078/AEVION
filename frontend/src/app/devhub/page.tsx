@@ -435,7 +435,7 @@ export default function DevHubPage() {
           {/* Share form */}
           <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-white mb-3">
-              Поделиться сниппетом
+              Share a snippet
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input

@@ -213,6 +213,79 @@ eventsRouter.get("/summary", (req, res) => {
 });
 
 /**
+ * GET /api/pricing/events/aggregate
+ * Time-bucketed counts. Защищён ADMIN_TOKEN.
+ *
+ * Параметры:
+ *   - period (hour|day, default day) — размер бакета
+ *   - groupBy (source|type|tier|industry, default type) — измерение разбивки
+ *   - hours (1..720, default 168) — окно
+ *
+ * Ответ: { period, groupBy, windowHours, buckets: [{ bucket, total, counts: {<dim>: n} }] }
+ */
+eventsRouter.get("/aggregate", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (required) {
+    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+    if (got !== required) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+  }
+
+  const period = req.query.period === "hour" ? "hour" : "day";
+  const GROUP_DIMS = new Set(["source", "type", "tier", "industry"]);
+  const groupBy = GROUP_DIMS.has(String(req.query.groupBy)) ? String(req.query.groupBy) : "type";
+  const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10) || 168, 1), 720);
+  const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
+
+  if (!existsSync(EVENTS_FILE)) {
+    return res.json({ period, groupBy, windowHours: sinceHours, buckets: [] });
+  }
+
+  let content = "";
+  try {
+    content = readFileSync(EVENTS_FILE, "utf8");
+  } catch (e) {
+    console.error("[events/aggregate] read failed", e);
+    return res.status(500).json({ error: "read_error" });
+  }
+
+  // bucketKey: ISO timestamp truncated to the hour or the day
+  function bucketKey(iso: string): string {
+    return period === "hour" ? iso.slice(0, 13) + ":00:00Z" : iso.slice(0, 10) + "T00:00:00Z";
+  }
+
+  const buckets = new Map<string, { total: number; counts: Record<string, number> }>();
+  const lines = content.split("\n").filter((l) => l.trim().length > 0);
+
+  for (const line of lines) {
+    let ev: AnalyticsEvent;
+    try {
+      ev = JSON.parse(line) as AnalyticsEvent;
+    } catch {
+      continue;
+    }
+    if (!ev.ts || new Date(ev.ts).getTime() < sinceMs) continue;
+    const key = bucketKey(ev.ts);
+    let b = buckets.get(key);
+    if (!b) {
+      b = { total: 0, counts: {} };
+      buckets.set(key, b);
+    }
+    b.total += 1;
+    const dim = (ev as unknown as Record<string, unknown>)[groupBy];
+    const dimVal = typeof dim === "string" && dim.length > 0 ? dim : "(none)";
+    b.counts[dimVal] = (b.counts[dimVal] ?? 0) + 1;
+  }
+
+  const sorted = [...buckets.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([bucket, v]) => ({ bucket, total: v.total, counts: v.counts }));
+
+  res.json({ period, groupBy, windowHours: sinceHours, buckets: sorted });
+});
+
+/**
  * GET /api/pricing/events/recent
  * Последние N событий целиком. Защищён ADMIN_TOKEN.
  */

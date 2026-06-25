@@ -48,6 +48,9 @@ const CRITICAL_PREFIXES = [
   "/api/revenue",
   "/api/planet",
   "/api/modules",
+  "/api/search",
+  "/api/paddle",
+  "/api/aevion",
 ];
 
 // Informational — checked but missing doesn't fail the smoke.

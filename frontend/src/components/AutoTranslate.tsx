@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useI18n, translations, type Lang } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 
 const dict: Record<string, string> = {
   "Trust \u00b7 IP \u00b7 Globus": "\u0414\u043e\u0432\u0435\u0440\u0438\u0435 \u00b7 IP \u00b7 Globus",
@@ -271,91 +272,255 @@ const dict: Record<string, string> = {
   "TypeScript": "TypeScript",
 };
 
-// Cache of sorted keys per dict to avoid re-sorting on every render
-const sortedRuKeys = Object.keys(dict).sort((a, b) => b.length - a.length);
+// Build SOURCE→TARGET reverse map from the structured translations dict.
+// Cached per (source, target) pair — most pages have RU-literal JSX (no t()
+// hook), so RU→EN and RU→KK matter just as much as EN→*. Without RU as a
+// source, ~515 RU-literal pages silently fail to translate when user picks
+// EN or KK from the switcher.
+const langDictCache = new Map<string, { d: Record<string, string>; k: string[] }>();
 
-// Build EN→LANG reverse map from the structured translations dict.
-// Cached per language — computed once, reused on subsequent renders.
-const langDictCache = new Map<Lang, { d: Record<string, string>; k: string[] }>();
+type SourceLang = "en" | "ru";
 
-function getLangDict(lang: Lang): { d: Record<string, string>; k: string[] } {
-  if (langDictCache.has(lang)) return langDictCache.get(lang)!;
+function getLangDict(target: Lang, source: SourceLang = "en"): { d: Record<string, string>; k: string[] } {
+  const cacheKey = `${source}->${target}`;
+  if (langDictCache.has(cacheKey)) return langDictCache.get(cacheKey)!;
   const tbl = translations as Record<string, Record<string, string>>;
-  const enTbl = tbl["en"] ?? {};
-  const langTbl = tbl[lang] ?? {};
+  const srcTbl = tbl[source] ?? {};
+  const langTbl = tbl[target] ?? {};
   const d: Record<string, string> = {};
-  for (const key of Object.keys(enTbl)) {
-    const en = enTbl[key];
+  for (const key of Object.keys(srcTbl)) {
+    const src = srcTbl[key];
     const tr = langTbl[key];
-    if (en && tr && en !== tr) d[en] = tr;
+    if (src && tr && src !== tr) d[src] = tr;
   }
   const k = Object.keys(d).sort((a, b) => b.length - a.length);
   const entry = { d, k };
-  langDictCache.set(lang, entry);
+  langDictCache.set(cacheKey, entry);
   return entry;
 }
 
-function translateText(text: string, d: Record<string, string>, keys: string[]): string {
-  // Walk left-to-right, at each position try longest key match; consume matched
-  // region so later shorter keys can't corrupt it (e.g., "TypeScript" must not
-  // be re-matched as "Type" + "Script"). Keys are pre-sorted longest-first.
-  let result = "";
-  let i = 0;
-  const n = text.length;
-  while (i < n) {
-    let matched = false;
-    for (const k of keys) {
-      if (text.startsWith(k, i)) {
-        result += d[k];
-        i += k.length;
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      result += text[i];
-      i++;
-    }
+// Inverted RU→EN dict from the hardcoded EN→RU dict at the top of this
+// file. That dict was authored for EN-literal pages (legacy assumption);
+// reusing it inverted gives ~200 free RU→EN pairs covering common UI words.
+// Built lazily once on first lang switch.
+let ruToEnInlineCache: { d: Record<string, string>; k: string[] } | null = null;
+function getRuToEnInline(): { d: Record<string, string>; k: string[] } {
+  if (ruToEnInlineCache) return ruToEnInlineCache;
+  const d: Record<string, string> = {};
+  for (const en of Object.keys(dict)) {
+    const ru = dict[en];
+    if (ru && en && ru !== en && !(ru in d)) d[ru] = en;
   }
-  return result;
+  const k = Object.keys(d).sort((a, b) => b.length - a.length);
+  ruToEnInlineCache = { d, k };
+  return ruToEnInlineCache;
 }
 
-function walk(node: Node, d: Record<string, string>, keys: string[]) {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const o = node.textContent || ""; if (!o.trim()) return;
-    const t = translateText(o, d, keys); if (t !== o) node.textContent = t;
-    return;
+/* ──────────────────────────────────────────────────────────────────────────
+   API-backed DOM translation.
+
+   The dictionaries above are an INSTANT seed (exact full-string match) so common
+   UI flips with zero latency. Everything else — the unique prose of ~500
+   RU/EN-literal pages — is translated live via POST /api/i18n/translate (DeepL,
+   or Claude for Kazakh) and cached in localStorage, so each unique string×language
+   is paid for once. Replaces the old substring walker, which could only ever
+   cover dictionary phrases and left the rest of every page mixed.
+   ────────────────────────────────────────────────────────────────────────── */
+
+// Instant seed map (original -> translation) for the active target language.
+function buildSeedMap(lang: Lang): Record<string, string> {
+  if (lang === "ru") {
+    return { ...getLangDict("ru", "en").d, ...dict }; // en->ru structured + hardcoded EN->RU
   }
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    const tag = (node as Element).tagName;
-    if (["SCRIPT","STYLE","TEXTAREA","INPUT","CODE","PRE","SVG"].includes(tag)) return;
-    const el = node as HTMLElement;
-    for (const a of ["placeholder","title","aria-label"]) {
-      const v = el.getAttribute(a); if (v) { const t = translateText(v, d, keys); if (t !== v) el.setAttribute(a, t); }
-    }
+  if (lang === "en") {
+    return { ...getRuToEnInline().d, ...getLangDict("en", "ru").d }; // ru->en
   }
-  node.childNodes.forEach(c => walk(c, d, keys));
+  return { ...getLangDict(lang, "en").d, ...getLangDict(lang, "ru").d }; // en/ru -> target
 }
 
-export function AutoTranslate({ children }: { children: React.ReactNode }) {
+const LS_PREFIX = "aevion_tr_v1_";
+const LS_CAP = 8000;
+
+function loadCache(lang: Lang): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + lang);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    return o && typeof o === "object" ? (o as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+function saveCache(lang: Lang, map: Record<string, string>) {
+  try {
+    const keys = Object.keys(map);
+    const out =
+      keys.length > LS_CAP
+        ? Object.fromEntries(keys.slice(keys.length - LS_CAP).map((k) => [k, map[k]]))
+        : map;
+    localStorage.setItem(LS_PREFIX + lang, JSON.stringify(out));
+  } catch {
+    /* quota exceeded — in-memory cache still works */
+  }
+}
+
+// Kazakh-specific Cyrillic letters — their presence means the string is already KK.
+const KK_RE = /[ӘәҒғҚқҢңӨөҰұҮүІіҺһ]/;
+const LAT_RE = /[A-Za-z]{2,}/;
+const CYR_RE = /[Ѐ-ӿ]/;
+const LETTER_RE = /[A-Za-zЀ-ӿ]/;
+
+// Whether a visible string still needs translation for the target — the script
+// heuristic skips strings already in the target language (saves API quota).
+function shouldTranslate(s: string, lang: Lang): boolean {
+  if (s.length < 2 || !LETTER_RE.test(s)) return false;
+  if (/^https?:\/\//i.test(s) || /^\S+@\S+\.\S+$/.test(s)) return false; // url / email
+  const lat = LAT_RE.test(s);
+  const cyr = CYR_RE.test(s);
+  if (lang === "en") return cyr; // cyrillic -> EN; latin already EN
+  if (lang === "ru") return lat && !cyr; // pure latin -> RU; cyrillic already RU-ish
+  if (lang === "kk") return (lat || cyr) && !KK_RE.test(s); // EN/RU -> KK; skip already-KK
+  return lat || cyr; // other targets: translate EN/RU sources
+}
+
+const WS_LEAD = /^\s*/;
+const WS_TRAIL = /\s*$/;
+const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
+
+export function AutoTranslate({ children, observe = true }: { children: React.ReactNode; observe?: boolean }) {
   const { lang } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
-  const obs = useRef<MutationObserver | null>(null);
+
+  // observe=false → один стартовый проход перевода, БЕЗ live-MutationObserver.
+  // Нужно для full-app оболочек (CyberChess и т.п.): там DOM меняется постоянно
+  // (часы тикают, доска ходит, eval стримит), и подписка observer на весь субтри
+  // с characterData гоняла walk() синхронно на каждый ход → «ходы буксуют».
+  // Эти приложения RU-нативные и имеют свой LocaleSwitcher, live-перевод им не нужен.
   useEffect(() => {
-    if (!ref.current || lang === "en") return;
-    // RU: use the comprehensive hardcoded dict; other langs: use reverse map from translations
-    const activeDict = lang === "ru" ? dict : getLangDict(lang).d;
-    const activeKeys = lang === "ru" ? sortedRuKeys : getLangDict(lang).k;
-    if (activeKeys.length === 0) return;
-    walk(ref.current, activeDict, activeKeys);
-    obs.current = new MutationObserver(ms => {
-      for (const m of ms) {
-        if (m.type === "childList") m.addedNodes.forEach(n => walk(n, activeDict, activeKeys));
-        else if (m.type === "characterData") walk(m.target, activeDict, activeKeys);
+    const root = ref.current;
+    if (!root) return;
+
+    // map = instant seed ∪ persisted API results (original -> translation).
+    // cache = API results only (what we persist back).
+    const cache = loadCache(lang);
+    const map: Record<string, string> = { ...buildSeedMap(lang), ...cache };
+    // Seeded EMPTY on purpose. Pre-seeding from the dict's values wrongly marked
+    // stale dict stubs (a kk entry still holding the RU word) as "already done",
+    // so they never reached the API and stayed mixed. Loop-safety instead comes
+    // from the script heuristic + caching identity results in flush() below.
+    const translatedValues = new Set<string>();
+    const pending = new Set<string>();
+    let obs: MutationObserver | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    const applyText = (node: Text) => {
+      const orig = node.textContent || "";
+      const s = orig.trim();
+      if (!s) return;
+      const tr = map[s];
+      if (tr && tr !== s) {
+        node.textContent = (orig.match(WS_LEAD)?.[0] ?? "") + tr + (orig.match(WS_TRAIL)?.[0] ?? "");
+      } else if (!tr && !translatedValues.has(s) && shouldTranslate(s, lang)) {
+        pending.add(s);
       }
-    });
-    obs.current.observe(ref.current, { childList: true, subtree: true, characterData: true });
-    return () => { obs.current?.disconnect(); obs.current = null; };
-  }, [lang]);
+    };
+
+    const applyEl = (el: HTMLElement) => {
+      for (const a of ["placeholder", "title", "aria-label"]) {
+        const v = el.getAttribute(a);
+        if (!v) continue;
+        const s = v.trim();
+        const tr = map[s];
+        if (tr && tr !== s) el.setAttribute(a, tr);
+        else if (!tr && !translatedValues.has(s) && shouldTranslate(s, lang)) pending.add(s);
+      }
+    };
+
+    const walk = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) { applyText(node as Text); return; }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const el = node as HTMLElement;
+      if (SKIP_TAGS.has(el.tagName)) return;
+      // Honor the standard `translate="no"` attribute (and the `notranslate`
+      // class) — brand tokens like tier names (Lite/Medium/Full) opt out of
+      // DOM translation so "Medium" never becomes "Средне".
+      if (el.getAttribute("translate") === "no" || el.classList?.contains("notranslate")) return;
+      applyEl(el);
+      node.childNodes.forEach(walk);
+    };
+
+    // Disconnect while we mutate so our own writes don't re-trigger the observer.
+    const apply = (node: Node) => {
+      obs?.disconnect();
+      walk(node);
+      if (!destroyed && obs) obs.observe(root, { childList: true, subtree: true, characterData: true });
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = setTimeout(flush, 250);
+    };
+
+    const flush = async () => {
+      if (destroyed || pending.size === 0) return;
+      const batch = Array.from(pending).slice(0, 100);
+      batch.forEach((b) => pending.delete(b));
+      try {
+        const r = await fetch(apiUrl("/api/i18n/translate"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: lang, texts: batch }),
+        });
+        if (r.ok) {
+          const data = (await r.json()) as { translations?: string[] };
+          const trs = data.translations || [];
+          let changed = false;
+          for (let i = 0; i < batch.length; i++) {
+            const raw = trs[i];
+            const tr = typeof raw === "string" && raw ? raw : batch[i];
+            // Record EVERY result — including identity (loanwords, brand names
+            // that come back unchanged) — so they are cached and never re-sent
+            // on the next pass. Only a real change triggers a re-apply walk.
+            map[batch[i]] = tr;
+            cache[batch[i]] = tr;
+            translatedValues.add(tr);
+            if (tr !== batch[i]) changed = true;
+          }
+          if (!destroyed) { saveCache(lang, cache); if (changed) apply(root); }
+        }
+      } catch {
+        /* offline / 5xx — leave source text, don't hammer */
+      }
+      if (!destroyed && pending.size > 0) scheduleFlush();
+    };
+
+    apply(root);
+
+    // Live-наблюдатель только когда observe=true. На full-app оболочках его НЕ
+    // ставим — иначе каждый ход/тик часов триггерит синхронный walk() и лагает.
+    if (observe) {
+      obs = new MutationObserver((muts) => {
+        obs?.disconnect();
+        for (const m of muts) {
+          if (m.type === "childList") m.addedNodes.forEach(walk);
+          else if (m.type === "characterData") walk(m.target);
+        }
+        if (!destroyed && obs) obs.observe(root, { childList: true, subtree: true, characterData: true });
+        if (pending.size > 0) scheduleFlush();
+      });
+      obs.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+
+    if (pending.size > 0) scheduleFlush();
+
+    return () => {
+      destroyed = true;
+      if (flushTimer) clearTimeout(flushTimer);
+      obs?.disconnect();
+      obs = null;
+    };
+  }, [lang, observe]);
+
   return <div ref={ref} key={lang} style={{ display: "contents" }}>{children}</div>;
 }

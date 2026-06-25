@@ -39,9 +39,10 @@ type Props = {
   runEngine?: (fen: string, depth: number, pvCount: number) => Promise<PVLine[]>;
   quickEval?: (fen: string, depth: number) => Promise<{ cp: number; mate: number }>;
   phaseLabel?: string;       // "Дебют" / "Миттельшпиль" / "Эндшпиль" — если знаем стадию
+  coachLevel?: "beginner" | "intermediate" | "advanced"; // уровень ученика — калибрует глубину объяснений
 };
 
-const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Играешь на гроссмейстерском уровне, но разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства.
+const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Думаешь и оцениваешь позицию на уровне супергроссмейстера (2800+ Эло), сверяясь с движком — симбиоз понимания топ-игрока и точности Stockfish. При этом разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства. Глубина анализа — максимальная: называй конкретные варианты на 3-5 полуходов вперёд, типовые приёмы и стратегические мотивы по именам (карлсбадская структура, висячие пешки, принцип двух слабостей, цугцванг, перевод коня на форпост). Никогда не упрощай до уровня «развивай фигуры» — это уровень новичка, ты выше него.
 
 ═══ ИСТОЧНИК ИСТИНЫ: ОТЧЁТ ДВИЖКА ═══
 В начале сообщения ученика ты получаешь отчёт Stockfish. Это твоя единственная опора. Никогда не противоречь ему. Никогда не придумывай варианты, которых в нём нет. Все числовые оценки в твоём ответе должны совпадать с блоком.
@@ -81,7 +82,7 @@ const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер в
 - Противоречить оценке или лучшей линии движка.
 - Размытая похвала. Размытая критика. "Интересно", "неплохо", "любопытно" — в топку.`;
 
-const SYSTEM_LIVE = `Ты — Алексей, живой тренер. Комментируешь только КЛЮЧЕВЫЕ моменты партии, коротко, по делу, как если бы подсказывал в живую над плечом.
+const SYSTEM_LIVE = `Ты — Алексей, живой тренер уровня супергроссмейстера (2800+). Комментируешь только КЛЮЧЕВЫЕ моменты партии, коротко, по делу, как если бы подсказывал вживую над плечом. Даже в одной фразе — мысль топ-игрока, а не общая фраза новичка.
 
 ═══ ИСТОЧНИК ИСТИНЫ ═══
 В сообщении ученика есть отчёт Stockfish. Твои числа должны совпадать с ним. Фигуры — из FEN. Варианты не выдумывай.
@@ -220,7 +221,7 @@ function buildMovesStr(moves: string[]): string {
 
 export default function AiCoach({
   fen, moves, fenHist, evalCp, evalMate, opening, playerColor, visible, onClose,
-  runEngine, quickEval, phaseLabel,
+  runEngine, quickEval, phaseLabel, coachLevel,
 }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
@@ -228,7 +229,7 @@ export default function AiCoach({
   const [error, sError] = useState("");
   const [engineThinking, sEngineThinking] = useState(false);
 
-  const [liveMode, sLiveMode] = useState(true);
+  const [liveMode, sLiveMode] = useState(false); // OFF по умолчанию — каждый ход = API call, шум во время игры
   const [liveComments, sLiveComments] = useState<
     { move: number; san: string; comment: string; quality?: string }[]
   >([]);
@@ -428,6 +429,7 @@ export default function AiCoach({
             ctx.push(`Game moves so far: ${buildMovesStr(moves)}`);
             if (opening) ctx.push(`Opening: ${opening.eco} ${opening.name} (${opening.desc})`);
             if (phaseLabel) ctx.push(`Текущая стадия партии: ${phaseLabel}. Формулируй ответ в терминах этой стадии — для дебюта про развитие/центр/рокировку, для миттельшпиля про слабости/планы/инициативу, для эндшпиля про активность короля/проходные/типовые позиции.`);
+            if (coachLevel) ctx.push(`Уровень ученика: ${coachLevel === "beginner" ? "новичок — объясняй приёмы простыми словами, но НЕ упрощай саму суть анализа (мысль остаётся супергроссмейстерской, меняется только язык)" : coachLevel === "advanced" ? "продвинутый/кандидат в мастера — можно глубокие варианты, терминологию и тонкие нюансы без разжёвывания" : "средний клубный игрок — баланс конкретики и пояснений"}.`);
             ctx.push(`You are coaching ${playerColor === "w" ? "White" : "Black"}.`);
             ctx.push("");
             ctx.push("User question:");
@@ -483,6 +485,9 @@ export default function AiCoach({
 
   // Live Coach — only on key moments
   useEffect(() => {
+    // Новая партия / откат: история ходов сжалась → сбрасываем курсор комментариев,
+    // иначе после длинной партии следующая НЕ комментируется, пока не превысит её длину.
+    if (moves.length < lastCommentedMoveIdx.current) lastCommentedMoveIdx.current = moves.length;
     if (!liveMode || !visible || moves.length === 0) return;
     if (moves.length <= lastCommentedMoveIdx.current) return;
 

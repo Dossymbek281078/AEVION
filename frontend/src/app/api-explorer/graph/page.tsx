@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -355,7 +355,7 @@ export default function GraphExplorerPage() {
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
   const fullUrl = `${apiBase}/api/aevion/catalog?fields=id,name,status,tags`;
 
   // Fetch catalog once

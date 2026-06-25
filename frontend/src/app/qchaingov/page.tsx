@@ -4,11 +4,36 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type StatusPayload = {
   module: string;
   status: string;
   conceptMessagesCount: number;
+};
+
+type Stats = {
+  total_proposals: number;
+  open_proposals: number;
+  closed_proposals: number;
+  total_votes: number;
+  unique_voters: number;
+};
+
+type Proposal = {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  status: "draft" | "open" | "closed" | "executed" | string;
+  createdAt: string;
+};
+
+const STATUS_STYLE: Record<string, string> = {
+  draft: "bg-slate-800 border-slate-600 text-slate-300",
+  open: "bg-emerald-500/15 border-emerald-500/50 text-emerald-300",
+  closed: "bg-amber-500/15 border-amber-500/50 text-amber-300",
+  executed: "bg-sky-500/15 border-sky-500/50 text-sky-300",
 };
 
 const FEATURES = [
@@ -20,6 +45,8 @@ const FEATURES = [
 
 export default function QChainGovLanding() {
   const [status, setStatus] = useState<StatusPayload | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +55,20 @@ export default function QChainGovLanding() {
       .then((d) => {
         if (cancelled || !d) return;
         setStatus(d);
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/qchaingov/stats"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        setStats(d);
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/qchaingov/proposals?limit=5"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        setProposals(Array.isArray(d.proposals) ? d.proposals : []);
       })
       .catch(() => {});
     return () => {
@@ -40,7 +81,10 @@ export default function QChainGovLanding() {
       <header className="border-b border-slate-800/60 px-5 py-3 backdrop-blur sticky top-0 z-30 bg-slate-950/60">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <Link href="/" className="text-sm text-slate-400 hover:text-white">← AEVION</Link>
-          <div className="text-xs font-mono tracking-[0.2em] text-sky-300">QCHAINGOV</div>
+          <div className="flex items-center gap-3">
+            <ModulePricingChip moduleId="qchaingov" theme="dark" />
+            <div className="text-xs font-mono tracking-[0.2em] text-sky-300">QCHAINGOV</div>
+          </div>
         </div>
       </header>
 
@@ -85,6 +129,51 @@ export default function QChainGovLanding() {
         </div>
       </section>
 
+      {/* Live governance — real stats + recent proposals from the chain */}
+      <section className="mx-auto max-w-6xl px-5 pb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-sky-300">Live governance</h2>
+          <Link href="/qchaingov/proposals" className="text-xs text-slate-400 hover:text-white">all proposals →</Link>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+          <StatCard label="Proposals" value={stats?.total_proposals} />
+          <StatCard label="Open" value={stats?.open_proposals} accent="emerald" />
+          <StatCard label="Closed" value={stats?.closed_proposals} accent="amber" />
+          <StatCard label="Votes" value={stats?.total_votes} />
+          <StatCard label="Voters" value={stats?.unique_voters} />
+        </div>
+        {proposals === null ? (
+          <div className="text-sm text-slate-500">Загружаем последние инициативы…</div>
+        ) : proposals.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-5 text-sm text-slate-400">
+            Пока нет инициатив.{" "}
+            <Link href="/qchaingov/new" className="text-sky-300 hover:underline">Создай первую →</Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {proposals.map((p) => (
+              <Link
+                key={p.id}
+                href={`/qchaingov/proposals/${p.id}`}
+                className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 hover:border-sky-700 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <div className="font-semibold text-slate-100 text-sm leading-snug">{p.title}</div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${STATUS_STYLE[p.status] ?? STATUS_STYLE.draft}`}>
+                    {p.status}
+                  </span>
+                </div>
+                {p.summary && <div className="text-xs text-slate-400 line-clamp-2 mb-2">{p.summary}</div>}
+                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                  <span className="rounded bg-slate-800 px-1.5 py-0.5">{p.category}</span>
+                  <span>{new Date(p.createdAt).toLocaleDateString()}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="mx-auto max-w-6xl px-5 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {FEATURES.map((f) => (
@@ -120,6 +209,16 @@ export default function QChainGovLanding() {
           <span className="font-mono">/api/qchaingov/status</span>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number | undefined; accent?: "emerald" | "amber" }) {
+  const color = accent === "emerald" ? "text-emerald-300" : accent === "amber" ? "text-amber-300" : "text-sky-300";
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-center">
+      <div className={`text-xl font-bold ${color}`}>{value ?? "…"}</div>
+      <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">{label}</div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { captureException } from "../lib/sentry";
 
 export const devhubRouter = Router();
 
@@ -23,8 +24,9 @@ const pool = getPool();
 (async () => {
   try {
     await ensureDevHubTables(pool);
-  } catch {
-    // silent — in-memory fallback active
+  } catch (e) {
+    captureException(e, { route: "devhub/bootstrap", op: "ensureDevHubTables" });
+    // in-memory fallback active
   }
 })();
 
@@ -463,6 +465,7 @@ devhubRouter.post("/projects", async (req, res) => {
   try {
     await dbSaveProject(project);
   } catch (e: any) {
+    captureException(e, { route: "devhub/projects:create", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.status(201).json({ project });
@@ -476,6 +479,7 @@ devhubRouter.get("/projects", async (req, res) => {
     const projects = await dbListProjects(userId);
     res.json({ projects, total: projects.length });
   } catch (e: any) {
+    captureException(e, { route: "devhub/projects:list", userId });
     const projects = [...memProjects.values()].filter((p) => p.userId === userId);
     res.json({ projects, total: projects.length });
   }
@@ -520,7 +524,8 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/projects:update", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ project });
@@ -541,7 +546,8 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   }
   try {
     await dbDeleteProject(req.params.id);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/projects:delete", projectId: req.params.id });
     memProjects.delete(req.params.id);
     for (const [fid, f] of memFiles) {
       if (f.projectId === req.params.id) memFiles.delete(fid);
@@ -649,7 +655,8 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
   };
   try {
     await dbUpsertFile(file);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/files:put", projectId: req.params.id, path: filePath });
     const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
     if (existing) {
       existing.content = file.content;
@@ -688,7 +695,8 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   };
   try {
     await dbUpsertFile(file);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/files:putByPath", projectId: req.params.id, path: filePath });
     const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
     if (existing) {
       existing.content = file.content;
@@ -1043,7 +1051,8 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.status(201).json({ collaborators: project.collaborators });
@@ -1067,7 +1076,8 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/collaborators:delete", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, collaborators: project.collaborators });
@@ -1169,7 +1179,8 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     project.updatedAt = now();
     try {
       await dbSaveProject(project);
-    } catch {
+    } catch (e) {
+      captureException(e, { route: "devhub/github:push", projectId: project.id });
       memProjects.set(project.id, project);
     }
 
@@ -1405,7 +1416,8 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/env:put", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, key });
@@ -1429,7 +1441,8 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/env:delete", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({ ok: true, key });
@@ -1463,7 +1476,8 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   project.updatedAt = now();
   try {
     await dbSaveProject(project);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/domain:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
   res.json({
@@ -1611,7 +1625,8 @@ devhubRouter.post("/snippets", async (req, res) => {
   };
   try {
     await dbSaveSnippet(snippet);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
   }
   res.status(201).json({ snippet });
@@ -1643,7 +1658,8 @@ devhubRouter.post("/snippets/:id/star", async (req, res) => {
   snippet.updatedAt = now();
   try {
     await dbSaveSnippet(snippet);
-  } catch {
+  } catch (e) {
+    captureException(e, { route: "devhub/snippets:star", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
   }
   res.json({ ok: true, stars: snippet.stars });
@@ -1786,64 +1802,68 @@ devhubRouter.post("/media/email", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/payment-link — create Paddle checkout link
+// POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
 devhubRouter.post("/media/payment-link", async (req, res) => {
-  const { name, amountCents, currency = "USD", description, successUrl } = req.body || {};
+  const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
   if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
 
-  const paddleKey = process.env.PADDLE_API_KEY?.trim();
-  if (!paddleKey) {
+  const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
+  const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
+  const variantId = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+
+  if (!lsKey || !storeId || !variantId) {
     return res.status(503).json({
-      error: "Paddle not configured — set PADDLE_API_KEY",
-      setupUrl: "https://vendors.paddle.com/api-key",
+      error: "Lemon Squeezy not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+      setupUrl: "https://app.lemonsqueezy.com",
     });
   }
 
-  const isSandbox = process.env.PADDLE_SANDBOX !== "false";
-  const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
   const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
 
   try {
-    const txBody: Record<string, unknown> = {
-      items: [{
-        quantity: 1,
-        price: {
-          name: name.trim().slice(0, 200),
-          ...(description ? { description: String(description).slice(0, 500) } : {}),
-          unit_price: {
-            amount: String(Math.round(amt)),
-            currency_code: String(currency).toUpperCase().slice(0, 3),
+    const body = {
+      data: {
+        type: "checkouts",
+        attributes: {
+          custom_price: Math.round(amt),
+          checkout_options: { embed: false, media: false, logo: true },
+          product_options: {
+            name: name.trim().slice(0, 200),
+            description: (description || name).trim().slice(0, 500),
+            redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
           },
-          tax_mode: "exclusive",
         },
-      }],
-      checkout: {
-        url: successUrl || `${frontendUrl}/devhub?payment=success`,
+        relationships: {
+          store: { data: { type: "stores", id: String(storeId) } },
+          variant: { data: { type: "variants", id: String(variantId) } },
+        },
       },
     };
 
-    const r = await fetch(`${paddleBase}/transactions`, {
+    const r = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
       method: "POST",
-      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(txBody),
+      headers: {
+        Authorization: `Bearer ${lsKey}`,
+        Accept: "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!r.ok) {
-      const errText = await r.text();
-      return res.status(r.status).json({ error: `Paddle error: ${errText.slice(0, 300)}` });
+      const errText = await r.text().catch(() => "");
+      return res.status(r.status).json({ error: `Lemon Squeezy error: ${errText.slice(0, 500)}` });
     }
-    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = data.data;
-    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
 
-    res.json({
-      ok: true,
-      provider: "paddle",
-      transactionId: tx.id,
-      url: tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`,
-    });
+    const data = await r.json() as { data?: { id?: string; attributes?: { url?: string } } };
+    const checkoutUrl = data.data?.attributes?.url;
+    const checkoutId = data.data?.id;
+    if (!checkoutUrl) return res.status(500).json({ error: "no checkout URL from Lemon Squeezy" });
+
+    res.json({ ok: true, provider: "lemonsqueezy", checkoutId, url: checkoutUrl });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Payment link creation failed" });
   }
@@ -1871,6 +1891,9 @@ devhubRouter.post("/media/image", async (req, res) => {
     });
   }
 
+  // gpt-image-1 quality values: low/medium/high/auto (not standard/hd)
+  const gptQuality = quality === "hd" ? "high" : quality === "standard" ? "medium" : (quality || "medium");
+
   try {
     const r = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
@@ -1880,17 +1903,20 @@ devhubRouter.post("/media/image", async (req, res) => {
         prompt: prompt.trim(),
         n: 1,
         size,
-        quality: quality === "hd" ? "hd" : "standard",
+        quality: gptQuality,
       }),
     });
     if (!r.ok) {
       const errText = await r.text();
       return res.status(r.status).json({ error: `DALL-E error: ${errText.slice(0, 300)}` });
     }
-    const data = await r.json() as { data: Array<{ url: string; revised_prompt?: string }> };
+    // gpt-image-1 returns b64_json, not url
+    const data = await r.json() as { data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
     const first = data.data?.[0];
-    if (!first?.url) return res.status(500).json({ error: "no image returned" });
-    res.json({ ok: true, url: first.url, revisedPrompt: first.revised_prompt || null });
+    if (!first) return res.status(500).json({ error: "no image returned" });
+    const imageUrl = first.url ?? (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null);
+    if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
+    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image generation failed" });
   }
@@ -2819,6 +2845,26 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "WhatsApp send failed" });
   }
+});
+
+// POST /api/devhub/media/gumroad-checkout — build a Gumroad product checkout URL
+// for a DevHub-built product. Gumroad is the only live processor (Stripe/Paddle
+// are blocked by KYC). Price is fixed in the Gumroad product itself, not passed
+// here — same public-URL scheme as lib/payment/gumroadProvider. No API key needed
+// to generate the link (the URL is a public product page).
+// Body: { permalink: string (slug or full Gumroad URL), email?: string }
+devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
+  const { permalink, email } = req.body || {};
+  if (!permalink || typeof permalink !== "string" || !permalink.trim()) return res.status(400).json({ error: "permalink required (Gumroad product slug, e.g. 'my-product')" });
+  // Accept a raw slug or a full https://app.gumroad.com/l/<slug> URL.
+  const slug = permalink.trim().replace(/^https?:\/\/[^/]+\/l\//i, "").replace(/^\/+|[/?#].*$/g, "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(slug)) return res.status(400).json({ error: "permalink must be a Gumroad product slug (letters, digits, -, _)" });
+  if (email != null && (typeof email !== "string" || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return res.status(400).json({ error: "email must be a valid address" });
+
+  const url = email
+    ? `https://app.gumroad.com/l/${slug}?wanted_email=${encodeURIComponent(String(email).trim())}`
+    : `https://app.gumroad.com/l/${slug}`;
+  res.json({ ok: true, url, provider: "gumroad" });
 });
 
 // POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)

@@ -47,8 +47,10 @@ const pool = getPool();
 (async () => {
   try {
     await ensureKidsAiTables(pool);
-  } catch {
-    // silent — in-memory fallback active
+  } catch (err: unknown) {
+    // in-memory fallback active — but log so the failure isn't invisible
+    const msg = err instanceof Error ? err.message : "ensureKidsAiTables failed";
+    console.error("[KidsAI] ensureKidsAiTables failed:", msg);
   }
 })();
 
@@ -164,8 +166,12 @@ kidsAiContentRouter.get("/health", async (_req: Request, res: Response) => {
       );
       const row = r.rows[0] as { count?: string } | undefined;
       lessonsCount = Number(row?.count ?? lessonsCount);
-    } catch {
-      // fall through
+    } catch (err: unknown) {
+      console.warn(
+        "[KidsAI] GET /health count query failed:",
+        err instanceof Error ? err.message : err,
+      );
+      // fall through to in-memory count
     }
   }
   res.json({
@@ -201,8 +207,12 @@ kidsAiContentRouter.get("/stats", async (_req: Request, res: Response) => {
         source: "postgres",
       });
       return;
-    } catch {
-      // fall through
+    } catch (err: unknown) {
+      console.warn(
+        "[KidsAI] GET /stats query failed:",
+        err instanceof Error ? err.message : err,
+      );
+      // fall through to in-memory stats
     }
   }
   const langs = new Set(memLessons.map((l) => l.language)).size;
@@ -268,8 +278,12 @@ kidsAiContentRouter.get("/lessons", async (req: Request, res: Response) => {
         source: "postgres",
       });
       return;
-    } catch {
-      // fall through
+    } catch (err: unknown) {
+      console.warn(
+        "[KidsAI] GET /lessons query failed:",
+        err instanceof Error ? err.message : err,
+      );
+      // fall through to in-memory list
     }
   }
 
@@ -310,8 +324,12 @@ kidsAiContentRouter.get("/lessons/:id", async (req: Request, res: Response) => {
       }
       res.json({ lesson: row.rows[0] as KidsLesson });
       return;
-    } catch {
-      // fall through
+    } catch (err: unknown) {
+      console.warn(
+        "[KidsAI] GET /lessons/:id query failed:",
+        err instanceof Error ? err.message : err,
+      );
+      // fall through to in-memory lookup
     }
   }
 
@@ -359,8 +377,12 @@ kidsAiContentRouter.post(
             [lessonId],
           );
           lessonContext = (r.rows[0] as KidsLesson | undefined) ?? null;
-        } catch {
-          // fall through
+        } catch (err: unknown) {
+          console.warn(
+            "[KidsAI] POST /ask lesson-context query failed:",
+            err instanceof Error ? err.message : err,
+          );
+          // fall through to in-memory lesson context
         }
       }
       if (!lessonContext) {
@@ -390,6 +412,7 @@ kidsAiContentRouter.post(
       res.json({
         answer: fallbackAnswer(lang),
         provider: "fallback",
+        source: "fallback",
         model: null,
       });
       return;
@@ -403,10 +426,14 @@ kidsAiContentRouter.post(
         provider.defaultModel,
         0.7,
       );
+      // An empty reply means we served the canned fallback text, so the
+      // client should treat it as a fallback, not a real AI answer.
+      const usedReply = Boolean(result.reply);
       res.json({
         answer: result.reply || fallbackAnswer(lang),
-        provider: provider.id,
-        model: result.model,
+        provider: usedReply ? provider.id : "fallback",
+        source: usedReply ? "ai" : "fallback",
+        model: usedReply ? result.model : null,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "provider failure";
@@ -414,6 +441,7 @@ kidsAiContentRouter.post(
       res.json({
         answer: fallbackAnswer(lang),
         provider: "fallback",
+        source: "fallback",
         model: null,
         note: "Provider unavailable — using fallback.",
       });
@@ -466,8 +494,14 @@ kidsAiContentRouter.post("/progress", async (req: Request, res: Response) => {
       );
       res.status(201).json({ progress: inserted.rows[0] as KidsProgress });
       return;
-    } catch {
-      // fall through
+    } catch (err: unknown) {
+      // DB is the source of truth here — do NOT silently fall back to the
+      // in-memory store, or we'd return 201 while the row is lost. Surface
+      // the failure so the client can retry.
+      const msg = err instanceof Error ? err.message : "progress insert failed";
+      console.error("[KidsAI] POST /progress DB error:", msg);
+      res.status(500).json({ error: "Could not save progress — please retry" });
+      return;
     }
   }
 
@@ -515,8 +549,12 @@ kidsAiContentRouter.get(
           total: rows.rowCount ?? rows.rows.length,
         });
         return;
-      } catch {
-        // fall through
+      } catch (err: unknown) {
+        console.warn(
+          "[KidsAI] GET /progress/:childAlias query failed:",
+          err instanceof Error ? err.message : err,
+        );
+        // fall through to in-memory progress
       }
     }
 

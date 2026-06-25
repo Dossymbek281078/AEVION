@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -463,7 +463,7 @@ export default function DiffExplorerPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
 
   // Fetch catalog list once for dropdowns
   useEffect(() => {

@@ -26,6 +26,9 @@ import {
   loadTrending,
   type TrendingWindow,
 } from "../lib/modules/hits";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureModulesError = makeServiceCapture("modules");
 
 export const modulesRouter = Router();
 
@@ -186,6 +189,7 @@ modulesRouter.get("/status", async (_req, res) => {
       items: enriched,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "status" });
     res.status(500).json({ error: "status failed" });
   }
 });
@@ -309,6 +313,7 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
       items: decorated,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "registry" });
     res.status(500).json({ error: "registry failed" });
   }
 });
@@ -383,6 +388,7 @@ modulesRouter.get("/registry.csv", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send([header, ...lines].join("\r\n"));
   } catch (err: any) {
+    captureModulesError(err, { route: "registry-csv" });
     res.status(500).json({ error: "csv failed" });
   }
 });
@@ -424,6 +430,7 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       trending7d,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "stats" });
     res.status(500).json({ error: "stats failed" });
   }
 });
@@ -464,6 +471,7 @@ modulesRouter.get("/trending", modulesEmbedRateLimit, async (req, res) => {
       items,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "trending" });
     res.status(500).json({ error: "trending failed" });
   }
 });
@@ -506,6 +514,7 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
       isOverridden: !!p.override,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "embed" });
     res.status(500).json({ error: "embed failed" });
   }
 });
@@ -548,6 +557,7 @@ modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
       updatedAt: p.updatedAt,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "detail" });
     res.status(500).json({ error: "detail failed" });
   }
 });
@@ -624,6 +634,7 @@ modulesRouter.get("/:id/history", modulesEmbedRateLimit, async (req, res) => {
       series,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "history" });
     res.status(500).json({ error: "history failed" });
   }
 });
@@ -698,6 +709,7 @@ modulesRouter.get("/:id/badge.svg", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION MODULE", right, tierColor[p.effectiveTier] || "#94a3b8"));
   } catch (err: any) {
+    captureModulesError(err, { route: "badge" });
     res.status(500).json({ error: "badge failed" });
   }
 });
@@ -732,6 +744,7 @@ modulesRouter.get("/dependency-graph", modulesEmbedRateLimit, async (_req, res) 
       edges,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "dependency-graph" });
     res.status(500).json({ error: "graph failed" });
   }
 });
@@ -779,6 +792,7 @@ modulesRouter.get("/changelog", modulesEmbedRateLimit, async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "changelog" });
     res.status(500).json({ error: "changelog failed" });
   }
 });
@@ -915,6 +929,7 @@ modulesRouter.patch("/admin/:id", async (req, res) => {
       cleared: !after.hadOverride,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "admin-patch" });
     res.status(500).json({ error: "admin patch failed" });
   }
 });
@@ -962,6 +977,7 @@ modulesRouter.get("/admin/audit", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "admin-audit" });
     res.status(500).json({ error: "audit failed" });
   }
 });
@@ -1032,6 +1048,7 @@ modulesRouter.post("/admin/webhooks", async (req, res) => {
       createdAt: new Date().toISOString(),
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "webhook-create" });
     res.status(500).json({ error: "webhook create failed" });
   }
 });
@@ -1068,6 +1085,7 @@ modulesRouter.get("/admin/webhooks", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "webhook-list" });
     res.status(500).json({ error: "webhook list failed" });
   }
 });
@@ -1088,6 +1106,7 @@ modulesRouter.delete("/admin/webhooks/:id", async (req, res) => {
     await pool.query(`DELETE FROM "ModuleWebhookDelivery" WHERE "webhookId" = $1`, [id]);
     res.json({ id, deleted: true });
   } catch (err: any) {
+    captureModulesError(err, { route: "webhook-delete" });
     res.status(500).json({ error: "webhook delete failed" });
   }
 });
@@ -1127,6 +1146,7 @@ modulesRouter.get("/admin/webhooks/:id/deliveries", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "webhook-deliveries" });
     res.status(500).json({ error: "deliveries failed" });
   }
 });
@@ -1220,6 +1240,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    captureModulesError(err, { route: "changelog-rss" });
     res.status(500).json({ error: "rss failed" });
   }
 });
@@ -1253,6 +1274,7 @@ modulesRouter.get("/tags", modulesEmbedRateLimit, async (_req, res) => {
       items,
     });
   } catch (err: any) {
+    captureModulesError(err, { route: "tags" });
     res.status(500).json({ error: "tags failed" });
   }
 });
@@ -1366,6 +1388,7 @@ modulesRouter.get("/:id/og.svg", modulesEmbedRateLimit, async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
+    captureModulesError(err, { route: "og-svg" });
     res.status(500).json({ error: "og failed" });
   }
 });
@@ -1462,6 +1485,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    captureModulesError(err, { route: "module-changelog-rss" });
     res.status(500).json({ error: "module rss failed" });
   }
 });
@@ -1539,6 +1563,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
+    captureModulesError(err, { route: "sitemap" });
     res.status(500).json({ error: "sitemap failed" });
   }
 });
@@ -1612,6 +1637,7 @@ modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(svg);
   } catch (err: any) {
+    captureModulesError(err, { route: "index-og-svg" });
     res.status(500).json({ error: "index og failed" });
   }
 });
@@ -1710,6 +1736,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    captureModulesError(err, { route: "tag-changelog-rss" });
     res.status(500).json({ error: "tag rss failed" });
   }
 });
@@ -1859,6 +1886,7 @@ modulesRouter.patch("/admin/bulk", async (req, res) => {
 
     res.json({ updated: results.length, items: results });
   } catch (err: any) {
+    captureModulesError(err, { route: "admin-bulk" });
     res.status(500).json({ error: "bulk patch failed" });
   }
 });

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import Globus3D from "./components/Globus3D";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { countryByGlobusName } from "@/lib/constitution";
 
 type ModuleRuntime = {
   tier: "mvp_live" | "platform_api" | "portal_only";
@@ -245,7 +247,7 @@ export default function HomePage() {
     return { bg: "rgba(100,100,100,0.1)", fg: "#444", label: "HUB" };
   };
 
-  const backendOrigin = getBackendOrigin();
+  const backendOrigin = getClientApiBase();
 
   return (
     <main style={{ padding: 0 }}>
@@ -1034,9 +1036,125 @@ export default function HomePage() {
               >
                 Register object in QRight here
               </button>
+              {selectedGeo.country && (() => {
+                const cc = countryByGlobusName(selectedGeo.country);
+                if (!cc) return null;
+                return (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      padding: 12,
+                      background: "rgba(11,23,54,0.06)",
+                      border: "1px solid rgba(212,175,55,0.3)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Constitution отпечаток
+                    </div>
+                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                      <a
+                        href={`/constitution?country=${cc.code}`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "#d4af37",
+                          color: "#0b1736",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        ▸ Применить ползунки {cc.flag}
+                      </a>
+                      <a
+                        href={`/constitution?country=${cc.code}#scatter`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "transparent",
+                          border: "1px solid rgba(34,211,238,0.5)",
+                          color: "#0891b2",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        ⊙ Сравнить со своим
+                      </a>
+                      <a
+                        href={`/constitution/leaderboard`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "transparent",
+                          border: "1px solid rgba(16,185,129,0.4)",
+                          color: "#059669",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        🪞 Похожие сценарии
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </section>
         </div>
+
+        <section
+          style={{
+            maxWidth: 1200,
+            margin: "32px auto 24px",
+            padding: 16,
+            border: "1px solid rgba(212,175,55,0.25)",
+            borderRadius: 12,
+            background: "rgba(248,250,252,0.6)",
+            display: "flex",
+            gap: 24,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <ConstitutionEmbed
+            sliders={{ floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 }}
+            label="Отпечаток AEVION"
+            size="md"
+          />
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+              Какой социальный контракт строит AEVION
+            </h2>
+            <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
+              Open Access как философия экосистемы: высокий пол снизу, закон
+              над верхом, ротация, прозрачность, полицентричность. Это не
+              маркетинг — это конкретные 8 ползунков, заложенных в дизайн
+              каждого модуля платформы.
+            </p>
+            <a
+              href="/constitution"
+              style={{
+                display: "inline-block",
+                padding: "10px 16px",
+                borderRadius: 8,
+                background: "#0f172a",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: "none",
+              }}
+            >
+              Построить свою конституцию →
+            </a>
+          </div>
+        </section>
       </div>
     </main>
   );

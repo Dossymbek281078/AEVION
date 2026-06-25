@@ -4,6 +4,7 @@
 // Exit 1 if any key is missing in RU or KK.
 
 import fs from "node:fs";
+import { runPillMountCheck } from "./i18n-pill-mount-check.mjs";
 
 const src = fs.readFileSync("frontend/src/lib/i18n-data.ts", "utf8");
 const lines = src.split("\n");
@@ -109,9 +110,13 @@ for (const prefix of EXTRA_PREFIXES) {
 // ── summary ────────────────────────────────────────────────────────────────
 
 console.log("");
-if (totalMissing === 0) {
-  console.log("All i18n blocks are in parity (EN=RU=KK). ✓");
+const pillFailed = runPillMountCheck();
+console.log("");
+
+if (totalMissing === 0 && pillFailed === 0) {
+  console.log("All i18n blocks are in parity (EN=RU=KK) and pill mount intact. ✓");
 } else {
-  console.log(`FAIL: ${totalMissing} missing translations across all blocks.`);
+  if (totalMissing) console.log(`FAIL: ${totalMissing} missing translations across all blocks.`);
+  if (pillFailed) console.log(`FAIL: AppShellLanguagePill mount check.`);
   process.exit(1);
 }

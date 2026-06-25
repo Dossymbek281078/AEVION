@@ -1,0 +1,79 @@
+# Constitution smoke — runs against prod AEVION API.
+#
+# Triggers:
+#   - cron: 09:00 UTC daily (1h after daily-smoke so backend is warm)
+#   - workflow_dispatch: manual trigger with optional BASE override
+#   - push to main when constitution smoke script changes
+#
+# Uses the real prod API (no local backend needed).
+# SKIP_AI=1 by default — AI tests need live QCoreAI provider keys.
+# Set SKIP_AI=0 in secrets if OPENAI_API_KEY or ANTHROPIC_API_KEY is set.
+
+name: Constitution smoke
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "BASE URL (default https://aevion.app/api-backend)"
+        required: false
+        default: "https://aevion.app/api-backend"
+      skip_ai:
+        description: "Skip AI tests (1=yes, 0=no)"
+        required: false
+        default: "1"
+  push:
+    branches: [main]
+    paths:
+      - "aevion-globus-backend/scripts/constitution-prod-smoke.js"
+      - ".github/workflows/constitution-smoke.yml"
+
+jobs:
+  constitution-smoke:
+    name: Constitution smoke (prod)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps (scripts only, no build)
+        run: npm install --ignore-scripts
+
+      - name: Run Constitution prod smoke
+        run: node scripts/constitution-prod-smoke.js
+        env:
+          BASE: ${{ inputs.base_url || 'https://aevion.app/api-backend' }}
+          SKIP_AI: ${{ inputs.skip_ai || secrets.CONSTITUTION_SMOKE_SKIP_AI || '1' }}
+          ARTIFACT: /tmp/constitution-smoke-${{ github.run_id }}.json
+
+      - name: Upload smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constitution-smoke-${{ github.run_id }}
+          path: /tmp/constitution-smoke-${{ github.run_id }}.json
+          retention-days: 30
+
+      - name: Comment on failure (cron only)
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔴 Constitution smoke failed · ${new Date().toISOString().slice(0,10)}`,
+              labels: ['bug', 'constitution', 'smoke'],
+              body: `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nConstitution prod smoke failed on cron run. Check which assertions failed in the uploaded artifact.`,
+            })

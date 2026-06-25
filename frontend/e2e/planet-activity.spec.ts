@@ -88,8 +88,10 @@ test.describe("Planet — /planet/activity feed", () => {
     ).toBeVisible({ timeout: 15_000 });
 
     // 2. Multiple items render — at least Submitted + Certified + Revoked + Voted
-    //    label chips. The KIND_META labels are uppercase ("SUBMITTED" etc.).
-    for (const label of ["SUBMITTED", "CERTIFIED", "REVOKED", "VOTED"]) {
+    //    label chips. KIND_META labels are title-case ("Submitted"); the
+    //    UPPERCASE look on screen comes from CSS text-transform, so the DOM
+    //    text content is still title-case.
+    for (const label of ["Submitted", "Certified", "Revoked", "Voted"]) {
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible({
         timeout: 10_000,
       });
@@ -99,16 +101,20 @@ test.describe("Planet — /planet/activity feed", () => {
     //    The tab button text is "Certified" (matches against the visible label).
     await page.getByRole("button", { name: /^✅?\s*Certified$/i }).click();
 
-    // After re-fetch, "SUBMITTED" / "REVOKED" / "VOTED" labels disappear
-    // (only certified items render).
-    await expect(page.getByText("SUBMITTED", { exact: true })).toHaveCount(0, {
+    // After re-fetch, "Submitted" / "Revoked" / "Voted" chips disappear from
+    // FEED ITEMS — the same words still appear on the tab buttons, so scope
+    // the assertion to the feed's <ul role="list"> via listitem children.
+    const feedItems = page.getByRole("listitem");
+    await expect(feedItems.getByText("Submitted", { exact: true })).toHaveCount(0, {
       timeout: 10_000,
     });
-    await expect(page.getByText("REVOKED", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("VOTED", { exact: true })).toHaveCount(0);
+    await expect(feedItems.getByText("Revoked", { exact: true })).toHaveCount(0);
+    await expect(feedItems.getByText("Voted", { exact: true })).toHaveCount(0);
 
-    // Both certified items remain.
-    await expect(page.getByText("CERTIFIED", { exact: true })).toHaveCount(2);
+    // Both certified items remain in the feed (chip label "Certified" appears
+    // once per feed row; the "Certified" tab button adds a separate occurrence
+    // outside the feed, so scope to listitems).
+    await expect(feedItems.getByText("Certified", { exact: true })).toHaveCount(2);
 
     // 4. The certified rows contain a link to /planet/artifact/[ref].
     //    `buildArtifactLink` produces `/planet/artifact/${encodeURIComponent(ref)}`.

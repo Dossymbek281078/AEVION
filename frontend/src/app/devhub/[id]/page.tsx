@@ -437,7 +437,10 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // Stripe payment link state
+  // Payment link state (Stripe one-off link OR Gumroad product checkout).
+  // Gumroad is the only live processor — Stripe/Paddle blocked by KYC.
+  const [payProvider, setPayProvider] = useState<"stripe" | "gumroad">("gumroad");
+  const [payPermalink, setPayPermalink] = useState("");
   const [payName, setPayName] = useState("");
   const [payAmount, setPayAmount] = useState("");
   const [payCurrency, setPayCurrency] = useState("usd");
@@ -986,6 +989,33 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       }
     } catch (e: any) {
       setPayError(e?.message || "Failed to create payment link");
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  // ── Gumroad checkout helper (the only live processor) ────────────────────────
+  // Price is fixed in the Gumroad product; we just build its public checkout URL.
+
+  const createGumroadCheckout = async () => {
+    if (!payPermalink.trim()) return;
+    setPayLoading(true);
+    setPayError(null);
+    setPayResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/gumroad-checkout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permalink: payPermalink.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setPayError(d.error || "Failed to create Gumroad checkout");
+      } else {
+        setPayResult({ url: d.url });
+      }
+    } catch (e: any) {
+      setPayError(e?.message || "Failed to create Gumroad checkout");
     } finally {
       setPayLoading(false);
     }
@@ -2754,49 +2784,81 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   {/* Stripe Payment Link */}
                   {mediaTab === "payment" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
-                        <input
-                          type="text"
-                          value={payName}
-                          onChange={(e) => setPayName(e.target.value)}
-                          placeholder="Pro subscription"
-                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
-                        />
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {(["gumroad", "stripe"] as const).map((prov) => (
+                          <button
+                            key={prov}
+                            onClick={() => { setPayProvider(prov); setPayResult(null); setPayError(null); }}
+                            style={{
+                              flex: 1, padding: "6px 10px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                              border: payProvider === prov ? "1px solid #635bff" : "1px solid #e2e8f0",
+                              background: payProvider === prov ? "#eef2ff" : "#fff",
+                              color: payProvider === prov ? "#4338ca" : "#64748b",
+                            }}
+                          >
+                            {prov === "gumroad" ? "Gumroad ✓ live" : "Stripe (KYC blocked)"}
+                          </button>
+                        ))}
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <div style={{ flex: 2 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Amount</label>
+                      {payProvider === "gumroad" ? (
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Gumroad product permalink</label>
                           <input
-                            type="number"
-                            step="0.01"
-                            value={payAmount}
-                            onChange={(e) => setPayAmount(e.target.value)}
-                            placeholder="9.99"
+                            type="text"
+                            value={payPermalink}
+                            onChange={(e) => setPayPermalink(e.target.value)}
+                            placeholder="my-product  (or full app.gumroad.com/l/... URL)"
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                           />
+                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Price is set in the Gumroad product itself — create it in your Gumroad dashboard, paste its permalink here.</div>
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Currency</label>
-                          <select
-                            value={payCurrency}
-                            onChange={(e) => setPayCurrency(e.target.value)}
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
-                          >
-                            {["usd", "eur", "kzt", "rub", "gbp"].map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
-                        <input
-                          type="text"
-                          value={payDesc}
-                          onChange={(e) => setPayDesc(e.target.value)}
-                          placeholder="Monthly access to all features"
-                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
-                        />
-                      </div>
+                      ) : (
+                        <>
+                          <div>
+                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
+                            <input
+                              type="text"
+                              value={payName}
+                              onChange={(e) => setPayName(e.target.value)}
+                              placeholder="Pro subscription"
+                              style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                            />
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <div style={{ flex: 2 }}>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Amount</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={payAmount}
+                                onChange={(e) => setPayAmount(e.target.value)}
+                                placeholder="9.99"
+                                style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                              />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Currency</label>
+                              <select
+                                value={payCurrency}
+                                onChange={(e) => setPayCurrency(e.target.value)}
+                                style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                              >
+                                {["usd", "eur", "kzt", "rub", "gbp"].map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
+                            <input
+                              type="text"
+                              value={payDesc}
+                              onChange={(e) => setPayDesc(e.target.value)}
+                              placeholder="Monthly access to all features"
+                              style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                            />
+                          </div>
+                        </>
+                      )}
                       {payError && (
                         <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
                           {payError}
@@ -2820,19 +2882,26 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           </button>
                         </div>
                       )}
-                      <button
-                        onClick={createPaymentLink}
-                        disabled={payLoading || !payName.trim() || !payAmount.trim()}
-                        style={{
-                          padding: "9px 18px", background: payLoading ? "#a5b4fc" : "#635bff",
-                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                          cursor: (payLoading || !payName.trim() || !payAmount.trim()) ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {payLoading ? "Creating..." : "Create Payment Link"}
-                      </button>
+                      {(() => {
+                        const disabled = payLoading || (payProvider === "gumroad" ? !payPermalink.trim() : (!payName.trim() || !payAmount.trim()));
+                        return (
+                          <button
+                            onClick={payProvider === "gumroad" ? createGumroadCheckout : createPaymentLink}
+                            disabled={disabled}
+                            style={{
+                              padding: "9px 18px", background: payLoading ? "#a5b4fc" : "#635bff",
+                              color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                              cursor: disabled ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {payLoading ? "Creating..." : payProvider === "gumroad" ? "Get Gumroad Checkout Link" : "Create Payment Link"}
+                          </button>
+                        );
+                      })()}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>. Min amount 50 cents (or equivalent).
+                        {payProvider === "gumroad"
+                          ? <>Gumroad is the only live processor (Stripe/Paddle blocked by KYC). Link is a public product page — no server key needed. Sales arrive via <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
+                          : <>⚠️ Stripe is KYC-blocked — links won't collect real payments. Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>.</>}
                       </div>
                     </div>
                   )}

@@ -153,5 +153,9 @@
     "search": "Search",
     "copy": "Copy",
     "copied": "Copied"
+  },
+  "constitution": {
+    "title": "Constitution — World-System Design Lab",
+    "subtitle": "8 sliders → regime classifier: see what society slides into when you change the floor, rule of law, rotation, and transparency"
   }
 }

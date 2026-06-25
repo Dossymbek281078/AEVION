@@ -51,7 +51,7 @@ export default function Countdown({ target, size = "md", compact = false }: Coun
           letterSpacing: "0.1em",
         }}
       >
-        UNLOCKED
+        ОТКРЫТО
       </span>
     );
   }

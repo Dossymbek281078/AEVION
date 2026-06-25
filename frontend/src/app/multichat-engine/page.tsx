@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
 import { useI18n, type Lang } from "@/lib/i18n";
 
@@ -1238,12 +1239,16 @@ function MissionPresetGrid() {
 }
 
 export default function MultichatEnginePage() {
-  const origin = getBackendOrigin();
+  const origin = getClientApiBase();
 
   return (
     <main>
       <ProductPageShell maxWidth={860}>
         <Wave1Nav />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="multichat-engine" theme="dark" />
+        </div>
 
         <div
           style={{

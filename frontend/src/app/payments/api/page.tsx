@@ -148,17 +148,22 @@ function snippet(lang: Lang, e: Endpoint, apiKey: string, base: string): string 
   -d '${(e.body ?? "{}").replace(/\n\s*/g, " ")}'`;
   }
   if (lang === "node") {
+    // No published SDK for /api/payments/v1/* yet — use raw fetch (typed via
+    // OpenAPI). Server-side env access keeps the secret key off the client.
     if (e.method === "GET") {
-      return `import { Aevion } from "@aevion/payments";
-const aevion = new Aevion("${k}");
-
-const res = await aevion.${pathToMethod(e.path)}.retrieve("pl_q9w2k47abc");`;
+      return `const res = await fetch("${url}", {
+  headers: { Authorization: \`Bearer \${process.env.AEVION_API_KEY}\` },
+}).then(r => r.json());`;
     }
-    const obj = e.body ? e.body.replace(/^\{/, "{").replace(/\n/g, "\n  ") : "{}";
-    return `import { Aevion } from "@aevion/payments";
-const aevion = new Aevion("${k}");
-
-const res = await aevion.${pathToMethod(e.path)}.create(${obj});`;
+    const obj = e.body ? e.body.replace(/^\{/, "{").replace(/\n/g, "\n    ") : "{}";
+    return `const res = await fetch("${url}", {
+  method: "${e.method}",
+  headers: {
+    Authorization: \`Bearer \${process.env.AEVION_API_KEY}\`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(${obj}),
+}).then(r => r.json());`;
   }
   if (e.method === "GET") {
     return `from aevion import Aevion

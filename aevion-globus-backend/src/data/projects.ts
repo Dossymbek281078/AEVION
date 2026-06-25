@@ -158,7 +158,7 @@ export const projects: GlobusProject[] = [
     code: "VEILNETX",
     name: "VeilNetX — Privacy Crypto & Network",
     description:
-      "Privacy proxy network MVP 2026-05-15 — pre-launch status surface, waitlist with email-hash dedupe, principles + threat model, in-memory concept board. /api/veilnetx.",
+      "Privacy network. LIVE: privacy-check tool (GET /api/veilnetx/inspect) — что запрос раскрывает серверу (IP/гео/UA + exposure score green/yellow/red) + браузерные утечки (WebRTC/canvas/fingerprint) на /veilnetx. Plus waitlist (email-hash dedupe), threat model, concept board. Tor-proxy roadmap Q4 2026. /api/veilnetx.",
     kind: "experiment",
     status: "live",
     priority: 2,
@@ -493,6 +493,19 @@ export const projects: GlobusProject[] = [
     status: "live",
     priority: 3,
     tags: ["events", "conferences", "scheduling"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "constitution",
+    code: "CONSTITUTION",
+    name: "Constitution — World-System Design Lab",
+    description:
+      "Интерактивный симулятор государственного устройства: 8 ползунков (пол снизу, верховенство закона, ротация, прозрачность, multi-status, skin-in-the-game, полицентричность, положительная сумма) → классификатор исторических режимов + сохранение сценариев в Postgres через mvpConcepts.",
+    kind: "experiment",
+    status: "live",
+    priority: 3,
+    tags: ["governance", "simulator", "social-design", "concept"],
     createdAt: now,
     updatedAt: now,
   },

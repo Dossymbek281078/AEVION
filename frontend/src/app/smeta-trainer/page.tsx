@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 export default function SmetaTrainerPage() {
   return (
@@ -26,6 +27,9 @@ export default function SmetaTrainerPage() {
           >
             ❓ Инструкция
           </Link>
+          <div className="hidden md:block">
+            <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
+          </div>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
             className="hidden sm:block text-[10px] text-slate-400 hover:text-emerald-400 px-1.5 py-0.5 border border-slate-700 rounded font-mono"

@@ -3,6 +3,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n";
 
 interface Payout {
   id: string;
@@ -21,10 +22,10 @@ interface Payout {
 
 interface Wallet { id: string; name: string; balance: number; currency: string; }
 
-const METHOD_LABEL: Record<Payout["method"], string> = {
-  card: "На карту",
-  bank_transfer: "Банковский перевод",
-  kaspi: "Kaspi",
+const METHOD_KEY: Record<Payout["method"], string> = {
+  card: "qpaynet.payouts.method.card",
+  bank_transfer: "qpaynet.payouts.method.bank",
+  kaspi: "qpaynet.payouts.method.kaspi",
 };
 
 const STATUS_CHIP: Record<Payout["status"], string> = {
@@ -34,21 +35,23 @@ const STATUS_CHIP: Record<Payout["status"], string> = {
   rejected:  "bg-red-900 text-red-300",
 };
 
-const STATUS_LABEL: Record<Payout["status"], string> = {
-  requested: "Запрошен",
-  approved:  "Одобрен",
-  paid:      "Выплачен",
-  rejected:  "Отклонён",
+const STATUS_KEY: Record<Payout["status"], string> = {
+  requested: "qpaynet.payouts.status.requested",
+  approved:  "qpaynet.payouts.status.approved",
+  paid:      "qpaynet.payouts.status.paid",
+  rejected:  "qpaynet.payouts.status.rejected",
 };
 
 function fmt(n: number) {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function fmtDate(iso: string, lang: string) {
+  const localeTag = lang === "en" ? "en-US" : "ru-RU";
+  return new Date(iso).toLocaleString(localeTag, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function PayoutsPage() {
+  const { t, lang } = useI18n();
   const [token, setToken] = useState("");
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -61,12 +64,12 @@ export default function PayoutsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
-    setToken(t);
-    if (!t) { setLoading(false); return; }
+    const saved = localStorage.getItem("aevion_token") ?? "";
+    setToken(saved);
+    if (!saved) { setLoading(false); return; }
     Promise.all([
-      fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
-      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${saved}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${saved}` } }).then(r => r.json()),
     ]).then(([p, w]) => {
       setPayouts(p.payouts ?? []);
       setWallets(w.wallets ?? []);
@@ -84,12 +87,12 @@ export default function PayoutsPage() {
         body: JSON.stringify({ walletId, amount: parseFloat(amount), method, destination }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Ошибка");
+      if (!r.ok) throw new Error(d.error ?? t("qpaynet.payouts.err.generic"));
       const list = await fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
       setPayouts(list.payouts ?? []);
       setAmount(""); setDestination("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
+      setError(e instanceof Error ? e.message : t("qpaynet.payouts.err.generic"));
     } finally { setSubmitting(false); }
   }
 
@@ -97,8 +100,8 @@ export default function PayoutsPage() {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
-          <p className="text-slate-400 mb-4">Войдите чтобы запросить выплату</p>
-          <Link href="/auth" className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold">→ Войти</Link>
+          <p className="text-slate-400 mb-4">{t("qpaynet.payouts.loginPrompt")}</p>
+          <Link href="/auth" className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold">{t("qpaynet.payouts.login")}</Link>
         </div>
       </div>
     );
@@ -110,73 +113,72 @@ export default function PayoutsPage() {
         <div className="flex items-center gap-3">
           <Link href="/qpaynet" className="text-slate-400 hover:text-white text-sm">← QPayNet</Link>
           <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">Выплаты</h1>
+          <h1 className="text-sm font-bold">{t("qpaynet.payouts.title")}</h1>
         </div>
       </header>
 
       <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
         {/* Request form */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 space-y-3">
-          <h2 className="font-bold mb-1">Запросить выплату</h2>
+          <h2 className="font-bold mb-1">{t("qpaynet.payouts.requestTitle")}</h2>
           <p className="text-xs text-slate-400 mb-3">
-            Выплата уходит на ручную модерацию. Средства списываются сразу;
-            при отказе деньги возвращаются автоматически.
+            {t("qpaynet.payouts.note")}
           </p>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Кошелёк</label>
+            <label className="text-xs text-slate-400 mb-1 block">{t("qpaynet.payouts.walletLabel")}</label>
             <select value={walletId} onChange={e => setWalletId(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500">
               {wallets.map(w => <option key={w.id} value={w.id}>{w.name} ({fmt(w.balance)} {w.currency})</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Метод</label>
+            <label className="text-xs text-slate-400 mb-1 block">{t("qpaynet.payouts.methodLabel")}</label>
             <select value={method} onChange={e => setMethod(e.target.value as Payout["method"])}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500">
-              <option value="card">Банковская карта</option>
-              <option value="bank_transfer">Банковский перевод (IBAN)</option>
-              <option value="kaspi">Kaspi (телефон)</option>
+              <option value="card">{t("qpaynet.payouts.opt.card")}</option>
+              <option value="bank_transfer">{t("qpaynet.payouts.opt.bank")}</option>
+              <option value="kaspi">{t("qpaynet.payouts.opt.kaspi")}</option>
             </select>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">
-              {method === "card" ? "Номер карты (16 цифр)" : method === "kaspi" ? "Номер телефона +7..." : "IBAN"}
+              {method === "card" ? t("qpaynet.payouts.dest.card") : method === "kaspi" ? t("qpaynet.payouts.dest.kaspi") : t("qpaynet.payouts.dest.iban")}
             </label>
             <input value={destination} onChange={e => setDestination(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-violet-500" />
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Сумма (₸)</label>
+            <label className="text-xs text-slate-400 mb-1 block">{t("qpaynet.payouts.amountLabel")}</label>
             <input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)}
               placeholder="0"
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
             {amount && parseFloat(amount) > 0 && (
               <p className="text-[11px] text-slate-500 mt-1">
-                Комиссия 0.1%: {fmt(parseFloat(amount) * 0.001)} ₸ · к списанию {fmt(parseFloat(amount) * 1.001)} ₸
+                {t("qpaynet.payouts.feeHint", { fee: fmt(parseFloat(amount) * 0.001), total: fmt(parseFloat(amount) * 1.001) })}
               </p>
             )}
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button onClick={submit} disabled={submitting || !amount || !destination}
             className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
-            {submitting ? "..." : "Запросить выплату"}
+            {submitting ? "..." : t("qpaynet.payouts.submit")}
           </button>
         </div>
 
         {/* History */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">История ({payouts.length})</h3>
-          {loading && <div className="text-slate-500 text-sm py-8 text-center">Загрузка...</div>}
-          {!loading && payouts.length === 0 && <div className="text-slate-600 text-sm py-8 text-center">Выплат нет</div>}
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t("qpaynet.payouts.history", { count: payouts.length })}</h3>
+          {loading && <div className="text-slate-500 text-sm py-8 text-center">{t("qpaynet.payouts.loading")}</div>}
+          {!loading && payouts.length === 0 && <div className="text-slate-600 text-sm py-8 text-center">{t("qpaynet.payouts.empty")}</div>}
           <div className="space-y-2">
             {payouts.map(p => (
               <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                      <span className="text-[10px] text-slate-500">{METHOD_LABEL[p.method]}</span>
-                      <span className="text-[10px] text-slate-600">{fmtDate(p.created_at)}</span>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{t(STATUS_KEY[p.status])}</span>
+                      <span className="text-[10px] text-slate-500">{t(METHOD_KEY[p.method])}</span>
+                      <span className="text-[10px] text-slate-600">{fmtDate(p.created_at, lang)}</span>
                     </div>
                     <div className="text-base font-bold">{fmt(p.amount)} {p.currency}</div>
                     <div className="text-[11px] text-slate-500 font-mono">→ {p.destination}</div>

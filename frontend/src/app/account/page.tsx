@@ -115,8 +115,12 @@ export default function AccountPage() {
   const [sub, setSub] = useState<{
     tierId: string; period: string; seats: number;
     validUntil: string | null; trialDays: number; amountUsd: number | null;
-    source: string | null; createdAt: string;
+    source: string | null; createdAt: string; modules: string[];
   } | null>(null);
+  // Lite = 1 продукт на выбор: список доступных модулей + выбор + busy
+  const [allModules, setAllModules] = useState<{ id: string; name: string }[]>([]);
+  const [liteChoice, setLiteChoice] = useState<string>("");
+  const [liteBusy, setLiteBusy] = useState(false);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -168,7 +172,16 @@ export default function AccountPage() {
       if (subRes.ok) {
         const d = await subRes.json();
         setSub(d.subscription ?? null);
+        setLiteChoice(d.subscription?.modules?.[0] ?? "");
       }
+      // список продуктов для выбора Lite (публичный)
+      try {
+        const pr = await fetch(apiUrl("/api/pricing"));
+        if (pr.ok) {
+          const pj = await pr.json();
+          setAllModules((pj.modules ?? []).map((m: { id: string; name: string }) => ({ id: m.id, name: m.name })));
+        }
+      } catch { /* ignore */ }
     } catch {
       /* silent */
     } finally {
@@ -374,6 +387,32 @@ export default function AccountPage() {
     }
   };
 
+  const changeLiteModule = async () => {
+    if (!liteChoice) {
+      showToast("Выберите продукт", "error");
+      return;
+    }
+    setLiteBusy(true);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/subscription/lite-module"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ moduleId: liteChoice }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        showToast("Продукт обновлён", "success");
+        loadAll();
+      } else {
+        showToast(`Не удалось: ${d.error || r.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Ошибка: ${(e as Error).message}`, "error");
+    } finally {
+      setLiteBusy(false);
+    }
+  };
+
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa" }}>
       <Wave1Nav />
@@ -537,6 +576,7 @@ export default function AccountPage() {
               <div style={card}>
                 <h2 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 800 }}>Subscription</h2>
                 {sub ? (
+                  <>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
                       <div style={labelStyle}>Plan</div>
@@ -571,6 +611,32 @@ export default function AccountPage() {
                       <span>{new Date(sub.createdAt).toLocaleDateString("ru-RU")}</span>
                     </div>
                   </div>
+                  {(sub.tierId === "lite" || sub.tierId === "free") && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(15,23,42,0.08)" }}>
+                      <div style={labelStyle}>Продукт {sub.tierId === "lite" ? "(Lite — 1 на выбор)" : "(Free — 1 на выбор)"}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <select
+                          value={liteChoice}
+                          onChange={(e) => setLiteChoice(e.target.value)}
+                          style={{ ...inputStyle, marginBottom: 0, maxWidth: 320 }}
+                        >
+                          <option value="">— выберите продукт —</option>
+                          {allModules.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                        <button onClick={changeLiteModule} disabled={liteBusy || !liteChoice} style={btnPrimary}>
+                          {liteBusy ? "…" : "Сохранить"}
+                        </button>
+                      </div>
+                      {sub.modules?.[0] && (
+                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+                          Текущий: <strong>{allModules.find((m) => m.id === sub.modules[0])?.name ?? sub.modules[0]}</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  </>
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                     <span style={{ fontSize: 13, color: "#64748b" }}>Free plan — no active subscription.</span>

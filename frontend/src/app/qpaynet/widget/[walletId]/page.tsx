@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { useI18n } from "@/lib/i18n";
 
 interface WalletPub { name: string; currency: string; active: boolean; }
 
 function WidgetInner() {
+  const { t } = useI18n();
   const { walletId } = useParams<{ walletId: string }>();
   const params = useSearchParams();
   const presetAmount = params.get("amount") ?? "";
@@ -21,7 +23,7 @@ function WidgetInner() {
     fetch(`/api/qpaynet/wallets/${walletId}/public`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => setWallet({ name: d.name, currency: d.currency, active: d.active }))
-      .catch(() => setError("Кошелёк не найден"));
+      .catch(() => setError(t("qpaynet.widget.notFound")));
   }, [walletId]);
 
   function open(target: "send" | "request") {
@@ -47,7 +49,7 @@ function WidgetInner() {
   if (!wallet) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-slate-600 text-sm animate-pulse">Загрузка...</div>
+        <div className="text-slate-600 text-sm animate-pulse">{t("qpaynet.widget.loading")}</div>
       </div>
     );
   }
@@ -59,16 +61,16 @@ function WidgetInner() {
           <span className="text-violet-400 font-black">₸</span>
           <span className="text-xs font-bold text-slate-300">QPayNet</span>
           {wallet.active ? (
-            <span className="ml-auto text-xs bg-emerald-900 text-emerald-300 px-2 py-1 rounded-full">активен</span>
+            <span className="ml-auto text-xs bg-emerald-900 text-emerald-300 px-2 py-1 rounded-full">{t("qpaynet.widget.active")}</span>
           ) : (
-            <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded-full">неактивен</span>
+            <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded-full">{t("qpaynet.widget.inactive")}</span>
           )}
         </div>
 
-        <div className="text-xs text-slate-400 mb-1">Получатель</div>
+        <div className="text-xs text-slate-400 mb-1">{t("qpaynet.widget.recipient")}</div>
         <div className="text-base font-semibold text-white mb-4 truncate">{wallet.name}</div>
 
-        <label className="text-xs text-slate-400 mb-1 block">Сумма ({wallet.currency})</label>
+        <label className="text-xs text-slate-400 mb-1 block">{t("qpaynet.widget.amountLabel", { currency: wallet.currency })}</label>
         <input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)}
           placeholder="0"
           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm mb-3 focus:outline-none focus:border-violet-500" />
@@ -76,7 +78,7 @@ function WidgetInner() {
         <div className="flex gap-2">
           <button onClick={() => open("send")} disabled={!wallet.active}
             className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold text-white">
-            Оплатить →
+            {t("qpaynet.widget.pay")}
           </button>
         </div>
 
@@ -86,7 +88,7 @@ function WidgetInner() {
 
         <a href="https://aevion.app/qpaynet" target="_blank" rel="noopener noreferrer"
           className="block text-center mt-4 text-[10px] text-slate-600 hover:text-slate-400">
-          Безопасно через AEVION QPayNet ↗
+          {t("qpaynet.widget.footer")}
         </a>
       </div>
     </div>

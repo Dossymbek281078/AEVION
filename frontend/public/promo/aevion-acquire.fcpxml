@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" name="FFVideoFormat1080p30" frameDuration="100/3000s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <asset id="a1" name="aevion-acquire-music" src="aevion-acquire-music.mp3" hasAudio="1" audioSources="1" audioChannels="2" audioRate="44100" duration="92s" start="0s"/>
+    <asset id="a2" name="aevion-acquire-ru" src="aevion-acquire-ru.mp3" hasAudio="1" audioSources="1" audioChannels="1" audioRate="44100" duration="85s" start="0s"/>
+    <asset id="a3" name="aevion-acquire-en" src="aevion-acquire-en.mp3" hasAudio="1" audioSources="1" audioChannels="1" audioRate="44100" duration="80s" start="0s"/>
+    <effect id="e1" name="Custom Title" uid=".../Effects.localized/Titles.localized/Build In Build Out.localized/Custom.localized/Custom.moti"/>
+  </resources>
+
+  <library>
+    <event name="AEVION Acquire Pitch">
+      <project name="aevion-acquire-90s">
+        <sequence format="r1" duration="90s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+
+            <!-- Cut 1: 0:00 - 0:08 — "Хаос 15 вкладок" -->
+            <gap offset="0s" duration="8s" start="0s">
+              <title ref="e1" offset="0s" duration="8s" start="0s" name="15-tabs-chaos">
+                <text><text-style ref="ts1">15 вкладок · 15 паролей · 15 биллингов</text-style></text>
+                <text-style-def id="ts1"><text-style font="Inter" fontSize="60" fontFace="Black" alignment="center" fontColor="1 1 1 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 2: 0:08 - 0:14 — "Боль биллингов" -->
+            <gap offset="8s" duration="6s" start="0s">
+              <title ref="e1" offset="0s" duration="6s" start="0s" name="bills-pain">
+                <text><text-style ref="ts2">$427 / мес</text-style></text>
+                <text-style-def id="ts2"><text-style font="Inter" fontSize="120" fontFace="Black" alignment="center" fontColor="0.94 0.27 0.27 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 3: 0:14 - 0:22 — "Тишина", полный чёрный hold -->
+            <gap offset="14s" duration="8s" start="0s"/>
+
+            <!-- Cut 4: 0:22 - 0:34 — "Planet AEVION" reveal -->
+            <gap offset="22s" duration="12s" start="0s">
+              <title ref="e1" offset="0s" duration="12s" start="0s" name="aevion-reveal">
+                <text><text-style ref="ts3">Planet AEVION</text-style></text>
+                <text-style-def id="ts3"><text-style font="Inter" fontSize="100" fontFace="Black" alignment="center" fontColor="0.06 0.73 0.51 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 5: 0:34 - 0:48 — "DevHub в работе" -->
+            <gap offset="34s" duration="14s" start="0s">
+              <title ref="e1" offset="0s" duration="14s" start="0s" name="devhub-placeholder">
+                <text><text-style ref="ts4">4 действия · 1 окно · 12 секунд</text-style></text>
+                <text-style-def id="ts4"><text-style font="Inter" fontSize="48" fontFace="Bold" alignment="center" fontColor="1 1 1 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 6: 0:48 - 1:00 — "Три волны" -->
+            <gap offset="48s" duration="12s" start="0s">
+              <title ref="e1" offset="0s" duration="12s" start="0s" name="three-waves">
+                <text><text-style ref="ts5">Banking · IP · Dev → AEVION</text-style></text>
+                <text-style-def id="ts5"><text-style font="Inter" fontSize="56" fontFace="Black" alignment="center" fontColor="0.23 0.51 0.96 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 7: 1:00 - 1:14 — "Live products collage" -->
+            <gap offset="60s" duration="14s" start="0s">
+              <title ref="e1" offset="0s" duration="14s" start="0s" name="live-products">
+                <text><text-style ref="ts6">30+ модулей · LIVE</text-style></text>
+                <text-style-def id="ts6"><text-style font="Inter" fontSize="56" fontFace="Black" alignment="center" fontColor="0.06 0.73 0.51 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 8: 1:14 - 1:24 — "Что нельзя купить" -->
+            <gap offset="74s" duration="10s" start="0s">
+              <title ref="e1" offset="0s" duration="10s" start="0s" name="cant-be-built">
+                <text><text-style ref="ts7">Нельзя купить за месяц.</text-style></text>
+                <text-style-def id="ts7"><text-style font="Inter" fontSize="64" fontFace="Black" alignment="center" fontColor="1 1 1 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Cut 9: 1:24 - 1:30 — "$1B Net. Let's talk." -->
+            <gap offset="84s" duration="6s" start="0s">
+              <title ref="e1" offset="0s" duration="6s" start="0s" name="the-ask">
+                <text><text-style ref="ts8">$1 000 000 000 net</text-style></text>
+                <text-style-def id="ts8"><text-style font="Inter" fontSize="84" fontFace="Black" alignment="center" fontColor="0.06 0.73 0.51 1"/></text-style-def>
+              </title>
+            </gap>
+
+            <!-- Audio: music underbed (full duration, lower volume) -->
+            <asset-clip ref="a1" offset="0s" duration="90s" name="music-bed" audioRole="music">
+              <adjust-volume amount="-16dB"/>
+            </asset-clip>
+
+            <!-- Audio: VO RU primary -->
+            <asset-clip ref="a2" offset="0s" duration="85s" name="vo-ru" audioRole="dialogue">
+              <adjust-volume amount="0dB"/>
+            </asset-clip>
+
+            <!-- Audio: VO EN secondary (disabled by default — re-enable for EN render) -->
+            <asset-clip ref="a3" offset="0s" duration="80s" name="vo-en" audioRole="dialogue" enabled="0">
+              <adjust-volume amount="0dB"/>
+            </asset-clip>
+
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>

@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
 
@@ -630,6 +631,9 @@ export default function QSignPage() {
     <main>
       <ProductPageShell maxWidth={1080}>
         <Wave1Nav />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="qsign" theme="dark" />
+        </div>
         <PipelineSteps current="qsign" />
 
         {/* ─── Hero ─── */}
@@ -2047,41 +2051,50 @@ curl -s https://api.aevion.app/api/qsign/v2/metrics`;
 
 function buildTsSnippet(signed: SignResponse | null): string {
   const sigId = signed?.id ?? "<signature-id>";
-  return `// npm install @aevion/qsign-client
-import { QSignClient } from "@aevion/qsign-client";
+  return `// No client SDK yet — call /api/qsign/v2 directly. WebCrypto fetch
+// works in Node 18+, Deno, browsers, and edge runtimes.
+const BASE = "https://api.aevion.app/api/qsign/v2";
+const H = {
+  Authorization: \`Bearer \${process.env.AEVION_TOKEN}\`,
+  "Content-Type": "application/json",
+};
 
-const qsign = new QSignClient({
-  baseUrl: "https://api.aevion.app/api/qsign/v2",
-  token: process.env.AEVION_TOKEN,
-});
-
-// Sign — idempotent retries return the same id
-const sig = await qsign.sign(
-  { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
-  { idempotencyKey: "order-2026-04-28-001" },
-);
+// 1. Sign — Idempotency-Key makes retries safe (same id returned)
+const sig = await fetch(\`\${BASE}/sign\`, {
+  method: "POST",
+  headers: { ...H, "Idempotency-Key": "order-2026-04-28-001" },
+  body: JSON.stringify({ payload: { artifact: "invoice-001", amount: 1500.00, currency: "USD" } }),
+}).then(r => r.json());
 console.log(sig.id, sig.publicUrl);
 
-// Verify (stateless)
-const r = await qsign.verify({
-  payload: { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
-  hmacKid: sig.hmac.kid,
-  signatureHmac: sig.hmac.signature,
-  ed25519Kid: sig.ed25519?.kid,
-  signatureEd25519: sig.ed25519?.signature,
-});
-console.log("valid:", r.valid);
+// 2. Verify (stateless — HMAC + optional Ed25519)
+const v = await fetch(\`\${BASE}/verify\`, {
+  method: "POST",
+  headers: H,
+  body: JSON.stringify({
+    payload: { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
+    hmacKid: sig.hmac.kid,
+    signatureHmac: sig.hmac.signature,
+    ed25519Kid: sig.ed25519?.kid,
+    signatureEd25519: sig.ed25519?.signature,
+  }),
+}).then(r => r.json());
+console.log("valid:", v.valid);
 
-// DB-backed verify (includes revocation status)
-const live = await qsign.verifyById("${sigId}");
+// 3. DB-backed verify (includes revocation status)
+const live = await fetch(\`\${BASE}/verify/${sigId}\`, { headers: H }).then(r => r.json());
 console.log("revoked:", live.revoked);
 
-// Audit log
-const audit = await qsign.listAudit({ event: "sign", limit: 20 });
+// 4. Audit log
+const audit = await fetch(\`\${BASE}/audit?event=sign&limit=20\`, { headers: H }).then(r => r.json());
 audit.items.forEach((e) => console.log(e.at, e.signatureId));
 
-// Webhooks
-const wh = await qsign.createWebhook("https://your-app.example.com/qsign-events");
+// 5. Webhooks
+const wh = await fetch(\`\${BASE}/webhooks\`, {
+  method: "POST",
+  headers: H,
+  body: JSON.stringify({ url: "https://your-app.example.com/qsign-events" }),
+}).then(r => r.json());
 console.log("save secret ONCE:", wh.secret);`;
 }
 

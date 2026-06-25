@@ -67,6 +67,19 @@ async function loadStats(): Promise<Stats | null> {
   } catch { return null; }
 }
 
+type Verify = { verified: boolean; brokenAt: number | null; length: number; head: string };
+
+async function loadVerify(): Promise<Verify | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/veilnetx-ledger/chain/verify`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(9000),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
 function fmt(cents: string | number): string {
   const n = typeof cents === "string" ? parseInt(cents, 10) : cents;
   if (!Number.isFinite(n)) return "0";
@@ -86,7 +99,7 @@ const MODULE_COLORS: Record<string, string> = {
 };
 
 export default async function VeilNetXLedgerPage() {
-  const [head, entries, stats] = await Promise.all([loadHead(), loadEntries(), loadStats()]);
+  const [head, entries, stats, verify] = await Promise.all([loadHead(), loadEntries(), loadStats(), loadVerify()]);
 
   return (
     <main style={{ minHeight: "100vh", background: "#0f172a", color: "#f1f5f9" }}>
@@ -97,6 +110,35 @@ export default async function VeilNetXLedgerPage() {
           <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 620, margin: "0 auto 16px" }}>
             Tamper-evident settlement chain. Каждая запись хэшем сцеплена с предыдущей. Participants blinded HMAC-SHA-256.
           </p>
+        </div>
+      </section>
+
+      <section style={{ padding: "0 24px 20px" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+          {(() => {
+            if (!verify) {
+              return (
+                <div style={{ padding: "12px 16px", background: "#1e293b", border: "1px solid #334155", borderRadius: 12, color: "#94a3b8", fontSize: 13, textAlign: "center" }}>
+                  Integrity check unavailable — backend unreachable.
+                </div>
+              );
+            }
+            const ok = verify.verified;
+            return (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "14px 18px", background: ok ? "#06281d" : "#2a0f12", border: `1px solid ${ok ? "#10b981" : "#ef4444"}`, borderRadius: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 20 }}>{ok ? "✅" : "⚠"}</span>
+                <span style={{ fontWeight: 800, color: ok ? "#34d399" : "#f87171", fontSize: 15 }}>
+                  {ok ? "Chain verified" : `Integrity broken at entry #${verify.brokenAt}`}
+                </span>
+                <span style={{ color: "#94a3b8", fontSize: 12 }}>
+                  {ok
+                    ? `Все ${verify.length} записей пересчитаны от генезиса — SHA-256 цепь цела.`
+                    : "Recomputed hash diverges from stored — chain has been tampered or corrupted."}
+                </span>
+                <code style={{ color: "#a78bfa", fontSize: 11, fontFamily: "ui-monospace, Menlo, monospace" }} title={verify.head}>head {short(verify.head, 12)}</code>
+              </div>
+            );
+          })()}
         </div>
       </section>
 

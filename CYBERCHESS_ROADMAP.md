@@ -91,10 +91,10 @@
 6. **F2 phase-3** — Stockfish multiPV depth 25+ (сейчас depth 18 для recall). Точнее CPI, но медленнее. Toggle в settings.
 
 ### Дизайн/UX долг
-7. **Tournament UI page** — `tournament.ts` имеет логику (bracket/leaderboard), но нет визуального `/cyberchess/tournament` маршрута. ~3 часа.
+7. ✅ **Tournament UI page** — DONE. `/cyberchess/tournament` (hub, bracket/leaderboard/badges), `/cyberchess/tournaments` (список + API-fallback), `/cyberchess/tournaments/[id]` (детальная, polling+SSE matchmaking). **2026-06-20:** hub подключён к реальным трофеям игрока (`ldTrophies()`), игрок «Ты» вливается в лидерборд. Cross-tournament leaderboard backend готов: `GET /api/cyberchess-tournaments/leaderboard` (агрегатор `computeCrossTournamentLeaderboard`, +vitest 5 кейсов), hub тянет live с фоллбэком на демо.
 8. **Time-control selector в Setup screen** — сейчас Quick Game / Variants есть, но фактический TC иногда теряется.
-9. **Mobile playboard** — сама доска на мобайле может быть тесной. Нужен dedicated mobile layout (CSS `aspect-ratio: 1`, touch handling). ~4-6 часов.
-10. **Dark/Light theme toggle** — сейчас всё dark. Light mode желателен.
+9. **Mobile playboard** — адаптив есть (resize-логика + media-queries + user-scale `cc_board_scale_v1`), доска clamp'ится до окна. Можно дошлифовать тач-зоны, но не блокер.
+10. ✅ **Dark/Light theme toggle** — DONE. `themeMode` (localStorage `aevion_chess_color_theme_v1`), `CC_DARK`/`CC_LIGHT`, CSS-vars `data-cc-theme`, переключатель в Настройках → «Внешний вид».
 
 ### Контент-долг
 11. **Coach Knowledge: 93 → 150+ entries** — больше тем по эндшпилям, миттельшпилю, классическим партиям.
@@ -139,7 +139,7 @@
 | 12 chess variants (Knight Riders/Atomic/KotH/Twin Kings/Diceblade и т.д.) | partial | partial | ✅ |
 | Game DNA / Game Insights cards | ❌ | partial | ✅ |
 | Ghost Duel mode (vs past-self) | ❌ | ❌ | ✅ |
-| Multiverse mode (parallel alt-history) | ❌ | ❌ | ✅ |
+| ~~Multiverse mode (parallel alt-history)~~ | ❌ | ❌ | ⚠️ вырезан 2026-05-18 (dead code) — либо возродить, либо снять заявку |
 
 **9 уникальных killer-фичей** которых нет ни у lichess, ни у chess.com.
 
@@ -158,3 +158,50 @@
 - `CYBERCHESS_CPI_SPEC.md` — полная формула рейтинга
 - `CYBERCHESS_STOCKFISH_UPGRADE.md` — пути апгрейда движка L1/L2/L3
 - `AEVION_COORDINATION.md` — кросс-зонные правила, BROADCAST #1-#5, WIP
+
+---
+
+## Аудит vs lichess/chess.com (2026-06-20) — главный вывод
+
+Прогнали честный 4-зонный аудит (shell/навигация, киллер-фичи, механики, onboarding/mobile/perf).
+
+**Ключевой инсайт: мы НЕ отстаём по механикам — мы проигрываем по обнаружимости.**
+- Механики у паритета: ПКМ-стрелки + подсветка клеток (Shift=красный/Ctrl=синий), навигация по ходам (←/→, hover-превью, click-jump, аннотации !?/??), премувы с очередью, анализ + multiPV + WhatIf, opening explorer, 12 вариантов, процедурные звуки. Первичный аудит механик дал ложные негативы (читал только `useBoardInput.ts`).
+- **Реальный провал — 12 из 14 маршрутов были «сиротами»** (только прямой URL / Ctrl+K): Турниры, Экономика, Тренинг, Реплеи, Спектатор, Студия, Матчмейкинг, CPI-лидерборд. Киллер-фич БОЛЬШЕ, чем у конкурентов, но их не видно → выглядим беднее.
+
+**Сделано (2026-06-20):**
+- ✅ **Навигационный хаб «☰ Все разделы»** в хедере (зелёный акцент) + группа «Разделы» в Ctrl+K. Сгруппировано: Играть · Учиться · Соревноваться · Смотреть · Экономика. Все 14 маршрутов теперь обнаружимы.
+- ✅ Multiverse-заявка помечена честно (вырезан, dead code).
+
+**Сделано (2026-06-22, big block):**
+- ✅ Home-экран: карточка «⭐ Чего нет у конкурентов» — Турниры / CPI / Экономика / 12 вариантов, видна ВСЕМ (не только новичкам) + ссылка на хаб.
+- ✅ AI-коуч тумблер: лейбл «🤖 AI-разбор» + тултипы (PR #398).
+- ✅ **Стрелка лучшего хода движка в анализе** (lichess-style, авто из multiPV[0], тумблер в «Варианты»). Заодно починен gate SVG-оверлея: движковые/премув-стрелки раньше не рендерились без пользовательской стрелки — теперь видны сами по себе.
+- ✅ Онбординг: понятные описания уровней ИИ (что значит 800/1200/…).
+
+**Осталось (нужна браузерная проверка — НЕ делаем вслепую):**
+1. Перф: page.tsx = 13.7k строк / ~140 useState — декомпозиция под мобильные (риск регрессий, нужен профайлинг).
+2. Mobile-доска — больше места под доску (есть история overflow-регрессий, менять только с визуальной проверкой).
+3. Stockfish L3 — миграция на `lila-stockfish-web` (нужен npm install + проверка SAB/потоков).
+4. Боты <1200 — дебютная книга + человечные ошибки.
+5. Решить судьбу Multiverse (возродить или снять из киллер-листа).
+6. Ecosystem-балласт (AevionMiniHub, Projects-баннер) — НЕ трогаем: осознанная кросс-промо стратегия.
+
+### ✅ Починено (2026-06-24, PR #432) — панель «Варианты» / multiPV
+
+**Было:** панель «Варианты» (engine lines / multiPV) в анализе висла на «Analyzing…»,
+стрелка лучшего хода (PR #399) не показывалась по той же причине.
+
+**Корень:** класс `SF` использовал ОДИН Stockfish-воркер с общими колбэками `cb/ecb/mpvCb`.
+`multiPV()` обнулял `this.cb`, а `eval()` — `this.mpvCb`; в анализе `runMultiPV` и live-eval
+стартовали почти одновременно и `stop`+`go` друг друга → ни один не доходил до `bestmove`.
+
+**Решение (вместо вариантов A/B — общий, на все call-site'ы):** `SF` сериализует все запросы
+(`go`/`eval`/`multiPV`) через внутреннюю очередь. Запрос доходит до своего `bestmove` прежде,
+чем стартует следующий → колбэки больше не затираются. Один воркер (без второго wasm-движка),
+тот же публичный API. В очереди максимум по одному запросу каждого вида (свежая позиция вытесняет
+устаревшую). См. `_submit`/`_pump`/`_finish` в `page.tsx`.
+
+**Проверено в браузере (Playwright, dev):** `/cyberchess → ▲ Анализ → 1.e4 → ▶ Analyze` —
+панель рисует 3 PV-линии с полным SAN, стрелка лучшего хода появляется, eval-бар обновляется,
+нет зависания на повторных запусках. `tsc --noEmit` чистый.

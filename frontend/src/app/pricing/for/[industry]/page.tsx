@@ -15,7 +15,7 @@ interface IndustryConfig {
   hero: string;
   problem: string;
   whyAevion: string[];
-  recommendedTier: "free" | "pro" | "business" | "enterprise";
+  recommendedTier: "free" | "lite" | "medium" | "full" | "enterprise";
   recommendedModules: string[];
   caseStudy: { title: string; result: string };
   metrics: { label: string; value: string }[];
@@ -73,7 +73,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "AEVION IP Bureau: pre-validation идеи перед патентным поверенным",
       "Startup Exchange: монетизируйте идею, даже если не строите продукт",
     ],
-    recommendedTier: "pro",
+    recommendedTier: "medium",
     recommendedModules: ["qright", "qsign", "qcoreai", "aevion-ip-bureau"],
     caseStudy: {
       title: "AI-стартап MVP за 14 дней",
@@ -139,7 +139,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "QPersona: цифровой аватар для масштабирования",
       "Startup Exchange: продажа лицензий на готовый контент",
     ],
-    recommendedTier: "pro",
+    recommendedTier: "medium",
     recommendedModules: ["qright", "qsign", "kids-ai-content", "qpersona", "startup-exchange"],
     caseStudy: {
       title: "Инди-блогер: 1000 защищённых статей за год",
@@ -169,7 +169,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "Multichat-агенты на ваших шаблонах договоров",
       "Аудит-лог под export для регулятора одной кнопкой",
     ],
-    recommendedTier: "business",
+    recommendedTier: "full",
     recommendedModules: [
       "qright",
       "qsign",

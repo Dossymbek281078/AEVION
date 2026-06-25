@@ -170,7 +170,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
         }}>
           <span style={{ fontSize: 18, color: "#94a3b8" }}>⌕</span>
           <input ref={inputRef} value={q} onChange={e => { sQ(e.target.value); sIdx(0); }}
-            placeholder="Поиск команды… (e.g. quick start, premove, lichess, workspace stream)"
+            placeholder="Поиск команды… (e.g. quick start, premove, stream, puzzle)"
             style={{
               flex: 1, border: "none", outline: "none",
               background: "transparent", fontSize: 16, color: "#0f172a",

@@ -1,0 +1,368 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import type { Sliders } from "@/lib/constitution";
+
+type SimilarItem = {
+  id: string;
+  title: string;
+  regimeName: string;
+  similarity: number;
+  sliders: Sliders | null;
+};
+
+type ArtifactSummary = {
+  id: string;
+  title: string;
+  regimeId: string;
+  regimeName: string;
+  signedAt: string;
+  publishedAt: string;
+};
+
+type ArtifactFull = ArtifactSummary & {
+  algo?: string;
+  signature?: string;
+  payload?: {
+    sliders?: Sliders;
+    regime?: { id?: string; name?: string; era?: string };
+  };
+};
+
+export default function ConstitutionLeaderboardPage() {
+  const [items, setItems] = useState<ArtifactSummary[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [stub, setStub] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  // Full artifacts cache so we can render Embed with sliders
+  const [fullById, setFullById] = useState<Record<string, ArtifactFull>>({});
+
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(
+        "/api-backend/api/planet/constitution-artifacts?limit=50",
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = (await r.json()) as {
+        items: ArtifactSummary[];
+        total: number;
+        stub?: boolean;
+      };
+      setItems(j.items ?? []);
+      setTotal(j.total ?? 0);
+      setStub(Boolean(j.stub));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "load_failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadList();
+  }, [loadList]);
+
+  // Eagerly fetch full data for all items so each card renders a radar.
+  // For 50 items × ~2KB = ~100KB total — acceptable on initial load.
+  useEffect(() => {
+    if (items.length === 0) return;
+    const todo = items.filter((it) => !(it.id in fullById)).map((it) => it.id);
+    if (todo.length === 0) return;
+    Promise.all(
+      todo.map(async (id) => {
+        try {
+          const r = await fetch(
+            `/api-backend/api/planet/constitution-artifacts/${id}`,
+          );
+          if (!r.ok) return null;
+          const j = (await r.json()) as ArtifactFull;
+          return [id, j] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((results) => {
+      const additions: Record<string, ArtifactFull> = {};
+      for (const r of results) {
+        if (r) additions[r[0]] = r[1];
+      }
+      if (Object.keys(additions).length > 0) {
+        setFullById((prev) => ({ ...prev, ...additions }));
+      }
+    });
+  }, [items, fullById]);
+
+  // Social stats per artifact (votes/comments counts)
+  const [socialById, setSocialById] = useState<
+    Record<string, { up: number; down: number; my: number; commentCount: number }>
+  >({});
+
+  const loadSocial = useCallback(
+    async (id: string) => {
+      try {
+        const r = await fetch(
+          `/api-backend/api/planet/constitution-artifacts/${id}/social`,
+        );
+        if (!r.ok) return;
+        const j = (await r.json()) as {
+          votes: { up: number; down: number; my: number };
+          comments: unknown[];
+        };
+        setSocialById((prev) => ({
+          ...prev,
+          [id]: {
+            up: j.votes.up,
+            down: j.votes.down,
+            my: j.votes.my,
+            commentCount: Array.isArray(j.comments) ? j.comments.length : 0,
+          },
+        }));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    items.slice(0, 30).forEach((it) => {
+      if (!(it.id in socialById)) void loadSocial(it.id);
+    });
+  }, [items, socialById, loadSocial]);
+
+  const [expandedSimilar, setExpandedSimilar] = useState<string | null>(null);
+  const [similarById, setSimilarById] = useState<Record<string, SimilarItem[]>>({});
+
+  const toggleSimilar = useCallback(async (id: string) => {
+    if (expandedSimilar === id) {
+      setExpandedSimilar(null);
+      return;
+    }
+    setExpandedSimilar(id);
+    if (id in similarById) return;
+    try {
+      const r = await fetch(
+        `/api-backend/api/planet/constitution-artifacts/${id}/similar?limit=3`,
+      );
+      if (!r.ok) return;
+      const j = (await r.json()) as { items: SimilarItem[] };
+      setSimilarById((prev) => ({ ...prev, [id]: j.items ?? [] }));
+    } catch {
+      /* ignore */
+    }
+  }, [expandedSimilar, similarById]);
+
+  const castVote = useCallback(
+    async (id: string, vote: 1 | -1) => {
+      const cur = socialById[id];
+      const isToggleOff = cur?.my === vote;
+      try {
+        if (isToggleOff) {
+          await fetch(
+            `/api-backend/api/planet/constitution-artifacts/${id}/vote`,
+            { method: "DELETE" },
+          );
+        } else {
+          await fetch(
+            `/api-backend/api/planet/constitution-artifacts/${id}/vote`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ vote }),
+            },
+          );
+        }
+        await loadSocial(id);
+      } catch {
+        /* ignore */
+      }
+    },
+    [socialById, loadSocial],
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-6">
+          <Link
+            href="/constitution"
+            className="text-[#d4af37] hover:underline text-sm"
+          >
+            ← Constitution
+          </Link>
+          <h1 className="text-3xl md:text-4xl font-bold mt-2 text-[#d4af37]">
+            Planet Constitutions — Leaderboard
+          </h1>
+          <p className="text-[#9aa3c0] mt-2 max-w-3xl">
+            Подписанные QSign конституции, опубликованные на Planet. Сортировка
+            по дате публикации. Клик «Применить» — переход в редактор с
+            подгруженными ползунками.
+          </p>
+          {stub && (
+            <p className="text-xs text-amber-300 mt-2 max-w-3xl">
+              ⚠ Хранилище — in-memory ring buffer (stub). Артефакты переживут
+              сервер до рестарта Railway. Production-storage — следующий шаг.
+            </p>
+          )}
+        </header>
+
+        {loading && (
+          <div className="text-center text-[#9aa3c0] py-10">Загрузка…</div>
+        )}
+
+        {error && (
+          <div className="text-rose-400 border border-rose-500/30 rounded p-4 bg-rose-500/5">
+            Ошибка загрузки: {error}
+          </div>
+        )}
+
+        {!loading && !error && items.length === 0 && (
+          <div className="text-center text-[#9aa3c0] py-10 border border-[#d4af37]/20 rounded">
+            Пока нет опубликованных артефактов. Зайди в{" "}
+            <Link href="/constitution" className="text-[#d4af37] underline">
+              /constitution
+            </Link>{" "}
+            и нажми «🌍 Опубликовать на Planet».
+          </div>
+        )}
+
+        {!loading && items.length > 0 && (
+          <>
+            <div className="mb-4 text-sm text-[#9aa3c0]">
+              Показано {items.length} из {total} артефактов
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {items.map((it) => {
+                const full = fullById[it.id];
+                const sliders = full?.payload?.sliders;
+                return (
+                  <div
+                    key={it.id}
+                    className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-4 flex flex-col"
+                  >
+                    <div className="text-xs text-[#9aa3c0] mb-2 flex justify-between">
+                      <span className="font-mono truncate">
+                        {it.id.slice(0, 8)}
+                      </span>
+                      <span>{new Date(it.publishedAt).toLocaleDateString()}</span>
+                    </div>
+                    {sliders ? (
+                      <div className="self-center">
+                        <ConstitutionEmbed
+                          sliders={sliders}
+                          label={it.title}
+                          size="sm"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-[240px] flex items-center justify-center text-[#9aa3c0] text-xs">
+                        Загрузка отпечатка…
+                      </div>
+                    )}
+                    {(() => {
+                      const s = socialById[it.id];
+                      if (!s) {
+                        return (
+                          <div className="mt-2 text-xs text-[#9aa3c0] text-center">
+                            …
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-2 flex items-center justify-between text-sm">
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => castVote(it.id, 1)}
+                              className={`px-2 py-1 rounded transition text-xs ${
+                                s.my === 1
+                                  ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200"
+                                  : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
+                              }`}
+                              title="Голос «за»"
+                            >
+                              👍 {s.up}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => castVote(it.id, -1)}
+                              className={`px-2 py-1 rounded transition text-xs ${
+                                s.my === -1
+                                  ? "bg-rose-500/30 border border-rose-400/60 text-rose-200"
+                                  : "border border-[#d4af37]/30 hover:bg-rose-500/10"
+                              }`}
+                              title="Голос «против»"
+                            >
+                              👎 {s.down}
+                            </button>
+                          </div>
+                          <Link
+                            href={`/constitution?artifact=${it.id}#comments`}
+                            className="text-xs text-[#9aa3c0] hover:text-[#d4af37]"
+                          >
+                            💬 {s.commentCount}
+                          </Link>
+                        </div>
+                      );
+                    })()}
+                    <Link
+                      href={`/constitution?artifact=${it.id}`}
+                      className="mt-3 px-3 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold text-center text-sm hover:opacity-90"
+                    >
+                      Применить ползунки →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => toggleSimilar(it.id)}
+                      className="mt-1 px-2 py-1 text-xs text-[#9aa3c0] hover:text-[#f5d27a] text-center"
+                    >
+                      {expandedSimilar === it.id ? "Скрыть похожие ▴" : "🪞 Похожие →"}
+                    </button>
+                    {expandedSimilar === it.id && (
+                      <div className="mt-2 border-t border-[#d4af37]/15 pt-2 space-y-1.5">
+                        {!(it.id in similarById) ? (
+                          <div className="text-xs text-[#9aa3c0] text-center py-2">
+                            …
+                          </div>
+                        ) : similarById[it.id].length === 0 ? (
+                          <div className="text-xs text-[#9aa3c0] italic">
+                            Похожих не нашлось
+                          </div>
+                        ) : (
+                          similarById[it.id].map((sim) => (
+                            <Link
+                              key={sim.id}
+                              href={`/constitution?artifact=${sim.id}`}
+                              className="block text-xs px-2 py-1 rounded hover:bg-[#d4af37]/5"
+                            >
+                              <div className="flex justify-between items-baseline">
+                                <span className="truncate text-[#f5d27a]">
+                                  {sim.title}
+                                </span>
+                                <span className="text-emerald-300 font-mono ml-2 flex-shrink-0">
+                                  {Math.round(sim.similarity * 100)}%
+                                </span>
+                              </div>
+                              <div className="text-[#9aa3c0] truncate">
+                                {sim.regimeName}
+                              </div>
+                            </Link>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

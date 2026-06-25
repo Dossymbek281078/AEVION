@@ -43,22 +43,32 @@ export default function PrivacyScore() {
   });
   const [result, setResult] = useState<ScoreResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(false);
     fetch("/api-backend/api/shadownet/score", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ features }),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`score request failed (${r.status})`);
+        return r.json();
+      })
       .then((j) => {
-        if (!cancelled && j && j.success) {
+        if (cancelled) return;
+        if (j && j.success) {
           setResult(j.data);
+        } else {
+          throw new Error(j?.error || "score request failed");
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -208,6 +218,11 @@ export default function PrivacyScore() {
         {loading && !result && (
           <div style={{ marginTop: "12px", fontSize: "11px", color: "#a78bfa" }}>
             computing…
+          </div>
+        )}
+        {error && !loading && (
+          <div style={{ marginTop: "12px", fontSize: "11px", color: "#ef4444", fontFamily: "monospace" }}>
+            score unavailable — could not reach server
           </div>
         )}
       </div>

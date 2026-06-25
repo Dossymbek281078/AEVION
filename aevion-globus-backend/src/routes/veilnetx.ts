@@ -166,6 +166,163 @@ veilnetxRouter.post("/waitlist", waitlistLimiter, async (req: Request, res: Resp
   }
 });
 
+// ── Privacy inspect — live tool, no DB, no deps ──────────────────────────────
+//
+// Reports exactly what the request reveals about the caller to any server it
+// talks to. This is the honest, shippable-today core of VeilNetX: the Tor proxy
+// is still Q4 2026, but "see what you're leaking" works right now.
+
+function headerStr(value: unknown): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseUserAgent(ua: string | undefined): {
+  raw: string | null;
+  browser: string;
+  os: string;
+  mobile: boolean;
+} {
+  if (!ua) return { raw: null, browser: "unknown", os: "unknown", mobile: false };
+  const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+  let browser = "unknown";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/OPR\/|Opera/.test(ua)) browser = "Opera";
+  else if (/Chrome\//.test(ua)) browser = "Chrome";
+  else if (/Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Safari\//.test(ua)) browser = "Safari";
+  let os = "unknown";
+  if (/Windows NT/.test(ua)) os = "Windows";
+  else if (/Mac OS X/.test(ua)) os = "macOS";
+  else if (/Android/.test(ua)) os = "Android";
+  else if (/(iPhone|iPad|iPod)/.test(ua)) os = "iOS";
+  else if (/Linux/.test(ua)) os = "Linux";
+  return { raw: ua, browser, os, mobile };
+}
+
+veilnetxRouter.get("/inspect", (req: Request, res: Response) => {
+  // IP chain: X-Forwarded-For is leftmost-original-client first.
+  const xff = headerStr(req.headers["x-forwarded-for"]);
+  const rawChain = xff
+    ? xff.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  // Railway/CF terminate TLS and append their own hop(s) to X-Forwarded-For.
+  // Those trailing entries are our own edge infrastructure, not a privacy proxy
+  // the visitor chose — strip them before judging exposure, otherwise every
+  // direct visitor is wrongly told "you're behind a proxy". Defaults to 1 hop on
+  // Railway (RAILWAY_ENVIRONMENT set), 0 elsewhere; override via env for other edges.
+  const trustedEdgeHops = Number(
+    process.env.VEILNETX_TRUSTED_EDGE_HOPS ??
+      (process.env.RAILWAY_ENVIRONMENT ? "1" : "0"),
+  );
+  const ipChain =
+    trustedEdgeHops > 0 && rawChain.length > trustedEdgeHops
+      ? rawChain.slice(0, rawChain.length - trustedEdgeHops)
+      : rawChain;
+  const directIp =
+    (req.socket && req.socket.remoteAddress) || req.ip || null;
+  const clientIp = ipChain[0] || directIp || null;
+
+  const via = headerStr(req.headers["via"]);
+  const forwarded = headerStr(req.headers["forwarded"]);
+  // A proxy is "in front" only if the client-visible chain (after stripping our
+  // own edge hops) still has more than one hop, or a Via/Forwarded header is set.
+  const proxyDetected = Boolean(via || forwarded || ipChain.length > 1);
+
+  const ua = parseUserAgent(headerStr(req.headers["user-agent"]));
+  const acceptLanguage = headerStr(req.headers["accept-language"]) ?? null;
+  const primaryLanguage = acceptLanguage
+    ? acceptLanguage.split(",")[0]?.split(";")[0]?.trim() ?? null
+    : null;
+  const dnt = headerStr(req.headers["dnt"]) === "1";
+
+  // Geo hints leaked by the edge proxy (Cloudflare / Railway / generic).
+  const geo = {
+    country:
+      headerStr(req.headers["cf-ipcountry"]) ??
+      headerStr(req.headers["x-vercel-ip-country"]) ??
+      null,
+    city:
+      headerStr(req.headers["cf-ipcity"]) ??
+      headerStr(req.headers["x-vercel-ip-city"]) ??
+      null,
+    region:
+      headerStr(req.headers["cf-region"]) ??
+      headerStr(req.headers["x-vercel-ip-country-region"]) ??
+      null,
+  };
+  const geoLeaked = Boolean(geo.country || geo.city || geo.region);
+
+  // ── Exposure scoring: 0 = invisible, 100 = fully exposed ──────────────────
+  const findings: { id: string; label: string; severity: "low" | "med" | "high"; exposed: boolean }[] = [
+    {
+      id: "real-ip",
+      label: proxyDetected
+        ? "Запрос идёт через прокси — реальный IP скрыт от конечного сервера"
+        : "Реальный IP виден серверу напрямую (нет прокси/Tor)",
+      severity: "high",
+      exposed: !proxyDetected,
+    },
+    {
+      id: "geo",
+      label: geoLeaked
+        ? `Гео определяется по IP: ${[geo.country, geo.city].filter(Boolean).join(", ") || "да"}`
+        : "Гео по IP не раскрыто на этом хопе",
+      severity: "high",
+      exposed: geoLeaked,
+    },
+    {
+      id: "user-agent",
+      label: ua.raw
+        ? `User-Agent раскрывает браузер/ОС: ${ua.browser} / ${ua.os}`
+        : "User-Agent не передан",
+      severity: "med",
+      exposed: Boolean(ua.raw),
+    },
+    {
+      id: "language",
+      label: primaryLanguage
+        ? `Accept-Language раскрывает локаль: ${primaryLanguage}`
+        : "Accept-Language не передан",
+      severity: "low",
+      exposed: Boolean(primaryLanguage),
+    },
+    {
+      id: "dnt",
+      label: dnt
+        ? "Do-Not-Track включён"
+        : "Do-Not-Track не установлен (большинство сайтов его игнорируют, но это маркер)",
+      severity: "low",
+      exposed: !dnt,
+    },
+  ];
+
+  const weight = { low: 8, med: 18, high: 30 } as const;
+  const exposureScore = Math.min(
+    100,
+    findings.reduce((sum, f) => (f.exposed ? sum + weight[f.severity] : sum), 0),
+  );
+  const level = exposureScore >= 60 ? "red" : exposureScore >= 30 ? "yellow" : "green";
+
+  res.json({
+    module: "veilnetx",
+    tool: "inspect",
+    ip: clientIp,
+    ipChain,
+    proxyDetected,
+    userAgent: ua,
+    acceptLanguage,
+    primaryLanguage,
+    doNotTrack: dnt,
+    geo,
+    geoLeaked,
+    via: via ?? null,
+    serverTime: new Date().toISOString(),
+    exposure: { score: exposureScore, level, findings },
+    note: "Это видит ЛЮБОЙ сервер, к которому ты обращаешься напрямую. VeilNetX (Q4 2026) скроет IP+гео через Tor.",
+  });
+});
+
 // ── MVP concept board surface ───────────────────────────────────────────────
 
 mountConceptBoard({
@@ -198,6 +355,12 @@ veilnetxRouter.get("/openapi.json", (_req, res) => {
     paths: {
       "/health": { get: { summary: "Service health" } },
       "/status": { get: { summary: "Public status, ETA, principles, threat model, milestones" } },
+      "/inspect": {
+        get: {
+          summary: "Live privacy check — what the request reveals about the caller (IP, geo, UA, exposure score)",
+          responses: { "200": { description: "Server-visible exposure report" } },
+        },
+      },
       "/waitlist": {
         post: {
           summary: "Join the launch waitlist (rate-limited 5/min/IP)",

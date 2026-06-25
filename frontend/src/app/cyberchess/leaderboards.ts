@@ -30,7 +30,7 @@ const LAST_NAMES = [
   "Grischuk","Abdusattorov","Yi","Keymer","Erigaisi","Praggnanandhaa","Gukesh","Firouzja","Mamedyarov","Wojtaszek",
   "Kramnik","Radjabov","Svidler","Topalov","Gelfand","Kasparov","Karpov","Ivanchuk","Artemiev","Andreikin",
   "Dubov","Esipenko","Tomashevsky","Karjakin","Sjugirov","Sarana","Antipov","Khismatullin","Bogdanovich","Najer",
-  "Shirov","Korobov","Hess","Robson","Caruana","Sadorra","Naroditsky","Onischuk","Kamsky","Akobian",
+  "Shirov","Korobov","Hess","Robson","Caruana","Sadorra","Onischuk","Kamsky","Akobian",
   "Kulaots","Stefanova","Lagno","Goryachkina","Muzychuk","Krush","Kosteniuk","Polgar","Cramling","Hou",
   "Wenjun","Shuwen","Vega","Mastrovasilis","Negi","Nielsen","Howell","Adams","Short","McShane",
   "Wraith","Nightfall","Cipher","Specter","Wraith","Cyclone","Tempest","Inferno","Maverick","Rogue",

@@ -31,7 +31,10 @@ const GREEN = "#10b981";
 const BG = "#f8fafc";
 const CARD_BORDER = "rgba(15,23,42,0.08)";
 
-const FALLBACK_VERSION = "0.5.0";
+// Hardcoded as a last-resort if both FS read AND /api/aevion/sdks fall through.
+// Update on every catalog-client publish so the worst-case fallback is still
+// recent enough not to look like a broken page.
+const FALLBACK_VERSION = "0.8.1";
 
 const COOKBOOK_URL =
   "https://github.com/Dossymbek281078/AEVION/blob/main/docs/SDK_USAGE.md";
@@ -58,6 +61,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function readPackageVersion(): Promise<string> {
+  // Primary: read from the monorepo package.json at build-time. Fast,
+  // no network, always matches what would be published next.
   try {
     const pkgPath = path.join(
       process.cwd(),
@@ -72,7 +77,20 @@ async function readPackageVersion(): Promise<string> {
       return parsed.version;
     }
   } catch {
-    // fall through
+    // fall through to network fallback
+  }
+  // Secondary: /api/aevion/sdks lists the catalog-client version that the
+  // backend has on hand. Triggers when FS read fails on Vercel build
+  // (different cwd, missing files in build context, etc.).
+  try {
+    const r = await fetch(`${getApiBase()}/api/aevion/sdks?stats=0`, { next: { revalidate: 3600 } });
+    if (r.ok) {
+      const j = (await r.json()) as { sdks?: Array<{ id?: string; version?: string }> };
+      const v = j.sdks?.find((s) => s.id === "catalog-client")?.version;
+      if (typeof v === "string") return v;
+    }
+  } catch {
+    // fall through to hardcoded
   }
   return FALLBACK_VERSION;
 }

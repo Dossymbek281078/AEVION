@@ -4,14 +4,19 @@
  * Per-app monetization config — единый источник правды о том,
  * какие каналы монетизации активны в каждом приложении.
  *
- * Stripe-атрибуция: каждый платёж тегируется metadata.app_id = appId.
- * YouTube/Twitch: read-only stats через API, ключи в ENV.
- * PayBox: orderId prefix = appId (например cyberchess-1748600000-abc)
+ * Атрибуция продаж:
+ *   - Gumroad (ЕДИНСТВЕННЫЙ живой процессинг): permalink → appId через
+ *     GUMROAD_APP_<PERMALINK>=<appId>. См. /api/revenue/gumroad/*.
+ *   - YouTube/Twitch: read-only stats через API, ключи в ENV.
+ *   - PayBox: orderId prefix = appId (например cyberchess-1748600000-abc)
+ *   - Paddle: KYC не пройдена → мёртв; в каналах приложений больше не используется.
  */
 
 export type RevenueChannel =
-  | "paddle_subscription"   // Paddle периодические подписки
-  | "paddle_onetime"        // Paddle разовые платежи
+  | "gumroad_onetime"       // Gumroad разовая покупка (ЖИВОЙ канал)
+  | "gumroad_membership"    // Gumroad recurring membership (ЖИВОЙ канал)
+  | "paddle_subscription"   // Paddle периодические подписки (KYC не пройдена — мёртв, legacy)
+  | "paddle_onetime"        // Paddle разовые платежи (KYC не пройдена — мёртв, legacy)
   | "paybox"                // PayBox KZT
   | "kaspi"                 // Kaspi Pay (coming soon)
   | "youtube_adsense"       // YouTube AdSense / Shorts monetization
@@ -31,8 +36,8 @@ export interface AppRevenueMeta {
   youtubeChannelEnvKey?: string;
   /** ENV-переменная с логином Twitch-канала */
   twitchChannelEnvKey?: string;
-  /** Stripe Price IDs для подписок этого приложения */
-  stripePriceIds?: string[];
+  /** Gumroad permalink'и продуктов этого приложения (для справки в дашборде) */
+  gumroadPermalinks?: string[];
   /** Цветовой маркер в дашборде */
   color: string;
   /** Описание для дашборда */
@@ -45,7 +50,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "cyberchess",
     appName: "CyberChess",
-    channels: ["paddle_subscription", "paddle_onetime", "twitch_affiliate", "youtube_adsense", "in_app_purchase"],
+    channels: ["gumroad_membership", "gumroad_onetime", "twitch_affiliate", "youtube_adsense", "in_app_purchase"],
     youtubeChannelEnvKey: "CYBERCHESS_YOUTUBE_CHANNEL_ID",
     twitchChannelEnvKey: "CYBERCHESS_TWITCH_CHANNEL",
     color: "#6366f1",
@@ -55,7 +60,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qlearn",
     appName: "QLearn",
-    channels: ["paddle_subscription", "course_sale", "paybox"],
+    channels: ["gumroad_membership", "course_sale", "paybox"],
     color: "#10b981",
     description: "Образовательная платформа — подписки, продажа курсов",
     live: true,
@@ -63,7 +68,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "smeta-trainer",
     appName: "Smeta Trainer",
-    channels: ["paddle_onetime", "paybox", "course_sale"],
+    channels: ["gumroad_onetime", "paybox", "course_sale"],
     color: "#f59e0b",
     description: "Тренажёр сметного дела РК — разовые покупки курсов",
     live: true,
@@ -71,7 +76,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qstore",
     appName: "QStore",
-    channels: ["paddle_onetime", "paybox", "marketplace"],
+    channels: ["gumroad_onetime", "paybox", "marketplace"],
     color: "#ec4899",
     description: "Маркетплейс — транзакционные комиссии, прямые продажи",
     live: true,
@@ -79,7 +84,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qgood",
     appName: "QGood",
-    channels: ["paddle_onetime", "donation", "paybox"],
+    channels: ["gumroad_onetime", "donation", "paybox"],
     color: "#14b8a6",
     description: "Благотворительность — пожертвования, сборы",
     live: true,
@@ -87,7 +92,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qmedia",
     appName: "QMedia",
-    channels: ["paddle_subscription", "youtube_adsense", "twitch_affiliate"],
+    channels: ["gumroad_membership", "youtube_adsense", "twitch_affiliate"],
     youtubeChannelEnvKey: "QMEDIA_YOUTUBE_CHANNEL_ID",
     twitchChannelEnvKey: "QMEDIA_TWITCH_CHANNEL",
     color: "#f97316",
@@ -97,7 +102,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qpaynet-embedded",
     appName: "QPayNet",
-    channels: ["paddle_onetime", "paybox"],
+    channels: ["gumroad_onetime", "paybox"],
     color: "#3b82f6",
     description: "Финансовые операции — комиссии за переводы",
     live: true,
@@ -105,7 +110,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "healthai",
     appName: "HealthAI",
-    channels: ["paddle_subscription", "paybox"],
+    channels: ["gumroad_membership", "paybox"],
     color: "#22c55e",
     description: "AI-здоровье — подписки Premium",
     live: true,
@@ -113,7 +118,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qcoreai",
     appName: "QCoreAI",
-    channels: ["paddle_subscription", "paddle_onetime"],
+    channels: ["gumroad_membership", "gumroad_onetime"],
     color: "#a855f7",
     description: "AI-платформа — API-кредиты, подписки Pro",
     live: true,
@@ -121,7 +126,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "psyapp-deps",
     appName: "PsyApp",
-    channels: ["paddle_subscription", "paybox"],
+    channels: ["gumroad_membership", "paybox"],
     color: "#06b6d4",
     description: "Психологические инструменты — подписки",
     live: true,
@@ -129,7 +134,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "startup-exchange",
     appName: "Startup Exchange",
-    channels: ["paddle_onetime", "paddle_subscription"],
+    channels: ["gumroad_onetime", "gumroad_membership"],
     color: "#84cc16",
     description: "Стартап-биржа — листинги, featured-места",
     live: true,
@@ -137,7 +142,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "aevion-resonance",
     appName: "AEVION Resonance",
-    channels: ["paddle_onetime", "paybox", "course_sale"],
+    channels: ["gumroad_onetime", "paybox", "course_sale"],
     color: "#fb923c",
     description: "B2C протокол аллергии — продажа руководств, курсов",
     live: false,
@@ -145,7 +150,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qfusionai",
     appName: "QFusionAI",
-    channels: ["paddle_subscription", "paddle_onetime"],
+    channels: ["gumroad_membership", "gumroad_onetime"],
     color: "#8b5cf6",
     description: "AI-ансамбли — подписки Pro, API-кредиты",
     live: true,
@@ -153,7 +158,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qmaskcard",
     appName: "QMaskCard",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#64748b",
     description: "Защита идентичности — Premium-подписки",
     live: true,
@@ -161,7 +166,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "veilnetx",
     appName: "VeilNetX",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#475569",
     description: "Privacy-сеть — подписки",
     live: true,
@@ -169,7 +174,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qlife",
     appName: "QLife",
-    channels: ["paddle_subscription", "paybox"],
+    channels: ["gumroad_membership", "paybox"],
     color: "#0ea5e9",
     description: "Лайф-трекер — Premium",
     live: true,
@@ -177,7 +182,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qpersona",
     appName: "QPersona",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#c084fc",
     description: "Личный AI-ассистент — подписки",
     live: true,
@@ -185,7 +190,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "kids-ai-content",
     appName: "Kids AI Content",
-    channels: ["paddle_subscription", "paybox", "course_sale"],
+    channels: ["gumroad_membership", "paybox", "course_sale"],
     color: "#fbbf24",
     description: "Детский AI-контент — семейные подписки, продажа курсов",
     live: true,
@@ -193,7 +198,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "voice-of-earth",
     appName: "Voice of Earth",
-    channels: ["donation", "paddle_onetime"],
+    channels: ["donation", "gumroad_onetime"],
     color: "#16a34a",
     description: "Социальная инициатива — пожертвования",
     live: true,
@@ -201,7 +206,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "deepsan",
     appName: "DeepSan",
-    channels: ["paddle_subscription", "course_sale"],
+    channels: ["gumroad_membership", "course_sale"],
     color: "#0891b2",
     description: "Глубинные сан-инструменты — подписки, курсы",
     live: true,
@@ -209,7 +214,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "mapreality",
     appName: "MapReality",
-    channels: ["paddle_subscription", "paddle_onetime"],
+    channels: ["gumroad_membership", "gumroad_onetime"],
     color: "#dc2626",
     description: "AR-карта реальности — Premium, разовые покупки",
     live: true,
@@ -217,7 +222,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "z-tide",
     appName: "Z-Tide",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#7c3aed",
     description: "Социальная волна — подписки",
     live: true,
@@ -225,7 +230,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qcontract",
     appName: "QContract",
-    channels: ["paddle_onetime", "paybox"],
+    channels: ["gumroad_onetime", "paybox"],
     color: "#0f766e",
     description: "Цифровые контракты — разовые сборы",
     live: true,
@@ -233,7 +238,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "shadownet",
     appName: "ShadowNet",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#334155",
     description: "Анонимная сеть — подписки",
     live: true,
@@ -241,7 +246,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "lifebox",
     appName: "LifeBox",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#e11d48",
     description: "Личное хранилище — Premium-подписки",
     live: true,
@@ -249,7 +254,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qbuild",
     appName: "QBuild",
-    channels: ["paddle_subscription", "paybox"],
+    channels: ["gumroad_membership", "paybox"],
     color: "#ea580c",
     description: "Стройка-инструменты — Pro-подписки",
     live: true,
@@ -257,7 +262,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qchaingov",
     appName: "QChainGov",
-    channels: ["paddle_onetime"],
+    channels: ["gumroad_onetime"],
     color: "#1e40af",
     description: "Governance-голосования — разовые сборы за голос",
     live: true,
@@ -265,7 +270,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qnews",
     appName: "QNews",
-    channels: ["paddle_subscription", "youtube_adsense"],
+    channels: ["gumroad_membership", "youtube_adsense"],
     color: "#be123c",
     description: "Новости — подписки Pro, YouTube-монетизация",
     live: true,
@@ -273,7 +278,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qai",
     appName: "QAI",
-    channels: ["paddle_subscription"],
+    channels: ["gumroad_membership"],
     color: "#7e22ce",
     description: "Универсальный AI — подписки",
     live: true,
@@ -281,7 +286,7 @@ export const REVENUE_APPS: AppRevenueMeta[] = [
   {
     appId: "qevents",
     appName: "QEvents",
-    channels: ["paddle_onetime", "paybox"],
+    channels: ["gumroad_onetime", "paybox"],
     color: "#0d9488",
     description: "События — продажа билетов",
     live: true,

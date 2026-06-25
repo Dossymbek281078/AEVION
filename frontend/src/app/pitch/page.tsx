@@ -1521,7 +1521,12 @@ export default function PitchPage() {
           >
             {ask.title}
           </h2>
-          <p style={{ fontSize: 17, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 32px" }}>{ask.body}</p>
+          <p style={{ fontSize: 17, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 20px" }}>{ask.body}</p>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 32px" }}>
+            <Link href={ask.termsHref} style={{ color: "#5eead4", textDecoration: "none", borderBottom: "1px solid rgba(94,234,212,0.4)", paddingBottom: 2 }}>
+              {ask.termsLabel} →
+            </Link>
+          </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
             <a
               href={ask.ctaPrimary.href}

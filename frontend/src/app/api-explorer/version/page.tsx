@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -250,7 +250,7 @@ export default function VersionExplorerPage() {
   // between fetches — version is static between deploys so we don't re-fetch).
   const [, setNowTick] = useState(0);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
   const fullUrl = `${apiBase}/api/aevion/version`;
   const curl = `curl -s '${fullUrl}' | jq .`;
   const sdkSnippet = `import { AevionCatalog } from "@aevion-io/catalog-client";

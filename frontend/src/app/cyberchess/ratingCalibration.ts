@@ -148,6 +148,13 @@ export type CPIMetrics = {
   avgMoveTime: number;
   /** Кол-во партий в выборке (для confidence interval) */
   gamesPlayed: number;
+  /** Медиана per-move centipawn loss. Robust к outlier-блундерам.
+   *  Optional — старые callers не предоставляют, predict просто игнорирует
+   *  эту часть если weights без median coef. */
+  medianCpLoss?: number;
+  /** Стандартное отклонение per-move cp loss. Игроки с consistent loss
+   *  vs spiky loss с тем же mean — разные классы. Optional. */
+  cpLossStd?: number;
 };
 
 /**
@@ -325,8 +332,14 @@ export type SavedGameForCPI = {
   tc: string;
   category?: string;
   opening?: string;
-  /** Если впоследствии добавим engine eval — будем использовать */
-  analysis?: Array<{ ply: number; quality?: "best" | "good" | "ok" | "inaccuracy" | "mistake" | "blunder" }>;
+  /** Per-move engine evaluation recorded at end of game. When present,
+   *  calibrateFromGames uses real cp-loss stats instead of heuristics. */
+  analysis?: Array<{
+    ply: number;
+    quality?: "best" | "good" | "ok" | "inaccuracy" | "mistake" | "blunder";
+    /** Centipawn loss for this ply (always ≥ 0). Undefined on legacy records. */
+    cpLoss?: number;
+  }>;
 };
 
 /**
@@ -358,6 +371,7 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
   let inaccuracyMoves = 0;
   let bestOrGoodMoves = 0;
   let analyzedPlies = 0;
+  const cpLosses: number[] = [];
 
   let openings = new Set<string>();
   let totalOpeningPlies = 0;
@@ -395,6 +409,7 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
         else if (a.quality === "mistake") mistakeMoves++;
         else if (a.quality === "inaccuracy") inaccuracyMoves++;
         else if (a.quality === "best" || a.quality === "good") bestOrGoodMoves++;
+        if (typeof a.cpLoss === "number" && a.cpLoss >= 0) cpLosses.push(a.cpLoss);
       }
     }
 
@@ -485,6 +500,19 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
   }
   const avgMoveTime = timeSamples > 0 ? totalTime / timeSamples : 30;
 
+  // Compute median and std from accumulated per-move cp losses when enough
+  // data exists. Falls through to undefined when analysis is missing (legacy
+  // games or games without engine review) — predictor silently ignores them.
+  let medianCpLoss: number | undefined;
+  let cpLossStd: number | undefined;
+  if (cpLosses.length >= 5) {
+    const sorted = [...cpLosses].sort((a, b) => a - b);
+    const n = sorted.length;
+    medianCpLoss = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+    const mean = cpLosses.reduce((s, x) => s + x, 0) / n;
+    cpLossStd = Math.sqrt(cpLosses.reduce((s, x) => s + (x - mean) ** 2, 0) / Math.max(1, n - 1));
+  }
+
   return {
     accuracyPct,
     openingTheoryDepth,
@@ -493,6 +521,8 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
     blunderRate,
     avgMoveTime,
     gamesPlayed: games.length,
+    ...(medianCpLoss !== undefined ? { medianCpLoss } : {}),
+    ...(cpLossStd !== undefined ? { cpLossStd } : {}),
   };
 }
 

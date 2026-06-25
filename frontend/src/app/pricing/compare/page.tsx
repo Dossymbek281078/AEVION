@@ -7,7 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 type ModuleKind = "core" | "product" | "service" | "experiment";
 type ModuleAvailability = "live" | "beta" | "soon" | "on_request";
 
@@ -132,7 +132,7 @@ export default function PricingComparePage() {
     );
   }
 
-  const tierOrder: TierId[] = ["free", "pro", "business", "enterprise"];
+  const tierOrder: TierId[] = ["free", "lite", "medium", "full", "enterprise"];
   const tiers = tierOrder
     .map((id) => data.tiers.find((t) => t.id === id))
     .filter((t): t is PricingTier => Boolean(t));

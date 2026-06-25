@@ -1,6 +1,6 @@
-// chessSounds.ts — 40 procedural sound presets + silent mode for CyberChess.
+// chessSounds.ts — 60 procedural sound presets + silent mode for CyberChess.
 // Все звуки синтезируются через Web Audio API. Никаких ассетов не качается —
-// пользователь может выбрать любой из 41 варианта (20 классических + 20 нетиповых
+// пользователь может выбрать любой из 61 варианта (30 классических + 30 нетиповых
 // + молчание) прямо в Settings, и фигуры начинают щёлкать по-новому без перезагрузки.
 
 export type ChessSoundEvent = "move" | "capture" | "check" | "castle" | "premove" | "cancel" | "x";
@@ -119,8 +119,8 @@ const CLASSIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-lichess", name: "Lichess стиль", emoji: "♞", category: "classic",
-    desc: "Знакомый сухой клац как у lichess.org.",
+    id: "classic-lichess", name: "Классический сухой", emoji: "♞", category: "classic",
+    desc: "Чёткий сухой клац — минималистичный стиль.",
     events: {
       move:    [noiseMove(1600, 0.20, 0.05)],
       capture: [noiseMove(800, 0.30, 0.08), noiseMove(1200, 0.14, 0.05)],
@@ -520,13 +520,257 @@ const EXOTIC: ChessSoundPreset[] = [
   },
 ];
 
+// 20 ДОПОЛНИТЕЛЬНЫХ (10 classic-extra + 10 exotic-extra) — доводят набор до 60.
+const EXTRA: ChessSoundPreset[] = [
+  {
+    id: "classic-felt", name: "Фетр", emoji: "🟫", category: "classic",
+    desc: "Мягкое приглушённое касание по фетровому полю.",
+    events: {
+      move:    [noiseMove(900, 0.16, 0.05)],
+      capture: [noiseMove(520, 0.26, 0.09), noiseMove(720, 0.12, 0.06)],
+      check:   [noiseMove(1500, 0.20, 0.06)],
+      castle:  [noiseMove(800, 0.15, 0.04), noiseMove(800, 0.13, 0.04)],
+      premove: [noiseMove(1200, 0.10, 0.03)],
+      cancel:  [noiseMove(700, 0.14, 0.05), noiseMove(420, 0.10, 0.05)],
+    },
+  },
+  {
+    id: "classic-bone", name: "Кость", emoji: "🦴", category: "classic",
+    desc: "Сухой костяной стук старинного набора.",
+    events: {
+      move:    [{ kind: "click", freq: 2000, q: 6, dur: 0.05, vol: 0.20 }],
+      capture: [{ kind: "click", freq: 900, q: 3, dur: 0.09, vol: 0.30 }, { kind: "click", freq: 1600, q: 5, dur: 0.05, vol: 0.14 }],
+      check:   [{ kind: "click", freq: 2600, q: 8, dur: 0.06, vol: 0.24 }],
+      castle:  [{ kind: "click", freq: 1700, q: 5, dur: 0.05, vol: 0.16 }, { kind: "click", freq: 1700, q: 5, dur: 0.05, vol: 0.16 }],
+      premove: [{ kind: "click", freq: 2400, q: 6, dur: 0.03, vol: 0.10 }],
+      cancel:  [{ kind: "click", freq: 1400, q: 4, dur: 0.05, vol: 0.15 }, { kind: "click", freq: 700, q: 4, dur: 0.05, vol: 0.11 }],
+    },
+  },
+  {
+    id: "classic-metal", name: "Сталь", emoji: "⚙️", category: "classic",
+    desc: "Холодный звон стальных фигур.",
+    events: {
+      move:    [{ kind: "click", freq: 3200, q: 12, dur: 0.06, vol: 0.16 }],
+      capture: [{ kind: "click", freq: 1500, q: 8, dur: 0.11, vol: 0.28 }, { kind: "click", freq: 2900, q: 12, dur: 0.07, vol: 0.16 }],
+      check:   [{ kind: "click", freq: 3900, q: 16, dur: 0.08, vol: 0.22 }],
+      castle:  [{ kind: "click", freq: 2300, q: 10, dur: 0.05, vol: 0.15 }, { kind: "click", freq: 2300, q: 10, dur: 0.05, vol: 0.15 }],
+      premove: [{ kind: "click", freq: 3400, q: 14, dur: 0.03, vol: 0.10 }],
+      cancel:  [{ kind: "click", freq: 1900, q: 8, dur: 0.05, vol: 0.15 }, { kind: "click", freq: 950, q: 8, dur: 0.05, vol: 0.11 }],
+    },
+  },
+  {
+    id: "classic-soft-wood", name: "Орех", emoji: "🌰", category: "classic",
+    desc: "Тёплый низкий орех — мягче дуба.",
+    events: {
+      move:    [noiseMove(1000, 0.22, 0.07)],
+      capture: [noiseMove(560, 0.34, 0.11), noiseMove(820, 0.15, 0.07)],
+      check:   [noiseMove(1900, 0.26, 0.07)],
+      castle:  [noiseMove(900, 0.20, 0.05), noiseMove(900, 0.18, 0.05)],
+      premove: [noiseMove(1400, 0.12, 0.04)],
+      cancel:  [noiseMove(760, 0.17, 0.05), noiseMove(440, 0.12, 0.05)],
+    },
+  },
+  {
+    id: "classic-ivory", name: "Слоновая кость", emoji: "🐘", category: "classic",
+    desc: "Гладкий полированный звон премиум-набора.",
+    events: {
+      move:    [tone("sine", 2200, 0.07, 0.13)],
+      capture: [tone("triangle", 1100, 0.10, 0.20), tone("sine", 1700, 0.06, 0.09)],
+      check:   [tone("sine", 2800, 0.10, 0.16)],
+      castle:  [tone("sine", 1900, 0.05, 0.12), tone("sine", 2200, 0.06, 0.12)],
+      premove: [tone("sine", 2600, 0.04, 0.09)],
+      cancel:  [tone("sine", 1700, 0.05, 0.12), tone("sine", 950, 0.06, 0.10)],
+    },
+  },
+  {
+    id: "classic-clay", name: "Глина", emoji: "🏺", category: "classic",
+    desc: "Глухой керамический «бом».",
+    events: {
+      move:    [tone("sine", 480, 0.10, 0.18, 360)],
+      capture: [tone("sine", 360, 0.16, 0.26, 240), noiseMove(600, 0.12, 0.06)],
+      check:   [tone("sine", 620, 0.12, 0.20, 460)],
+      castle:  [tone("sine", 420, 0.09, 0.16, 340), tone("sine", 500, 0.09, 0.15, 380)],
+      premove: [tone("sine", 700, 0.06, 0.10, 600)],
+      cancel:  [tone("sine", 520, 0.09, 0.16, 300), tone("sine", 320, 0.10, 0.12, 200)],
+    },
+  },
+  {
+    id: "classic-cork", name: "Пробка", emoji: "🟤", category: "classic",
+    desc: "Лёгкое упругое «пок» по пробковому полю.",
+    events: {
+      move:    [{ kind: "click", freq: 1400, q: 3, dur: 0.05, vol: 0.20 }],
+      capture: [{ kind: "click", freq: 800, q: 2, dur: 0.08, vol: 0.28 }, noiseMove(1000, 0.12, 0.05)],
+      check:   [{ kind: "click", freq: 1900, q: 4, dur: 0.06, vol: 0.22 }],
+      castle:  [{ kind: "click", freq: 1300, q: 3, dur: 0.04, vol: 0.16 }, { kind: "click", freq: 1300, q: 3, dur: 0.04, vol: 0.16 }],
+      premove: [{ kind: "click", freq: 1800, q: 4, dur: 0.03, vol: 0.10 }],
+      cancel:  [{ kind: "click", freq: 1100, q: 3, dur: 0.05, vol: 0.15 }, { kind: "click", freq: 650, q: 3, dur: 0.05, vol: 0.11 }],
+    },
+  },
+  {
+    id: "classic-crystal-soft", name: "Кварц", emoji: "💎", category: "classic",
+    desc: "Нежный кварцевый «динь» с лёгким сустейном.",
+    events: {
+      move:    [tone("sine", 1600, 0.12, 0.13)],
+      capture: [tone("sine", 1000, 0.14, 0.20), tone("sine", 2000, 0.09, 0.10)],
+      check:   [tone("sine", 2600, 0.16, 0.16)],
+      castle:  [tone("sine", 1400, 0.08, 0.12), tone("sine", 1800, 0.10, 0.12)],
+      premove: [tone("sine", 2400, 0.06, 0.09)],
+      cancel:  [tone("sine", 1500, 0.08, 0.13), tone("sine", 850, 0.10, 0.10)],
+    },
+  },
+  {
+    id: "classic-leather", name: "Кожа", emoji: "🟫", category: "classic",
+    desc: "Приглушённый кожаный «туп» по доске-планшету.",
+    events: {
+      move:    [noiseMove(640, 0.20, 0.06)],
+      capture: [noiseMove(420, 0.30, 0.10), noiseMove(620, 0.14, 0.06)],
+      check:   [noiseMove(1200, 0.22, 0.06)],
+      castle:  [noiseMove(560, 0.18, 0.05), noiseMove(560, 0.16, 0.05)],
+      premove: [noiseMove(1000, 0.11, 0.03)],
+      cancel:  [noiseMove(600, 0.15, 0.05), noiseMove(360, 0.11, 0.05)],
+    },
+  },
+  {
+    id: "classic-tournament", name: "Турнир", emoji: "🏆", category: "classic",
+    desc: "Чёткий собранный стук турнирного пластика Стаунтон.",
+    events: {
+      move:    [noiseMove(1800, 0.20, 0.05), { kind: "click", freq: 2600, q: 6, dur: 0.03, vol: 0.08 }],
+      capture: [noiseMove(1000, 0.32, 0.08), noiseMove(1500, 0.16, 0.06)],
+      check:   [noiseMove(2700, 0.26, 0.06)],
+      castle:  [noiseMove(1600, 0.18, 0.04), noiseMove(1600, 0.16, 0.04)],
+      premove: [noiseMove(2200, 0.12, 0.03)],
+      cancel:  [noiseMove(1200, 0.16, 0.05), noiseMove(700, 0.12, 0.05)],
+    },
+  },
+  {
+    id: "exotic-8bit", name: "8-бит", emoji: "🕹", category: "exotic",
+    desc: "Ретро-аркада: квадратные блипы из приставки.",
+    events: {
+      move:    [tone("square", 880, 0.05, 0.10, 1320)],
+      capture: [tone("square", 440, 0.08, 0.14, 220), tone("square", 660, 0.05, 0.08)],
+      check:   [tone("square", 1320, 0.07, 0.12, 1760)],
+      castle:  [tone("square", 660, 0.05, 0.10), tone("square", 990, 0.05, 0.10)],
+      premove: [tone("square", 1760, 0.04, 0.08)],
+      cancel:  [tone("square", 880, 0.05, 0.10, 440), tone("square", 330, 0.06, 0.08)],
+    },
+  },
+  {
+    id: "exotic-laser", name: "Лазер", emoji: "🔫", category: "exotic",
+    desc: "Sci-fi бластер — нисходящий писк.",
+    events: {
+      move:    [tone("sawtooth", 2200, 0.07, 0.10, 600)],
+      capture: [tone("sawtooth", 1800, 0.12, 0.16, 200), tone("square", 900, 0.05, 0.08)],
+      check:   [tone("sawtooth", 3000, 0.10, 0.13, 800)],
+      castle:  [tone("sawtooth", 1600, 0.06, 0.10, 700), tone("sawtooth", 1900, 0.06, 0.10, 900)],
+      premove: [tone("sawtooth", 2600, 0.04, 0.08, 1400)],
+      cancel:  [tone("sawtooth", 1400, 0.08, 0.12, 300)],
+    },
+  },
+  {
+    id: "exotic-organ", name: "Орган", emoji: "⛪", category: "exotic",
+    desc: "Соборный орган — торжественный аккорд.",
+    events: {
+      move:    [tone("sine", 392, 0.18, 0.12), tone("sine", 587, 0.18, 0.06)],
+      capture: [tone("sine", 294, 0.26, 0.16), tone("sine", 440, 0.26, 0.10), tone("sine", 587, 0.20, 0.06)],
+      check:   [tone("sine", 523, 0.24, 0.14), tone("sine", 659, 0.24, 0.10)],
+      castle:  [tone("sine", 392, 0.16, 0.12), tone("sine", 523, 0.18, 0.10)],
+      premove: [tone("sine", 659, 0.08, 0.08)],
+      cancel:  [tone("sine", 440, 0.16, 0.12), tone("sine", 330, 0.18, 0.10)],
+    },
+  },
+  {
+    id: "exotic-heartbeat", name: "Пульс", emoji: "❤️", category: "exotic",
+    desc: "Глубокий двойной удар сердца — нагнетает напряжение.",
+    events: {
+      move:    [tone("sine", 90, 0.12, 0.30, 55)],
+      capture: [tone("sine", 80, 0.14, 0.34, 45), tone("sine", 110, 0.10, 0.20, 60)],
+      check:   [tone("sine", 120, 0.16, 0.32, 70), tone("sine", 120, 0.12, 0.24, 70)],
+      castle:  [tone("sine", 95, 0.12, 0.26, 55), tone("sine", 95, 0.12, 0.24, 55)],
+      premove: [tone("sine", 140, 0.08, 0.16, 90)],
+      cancel:  [tone("sine", 85, 0.12, 0.24, 40)],
+    },
+  },
+  {
+    id: "exotic-bubble", name: "Пузырь", emoji: "🫧", category: "exotic",
+    desc: "Подводные пузырьки — игривый «блюп».",
+    events: {
+      move:    [tone("sine", 600, 0.08, 0.16, 1600)],
+      capture: [tone("sine", 400, 0.12, 0.22, 1200), tone("sine", 800, 0.06, 0.10, 1800)],
+      check:   [tone("sine", 900, 0.10, 0.18, 2200)],
+      castle:  [tone("sine", 500, 0.07, 0.14, 1400), tone("sine", 700, 0.07, 0.14, 1700)],
+      premove: [tone("sine", 1000, 0.05, 0.10, 2000)],
+      cancel:  [tone("sine", 700, 0.08, 0.14, 400)],
+    },
+  },
+  {
+    id: "exotic-glitch", name: "Глитч", emoji: "📟", category: "exotic",
+    desc: "Цифровой сбой — FM-щелчок с биениями.",
+    events: {
+      move:    [{ kind: "fm", carrier: 900, mod: 320, modIdx: 400, dur: 0.06, vol: 0.14 }],
+      capture: [{ kind: "fm", carrier: 500, mod: 180, modIdx: 600, dur: 0.12, vol: 0.22 }, { kind: "fm", carrier: 1200, mod: 410, modIdx: 300, dur: 0.06, vol: 0.12 }],
+      check:   [{ kind: "fm", carrier: 1400, mod: 530, modIdx: 700, dur: 0.10, vol: 0.18 }],
+      castle:  [{ kind: "fm", carrier: 700, mod: 250, modIdx: 350, dur: 0.06, vol: 0.13 }, { kind: "fm", carrier: 900, mod: 300, modIdx: 350, dur: 0.06, vol: 0.13 }],
+      premove: [{ kind: "fm", carrier: 1600, mod: 600, modIdx: 200, dur: 0.04, vol: 0.09 }],
+      cancel:  [{ kind: "fm", carrier: 800, mod: 290, modIdx: 500, dur: 0.08, vol: 0.14 }],
+    },
+  },
+  {
+    id: "exotic-harp", name: "Арфа", emoji: "🎵", category: "exotic",
+    desc: "Щипок струны арфы — мягкий pluck.",
+    events: {
+      move:    [{ kind: "pluck", freq: 880, dur: 0.30, vol: 0.20, decay: 1.0 }],
+      capture: [{ kind: "pluck", freq: 587, dur: 0.34, vol: 0.26, decay: 1.0 }, { kind: "pluck", freq: 880, dur: 0.24, vol: 0.14, decay: 1.0 }],
+      check:   [{ kind: "pluck", freq: 1175, dur: 0.30, vol: 0.22, decay: 1.0 }],
+      castle:  [{ kind: "pluck", freq: 659, dur: 0.26, vol: 0.18, decay: 1.0 }, { kind: "pluck", freq: 988, dur: 0.26, vol: 0.18, decay: 1.0 }],
+      premove: [{ kind: "pluck", freq: 1318, dur: 0.18, vol: 0.12, decay: 1.0 }],
+      cancel:  [{ kind: "pluck", freq: 784, dur: 0.24, vol: 0.16, decay: 1.0 }, { kind: "pluck", freq: 523, dur: 0.26, vol: 0.13, decay: 1.0 }],
+    },
+  },
+  {
+    id: "exotic-gong", name: "Гонг", emoji: "🥁", category: "exotic",
+    desc: "Восточный гонг — металлический сустейн с биениями.",
+    events: {
+      move:    [{ kind: "fm", carrier: 320, mod: 211, modIdx: 180, dur: 0.30, vol: 0.16 }],
+      capture: [{ kind: "fm", carrier: 220, mod: 147, modIdx: 240, dur: 0.40, vol: 0.24 }],
+      check:   [{ kind: "fm", carrier: 440, mod: 293, modIdx: 220, dur: 0.36, vol: 0.20 }],
+      castle:  [{ kind: "fm", carrier: 280, mod: 187, modIdx: 180, dur: 0.30, vol: 0.16 }],
+      premove: [{ kind: "fm", carrier: 520, mod: 340, modIdx: 120, dur: 0.16, vol: 0.10 }],
+      cancel:  [{ kind: "fm", carrier: 300, mod: 200, modIdx: 200, dur: 0.30, vol: 0.16 }],
+    },
+  },
+  {
+    id: "exotic-typewriter", name: "Печатная машинка", emoji: "⌨️", category: "exotic",
+    desc: "Механический удар клавиши и возврат каретки.",
+    events: {
+      move:    [{ kind: "click", freq: 2400, q: 14, dur: 0.04, vol: 0.20 }, noiseMove(1600, 0.10, 0.03)],
+      capture: [{ kind: "click", freq: 1400, q: 10, dur: 0.06, vol: 0.28 }, { kind: "click", freq: 2800, q: 16, dur: 0.04, vol: 0.14 }],
+      check:   [{ kind: "click", freq: 3200, q: 18, dur: 0.05, vol: 0.22 }],
+      castle:  [{ kind: "click", freq: 2000, q: 12, dur: 0.04, vol: 0.16 }, { kind: "click", freq: 1200, q: 8, dur: 0.06, vol: 0.14 }],
+      premove: [{ kind: "click", freq: 2800, q: 16, dur: 0.03, vol: 0.10 }],
+      cancel:  [{ kind: "click", freq: 1600, q: 10, dur: 0.05, vol: 0.15 }, { kind: "click", freq: 800, q: 8, dur: 0.05, vol: 0.11 }],
+    },
+  },
+  {
+    id: "exotic-zen-bowl", name: "Поющая чаша", emoji: "🧘", category: "exotic",
+    desc: "Тибетская чаша — долгий медитативный обертон.",
+    events: {
+      move:    [tone("sine", 528, 0.34, 0.14), tone("sine", 1056, 0.30, 0.05)],
+      capture: [tone("sine", 396, 0.40, 0.18), tone("sine", 792, 0.34, 0.07)],
+      check:   [tone("sine", 639, 0.38, 0.16), tone("sine", 1278, 0.32, 0.06)],
+      castle:  [tone("sine", 528, 0.30, 0.13), tone("sine", 660, 0.30, 0.11)],
+      premove: [tone("sine", 852, 0.16, 0.09)],
+      cancel:  [tone("sine", 432, 0.30, 0.14), tone("sine", 324, 0.32, 0.10)],
+    },
+  },
+];
+
 const SILENT: ChessSoundPreset = {
   id: "silent", name: "Молчание", emoji: "🔇", category: "silent",
   desc: "Полная тишина — никаких звуков фигур.",
   events: {},
 };
 
-export const CHESS_SOUND_PRESETS: ChessSoundPreset[] = [...CLASSIC, ...EXOTIC, SILENT];
+export const CHESS_SOUND_PRESETS: ChessSoundPreset[] = [...CLASSIC, ...EXOTIC, ...EXTRA, SILENT];
 
 let _audioCtx: AudioContext | null = null;
 function getCtx(): AudioContext | null {

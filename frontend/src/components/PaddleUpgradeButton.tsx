@@ -1,19 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { apiUrl } from "@/lib/apiBase";
+import { gumroadCheckoutUrl } from "@/lib/gumroad";
 
-// Paddle Price IDs — production live
-const PRICE_IDS: Record<string, string> = {
-  pro:      "pri_01krzxq0t2rmy9erdv54c9ny3w", // $19/мес
-  business: "pri_01krzy7zgqn32xc52qjbkfhvz0", // $49/мес
-};
+// NOTE: имя PaddleUpgradeButton оставлено как legacy — на него завязаны ~11
+// модульных страниц (импорты). Paddle/Stripe/LemonSqueezy не прошли KYC и мертвы;
+// единственный живой процессинг — Gumroad. Кнопка ведёт на Gumroad-чекаут.
 
 interface Props {
   tierId?: "pro" | "business";
   /** "button" — обычная кнопка, "banner" — полоса на всю ширину, "pill" — компактный */
   variant?: "button" | "banner" | "pill";
-  /** Название приложения для атрибуции (appId в Paddle metadata) */
+  /** Название приложения — пробрасывается в Gumroad URL для аналитики атрибуции */
   appId?: string;
   label?: string;
   className?: string;
@@ -27,39 +25,15 @@ export function PaddleUpgradeButton({
   className = "",
 }: Props) {
   const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
-  async function handleClick() {
+  function handleClick() {
     setLoading(true);
-    setNotice(null);
-    try {
-      const priceId = PRICE_IDS[tierId];
-      const r = await fetch(apiUrl("/api/paddle/checkout"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ priceId, appId, tierId }),
-      });
-      const j = await r.json();
-      if (j.url) {
-        window.location.href = j.url;
-      } else if (j.error?.includes("checkout_not_enabled")) {
-        setNotice("Платёжный шлюз проходит верификацию — будет доступен в течение 1-3 дней");
-      } else {
-        setNotice("Попробуйте позже или напишите нам на support@aevion.app");
-      }
-    } catch {
-      setNotice("Нет соединения — проверьте интернет и попробуйте ещё раз");
-    } finally {
-      setLoading(false);
-    }
+    // Gumroad hosted checkout — единственный живой рельс.
+    window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
   }
 
   const defaultLabel = tierId === "pro" ? "Начать бесплатно — 14 дней" : "Попробовать Business";
-  const text = loading ? "Загружаем..." : (label ?? defaultLabel);
-
-  const noticeEl = notice ? (
-    <p className="mt-2 text-xs text-amber-400/80 text-center">{notice}</p>
-  ) : null;
+  const text = loading ? "Открываем оплату..." : (label ?? defaultLabel);
 
   if (variant === "banner") {
     return (
@@ -79,7 +53,6 @@ export function PaddleUpgradeButton({
             {text}
           </button>
         </div>
-        {noticeEl}
       </div>
     );
   }
@@ -95,7 +68,6 @@ export function PaddleUpgradeButton({
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
           {text}
         </button>
-        {noticeEl}
       </span>
     );
   }
@@ -110,7 +82,6 @@ export function PaddleUpgradeButton({
       >
         {text}
       </button>
-      {noticeEl}
     </span>
   );
 }

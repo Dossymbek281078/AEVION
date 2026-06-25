@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface Message {
   role: "user" | "assistant";
@@ -486,6 +487,9 @@ export default function QAIPage() {
             >
               + New chat
             </button>
+            <div className="mt-2">
+              <ModulePricingChip moduleId="qai" theme="dark" />
+            </div>
           </div>
 
           {/* Persona selector */}

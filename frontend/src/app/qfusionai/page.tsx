@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import FusionPlayground, { type RouteResult } from "./components/FusionPlayground";
 import ProvidersPanel from "./components/ProvidersPanel";
 import RequestCard from "./components/RequestCard";
@@ -52,13 +53,16 @@ export default function QFusionAIPage() {
             MVP
           </span>
         </div>
-        <Link
-          href="/api-backend/api/qfusionai/openapi.json"
-          target="_blank"
-          style={{ color: "#446644", fontSize: 12, textDecoration: "none" }}
-        >
-          OpenAPI →
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <ModulePricingChip moduleId="qfusionai" theme="dark" />
+          <Link
+            href="/api-backend/api/qfusionai/openapi.json"
+            target="_blank"
+            style={{ color: "#446644", fontSize: 12, textDecoration: "none" }}
+          >
+            OpenAPI →
+          </Link>
+        </div>
       </header>
 
       {/* Hero */}

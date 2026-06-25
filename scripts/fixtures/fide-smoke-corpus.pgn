@@ -1,0 +1,119 @@
+[Event "Smoke 1"]
+[Site "Local"]
+[White "GM_A"]
+[Black "GM_B"]
+[Result "1-0"]
+[WhiteElo "2700"]
+[BlackElo "2680"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Na5 10. Bc2 c5 11. d4 Qc7 12. Nbd2 cxd4 13. cxd4 Nc6 14. Nb3 a5 15. Be3 a4 16. Nbd2 Bd7 17. Rc1 Qb7 18. Bb1 Rfc8 19. Bd3 Qa6 20. Qe2 Nb4 21. Bxb4 axb3 22. Nxb3 1-0
+
+[Event "Smoke 2"]
+[Site "Local"]
+[White "GM_C"]
+[Black "GM_D"]
+[Result "0-1"]
+[WhiteElo "2650"]
+[BlackElo "2720"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. Nf3 O-O 6. Be2 e5 7. O-O Nc6 8. d5 Ne7 9. Nd2 a5 10. a3 Nd7 11. Rb1 f5 12. b4 Kh8 13. f3 axb4 14. axb4 Nf6 15. c5 fxe4 16. fxe4 dxc5 17. bxc5 Nh5 18. Nb5 Nf4 19. Bxf4 Rxf4 20. Rxf4 exf4 0-1
+
+[Event "Smoke 3"]
+[Site "Local"]
+[White "IM_E"]
+[Black "IM_F"]
+[Result "1/2-1/2"]
+[WhiteElo "2450"]
+[BlackElo "2470"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be2 e5 7. Nb3 Be7 8. O-O O-O 9. Be3 Be6 10. Nd5 Nbd7 11. Qd3 Bxd5 12. exd5 Rc8 13. c4 Nb6 14. b3 Nbd7 15. f3 Re8 16. Rfd1 Bf8 17. Rd2 g6 18. Rad1 Bg7 19. Nd1 Nh5 20. Nf2 Nf4 1/2-1/2
+
+[Event "Smoke 4"]
+[Site "Local"]
+[White "FM_G"]
+[Black "FM_H"]
+[Result "1-0"]
+[WhiteElo "2300"]
+[BlackElo "2280"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O 6. Nf3 h6 7. Bh4 b6 8. cxd5 Nxd5 9. Bxe7 Qxe7 10. Nxd5 exd5 11. Rc1 Be6 12. Qa4 c5 13. Qa3 Rc8 14. Bb5 a6 15. dxc5 bxc5 16. O-O Ra7 17. Be2 Nd7 18. Nd4 Qf8 19. Nxe6 fxe6 20. e4 d4 1-0
+
+[Event "Smoke 5"]
+[Site "Local"]
+[White "Expert_I"]
+[Black "Expert_J"]
+[Result "0-1"]
+[WhiteElo "2100"]
+[BlackElo "2050"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 7. O-O d6 8. cxd4 Bb6 9. d5 Na5 10. Bb2 Ne7 11. Bd3 O-O 12. Nc3 Ng6 13. Ne2 c5 14. Qd2 f6 15. Kh1 Bc7 16. Rg1 Bd7 17. g4 Rb8 18. Rg3 b5 19. Rag1 b4 20. Nh4 Nxh4 0-1
+
+[Event "Smoke 6"]
+[Site "Local"]
+[White "Expert_K"]
+[Black "Club_L"]
+[Result "1-0"]
+[WhiteElo "2000"]
+[BlackElo "1800"]
+
+1. e4 c5 2. Nf3 e6 3. d4 cxd4 4. Nxd4 Nc6 5. Nc3 Qc7 6. Be2 a6 7. O-O Nf6 8. Be3 Bb4 9. Na4 Be7 10. Nxc6 Qxc6 11. Nb6 Rb8 12. Bf3 e5 13. Bd5 Nxd5 14. Nxd5 Bd8 15. c4 O-O 16. Rc1 d6 17. Qd3 Be6 18. Rfd1 f5 19. exf5 Bxf5 20. Qd2 Be4 1-0
+
+[Event "Smoke 7"]
+[Site "Local"]
+[White "Club_M"]
+[Black "Club_N"]
+[Result "1-0"]
+[WhiteElo "1700"]
+[BlackElo "1750"]
+
+1. d4 d5 2. Nf3 Nf6 3. c4 e6 4. Nc3 c6 5. Bg5 h6 6. Bxf6 Qxf6 7. e3 Nd7 8. Bd3 dxc4 9. Bxc4 g6 10. O-O Bg7 11. e4 O-O 12. Re1 b6 13. e5 Qe7 14. h3 Bb7 15. Qd3 Rfd8 16. Rad1 c5 17. d5 exd5 18. Bxd5 Bxd5 19. Nxd5 Qf8 20. Qb5 1-0
+
+[Event "Smoke 8"]
+[Site "Local"]
+[White "Club_O"]
+[Black "Club_P"]
+[Result "0-1"]
+[WhiteElo "1600"]
+[BlackElo "1650"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. O-O Nxe4 5. d4 Nd6 6. Bxc6 dxc6 7. dxe5 Nf5 8. Qxd8+ Kxd8 9. Nc3 h6 10. Re1 Bd7 11. Bf4 Bc5 12. Rad1 Ke8 13. Bg3 Nxg3 14. hxg3 Rd8 15. Nd5 Be6 16. b3 c5 17. c4 Bxd5 18. cxd5 Rxd5 19. Rxd5 Bxf2+ 0-1
+
+[Event "Smoke 9"]
+[Site "Local"]
+[White "Beginner_Q"]
+[Black "Beginner_R"]
+[Result "1-0"]
+[WhiteElo "1400"]
+[BlackElo "1350"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 g5 4. Bc4 g4 5. O-O gxf3 6. Qxf3 Qf6 7. d3 Nc6 8. Nc3 Nd4 9. Qd1 Bd6 10. Bxf4 Nxc2 11. Bxd6 Nxd6 12. Bb3 Bd7 13. Rxf4 Qxf4 14. Nd5 Qc4 15. Nxc7+ Kd8 16. dxc4 Kxc7 17. Rd1 Re8 18. e5 Ne4 19. Qd5 b6 20. Qxe4 1-0
+
+[Event "Smoke 10"]
+[Site "Local"]
+[White "Beginner_S"]
+[Black "Novice_T"]
+[Result "1-0"]
+[WhiteElo "1200"]
+[BlackElo "1100"]
+
+1. e4 e5 2. Nc3 Nc6 3. f4 exf4 4. Nf3 g5 5. h4 g4 6. Ng5 h6 7. Nxf7 Kxf7 8. Bc4+ d5 9. Bxd5+ Kg7 10. d4 Qxh4+ 11. Kf1 Bg4 12. Nxf4 Nf6 13. Bxc6 bxc6 14. Ne6+ Kf7 15. Nxc7 Rb8 16. b3 Bb4 17. Bb2 Ne4 18. Qe2 Qh5 19. Rh4 Bf2 20. Qxe4 1-0
+
+[Event "Smoke 11"]
+[Site "Local"]
+[White "GM_U"]
+[Black "Beginner_V"]
+[Result "1-0"]
+[WhiteElo "2600"]
+[BlackElo "1400"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Nd4 4. Nxe5 Qg5 5. Nxf7 Qxg2 6. Rf1 Qxe4+ 7. Be2 Nf3# 0-1
+
+[Event "Smoke 12"]
+[Site "Local"]
+[White "Novice_W"]
+[Black "GM_X"]
+[Result "0-1"]
+[WhiteElo "1050"]
+[BlackElo "2750"]
+
+1. f3 e5 2. g4 Qh4# 0-1

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { InfoTip } from "@/components/InfoTip";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { Sparkline } from "@/components/Sparkline";
@@ -645,6 +647,10 @@ export default function QRightPage() {
     <main>
       <ProductPageShell maxWidth={860}>
         <Wave1Nav />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="qright" theme="dark" />
+        </div>
 
         {/* ── Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24 }}>
@@ -1706,6 +1712,59 @@ export default function QRightPage() {
           </div>
         </div>
       )}
+
+      <section
+        style={{
+          margin: "32px auto 24px",
+          maxWidth: 960,
+          padding: 16,
+          border: "1px solid rgba(212,175,55,0.25)",
+          borderRadius: 12,
+          background: "rgba(11,23,54,0.04)",
+          display: "flex",
+          gap: 20,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <ConstitutionEmbed
+          sliders={{
+            floor: 55,
+            ruleOfLaw: 90,
+            rotation: 30,
+            transparency: 85,
+            multiStatus: 70,
+            skinInGame: 60,
+            polycentricity: 45,
+            positiveSum: 65,
+          }}
+          label="Конституция QRight"
+          size="sm"
+        />
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, marginBottom: 8 }}>
+            QRight как институт IP: верховенство закона над верхом и прозрачность
+            — главные ползунки. Закон фиксирует hash объекта, и его не отменит
+            ни наследник, ни корпорация-захватчик. Это и есть «конституционная»
+            гарантия для авторов.
+          </div>
+          <a
+            href="/constitution"
+            style={{
+              display: "inline-block",
+              padding: "8px 14px",
+              borderRadius: 8,
+              background: "#0f172a",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 13,
+              textDecoration: "none",
+            }}
+          >
+            Открыть в редакторе →
+          </a>
+        </div>
+      </section>
     </main>
   );
 }

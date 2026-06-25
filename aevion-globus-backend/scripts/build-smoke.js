@@ -67,6 +67,40 @@ function is2xx(r) {
   return r.status >= 200 && r.status < 300;
 }
 
+function skip(name, reason) {
+  step += 1;
+  console.log(`  ${String(step).padStart(2, "0")}  SKIP  ${name}${reason ? "  (" + reason + ")" : ""}`);
+}
+
+// Mint an ADMIN-scoped token for the admin-surface steps. The ADMIN role is
+// not self-assignable via the API, so we register a fresh user, promote it
+// directly in Postgres, then log in to get a token carrying role=ADMIN.
+// Returns null (→ admin steps SKIP) when direct DB access isn't available.
+async function getAdminToken() {
+  let dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    try {
+      require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
+      dbUrl = process.env.DATABASE_URL;
+    } catch { /* dotenv optional */ }
+  }
+  if (!dbUrl) return null;
+  const email = `admin+${RUN}@smoke.test`;
+  const password = "smoke-admin-pass";
+  const reg = await call("POST", "/api/auth/register", { email, password, name: "Smoke Admin" });
+  const userId = reg.body?.user?.id;
+  if (!userId) return null;
+  let Client;
+  try { ({ Client } = require("pg")); } catch { return null; }
+  const db = new Client({ connectionString: dbUrl });
+  try {
+    await db.connect();
+    await db.query(`UPDATE "AEVIONUser" SET "role" = 'ADMIN' WHERE "id" = $1`, [userId]);
+  } catch { return null; } finally { await db.end().catch(() => {}); }
+  const login = await call("POST", "/api/auth/login", { email, password });
+  return login.body?.token || null;
+}
+
 async function main() {
   console.log(`QBuild smoke against ${BASE}\n`);
 
@@ -607,6 +641,52 @@ async function main() {
     const body = r.body; // text/plain Prometheus
     ok("GET /health/metrics", `has qbuild_vacancies=${String(r.body).includes("qbuild_vacancies") || String(body).includes("qbuild")}`);
   } else return fail("health metrics", `status=${r.status}`);
+
+  // ── Admin surfaces: verification accept/reject + flag resolve ──────────
+  // Need an ADMIN token; promote a fresh user in Postgres. If DB access is
+  // unavailable (e.g. CI without DATABASE_URL) these steps SKIP, not FAIL.
+  const adminToken = await getAdminToken();
+  if (!adminToken) {
+    skip("admin surfaces", "no DB access to mint ADMIN token");
+  } else {
+    // 49. Worker's PENDING verification request (step 46) shows in admin queue.
+    r = await call("GET", "/api/build/verification/admin/queue", null, adminToken);
+    if (is2xx(r) && Array.isArray(unwrap(r)?.items) && unwrap(r).items.some((it) => it.userId === workerId)) {
+      ok("admin verification queue lists worker");
+    } else return fail("admin verification queue", `status=${r.status} body=${JSON.stringify(r.body)}`);
+
+    // 50. Admin APPROVES the worker → /verification/my flips to APPROVED.
+    r = await call("POST", `/api/build/verification/admin/${workerId}/approve`, {}, adminToken);
+    if (!(is2xx(r) && unwrap(r)?.approved === true)) return fail("admin approve verification", `status=${r.status} body=${JSON.stringify(r.body)}`);
+    r = await call("GET", "/api/build/verification/my", null, workerToken);
+    if (is2xx(r) && unwrap(r)?.request?.status === "APPROVED") ok("admin approve -> worker APPROVED");
+    else return fail("verification approved read-back", `status=${r.status} body=${JSON.stringify(r.body)}`);
+
+    // 51. Admin REJECTS a fresh user's request → /verification/my is REJECTED.
+    const rej = await call("POST", "/api/auth/register", { email: `reject+${RUN}@smoke.test`, password: "smoke-reject-pass", name: "Smoke Reject" });
+    const rejToken = rej.body?.token;
+    const rejId = rej.body?.user?.id;
+    if (rejToken && rejId) {
+      await call("POST", "/api/build/verification/request", { note: "smoke reject" }, rejToken);
+      r = await call("POST", `/api/build/verification/admin/${rejId}/reject`, { reason: "smoke" }, adminToken);
+      if (!(is2xx(r) && unwrap(r)?.rejected === true)) return fail("admin reject verification", `status=${r.status} body=${JSON.stringify(r.body)}`);
+      r = await call("GET", "/api/build/verification/my", null, rejToken);
+      if (is2xx(r) && unwrap(r)?.request?.status === "REJECTED") ok("admin reject -> user REJECTED");
+      else return fail("verification rejected read-back", `status=${r.status} body=${JSON.stringify(r.body)}`);
+    } else return fail("register reject-user", `status=${rej.status}`);
+
+    // 52. Owner flags the worker's application → admin flags queue → resolve.
+    r = await call("POST", `/api/build/applications/${applicationId}/flag`, { reason: "smoke-review", note: "smoke" }, clientToken);
+    const flagId = unwrap(r)?.id;
+    if (!(r.status === 201 && flagId)) return fail("create application flag", `status=${r.status} body=${JSON.stringify(r.body)}`);
+    r = await call("GET", "/api/build/admin/flags?status=open", null, adminToken);
+    if (!(is2xx(r) && Array.isArray(unwrap(r)?.items) && unwrap(r).items.some((f) => f.id === flagId))) {
+      return fail("admin flags queue", `status=${r.status} body=${JSON.stringify(r.body)}`);
+    }
+    r = await call("PATCH", `/api/build/admin/flags/${flagId}`, { status: "actioned" }, adminToken);
+    if (is2xx(r) && unwrap(r)?.status === "actioned") ok("admin flag resolve (actioned)");
+    else return fail("admin resolve flag", `status=${r.status} body=${JSON.stringify(r.body)}`);
+  }
 }
 
 main()

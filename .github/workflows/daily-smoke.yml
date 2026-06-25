@@ -61,6 +61,10 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aevion
       JWT_SECRET: ci-smoke-jwt-secret-do-not-use-in-prod-32chars-min
       QSIGN_HMAC_V1_SECRET: ci-smoke-hmac-do-not-use-in-prod
+      # Quantum Shield shard authentication — without this, /api/quantum-shield
+      # create 500s ("SHARD_HMAC_SECRET_V1 env is not set"), reddening the whole
+      # daily-smoke job on a fresh DB. Prod sets the real secret; CI uses a dummy.
+      SHARD_HMAC_SECRET_V1: ci-smoke-shard-hmac-do-not-use-in-prod
       # Tier 3 amplifier ETag fingerprints depend on row counts, which
       # start at 0 in a fresh DB — that's fine for smoke shape checks.
       AWARDS_BACKDOOR: "0"
@@ -103,6 +107,12 @@ jobs:
         env:
           BASE: ${{ inputs.base_url || 'http://127.0.0.1:4001' }}
           READ_ONLY: ${{ inputs.read_only && '1' || '0' }}
+          # qai / qfusionai hard-assert a live LLM provider (/chat 200, /route
+          # 200). The ephemeral CI has no provider key, so they 500/503 and can
+          # never pass here. They ARE covered against real prod by the
+          # prod-readonly-sweep job below (where keys are configured). Skip in
+          # the ephemeral run so a genuine regression elsewhere stays visible.
+          SKIP: qai,qfusionai
         run: npm run smoke:all
 
       - name: Backend logs (always)
@@ -150,6 +160,31 @@ jobs:
           path: /tmp/smoke-bank-prod-${{ github.run_id }}.json
           retention-days: 14
 
+  hub-prod-smoke:
+    name: Hub prod smoke (Railway /api/aevion/*)
+    # Cron + manual dispatch only — no per-commit prod hits.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Run hub prod smoke (incl. /sdks stats regression guard)
+        run: node scripts/hub-full-smoke.js
+        env:
+          BASE: https://aevion-production-a70c.up.railway.app
+
   qbuild-prod-smoke:
     name: QBuild prod smoke (Vercel → Railway)
     # Cron + manual dispatch only — no per-commit prod hits.
@@ -185,3 +220,63 @@ jobs:
           name: qbuild-prod-smoke-${{ github.run_id }}
           path: /tmp/smoke-qbuild-prod-${{ github.run_id }}.json
           retention-days: 14
+
+  constitution-prod-smoke:
+    name: Constitution prod smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Run Constitution prod smoke
+        run: node scripts/constitution-prod-smoke.js
+        env:
+          BASE: ${{ secrets.CONSTITUTION_SMOKE_BASE || 'https://aevion.app/api-backend' }}
+          SKIP_AI: "1"
+          ARTIFACT: /tmp/constitution-smoke-${{ github.run_id }}.json
+
+      - name: Upload smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: constitution-prod-smoke-${{ github.run_id }}
+          path: /tmp/constitution-smoke-${{ github.run_id }}.json
+          retention-days: 30
+
+  prod-readonly-sweep:
+    name: Prod read-only smoke sweep (live Railway)
+    # Cron + manual dispatch only — never on push. READ_ONLY=1 so it only runs
+    # the safe read-only smokes and never writes to the live prod DB. Monitors
+    # the whole public deploy (all modules) end-to-end, beyond just bank/hub.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Read-only smoke sweep against live prod
+        run: BASE="$PROD_BASE" READ_ONLY=1 node scripts/all-smokes.js
+        env:
+          PROD_BASE: ${{ secrets.PROD_SMOKE_BASE || 'https://aevion-production-a70c.up.railway.app' }}

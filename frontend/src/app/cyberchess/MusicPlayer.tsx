@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { AMBIENT_TRACKS, AmbientPlayer } from "./ambientMusic";
 
 // Музыкальный плеер CyberChess.
 // Источники: пользовательские треки (drag-drop файлов через FileReader URL),
@@ -19,10 +20,17 @@ export interface MusicTrack {
   url: string;        // http(s):// или blob: URL (blob теряется после reload)
   isLocal: boolean;
   isLibrary?: boolean; // подгружено из /music/index.json — read-only, нельзя удалить
+  isProcedural?: boolean; // встроенный Web-Audio ambient (ambientMusic.ts) — без файла
   artist?: string;
   license?: string;
   addedAt: number;
 }
+
+// Встроенные процедурные треки — играют «из коробки» без файлов (синтез Web Audio).
+const PROCEDURAL_TRACKS: MusicTrack[] = AMBIENT_TRACKS.map(a => ({
+  id: a.id, name: a.name, url: "", isLocal: false, isProcedural: true,
+  artist: "AEVION · синтез", license: "procedural", addedAt: 0,
+}));
 
 type LibraryIndexEntry = {
   id?: string;
@@ -105,44 +113,69 @@ export default function MusicPlayer({ open, onClose }: Props) {
   const [urlName, setUrlName] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const ambientRef = useRef<AmbientPlayer | null>(null);
 
   useEffect(() => {
-    // Library треки (из /public/music/index.json) идут первыми, затем user-added.
+    // Порядок: процедурные (из коробки) -> library (/public/music) -> user-added.
     let cancelled = false;
     (async () => {
       const lib = await loadLibraryTracks();
       const user = loadPlaylist();
-      if (!cancelled) setTracks([...lib, ...user]);
+      if (!cancelled) setTracks([...PROCEDURAL_TRACKS, ...lib, ...user]);
     })();
     return () => { cancelled = true; };
   }, []);
 
+  // Остановить ambient при закрытии плеера (consistent с <audio>, который
+  // размонтируется когда open=false) и при размонтировании компонента.
   useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.volume = volume;
+    if (!open) { ambientRef.current?.stop(); setPlaying(false); }
+  }, [open]);
+  useEffect(() => () => { ambientRef.current?.stop(); }, []);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+    ambientRef.current?.setVolume(volume);
   }, [volume]);
 
   useEffect(() => {
+    // Только URL/local треки; процедурные стартуют явно в playTrack/togglePlay.
     if (currentIdx === null || !audioRef.current) return;
     const t = tracks[currentIdx];
-    if (!t) return;
+    if (!t || t.isProcedural) return;
     audioRef.current.src = t.url;
     audioRef.current.volume = volume;
     if (playing) audioRef.current.play().catch(() => setPlaying(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
 
+  const startAmbient = (id: string) => {
+    if (!ambientRef.current) ambientRef.current = new AmbientPlayer();
+    ambientRef.current.play(id, volume);
+  };
+
   const playTrack = (idx: number) => {
+    const t = tracks[idx];
     setCurrentIdx(idx);
     setPlaying(true);
-    setTimeout(() => { audioRef.current?.play().catch(() => setPlaying(false)); }, 50);
+    if (t?.isProcedural) {
+      audioRef.current?.pause();
+      startAmbient(t.id);
+    } else {
+      ambientRef.current?.stop();
+      setTimeout(() => { audioRef.current?.play().catch(() => setPlaying(false)); }, 50);
+    }
   };
 
   const togglePlay = () => {
-    if (!audioRef.current || currentIdx === null) {
-      if (tracks.length > 0) playTrack(0);
+    if (currentIdx === null) { if (tracks.length > 0) playTrack(0); return; }
+    const t = tracks[currentIdx];
+    if (t?.isProcedural) {
+      if (playing) { ambientRef.current?.stop(); setPlaying(false); }
+      else { startAmbient(t.id); setPlaying(true); }
       return;
     }
+    if (!audioRef.current) { if (tracks.length > 0) playTrack(0); return; }
     if (playing) { audioRef.current.pause(); setPlaying(false); }
     else { audioRef.current.play().catch(() => {}); setPlaying(true); }
   };
@@ -161,7 +194,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
 
   const removeTrack = (idx: number) => {
     const t = tracks[idx];
-    if (t.isLibrary) return; // library треки read-only
+    if (t.isLibrary || t.isProcedural) return; // встроенные треки read-only
     if (t.url.startsWith("blob:")) URL.revokeObjectURL(t.url);
     const next = tracks.filter((_, i) => i !== idx);
     setTracks(next); savePlaylist(next);
@@ -315,7 +348,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
                     <div style={{ fontSize: 10, color: "#94a3b8" }}>
-                      {t.isLibrary ? `📦 библиотека${t.artist ? " · " + t.artist : ""}${t.license ? " · " + t.license : ""}` : t.isLocal ? "📁 локальный" : "🔗 URL"}
+                      {t.isProcedural ? `🎛 синтез · из коробки` : t.isLibrary ? `📦 библиотека${t.artist ? " · " + t.artist : ""}${t.license ? " · " + t.license : ""}` : t.isLocal ? "📁 локальный" : "🔗 URL"}
                     </div>
                   </div>
                   {!t.isLibrary && <button onClick={() => removeTrack(idx)} title="Удалить" style={{ width: 28, height: 28, border: "1px solid #fecaca", borderRadius: 6, background: "#fef2f2", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>✕</button>}

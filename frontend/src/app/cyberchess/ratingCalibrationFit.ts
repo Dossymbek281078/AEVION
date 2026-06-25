@@ -36,12 +36,42 @@ export type CalibrationWeights = {
     endgame: number;
     blunder: number;
     time: number;
+    /** Rich-mode features from richer Stockfish CPI extraction. Optional —
+     *  loadCalibratedWeights accepts both 6-coef and 8-coef payloads. */
+    median?: number;
+    std?: number;
+    /** Nonlinear features (polynomial expansion + interaction). Applied to
+     *  (accuracyPct-60)², blunderRate², (accuracyPct-60)*blunderRate.
+     *  Optional — null when CSV produced a purely linear fit. */
+    accuracy2?: number;
+    blunder2?: number;
+    accBlu?: number;
   };
   bias: number;
   fitStats?: {
     rmseElo: number;
     r2: number;
     meanTargetElo: number;
+  };
+  /** Optional second-pass fit on rows with targetElo ≥ threshold. When the
+   *  primary prediction exceeds the threshold, recompute with this
+   *  bracket-specialized weight set — large RMSE win at the GM tail. */
+  floorFit?: {
+    threshold: number;
+    samples: number;
+    coefficients: CalibrationWeights["coefficients"];
+    bias: number;
+    fitStats?: { rmseElo: number; r2: number };
+  };
+  /** Mirror of floorFit for the Beginner end. When the primary prediction
+   *  falls below the threshold, recompute with these low-Elo specialist
+   *  coefficients — prevents nonlinear over-correction clamping to 400. */
+  ceilingFit?: {
+    threshold: number;
+    samples: number;
+    coefficients: CalibrationWeights["coefficients"];
+    bias: number;
+    fitStats?: { rmseElo: number; r2: number };
   };
   notes?: string[];
 };
@@ -129,9 +159,13 @@ function validateWeights(d: unknown): d is CalibrationWeights {
   if (typeof w.bias !== "number") return false;
   if (!w.coefficients || typeof w.coefficients !== "object") return false;
   const c = w.coefficients as Record<string, unknown>;
-  const keys = ["accuracy", "opening", "tactical", "endgame", "blunder", "time"];
-  for (const k of keys) {
+  const required = ["accuracy", "opening", "tactical", "endgame", "blunder", "time"];
+  for (const k of required) {
     if (typeof c[k] !== "number" || !Number.isFinite(c[k] as number)) return false;
+  }
+  // Optional rich + nonlinear keys — if present, must be finite numbers.
+  for (const k of ["median", "std", "accuracy2", "blunder2", "accBlu"]) {
+    if (k in c && (typeof c[k] !== "number" || !Number.isFinite(c[k] as number))) return false;
   }
   return true;
 }
@@ -154,6 +188,29 @@ export function estimateFideFromCPIWithFit(
   // No weights → fall back to existing implementation
   if (!weights) return estimateFideFromCPI(metrics);
 
+  // Helper to compute raw FIDE from a coef set + bias; used twice when
+  // a floorFit specialization is present.
+  const computeRaw = (coefs: CalibrationWeights["coefficients"], biasVal: number) => {
+    const accCentered = metrics.accuracyPct - ACCURACY_BASELINE;
+    const blunderClamped = clamp01(metrics.blunderRate);
+    const sum =
+      biasVal +
+      accCentered * coefs.accuracy +
+      Math.min(10, metrics.openingTheoryDepth) * coefs.opening +
+      clamp01(metrics.tacticalEfficiency) * coefs.tactical +
+      clamp01(metrics.endgameStrength) * coefs.endgame +
+      blunderClamped * coefs.blunder +
+      (-Math.abs(metrics.avgMoveTime - OPTIMAL_MOVE_TIME)) * Math.abs(coefs.time) +
+      (typeof coefs.median === "number" && typeof metrics.medianCpLoss === "number"
+        ? -metrics.medianCpLoss * coefs.median : 0) +
+      (typeof coefs.std === "number" && typeof metrics.cpLossStd === "number"
+        ? -metrics.cpLossStd * coefs.std : 0) +
+      (typeof coefs.accuracy2 === "number" ? accCentered * accCentered * coefs.accuracy2 : 0) +
+      (typeof coefs.blunder2 === "number" ? blunderClamped * blunderClamped * coefs.blunder2 : 0) +
+      (typeof coefs.accBlu === "number" ? accCentered * blunderClamped * coefs.accBlu : 0);
+    return sum;
+  };
+
   const w = weights.coefficients;
   const bias = weights.bias;
 
@@ -164,7 +221,43 @@ export function estimateFideFromCPIWithFit(
   const blunderDelta = clamp01(metrics.blunderRate) * w.blunder;
   const timeDelta = -Math.abs(metrics.avgMoveTime - OPTIMAL_MOVE_TIME) * Math.abs(w.time);
 
-  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta;
+  // Rich features. Both coef and metric must be present — otherwise the
+  // delta is 0 and we silently fall back to the 6-feature prediction.
+  // Negated to match the design-matrix convention (positive coef ⇒
+  // lower cp loss = higher Elo).
+  const medianDelta = (typeof w.median === "number" && typeof metrics.medianCpLoss === "number")
+    ? -metrics.medianCpLoss * w.median
+    : 0;
+  const stdDelta = (typeof w.std === "number" && typeof metrics.cpLossStd === "number")
+    ? -metrics.cpLossStd * w.std
+    : 0;
+
+  // Nonlinear terms — polynomial expansion of base features. These are
+  // applied to the centered values (accuracyPct - 60) and blunderRate,
+  // matching the design matrix in cyberchess-fide-calibrate.mjs.
+  const accCentered = metrics.accuracyPct - ACCURACY_BASELINE;
+  const blunderClamped = clamp01(metrics.blunderRate);
+  const acc2Delta = typeof w.accuracy2 === "number" ? accCentered * accCentered * w.accuracy2 : 0;
+  const blu2Delta = typeof w.blunder2 === "number" ? blunderClamped * blunderClamped * w.blunder2 : 0;
+  const accBluDelta = typeof w.accBlu === "number" ? accCentered * blunderClamped * w.accBlu : 0;
+
+  let rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta + acc2Delta + blu2Delta + accBluDelta;
+
+  // Floor-fit second pass: if the primary prediction lands in the
+  // high-Elo region and weights carry a floorFit block, recompute with
+  // the bracket-specialized coefficients. Crushes GM RMSE 390 → 122.
+  if (weights.floorFit && rawFide >= weights.floorFit.threshold) {
+    rawFide = computeRaw(weights.floorFit.coefficients, weights.floorFit.bias);
+  }
+
+  // Ceiling-fit second pass: mirror for the Beginner end. Nonlinear
+  // terms can over-penalize at low Elo, pushing raw predictions below
+  // 400 (the clamp). The specialist fit uses coefs trained only on
+  // <threshold rows so it stays well-calibrated at the bottom.
+  if (weights.ceilingFit && rawFide < weights.ceilingFit.threshold) {
+    rawFide = computeRaw(weights.ceilingFit.coefficients, weights.ceilingFit.bias);
+  }
+
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));
 
   const stddev = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));

@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { apiUrl } from "@/lib/apiBase";
+
+// Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
+// tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
+// actually charges — so what a visitor sees equals what they pay.
+//
+// "Купить" opens the live LemonSqueezy checkout for Lite + this module: $19/mo,
+// "one product of your choice" with full access to it (the backend skips the
+// per-module add-on for Lite's chosen module, so the charge is exactly Lite's
+// price). "сравнить тарифы →" leads to /pricing?module=<id> with the product
+// pre-selected.
+//
+// Previously this chip read /api/aevion/pricing (an à-la-carte $5/$9/$15 "solo"
+// model that has no real checkout SKU) — that advertised a price that was never
+// charged. Now it reads the GTM tiers that the checkout/LemonSqueezy flow
+// actually bills.
+//
+// Data: pulls /api/pricing once per page-load and caches the in-flight promise
+// at module scope so N chips on one page = 1 request.
+
+type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
+
+interface Tier {
+  id: string;
+  name: string;
+  priceMonthly: number | null;
+}
+interface CurrencyRate {
+  rate: number;
+  symbol: string;
+  label: string;
+}
+interface PricingResponse {
+  tiers: Tier[];
+  currencies: Record<CurrencyCode, CurrencyRate>;
+}
+
+// Module-scoped cache: first chip on the page triggers the fetch, every
+// subsequent chip reuses the same promise. Survives chip-mount churn.
+let pricingPromise: Promise<PricingResponse | null> | null = null;
+
+function loadPricing(): Promise<PricingResponse | null> {
+  if (!pricingPromise) {
+    pricingPromise = fetch(apiUrl("/api/pricing"))
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return pricingPromise;
+}
+
+function fmt(usd: number, code: CurrencyCode, rates: Record<CurrencyCode, CurrencyRate>): string {
+  const r = rates?.[code] ?? rates?.USD ?? { rate: 1, symbol: "$", label: "USD" };
+  const raw = usd * r.rate;
+  if (code === "USD" || code === "EUR") return `${r.symbol}${Math.round(raw * 100) / 100}`;
+  return `${Math.round(raw).toLocaleString("ru-RU")} ${r.symbol}`;
+}
+
+interface Props {
+  moduleId: string;
+  currency?: CurrencyCode;
+  /** Optional dark/light theme (defaults to light). */
+  theme?: "light" | "dark";
+  /** Hide the one-click buy button (chip stays informational). Default false. */
+  hideBuy?: boolean;
+}
+
+export default function ModulePricingChip({ moduleId, currency = "USD", theme = "light", hideBuy = false }: Props) {
+  const [data, setData] = useState<PricingResponse | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadPricing().then((d) => {
+      if (!cancelled) setData(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!data || !Array.isArray(data.tiers)) return null;
+
+  const findTier = (id: string) => data.tiers.find((t) => t.id === id);
+  const lite = findTier("lite");
+  const medium = findTier("medium");
+  const full = findTier("full");
+  // Lite is the entry the buy button charges — without it there's nothing to show.
+  if (!lite || lite.priceMonthly == null) return null;
+
+  const palette =
+    theme === "dark"
+      ? { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.12)", text: "#e2e8f0", muted: "#94a3b8", accent: "#34d399" }
+      : { bg: "#f8fafc", border: "rgba(15,23,42,0.08)", text: "#0f172a", muted: "#64748b", accent: "#0d9488" };
+
+  const litePrice = fmt(lite.priceMonthly, currency, data.currencies);
+
+  // One-click checkout: Lite tier + this module → live LemonSqueezy hosted page.
+  // The backend /checkout/session picks the processor (LS primary → Gumroad →
+  // stub), treats this module as Lite's "one of choice" (no add-on), and returns
+  // a ready checkout URL. Email is collected on the hosted page.
+  async function buyNow() {
+    setBuying(true);
+    setBuyError(false);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tierId: "lite", period: "monthly", seats: 1, modules: [moduleId] }),
+      });
+      const j = await r.json();
+      if (j?.url) {
+        window.location.href = j.url;
+        return; // keep the spinner while the browser navigates away
+      }
+      setBuyError(true);
+      setBuying(false);
+    } catch {
+      setBuyError(true);
+      setBuying(false);
+    }
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 8px 6px 12px",
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        borderRadius: 999,
+        fontSize: 12,
+        color: palette.text,
+        lineHeight: 1.4,
+      }}
+    >
+      <Link
+        href={`/pricing?module=${encodeURIComponent(moduleId)}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
+        title="Сравнить тарифы — Lite, Medium, Full"
+      >
+        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no">Lite</span></span>
+        {medium && medium.priceMonthly != null && (
+          <>
+            <span style={{ color: palette.muted }}>·</span>
+            <span><span translate="no">Medium</span> {fmt(medium.priceMonthly, currency, data.currencies)}</span>
+          </>
+        )}
+        {full && full.priceMonthly != null && (
+          <>
+            <span style={{ color: palette.muted }}>·</span>
+            <span style={{ color: palette.accent, fontWeight: 700 }}>
+              Полный доступ {fmt(full.priceMonthly, currency, data.currencies)}
+            </span>
+          </>
+        )}
+      </Link>
+      {!hideBuy && (
+        <button
+          type="button"
+          onClick={buyNow}
+          disabled={buying}
+          title={buyError ? "Ошибка — попробуйте ещё раз" : `Купить Lite ${litePrice}/мес — этот продукт, оплата картой`}
+          style={{
+            border: "none",
+            cursor: buying ? "wait" : "pointer",
+            padding: "6px 14px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            color: "#fff",
+            background: buyError ? "#dc2626" : "linear-gradient(135deg, #0d9488, #0ea5e9)",
+            opacity: buying ? 0.7 : 1,
+          }}
+        >
+          {buying ? "Открываем…" : buyError ? "Повторить" : "Купить"}
+        </button>
+      )}
+    </span>
+  );
+}

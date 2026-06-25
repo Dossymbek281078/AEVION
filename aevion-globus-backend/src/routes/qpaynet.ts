@@ -40,6 +40,8 @@ import { EventEmitter } from "node:events";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ipKeyGenerator } = require("express-rate-limit") as typeof import("express-rate-limit");
 import { getPool, getPoolStats } from "../lib/dbPool";
 import { verifyBearerOptional, verifyBearerToken } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
@@ -121,7 +123,9 @@ const moneyLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const auth = verifyBearerOptional(req);
-    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    // ipKeyGenerator normalises IPv6 (/64) so a single client can't bypass the
+    // limit by rotating addresses within its prefix.
+    const id = auth?.sub ?? auth?.email ?? (req.ip ? ipKeyGenerator(req.ip) : "anon");
     return `qpn:money:${id}`;
   },
   message: { error: "rate_limit_exceeded" },
@@ -134,7 +138,9 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const auth = verifyBearerOptional(req);
-    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    // ipKeyGenerator normalises IPv6 (/64) so a single client can't bypass the
+    // limit by rotating addresses within its prefix.
+    const id = auth?.sub ?? auth?.email ?? (req.ip ? ipKeyGenerator(req.ip) : "anon");
     return `qpn:auth:${id}`;
   },
   message: { error: "rate_limit_exceeded" },
@@ -158,7 +164,9 @@ const csvLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const auth = verifyBearerOptional(req);
-    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    // ipKeyGenerator normalises IPv6 (/64) so a single client can't bypass the
+    // limit by rotating addresses within its prefix.
+    const id = auth?.sub ?? auth?.email ?? (req.ip ? ipKeyGenerator(req.ip) : "anon");
     return `qpn:csv:${id}`;
   },
   message: { error: "rate_limit_exceeded", hint: "csv export limited to 5/min" },
@@ -166,7 +174,7 @@ const csvLimiter = rateLimit({
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
 const STRIPE_WH = process.env.QPAYNET_STRIPE_WEBHOOK_SECRET?.trim();
-const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-04-22.dahlia" }) : null;
+const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-05-27.dahlia" }) : null;
 const FRONTEND = (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────

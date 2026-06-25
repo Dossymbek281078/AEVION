@@ -3,6 +3,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n";
 
 type ContentType = "text" | "url" | "html";
 type SelfDestructMode = "views" | "time" | "both" | "none";
@@ -15,6 +16,7 @@ interface Template {
 }
 
 export default function CreateDocument() {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [contentType, setContentType] = useState<ContentType>("text");
@@ -51,9 +53,9 @@ export default function CreateDocument() {
 
   async function handleCreate() {
     const token = localStorage.getItem("aevion_token") ?? "";
-    if (!token) { setError("Необходима авторизация AEVION. Войдите на /auth."); return; }
-    if (!title.trim()) { setError("Введите название"); return; }
-    if (!content.trim()) { setError("Введите содержимое"); return; }
+    if (!token) { setError(t("qcontract.create.error.auth_required")); return; }
+    if (!title.trim()) { setError(t("qcontract.create.error.title_required")); return; }
+    if (!content.trim()) { setError(t("qcontract.create.error.content_required")); return; }
 
     setLoading(true);
     setError("");
@@ -71,10 +73,10 @@ export default function CreateDocument() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Ошибка");
+      if (!res.ok) throw new Error(data.error ?? t("qcontract.create.error.generic"));
       setResult({ shareUrl: data.shareUrl });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
+      setError(e instanceof Error ? e.message : t("qcontract.create.error.generic"));
     } finally {
       setLoading(false);
     }
@@ -86,28 +88,28 @@ export default function CreateDocument() {
         <div className="max-w-lg w-full">
           <div className="text-center mb-8">
             <div className="text-5xl mb-4">💣</div>
-            <h1 className="text-2xl font-black mb-2">Документ создан</h1>
-            <p className="text-slate-400 text-sm">Отправьте ссылку получателю. После срабатывания — документ исчезнет.</p>
+            <h1 className="text-2xl font-black mb-2">{t("qcontract.create.done.title")}</h1>
+            <p className="text-slate-400 text-sm">{t("qcontract.create.done.body")}</p>
           </div>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-4">
             <div>
-              <label className="text-xs text-slate-500 uppercase tracking-wider">Ссылка для отправки</label>
+              <label className="text-xs text-slate-500 uppercase tracking-wider">{t("qcontract.create.done.link_label")}</label>
               <div className="mt-2 flex items-center gap-2">
                 <code className="flex-1 bg-slate-800 text-emerald-400 text-xs px-3 py-2 rounded-lg break-all">{result.shareUrl}</code>
                 <button
                   onClick={() => { navigator.clipboard.writeText(result.shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                   className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg"
                 >
-                  {copied ? "✓" : "Копировать"}
+                  {copied ? "✓" : t("qcontract.create.done.copy")}
                 </button>
               </div>
             </div>
             <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl p-3 text-xs text-amber-300">
-              ⚠ Сохраните ссылку — восстановить можно только из дашборда.
+              {t("qcontract.create.done.warn")}
             </div>
             <div className="flex gap-3 pt-2">
-              <Link href="/qcontract" className="flex-1 text-center py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">К дашборду</Link>
-              <button onClick={() => { setResult(null); setTitle(""); setContent(""); setCopied(false); }} className="flex-1 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium transition-colors">+ Ещё</button>
+              <Link href="/qcontract" className="flex-1 text-center py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">{t("qcontract.create.done.to_dashboard")}</Link>
+              <button onClick={() => { setResult(null); setTitle(""); setContent(""); setCopied(false); }} className="flex-1 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium transition-colors">{t("qcontract.create.done.another")}</button>
             </div>
           </div>
         </div>
@@ -119,16 +121,16 @@ export default function CreateDocument() {
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm">← Назад</Link>
+          <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm">{t("qcontract.create.header.back")}</Link>
           <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">Создать документ</h1>
+          <h1 className="text-sm font-bold">{t("qcontract.create.header.title")}</h1>
         </div>
         {templates.length > 0 && (
           <button
             onClick={() => setShowTemplates(!showTemplates)}
             className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300"
           >
-            📋 Шаблоны
+            {t("qcontract.create.header.templates")}
           </button>
         )}
       </header>
@@ -136,7 +138,7 @@ export default function CreateDocument() {
       {/* Templates panel */}
       {showTemplates && (
         <div className="border-b border-slate-800 bg-slate-900 px-6 py-4">
-          <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">Готовые шаблоны</p>
+          <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">{t("qcontract.create.templates_heading")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {templates.map((t) => (
               <button
@@ -155,23 +157,27 @@ export default function CreateDocument() {
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         {/* Title */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Название</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t("qcontract.create.field.title_label")}</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="NDA с партнёром, Оффер кандидату, Секретная инструкция..."
+            placeholder={t("qcontract.create.field.title_ph")}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
           />
         </div>
 
         {/* Content type */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Тип содержимого</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t("qcontract.create.field.type_label")}</label>
           <div className="flex gap-2">
-            {([["text", "📝 Текст"], ["url", "🔗 URL"], ["html", "🌐 HTML"]] as const).map(([t, l]) => (
-              <button key={t} onClick={() => setContentType(t)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${contentType === t ? "bg-red-600 border-red-500 text-white" : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"}`}>
+            {([
+              ["text", t("qcontract.create.field.type.text")],
+              ["url", "🔗 URL"],
+              ["html", t("qcontract.create.field.type.html")],
+            ] as const).map(([key, l]) => (
+              <button key={key} onClick={() => setContentType(key)}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${contentType === key ? "bg-red-600 border-red-500 text-white" : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"}`}>
                 {l}
               </button>
             ))}
@@ -181,7 +187,7 @@ export default function CreateDocument() {
         {/* Content */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            {contentType === "url" ? "URL" : "Содержимое"}
+            {contentType === "url" ? "URL" : t("qcontract.create.field.content_label")}
           </label>
           {contentType === "url" ? (
             <input type="url" value={content} onChange={(e) => setContent(e.target.value)}
@@ -189,17 +195,22 @@ export default function CreateDocument() {
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors" />
           ) : (
             <textarea rows={9} value={content} onChange={(e) => setContent(e.target.value)}
-              placeholder={contentType === "html" ? "<h1>Заголовок</h1>\n<p>Текст...</p>" : "Введите текст документа..."}
+              placeholder={contentType === "html" ? t("qcontract.create.field.content_ph.html") : t("qcontract.create.field.content_ph.text")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors resize-none font-mono text-sm" />
           )}
         </div>
 
         {/* Self-destruct */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">💣 Самоуничтожение</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t("qcontract.create.destruct.label")}</label>
           <div className="grid grid-cols-2 gap-2 mb-3">
-            {([["none","♾ Без ограничений"],["views","👁 По просмотрам"],["time","⏱ По времени"],["both","☠️ Оба условия"]] as const).map(([m,l]) => (
-              <button key={m} onClick={() => setDestructMode(m)}
+            {([
+              ["none", t("qcontract.create.destruct.none")],
+              ["views", t("qcontract.create.destruct.views")],
+              ["time", t("qcontract.create.destruct.time")],
+              ["both", t("qcontract.create.destruct.both")],
+            ] as const).map(([m, l]) => (
+              <button key={m} onClick={() => setDestructMode(m as SelfDestructMode)}
                 className={`py-2.5 rounded-xl text-sm font-medium transition-colors border ${destructMode === m ? "bg-red-900 border-red-600 text-red-200" : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"}`}>
                 {l}
               </button>
@@ -207,12 +218,12 @@ export default function CreateDocument() {
           </div>
           {(destructMode === "views" || destructMode === "both") && (
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-2">
-              <label className="text-xs text-slate-400 mb-2 block">Максимум просмотров</label>
+              <label className="text-xs text-slate-400 mb-2 block">{t("qcontract.create.destruct.max_views")}</label>
               <div className="flex gap-2 flex-wrap">
                 {[1,3,5,10].map((n) => (
                   <button key={n} onClick={() => setMaxViews(n)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${maxViews === n ? "bg-red-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
-                    {n === 1 ? "🔥 1 раз" : `${n}×`}
+                    {n === 1 ? t("qcontract.create.destruct.one_time") : `${n}×`}
                   </button>
                 ))}
                 <input type="number" min={1} value={maxViews} onChange={(e) => setMaxViews(Math.max(1, parseInt(e.target.value)||1))}
@@ -222,7 +233,7 @@ export default function CreateDocument() {
           )}
           {(destructMode === "time" || destructMode === "both") && (
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
-              <label className="text-xs text-slate-400 mb-2 block">Действует до</label>
+              <label className="text-xs text-slate-400 mb-2 block">{t("qcontract.create.destruct.expires_label")}</label>
               <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
                 className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 w-full" />
             </div>
@@ -231,17 +242,17 @@ export default function CreateDocument() {
 
         {/* Security options */}
         <div className="space-y-3">
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">🔐 Защита</label>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("qcontract.create.sec.label")}</label>
 
           {/* Password */}
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={usePassword} onChange={(e) => setUsePassword(e.target.checked)} className="w-4 h-4 accent-red-500" />
-              <span className="text-sm font-medium">🔒 Пароль для доступа</span>
+              <span className="text-sm font-medium">{t("qcontract.create.sec.password")}</span>
             </label>
             {usePassword && (
               <input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Придумайте пароль"
+                placeholder={t("qcontract.create.sec.password_ph")}
                 className="mt-3 w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500" />
             )}
           </div>
@@ -251,8 +262,8 @@ export default function CreateDocument() {
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={requireSignature} onChange={(e) => setRequireSignature(e.target.checked)} className="w-4 h-4 accent-red-500" />
               <div>
-                <span className="text-sm font-medium">✍️ Требовать email-подпись</span>
-                <p className="text-[11px] text-slate-500 mt-0.5">Читатель должен ввести email перед просмотром. Email войдёт в лог и будет виден на документе.</p>
+                <span className="text-sm font-medium">{t("qcontract.create.sec.signature")}</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">{t("qcontract.create.sec.signature_hint")}</p>
               </div>
             </label>
           </div>
@@ -262,13 +273,13 @@ export default function CreateDocument() {
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={useQright} onChange={(e) => setUseQright(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
               <div>
-                <span className="text-sm font-medium">🛡 Привязать к QRight (IP-защита)</span>
-                <p className="text-[11px] text-slate-500 mt-0.5">Читатель увидит значок «Охраняется IP» со ссылкой на объект в реестре.</p>
+                <span className="text-sm font-medium">{t("qcontract.create.sec.qright")}</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">{t("qcontract.create.sec.qright_hint")}</p>
               </div>
             </label>
             {useQright && (
               <input type="text" value={qrightId} onChange={(e) => setQrightId(e.target.value)}
-                placeholder="ID объекта из реестра QRight"
+                placeholder={t("qcontract.create.sec.qright_ph")}
                 className="mt-3 w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
             )}
           </div>
@@ -281,7 +292,7 @@ export default function CreateDocument() {
           disabled={loading || !title.trim() || !content.trim()}
           className="w-full py-4 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-bold rounded-xl transition-colors"
         >
-          {loading ? "Создание..." : "💣 Создать самоуничтожающийся документ"}
+          {loading ? t("qcontract.create.submit.loading") : t("qcontract.create.submit.cta")}
         </button>
       </div>
     </div>

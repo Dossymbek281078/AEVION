@@ -4,6 +4,8 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ModulePricingChip from "@/components/ModulePricingChip";
+import { useI18n } from "@/lib/i18n";
 
 interface DocItem {
   id: string;
@@ -19,17 +21,22 @@ interface DocItem {
   createdAt: string;
 }
 
-function StatusBadge({ doc }: { doc: DocItem }) {
-  if (doc.revokedAt) return <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Отозван</span>;
-  if (doc.expired) return <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">Истёк</span>;
-  return <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Активен</span>;
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+function StatusBadge({ doc, t }: { doc: DocItem; t: TFn }) {
+  if (doc.revokedAt) return <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">{t("qcontract.home.status.revoked")}</span>;
+  if (doc.expired) return <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">{t("qcontract.home.status.expired")}</span>;
+  return <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">{t("qcontract.home.status.active")}</span>;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+function formatDate(iso: string, lang: string) {
+  // ru / kk locales use the same "ru-RU" day-month-year ordering; en flips
+  const localeTag = lang === "en" ? "en-US" : "ru-RU";
+  return new Date(iso).toLocaleDateString(localeTag, { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function QContractHome() {
+  const { t, lang } = useI18n();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState("");
@@ -49,7 +56,7 @@ export default function QContractHome() {
   }, []);
 
   async function revoke(id: string) {
-    if (!confirm("Отозвать документ? Ссылка перестанет работать немедленно.")) return;
+    if (!confirm(t("qcontract.home.confirm.revoke"))) return;
     setRevoking(id);
     await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
       method: "DELETE",
@@ -60,7 +67,7 @@ export default function QContractHome() {
   }
 
   async function extend(id: string) {
-    const days = prompt("Продлить на сколько дней?", "7");
+    const days = prompt(t("qcontract.home.prompt.extend"), "7");
     const n = parseInt(days ?? "");
     if (!n || n < 1 || n > 365) return;
     const r = await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
@@ -116,32 +123,36 @@ export default function QContractHome() {
           <span className="text-[10px] bg-red-900 text-red-300 px-2 py-0.5 rounded-full">BETA</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <Link href="/" className="text-xs text-slate-400 hover:text-white px-2 py-1.5">← AEVION</Link>
+          <Link href="/" className="text-xs text-slate-400 hover:text-white px-2 py-1.5">{t("qcontract.home.back")}</Link>
           <Link
             href="/qcontract/create"
             className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-lg transition-colors min-h-[36px] inline-flex items-center"
           >
-            <span className="sm:hidden">+ Документ</span>
-            <span className="hidden sm:inline">+ Создать документ</span>
+            <span className="sm:hidden">{t("qcontract.home.new.short")}</span>
+            <span className="hidden sm:inline">{t("qcontract.home.new.long")}</span>
           </Link>
         </div>
       </header>
+
+      {/* Pricing chip */}
+      <div className="border-b border-slate-800 px-4 sm:px-6 py-2 flex justify-end">
+        <ModulePricingChip moduleId="qcontract" theme="dark" />
+      </div>
 
       {/* Hero */}
       {!token && (
         <div className="max-w-3xl mx-auto px-6 py-24 text-center">
           <div className="text-6xl mb-6">💣</div>
-          <h1 className="text-4xl font-black mb-4">Документы, которые<br />сами себя уничтожают</h1>
+          <h1 className="text-4xl font-black mb-4">{t("qcontract.home.hero.title")}</h1>
           <p className="text-slate-400 text-lg mb-8 leading-relaxed">
-            Отправьте секретный документ. Установите лимит просмотров или срок действия.<br />
-            После — он исчезнет навсегда. Никаких следов.
+            {t("qcontract.home.hero.body")}
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap mb-10">
             {[
-              ["🔒", "Пароль на доступ"],
-              ["👁", "Лимит просмотров"],
-              ["⏱", "Срок действия"],
-              ["📊", "Лог просмотров"],
+              ["🔒", t("qcontract.home.hero.feat.password")],
+              ["👁", t("qcontract.home.hero.feat.views")],
+              ["⏱", t("qcontract.home.hero.feat.expiry")],
+              ["📊", t("qcontract.home.hero.feat.log")],
             ].map(([icon, label]) => (
               <div key={label} className="flex items-center gap-2 text-sm text-slate-300 bg-slate-800 px-4 py-2 rounded-xl">
                 <span>{icon}</span>
@@ -153,9 +164,9 @@ export default function QContractHome() {
             href="/qcontract/create"
             className="inline-block px-8 py-4 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl transition-colors"
           >
-            Создать саморазрушающийся документ →
+            {t("qcontract.home.hero.cta")}
           </Link>
-          <p className="text-xs text-slate-600 mt-4">Требуется авторизация AEVION</p>
+          <p className="text-xs text-slate-600 mt-4">{t("qcontract.home.hero.auth_required")}</p>
         </div>
       )}
 
@@ -164,16 +175,20 @@ export default function QContractHome() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
-              <h2 className="text-xl font-bold">Мои документы</h2>
+              <h2 className="text-xl font-bold">{t("qcontract.home.dash.title")}</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {docs.length} всего · {docs.filter(d => !d.expired).length} активных · {docs.filter(d => d.expired).length} истёкших
+                {t("qcontract.home.dash.summary", {
+                  total: docs.length,
+                  active: docs.filter(d => !d.expired).length,
+                  expired: docs.filter(d => d.expired).length,
+                })}
               </p>
             </div>
             <Link
               href="/qcontract/create"
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg"
             >
-              + Создать
+              {t("qcontract.home.dash.new")}
             </Link>
           </div>
 
@@ -184,14 +199,14 @@ export default function QContractHome() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 Поиск по названию документа..."
+                placeholder={t("qcontract.home.dash.search")}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
               />
             </div>
           )}
 
           {loading && (
-            <div className="space-y-3 animate-pulse" aria-label="Загрузка документов" role="status">
+            <div className="space-y-3 animate-pulse" aria-label={t("qcontract.home.dash.loading")} role="status">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="border border-slate-800 rounded-xl p-4 bg-slate-900/50">
                   <div className="flex items-start justify-between gap-4">
@@ -214,9 +229,9 @@ export default function QContractHome() {
           {!loading && docs.length === 0 && (
             <div className="text-center py-16 text-slate-500">
               <div className="text-4xl mb-4">📄</div>
-              <p className="text-sm">Документов пока нет.</p>
+              <p className="text-sm">{t("qcontract.home.dash.empty")}</p>
               <Link href="/qcontract/create" className="text-red-400 hover:text-red-300 text-sm underline mt-2 inline-block">
-                Создать первый →
+                {t("qcontract.home.dash.create_first")}
               </Link>
             </div>
           )}
@@ -232,15 +247,15 @@ export default function QContractHome() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <StatusBadge doc={doc} />
-                      {doc.hasPassword && <span className="text-[10px] text-slate-400">🔒 Пароль</span>}
+                      <StatusBadge doc={doc} t={t} />
+                      {doc.hasPassword && <span className="text-[10px] text-slate-400">{t("qcontract.home.doc.password_label")}</span>}
                       {doc.contentType === "url" && <span className="text-[10px] text-slate-400">🔗 URL</span>}
                     </div>
                     <h3 className="font-semibold text-white truncate">{doc.title}</h3>
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
-                      <span>👁 {doc.viewCount}{doc.maxViews ? `/${doc.maxViews}` : ""} просмотров</span>
-                      {doc.expiresAt && <span>⏱ до {formatDate(doc.expiresAt)}</span>}
-                      <span>📅 {formatDate(doc.createdAt)}</span>
+                      <span>{t("qcontract.home.doc.views", { viewed: doc.viewCount, cap: doc.maxViews ? `/${doc.maxViews}` : "" })}</span>
+                      {doc.expiresAt && <span>{t("qcontract.home.doc.until", { date: formatDate(doc.expiresAt, lang) })}</span>}
+                      <span>📅 {formatDate(doc.createdAt, lang)}</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
@@ -249,33 +264,33 @@ export default function QContractHome() {
                         <button
                           onClick={() => copyLink(doc.shareUrl, doc.id)}
                           className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
-                          aria-label={copied === doc.id ? "Ссылка скопирована" : "Скопировать ссылку"}
+                          aria-label={copied === doc.id ? t("qcontract.home.doc.copy_aria_done") : t("qcontract.home.doc.copy_aria")}
                         >
-                          {copied === doc.id ? "✓ Скопировано" : "Ссылка"}
+                          {copied === doc.id ? t("qcontract.home.doc.copied") : t("qcontract.home.doc.copy")}
                         </button>
                         <Link
                           href={`/qcontract/documents/${doc.id}/log`}
                           className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px] inline-flex items-center justify-center"
                         >
-                          Лог
+                          {t("qcontract.home.doc.log")}
                         </Link>
                         {doc.expiresAt && (
                           <button
                             onClick={() => extend(doc.id)}
-                            title="Продлить срок действия"
-                            aria-label="Продлить срок действия документа"
+                            title={t("qcontract.home.doc.extend_title")}
+                            aria-label={t("qcontract.home.doc.extend_aria")}
                             className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
                           >
-                            ⏱ Продлить
+                            {t("qcontract.home.doc.extend")}
                           </button>
                         )}
                         <button
                           onClick={() => revoke(doc.id)}
                           disabled={revoking === doc.id}
-                          aria-label="Отозвать документ"
+                          aria-label={t("qcontract.home.doc.revoke_aria")}
                           className="text-xs px-3 py-2 sm:py-1.5 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors disabled:opacity-40 min-h-[36px]"
                         >
-                          {revoking === doc.id ? "..." : "Отозвать"}
+                          {revoking === doc.id ? "..." : t("qcontract.home.doc.revoke")}
                         </button>
                       </>
                     )}
@@ -292,25 +307,25 @@ export default function QContractHome() {
           moduleId="qcontract"
           noun="concept/messages"
           accent="violet"
-          sectionTitle="Smart documents concept board"
-          sectionHint="Какие типы саморазрушающихся документов нужны? Какие watermarks обязательны?"
+          sectionTitle={t("qcontract.home.cb.title")}
+          sectionHint={t("qcontract.home.cb.hint")}
           titleField="idea"
           summaryField="rationale"
           fields={[
-            { key: "idea", label: "Идея / use-case", placeholder: "напр.: NDA с per-viewer watermark", required: true },
-            { key: "rationale", label: "Почему это нужно", type: "textarea", placeholder: "Какую угрозу адресует, кому полезно" },
-            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            { key: "idea", label: t("qcontract.home.cb.idea_label"), placeholder: t("qcontract.home.cb.idea_ph"), required: true },
+            { key: "rationale", label: t("qcontract.home.cb.rationale_label"), type: "textarea", placeholder: t("qcontract.home.cb.rationale_ph") },
+            { key: "author", label: t("qcontract.home.cb.author_label"), placeholder: "anon" },
           ]}
         />
       </div>
 
       {/* Stats footer */}
-      <QContractStats />
+      <QContractStats t={t} />
     </div>
   );
 }
 
-function QContractStats() {
+function QContractStats({ t }: { t: TFn }) {
   const [stats, setStats] = useState<{ totalDocuments: number; totalViews: number } | null>(null);
   useEffect(() => {
     fetch(apiUrl("/api/qcontract/stats")).then((r) => r.json()).then(setStats).catch(() => {});
@@ -318,9 +333,9 @@ function QContractStats() {
   if (!stats) return null;
   return (
     <div className="border-t border-slate-800 px-6 py-4 flex items-center justify-center gap-8 text-xs text-slate-600">
-      <span>{stats.totalDocuments} документов создано</span>
+      <span>{t("qcontract.home.stats.docs", { n: stats.totalDocuments })}</span>
       <span>·</span>
-      <span>{stats.totalViews} просмотров зафиксировано</span>
+      <span>{t("qcontract.home.stats.views", { n: stats.totalViews })}</span>
     </div>
   );
 }

@@ -23,7 +23,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail } from "./provisioning";
+import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -192,7 +192,7 @@ pricingRouter.get("/bundles", (_req, res) => {
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
-  if (!tierId || !["free", "pro", "business", "enterprise"].includes(tierId)) {
+  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
@@ -222,7 +222,7 @@ pricingRouter.post("/promo/validate", (req, res) => {
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
-  if (!tierId || !["free", "pro", "business", "enterprise"].includes(tierId)) {
+  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
   const { promo, reason } = resolvePromoCode(code, tierId);
@@ -278,7 +278,7 @@ pricingRouter.post("/lead", (req, res) => {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
   const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : undefined;
   const industry = typeof body.industry === "string" ? body.industry.trim().slice(0, 60) : undefined;
-  const tier = typeof body.tier === "string" && ["free", "pro", "business", "enterprise"].includes(body.tier)
+  const tier = typeof body.tier === "string" && ["free", "lite", "medium", "full", "enterprise"].includes(body.tier)
     ? (body.tier as TierId)
     : undefined;
   const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;
@@ -1414,6 +1414,7 @@ pricingRouter.get("/subscription/me", (req, res) => {
         tierId: latest.tierId,
         period: latest.period,
         seats: latest.seats ?? 1,
+        modules: Array.isArray(latest.modules) ? latest.modules : [],
         validUntil: latest.validUntil ?? null,
         trialDays: latest.trialDays ?? 0,
         amountUsd: latest.amountUsd ?? null,
@@ -1424,5 +1425,76 @@ pricingRouter.get("/subscription/me", (req, res) => {
   } catch (e) {
     console.error("[subscription/me] read failed", e);
     res.status(500).json({ error: "read_failed" });
+  }
+});
+
+/**
+ * POST /api/pricing/subscription/lite-module
+ * JWT-auth. Body: { moduleId }
+ *
+ * Lite = 1 продукт на выбор. Меняет выбранный продукт подписчика Lite/Free,
+ * дописывая новую (latest-wins) запись подписки с modules=[moduleId].
+ */
+pricingRouter.post("/subscription/lite-module", (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "unauthorized" });
+  let email: string;
+  try {
+    const payload = jwt.verify(auth.slice(7), getJwtSecret(), { algorithms: ["HS256"] }) as { email?: string };
+    if (!payload.email) return res.status(401).json({ error: "invalid_token" });
+    email = payload.email.toLowerCase();
+  } catch {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+
+  const moduleId = typeof req.body?.moduleId === "string" ? req.body.moduleId.trim() : "";
+  if (!moduleId || !getModulePrice(moduleId)) {
+    return res.status(400).json({ error: "invalid_module" });
+  }
+
+  const current = readLatestSubscription(email);
+  if (!current || (current.tierId !== "lite" && current.tierId !== "free")) {
+    return res.status(409).json({ error: "not_lite", message: "Смена одного продукта доступна на тарифах Free/Lite" });
+  }
+
+  const updated: Subscription = {
+    ...current,
+    id: `sub_litemod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    ts: new Date().toISOString(),
+    modules: [moduleId],
+    source: "lite_module_change",
+  };
+  writeSubscription(updated);
+  res.json({ ok: true, tierId: current.tierId, module: moduleId });
+});
+
+/**
+ * POST /api/pricing/subscriptions/purge
+ * Body: { email }
+ * Header: x-admin-token
+ *
+ * Removes every subscriptions.jsonl record for this email (case-insensitive).
+ * Atomic rewrite via .tmp + rename. Returns { ok, removed, remaining }.
+ *
+ * Use cases: GDPR removal, clearing test verify-pings, support hand-edits.
+ */
+pricingRouter.post("/subscriptions/purge", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) return res.status(401).json({ error: "admin_token_not_configured" });
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+
+  try {
+    const { removed, remaining } = purgeSubscriptions(email);
+    res.json({ ok: true, email, removed, remaining });
+  } catch (e) {
+    console.error("[subscriptions/purge] failed", e);
+    res.status(500).json({ error: "purge_failed" });
   }
 });

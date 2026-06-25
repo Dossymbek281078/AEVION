@@ -264,6 +264,13 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document === "undefined") return null;
     const cell = document.querySelector(`[data-sq="${from}"]`);
     if (!cell) return null;
+    // Strategy 0 (PRIMARY, stable contract): piece wrapper carries data-piece,
+    // set explicitly in page.tsx's board cell. Этот атрибут — единственная точка
+    // связи между разметкой и input-слоем; пока он на месте, механика НЕ слетает
+    // от любых изменений размера/стиля/структуры фигуры. Строковые проверки ниже —
+    // только запасной путь на случай рассинхрона.
+    const tagged = cell.querySelector('[data-piece]') as HTMLElement | null;
+    if (tagged) return tagged;
     // Strategy 1: direct child with width:88% height:88% inline style
     const children = cell.children;
     for (let i = 0; i < children.length; i++) {
@@ -318,7 +325,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
     const piece = pieceSrc.get(from) || o.game.get(from);
     if (!piece) {
-      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
         // eslint-disable-next-line no-console
         console.log("[CC] showGhost: no piece on", from);
       }
@@ -364,7 +371,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     // GPU compositor: transform: translate3d() — instant repaint, no layout
     node.style.transform = `translate3d(${x}px,${y + dy}px,0)`;
     ghostPosRef.current = { x, y };
-    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
       // eslint-disable-next-line no-console
       console.log("[CC] GHOST shown", {
         from, x, y, cellSz,
@@ -379,15 +386,19 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document !== "undefined") {
       const srcCell = document.querySelector(`[data-sq="${from}"]`);
       if (srcCell) {
-        const allDivs = srcCell.querySelectorAll("div");
-        for (let i = 0; i < allDivs.length; i++) {
-          const c = allDivs[i] as HTMLElement;
-          if (c.style && c.style.width === "88%" && c.style.height === "88%") {
-            c.dataset.ghostHidden = "1";
-            c.style.opacity = "0";
-            c.style.transition = "opacity 60ms linear"; // smoother than instant
-            break;
+        // Stable contract first: [data-piece]. Fallback: legacy 88% style match.
+        let target = srcCell.querySelector('[data-piece]') as HTMLElement | null;
+        if (!target) {
+          const allDivs = srcCell.querySelectorAll("div");
+          for (let i = 0; i < allDivs.length; i++) {
+            const c = allDivs[i] as HTMLElement;
+            if (c.style && c.style.width === "88%" && c.style.height === "88%") { target = c; break; }
           }
+        }
+        if (target) {
+          target.dataset.ghostHidden = "1";
+          target.style.opacity = "0";
+          target.style.transition = "opacity 60ms linear"; // smoother than instant
         }
       }
       document.body.style.cursor = "grabbing";
@@ -543,7 +554,7 @@ export function useBoardInput(opts: BoardInputOptions) {
         d.active = true;
         ghostPosRef.current = { x: e.clientX, y: e.clientY };
         showGhost(d.from, e.clientX, e.clientY);
-        if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+        if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
           // eslint-disable-next-line no-console
           console.log("[CC] drag ACTIVATED — ghost should follow cursor");
         }
@@ -558,6 +569,9 @@ export function useBoardInput(opts: BoardInputOptions) {
         if (target !== dragHoverIntRef.current) {
           dragHoverIntRef.current = target;
           // Imperative halo — no setDragHover, no React render thrashing.
+          // ВАЖНО: НЕ вызывать setDragHover здесь — ре-рендер 13k-строчного
+          // компонента во время активного pointer-драга ломает захват/трекинг
+          // («фигуры не берутся»). Этот баг уже чинили — halo держим императивным.
           positionHalo(target);
         }
       }
@@ -641,14 +655,14 @@ export function useBoardInput(opts: BoardInputOptions) {
   //    fallback via opts.click().
   const onBoardDown = useCallback((e: React.PointerEvent) => {
     // DEBUG: visible in browser DevTools console (F12). Strip after diagnosing.
-    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
       // eslint-disable-next-line no-console
       console.log("[CC] onBoardDown fired", { button: e.button, pointerType: e.pointerType, x: e.clientX, y: e.clientY });
     }
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const sq = sqFromBoard(e.clientX, e.clientY);
     if (!sq) {
-      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
         // eslint-disable-next-line no-console
         console.log("[CC] onBoardDown: no square detected — board ref null or pointer outside grid");
       }
@@ -730,7 +744,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     const p = checkBoard.get(sq);
     const side = o.tab === "analysis" ? o.game.turn() : o.pCol;
     const canDrag = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
-    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
       // eslint-disable-next-line no-console
       console.log("[CC] onBoardDown: canDrag check", {
         sq, isPM, hasPiece: !!p, pieceColor: p?.color, side, pCol: o.pCol,
@@ -746,7 +760,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     // d.active=true сразу: pointerup → executeDrop (если to !== from), либо
     // priority-логика onBoardDown уже обработала бы tap-to-exec до этой точки.
     showGhost(sq, e.clientX, e.clientY);
-    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
       // eslint-disable-next-line no-console
       console.log("[CC] onBoardDown: drag ARMED + ghost shown immediately");
     }

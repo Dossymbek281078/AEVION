@@ -8,6 +8,8 @@ import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
 import earcut from "earcut";
 import { apiUrl } from "@/lib/apiBase";
+import { countryByGlobusName } from "@/lib/constitution";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 
 type Project = {
   id: string;
@@ -376,6 +378,12 @@ function projectGeo(projectId: string) {
       city: "Los Angeles",
       lat: 34.0522,
       lon: -118.2437,
+    },
+    constitution: {
+      country: "Greece",
+      city: "Athens",
+      lat: 37.9838,
+      lon: 23.7275,
     },
   };
 
@@ -4607,6 +4615,33 @@ export default function Globus3D({
           </button>
         </div>
       ) : null}
+
+      {/* Constitution Embed — fingerprint card for the hovered country, if known.
+          Drawn first so the bottom country badge sits visually above it. */}
+      {hoveredCountry && !label && (() => {
+        const aliased = aliasCountry(hoveredCountry);
+        const cc = countryByGlobusName(aliased) ?? countryByGlobusName(hoveredCountry);
+        if (!cc) return null;
+        return (
+          <div
+            aria-label={`Constitution fingerprint for ${cc.en}`}
+            style={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              zIndex: 6,
+              pointerEvents: "none",
+              animation: "aev-hover-card-in 140ms ease-out",
+            }}
+          >
+            <ConstitutionEmbed
+              sliders={cc.sliders}
+              label={`${cc.flag} ${cc.name}`}
+              size="sm"
+            />
+          </div>
+        );
+      })()}
 
       {/* Country badge — shown on globe-surface hover when no marker is hovered. */}
       {hoveredCountry && !label ? (

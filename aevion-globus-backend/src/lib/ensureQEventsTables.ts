@@ -62,6 +62,29 @@ export async function ensureQEventsTables(pool: PgPoolInstance): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "QEventRSVP_uniq"
         ON "QEventRSVP" ("eventId", "userId");
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QEventWaitlist" (
+        "id"        TEXT PRIMARY KEY,
+        "eventId"   TEXT NOT NULL,
+        "userId"    TEXT NOT NULL,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "QEventWaitlist_uniq"
+        ON "QEventWaitlist" ("eventId", "userId");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QEventWaitlist_event_idx"
+        ON "QEventWaitlist" ("eventId", "createdAt");
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QEventShare" (
+        "id"        TEXT PRIMARY KEY,
+        "eventId"   TEXT NOT NULL,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
     dbReady = true;
     console.log("[QEvents] Tables ready");
   } catch (e: unknown) {

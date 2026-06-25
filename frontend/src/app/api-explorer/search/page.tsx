@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -278,7 +278,7 @@ export default function SearchExplorerPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
 
   // Autofocus on mount
   useEffect(() => {

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 /* ============================================================
  * QTradeOffline — offline-first P2P payments в AEV.
@@ -535,9 +536,12 @@ export default function QTradeOfflinePage() {
           </h1>
           <span style={subtitleStyle}>offline-first AEV payments</span>
         </div>
-        <a href="/" style={backLinkStyle}>
-          ← Back to AEVION
-        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <ModulePricingChip moduleId="qtradeoffline" theme="dark" />
+          <a href="/" style={backLinkStyle}>
+            ← Back to AEVION
+          </a>
+        </div>
       </header>
 
       <section style={walletCardStyle}>

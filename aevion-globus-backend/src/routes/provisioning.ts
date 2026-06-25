@@ -9,7 +9,7 @@
  * GTM-уровень: запись подписки + welcome-email.
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
 
@@ -52,6 +52,43 @@ export function writeSubscription(sub: Subscription): void {
   }
 }
 
+/**
+ * Remove every subscription record matching this email (case-insensitive)
+ * from the store. Rewrites the JSONL atomically via .tmp + rename so a crash
+ * mid-rewrite can't leave a half-truncated file. Returns counts of removed
+ * vs. kept records. No-op (0/0) when the file doesn't exist.
+ *
+ * Used by the admin purge endpoint for GDPR removal and to clear test
+ * records left by verify pings.
+ */
+export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
+  const target = email.trim().toLowerCase();
+  if (!target) return { removed: 0, remaining: 0 };
+  if (!existsSync(SUBS_FILE)) return { removed: 0, remaining: 0 };
+  const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+  const kept: string[] = [];
+  let removed = 0;
+  for (const line of lines) {
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      if (sub.email?.toLowerCase() === target) {
+        removed += 1;
+        continue;
+      }
+    } catch {
+      // keep malformed lines — they were already in the store and we don't
+      // want to silently drop unparseable data during a purge by email
+    }
+    kept.push(line);
+  }
+  const tmp = SUBS_FILE + ".tmp";
+  const out = kept.length === 0 ? "" : kept.join("\n") + "\n";
+  ensureDir();
+  writeFileSync(tmp, out, "utf8");
+  renameSync(tmp, SUBS_FILE);
+  return { removed, remaining: kept.length };
+}
+
 export function countSubscriptions(): number {
   try {
     if (!existsSync(SUBS_FILE)) return 0;
@@ -60,6 +97,55 @@ export function countSubscriptions(): number {
   } catch {
     return 0;
   }
+}
+
+/**
+ * Latest subscription record for an email (case-insensitive). The store is
+ * append-only and latest-wins, so a later "free" downgrade record (written by
+ * the LS subscription webhook on cancel/expire) correctly supersedes an
+ * earlier paid record. Returns null if the email has no records.
+ */
+export function readLatestSubscription(email: string): Subscription | null {
+  const target = email.trim().toLowerCase();
+  if (!target) return null;
+  try {
+    if (!existsSync(SUBS_FILE)) return null;
+    const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+    let latest: Subscription | null = null;
+    for (const line of lines) {
+      try {
+        const sub = JSON.parse(line) as Subscription;
+        if (sub.email?.toLowerCase() === target) latest = sub;
+      } catch {
+        // skip malformed
+      }
+    }
+    return latest;
+  } catch {
+    return null;
+  }
+}
+
+export interface ActivePlan {
+  /** Latest subscription tier for the email, or "free" if none/expired. */
+  tierId: TierId;
+  validUntil: string | null;
+  /** true when tierId is a paid tier AND validUntil hasn't passed. */
+  active: boolean;
+  source: string | null;
+}
+
+/**
+ * Resolves the effective plan for an email from the subscription store.
+ * Single source of truth for "what has this user paid for" — used by the
+ * pricing self-service endpoint and the Constitution Pro server gate.
+ */
+export function getActivePlan(email: string): ActivePlan {
+  const sub = readLatestSubscription(email);
+  if (!sub) return { tierId: "free", validUntil: null, active: false, source: null };
+  const expired = sub.validUntil ? new Date(sub.validUntil).getTime() < Date.now() : false;
+  const active = sub.tierId !== "free" && !expired;
+  return { tierId: sub.tierId, validUntil: sub.validUntil ?? null, active, source: sub.source ?? null };
 }
 
 interface EmailPayload {
@@ -101,9 +187,13 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
 
 const TIER_DISPLAY: Record<TierId, string> = {
   free: "Free",
-  pro: "Pro",
-  business: "Business",
+  lite: "Lite",
+  medium: "Medium",
+  full: "Full",
   enterprise: "Enterprise",
+  // legacy aliases (deprecated)
+  pro: "Lite",
+  business: "Full",
 };
 
 function welcomeHtml(sub: Subscription): string {

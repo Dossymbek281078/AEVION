@@ -27,14 +27,14 @@ interface Job {
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
   const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+    localStorage.getItem("aevion_auth_token_v1") || sessionStorage.getItem("aevion_auth_token_v1");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function getAuthSub(): string | null {
   if (typeof window === "undefined") return null;
   const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+    localStorage.getItem("aevion_auth_token_v1") || sessionStorage.getItem("aevion_auth_token_v1");
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));

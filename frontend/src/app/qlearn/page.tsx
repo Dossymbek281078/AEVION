@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface Course {
   id: string;
@@ -485,6 +486,9 @@ export default function QLearnPage() {
           {/* Paddle upgrade banner */}
           <div style={{ marginBottom: 20 }}>
             <PaddleUpgradeButton variant="banner" appId="qlearn" label="Открыть все курсы — 14 дней бесплатно" />
+            <div style={{ marginTop: 10 }}>
+              <ModulePricingChip moduleId="qlearn" />
+            </div>
           </div>
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>

@@ -67,6 +67,10 @@ const SMOKES = [
   { name: "qgood", script: "qgood-smoke.js", readOnly: false },
   // QMaskCard — virtual payment masking. Issues mask, charges, revokes.
   { name: "qmaskcard", script: "qmaskcard-smoke.js", readOnly: false },
+  // VeilNetX privacy-check — live /inspect tool (IP/geo/UA/exposure score) +
+  // status + openapi. Read-only & prod-safe: the waitlist WRITE leg self-skips
+  // when READ_ONLY=1, so daily prod runs never insert smoke emails.
+  { name: "veilnetx", script: "veilnetx-smoke.js", readOnly: true },
   // VeilNetX Ledger — chain integrity + entry write.
   { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
   // VeilNetX chaos — bursty parallel writes + chain integrity check. Catches race-condition regressions.
@@ -93,6 +97,15 @@ const SMOKES = [
   // 19 critical module prefixes must be documented; 20 soft prefixes tracked
   // for awareness (after 2026-05-19 expansion: all 20 present).
   { name: "openapi-completeness", script: "openapi-completeness-smoke.js", readOnly: true },
+  // Phantom-endpoint gate — probes every advertised "/api/..." literal and
+  // fails if any is a confirmed phantom (advertised + 404 + no handler of any
+  // method). Read-only (GET probes only). Guards against the OpenAPI catalog
+  // advertising routes that don't exist. Honors BASE.
+  { name: "phantom-audit", script: "phantom-endpoint-audit.mjs", readOnly: true },
+  // Frontend phantom-page gate — every module in the registry advertises a
+  // page at /<id>; this fails if any returns 404 on the live frontend.
+  // Read-only; always probes FRONTEND (default https://aevion.app).
+  { name: "frontend-phantom", script: "frontend-phantom-audit.mjs", readOnly: true, env: { FRONTEND: process.env.FRONTEND || "https://aevion.app" } },
   // QCoreAI PROD — 12 checks for the multi-agent AI core (foundational —
   // every AI-using module eventually calls into it). Validates health,
   // providers/configuration consistency, sessions/agents/prompts shape.
@@ -136,6 +149,28 @@ const SMOKES = [
   { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
   // Paddle Billing PROD — 15 checks: health/plans/products/transactions + webhook HMAC round-trip.
   { name: "paddle-prod", script: "paddle-prod-smoke.js", readOnly: true, env: { PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET || "" } },
+  // Lemon Squeezy subscription webhook — mode probe (stub vs real), bad-sig 401,
+  // and (with LEMON_SQUEEZY_WEBHOOK_SECRET) activate/downgrade/ignore/400/dedup.
+  // Self-skips gracefully in stub mode or when the secret isn't in env.
+  { name: "ls-webhook", script: "ls-webhook-smoke.js", readOnly: false, env: { LEMON_SQUEEZY_WEBHOOK_SECRET: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET || "" } },
+  // Constitution Pro gate (prod contract) — read-only: /me/plan free-limit
+  // shape (savedScenarios/aiSuggestPerDay/pdfRequiresSign), publish-route
+  // validation gates, ai-suggest liveness. Doesn't trigger 402/429.
+  { name: "constitution-pro-prod", script: "constitution-pro-prod-smoke.js", readOnly: true },
+  // Gumroad ping webhook — form-encoded paid/refund/no-email/dedup. Also
+  // guards the express.urlencoded body-parser fix (form pings must reach the
+  // handler with a populated body). Signs with GUMROAD_WEBHOOK_SECRET if set.
+  { name: "gumroad-webhook", script: "gumroad-webhook-smoke.js", readOnly: false, env: { GUMROAD_WEBHOOK_SECRET: process.env.GUMROAD_WEBHOOK_SECRET || "" } },
+  // Smeta Trainer PROD — read-only: health, leaderboard, per-level stats,
+  // groups, graceful student-miss, /sync validation gate. Last live-module gap.
+  { name: "smeta-trainer-prod", script: "smeta-trainer-prod-smoke.js", readOnly: true },
+  // CyberChess PROD — read-only: CPI leaderboard, tournaments list/detail/meta,
+  // spectator, auth+validation gates. No game state, no cyberchess source.
+  { name: "cyberchess-prod", script: "cyberchess-prod-smoke.js", readOnly: true },
+  // DevHub PROD — 47 assertions: all 8 tabs (projects/files/env/deployments/github/templates/agent/snippets)
+  // + 13 media subtabs (TTS/Image/SFX/Music/VoiceClone/STT/Email/Payment/SMS/WhatsApp/Translate/Drive)
+  // Accepts 503 gracefully for unconfigured API keys. Writes one project + snippet then cleans up.
+  { name: "devhub-prod", script: "devhub-prod-smoke.js", readOnly: false },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
@@ -195,10 +230,21 @@ const SMOKES = [
   },
 ];
 
+// The *-prod smokes encode production-specific expectations (live billing
+// keys, seeded search indexes, gated mutations). Run against a local backend
+// they fail for environment reasons, not real bugs — so skip them unless the
+// target actually looks like prod.
+const isProdTarget = !/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(BASE);
+const prodSkipped = [];
+
 const eligible = SMOKES.filter((sm) => {
   if (ONLY.length > 0 && !ONLY.includes(sm.name)) return false;
   if (SKIP.includes(sm.name)) return false;
   if (READ_ONLY && !sm.readOnly) return false;
+  if (!isProdTarget && /-prod$/.test(sm.name) && !ONLY.includes(sm.name)) {
+    prodSkipped.push(sm.name);
+    return false;
+  }
   return true;
 });
 
@@ -211,20 +257,69 @@ console.log(`AEVION smoke orchestrator`);
 console.log(`  BASE       = ${BASE}`);
 console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
+if (prodSkipped.length > 0) {
+  console.log(`  skipped    = ${prodSkipped.length} *-prod smoke(s) (BASE is not prod): ${prodSkipped.join(", ")}`);
+}
 console.log("");
+
+// Node v24.11.1 on Windows can crash during process teardown (exit code
+// 0xC0000409 = 3221226505, STATUS_STACK_BUFFER_OVERRUN) when fetch/undici
+// keep-alive sockets are still open at exit — even after a clean
+// process.exit(0). That overrides the child's real exit code, so a fully
+// passing smoke shows up as a failure. When we see that exact sentinel,
+// fall back to judging by the child's printed summary instead of the code.
+const WIN_EXIT_TEARDOWN_CRASH = 3221226505; // 0xC0000409
+
+// True when the captured output reports zero failed assertions. Covers the
+// summary formats in use across the smoke fleet:
+//   "… N PASS  0 FAIL"   "… N passed, 0 failed"   "failed: 0"
+//   "[x-smoke] PASS=9 FAIL=0"   "✅ all steps passed"
+function reportsZeroFailures(out) {
+  const hasSummary =
+    /\bassertions\b|\bPASS\b|\bpassed\b|\bFAIL=\d+\b/i.test(out);
+  const zeroFail =
+    /\b0\s+FAIL\b/i.test(out) ||
+    /\b0\s+failed\b/i.test(out) ||
+    /failed:\s*0\b/i.test(out) ||
+    /\bFAIL=0\b/i.test(out) ||
+    /\ball (?:steps|checks|assertions|tests) passed\b/i.test(out);
+  // Note the (?!=) guards: in "PASS=9 FAIL=0" the "9 FAIL" substring must NOT
+  // be read as a fail count — FAIL there is followed by "=0" (a zero count).
+  const hasFailMarker =
+    /\b[1-9]\d*\s+FAIL\b(?!=)/i.test(out) ||
+    /\b[1-9]\d*\s+failed\b/i.test(out) ||
+    /\bFAIL=[1-9]\d*\b/i.test(out) ||
+    /failed:\s*[1-9]\d*\b/i.test(out);
+  return hasSummary && zeroFail && !hasFailMarker;
+}
 
 const results = [];
 for (const sm of eligible) {
   const banner = `========== ${sm.name} ==========`;
   console.log(`\n${banner}`);
   const start = Date.now();
+  // Preload a fetch wrapper that retries idempotent GETs once on a transient
+  // network blip, so prod latency doesn't produce false FAILs. Forward slashes
+  // work on Windows and avoid backslash escaping inside NODE_OPTIONS.
+  const preload = path.join(__dirname, "lib", "fetch-retry.cjs").replace(/\\/g, "/");
+  const childNodeOptions = `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + " " : ""}--require ${preload}`;
   const child = spawnSync("node", [path.join(__dirname, sm.script)], {
-    stdio: "inherit",
-    env: { ...process.env, BASE, ...(sm.env || {}) },
+    env: { ...process.env, BASE, NODE_OPTIONS: childNodeOptions, ...(sm.env || {}) },
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
   });
+  // Stream the captured output through, preserving the previous live-ish UX.
+  if (child.stdout) process.stdout.write(child.stdout);
+  if (child.stderr) process.stderr.write(child.stderr);
   const elapsed = Date.now() - start;
-  const ok = child.status === 0;
-  results.push({ name: sm.name, ok, status: child.status, elapsed });
+  const combined = (child.stdout || "") + "\n" + (child.stderr || "");
+  let ok = child.status === 0;
+  let note = "";
+  if (!ok && child.status === WIN_EXIT_TEARDOWN_CRASH && reportsZeroFailures(combined)) {
+    ok = true;
+    note = " (Node/Windows exit-teardown crash ignored — 0 failures reported)";
+  }
+  results.push({ name: sm.name, ok, status: child.status, elapsed, note });
 }
 
 console.log("\n========== Summary ==========");
@@ -232,7 +327,7 @@ let passed = 0,
   failed = 0;
 for (const r of results) {
   const tag = r.ok ? "PASS" : "FAIL";
-  const detail = r.ok ? "" : ` (exit=${r.status})`;
+  const detail = r.ok ? r.note || "" : ` (exit=${r.status})`;
   console.log(`  ${tag}  ${r.name.padEnd(12)}  ${(r.elapsed / 1000).toFixed(1)}s${detail}`);
   if (r.ok) passed += 1;
   else failed += 1;

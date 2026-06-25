@@ -4,6 +4,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ToastProvider";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { AppShellLanguagePill } from "@/components/AppShellLanguagePill";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
@@ -23,8 +24,12 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <I18nProvider>
-      <AutoTranslate>
+      {/* observe={!isApp}: на full-app оболочках (CyberChess, build, qright…)
+          оставляем разовый стартовый перевод, но НЕ вешаем live-MutationObserver —
+          он гонял walk() на каждый ход/тик часов и лагал механику ходов. */}
+      <AutoTranslate observe={!isApp}>
         {!isApp && <SiteHeader />}
+        {isApp && <AppShellLanguagePill />}
         <ToastProvider>
           <div style={{ flex: 1 }}>{children}</div>
         </ToastProvider>

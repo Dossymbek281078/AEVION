@@ -64,7 +64,7 @@ function getStripe(): StripeInstance {
   if (_stripe) return _stripe;
   const apiKey = need("STRIPE_SECRET_KEY");
   // Don't pin apiVersion in code — let the SDK use whatever version it ships
-  // with (v22 → 2026-04-22.dahlia). This avoids TS2352 mismatch when SDK
+  // with (v22.2 → 2026-05-27.dahlia). This avoids TS2352 mismatch when SDK
   // gets bumped in package.json without updating this string. The version
   // can be pinned at the Stripe dashboard side instead.
   _stripe = new Stripe(apiKey);

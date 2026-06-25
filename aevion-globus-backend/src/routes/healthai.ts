@@ -616,6 +616,39 @@ function round(n: number, decimals = 1): number {
   return Math.round(n * f) / f;
 }
 
+/**
+ * Ownership guard for a health profile referenced by id.
+ *
+ * Health records (profile, symptom checks, daily logs, trends) must never be
+ * enumerable across users via a client-supplied profileId. A profile that
+ * belongs to an authenticated user (userId set) may only be read or written by
+ * that same JWT sub. Anonymous/legacy profiles (userId null) stay open so the
+ * no-token demo flow keeps working — non-breaking, mirrors the qlife/qgood fix.
+ *
+ * `requireExists: true` for reads (a missing profile is a 404); writes pass
+ * `false` so creating against a not-yet-persisted anonymous profile still works.
+ */
+async function guardProfile(
+  req: Request,
+  profileId: string,
+  opts: { requireExists: boolean },
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const profile = await store.getProfile(profileId);
+  if (!profile) {
+    return opts.requireExists
+      ? { ok: false, status: 404, error: "profile-not-found" }
+      : { ok: true };
+  }
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return { ok: false, status: 401, error: "auth-required" };
+    if (auth.sub !== profile.userId) {
+      return { ok: false, status: 403, error: "not-profile-owner" };
+    }
+  }
+  return { ok: true };
+}
+
 healthaiRouter.get("/health", async (_req, res) => {
   await ensureDb();
   res.json({
@@ -668,6 +701,14 @@ healthaiRouter.post("/profile", async (req: Request, res: Response) => {
   };
 
   const saved = await store.upsertProfile(profile);
+
+  // Claim transition: a profile that had no owner is now bound to this
+  // authenticated user. Evict any screener results cached during the prior
+  // anonymous phase so they don't carry into the freshly owned profile.
+  if (auth?.sub && !existing?.userId && saved.userId === auth.sub) {
+    clearScreenerCache(id);
+  }
+
   res.json({
     profile: saved,
     bmi: bmi(saved.heightCm, saved.weightKg),
@@ -702,6 +743,14 @@ healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
   const profile = await store.getProfile(qstr(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  // An owned profile is readable only by its owner; anonymous profiles stay open.
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
   res.json({
     profile,
     bmi: bmi(profile.heightCm, profile.weightKg),
@@ -713,6 +762,8 @@ healthaiRouter.post("/check", async (req: Request, res: Response) => {
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
   }
+  const access = await guardProfile(req, body.profileId, { requireExists: false });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
   if (symptoms.length === 0) {
     return res.status(400).json({ error: "symptoms-empty" });
@@ -744,6 +795,8 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
   }
+  const access = await guardProfile(req, body.profileId, { requireExists: false });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const date =
     typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
       ? body.date
@@ -773,6 +826,8 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
 
 healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.id);
+  const access = await guardProfile(req, profileId, { requireExists: true });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const cks = await store.getChecks(profileId, 20);
   const lgs = await store.getLogs(profileId, 90);
   res.json({ checks: cks, logs: lgs });
@@ -780,6 +835,8 @@ healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
 
 healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.id);
+  const access = await guardProfile(req, profileId, { requireExists: true });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
@@ -948,6 +1005,14 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   }
   const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  // An owned profile may only be queried by its owner; anonymous stays open.
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
   if (symptoms.length === 0) {
@@ -1049,6 +1114,8 @@ healthaiRouter.post("/import", async (req: Request, res: Response) => {
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
   }
+  const access = await guardProfile(req, body.profileId, { requireExists: false });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const source =
     body.source === "apple-health" ||
     body.source === "google-fit" ||
@@ -1093,6 +1160,13 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const lgs = await store.getLogs(profileId);
   const cks = await store.getChecks(profileId);
@@ -1240,6 +1314,13 @@ healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) 
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const lgs = await store.getLogs(profileId);
   const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -1321,6 +1402,13 @@ healthaiRouter.get("/score/:profileId", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const lgs = await store.getLogs(profileId);
   const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -1459,6 +1547,8 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
   }
+  const access = await guardProfile(req, body.profileId, { requireExists: false });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const date =
     typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
       ? body.date
@@ -1488,6 +1578,8 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
 
 healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.profileId);
+  const access = await guardProfile(req, profileId, { requireExists: true });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   const all = await store.getCycles(profileId);
   if (all.length === 0) {
     return res.json({
@@ -1600,6 +1692,13 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
   }
   const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   if (!Array.isArray(body.answers) || body.answers.length !== 9) {
     return res.status(400).json({ error: "answers-must-be-9-numbers" });
@@ -1641,7 +1740,10 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/phq9/:profileId",
   async (req: Request, res: Response) => {
-    const last = PHQ9_LAST.get(qstr(req.params.profileId));
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+    const last = PHQ9_LAST.get(profileId);
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1653,6 +1755,15 @@ healthaiRouter.get(
  *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-21: severe
  */
 const GAD7_LAST = new Map<string, { score: number; severity: string; answers: number[]; createdAt: string }>();
+
+// Drop any cached PHQ-9 / GAD-7 "last result" for a profile id. Called when a
+// profile is claimed by an authenticated owner (POST /profile) so screener
+// answers entered during the prior anonymous phase don't surface to the new
+// owner. (Function declaration — hoisted, so POST /profile above can call it.)
+function clearScreenerCache(profileId: string): void {
+  PHQ9_LAST.delete(profileId);
+  GAD7_LAST.delete(profileId);
+}
 
 function gad7Severity(score: number): { severity: string; advice: string } {
   if (score <= 4)
@@ -1687,6 +1798,13 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
   }
   const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   if (!Array.isArray(body.answers) || body.answers.length !== 7) {
     return res.status(400).json({ error: "answers-must-be-7-numbers" });
@@ -1722,7 +1840,10 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/gad7/:profileId",
   async (req: Request, res: Response) => {
-    const last = GAD7_LAST.get(qstr(req.params.profileId));
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+    const last = GAD7_LAST.get(profileId);
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1753,6 +1874,13 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const lgs = await store.getLogs(profileId);
   const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -1981,7 +2109,10 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
-  const list = await store.listPlanSnapshots(qstr(req.params.profileId));
+  const profileId = qstr(req.params.profileId);
+  const access = await guardProfile(req, profileId, { requireExists: true });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
+  const list = await store.listPlanSnapshots(profileId);
   res.json({
     snapshots: list.map((s) => ({
       id: s.id,
@@ -1997,6 +2128,15 @@ healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Respons
 healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
   const snap = await store.getPlanSnapshot(qstr(req.params.id));
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
+  // A snapshot inherits the ownership of the profile it was generated for.
+  // A snapshot with no profileId is orphaned/corrupt — fail closed rather than
+  // passing the string "null" into guardProfile (which, with requireExists
+  // false, would resolve to no-profile and wrongly allow the read).
+  if (!snap.profileId) {
+    return res.status(403).json({ error: "snapshot-not-owned" });
+  }
+  const access = await guardProfile(req, String(snap.profileId), { requireExists: false });
+  if (!access.ok) return res.status(access.status).json({ error: access.error });
   res.json(snap);
 });
 
@@ -2005,6 +2145,13 @@ healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
   const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
   const cks = await store.getChecks(profileId);
   const lgs = await store.getLogs(profileId);
   res.setHeader(
@@ -2039,6 +2186,13 @@ healthaiRouter.get("/population/:profileId", async (req, res) => {
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) {
+      return res.status(403).json({ error: "not-profile-owner" });
+    }
+  }
 
   const ids = await store.allProfileIdsWithLogs();
   const profiles: HealthProfile[] = [];
@@ -2253,7 +2407,7 @@ healthaiRouter.get("/referrals", async (req, res) => {
 
 healthaiRouter.get("/leaderboard", async (_req, res) => {
   const ids = await store.allProfileIdsWithLogs();
-  const board: Array<{ profileId: string; streak: number; logs: number }> = [];
+  const board: Array<{ anonId: string; streak: number; logs: number }> = [];
   for (const profileId of ids) {
     const lgs = await store.getLogs(profileId);
     const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -2273,8 +2427,16 @@ healthaiRouter.get("/leaderboard", async (_req, res) => {
       if (cur > streak) streak = cur;
       prevDate = d;
     }
-    board.push({ profileId, streak, logs: lgs.length });
+    // Anonymize: never expose raw profileIds in a public gamification board —
+    // a profileId is the key used to address a health record, so listing them
+    // is an enumeration surface. A stable one-way hash keeps rows
+    // distinguishable (a caller can hash their own id to find their row)
+    // without revealing real ids.
+    const anonId = crypto.createHash("sha256").update(profileId).digest("hex").slice(0, 12);
+    board.push({ anonId, streak, logs: lgs.length });
   }
   board.sort((a, b) => b.streak - a.streak || b.logs - a.logs);
-  res.json({ leaderboard: board.slice(0, 20) });
+  res.json({
+    leaderboard: board.slice(0, 20).map((row, i) => ({ rank: i + 1, ...row })),
+  });
 });

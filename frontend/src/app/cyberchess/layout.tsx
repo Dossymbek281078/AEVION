@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "CyberChess — AI-коуч, CPI рейтинг, 12 вариантов",
     description:
-      "AI-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. Обходит lichess + chess.com системно.",
+      "AI-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
     type: "website",
     siteName: "AEVION CyberChess",
     url: "/cyberchess",

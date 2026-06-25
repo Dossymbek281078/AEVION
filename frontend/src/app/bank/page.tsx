@@ -15,6 +15,7 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { A11yStyles } from "./_components/A11yStyles";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { AchievementsPanel } from "./_components/AchievementsPanel";
@@ -741,7 +742,60 @@ function BankContent() {
       <QuickActions />
       <RoyaltiesExplainer />
       <SecurityRoadmap />
+      <ConstitutionCard
+        title="Конституция Bank"
+        sliders={{ floor: 70, ruleOfLaw: 85, rotation: 25, transparency: 80, multiStatus: 45, skinInGame: 55, polycentricity: 25, positiveSum: 75 }}
+        hint="AEVION Bank построен на skandinavian-Singapore mix: высокий пол снизу, верховенство закона, прозрачность, растущая экономика. Это не случайные ползунки — это банковская доверительная модель."
+      />
     </div>
+  );
+}
+
+function ConstitutionCard({
+  title,
+  sliders,
+  hint,
+}: {
+  title: string;
+  sliders: import("@/lib/constitution").Sliders;
+  hint: string;
+}) {
+  return (
+    <section
+      style={{
+        marginTop: 32,
+        padding: 16,
+        border: "1px solid rgba(212,175,55,0.25)",
+        borderRadius: 12,
+        background: "rgba(11,23,54,0.04)",
+        display: "flex",
+        gap: 20,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <ConstitutionEmbed sliders={sliders} label={title} size="sm" />
+      <div style={{ flex: 1, minWidth: 240 }}>
+        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>
+          {hint}
+        </div>
+        <a
+          href="/constitution"
+          style={{
+            display: "inline-block",
+            padding: "8px 14px",
+            borderRadius: 8,
+            background: "#0f172a",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: "none",
+          }}
+        >
+          Открыть в редакторе →
+        </a>
+      </div>
+    </section>
   );
 }
 

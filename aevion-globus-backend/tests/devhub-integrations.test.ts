@@ -45,7 +45,9 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   for (const key of [
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
-    "BREVO_API_KEY", "PADDLE_API_KEY", "PADDLE_SANDBOX", "OPENAI_API_KEY",
+    "BREVO_API_KEY", "PADDLE_API_KEY", "PADDLE_SANDBOX",
+    "LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+    "OPENAI_API_KEY",
     "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_R2_ACCOUNT_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID",
     "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
@@ -178,20 +180,26 @@ describe("POST /api/devhub/media/email (Brevo)", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 3. Paddle Payment Link (was: Stripe, migrated 2026-05-20)
+// 3. Lemon Squeezy Payment Link (was: Paddle, migrated 2026-05-24)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/payment-link (Paddle)", () => {
-  test("503 when PADDLE_API_KEY missing", async () => {
+describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
+  function setLsEnv() {
+    process.env.LEMON_SQUEEZY_API_KEY = "ls_fake_key";
+    process.env.LEMON_SQUEEZY_STORE_ID = "12345";
+    process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID = "67890";
+  }
+
+  test("503 when Lemon Squeezy env vars missing", async () => {
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
       .send({ name: "Pro", amountCents: 999 });
     expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/PADDLE_API_KEY/);
+    expect(r.body.error).toMatch(/LEMON_SQUEEZY/);
   });
 
   test("400 when amount < 50 cents", async () => {
-    process.env.PADDLE_API_KEY = "pdl_sdbx_fake";
+    setLsEnv();
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
       .send({ name: "Pro", amountCents: 10 });
@@ -199,10 +207,10 @@ describe("POST /api/devhub/media/payment-link (Paddle)", () => {
     expect(r.body.error).toMatch(/≥ 50/);
   });
 
-  test("creates Paddle transaction with single /transactions call + returns checkout URL", async () => {
-    process.env.PADDLE_API_KEY = "pdl_sdbx_fake";
+  test("creates Lemon Squeezy checkout + returns checkout URL", async () => {
+    setLsEnv();
     fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: { id: "txn_abc123", checkout: { url: "https://sandbox-checkout.paddle.com/txn_abc123" } },
+      data: { id: "co_abc123", attributes: { url: "https://store.lemonsqueezy.com/checkout/co_abc123" } },
     }));
 
     const r = await request(makeApp())
@@ -212,13 +220,13 @@ describe("POST /api/devhub/media/payment-link (Paddle)", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({
       ok: true,
-      provider: "paddle",
-      transactionId: "txn_abc123",
-      url: "https://sandbox-checkout.paddle.com/txn_abc123",
+      provider: "lemonsqueezy",
+      checkoutId: "co_abc123",
+      url: "https://store.lemonsqueezy.com/checkout/co_abc123",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toContain("/transactions");
-    expect(fetchMock.mock.calls[0][0]).toContain("sandbox-api.paddle.com");
+    expect(fetchMock.mock.calls[0][0]).toContain("/v1/checkouts");
+    expect(fetchMock.mock.calls[0][0]).toContain("api.lemonsqueezy.com");
   });
 });
 
@@ -260,7 +268,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.revisedPrompt).toBe("A cat sitting");
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
     expect(body.model).toBe("gpt-image-1");
-    expect(body.quality).toBe("hd");
+    // gpt-image-1 uses low/medium/high/auto; route maps "hd" → "high"
+    expect(body.quality).toBe("high");
   });
 });
 

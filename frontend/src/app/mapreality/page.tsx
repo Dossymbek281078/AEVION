@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { SignalForm } from "./components/SignalForm";
 import { SignalCard, type Signal } from "./components/SignalCard";
 import { Filters, type FilterState } from "./components/Filters";
@@ -131,6 +132,7 @@ export default function MapRealityPage() {
             </span>
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ModulePricingChip moduleId="mapreality" theme="dark" />
             <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Your alias</label>
             <input
               type="text"

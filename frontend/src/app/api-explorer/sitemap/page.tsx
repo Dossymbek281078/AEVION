@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 interface SitemapEntry {
   loc: string;
@@ -87,7 +87,7 @@ export default function SitemapExplorerPage() {
   const [groupBy, setGroupBy] = useState<GroupKey>("prefix");
   const [copied, setCopied] = useState<string | null>(null);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
   const fullUrl = `${apiBase}/api/aevion/sitemap.xml`;
   const curl = `curl -s '${fullUrl}'`;
   const python = `import urllib.request

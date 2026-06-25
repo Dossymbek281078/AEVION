@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <radialGradient id="g1" cx="30%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="g2" cx="70%" cy="80%" r="55%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="g3" cx="50%" cy="100%" r="65%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="1920" height="1080" fill="#050810"/>
+  <rect width="1920" height="1080" fill="url(#g1)"/>
+  <rect width="1920" height="1080" fill="url(#g2)"/>
+  <rect width="1920" height="1080" fill="url(#g3)"/>
+
+  <!-- planet circle -->
+  <g transform="translate(960 540)">
+    <circle r="220" fill="none" stroke="url(#logoGrad)" stroke-width="2" opacity="0.45"/>
+    <circle r="180" fill="none" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+    <circle r="140" fill="url(#logoGrad)" opacity="0.18" filter="url(#glow)"/>
+    <circle r="80" fill="url(#logoGrad)" opacity="0.4"/>
+  </g>
+
+  <!-- eyebrow -->
+  <text x="960" y="240" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="800" letter-spacing="6" fill="#10b981" text-transform="uppercase">
+    · LIVE · ACQUISITION BRIEF · $1B FLOOR · 90-SECOND PITCH ·
+  </text>
+
+  <!-- title -->
+  <text x="960" y="800" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="112" font-weight="900" letter-spacing="-3" fill="#f8fafc">
+    Planet <tspan fill="url(#logoGrad)">AEVION</tspan>.
+  </text>
+
+  <!-- subtitle -->
+  <text x="960" y="870" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="32" font-weight="600" fill="#94a3b8">
+    Все деньги. Всё право. Весь dev. Одна планета.
+  </text>
+
+  <!-- bottom corner -->
+  <text x="60" y="1020" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" letter-spacing="3" fill="#64748b">
+    AEVION.APP/ACQUIRE
+  </text>
+  <text x="1860" y="1020" text-anchor="end" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" letter-spacing="3" fill="#64748b">
+    YAHIIN1978@GMAIL.COM
+  </text>
+</svg>

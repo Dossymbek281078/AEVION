@@ -33,24 +33,79 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false, nonlinear: false, floorFit: false, ceilingFit: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
     else if (a === "--output") args.output = argv[++i];
+    else if (a === "--features-csv") args.featuresCsv = argv[++i];
+    else if (a === "--weighted") args.weighted = true;
+    else if (a === "--no-std") args.noStd = true;
+    else if (a === "--nonlinear") args.nonlinear = true;
+    else if (a === "--floor-fit") args.floorFit = true;
+    else if (a === "--ceiling-fit") args.ceilingFit = true;
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
-        "Usage: node scripts/cyberchess-fide-calibrate.mjs --pgn <path> --output <path> [--limit N]"
+        "Usage: node scripts/cyberchess-fide-calibrate.mjs --output <path> ( --pgn <path> | --features-csv <path> ) [--limit N]\n" +
+        "  --features-csv  Skip PGN parsing and read engine-derived rows from CSV\n" +
+        "                  (produced by cyberchess-stockfish-eval.mjs).\n" +
+        "                  Columns: gameId,side,targetElo,result,accuracyPct,\n" +
+        "                           openingDepth,tacticalEff,endgameStrength,\n" +
+        "                           blunderRate,avgMoveTime[,plies,meanCpLoss]"
       );
       process.exit(0);
     }
   }
-  if (!args.pgn || !args.output) {
-    console.error("ERROR: --pgn and --output are required. See --help.");
+  if (!args.output || (!args.pgn && !args.featuresCsv)) {
+    console.error("ERROR: --output and one of --pgn / --features-csv are required. See --help.");
     process.exit(1);
   }
   return args;
+}
+
+function loadRowsFromCsv(path) {
+  const raw = readFileSync(path, "utf8").trim();
+  const lines = raw.split(/\r?\n/);
+  const header = lines.shift().split(",");
+  const idx = (name) => header.indexOf(name);
+  const required = ["targetElo","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime"];
+  for (const r of required) {
+    if (idx(r) < 0) {
+      console.error(`ERROR: features CSV missing column "${r}". Need: ${required.join(", ")}`);
+      process.exit(1);
+    }
+  }
+  // Optional new columns from richer feature extraction. If both present,
+  // calibrate uses an 8-feature design matrix; if absent, falls back to 6.
+  const idxMedian = idx("medianCpLoss");
+  const idxStd = idx("cpLossStd");
+  const hasRich = idxMedian >= 0 && idxStd >= 0;
+  const rows = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cols = line.split(",");
+    const targetFide = parseFloat(cols[idx("targetElo")]);
+    if (!Number.isFinite(targetFide) || targetFide < 800 || targetFide > 2900) continue;
+    const feats = [
+      parseFloat(cols[idx("accuracyPct")]),
+      parseFloat(cols[idx("openingDepth")]),
+      parseFloat(cols[idx("tacticalEff")]),
+      parseFloat(cols[idx("endgameStrength")]),
+      parseFloat(cols[idx("blunderRate")]),
+      parseFloat(cols[idx("avgMoveTime")]),
+    ];
+    if (hasRich) {
+      feats.push(parseFloat(cols[idxMedian]));
+      feats.push(parseFloat(cols[idxStd]));
+    }
+    rows.push({
+      targetFide,
+      features: feats,
+      meta: { side: cols[idx("side")] || "?", rich: hasRich }
+    });
+  }
+  return rows;
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -346,57 +401,73 @@ function main() {
   console.log("=".repeat(72));
   console.log("AEVION CyberChess — FIDE CPI calibration");
   console.log("=".repeat(72));
-  console.log(`Input PGN:  ${args.pgn}`);
+  console.log(`Input:      ${args.featuresCsv ? "CSV " + args.featuresCsv : "PGN " + args.pgn}`);
   console.log(`Output:     ${args.output}`);
   console.log(`Limit:      ${args.limit === Infinity ? "unlimited" : args.limit}`);
   console.log("");
 
-  const pgnPath = resolve(args.pgn);
-  if (!existsSync(pgnPath)) {
-    console.error(`ERROR: PGN file not found: ${pgnPath}`);
-    process.exit(1);
-  }
+  let rows;
+  let sourceFile;
 
-  console.log("[1/5] Reading PGN file…");
-  const raw = readFileSync(pgnPath, "utf8");
-  console.log(`      ${raw.length} bytes read.`);
+  if (args.featuresCsv) {
+    const csvPath = resolve(args.featuresCsv);
+    if (!existsSync(csvPath)) {
+      console.error(`ERROR: features CSV not found: ${csvPath}`);
+      process.exit(1);
+    }
+    console.log("[1/4] Loading engine-derived features from CSV…");
+    rows = loadRowsFromCsv(csvPath);
+    if (rows.length > args.limit) rows = rows.slice(0, args.limit);
+    sourceFile = csvPath;
+    console.log(`      Loaded ${rows.length} rows.`);
+  } else {
+    const pgnPath = resolve(args.pgn);
+    if (!existsSync(pgnPath)) {
+      console.error(`ERROR: PGN file not found: ${pgnPath}`);
+      process.exit(1);
+    }
+    sourceFile = pgnPath;
 
-  console.log("[2/5] Splitting games…");
-  const chunks = splitGames(raw);
-  console.log(`      ${chunks.length} game chunks found.`);
+    console.log("[1/5] Reading PGN file…");
+    const raw = readFileSync(pgnPath, "utf8");
+    console.log(`      ${raw.length} bytes read.`);
 
-  console.log("[3/5] Parsing + deriving CPI rows…");
-  const rows = [];
-  let parsed = 0;
-  let skipped = 0;
-  for (const chunk of chunks) {
-    if (rows.length >= args.limit) break;
-    try {
-      const g = parseGame(chunk);
-      if (!g.headers.WhiteElo && !g.headers.BlackElo) {
-        skipped++;
-        continue;
-      }
-      if (g.moves.length < 6) {
-        skipped++;
-        continue;
-      }
-      const gameRows = deriveRowsFromGame(g);
-      for (const r of gameRows) {
-        if (rows.length >= args.limit) break;
-        // Sanity: Elo bounds
-        if (r.targetFide < 800 || r.targetFide > 2900) {
+    console.log("[2/5] Splitting games…");
+    const chunks = splitGames(raw);
+    console.log(`      ${chunks.length} game chunks found.`);
+
+    console.log("[3/5] Parsing + deriving CPI rows…");
+    rows = [];
+    let parsed = 0;
+    let skipped = 0;
+    for (const chunk of chunks) {
+      if (rows.length >= args.limit) break;
+      try {
+        const g = parseGame(chunk);
+        if (!g.headers.WhiteElo && !g.headers.BlackElo) {
           skipped++;
           continue;
         }
-        rows.push(r);
+        if (g.moves.length < 6) {
+          skipped++;
+          continue;
+        }
+        const gameRows = deriveRowsFromGame(g);
+        for (const r of gameRows) {
+          if (rows.length >= args.limit) break;
+          if (r.targetFide < 800 || r.targetFide > 2900) {
+            skipped++;
+            continue;
+          }
+          rows.push(r);
+        }
+        parsed++;
+      } catch (e) {
+        skipped++;
       }
-      parsed++;
-    } catch (e) {
-      skipped++;
     }
+    console.log(`      Parsed ${parsed} games. Derived ${rows.length} rows. Skipped ${skipped}.`);
   }
-  console.log(`      Parsed ${parsed} games. Derived ${rows.length} rows. Skipped ${skipped}.`);
 
   if (rows.length < 20) {
     console.error("ERROR: Not enough valid rows for fit (need ≥20).");
@@ -404,34 +475,115 @@ function main() {
   }
 
   console.log("[4/5] Running least-squares fit via normal equations…");
-  // Design matrix: [accuracyPct - 60, opening, tactical, endgame, blunder, |time-30|, 1]
-  // Last column is bias; first 6 are the same features used by `estimateFideFromCPI`.
-  // We center accuracy at baseline 60 (per existing formula) and time at optimal 30.
+  // Design matrix.
+  //   Base columns (always present):
+  //     [accuracyPct - 60, opening, endgame, blunder, |time-30|, 1]
+  //   Rich columns (when CSV has medianCpLoss + cpLossStd):
+  //     append [-medianCpLoss, -cpLossStd]
+  // Median is robust to outliers — distinguishes a player whose accuracy
+  // is dragged down by one big blunder from one whose moves are uniformly
+  // weak. Std splits "consistent" from "spiky" players at the same mean.
+  // Both come in with the sign already flipped so positive coefficients
+  // mean "higher Elo" — matches the convention of the existing columns.
+  // Tactical dropped — coefficient was noise across the last 3 fits.
+  const hasRichCols = rows.length > 0 && rows[0].features.length >= 8;
+  const useStd = hasRichCols && !args.noStd;
+  const richMode = hasRichCols;  // median always added when CSV has rich cols
+  const nonlin = args.nonlinear;
+  // Nonlinear features added to break the linear-OLS ceiling. Captures
+  //   "99% accuracy + 0% blunder = GM"     (acc² high, acc·blu near zero)
+  //   "80% + 0% blunder = club lucky day"  (acc² mid, acc·blu near zero)
+  // The interaction term separates them.
   const X = rows.map(r => {
-    const [acc, open, tac, end, blu, tim] = r.features;
-    return [
-      acc - 60,                // accuracy delta vs baseline
+    const [acc, open, , end, blu, tim, median, std] = r.features;
+    const accDelta = acc - 60;
+    const base = [
+      accDelta,                // accuracy delta vs baseline
       Math.min(10, open),      // opening clamped same as frontend
-      tac,
       end,
       blu,
       -Math.abs(tim - 30),     // time penalty (always ≤ 0)
       1                        // bias
     ];
+    let row = base;
+    if (richMode) row = useStd ? [...row, -median, -std] : [...row, -median];
+    if (nonlin) row = [...row, accDelta * accDelta, blu * blu, accDelta * blu];
+    return row;
   });
   const y = rows.map(r => r.targetFide);
+  if (richMode || nonlin) {
+    const parts = [];
+    parts.push(richMode ? (useStd ? "median+std" : "median") : null);
+    parts.push(nonlin ? "acc² + blu² + acc·blu" : null);
+    console.log(`      Extended design matrix: ${X[0].length} features (extras: ${parts.filter(Boolean).join(", ")})`);
+  }
 
-  const coeffs = leastSquaresFit(X, y);
-  const [wAcc, wOpen, wTac, wEnd, wBlu, wTime, bias] = coeffs;
+  // Optional weighted least-squares — counters bracket-density bias in OLS.
+  // Bucket each target Elo into 200-Elo bins, set weight = 1 / count(bucket).
+  // Apply by scaling each row of X and each y entry by sqrt(weight) before
+  // solving — algebraically equivalent to (X^T W X) β = X^T W y.
+  let Xfit = X, yfit = y;
+  if (args.weighted) {
+    // Weight floor prevents 1/n exploding when a bucket only has a handful
+    // of samples. Without it, brackets with n=3 dominate the fit; see the
+    // super-final weighted run (c5f48278 commit message) for the failure
+    // mode. Floor of 50 means buckets at or below 50 all share the same
+    // weight cap so they no longer overpower mid-density brackets.
+    const WEIGHT_FLOOR = 50;
+    const bracket = (elo) => Math.floor(elo / 200);
+    const counts = new Map();
+    for (const v of y) counts.set(bracket(v), (counts.get(bracket(v)) || 0) + 1);
+    const w = y.map(v => 1 / Math.max(WEIGHT_FLOOR, counts.get(bracket(v))));
+    const meanW = w.reduce((s,x)=>s+x,0) / w.length;
+    const sqrtW = w.map(wi => Math.sqrt(wi / meanW));
+    Xfit = X.map((row, i) => row.map(v => v * sqrtW[i]));
+    yfit = y.map((v, i) => v * sqrtW[i]);
+    console.log(`      Weighted LS: 1/max(${WEIGHT_FLOOR}, n_bucket)`);
+    [...counts.entries()].sort().forEach(([k, n]) => {
+      const effN = Math.max(WEIGHT_FLOOR, n);
+      const note = n < WEIGHT_FLOOR ? `  (clipped to ${WEIGHT_FLOOR})` : "";
+      console.log(`        bracket ${k*200}-${k*200+199}: n=${String(n).padStart(4)}  weight=${(1/effN).toFixed(5)}${note}`);
+    });
+  }
+
+  const coeffs = leastSquaresFit(Xfit, yfit);
+  // Layout: 6 base + optional [median, std] + optional [acc², blu², acc·blu]
+  const wAcc = coeffs[0];
+  const wOpen = coeffs[1];
+  const wEnd = coeffs[2];
+  const wBlu = coeffs[3];
+  const wTime = coeffs[4];
+  const bias = coeffs[5];
+  let next = 6;
+  let wMedian = 0, wStd = 0, wAcc2 = 0, wBlu2 = 0, wAccBlu = 0;
+  if (richMode) {
+    wMedian = coeffs[next++];
+    if (useStd) wStd = coeffs[next++];
+  }
+  if (nonlin) {
+    wAcc2 = coeffs[next++];
+    wBlu2 = coeffs[next++];
+    wAccBlu = coeffs[next++];
+  }
+  const wTac = 0;  // dropped from design matrix, kept zero in output JSON
 
   console.log("      Fit complete. Coefficients:");
   console.log(`        accuracy:  ${wAcc.toFixed(3)}   (was 35.000)`);
   console.log(`        opening:   ${wOpen.toFixed(3)}   (was 30.000)`);
-  console.log(`        tactical:  ${wTac.toFixed(3)}   (was 250.000)`);
+  console.log(`        tactical:  0.000           (dropped — was noise)`);
   console.log(`        endgame:   ${wEnd.toFixed(3)}   (was 200.000)`);
   console.log(`        blunder:   ${wBlu.toFixed(3)}   (was -500.000)`);
   console.log(`        time:      ${wTime.toFixed(3)}   (was -2.000)`);
   console.log(`        bias:      ${bias.toFixed(3)}   (was 1200.000 BASE_ELO)`);
+  if (richMode) {
+    console.log(`        median:    ${wMedian.toFixed(3)}   (rich, applied to -medianCpLoss)`);
+    if (useStd) console.log(`        std:       ${wStd.toFixed(3)}   (rich, applied to -cpLossStd)`);
+  }
+  if (nonlin) {
+    console.log(`        accuracy²: ${wAcc2.toFixed(4)}  (nonlin, applied to (acc-60)²)`);
+    console.log(`        blunder²:  ${wBlu2.toFixed(3)}  (nonlin, applied to blunder²)`);
+    console.log(`        acc·blu:   ${wAccBlu.toFixed(3)}  (nonlin, interaction term)`);
+  }
 
   // Compute predictions + RMSE
   const predicted = X.map(row => row.reduce((s, v, i) => s + v * coeffs[i], 0));
@@ -464,12 +616,81 @@ function main() {
     console.log(`        ${b.name.padEnd(24)} n=${String(indices.length).padStart(5)}  RMSE=${rmseB.toFixed(1)}`);
   }
 
+  // Optional second-pass bracket fits. floor-fit restricts to high-Elo
+  // rows (≥2400) to fix the GM-bracket pull-toward-mean; ceiling-fit
+  // mirrors it on the low end (<1500) where nonlinear over-corrections
+  // pushed Beginner predictions into the 400-Elo clamp.
+  function runBracketFit(label, indicesPredicate, thresholdValue, stepName) {
+    const idxs = y.map((v, i) => indicesPredicate(v) ? i : -1).filter(i => i >= 0);
+    if (idxs.length < 30) {
+      console.log(`[${stepName}] --${label}: only ${idxs.length} matching rows — skipping (need ≥30)`);
+      return null;
+    }
+    console.log(`[${stepName}] ${label} pass on ${idxs.length} rows…`);
+    const Xb = idxs.map(i => X[i]);
+    const yb = idxs.map(i => y[i]);
+    let XbFit = Xb, ybFit = yb;
+    if (args.weighted) {
+      const WEIGHT_FLOOR = 50;
+      const bracket = (elo) => Math.floor(elo / 200);
+      const cnts = new Map();
+      for (const v of yb) cnts.set(bracket(v), (cnts.get(bracket(v)) || 0) + 1);
+      const wRaw = yb.map(v => 1 / Math.max(WEIGHT_FLOOR, cnts.get(bracket(v))));
+      const meanW = wRaw.reduce((s,x)=>s+x,0) / wRaw.length;
+      const sqrtW = wRaw.map(wi => Math.sqrt(wi / meanW));
+      XbFit = Xb.map((row, i) => row.map(v => v * sqrtW[i]));
+      ybFit = yb.map((v, i) => v * sqrtW[i]);
+    }
+    const cb = leastSquaresFit(XbFit, ybFit);
+    const predB = Xb.map(row => row.reduce((s, v, i) => s + v * cb[i], 0));
+    const rmseB = rmse(predB, yb);
+    const meanB = yb.reduce((s, v) => s + v, 0) / yb.length;
+    const ssTotB = yb.reduce((s, v) => s + (v - meanB) ** 2, 0);
+    const ssResB = predB.reduce((s, v, i) => s + (v - yb[i]) ** 2, 0);
+    const r2B = 1 - ssResB / ssTotB;
+    console.log(`      ${label}: RMSE=${rmseB.toFixed(1)}  R²=${r2B.toFixed(4)}  bias=${cb[5].toFixed(2)}`);
+    let n = 6;
+    const coefs = {
+      accuracy: round(cb[0], 4),
+      opening: round(cb[1], 4),
+      tactical: 0,
+      endgame: round(cb[2], 4),
+      blunder: round(cb[3], 4),
+      time: round(cb[4], 4),
+    };
+    if (richMode) {
+      coefs.median = round(cb[n++], 4);
+      if (useStd) coefs.std = round(cb[n++], 4);
+    }
+    if (nonlin) {
+      coefs.accuracy2 = round(cb[n++], 6);
+      coefs.blunder2 = round(cb[n++], 4);
+      coefs.accBlu = round(cb[n++], 4);
+    }
+    return {
+      threshold: thresholdValue,
+      samples: idxs.length,
+      coefficients: coefs,
+      bias: round(cb[5], 4),
+      fitStats: { rmseElo: round(rmseB, 2), r2: round(r2B, 4) },
+    };
+  }
+
+  const FLOOR_THRESHOLD = 2400;
+  const CEILING_THRESHOLD = 1500;
+  const floorFitBlock = args.floorFit
+    ? runBracketFit("floor-fit", v => v >= FLOOR_THRESHOLD, FLOOR_THRESHOLD, "4b/5")
+    : null;
+  const ceilingFitBlock = args.ceilingFit
+    ? runBracketFit("ceiling-fit", v => v < CEILING_THRESHOLD, CEILING_THRESHOLD, "4c/5")
+    : null;
+
   console.log("[5/5] Writing output JSON…");
 
   const out = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    sourceFile: pgnPath,
+    sourceFile,
     samples: rows.length,
     coefficients: {
       accuracy: round(wAcc, 4),
@@ -477,7 +698,10 @@ function main() {
       tactical: round(wTac, 4),
       endgame: round(wEnd, 4),
       blunder: round(wBlu, 4),
-      time: round(wTime, 4)
+      time: round(wTime, 4),
+      ...(richMode ? { median: round(wMedian, 4) } : {}),
+      ...(richMode && useStd ? { std: round(wStd, 4) } : {}),
+      ...(nonlin ? { accuracy2: round(wAcc2, 6), blunder2: round(wBlu2, 4), accBlu: round(wAccBlu, 4) } : {})
     },
     bias: round(bias, 4),
     fitStats: {
@@ -485,6 +709,8 @@ function main() {
       r2: round(r2, 4),
       meanTargetElo: round(meanY, 1),
     },
+    ...(floorFitBlock ? { floorFit: floorFitBlock } : {}),
+    ...(ceilingFitBlock ? { ceilingFit: ceilingFitBlock } : {}),
     notes: [
       "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",
       "Accuracy / blunder are coarsely derived from game result (win/draw/loss).",

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import ComplianceBanner from "@/components/ComplianceBanner";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://aevion.app";
 
@@ -46,5 +47,10 @@ export const viewport: Viewport = {
 };
 
 export default function AevLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <ComplianceBanner variant="trading" />
+      {children}
+    </>
+  );
 }

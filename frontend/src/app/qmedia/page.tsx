@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type Track = {
   id: string;
@@ -108,15 +109,11 @@ export default function QMediaPage() {
   }, [active, playing]);
 
   const playList = useCallback((list: Track[], startIdx = 0) => {
-    const playable = list.filter((t) => !!t.url);
-    if (playable.length === 0) {
-      // Allow play attempt even without url — player will show "no source"
-      setQueue(list);
-      setActiveIdx(startIdx);
-    } else {
-      setQueue(list);
-      setActiveIdx(startIdx);
-    }
+    if (list.length === 0) return;
+    // Allow play attempt even without url — player will show "no source"
+    setQueue(list);
+    setActiveIdx(startIdx);
+    setCurrent(0);
     setPlaying(true);
   }, []);
 
@@ -173,6 +170,9 @@ export default function QMediaPage() {
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: "0 0 6px" }}>🎵 QMedia</h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Music, video and creative tools — all in one place.</p>
+          <div style={{ marginTop: 12 }}>
+            <ModulePricingChip moduleId="qmedia" />
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>

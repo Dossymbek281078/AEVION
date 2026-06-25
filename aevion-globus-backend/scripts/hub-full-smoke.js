@@ -8,6 +8,8 @@
  *   /api/aevion/version     — build info
  *   /api/aevion/openapi.json — module spec index
  *   /api/aevion/sitemap.xml — XML sitemap of frontend module pages
+ *   /api/aevion/sdks        — published SDK packages + live npm stats
+ *   /api/aevion/sdks/diag   — npm reachability probe (regression guard)
  *
  * Read-only — safe anywhere including prod.
  */
@@ -165,6 +167,65 @@ async function get(path, expectJson = true) {
     for (const t of j.byTag) {
       assert(typeof t.tag === "string" && typeof t.count === "number", "byTag entry malformed");
     }
+  });
+
+  await step("GET /api/aevion/pricing returns solo + bundles + allAccess shape", async () => {
+    const j = await get("/api/aevion/pricing");
+    assert(Array.isArray(j.solo) && j.solo.length >= 30, `solo array missing or short: ${j.solo?.length}`);
+    assert(Array.isArray(j.bundles) && j.bundles.length === 4, `bundles must be 4 (fintech/build/ai/gaming), got ${j.bundles?.length}`);
+    assert(j.allAccess && typeof j.allAccess.modules === "number", "allAccess.modules missing");
+    assert(j.currencyRatesAt, "currencyRatesAt missing");
+    const bundleIds = j.bundles.map((b) => b.id).sort().join(",");
+    assert(bundleIds === "ai,build,fintech,gaming", `unexpected bundle ids: ${bundleIds}`);
+    for (const s of j.solo.slice(0, 5)) {
+      assert(["light", "standard", "heavy"].includes(s.computeTier), `bad computeTier: ${s.computeTier}`);
+      assert(typeof s.monthly?.USD === "number" && s.monthly.USD > 0, `${s.id}: USD price not positive`);
+    }
+  });
+
+  await step("GET /api/aevion/pricing bundles save money vs sum-of-solos", async () => {
+    // Bundle math invariant: each bundle's saveVsSolo.USD must be positive
+    // (bundle costs less than sum of its modules priced à la carte) and
+    // all-access must save more than any single bundle.
+    const j = await get("/api/aevion/pricing");
+    for (const b of j.bundles) {
+      assert(typeof b.saveVsSolo?.USD === "number" && b.saveVsSolo.USD > 0,
+        `bundle ${b.id}: saveVsSolo.USD must be positive, got ${b.saveVsSolo?.USD}`);
+    }
+    assert(j.allAccess.saveVsAllSolo?.USD > 100,
+      `all-access should save >$100/mo vs all-solo, got ${j.allAccess.saveVsAllSolo?.USD}`);
+  });
+
+  await step("GET /api/aevion/sdks returns 4 published packages with shape", async () => {
+    const j = await get("/api/aevion/sdks");
+    assert(j.total === 4, `total=${j.total}, expected 4`);
+    assert(Array.isArray(j.sdks) && j.sdks.length === 4, `sdks.length=${j.sdks?.length}, expected 4`);
+    const ids = j.sdks.map((s) => s.id).sort().join(",");
+    assert(ids === "catalog-client,fintech-sdk,qcoreai-client,qpaynet-client", `unexpected ids: ${ids}`);
+    for (const s of j.sdks) {
+      assert(/^\d+\.\d+\.\d+$/.test(s.version), `${s.id}: version not semver: ${s.version}`);
+      assert(typeof s.install === "string" && s.install.startsWith("npm install "), `${s.id}: install malformed`);
+      assert(s.registry?.startsWith("https://www.npmjs.com/package/"), `${s.id}: registry malformed`);
+      assert(Array.isArray(s.modules), `${s.id}: modules must be array`);
+    }
+  });
+
+  await step("GET /api/aevion/sdks stats are populated (≥1 non-null)", async () => {
+    // Regression guard: on 2026-05-21 a stale negative-cache after Railway
+    // restart served null for all 4 SDKs for several minutes. With the npm
+    // egress working (verified by /sdks/diag) at least one SDK must surface
+    // a non-null lastPublished within a fresh 60s cache window.
+    const j = await get("/api/aevion/sdks");
+    const liveCount = j.sdks.filter((s) => s.lastPublished || typeof s.downloadsLastWeek === "number").length;
+    assert(liveCount >= 1, `all 4 SDKs serving null stats — npm egress or cache broken`);
+  });
+
+  await step("GET /api/aevion/sdks/diag probes npm reachability", async () => {
+    const j = await get("/api/aevion/sdks/diag");
+    assert(j.downloads && j.registry, "diag must include downloads + registry probes");
+    assert(j.downloads.ok === true, `downloads probe failed: status=${j.downloads.status} err=${j.downloads.errorMessage}`);
+    assert(j.registry.ok === true, `registry HEAD probe failed: status=${j.registry.status} err=${j.registry.errorMessage}`);
+    assert(j.registry.lastModified, "registry HEAD must return Last-Modified header");
   });
 
   await step("GET /api/aevion/catalog?format=md returns markdown table", async () => {

@@ -2110,7 +2110,11 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
         kind: cert.kind,
         description: cert.description,
         author: cert.authorName || "Anonymous",
-        email: cert.authorEmail || null,
+        // email intentionally omitted — this bundle is public (anyone can
+        // re-pin it to IPFS), so including authorEmail would let anyone scrape
+        // every author's email by enumerating cert IDs. Matches the /verify
+        // response, which omits it for the same reason. Not needed for
+        // offline verification (hashes + signatures + witness carry that).
         location:
           [cert.city, cert.country].filter(Boolean).join(", ") || null,
         contentHash: cert.contentHash,

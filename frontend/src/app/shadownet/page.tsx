@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ThreatModelSelector from "./components/ThreatModelSelector";
 import RoutingSimulator from "./components/RoutingSimulator";
 import PrivacyScore from "./components/PrivacyScore";
 import EncryptedPostForm from "./components/EncryptedPostForm";
 import PostReader from "./components/PostReader";
+import StatsStrip from "./components/StatsStrip";
 
 export default function ShadowNetPage() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -80,6 +82,8 @@ export default function ShadowNetPage() {
           >
             simulator
           </span>
+          <span style={{ flex: 1 }} />
+          <ModulePricingChip moduleId="shadownet" theme="dark" />
         </div>
       </header>
 
@@ -123,6 +127,10 @@ export default function ShadowNetPage() {
           score и end-to-end зашифрованные посты — всё с криптографией в браузере,
           сервер видит только ciphertext.
         </p>
+      </section>
+
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 20px 30px" }}>
+        <StatsStrip />
       </section>
 
       <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>

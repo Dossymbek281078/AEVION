@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-24T14:17:07.039Z",
+  "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\super-rich-full.csv",
+  "samples": 3000,
+  "coefficients": {
+    "accuracy": 150.7851,
+    "opening": 6.4417,
+    "tactical": 0,
+    "endgame": 926.6949,
+    "blunder": 2343.1203,
+    "time": 0,
+    "median": 1.0898,
+    "std": -2.1626,
+    "accuracy2": -2.612536,
+    "blunder2": -3159.0015,
+    "accBlu": -304.3575
+  },
+  "bias": -209.6823,
+  "fitStats": {
+    "rmseElo": 328.07,
+    "r2": 0.6347,
+    "meanTargetElo": 2026.5
+  },
+  "floorFit": {
+    "threshold": 2400,
+    "samples": 1063,
+    "coefficients": {
+      "accuracy": 6.0488,
+      "opening": 8.479,
+      "tactical": 0,
+      "endgame": 189.7682,
+      "blunder": -1062.7157,
+      "time": 0,
+      "median": -2.5176,
+      "std": -0.436,
+      "accuracy2": 0.017756,
+      "blunder2": -50.9908,
+      "accBlu": 71.4113
+    },
+    "bias": 2317.4673,
+    "fitStats": {
+      "rmseElo": 121.55,
+      "r2": -0.0254
+    }
+  },
+  "ceilingFit": {
+    "threshold": 1500,
+    "samples": 632,
+    "coefficients": {
+      "accuracy": -2.1134,
+      "opening": -4.6855,
+      "tactical": 0,
+      "endgame": 205.5233,
+      "blunder": -1182.8029,
+      "time": 0,
+      "median": 1.3454,
+      "std": -0.186,
+      "accuracy2": -0.02108,
+      "blunder2": 2784.7057,
+      "accBlu": 64.5194
+    },
+    "bias": 1248.7381,
+    "fitStats": {
+      "rmseElo": 114.81,
+      "r2": 0.0295
+    }
+  },
+  "notes": [
+    "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",
+    "Accuracy / blunder are coarsely derived from game result (win/draw/loss).",
+    "Bias replaces BASE_ELO (1200) in estimateFideFromCPI.",
+    "Apply weights via ratingCalibrationFit.ts → estimateFideFromCPIWithFit()."
+  ]
+}

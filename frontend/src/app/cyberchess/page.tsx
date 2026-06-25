@@ -2666,14 +2666,12 @@ export default function CyberChessPage(){
     lastMoveStartRef.current=now;
     // Notify behavior tracker of player move
     if(mv.color===pCol){behaviorRef.current.onMoveMade(hist.length,cpiTimeMs);}
-    // ── Визуальные обновления — немедленно (board refresh, position indicator)
+    // ── Все обновления синхронны — React 18 авто-батчит их в один flush.
+    // startTransition(sHist+sFenHist) ломал список ходов: eval-бар каждые 120ms
+    // создавал срочное обновление, прерывая transition → hist никогда не коммитился.
+    sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);
     sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
-    // ── Не-визуальные — startTransition: не блокируют анимацию (~190ms)
-    // React помечает их как low-priority: анимация + board render идут первыми.
-    startTransition(()=>{
-      sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);
-      sMoveTimes([...moveTimesRef.current]);
-    });
+    startTransition(()=>sMoveTimes([...moveTimesRef.current]));
     // F2-phase-2: record per-move metrics into the CPI collector.
     // We build a base MoveMetric from the heuristic (live evalCp scalar) and then,
     // if Stockfish has pre-computed multiPV=3 for fenBefore (via the background

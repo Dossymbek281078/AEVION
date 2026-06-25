@@ -2,6 +2,9 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureHealthAIError = makeServiceCapture("healthai");
 
 /**
  * qstr — нормализует значение из req.params / req.query / req.headers,
@@ -188,6 +191,7 @@ async function ensureDb() {
     useDb = true;
     console.log("[HealthAI] Postgres persistence enabled");
   } catch (e) {
+    captureHealthAIError(e, { route: "db-init" });
     console.warn(
       "[HealthAI] DB init failed, fallback in-memory:",
       e instanceof Error ? e.message : e,
@@ -1100,6 +1104,7 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
         disclaimer: DISCLAIMER,
       });
     } catch (e: any) {
+      captureHealthAIError(e, { route: "check-llm", provider: name });
       tried.push({
         provider: name,
         error: String(e?.message || e),

@@ -1,6 +1,9 @@
 import { Router, type Request, type Response } from "express";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pg = require("pg") as typeof import("pg");
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureCyberChessError = makeServiceCapture("cyberchess");
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
@@ -104,6 +107,7 @@ cyberchessRouter.get("/upcoming", async (_req, res) => {
     const items = await loadTournaments();
     res.json({ items });
   } catch (err: any) {
+    captureCyberChessError(err, { route: "upcoming" });
     res.status(500).json({ error: "tournaments load failed" });
   }
 });
@@ -316,6 +320,7 @@ cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => 
     }));
     res.json({ data: { items, factor, limit } });
   } catch (err) {
+    captureCyberChessError(err, { route: "cpi/leaderboard" });
     console.error("[CyberchessCPI] leaderboard:", err);
     res.status(500).json({ error: "cpi_leaderboard_failed" });
   }
@@ -380,6 +385,7 @@ cyberchessRouter.post("/cpi/upsert", async (req: Request, res: Response) => {
     );
     res.status(200).json({ data: rows[0] ?? null });
   } catch (err) {
+    captureCyberChessError(err, { route: "cpi/upsert" });
     console.error("[CyberchessCPI] upsert:", err);
     res.status(500).json({ error: "cpi_upsert_failed" });
   }
@@ -403,6 +409,7 @@ cyberchessRouter.get("/cpi/me", async (req: Request, res: Response) => {
     );
     res.json({ data: rows[0] ?? null });
   } catch (err) {
+    captureCyberChessError(err, { route: "cpi/me" });
     console.error("[CyberchessCPI] me:", err);
     res.status(500).json({ error: "cpi_me_failed" });
   }

@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQSocialTables, isQSocialDbReady } from "../lib/ensureQSocialTables";
+
+const captureQSocialError = makeServiceCapture("qsocial");
 
 export const qsocialRouter = Router();
 
@@ -168,7 +171,8 @@ qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 50);
     return res.json({ posts });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -185,7 +189,8 @@ qsocialRouter.get("/posts/:id", async (req: Request, res: Response) => {
     const post = memPosts.get(id);
     if (!post) return res.status(404).json({ error: "not_found" });
     return res.json({ post });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -235,7 +240,8 @@ qsocialRouter.post("/posts", async (req: Request, res: Response) => {
       memPosts.set(post.id, post);
     }
     return res.status(201).json({ post });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -276,7 +282,8 @@ qsocialRouter.patch("/posts/:id", async (req: Request, res: Response) => {
     if (typeof isPublic === "boolean") post.isPublic = isPublic;
     post.updatedAt = nowIso();
     return res.json({ post });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -301,7 +308,8 @@ qsocialRouter.delete("/posts/:id", async (req: Request, res: Response) => {
       memPosts.delete(id);
     }
     return res.json({ ok: true });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -357,7 +365,8 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
       }
     }
     return res.json({ liked, likesCount: post.likesCount });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -377,7 +386,8 @@ qsocialRouter.get("/posts/:id/comments", async (req: Request, res: Response) => 
       .filter((c) => c.postId === postId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return res.json({ comments });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -430,7 +440,8 @@ qsocialRouter.post("/posts/:id/comments", async (req: Request, res: Response) =>
       }
     }
     return res.status(201).json({ comment });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -451,7 +462,8 @@ qsocialRouter.get("/users/:userId/posts", async (req: Request, res: Response) =>
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 50);
     return res.json({ posts });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -498,7 +510,8 @@ qsocialRouter.post("/follow/:userId", async (req: Request, res: Response) => {
       addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
     }
     return res.json({ following });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -529,7 +542,8 @@ qsocialRouter.get("/me/feed", async (req: Request, res: Response) => {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 50);
     return res.json({ posts });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -551,7 +565,8 @@ qsocialRouter.get("/me/followers", async (req: Request, res: Response) => {
       .filter((f) => f.followingId === auth.sub)
       .map((f) => ({ followerId: f.followerId, createdAt: f.createdAt }));
     return res.json({ followers });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -573,7 +588,8 @@ qsocialRouter.get("/me/following", async (req: Request, res: Response) => {
       .filter((f) => f.followerId === auth.sub)
       .map((f) => ({ followingId: f.followingId, createdAt: f.createdAt }));
     return res.json({ following });
-  } catch {
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
   }
 });

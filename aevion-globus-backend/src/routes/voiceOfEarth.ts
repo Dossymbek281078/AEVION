@@ -1,8 +1,11 @@
 import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
+
+const captureVoEError = makeServiceCapture("voice-of-earth");
 import {
   ensureVoiceOfEarthTables,
   isVoiceOfEarthDbReady,
@@ -332,6 +335,7 @@ voiceOfEarthRouter.post(
         return res.json({ ok: true, votes: rows[0]?.votes ?? 0 });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks/:id/vote DB error", e);
+        captureVoEError(e, { route: "voice-of-earth/POST/tracks/:id/vote" });
         return res.status(500).json({ error: "vote_failed" });
       }
     }

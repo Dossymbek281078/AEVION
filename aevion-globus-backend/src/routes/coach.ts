@@ -31,9 +31,12 @@
 //   for /chat belongs in a rate-limiter layer (TODO), not auth gating.
 
 import { Router, type Request, type Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID } from "crypto";
 import { Readable } from "stream";
 import { requireAuth } from "../lib/authJwt";
+
+const captureCoachError = makeServiceCapture("coach");
 
 export const coachRouter = Router();
 
@@ -190,6 +193,7 @@ coachRouter.post("/chat", async (req: Request, res: Response) => {
     return res.json(data);
   } catch (err: any) {
     console.error("[coach] Unexpected error:", err);
+    captureCoachError(err, { route: "coach/POST/chat" });
     return res.status(500).json({
       error: err?.message || "Internal server error",
     });
@@ -264,6 +268,7 @@ coachRouter.post("/chat/stream", async (req: Request, res: Response) => {
     nodeStream.pipe(res);
   } catch (err: any) {
     console.error("[coach] Unexpected stream error:", err);
+    captureCoachError(err, { route: "coach/POST/chat/stream" });
     if (!res.headersSent) res.status(500).json({ error: err?.message || "Internal server error" });
     else { try { res.end(); } catch { /* ignore */ } }
   }

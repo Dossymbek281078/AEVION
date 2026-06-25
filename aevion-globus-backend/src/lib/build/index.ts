@@ -2,6 +2,9 @@ import type { Request, Response } from "express";
 import { verifyBearerOptional, type JwtPayload } from "../authJwt";
 import { getPool } from "../dbPool";
 import { ensureUsersTable } from "../ensureUsersTable";
+import { makeServiceCapture } from "../sentry/platform";
+
+const captureBuildError = makeServiceCapture("qbuild");
 
 // ── Response envelope ─────────────────────────────────────────────────
 // QBuild surfaces wrap every success in { success: true, data } so the
@@ -18,6 +21,9 @@ export function fail(
   message: string,
   extra?: Record<string, unknown>,
 ): Response {
+  if (status >= 500) {
+    captureBuildError(new Error(message), { status, code: message });
+  }
   return res.status(status).json({ success: false, error: message, ...(extra ?? {}) });
 }
 

@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
+
+const captureStartupXError = makeServiceCapture("startup-exchange");
 import {
   ensureStartupExchangeTables,
   isStartupExchangeDbReady,

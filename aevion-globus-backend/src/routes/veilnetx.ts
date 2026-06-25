@@ -7,10 +7,13 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID, createHash } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
+
+const captureVeilNetXError = makeServiceCapture("veilnetx");
 
 export const veilnetxRouter = Router();
 
@@ -162,6 +165,7 @@ veilnetxRouter.post("/waitlist", waitlistLimiter, async (req: Request, res: Resp
     const count = await getWaitlistCount();
     res.status(created ? 201 : 200).json({ ok: true, id, alreadyJoined: !created, waitlistCount: count });
   } catch (err) {
+    captureVeilNetXError(err, { route: "veilnetx/POST/waitlist" });
     res.status(500).json({ error: "waitlist-failed" });
   }
 });

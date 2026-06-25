@@ -157,5 +157,43 @@
   "constitution": {
     "title": "Constitution — World-System Design Lab",
     "subtitle": "8 sliders → regime classifier: see what society slides into when you change the floor, rule of law, rotation, and transparency"
+  },
+  "cyberchess": {
+    "title": "CyberChess",
+    "subtitle": "Next-gen chess with AI coach",
+    "play": "Play",
+    "puzzles": "Puzzles",
+    "analysis": "Analysis",
+    "coach": "Coach",
+    "rating": "Rating",
+    "tournaments": "Tournaments"
+  },
+  "healthai": {
+    "title": "HealthAI",
+    "subtitle": "Your personal AI doctor",
+    "check": "Symptom Check",
+    "log": "Wellness Log",
+    "screeners": "Screeners",
+    "plan": "Weekly Plan",
+    "family": "Family"
+  },
+  "smeta": {
+    "title": "Smeta Trainer",
+    "subtitle": "AI estimating trainer for RK",
+    "lsr": "LSR",
+    "rates": "Rates",
+    "volume": "Volume",
+    "index": "Index",
+    "ai_advisor": "AI Advisor"
+  },
+  "multichat": {
+    "title": "Multichat Engine",
+    "subtitle": "6 AI agents in parallel",
+    "general": "General",
+    "code": "Code",
+    "finance": "Finance",
+    "legal": "Legal",
+    "compliance": "Compliance",
+    "translate": "Translate"
   }
 }

@@ -1,10 +1,13 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQStoreTables, isQStoreDbReady } from "../lib/ensureQStoreTables";
 import { applyOgEtag } from "../lib/ogEtag";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+
+const captureQStoreError = makeServiceCapture("qstore");
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
 
@@ -364,6 +367,7 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       return;
     } catch (e) {
       console.error("[QStore] purchase error:", e instanceof Error ? e.message : e);
+      captureQStoreError(e, { route: "qstore/products/:id/purchase" });
       res.status(500).json({ error: "purchase_failed" });
       return;
     }
@@ -985,6 +989,7 @@ qstoreRouter.get("/og.svg", async (req: Request, res: Response) => {
     if (applyOgEtag(req, res, "qstore-default-v1")) return;
     res.send(renderQStoreDefaultSvg());
   } catch (_err) {
+    captureQStoreError(_err, { route: "qstore/og.svg" });
     try {
       res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=60");

@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import rateLimit from "express-rate-limit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureDeepSanTables, isDeepSanDbReady } from "../lib/ensureDeepSanTables";
+
+const captureDeepSanError = makeServiceCapture("deepsan");
 
 export const deepSanRouter = Router();
 
@@ -115,6 +118,7 @@ deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
       return ok(res, result.rows);
     } catch (e) {
       console.error("[DeepSan] GET /tasks db error:", e);
+      captureDeepSanError(e, { route: "deepsan/GET/tasks" });
       return fail(res, "database error", 500);
     }
   }
@@ -160,6 +164,7 @@ deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
       return ok(res, result.rows[0], 201);
     } catch (e) {
       console.error("[DeepSan] POST /tasks db error:", e);
+      captureDeepSanError(e, { route: "deepsan/POST/tasks" });
       return fail(res, "database error", 500);
     }
   }
@@ -211,6 +216,7 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
       return ok(res, result.rows[0]);
     } catch (e) {
       console.error("[DeepSan] PATCH /tasks/:id db error:", e);
+      captureDeepSanError(e, { route: "deepsan/PATCH/tasks/:id" });
       return fail(res, "database error", 500);
     }
   }
@@ -238,6 +244,7 @@ deepSanRouter.delete("/tasks/:id", async (req: Request, res: Response) => {
       return ok(res, { deleted: id });
     } catch (e) {
       console.error("[DeepSan] DELETE /tasks/:id db error:", e);
+      captureDeepSanError(e, { route: "deepsan/DELETE/tasks/:id" });
       return fail(res, "database error", 500);
     }
   }
@@ -266,6 +273,7 @@ deepSanRouter.post("/focus", async (req: Request, res: Response) => {
       return ok(res, result.rows[0], 201);
     } catch (e) {
       console.error("[DeepSan] POST /focus db error:", e);
+      captureDeepSanError(e, { route: "deepsan/POST/focus" });
       return fail(res, "database error", 500);
     }
   }
@@ -295,6 +303,7 @@ deepSanRouter.get("/focus/active", async (_req: Request, res: Response) => {
       return ok(res, result.rows[0] ?? null);
     } catch (e) {
       console.error("[DeepSan] GET /focus/active db error:", e);
+      captureDeepSanError(e, { route: "deepsan/GET/focus/active" });
       return fail(res, "database error", 500);
     }
   }
@@ -326,6 +335,7 @@ deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
       return ok(res, result.rows[0]);
     } catch (e) {
       console.error("[DeepSan] PATCH /focus/:id/done db error:", e);
+      captureDeepSanError(e, { route: "deepsan/PATCH/focus/:id/done" });
       return fail(res, "database error", 500);
     }
   }
@@ -378,6 +388,7 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
       });
     } catch (e) {
       console.error("[DeepSan] GET /stats db error:", e);
+      captureDeepSanError(e, { route: "deepsan/GET/stats" });
       return fail(res, "database error", 500);
     }
   }

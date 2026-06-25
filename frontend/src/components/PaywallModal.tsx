@@ -11,18 +11,18 @@ import {
   PAYWALL_EVENT,
   installPaywallInterceptor,
   formatTiers,
-  type PaywallInfo,
+  type PaywallPayload,
 } from "@/lib/paywall";
 
 export function PaywallModal() {
-  const [info, setInfo] = useState<PaywallInfo | null>(null);
+  const [info, setInfo] = useState<PaywallPayload | null>(null);
 
   const close = useCallback(() => setInfo(null), []);
 
   useEffect(() => {
     installPaywallInterceptor();
     const onPaywall = (e: Event) => {
-      const detail = (e as CustomEvent<PaywallInfo>).detail;
+      const detail = (e as CustomEvent<PaywallPayload>).detail;
       if (detail) setInfo(detail);
     };
     window.addEventListener(PAYWALL_EVENT, onPaywall as EventListener);

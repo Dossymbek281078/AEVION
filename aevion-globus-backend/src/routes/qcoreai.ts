@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
 import {
@@ -326,6 +329,7 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     // wire response so we never echo a leaked provider key, internal URL,
     // or stack frame back to anonymous callers.
     console.error("[QCoreAI] error:", msg);
+    captureQCoreAIError(err, { route: "chat" });
     res.status(500).json({ error: publicErrorCategory(msg) });
   }
 });
@@ -407,6 +411,7 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "stream failed";
     console.error("[QCoreAI stream]", msg);
+    captureQCoreAIError(err, { route: "chat-stream" });
     if (!aborted) send({ kind: "error", message: msg });
   } finally {
     clearInterval(heartbeat);
@@ -508,6 +513,7 @@ qcoreaiRouter.get("/me/webhook", async (req, res) => {
       updatedAt: cfg.updatedAt,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-webhook" });
     return res.status(500).json({ error: "lookup failed" });
   }
 });
@@ -539,6 +545,7 @@ qcoreaiRouter.put("/me/webhook", async (req, res) => {
       updatedAt: cfg.updatedAt,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "set-webhook" });
     return res.status(500).json({ error: "save failed" });
   }
 });
@@ -550,6 +557,7 @@ qcoreaiRouter.delete("/me/webhook", async (req, res) => {
     const removed = await deleteUserWebhook(auth.sub);
     return res.json({ ok: removed });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-webhook" });
     return res.status(500).json({ error: "delete failed" });
   }
 });
@@ -581,6 +589,7 @@ qcoreaiRouter.post("/me/webhook/test", async (req, res) => {
     await notifyEvent(testEvt, userOverride);
     res.json({ ok: true, sentTo: userOverride?.url || envUrl });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "test-webhook" });
     res.status(500).json({ error: "test webhook failed" });
   }
 });
@@ -594,6 +603,7 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
     const items = await listWebhookLogs(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "webhook-log" });
     res.status(500).json({ error: "webhook log failed" });
   }
 });
@@ -624,6 +634,7 @@ qcoreaiRouter.get("/me/webhook/stats", async (req, res) => {
     const successRate = total > 0 ? Math.round((successes / total) * 1000) / 1000 : 1;
     res.json({ total, successRate, avgLatencyMs, errorCount, period: "30d" });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "webhook-stats" });
     res.status(500).json({ error: "webhook stats failed" });
   }
 });
@@ -669,6 +680,7 @@ qcoreaiRouter.post("/me/webhook/retry", async (req, res) => {
     await notifyEvent(retryEvt as any, userOverride, auth.sub);
     res.json({ ok: true, sentTo: userOverride?.url || envUrl });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "webhook-retry" });
     res.status(500).json({ error: "retry failed" });
   }
 });
@@ -773,6 +785,7 @@ qcoreaiRouter.get("/insights", async (req, res) => {
       avgCostByHour: hourly.rows,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "insights" });
     res.status(500).json({ error: "insights failed" });
   }
 });
@@ -1034,6 +1047,7 @@ qcoreaiRouter.get("/sessions", async (req, res) => {
     const rows = await listSessions(auth?.sub ?? null, 50);
     res.json({ items: rows, total: rows.length, scope: auth ? "mine" : "anonymous" });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-sessions" });
     res.status(500).json({ error: "list sessions failed" });
   }
 });
@@ -1046,6 +1060,7 @@ qcoreaiRouter.get("/sessions/:id", async (req, res) => {
     const runs = await listRuns(session.id, 200);
     res.json({ session, runs });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-session", entityId: req.params.id });
     res.status(500).json({ error: "get session failed" });
   }
 });
@@ -1136,6 +1151,7 @@ qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "session not found" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-session", entityId: req.params.id });
     res.status(500).json({ error: "delete session failed" });
   }
 });
@@ -1150,6 +1166,7 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
     const messages = await listMessages(run.id);
     res.json({ run, messages });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-run", entityId: req.params.id });
     res.status(500).json({ error: "get run failed" });
   }
 });
@@ -1400,6 +1417,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
   } catch (err: any) {
     const msg = err?.message || "refine failed";
     console.error("[QCoreAI] refine error:", msg);
+    captureQCoreAIError(err, { route: "refine" });
     res.status(500).json({ error: msg });
   }
 });
@@ -1418,6 +1436,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
     const items = await searchRuns(auth?.sub ?? null, q, limit);
     res.json({ items, query: q });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "search" });
     res.status(500).json({ error: "search failed" });
   }
 });

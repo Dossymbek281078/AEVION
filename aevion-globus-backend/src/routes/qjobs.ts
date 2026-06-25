@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQJobsTables, isQJobsDbReady } from "../lib/ensureQJobsTables";
+
+const captureQJobsError = makeServiceCapture("qjobs");
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
@@ -127,7 +130,8 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
     jobs = jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const total = jobs.length;
     return res.json({ jobs: jobs.slice(0, limitN), total });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -144,7 +148,8 @@ qjobsRouter.get("/jobs/:id", async (req: Request, res: Response) => {
     const job = memJobs.get(id);
     if (!job) return res.status(404).json({ error: "not_found" });
     return res.json({ job });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -195,7 +200,8 @@ qjobsRouter.post("/me/jobs", postLimiter, async (req: Request, res: Response) =>
       memJobs.set(job.id, job);
     }
     return res.status(201).json({ job });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -237,7 +243,8 @@ qjobsRouter.patch("/me/jobs/:id", async (req: Request, res: Response) => {
     const updates = req.body as Partial<JobPosting>;
     Object.assign(job, { ...updates, updatedAt: nowIso() });
     return res.json({ job });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -263,7 +270,8 @@ qjobsRouter.delete("/me/jobs/:id", async (req: Request, res: Response) => {
       job.updatedAt = nowIso();
     }
     return res.json({ ok: true });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -309,7 +317,8 @@ qjobsRouter.post("/jobs/:id/apply", applyLimiter, async (req: Request, res: Resp
     memApplications.set(application.id, application);
     job.applicantCount += 1;
     return res.status(201).json({ applicationId: application.id });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -331,7 +340,8 @@ qjobsRouter.get("/me/applications", async (req: Request, res: Response) => {
       .filter((a) => a.applicantId === auth.sub)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return res.json({ applications });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -363,7 +373,8 @@ qjobsRouter.get("/me/jobs/:id/applicants", async (req: Request, res: Response) =
       .filter((a) => a.jobId === jobId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return res.json({ applicants });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -578,7 +589,8 @@ qjobsRouter.patch("/applications/:id", async (req: Request, res: Response) => {
     if (!job || job.employerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     application.status = status;
     return res.json({ application });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -607,7 +619,8 @@ qjobsRouter.get("/stats", async (_req: Request, res: Response) => {
       byType,
       backend: "memory",
     });
-  } catch {
+  } catch (err) {
+    captureQJobsError(err, { route: "qjobs" });
     return res.status(500).json({ error: "internal_error" });
   }
 });

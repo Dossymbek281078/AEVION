@@ -3,9 +3,29 @@ import { AchievementToast } from "./components/AchievementToast";
 import { AutoSyncBridge } from "./lib/useAutoSync";
 import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 
-export const metadata = {
-  title: "Сметный тренажёр — AEVION",
-  description: "AI-тренажёр сметного дела РК. Учебный режим: подбор расценок, расчёт ЛСР, AI-советник.",
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Сметный тренажёр — AEVION",
+    template: "%s | Смета · AEVION",
+  },
+  description:
+    "AI-тренажёр сметного дела РК. Подбор расценок НДЦС РК, расчёт ЛСР, учебный режим, AI-советник на типовых ошибках.",
+  keywords: ["смета", "AEVION", "ЛСР", "сметное дело", "расценки РК", "тренажёр"],
+  openGraph: {
+    title: "Сметный тренажёр · AEVION",
+    description:
+      "AI-тренажёр сметного дела РК. Подбор расценок НДЦС РК, расчёт ЛСР, учебный режим, AI-советник на типовых ошибках.",
+    type: "website",
+    siteName: "AEVION",
+    url: "/smeta-trainer",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Сметный тренажёр · AEVION",
+    description: "Учебный режим + AI-советник по ЛСР",
+  },
 };
 
 export default function SmetaTrainerLayout({ children }: { children: ReactNode }) {

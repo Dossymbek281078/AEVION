@@ -4,6 +4,9 @@ import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const captureSmetaError = makeServiceCapture("smeta-trainer");
 
 // AI-тренажёр сметного дела РК — backend для прогресса студентов.
 // MVP storage через jsonFileStore (как aev/qright). Prisma-схема

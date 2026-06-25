@@ -174,7 +174,11 @@ const csvLimiter = rateLimit({
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
 const STRIPE_WH = process.env.QPAYNET_STRIPE_WEBHOOK_SECRET?.trim();
-const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-05-27.dahlia" }) : null;
+// Don't pin apiVersion in code — let the SDK use whatever version it ships
+// with. Mirrors lib/payment/stripeProvider.ts and avoids the TS2322 mismatch
+// when the SDK is bumped without updating this string. Pin at the Stripe
+// dashboard side instead.
+const stripe = STRIPE_SK ? new Stripe(STRIPE_SK) : null;
 const FRONTEND = (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────

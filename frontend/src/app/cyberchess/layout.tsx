@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import SwRegister from "./SwRegister";
 import PwaInstall from "./PwaInstall";
+import { fetchOrPaywall } from "@/lib/paywall";
+import { PaywallScreen } from "@/components/PaywallScreen";
 
 export const metadata: Metadata = {
   title: "CyberChess — AI-тренер и пазлы",
@@ -42,7 +44,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function CyberChessLayout({ children }: { children: React.ReactNode }) {
+export default async function CyberChessLayout({ children }: { children: React.ReactNode }) {
+  const r = await fetchOrPaywall("/api/cyberchess/health");
+  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
+
   return (
     <>
       <SwRegister />

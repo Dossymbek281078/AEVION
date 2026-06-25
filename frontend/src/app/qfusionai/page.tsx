@@ -4,16 +4,23 @@ import Link from "next/link";
 import { useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import type { PaywallPayload } from "@/lib/paywall";
 import FusionPlayground, { type RouteResult } from "./components/FusionPlayground";
 import ProvidersPanel from "./components/ProvidersPanel";
 import RequestCard from "./components/RequestCard";
 
 export default function QFusionAIPage() {
   const [refreshTick, setRefreshTick] = useState(0);
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
 
   function handleResult(_r: RouteResult) {
     // Trigger stats refresh after each successful routing
     setRefreshTick((t) => t + 1);
+  }
+
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/" backLabel="← AEVION" />;
   }
 
   return (
@@ -165,7 +172,7 @@ export default function QFusionAIPage() {
             </p>
           </div>
 
-          <FusionPlayground onResult={handleResult} />
+          <FusionPlayground onResult={handleResult} onPaywall={setPaywall} />
 
           {/* Stats mini-dashboard */}
           <RequestCard refreshTick={refreshTick} />

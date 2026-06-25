@@ -38,8 +38,11 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { emitVeilNetXEntry } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const qmaskcardRouter = Router();
+
+const captureQMaskCardError = makeServiceCapture("qmaskcard");
 
 const writeLimit = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false });
 const chargeLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
@@ -170,6 +173,7 @@ qmaskcardRouter.post("/masks", writeLimit, async (req, res) => {
       note: "Use virtualPan as the routing tag for charges. Real PAN never issued.",
     });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "POST /masks" });
     console.error("[qmaskcard] mask_create_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "mask_create_failed" });
   }
@@ -193,6 +197,7 @@ qmaskcardRouter.get("/masks", readLimit, async (req, res) => {
     const r = await pool.query(sql, [auth.sub]);
     res.json({ masks: r.rows, total: r.rowCount });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "GET /masks" });
     console.error("[qmaskcard] masks_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "masks_list_failed" });
   }
@@ -216,6 +221,7 @@ qmaskcardRouter.post("/masks/:id/revoke", writeLimit, async (req, res) => {
     }
     res.json({ ok: true, revokedId: req.params.id });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "POST /masks/:id/revoke" });
     console.error("[qmaskcard] revoke_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "revoke_failed" });
   }
@@ -317,6 +323,7 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
       amountCents: amount, riskScore, autoRevoked: mask.kind === "single-use",
     });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "POST /charges" });
     console.error("[qmaskcard] charge_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "charge_failed" });
   }
@@ -359,6 +366,7 @@ qmaskcardRouter.get("/charges", readLimit, async (req, res) => {
     const r = await pool.query(sql, params);
     res.json({ charges: r.rows, total: r.rowCount });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "GET /charges" });
     console.error("[qmaskcard] charges_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "charges_list_failed" });
   }
@@ -378,6 +386,7 @@ qmaskcardRouter.get("/stats", readLimit, async (_req, res) => {
     `);
     res.json({ ...r.rows[0], service: "qmaskcard" });
   } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "GET /stats" });
     console.error("[qmaskcard] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });
   }

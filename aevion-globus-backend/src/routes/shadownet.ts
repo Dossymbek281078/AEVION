@@ -13,6 +13,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
@@ -20,6 +21,8 @@ import {
   isShadowNetDbReady,
 } from "../lib/ensureShadowNetTables";
 import { rateLimit } from "../lib/rateLimit";
+
+const captureShadowNetError = makeServiceCapture("shadownet");
 
 export const shadownetRouter = Router();
 

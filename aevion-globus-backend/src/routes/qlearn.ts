@@ -1,9 +1,12 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+
+const captureQLearnError = makeServiceCapture("qlearn");
 
 /**
  * Register a completion certificate as a QRight IP object.

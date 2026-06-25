@@ -19,8 +19,11 @@ import {
 } from "../services/qcoreai/providers";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const qfusionaiRouter = Router();
+
+const captureQFusionAIError = makeServiceCapture("qfusionai");
 
 // ── Strategy types ───────────────────────────────────────────────────────────
 
@@ -425,6 +428,7 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
     });
   } catch (err) {
     const latencyMs = Date.now() - t0;
+    captureQFusionAIError(err, { route: "POST /route", provider: providerId, strategy });
     return res.status(502).json({
       error: "provider-error",
       provider: providerId,

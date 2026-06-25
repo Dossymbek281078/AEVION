@@ -1,105 +1,114 @@
 /**
- * Client-side paywall plumbing.
+ * Paywall — shared types + fetch helpers for handling 402 upgrade_required
+ * responses from the platform-wide module paywall gate (backend planGate.ts,
+ * shipped in PR #434). Pairs with components/PaywallScreen.tsx for the UI.
  *
- * The backend module gate (aevion-globus-backend/lib/planGate.ts) answers a
- * gated request with HTTP 402 + { error: "upgrade_required", module, plan,
- * requiredTiers, upgradeUrl, message }. Rather than retrofit every module's
- * fetch call, we install ONE global fetch interceptor that watches for that
- * shape and raises a window event. <PaywallModal/> (mounted once in
- * ClientProviders) listens and renders the upgrade prompt.
- *
- * The interceptor is transparent: it never alters the response the caller
- * receives (callers still get their 402), it only side-channels the event so
- * the UI can react consistently across all modules.
+ * The 402 payload shape (from planGate.upgradeResponse):
+ *   {
+ *     error: "upgrade_required",
+ *     module: "qcoreai",
+ *     plan: "free",
+ *     requiredTiers: ["medium", "full", "enterprise"],
+ *     upgradeUrl: "https://aevion.app/pricing",
+ *     message: "Модуль «qcoreai» доступен на тарифах: medium, full, enterprise. ..."
+ *   }
  */
 
-export const PAYWALL_EVENT = "aevion:paywall";
+import { apiUrl } from "./apiBase";
 
-/** Canonical tiers the backend reports as unlocking a module (excludes free). */
-export type PaywallTier = "lite" | "medium" | "full" | "enterprise";
+export type CanonicalTier = "free" | "lite" | "medium" | "full" | "enterprise";
 
-export interface PaywallInfo {
-  /** Module id from MODULES_PRICING (e.g. "qcoreai"). */
+export interface PaywallPayload {
+  error: "upgrade_required";
   module: string;
-  /** The caller's current resolved plan. */
-  plan: string;
-  /** Tiers that unlock the module. */
-  requiredTiers: PaywallTier[];
-  /** Absolute URL to the pricing/upgrade page. */
+  plan: CanonicalTier;
+  requiredTiers: CanonicalTier[];
   upgradeUrl: string;
-  /** Human-readable message (already localised by the backend). */
-  message?: string;
+  message: string;
 }
 
-/** Shape of the backend 402 body. */
-interface UpgradeBody {
-  error?: string;
-  module?: string;
-  plan?: string;
-  requiredTiers?: string[];
-  upgradeUrl?: string;
-  message?: string;
+export class PaywallError extends Error {
+  readonly payload: PaywallPayload;
+  constructor(payload: PaywallPayload) {
+    super(payload.message);
+    this.name = "PaywallError";
+    this.payload = payload;
+  }
 }
 
-const VALID_TIERS: PaywallTier[] = ["lite", "medium", "full", "enterprise"];
-
-function normaliseInfo(body: UpgradeBody): PaywallInfo {
-  const tiers = (body.requiredTiers ?? []).filter(
-    (t): t is PaywallTier => VALID_TIERS.includes(t as PaywallTier),
+function isPaywallPayload(x: unknown): x is PaywallPayload {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    o.error === "upgrade_required" &&
+    typeof o.module === "string" &&
+    typeof o.plan === "string" &&
+    Array.isArray(o.requiredTiers) &&
+    typeof o.upgradeUrl === "string" &&
+    typeof o.message === "string"
   );
-  return {
-    module: body.module ?? "unknown",
-    plan: body.plan ?? "free",
-    requiredTiers: tiers.length ? tiers : ["full"],
-    upgradeUrl: body.upgradeUrl || "/pricing",
-    message: body.message,
-  };
 }
-
-/** Fire the global paywall event so the modal can surface. */
-export function triggerPaywall(info: PaywallInfo): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<PaywallInfo>(PAYWALL_EVENT, { detail: info }));
-}
-
-const INSTALLED = Symbol.for("aevion.paywall.fetchPatched");
 
 /**
- * Monkeypatch window.fetch once so any module's 402 upgrade_required answer
- * raises the paywall event. Idempotent and SSR-safe.
+ * Server-side helper: fetch an API path and either return the parsed JSON,
+ * or return `{ paywall: PaywallPayload }` if the gate blocked the request.
+ *
+ * Use in RSC pages so the page can render <PaywallScreen> instead of the
+ * gated content without an exception:
+ *
+ *   const r = await fetchOrPaywall<MyData>("/api/qcoreai/health");
+ *   if ("paywall" in r) return <PaywallScreen payload={r.paywall} />;
+ *   // ...render r.data
  */
-export function installPaywallInterceptor(): void {
-  if (typeof window === "undefined") return;
-  const w = window as unknown as Record<symbol, boolean> & { fetch: typeof fetch };
-  if (w[INSTALLED]) return;
-  w[INSTALLED] = true;
-
-  const original = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const res = await original(input, init);
-    // Only 402s are interesting; everything else passes straight through
-    // untouched (no clone → no overhead, streaming responses unaffected).
-    if (res.status !== 402) return res;
-    try {
-      const body = (await res.clone().json()) as UpgradeBody;
-      if (body && body.error === "upgrade_required") {
-        triggerPaywall(normaliseInfo(body));
-      }
-    } catch {
-      /* not a JSON upgrade_required body — leave it to the caller */
-    }
-    return res;
-  };
+export async function fetchOrPaywall<T>(
+  apiPath: string,
+  init?: RequestInit,
+): Promise<{ data: T } | { paywall: PaywallPayload }> {
+  const res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
+  if (res.status === 402) {
+    const body = await res.json().catch(() => null);
+    if (isPaywallPayload(body)) return { paywall: body };
+  }
+  if (!res.ok) {
+    throw new Error(`fetchOrPaywall(${apiPath}) — HTTP ${res.status}`);
+  }
+  return { data: (await res.json()) as T };
 }
 
-const TIER_LABELS: Record<PaywallTier, string> = {
+/**
+ * Client-side helper: fetch and either resolve with JSON, or throw a
+ * PaywallError that the caller catches to render <PaywallScreen>.
+ *
+ *   try {
+ *     const data = await apiFetchOrPaywall<MyData>("/api/qcoreai/...");
+ *   } catch (e) {
+ *     if (e instanceof PaywallError) setPaywall(e.payload);
+ *     else throw e;
+ *   }
+ */
+export async function apiFetchOrPaywall<T>(
+  apiPath: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(apiUrl(apiPath), init);
+  if (res.status === 402) {
+    const body = await res.json().catch(() => null);
+    if (isPaywallPayload(body)) throw new PaywallError(body);
+  }
+  if (!res.ok) {
+    throw new Error(`apiFetchOrPaywall(${apiPath}) — HTTP ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+const TIER_LABELS: Record<CanonicalTier, string> = {
+  free: "Free",
   lite: "Lite",
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
 };
 
-/** Pretty tier list for display, e.g. ["full"] → "Full". */
-export function formatTiers(tiers: PaywallTier[]): string {
-  return tiers.map((t) => TIER_LABELS[t]).join(" / ");
+export function tierLabel(t: CanonicalTier): string {
+  return TIER_LABELS[t] ?? t;
 }

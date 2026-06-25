@@ -43,6 +43,9 @@ const SMOKES = [
   { name: "waitlist-unsub", script: "waitlist-unsub-smoke.js", readOnly: true },
   // Hub full surface: covers health/catalog/version/openapi/sitemap.xml in one shot.
   { name: "hub-full", script: "hub-full-smoke.js", readOnly: true },
+  // QBuild SEO: per-page metadata + JSON-LD on the 5 public /build landings (PR #433).
+  // Read-only — hits frontend HTML, not the backend; safe against prod.
+  { name: "qbuild-seo", script: "qbuild-seo-smoke.js", readOnly: true, env: { BASE: process.env.QBUILD_SEO_BASE || "https://aevion.app" } },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

@@ -40,8 +40,11 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
 import { ensureQGoodTables, isQGoodDbReady } from "../lib/ensureQGoodTables";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const qgoodRouter = Router();
+
+const captureQGoodError = makeServiceCapture("qgood");
 
 const createLimit = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
 const donateLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
@@ -161,6 +164,7 @@ qgoodRouter.get("/campaigns", readLimit, async (req, res) => {
     `, params);
     res.json({ campaigns: r.rows, total: r.rowCount });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "GET /campaigns" });
     console.error("[qgood] campaigns_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "campaigns_list_failed" });
   }
@@ -189,6 +193,7 @@ qgoodRouter.get("/campaigns/:id", readLimit, async (req, res) => {
     }));
     res.json({ campaign: c.rows[0], donations: safeDonations });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "GET /campaigns/:id" });
     console.error("[qgood] campaign_get_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "campaign_get_failed" });
   }
@@ -228,6 +233,7 @@ qgoodRouter.post("/campaigns", createLimit, async (req, res) => {
     );
     res.status(201).json({ id, status: "draft", message: "Submitted for review." });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /campaigns" });
     console.error("[qgood] campaign_create_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "campaign_create_failed" });
   }
@@ -247,6 +253,7 @@ qgoodRouter.post("/campaigns/:id/approve", createLimit, async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "draft_campaign_not_found" });
     res.json({ ok: true, campaign: r.rows[0] });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /campaigns/:id/approve" });
     console.error("[qgood] campaign_approve_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "campaign_approve_failed" });
   }
@@ -362,6 +369,7 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
         : null,
     });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /campaigns/:id/donations" });
     console.error("[qgood] donation_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "donation_failed" });
   }
@@ -398,6 +406,7 @@ qgoodRouter.post("/matching-pools", createLimit, async (req, res) => {
     );
     res.status(201).json(r.rows[0]);
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /matching-pools" });
     console.error("[qgood] matching_pool_create_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "matching_pool_create_failed" });
   }
@@ -413,6 +422,7 @@ qgoodRouter.get("/matching-pools", readLimit, async (_req, res) => {
     );
     res.json({ pools: r.rows, total: r.rowCount });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "GET /matching-pools" });
     console.error("[qgood] matching_pools_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "matching_pools_list_failed" });
   }
@@ -433,6 +443,7 @@ qgoodRouter.post("/matching-pools/:id/pause", createLimit, async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "active_pool_not_found" });
     res.json(r.rows[0]);
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /matching-pools/:id/pause" });
     console.error("[qgood] matching_pool_pause_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "matching_pool_pause_failed" });
   }
@@ -453,6 +464,7 @@ qgoodRouter.post("/matching-pools/:id/resume", createLimit, async (req, res) => 
     if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "paused_pool_not_found_or_empty" });
     res.json(r.rows[0]);
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "POST /matching-pools/:id/resume" });
     console.error("[qgood] matching_pool_resume_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "matching_pool_resume_failed" });
   }
@@ -472,6 +484,7 @@ qgoodRouter.get("/stats", readLimit, async (_req, res) => {
     );
     res.json({ ...totals.rows[0], service: "qgood", currency: "USD" });
   } catch (err: unknown) {
+    captureQGoodError(err, { route: "GET /stats" });
     console.error("[qgood] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });
   }

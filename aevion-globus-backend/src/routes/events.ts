@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+
+const captureEventsError = makeServiceCapture("qevents");
 
 export const eventsRouter = Router();
 
@@ -131,6 +134,7 @@ eventsRouter.post("/", (req, res) => {
     appendFileSync(EVENTS_FILE, JSON.stringify(event) + "\n", "utf8");
   } catch (e) {
     console.error("[events] write failed", e);
+    captureEventsError(e, { route: "events/POST" });
     return res.status(500).json({ error: "storage_error" });
   }
 
@@ -172,6 +176,7 @@ eventsRouter.get("/summary", (req, res) => {
     content = readFileSync(EVENTS_FILE, "utf8");
   } catch (e) {
     console.error("[events/summary] read failed", e);
+    captureEventsError(e, { route: "events/GET/summary" });
     return res.status(500).json({ error: "read_error" });
   }
 
@@ -247,6 +252,7 @@ eventsRouter.get("/aggregate", (req, res) => {
     content = readFileSync(EVENTS_FILE, "utf8");
   } catch (e) {
     console.error("[events/aggregate] read failed", e);
+    captureEventsError(e, { route: "events/GET/aggregate" });
     return res.status(500).json({ error: "read_error" });
   }
 
@@ -309,6 +315,7 @@ eventsRouter.get("/recent", (req, res) => {
     content = readFileSync(EVENTS_FILE, "utf8");
   } catch (e) {
     console.error("[events/recent] read failed", e);
+    captureEventsError(e, { route: "events/GET/recent" });
     return res.status(500).json({ error: "read_error" });
   }
 
@@ -385,6 +392,7 @@ eventsRouter.get("/by-variant", (req, res) => {
     content = readFileSync(EVENTS_FILE, "utf8");
   } catch (e) {
     console.error("[events/by-variant] read failed", e);
+    captureEventsError(e, { route: "events/GET/by-variant" });
     return res.status(500).json({ error: "read_error" });
   }
 

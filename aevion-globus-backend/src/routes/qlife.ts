@@ -17,8 +17,11 @@ import { ensureQLifeTables, isQLifeDbReady, getQLifeDbError } from "../lib/ensur
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const qlifeRouter = Router();
+
+const captureQLifeError = makeServiceCapture("qlife");
 
 const pool = getPool();
 
@@ -237,6 +240,7 @@ qlifeRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
     const stats = isQLifeDbReady() ? await dbStats() : memStats();
     res.json({ ok: true, ...stats });
   } catch (e: any) {
+    captureQLifeError(e, { route: "GET /stats" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -247,6 +251,7 @@ qlifeRouter.get("/biomarkers/trends", readLimit, async (_req: Request, res: Resp
     const trends = isQLifeDbReady() ? await dbTrends() : memTrends();
     res.json({ ok: true, trends });
   } catch (e: any) {
+    captureQLifeError(e, { route: "GET /biomarkers/trends" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -273,6 +278,7 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
 
     res.json({ ok: true, biomarkers, count: biomarkers.length });
   } catch (e: any) {
+    captureQLifeError(e, { route: "GET /biomarkers" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -315,6 +321,7 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
 
     res.status(201).json({ ok: true, biomarker });
   } catch (e: any) {
+    captureQLifeError(e, { route: "POST /biomarkers" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -380,6 +387,7 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
 
     res.json({ ok: true, plan, provider: providerId, model: result.model });
   } catch (e: any) {
+    captureQLifeError(e, { route: "POST /plan" });
     res.status(500).json({ ok: false, error: e?.message || "AI plan generation failed" });
   }
 });

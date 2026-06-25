@@ -202,7 +202,7 @@ parity + docs/runbook.
 | ID | Task | Owner |
 |---|---|---|
 | P2-1 | Awards prod smoke + AEC payout end-to-end against prod Bank | aevion-backend-modules + aevion-bank |
-| P2-2 | CyberChess: drag/click/premove regression suite (recent fixes in 0650719, d5c6d76, 7ce07a2) | aevion-cyberchess |
+| ~~P2-2~~ | ~~CyberChess: drag/click/premove regression suite~~ ✅ premove move-gen contract locked in vitest (PR #436); drag/click are DOM-coupled, deferred | aevion-cyberchess |
 | P2-3 | QBuild UI polish merge from `port-qbuild-v3` | aevion-qbuild |
 | P2-4 | смета — Sentry + i18n + smoke | aevion-smeta |
 | P2-5 | QCoreAI usage accounting dashboard (per-provider OPEX) | frontend-qcore |
@@ -270,10 +270,10 @@ If the user insists on more code work in this window, candidates are:
 2. **P2-6** Multichat prod smoke
 3. Translation parity for QCoreAI suggestion deck
 
-### `aevion-cyberchess` / `chess-tournaments`
-1. **P2-2** Regression suite for drag/click/premove (recent fixes are diagnostic-heavy)
-2. P2P friend-play merge into main (per memory `cyberchess_merge_2026-05-01`)
-3. Tournament finalize → Bank prize webhook smoke
+### `aevion-cyberchess` / `chess-tournaments` — P2 backlog ✅ cleared
+1. ~~**P2-2** Regression suite for drag/click/premove~~ ✅ premove move-gen contract locked in vitest (PR #436); drag/click are DOM-coupled → Playwright, deferred
+2. ~~P2P friend-play merge into main~~ ✅ already shipped — `useP2P` fully wired in `page.tsx` (onMessage + move relay); the `cyberchess_merge_2026-05-01` orphan note is stale
+3. ~~Tournament finalize → Bank prize webhook smoke~~ ✅ live e2e smoke for `/api/cyberchess/tournament-finalized` (sig-reject + record + idempotent replay + Bearer-scoped `/results`) in `all-smokes` (PR #440)
 
 ### `aevion-smeta` / `feat/smeta-trainer`
 1. **P2-4** Sentry + smoke + i18n
@@ -291,6 +291,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-06-25  #440 test(cyberchess): finalize→prize webhook smoke — live e2e for /api/cyberchess/tournament-finalized (sig-reject 401×2, valid 201 record, idempotent replay, malformed 400, Bearer-scoped /results + CSV) in all-smokes. CyberChess P2 backlog now fully cleared (P2P friend-play was already shipped — useP2P wired in page.tsx; the 2026-05-01 orphan note was stale).
+2026-06-25  #436 test(cyberchess): P2-2 — regression suite for premoveLegalMoves (10 vitest cases) locks the premove move-gen contract (pass-1 legal / pass-2 rescue / pass-3 pawn pseudo-legal) that v6/v7/v8 board-input rewrites kept breaking. Drag/click paths are DOM-coupled, deferred.
 2026-06-22  —    PROD EVIDENCE: read-only smoke suite 40/40 PASS against live Railway backend (https://aevion-production-a70c.up.railway.app, health 200) — auth/qtrade/bureau/qsign/planet/pipeline/qshield/modules/pricing/healthai/qcore/hub/ecosystem + all q-zone. Backend API is prod-ready; only Phase 0 (public domain + SSO removal) gates "100% publicly visible".
 2026-06-22  —    deps: merged backend-patch (#389) + frontend-patch (#390) dependabot groups
 2026-06-23  —    Wave 3 prod-hardening COMPLETE: 20 modules hardened (#408-#430 + #404/#407) — qsocial/qevents/qjobs/qlearn/qstore/qpersona/qnews/qchaingov/startup-exchange/voe/qmedia/shadownet/kids-ai/communities/deepsan/devhub/lifebox/veilnetx/coach/z-tide. QBuild AI-503+i18n merged. Main CI ✅. All Tier 4.5/5 modules now prod-hardened. Remaining blocker: Phase 0 DNS+SSO.

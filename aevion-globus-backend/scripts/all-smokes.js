@@ -43,6 +43,9 @@ const SMOKES = [
   { name: "waitlist-unsub", script: "waitlist-unsub-smoke.js", readOnly: true },
   // Hub full surface: covers health/catalog/version/openapi/sitemap.xml in one shot.
   { name: "hub-full", script: "hub-full-smoke.js", readOnly: true },
+  // QBuild SEO: per-page metadata + JSON-LD on the 5 public /build landings (PR #433).
+  // Read-only — hits frontend HTML, not the backend; safe against prod.
+  { name: "qbuild-seo", script: "qbuild-seo-smoke.js", readOnly: true, env: { BASE: process.env.QBUILD_SEO_BASE || "https://aevion.app" } },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).
@@ -57,6 +60,10 @@ const SMOKES = [
   { name: "qpaynet", script: "qpaynet-smoke.js", readOnly: true },
   { name: "qcontract", script: "qcontract-smoke.js", readOnly: true },
   { name: "cyberchess", script: "cyberchess-smoke.js", readOnly: false },
+  // CyberChess finalize→prize webhook — live end-to-end: signed /tournament-finalized
+  // records a podium prize, idempotent replay drops dups, GET /results (Bearer-scoped)
+  // surfaces it for the Bank ChessWinnings UI. Signs with CYBERCHESS_WEBHOOK_SECRET.
+  { name: "cyberchess-finalize", script: "cyberchess-finalize-smoke.js", readOnly: false, env: { CYBERCHESS_WEBHOOK_SECRET: process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook" } },
   { name: "smeta-trainer", script: "smeta-trainer-smoke.js", readOnly: false },
   { name: "multichat", script: "multichat-smoke.js", readOnly: false },
   // HealthAI — profile/log/screener/plan/LLM-check (soft: needs ANTHROPIC_API_KEY)

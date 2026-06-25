@@ -125,10 +125,13 @@ export function calcPosition(
   const baseDirect = struct.fot + struct.em + struct.materials;
   const coefMul = appliedCoefMultiplier(position);
 
-  // Базисные суммы по позиции = структура × объём × коэффициент
+  // Базисные суммы по позиции = структура × объём × коэффициент.
+  // Коэффициенты условий производства (стеснённость, высота, действующий объект,
+  // зимние) применяются ТОЛЬКО к ФОТ и ЭМ (затраты труда и эксплуатации машин),
+  // но НЕ к стоимости материалов — их расход от условий не растёт (СН РК 8.02-05).
   const baseFotPos = struct.fot * position.volume * coefMul;
   const baseEmPos = struct.em * position.volume * coefMul;
-  const baseMatPos = struct.materials * position.volume * coefMul;
+  const baseMatPos = struct.materials * position.volume;
   const baseEmMachWagePos = struct.emMachinistWage * position.volume * coefMul;
 
   // Применение индексов:

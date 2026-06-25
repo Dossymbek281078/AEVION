@@ -1,41 +1,47 @@
-import type { Lsr, AiNotice } from "../../types";
+import type { Lsr, AiNotice, LearningObject } from "../../types";
 
 /**
- * Сценарий: забытый коэффициент стеснённости.
- * Если объект — действующее или жилое здание и позиции демонтажа или отделки есть,
- * а ни одна позиция не имеет коэффициента «действующий-объект» — советуем добавить.
+ * Сценарий: забыт коэффициент условий «действующий-объект»/«стеснённые».
+ *
+ * Триггер — объект-управляемый: если объект помечен `occupied` (здание
+ * эксплуатируется во время работ), а ни к одной позиции сметы не применён
+ * коэффициент «действующий-объект» или «стеснённые», значит студент забыл его
+ * совсем. Это типичная ошибка по СН РК 8.02-10 (работы в действующем здании).
+ *
+ * Почему «нигде во всей смете», а не по каждой позиции: эталоны действующих
+ * объектов применяют коэффициент, и поэлементная проверка давала ложные
+ * срабатывания на корректных сметах. Признак «забыл совсем» точен и не шумит.
  */
-export function checkMissingCoefficient(lsr: Lsr): AiNotice[] {
-  const notices: AiNotice[] = [];
+const OCCUPIED_KINDS = new Set(["действующий-объект", "стеснённые"]);
 
-  // Для учебного объекта «капремонт» и «реконструкция» коэффициент К=1.15 обязателен
-  // если в смете есть ремонтные или демонтажные позиции без него.
-  const relevantCategories: string[] = ["демонтажные", "ремонтно-строительные", "отделочные"];
+export function checkMissingCoefficient(lsr: Lsr, object?: LearningObject): AiNotice[] {
+  if (!object?.occupied) return [];
 
+  const hasCoef = lsr.sections.some((s) =>
+    s.positions.some((p) => p.coefficients.some((c) => OCCUPIED_KINDS.has(c.kind)))
+  );
+  if (hasCoef) return [];
+
+  // Привязываем единственное замечание к первой позиции сметы.
   for (const section of lsr.sections) {
-    if (!relevantCategories.includes(section.category)) continue;
-
-    for (const pos of section.positions) {
-      const hasRelevantCoef = pos.coefficients.some(
-        (c) => c.kind === "действующий-объект" || c.kind === "стеснённые"
-      );
-      if (hasRelevantCoef) continue;
-
-      // Только для разделов, где работы идут в действующем здании
-      if (section.category === "демонтажные" || section.category === "ремонтно-строительные") {
-        notices.push({
-          id: `missing-coef-${pos.id}`,
-          severity: "warning",
-          scenario: "missing-coefficient",
-          context: { positionId: pos.id, sectionId: section.id },
-          title: "Возможен пропущенный коэффициент",
-          message: `При работах в действующем (эксплуатируемом) здании к стоимости работ применяется коэффициент стеснённости К=1.15 (ЕНиР, прил. 1).`,
-          suggestion: "Проверьте условия производства работ. Если школа функционировала во время ремонта — добавьте коэффициент «действующий-объект».",
-          reference: "ЕНиР, общая часть, прил. 1, п. 2 «Стеснённость условий».",
-        });
-      }
-    }
+    const pos = section.positions[0];
+    if (!pos) continue;
+    return [
+      {
+        id: `missing-coef-${pos.id}`,
+        severity: "warning",
+        scenario: "missing-coefficient",
+        context: { positionId: pos.id, sectionId: section.id },
+        title: "Забыт коэффициент действующего объекта",
+        message:
+          `Объект «${object.title}» эксплуатируется во время работ (действующее здание), ` +
+          `но коэффициент условий «действующий-объект» (К=1.15) не применён ни к одной позиции сметы.`,
+        suggestion:
+          "Добавьте коэффициент «действующий-объект» ко всем позициям работ кнопкой +К " +
+          "(работы в стеснённых условиях эксплуатируемого здания — СН РК 8.02-10).",
+        reference: "СН РК 8.02-05 (коэф. условий производства); СН РК 8.02-10 (работы в действующем здании).",
+      },
+    ];
   }
-
-  return notices;
+  return [];
 }

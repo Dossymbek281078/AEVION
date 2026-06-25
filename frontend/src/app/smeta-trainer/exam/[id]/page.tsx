@@ -14,9 +14,32 @@ import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
+import { syncExamAttempt } from "../../lib/examSync";
+import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
+import { buildRemediation, type RemSeverity } from "../../lib/examRemediation";
+import { applyReferenceFixes, hasMechanicalFixes } from "../../lib/examFix";
+import {
+  analyzeOpenings,
+  explainOpeningsDeterministic,
+  buildOpeningsAIPrompt,
+} from "../../lib/ai/scenarios/openingsAdvisor";
+import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
+import { deterministicBreakdown } from "../../lib/ai/scenarios/scenarioBreakdowns";
+import {
+  buildLsrFormHtml,
+  buildKs2FormHtml,
+  buildSsrFormHtml,
+  buildObjectEstimateHtml,
+  buildKs3FormHtml,
+  openPrintWindow,
+} from "../../lib/printForms";
+import { streamLLM } from "../../lib/aiBackend";
+import type { LsrCalc, AiNotice } from "../../lib/types";
+import type { RoomGeometry } from "../../lib/types";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
+import { LmsReturnBanner } from "../../components/LmsReturnBanner";
 
 export default function ExamTaskPage({
   params,
@@ -178,7 +201,9 @@ export default function ExamTaskPage({
   function submit() {
     const r = gradeExam(lsr, task!.reference, task!.object);
     setReport(r);
-    saveAttempt(task!.id, task!.title, r);
+    saveAttempt(task!.id, task!.title, r, { trap: findLesson(task!.id)?.trap });
+    // дублируем сдачу на backend для куратора (fire-and-forget, бэкенд опционален)
+    void syncExamAttempt(task!.id, task!.title, r);
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
     setFailedCount(failedAttemptsCount(task!.id));
@@ -190,7 +215,37 @@ export default function ExamTaskPage({
     setReport(null);
   }
 
+  function printForm(html: string) {
+    const ok = openPrintWindow(html);
+    if (!ok && typeof window !== "undefined") {
+      alert("Не удалось открыть окно печати — разрешите всплывающие окна для этого сайта.");
+    }
+  }
+
+  /**
+   * Применяет механические исправления из отчёта (объёмы / лишние / пропущенные)
+   * к ЛСР, не трогая AI-замечания. Отчёт сбрасывается — студент пересдаёт сам.
+   */
+  function applyFixes() {
+    if (!report) return;
+    const { lsr: fixedLsr, counts } = applyReferenceFixes(lsr, report, task!.reference);
+    setLsr(fixedLsr);
+    setReport(null);
+    if (typeof window !== "undefined") {
+      const parts = [
+        counts.volume > 0 ? `объёмов: ${counts.volume}` : null,
+        counts.removed > 0 ? `удалено: ${counts.removed}` : null,
+        counts.added > 0 ? `добавлено: ${counts.added}` : null,
+      ].filter(Boolean);
+      alert(
+        `Исправлено механических расхождений — ${parts.join(", ") || "нет"}.\n` +
+          "AI-замечания (коэффициенты, двойной счёт, индексы) оставлены вам — исправьте и пересдайте.",
+      );
+    }
+  }
+
   function applyPendingValue(value: number) {
+    logTransfer({ kind: "value", detail: value.toFixed(2), examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       if (selectedPosId) {
         return {
@@ -216,10 +271,12 @@ export default function ExamTaskPage({
   }
 
   function applyPendingRate(rateCode: string) {
-    if (!findRate(rateCode)) {
+    const rate = findRate(rateCode);
+    if (!rate) {
       alert(`Расценка ${rateCode} не найдена в корпусе`);
       return;
     }
+    logTransfer({ kind: "rate", detail: rateCode, label: rate.title, examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
       const targetSectionIdx = selectedPosId
@@ -249,6 +306,7 @@ export default function ExamTaskPage({
   }
 
   function applyPendingFormula(formula: string) {
+    logTransfer({ kind: "formula", detail: formula, examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       if (selectedPosId) {
         return {
@@ -269,6 +327,27 @@ export default function ExamTaskPage({
       target.positions[lastIdx] = { ...target.positions[lastIdx], formula };
       return { ...prev, sections, updatedAt: new Date().toISOString() };
     });
+  }
+
+  const remPlan = report ? buildRemediation(report, { trap: findLesson(task!.id)?.trap }) : null;
+
+  // Контекст для живого AI-разбора проёмов: замечание + геометрия + введённый объём
+  const openingsNotice = report?.breakdown.ai.notices.find(
+    (n) => n.scenario === "missing-opening-subtraction",
+  );
+  const roomGeometry =
+    task!.object.geometry && task!.object.geometry.kind === "room" ? task!.object.geometry : null;
+  let openingsPosTitle: string | undefined;
+  let openingsEnteredVolume: number | undefined;
+  if (openingsNotice?.context.positionId) {
+    for (const s of lsr.sections) {
+      const p = s.positions.find((x) => x.id === openingsNotice.context.positionId);
+      if (p) {
+        openingsPosTitle = findRate(p.rateCode)?.title;
+        openingsEnteredVolume = p.volume;
+        break;
+      }
+    }
   }
 
   return (
@@ -394,6 +473,9 @@ export default function ExamTaskPage({
           )}
         </div>
 
+        {/* Возврат зачёта в курс (если открыто из LMS) */}
+        <LmsReturnBanner taskId={task!.id} score={report?.score ?? null} grade={report?.grade ?? null} />
+
         {/* Отчёт */}
         {report && (
           <div className="bg-white border-2 border-emerald-300 rounded-lg p-5 mb-4">
@@ -418,12 +500,49 @@ export default function ExamTaskPage({
                   {report.grade}
                 </div>
               </div>
-              <button
-                onClick={reset}
-                className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
-              >
-                Начать заново
-              </button>
+              <div className="flex gap-2 flex-wrap justify-end">
+                <button
+                  onClick={() => printForm(buildLsrFormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Открыть Форму 4* (ЛСР) для печати или сохранения в PDF"
+                >
+                  🖨 Форма 4*
+                </button>
+                <button
+                  onClick={() => printForm(buildKs2FormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Акт о приёмке выполненных работ (КС-2)"
+                >
+                  🖨 КС-2
+                </button>
+                <button
+                  onClick={() => printForm(buildObjectEstimateHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Объектный сметный расчёт (Форма 3)"
+                >
+                  🖨 Форма 3
+                </button>
+                <button
+                  onClick={() => printForm(buildSsrFormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Сводный сметный расчёт (Форма 1)"
+                >
+                  🖨 ССР
+                </button>
+                <button
+                  onClick={() => printForm(buildKs3FormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Справка о стоимости (КС-3)"
+                >
+                  🖨 КС-3
+                </button>
+                <button
+                  onClick={reset}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                >
+                  Начать заново
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
@@ -494,9 +613,86 @@ export default function ExamTaskPage({
                       {n.reference && (
                         <div className="text-[10px] text-slate-500 mt-1">📎 {n.reference}</div>
                       )}
+                      {(() => {
+                        const bd = deterministicBreakdown(lsr, n);
+                        return bd ? (
+                          <div className="mt-2 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap bg-white/60 rounded p-2 border border-slate-200">
+                            {renderBold(bd)}
+                          </div>
+                        ) : null;
+                      })()}
+                      {!hasDedicatedPanel(n.scenario) && (
+                        <NoticeAdvisor
+                          notice={n}
+                          lsr={lsr}
+                          calc={calc}
+                          notices={report.breakdown.ai.notices}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Живой AI-разбор проёмов (P3) */}
+            {openingsNotice && roomGeometry && (
+              <OpeningsAdvisorPanel
+                geometry={roomGeometry}
+                positionTitle={openingsPosTitle}
+                enteredVolume={openingsEnteredVolume}
+                lsr={lsr}
+                calc={calc}
+                notices={report.breakdown.ai.notices}
+              />
+            )}
+
+            {/* Работа над ошибками */}
+            {remPlan && remPlan.items.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-1 gap-3">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase">
+                    🛠 Работа над ошибками
+                  </h3>
+                  {hasMechanicalFixes(report) && (
+                    <button
+                      onClick={applyFixes}
+                      className="text-[11px] px-3 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-900 font-semibold whitespace-nowrap"
+                      title="Привести объёмы к эталону, удалить лишние, добавить пропущенные. AI-замечания останутся вам."
+                    >
+                      ⚙ Применить исправления
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mb-2">{remPlan.summary}</p>
+                {hasMechanicalFixes(report) && (
+                  <p className="text-[10px] text-slate-400 italic mb-2">
+                    Кнопка чинит только механику (объёмы / лишние / пропущенные). Коэффициенты, двойной
+                    счёт и индексы из AI-замечаний исправьте сами — потом пересдайте.
+                  </p>
+                )}
+                <ol className="space-y-1.5">
+                  {remPlan.items.map((it, i) => (
+                    <li
+                      key={`${it.kind}-${it.rateCode ?? it.title}-${i}`}
+                      className={`border rounded p-2.5 text-xs ${SEV_STYLE[it.severity].box}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${SEV_STYLE[it.severity].chip}`}>
+                          {SEV_STYLE[it.severity].label}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800">{it.title}</div>
+                          <div className="text-slate-700 mt-0.5">→ {it.action}</div>
+                          {it.detail && <div className="text-slate-500 mt-0.5">{it.detail}</div>}
+                          {it.reference && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">📎 {it.reference}</div>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
           </div>
@@ -638,6 +834,148 @@ export default function ExamTaskPage({
     </div>
   );
 }
+
+/** Рендер «**жирного**» markdown в простой JSX (для разбора проёмов). */
+function renderBold(text: string) {
+  return text.split("\n").map((line, li) => (
+    <span key={li}>
+      {line.split(/(\*\*[^*]+\*\*)/g).map((part, pi) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={pi}>{part.slice(2, -2)}</strong>
+        ) : (
+          <span key={pi}>{part}</span>
+        ),
+      )}
+      {"\n"}
+    </span>
+  ));
+}
+
+function OpeningsAdvisorPanel({
+  geometry,
+  positionTitle,
+  enteredVolume,
+  lsr,
+  calc,
+  notices,
+}: {
+  geometry: RoomGeometry;
+  positionTitle?: string;
+  enteredVolume?: number;
+  lsr: Lsr;
+  calc: LsrCalc;
+  notices: AiNotice[];
+}) {
+  const analysis = useMemo(() => analyzeOpenings(geometry), [geometry]);
+  const deterministic = useMemo(
+    () => explainOpeningsDeterministic(analysis, enteredVolume),
+    [analysis, enteredVolume],
+  );
+  const [aiText, setAiText] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  async function askAI() {
+    setAsked(true);
+    setStreaming(true);
+    setAiText("");
+    const { question, extraSystem } = buildOpeningsAIPrompt(analysis, { positionTitle, enteredVolume });
+    try {
+      await streamLLM(question, [], lsr, calc, notices, {
+        extraSystem,
+        onChunk: (t) => setAiText((p) => p + t),
+      });
+    } catch {
+      setAiText((p) => p || "Не удалось получить ответ ИИ — выше детерминированный разбор.");
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border border-sky-200 bg-sky-50 rounded-lg p-3">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-xs font-bold text-sky-900 uppercase">📐 Разбор проёмов</h3>
+        <button
+          onClick={askAI}
+          disabled={streaming}
+          className="text-[11px] px-3 py-1.5 rounded bg-sky-700 text-white hover:bg-sky-800 font-semibold disabled:opacity-50 whitespace-nowrap"
+        >
+          🤖 {streaming ? "ИИ разбирает…" : "Спросить ИИ подробнее"}
+        </button>
+      </div>
+      <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+        {renderBold(deterministic)}
+      </div>
+      {asked && (
+        <div className="mt-3 pt-3 border-t border-sky-200">
+          <div className="text-[10px] uppercase tracking-wider text-sky-700 font-bold mb-1">
+            🤖 Объяснение ИИ
+          </div>
+          <div className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
+            {aiText || (streaming ? "…" : "")}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoticeAdvisor({
+  notice,
+  lsr,
+  calc,
+  notices,
+}: {
+  notice: AiNotice;
+  lsr: Lsr;
+  calc: LsrCalc;
+  notices: AiNotice[];
+}) {
+  const [text, setText] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  async function ask() {
+    setAsked(true);
+    setStreaming(true);
+    setText("");
+    const { question, extraSystem } = buildNoticeAIPrompt(notice);
+    try {
+      await streamLLM(question, [], lsr, calc, notices, {
+        extraSystem,
+        onChunk: (t) => setText((p) => p + t),
+      });
+    } catch {
+      setText((p) => p || "Не удалось получить ответ ИИ.");
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={ask}
+        disabled={streaming}
+        className="text-[10px] px-2 py-1 rounded border border-current opacity-80 hover:opacity-100 font-semibold disabled:opacity-50"
+      >
+        🤖 {streaming ? "ИИ разбирает…" : "Разобрать с ИИ"}
+      </button>
+      {asked && (
+        <div className="mt-1.5 text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap bg-white/60 rounded p-2">
+          {text || (streaming ? "…" : "")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SEV_STYLE: Record<RemSeverity, { label: string; box: string; chip: string }> = {
+  high:   { label: "критично", box: "bg-red-50 border-red-300",     chip: "bg-red-100 text-red-700" },
+  medium: { label: "внимание", box: "bg-amber-50 border-amber-300", chip: "bg-amber-100 text-amber-800" },
+  low:    { label: "мелочь",   box: "bg-slate-50 border-slate-300", chip: "bg-slate-200 text-slate-700" },
+};
 
 function Score({
   label,

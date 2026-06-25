@@ -17,7 +17,7 @@ import { findRate } from "../../corpus";
  *  - OSB / фанера 5-7%
  *  - паркет / ламинат 5-10%
  */
-const MATERIAL_LOSS_RULES = [
+export const MATERIAL_LOSS_RULES = [
   { name: ["плит"], minRatio: 1.07, loss: "7-10%" },
   { name: ["линолеум"], minRatio: 1.03, loss: "3-5%" },
   { name: ["обои"], minRatio: 1.10, loss: "10-15% (подбор рисунка)" },

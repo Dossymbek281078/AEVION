@@ -44,6 +44,7 @@ function mkLsr(args: { id: string; title: string; objectId: string; sections: Ls
  * ========================================================================= */
 const T1_OBJECT: LearningObject = {
   id: "exam-school-47-classroom",
+  occupied: true,
   title: "СОШ №47, восстановление двух классов",
   type: "капремонт",
   region: REGION,
@@ -553,6 +554,7 @@ const T8_STARTER = mkLsr({
  * ========================================================================= */
 const T9_OBJECT: LearningObject = {
   id: "exam-school-corridor-electrical",
+  occupied: true,
   title: "Электрика школьного коридора с антивандальной защитой",
   type: "капремонт",
   region: REGION,
@@ -876,6 +878,7 @@ const T13_STARTER = mkLsr({
  * ========================================================================= */
 const T14_OBJECT: LearningObject = {
   id: "exam-high-rise-electrical",
+  atHeight: true,
   title: "Электромонтаж в 12-этажном жилом доме",
   type: "новое-строительство",
   region: REGION,
@@ -982,6 +985,279 @@ const T15_STARTER = mkLsr({
       positions: [
         { id: "sp4", rateCode: "ЭСНСб15-15-05-001", volume: 0.351, coefficients: [], formula: "35.1 / 100" },
         { id: "sp5", rateCode: "ЭСНСб15-11-03-001", volume: 0.10, coefficients: [], formula: "10 / 100" },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 16 — Дубль материала (batch D: duplicate-material)
+ * ========================================================================= */
+const T16_OBJECT: LearningObject = {
+  id: "exam-laminate-dup",
+  title: "СОШ №47, замена покрытия пола в кабинете",
+  type: "капремонт",
+  region: REGION,
+  description: "Кабинет 6.0 × 5.0 × 3.0 м. Укладка ламината 33 класса по готовой стяжке, 30 м².",
+  geometry: { kind: "room", length: 6.0, width: 5.0, height: 3.0, openings: [] },
+  attachments: [],
+};
+const LAMINATE_RES = [
+  { kind: "труд" as const, name: "Плотник-отделочник 5 разряда", qtyPerUnit: 14, unit: "чел.-ч", basePrice: 1500 },
+  { kind: "материал" as const, name: "Ламинат 33 класс", qtyPerUnit: 105, unit: "м²", basePrice: 2800 },
+  { kind: "материал" as const, name: "Подложка 3 мм", qtyPerUnit: 102, unit: "м²", basePrice: 320 },
+  { kind: "материал" as const, name: "Плинтус ПВХ", qtyPerUnit: 35, unit: "м", basePrice: 380 },
+];
+const T16_REFERENCE = mkLsr({
+  id: "exam-t16-ref", title: "Эталон — ламинат", objectId: T16_OBJECT.id, lsrNumber: "exam-t16",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Полы", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-11-04-002", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+const T16_STARTER = mkLsr({
+  id: "exam-t16-student", title: "Моё решение", objectId: T16_OBJECT.id, lsrNumber: "exam-t16",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Полы", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-11-04-002", volume: 0.30, coefficients: [],
+          formula: "30 / 100 = 0.30",
+          note: "Поправил состав ресурсов под факт",
+          // BUG: «Ламинат 33 класс» добавлен дважды — стоимость материала задвоена.
+          resourceOverrides: [
+            LAMINATE_RES[0],
+            LAMINATE_RES[1],
+            { ...LAMINATE_RES[1] },
+            LAMINATE_RES[2],
+            LAMINATE_RES[3],
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 17 — Двойной индекс по материалу (batch D: index-double)
+ * ========================================================================= */
+const T17_OBJECT: LearningObject = {
+  id: "exam-index-double",
+  title: "СОШ №47, штукатурка стен лаборатории",
+  type: "капремонт",
+  region: REGION,
+  description: "Лаборатория 8.0 × 6.0 × 3.3 м. Штукатурка стен по маякам, 120 м² (нетто).",
+  geometry: { kind: "room", length: 8.0, width: 6.0, height: 3.3, openings: [] },
+  attachments: [],
+};
+const PLASTER_RES_BASE = [
+  { kind: "труд" as const, name: "Штукатур 4 разряда", qtyPerUnit: 42, unit: "чел.-ч", basePrice: 1300 },
+  { kind: "машины" as const, name: "Растворонасос", qtyPerUnit: 2, unit: "маш.-ч", basePrice: 950 },
+  { kind: "материал" as const, name: "Раствор цементно-известковый М100", qtyPerUnit: 2.5, unit: "м³", basePrice: 16500 },
+];
+const T17_REFERENCE = mkLsr({
+  id: "exam-t17-ref", title: "Эталон — штукатурка", objectId: T17_OBJECT.id, lsrNumber: "exam-t17",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.20, coefficients: [], formula: "120 / 100 = 1.20" },
+      ],
+    },
+  ],
+});
+const T17_STARTER = mkLsr({
+  id: "exam-t17-student", title: "Моё решение", objectId: T17_OBJECT.id, lsrNumber: "exam-t17",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.20, coefficients: [],
+          formula: "120 / 100 = 1.20",
+          // BUG: цена раствора введена в ТЕКУЩЕМ уровне (≈ базис ×8.7), без обоснования —
+          // при базисно-индексном методе индекс применится повторно.
+          resourceOverrides: [
+            PLASTER_RES_BASE[0],
+            PLASTER_RES_BASE[1],
+            { ...PLASTER_RES_BASE[2], basePrice: 143000 },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 18 — Двойной коэффициент условий (batch D: coef-double)
+ * ========================================================================= */
+const T18_OBJECT: LearningObject = {
+  id: "exam-coef-double",
+  occupied: true,
+  title: "СОШ №47, окраска коридора в действующем здании",
+  type: "капремонт",
+  region: REGION,
+  description: "Коридор 18.0 × 2.4 × 3.0 м. Окраска стен в 2 слоя, 120 м². Школа функционирует.",
+  geometry: { kind: "room", length: 18.0, width: 2.4, height: 3.0, openings: [] },
+  attachments: [],
+};
+const T18_REFERENCE = mkLsr({
+  id: "exam-t18-ref", title: "Эталон — окраска", objectId: T18_OBJECT.id, lsrNumber: "exam-t18",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Окраска", category: "отделочные",
+      positions: [
+        {
+          id: "rp1", rateCode: "ЭСНСб15-15-04-001", volume: 1.20,
+          coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует (СН РК 8.02-10)" }],
+          formula: "120 / 100 = 1.20",
+        },
+      ],
+    },
+  ],
+});
+const T18_STARTER = mkLsr({
+  id: "exam-t18-student", title: "Моё решение", objectId: T18_OBJECT.id, lsrNumber: "exam-t18",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Окраска", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-15-04-001", volume: 1.20,
+          // BUG: применены и «стеснённые», и «действующий-объект» — перекрывающиеся
+          // по смыслу условия, удорожание задваивается (1.15 × 1.15 = 1.32).
+          coefficients: [
+            { kind: "стеснённые", value: 1.15, justification: "Работа в узком коридоре" },
+            { kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" },
+          ],
+          formula: "120 / 100 = 1.20",
+        },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 19 — Неверная категория раздела → НР/СП (overhead-mismatch)
+ * ========================================================================= */
+const T19_OBJECT: LearningObject = {
+  id: "exam-overhead-mismatch",
+  title: "СОШ №47, демонтаж отделки кабинета",
+  type: "капремонт",
+  region: REGION,
+  description: "Кабинет 6.0 × 5.0 × 3.0 м. Демонтаж старой штукатурки и стяжки перед ремонтом.",
+  geometry: { kind: "room", length: 6.0, width: 5.0, height: 3.0, openings: [] },
+  attachments: [],
+};
+const T19_REFERENCE = mkLsr({
+  id: "exam-t19-ref", title: "Эталон — демонтаж", objectId: T19_OBJECT.id, lsrNumber: "exam-t19",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Демонтажные работы", category: "демонтажные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-01.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+        { id: "rp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+const T19_STARTER = mkLsr({
+  id: "exam-t19-student", title: "Моё решение", objectId: T19_OBJECT.id, lsrNumber: "exam-t19",
+  sections: [
+    {
+      // BUG: раздел демонтажа ошибочно отнесён к «общестроительным» (НР=90% вместо 70%).
+      id: "stu-s1", title: "Раздел 1. Демонтажные работы", category: "общестроительные",
+      positions: [
+        { id: "sp1", rateCode: "ЭСНСб15-01.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+        { id: "sp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 20 — Высотные работы без лесов (scaffolding-missing)
+ * ========================================================================= */
+const T20_OBJECT: LearningObject = {
+  id: "exam-scaffolding-missing",
+  title: "СОШ №47, штукатурка спортзала (высота 4.5 м)",
+  type: "капремонт",
+  region: REGION,
+  description: "Спортзал 12.0 × 9.0 × 4.5 м. Штукатурка стен на высоте — нужны строительные леса.",
+  geometry: { kind: "room", length: 12.0, width: 9.0, height: 4.5, openings: [] },
+  attachments: [],
+};
+const T20_REFERENCE = mkLsr({
+  id: "exam-t20-ref", title: "Эталон — штукатурка + леса", objectId: T20_OBJECT.id, lsrNumber: "exam-t20",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Отделка стен", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.89, coefficients: [], formula: "2×(12+9)×4.5 = 189 / 100 = 1.89" },
+        { id: "rp2", rateCode: "ЭСНСб08-01-01-001", volume: 189, coefficients: [], formula: "Леса по площади стен = 189 м²" },
+      ],
+    },
+  ],
+});
+const T20_STARTER = mkLsr({
+  id: "exam-t20-student", title: "Моё решение", objectId: T20_OBJECT.id, lsrNumber: "exam-t20",
+  sections: [
+    {
+      // BUG: штукатурка на высоте 4.5 м, но позиция на строительные леса пропущена.
+      id: "stu-s1", title: "Раздел 1. Отделка стен", category: "отделочные",
+      positions: [
+        { id: "sp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.89, coefficients: [], formula: "2×(12+9)×4.5 = 189 / 100 = 1.89" },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 21 — Коэффициент условий без обоснования (coef-unjustified)
+ * ========================================================================= */
+const T21_OBJECT: LearningObject = {
+  id: "exam-coef-unjustified",
+  occupied: true,
+  title: "СОШ №47, штукатурка лестничной клетки",
+  type: "капремонт",
+  region: REGION,
+  description: "Лестничная клетка, штукатурка стен 95 м². Студент применил коэффициент стеснённости, но без документа-обоснования.",
+  geometry: { kind: "room", length: 6.0, width: 2.5, height: 6.3, openings: [] },
+  attachments: [],
+};
+const T21_REFERENCE = mkLsr({
+  id: "exam-t21-ref", title: "Эталон — штукатурка", objectId: T21_OBJECT.id, lsrNumber: "exam-t21",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        {
+          id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 0.95,
+          coefficients: [{ kind: "стеснённые", value: 1.15, justification: "ППР, схема стеснённых условий лестничной клетки (СН РК 8.02-05)" }],
+          formula: "95 / 100 = 0.95",
+        },
+      ],
+    },
+  ],
+});
+const T21_STARTER = mkLsr({
+  id: "exam-t21-student", title: "Моё решение", objectId: T21_OBJECT.id, lsrNumber: "exam-t21",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-13-01-001", volume: 0.95,
+          // BUG: коэффициент стеснённости применён, но обоснование пустое —
+          // без ППР/акта экспертиза снимет коэффициент, смета завышена на 15%.
+          coefficients: [{ kind: "стеснённые", value: 1.15, justification: "" }],
+          formula: "95 / 100 = 0.95",
+        },
       ],
     },
   ],
@@ -1228,6 +1504,102 @@ export const EXAM_TASKS: ExamTask[] = [
     hints: [
       "Тёплый водяной пол требует циркуляционного насоса (ЭСНСб07-12-10-001)",
       "Это не дополнительная позиция, а обязательная — без неё система не работает",
+    ],
+  },
+  {
+    id: "laminate-duplicate-material",
+    title: "Ламинат в кабинете — состав ресурсов",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🪵",
+    hiddenError: "Материал «Ламинат 33 класс» добавлен в состав ресурсов дважды — стоимость задвоена",
+    object: T16_OBJECT,
+    reference: T16_REFERENCE,
+    starter: T16_STARTER,
+    hints: [
+      "Откройте редактор состава ресурсов позиции — нет ли одинаковых строк материала?",
+      "Расход материала задаётся одной строкой; повтор удваивает стоимость материала в ПЗ",
+    ],
+  },
+  {
+    id: "plaster-index-double",
+    title: "Штукатурка лаборатории — цена раствора",
+    category: "Отделка",
+    difficulty: "сложная",
+    durationMin: 20,
+    icon: "🧱",
+    hiddenError: "Цена раствора введена в текущем уровне — при базисно-индексном методе индекс задваивается",
+    object: T17_OBJECT,
+    reference: T17_REFERENCE,
+    starter: T17_STARTER,
+    hints: [
+      "Метод базисно-индексный: в состав ресурсов вносят БАЗИСНУЮ цену, индекс ×8.7 применит калькулятор",
+      "Если ввести текущую цену, она умножится на индекс ещё раз — переоценка в ~8.7 раза",
+    ],
+  },
+  {
+    id: "painting-coef-double",
+    title: "Окраска коридора — коэффициенты условий",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🖌️",
+    hiddenError: "Применены и «стеснённые», и «действующий-объект» — перекрывающиеся условия задваивают удорожание",
+    object: T18_OBJECT,
+    reference: T18_REFERENCE,
+    starter: T18_STARTER,
+    hints: [
+      "«Стеснённые» и «действующий-объект» описывают по сути одно — стеснённость на работающем объекте",
+      "Оставьте один коэффициент; перемножение 1.15 × 1.15 завышает стоимость на 32% вместо 15%",
+    ],
+  },
+  {
+    id: "demolition-section-overhead",
+    title: "Демонтаж кабинета — категория раздела",
+    category: "Отделка",
+    difficulty: "сложная",
+    durationMin: 18,
+    icon: "🏷️",
+    hiddenError: "Раздел демонтажа отнесён к «общестроительным» — НР/СП начислены по 90% вместо 70%",
+    object: T19_OBJECT,
+    reference: T19_REFERENCE,
+    starter: T19_STARTER,
+    hints: [
+      "НР/СП начисляются по категории раздела: для демонтажа — НР=70%/СП=45%, для общестроя — НР=90%/СП=60%",
+      "Категория раздела должна соответствовать работам внутри (СН РК 8.02-07)",
+    ],
+  },
+  {
+    id: "gym-scaffolding-missing",
+    title: "Штукатурка спортзала — леса",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🪜",
+    hiddenError: "Штукатурка на высоте 4.5 м без позиции на строительные леса",
+    object: T20_OBJECT,
+    reference: T20_REFERENCE,
+    starter: T20_STARTER,
+    hints: [
+      "При высоте > 4 м внутри помещения нужны строительные леса/подмости (СН РК 1.03-05)",
+      "Добавьте позицию «Монтаж и демонтаж наружных трубчатых строительных лесов» (ЭСНСб08-01-01-001)",
+    ],
+  },
+  {
+    id: "stairwell-coef-unjustified",
+    title: "Штукатурка лестничной клетки — обоснование коэффициента",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 12,
+    icon: "📎",
+    hiddenError: "Коэффициент стеснённости 1.15 применён без документа-обоснования",
+    object: T21_OBJECT,
+    reference: T21_REFERENCE,
+    starter: T21_STARTER,
+    hints: [
+      "Коэффициенты условий производства применяются только при наличии подтверждающего документа",
+      "Укажите в обосновании ППР/акт обследования со схемой стеснённых условий (СН РК 8.02-05)",
     ],
   },
 ];

@@ -15,6 +15,11 @@ import { checkDemolitionDoubled } from "./scenarios/demolitionDoubled";
 import { checkScaffoldingMissing } from "./scenarios/scaffoldingMissing";
 import { checkDismantlingCoefMissing } from "./scenarios/dismantlingCoefMissing";
 import { checkWasteFactorMissing } from "./scenarios/wasteFactorMissing";
+import { checkDuplicateMaterial } from "./scenarios/duplicateMaterial";
+import { checkMaterialPriceUnjustified } from "./scenarios/materialPriceUnjustified";
+import { checkCoefDouble } from "./scenarios/coefDouble";
+import { checkIndexDouble } from "./scenarios/indexDouble";
+import { checkCoefUnjustified } from "./scenarios/coefUnjustified";
 
 /** Запустить все AI-проверки на ЛСР. */
 export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
@@ -22,7 +27,7 @@ export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
   // Базовые проверки (предыдущая серия)
   notices.push(...detectMissingOpeningSubtraction(lsr, object));
   notices.push(...checkDoubleCount(lsr));
-  notices.push(...checkMissingCoefficient(lsr));
+  notices.push(...checkMissingCoefficient(lsr, object));
   notices.push(...checkWinterSurcharge(lsr));
   notices.push(...checkIndexMismatch(lsr));
   notices.push(...checkOverheadMismatch(lsr));
@@ -37,5 +42,12 @@ export function runAiAdvisor(lsr: Lsr, object: LearningObject): AiNotice[] {
   notices.push(...checkScaffoldingMissing(lsr, object));
   notices.push(...checkDismantlingCoefMissing(lsr));
   notices.push(...checkWasteFactorMissing(lsr));
+  // Ресурсная часть / коэффициенты (batch D — урок 2.6)
+  notices.push(...checkDuplicateMaterial(lsr));
+  notices.push(...checkMaterialPriceUnjustified(lsr));
+  notices.push(...checkCoefDouble(lsr));
+  notices.push(...checkIndexDouble(lsr));
+  // Обоснование коэффициентов условий (batch E — урок 2.6)
+  notices.push(...checkCoefUnjustified(lsr));
   return notices;
 }

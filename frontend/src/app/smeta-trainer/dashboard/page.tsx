@@ -18,6 +18,7 @@ import {
   type SmetaStats,
 } from "../lib/progressApi";
 import { findLesson } from "../lib/lessons";
+import { describeAttemptKind, examTaskTitleFromPayload } from "../lib/examSync";
 
 export default function DashboardPage() {
   const { progress } = useProgress();
@@ -94,7 +95,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-4 flex-wrap">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу
           </Link>
@@ -137,9 +138,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-12 gap-4">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ── Левая колонка: личный прогресс ─────────── */}
-        <section className="col-span-7 space-y-4">
+        <section className="col-span-1 lg:col-span-7 space-y-4">
           {/* Карточка с общим счётом */}
           <div className="bg-white border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
@@ -266,41 +267,61 @@ export default function DashboardPage() {
                 История попыток · последние {attempts.length}
               </div>
               <div className="space-y-1">
-                {attempts.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between text-xs px-2 py-1 hover:bg-slate-50 rounded"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-400 w-32">
-                        {new Date(a.ts).toLocaleString("ru-RU")}
-                      </span>
-                      <span className="text-slate-600">Ур. {a.level}</span>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-slate-700">{a.kind}</span>
+                {attempts.map((a) => {
+                  const examTitle =
+                    a.kind === "lsr-submit" ? examTaskTitleFromPayload(a.payload) : null;
+                  return (
+                    <div
+                      key={a.id}
+                      className="text-xs px-2 py-1 hover:bg-slate-50 rounded"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-mono text-slate-400 w-32 shrink-0">
+                            {new Date(a.ts).toLocaleString("ru-RU")}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
+                              a.kind === "lsr-submit"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {describeAttemptKind(a.kind)}
+                          </span>
+                          {examTitle && (
+                            <span className="text-slate-700 truncate">{examTitle}</span>
+                          )}
+                        </div>
+                        {a.score !== null && (
+                          <span
+                            className={`font-mono font-semibold shrink-0 ${
+                              a.score >= 80
+                                ? "text-emerald-700"
+                                : a.score >= 50
+                                  ? "text-amber-700"
+                                  : "text-red-700"
+                            }`}
+                          >
+                            {a.score}/100
+                          </span>
+                        )}
+                      </div>
+                      {a.feedback && (
+                        <div className="text-[10px] text-slate-500 pl-[8.5rem] mt-0.5 truncate">
+                          {a.feedback}
+                        </div>
+                      )}
                     </div>
-                    {a.score !== null && (
-                      <span
-                        className={`font-mono font-semibold ${
-                          a.score >= 80
-                            ? "text-emerald-700"
-                            : a.score >= 50
-                              ? "text-amber-700"
-                              : "text-red-700"
-                        }`}
-                      >
-                        {a.score}/100
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </section>
 
         {/* ── Правая колонка: лидерборд + статистика ─────────── */}
-        <aside className="col-span-5 space-y-4">
+        <aside className="col-span-1 lg:col-span-5 space-y-4">
           {backendOk && stats && (
             <div className="bg-white border rounded-lg p-5">
               <div className="text-sm font-semibold text-slate-900 mb-3">

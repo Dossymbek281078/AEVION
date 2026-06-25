@@ -352,6 +352,33 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/real-rates"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🏗 Реальные расценки РК (Форма 4)
+              <span className="text-[10px] text-amber-600 font-normal">
+                3237 из настоящей сметы · ресурсный метод
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/real-rates/assemble"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🧰 Собрать смету из реальных позиций
+              <span className="text-[10px] text-amber-600 font-normal">
+                капстоун · живые итоги по видам
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/resource-quiz"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🧱 Тест: ресурсный метод
+              <span className="text-[10px] text-amber-600 font-normal">
+                12 вопросов · Форма 4
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/calc"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-lg"
             >
@@ -518,6 +545,10 @@ export function LevelHome() {
         </div>
 
         {/* Карточки уровней */}
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+          Уровни открыты все сразу — можно проходить по порядку (рекомендуется) или сразу к нужной теме.{" "}
+          <Link href="/smeta-trainer/guide" className="text-emerald-700 dark:text-emerald-400 underline">Как пользоваться тренажёром →</Link>
+        </p>
         <div className="grid grid-cols-1 gap-4">
           {LEVELS.map((level) => {
             const lvProgress = progress.levels[level.num] ?? { status: "open" };
@@ -553,6 +584,7 @@ export function LevelHome() {
                       )}
                     </div>
                     <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">{level.title}</h2>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 font-medium">🎯 {level.objective}</p>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">{level.description}</p>
                     <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                       <span>⏱ ~{level.timeHours} ч</span>

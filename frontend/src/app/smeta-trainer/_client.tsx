@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -19,6 +20,13 @@ export default function SmetaTrainerPage() {
           <div className="text-[10px] text-slate-400 hidden sm:block">
             НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
           </div>
+          <Link
+            href="/smeta-trainer/guide"
+            className="text-[11px] text-slate-200 hover:text-emerald-400 px-2 py-0.5 border border-slate-700 rounded"
+            title="Как пользоваться тренажёром"
+          >
+            ❓ Инструкция
+          </Link>
           <div className="hidden md:block">
             <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
           </div>

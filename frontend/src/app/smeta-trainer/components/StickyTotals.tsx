@@ -43,6 +43,11 @@ export function StickyTotals({ calc }: Props) {
         </div>
       </div>
 
+      {/* Источник индексов — честность данных */}
+      <div className="hidden lg:block text-[9px] text-slate-300 shrink-0 max-w-[140px] leading-tight">
+        Индекс: НДЦС РК 8.04-07-2025<br />II кв. 2026 = 1.0388 (учебный расчёт)
+      </div>
+
       {/* Мини-прогресс по позициям */}
       <div className="shrink-0 text-right">
         <div className="text-[10px] text-slate-400">{totalPositions} позиций</div>

@@ -17,8 +17,8 @@ interface Props {
   onAskAi?: (rateCode: string, posId: string) => void;
 }
 
-const TH = "px-2 py-1 text-[10px] font-semibold text-slate-600 border border-slate-300 bg-slate-100 text-center whitespace-nowrap";
-const TD = "px-2 py-1 text-xs border border-slate-200";
+const TH = "px-1 md:px-2 py-1 text-[10px] font-semibold text-slate-600 border border-slate-300 bg-slate-100 text-center whitespace-nowrap";
+const TD = "px-1 md:px-2 py-1 text-xs border border-slate-200";
 
 export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdateCoefs, onEditResources, onAskAi }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -32,9 +32,18 @@ export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdate
   }
 
   let posCounter = 0;
+  const hasAnyPosition = calc.sections.some((s) => s.positions.length > 0);
 
   return (
-    <div className="overflow-x-auto print:overflow-visible">
+    <div className="relative">
+      {hasAnyPosition && (
+        <div className="md:hidden print:hidden mb-1 text-[10px] text-slate-400 flex items-center gap-1">
+          <span className="animate-pulse">↔</span> таблица прокручивается по горизонтали (цены — справа)
+        </div>
+      )}
+      <div className="overflow-x-auto print:overflow-visible">
+      {/* Краевой градиент-намёк о прокрутке (только мобильный) */}
+      <div className="md:hidden print:hidden pointer-events-none absolute top-0 right-0 bottom-0 w-6 bg-gradient-to-l from-white/90 to-transparent z-20" />
       <table className="w-full border-collapse text-xs print:text-[9pt]" style={{ minWidth: 800 }}>
         <thead>
           <tr>
@@ -262,6 +271,7 @@ export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdate
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

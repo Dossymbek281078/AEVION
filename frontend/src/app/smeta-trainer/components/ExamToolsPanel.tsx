@@ -38,6 +38,12 @@ export function ExamToolsPanel({
         title="Каталог расценок"
         hint="Поиск по корпусу"
       />
+      <ToolLink
+        href={`/smeta-trainer/real-rates${fromQuery}`}
+        icon="🏗"
+        title="Реальные расценки"
+        hint="Форма 4 → аналог в смету"
+      />
       {hasLesson && (
         <ToolLink
           href={`/smeta-trainer/exam/${examId}/lesson`}

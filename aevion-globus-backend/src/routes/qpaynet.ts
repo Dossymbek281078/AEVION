@@ -174,7 +174,7 @@ const csvLimiter = rateLimit({
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
 const STRIPE_WH = process.env.QPAYNET_STRIPE_WEBHOOK_SECRET?.trim();
-const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-04-22.dahlia" }) : null;
+const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, {} as ConstructorParameters<typeof Stripe>[1]) : null;
 const FRONTEND = (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────

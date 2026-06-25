@@ -25,6 +25,19 @@ Sitemap + robots already enumerate all of `/build/*` (see `frontend/src/app/site
 3. GSC will show a TXT record like `google-site-verification=AbCd…`. Add it to the DNS provider managing `aevion.app`.
 4. Wait 5–60 min, click **Verify**. Repeat for `*.aevion.app` if subdomains matter.
 
+**Verify locally before clicking Verify in GSC:**
+
+```bash
+# DNS TXT must resolve and contain the GSC token
+dig +short TXT aevion.app | grep google-site-verification
+# expected: "google-site-verification=AbCd..."  (matches the token GSC showed)
+
+# Optional belt-and-braces — the same token can also be installed via meta tag
+curl -s https://aevion.app/ | grep -o '<meta name="google-site-verification"[^>]*>'
+```
+
+If `dig` returns nothing, the DNS hasn't propagated — wait 5–10 min and retry.
+
 ### 2. Submit sitemap
 
 After verification:
@@ -32,6 +45,29 @@ After verification:
 1. **Sitemaps** → enter `sitemap.xml` → **Submit**.
 2. Also submit the backend-mirrored sitemap: `api-backend/api/aevion/sitemap.xml` (declared in `frontend/src/app/robots.ts:28`).
 3. Status should flip to **Success** within ~1 hour. URL count will grow as Google fetches it.
+
+**Pre-submission self-check (must pass before clicking Submit):**
+
+```bash
+# 1. sitemap must serve as XML and list every page you expect indexed
+curl -sI https://aevion.app/sitemap.xml | head -1
+# expected: HTTP/2 200
+
+curl -s https://aevion.app/sitemap.xml | grep -c '<loc>'
+# expected: ≥ 70 URLs (full TOP_LEVEL_ROUTES + dynamic /build/*)
+
+# 2. robots.txt must reference both sitemaps
+curl -s https://aevion.app/robots.txt | grep -i sitemap
+# expected:
+#   Sitemap: https://aevion.app/sitemap.xml
+#   Sitemap: https://aevion.app/api-backend/api/aevion/sitemap.xml
+
+# 3. our smoke ties it all together (sitemap + robots + 5 build pages with JSON-LD)
+node aevion-globus-backend/scripts/qbuild-seo-smoke.js
+# expected: "Result: 7 passed, 0 failed"
+```
+
+If any of these fail, **do not submit** — the sitemap or metadata is regressed. Re-check the most recent merges to `frontend/src/app/sitemap.ts` / `robots.ts`.
 
 ### 3. Request indexing for the 5 QBuild landings
 
@@ -57,6 +93,20 @@ For each page, run https://search.google.com/test/rich-results — paste the liv
 - `/build/interviews` → "HowTo" detected
 
 If any page shows errors, run the local smoke (see below) — JSON-LD changes since #433 may have regressed.
+
+**Pre-Rich-Results-Test self-check:** Each page must have ≥1 parseable `<script type="application/ld+json">` block. The smoke verifies this:
+
+```bash
+# already covered by the local smoke (step 2 above), but if you want
+# per-page detail without leaving the terminal:
+for p in pricing vacancies salary ai-match interviews; do
+  echo "--- /build/$p ---"
+  curl -s "https://aevion.app/build/$p" \
+    | grep -oE '<script[^>]*application/ld\+json[^>]*>' \
+    | wc -l
+done
+# expected: each line shows ≥1
+```
 
 ## Local smoke (CI + manual)
 

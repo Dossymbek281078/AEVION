@@ -14,6 +14,7 @@
     "smoke:bank-prod": "node scripts/bank-prod-smoke.js",
     "smoke:qbuild-prod": "node scripts/qbuild-prod-smoke.js",
     "audit:projects-pricing": "node scripts/projects-pricing-audit.js",
+    "smoke:paywall-policy": "node scripts/paywall-policy-smoke.js",
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",

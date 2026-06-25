@@ -268,6 +268,13 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Центральная карта и портал экосистемы",
   },
   {
+    id: "revenue-hub",
+    addonMonthly: 0,
+    includedIn: ["free", "lite", "medium", "full", "enterprise"],
+    availability: "live",
+    oneLiner: "Внутренний модуль монетизации (auth-gated, не plan-gated)",
+  },
+  {
     id: "qcoreai",
     addonMonthly: 29,
     includedIn: ["medium", "full", "enterprise"],

@@ -109,7 +109,9 @@
       "Bash(npm -v)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(echo \"BUILD:$?\")",
-      "Bash(xargs -n1 basename)"
+      "Bash(xargs -n1 basename)",
+      "PowerShell(\\(Get-ChildItem \"C:\\\\Users\\\\user\\\\aevion-smeta-trainer\\\\frontend\\\\src\\\\app\\\\smeta-trainer\\\\drawings-practice\" -Directory\\).Count)",
+      "Bash(python -c \"import json;d=json.load\\(open\\('seed.json',encoding='utf-8'\\)\\);print\\({k:\\(len\\(v\\) if isinstance\\(v,list\\) else type\\(v\\).__name__\\) for k,v in d.items\\(\\)}\\)\")"
     ]
   }
 }

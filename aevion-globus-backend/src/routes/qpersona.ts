@@ -12,11 +12,14 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQPersonaTables, isQPersonaDbReady, getQPersonaDbError } from "../lib/ensureQPersonaTables";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
+
+const captureQPersonaError = makeServiceCapture("qpersona");
 
 export const qpersonaRouter = Router();
 
@@ -213,6 +216,7 @@ qpersonaRouter.get("/stats", readLimit, async (_req: Request, res: Response) => 
     const stats = isQPersonaDbReady() ? await dbStats() : memStats();
     res.json({ ok: true, ...stats });
   } catch (e: any) {
+    captureQPersonaError(e, { route: "qpersona/stats" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -227,6 +231,7 @@ qpersonaRouter.get("/personas", readLimit, async (req: Request, res: Response) =
       : memList(limit, offset);
     res.json({ ok: true, personas, limit, offset });
   } catch (e: any) {
+    captureQPersonaError(e, { route: "qpersona/GET/personas" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -282,6 +287,7 @@ qpersonaRouter.post("/personas", writeLimit, async (req: Request, res: Response)
       res.status(409).json({ ok: false, error: "alias already taken" });
       return;
     }
+    captureQPersonaError(e, { route: "qpersona/POST/personas" });
     res.status(500).json({ ok: false, error: msg });
   }
 });
@@ -297,6 +303,7 @@ qpersonaRouter.get("/personas/:alias", readLimit, async (req: Request, res: Resp
     }
     res.json({ ok: true, persona });
   } catch (e: any) {
+    captureQPersonaError(e, { route: "qpersona/GET/personas/:alias" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -323,6 +330,7 @@ qpersonaRouter.patch("/personas/:alias", writeLimit, async (req: Request, res: R
     }
     res.json({ ok: true, persona });
   } catch (e: any) {
+    captureQPersonaError(e, { route: "qpersona/PATCH/personas/:alias" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -375,6 +383,7 @@ qpersonaRouter.post("/personas/:alias/ai-bio", aiLimit, async (req: Request, res
       model: result.model,
     });
   } catch (e: any) {
+    captureQPersonaError(e, { route: "qpersona/POST/personas/:alias/ai-bio" });
     res.status(500).json({ ok: false, error: e?.message || "AI bio generation failed" });
   }
 });

@@ -1,10 +1,13 @@
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureQNewsTables, isQNewsDbReady } from "../lib/ensureQNewsTables";
+
+const captureQNewsError = makeServiceCapture("qnews");
 
 const pool = getPool();
 (async () => {

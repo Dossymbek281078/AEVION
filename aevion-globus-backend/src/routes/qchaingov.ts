@@ -33,11 +33,14 @@
  */
 
 import { Router } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
+
+const captureQChaingov = makeServiceCapture("qchaingov");
 
 export const qchaingovRouter = Router();
 
@@ -170,6 +173,7 @@ qchaingovRouter.post("/proposals", writeLimit, async (req, res) => {
     res.status(201).json({ id, status: "draft", options: cleanOptions });
   } catch (err: unknown) {
     console.error("[qchaingov] proposal_create_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/POST/proposals" });
     res.status(500).json({ error: "proposal_create_failed" });
   }
 });
@@ -201,6 +205,7 @@ qchaingovRouter.get("/proposals", readLimit, async (req, res) => {
     res.json({ proposals: r.rows, total: r.rowCount });
   } catch (err: unknown) {
     console.error("[qchaingov] proposals_list_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/GET/proposals" });
     res.status(500).json({ error: "proposals_list_failed" });
   }
 });
@@ -232,6 +237,7 @@ qchaingovRouter.get("/proposals/:id", readLimit, async (req, res) => {
     });
   } catch (err: unknown) {
     console.error("[qchaingov] proposal_get_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/GET/proposals/:id" });
     res.status(500).json({ error: "proposal_get_failed" });
   }
 });
@@ -274,6 +280,7 @@ qchaingovRouter.post("/proposals/:id/votes", voteLimit, async (req, res) => {
     res.status(201).json({ id: voteId, proposalId: id, choice, weight: w });
   } catch (err: unknown) {
     console.error("[qchaingov] vote_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/POST/proposals/:id/votes" });
     res.status(500).json({ error: "vote_failed" });
   }
 });
@@ -293,6 +300,7 @@ qchaingovRouter.post("/proposals/:id/open", writeLimit, async (req, res) => {
     res.json({ ok: true, proposal: r.rows[0] });
   } catch (err: unknown) {
     console.error("[qchaingov] proposal_open_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/POST/proposals/:id/open" });
     res.status(500).json({ error: "proposal_open_failed" });
   }
 });
@@ -312,6 +320,7 @@ qchaingovRouter.post("/proposals/:id/close", writeLimit, async (req, res) => {
     res.json({ ok: true, proposal: r.rows[0] });
   } catch (err: unknown) {
     console.error("[qchaingov] proposal_close_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/POST/proposals/:id/close" });
     res.status(500).json({ error: "proposal_close_failed" });
   }
 });
@@ -429,6 +438,7 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
     });
   } catch (err: unknown) {
     console.error("[qchaingov] proposal_execute_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/POST/proposals/:id/execute" });
     res.status(500).json({ error: "proposal_execute_failed" });
   }
 });
@@ -446,6 +456,7 @@ qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
     res.json({ votes: r.rows, total: r.rowCount });
   } catch (err: unknown) {
     console.error("[qchaingov] votes_list_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/GET/proposals/:id/votes" });
     res.status(500).json({ error: "votes_list_failed" });
   }
 });
@@ -465,6 +476,7 @@ qchaingovRouter.get("/stats", readLimit, async (_req, res) => {
     res.json({ ...r.rows[0], service: "qchaingov" });
   } catch (err: unknown) {
     console.error("[qchaingov] stats_failed", err instanceof Error ? err.message : err);
+    captureQChaingov(err, { route: "qchaingov/GET/stats" });
     res.status(500).json({ error: "stats_failed" });
   }
 });

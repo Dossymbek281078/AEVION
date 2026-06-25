@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LifeBox — digital safe for your future self.
  *
  * Time-locked capsules with categories. Content is hidden until unlock_at.
@@ -16,8 +16,11 @@
 
 import { randomUUID } from "crypto";
 import { Router, type Request, type Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
+
+const captureLifeBoxError = makeServiceCapture("lifebox");
 import {
   ensureLifeBoxTables,
   isLifeBoxDbReady,
@@ -337,6 +340,7 @@ lifeboxRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
     res.json({ ok: true, ...stats });
   } catch (e: any) {
     console.error("[lifebox] stats_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -408,6 +412,7 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
     });
   } catch (e: any) {
     console.error("[lifebox] create_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -450,6 +455,7 @@ lifeboxRouter.get("/capsules/:alias", readLimit, async (req: Request, res: Respo
     });
   } catch (e: any) {
     console.error("[lifebox] list_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -512,6 +518,7 @@ lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: R
     });
   } catch (e: any) {
     console.error("[lifebox] unlock_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -595,6 +602,7 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
     res.json({ ok: true, capsule: publicView(updated) });
   } catch (e: any) {
     console.error("[lifebox] patch_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -644,6 +652,7 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
     res.json({ ok, deletedId: id });
   } catch (e: any) {
     console.error("[lifebox] delete_failed", e instanceof Error ? e.message : e);
+    captureLifeBoxError(e, { route: "lifebox" });
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -667,3 +676,5 @@ lifeboxRouter.get("/status", readLimit, (_req: Request, res: Response) => {
 });
 
 mountConceptBoard({ router: lifeboxRouter, moduleId: "lifebox", defaultTag: "lifebox", readLimit, writeLimit });
+
+

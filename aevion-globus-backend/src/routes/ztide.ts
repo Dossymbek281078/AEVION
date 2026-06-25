@@ -38,11 +38,14 @@
  */
 
 import { Router } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
+
+const captureZTideError = makeServiceCapture("ztide");
 
 export const ztideRouter = Router();
 
@@ -230,6 +233,7 @@ ztideRouter.post("/events", writeLimit, async (req, res) => {
     });
   } catch (err: unknown) {
     console.error("[ztide] event_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/POST/events" });
     res.status(500).json({ error: "event_failed" });
   }
 });
@@ -260,6 +264,7 @@ ztideRouter.get("/me", readLimit, async (req, res) => {
     });
   } catch (err: unknown) {
     console.error("[ztide] me_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/GET/me" });
     res.status(500).json({ error: "me_failed" });
   }
 });
@@ -322,6 +327,7 @@ ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
     });
   } catch (err: unknown) {
     console.error("[ztide] login_streak_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/POST/me/login-streak" });
     res.status(500).json({ error: "login_streak_failed" });
   }
 });
@@ -348,6 +354,7 @@ ztideRouter.get("/leaderboard", readLimit, async (req, res) => {
     res.json({ leaderboard: rows, total: r.rowCount });
   } catch (err: unknown) {
     console.error("[ztide] leaderboard_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/GET/leaderboard" });
     res.status(500).json({ error: "leaderboard_failed" });
   }
 });
@@ -370,6 +377,7 @@ ztideRouter.get("/rank/:userId", readLimit, async (req, res) => {
     res.json({ userId, score, eventCount: row.eventCount, rank: rankFor(score), lastEventAt: row.lastEventAt });
   } catch (err: unknown) {
     console.error("[ztide] rank_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/GET/rank/:userId" });
     res.status(500).json({ error: "rank_failed" });
   }
 });
@@ -397,6 +405,7 @@ ztideRouter.get("/stats", readLimit, async (_req, res) => {
     });
   } catch (err: unknown) {
     console.error("[ztide] stats_failed", err instanceof Error ? err.message : err);
+    captureZTideError(err, { route: "ztide/GET/stats" });
     res.status(500).json({ error: "stats_failed" });
   }
 });

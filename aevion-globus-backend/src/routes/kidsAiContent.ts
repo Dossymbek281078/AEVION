@@ -20,8 +20,11 @@
  */
 
 import { Router, Request, Response } from "express";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 import { getPool } from "../lib/dbPool";
+
+const captureKidsAIError = makeServiceCapture("kids-ai");
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
   ensureKidsAiTables,
@@ -500,6 +503,7 @@ kidsAiContentRouter.post("/progress", async (req: Request, res: Response) => {
       // the failure so the client can retry.
       const msg = err instanceof Error ? err.message : "progress insert failed";
       console.error("[KidsAI] POST /progress DB error:", msg);
+      captureKidsAIError(err, { route: "kids-ai/POST/progress" });
       res.status(500).json({ error: "Could not save progress — please retry" });
       return;
     }

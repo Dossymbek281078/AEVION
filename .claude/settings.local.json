@@ -40,7 +40,8 @@
       "Read(C:/Users/user/aevion-bureau/**)",
       "Bash(mkdir *)",
       "Bash(cd * && *)",
-      "Bash(timeout *)"
+      "Bash(timeout *)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

@@ -9,6 +9,9 @@ import {
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("checkout");
 
 export const checkoutRouter = Router();
 
@@ -158,6 +161,7 @@ checkoutRouter.post("/session", async (req, res) => {
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
       } catch (e) {
+        capture(e);
         console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
       }
     }
@@ -173,6 +177,7 @@ checkoutRouter.post("/session", async (req, res) => {
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
       } catch (e) {
+        capture(e);
         console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
       }
     }
@@ -194,6 +199,7 @@ checkoutRouter.post("/session", async (req, res) => {
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
       } catch (e) {
+        capture(e);
         console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
       }
     }
@@ -226,6 +232,7 @@ checkoutRouter.post("/session", async (req, res) => {
       provider: "none",
     });
   } catch (e: unknown) {
+    capture(e);
     console.error("[checkout/session] failed", e);
     res.status(500).json({ error: "checkout_failed", message: e instanceof Error ? e.message : String(e) });
   }

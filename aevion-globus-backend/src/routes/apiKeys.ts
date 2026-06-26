@@ -21,6 +21,9 @@ import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("apiKeys");
 
 export const apiKeysRouter = Router();
 
@@ -137,6 +140,7 @@ apiKeysRouter.post("/", createLimiter, async (req, res) => {
       note: "Store this key securely — it will not be shown again.",
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] create_key_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "create_key_failed" });
   }
@@ -174,6 +178,7 @@ apiKeysRouter.get("/", async (req, res) => {
       })),
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] list_keys_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "list_keys_failed" });
   }
@@ -199,6 +204,7 @@ apiKeysRouter.delete("/:id", async (req, res) => {
     }
     res.json({ ok: true, revokedId: req.params.id });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] revoke_key_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "revoke_key_failed" });
   }
@@ -245,6 +251,7 @@ apiKeysRouter.patch("/:id", renameLimiter, async (req, res) => {
       },
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] rename_key_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "rename_key_failed" });
   }
@@ -309,6 +316,7 @@ apiKeysRouter.get("/:id/usage", async (req, res) => {
       daysUntilReset,
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] usage_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "usage_failed" });
   }
@@ -342,6 +350,7 @@ apiKeysRouter.get("/verify", verifyLimiter, async (req, res) => {
     const key = r.rows[0] as any;
     res.json({ valid: true, userId: key.userId, tier: key.tier, env: key.env });
   } catch (err: unknown) {
+    capture(err);
     console.error("[apiKeys] verify_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "verify_failed" });
   }

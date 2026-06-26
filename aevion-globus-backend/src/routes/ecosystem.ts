@@ -4,6 +4,9 @@ import { csvFromRows } from "../lib/csv";
 import { getPool } from "../lib/dbPool";
 import { projects } from "../data/projects";
 import { enrichProjects, MODULE_RUNTIME } from "../data/moduleRuntime";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("ecosystem");
 import {
   describeBackend,
   loadSnapshot,
@@ -574,6 +577,7 @@ ecosystemRouter.get("/graph", async (_req: Request, res: Response) => {
       matrix,
     });
   } catch (err) {
+    capture(err);
     console.error("[ecosystem] /graph failed", err);
     res.status(500).json({ error: "graph failed" });
   }
@@ -600,6 +604,7 @@ ecosystemRouter.get("/health-matrix", (_req: Request, res: Response) => {
       items: matrix,
     });
   } catch (err) {
+    capture(err);
     console.error("[ecosystem] /health-matrix failed", err);
     res.status(500).json({ error: "matrix failed" });
   }

@@ -34,6 +34,9 @@
 
 import { Router, Request, Response } from 'express';
 import { createHash } from 'crypto';
+import { makeServiceCapture } from '../lib/sentry/platform';
+
+const capture = makeServiceCapture('cyberchessVoiceCoach');
 import buildComment, {
   BuildCommentInput,
   MoveInfo,
@@ -244,6 +247,7 @@ router.post('/comment', async (req: Request, res: Response) => {
 
     res.json({ text, source });
   } catch (err) {
+    capture(err);
     res.status(500).json({
       error: 'comment_generation_failed',
       message: (err as Error)?.message ?? 'unknown error',
@@ -306,6 +310,7 @@ router.post('/ask', async (req: Request, res: Response) => {
         },
       );
     } catch (err) {
+      capture(err);
       return res.status(502).json({
         error: 'llm_unavailable',
         message: (err as Error)?.message ?? 'QCoreAI is not reachable',
@@ -318,6 +323,7 @@ router.post('/ask', async (req: Request, res: Response) => {
 
     res.json({ text, sessionId: sid, messageCount: session.messages.length });
   } catch (err) {
+    capture(err);
     res.status(500).json({
       error: 'ask_failed',
       message: (err as Error)?.message ?? 'unknown error',
@@ -427,6 +433,7 @@ router.post('/tts', async (req: Request, res: Response) => {
     res.setHeader('X-Cache-Key', cacheKey);
     return res.send(buf);
   } catch (err) {
+    capture(err);
     return res.status(502).json({
       error: 'elevenlabs_proxy_failed',
       message: (err as Error)?.message ?? 'unknown error',
@@ -647,6 +654,7 @@ router.post('/broadcast', async (req: Request, res: Response) => {
 
     res.json({ ok: true, text, source, audioUrl, viewers });
   } catch (err) {
+    capture(err);
     res.status(500).json({
       ok: false,
       error: 'broadcast_failed',

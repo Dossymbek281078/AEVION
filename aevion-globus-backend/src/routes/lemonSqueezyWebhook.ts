@@ -37,6 +37,9 @@ import {
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
 import { MEDIUM_BUNDLE } from "../data/pricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("lemonSqueezyWebhook");
 
 export const lemonSqueezyWebhookRouter = Router();
 
@@ -179,6 +182,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     return res.json({ ok: true, ignored: event });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "ls webhook failed";
+    capture(err);
     console.error("[ls/webhook] handler error:", msg);
     // 500 so LS retries — provisioning is idempotent enough (latest-wins).
     SEEN.delete(dedupKey);

@@ -15,6 +15,9 @@ import { Router, type Request, type Response } from "express";
 import { paypalPaymentProvider, verifyPaypalWebhook } from "../lib/payment/paypalProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("paypalWebhook");
 
 export const paypalWebhookRouter = Router();
 
@@ -72,6 +75,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   try {
     parsed = paypalPaymentProvider.parseWebhook(headers, rawBody);
   } catch (err) {
+    capture(err);
     console.error("[paypal/webhook] parse error:", err);
     return res.status(400).json({ ok: false, error: "parse_failed" });
   }
@@ -129,6 +133,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
     SEEN.delete(dedupKey);
+    capture(err);
     console.error("[paypal/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });
   }

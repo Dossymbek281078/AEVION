@@ -19,7 +19,10 @@ import { Router } from "express";
 import crypto from "crypto";
 import { provisionSubscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
 // paddleClient exports are re-used below; local helpers kept for backward compat
+
+const capture = makeServiceCapture("paddle");
 
 export const paddleRouter = Router();
 
@@ -53,6 +56,7 @@ async function paddleGet(path: string): Promise<unknown | null> {
     }
     return await r.json();
   } catch (e) {
+    capture(e);
     console.error("[paddle] GET failed", e);
     return null;
   }
@@ -76,6 +80,7 @@ async function paddlePost(path: string, body: unknown): Promise<unknown | null> 
     }
     return await r.json();
   } catch (e) {
+    capture(e);
     console.error("[paddle] POST failed", e);
     return null;
   }

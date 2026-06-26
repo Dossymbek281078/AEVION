@@ -4,6 +4,10 @@
  */
 import { Router, Request, Response } from "express";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("puzzles");
+
 export const puzzlesRouter = Router();
 
 let dbReady = false;
@@ -71,7 +75,7 @@ puzzlesRouter.get("/", async (req: Request, res: Response) => {
     const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
     const puzzles = rows.rows.map((p: any) => ({ id: p.id, fen: p.fen, sol: (()=>{try{return JSON.parse(p.sol)}catch{return [p.sol]}})(), name: p.name, r: p.rating, theme: p.theme, phase: p.phase, side: p.side, goal: p.goal, ...(p.mateIn ? { mateIn: p.mateIn } : {}) }));
     res.json({ puzzles, total, returned: rows.rows.length });
-  } catch (err) { console.error("[Puzzles] GET:", err); res.status(500).json({ error: "puzzle_fetch_failed" }); }
+  } catch (err) { capture(err); console.error("[Puzzles] GET:", err); res.status(500).json({ error: "puzzle_fetch_failed" }); }
 });
 
 puzzlesRouter.get("/themes", async (_req: Request, res: Response) => {
@@ -81,7 +85,7 @@ puzzlesRouter.get("/themes", async (_req: Request, res: Response) => {
     const pool = getPool();
     const r = await pool.query(`SELECT "theme", COUNT(*) AS cnt FROM "ChessPuzzle" GROUP BY "theme" ORDER BY cnt DESC`);
     res.json({ themes: r.rows.map((g: any) => ({ name: g.theme, count: Number(g.cnt) })) });
-  } catch { res.status(500).json({ error: "themes_fetch_failed" }); }
+  } catch (err) { capture(err); res.status(500).json({ error: "themes_fetch_failed" }); }
 });
 
 puzzlesRouter.get("/count", async (_req: Request, res: Response) => {
@@ -92,7 +96,7 @@ puzzlesRouter.get("/count", async (_req: Request, res: Response) => {
     const totalR = await pool.query(`SELECT COUNT(*) FROM "ChessPuzzle"`);
     const byTheme = await pool.query(`SELECT "theme", COUNT(*) AS cnt FROM "ChessPuzzle" GROUP BY "theme" ORDER BY cnt DESC LIMIT 20`);
     res.json({ total: Number(totalR.rows[0].count), topThemes: byTheme.rows.map((b: any) => ({ theme: b.theme, count: Number(b.cnt) })) });
-  } catch { res.status(500).json({ error: "count_failed" }); }
+  } catch (err) { capture(err); res.status(500).json({ error: "count_failed" }); }
 });
 
 puzzlesRouter.post("/seed", async (req: Request, res: Response) => {
@@ -123,5 +127,5 @@ puzzlesRouter.post("/seed", async (req: Request, res: Response) => {
       }
     }
     res.json({ ok: true, upserted });
-  } catch (err) { console.error("[Puzzles] seed:", err); res.status(500).json({ error: "seed_failed" }); }
+  } catch (err) { capture(err); console.error("[Puzzles] seed:", err); res.status(500).json({ error: "seed_failed" }); }
 });

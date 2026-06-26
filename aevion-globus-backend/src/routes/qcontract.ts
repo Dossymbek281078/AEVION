@@ -3,6 +3,9 @@ import { randomUUID, createHash } from "node:crypto";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("qcontract");
 
 export const qcontractRouter = Router();
 
@@ -646,6 +649,7 @@ qcontractRouter.get("/health", async (_req, res) => {
     const r = await pool.query("SELECT COUNT(*) AS n FROM qcontract_documents");
     res.json({ status: "ok", service: "qcontract", documents: Number(r.rows[0]?.n ?? 0) });
   } catch (err) {
+    capture(err);
     res.status(503).json({ status: "error", service: "qcontract", error: err instanceof Error ? err.message : String(err) });
   }
 });

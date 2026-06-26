@@ -13,6 +13,9 @@ import { randomUUID, createHash, createHmac, timingSafeEqual } from "node:crypto
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { sendWaitlistConfirmation } from "../lib/planningEmail";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("planning-stubs");
 
 import { requireProdSecret as _reqPS } from "../lib/qsignSecret";
 const getUnsubSecret = () => _reqPS("WAITLIST_UNSUB_SECRET", "aevion-waitlist-unsub-dev-only-key");
@@ -310,7 +313,8 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
         }
       }
       res.status(created ? 201 : 200).json({ ok: true, id, alreadyJoined: !created, waitlistCount: count });
-    } catch {
+    } catch (e) {
+      capture(e);
       res.status(500).json({ error: "waitlist-failed" });
     }
   });

@@ -43,6 +43,9 @@ import bcrypt from "bcrypt";
 import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("authOauth");
 
 export const authOauthRouter = Router();
 
@@ -364,6 +367,7 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
     const sep = redirect.includes("?") ? "&" : "?";
     return res.redirect(`${redirect}${sep}token=${encodeURIComponent(token)}&provider=${id}`);
   } catch (err: any) {
+    capture(err);
     return res.status(500).json({
       error: "oauth callback failed",
     });

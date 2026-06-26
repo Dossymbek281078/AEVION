@@ -20,6 +20,9 @@ import { Router, type Request, type Response } from "express";
 import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("payboxWebhook");
 
 export const payboxWebhookRouter = Router();
 
@@ -59,6 +62,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   try {
     parsed = payboxPaymentProvider.parseWebhook({}, rawBody);
   } catch (err) {
+    capture(err);
     console.error("[paybox/webhook] parse error:", err);
     return res.status(400).json({ ok: false, error: "parse_failed" });
   }
@@ -124,6 +128,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
     SEEN.delete(dedupKey);
+    capture(err);
     console.error("[paybox/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });
   }

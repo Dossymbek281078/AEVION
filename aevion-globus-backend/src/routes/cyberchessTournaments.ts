@@ -25,6 +25,9 @@ import {
   ALLOWED_TIME_CONTROLS,
   type TimeControl as MmTimeControl,
 } from "./cyberchessMatchmaking";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("cyberchessTournaments");
 
 const router = Router();
 
@@ -118,6 +121,7 @@ function tryLoadFromDisk(): Tournament[] | null {
     return parsed.tournaments as Tournament[];
   } catch (e) {
     console.warn("[cyberchess-tournaments] load failed:", (e as Error).message);
+    capture(e);
     return null;
   }
 }
@@ -975,6 +979,7 @@ function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void
         `[cyberchess-tournaments] publishRoundToMatchmaking failed for ${m.id}:`,
         (e as Error).message,
       );
+      capture(e);
       m.liveMatchId = null;
     }
   }

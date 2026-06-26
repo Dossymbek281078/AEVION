@@ -27,6 +27,9 @@ import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("gumroadWebhook");
 
 export const gumroadWebhookRouter = Router();
 
@@ -126,6 +129,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   try {
     parsed = gumroadPaymentProvider.parseWebhook(headers, rawBody);
   } catch (err) {
+    capture(err);
     console.error("[gumroad/webhook] parse error:", err);
     return res.status(400).json({ ok: false, error: "parse_failed" });
   }
@@ -207,6 +211,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
           return res.json({ ok: true, action: "bureau_no_match", email });
         }
       } catch (err) {
+        capture(err);
         console.error("[gumroad/webhook] bureau DB error:", err instanceof Error ? err.message : err);
         return res.status(500).json({ ok: false, error: "bureau_db_failed" });
       }
@@ -260,6 +265,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
     SEEN.delete(dedupKey);
+    capture(err);
     console.error("[gumroad/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });
   }

@@ -18,6 +18,9 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionWaitlist");
 
 type WaitlistRow = {
   email: string;
@@ -108,6 +111,7 @@ constitutionWaitlistRouter.post(
 
       res.status(201).json({ ok: true, storage });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "subscribe_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -156,6 +160,7 @@ constitutionWaitlistAdminRouter.get(
         bySource: aggregateBySource(rows),
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "list_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -221,7 +226,8 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
     const weekOf = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
     const { sent, errors } = await sendDigestEmail(subscribers, topArtifacts, weekOf);
     return { sent, skipped: errors };
-  } catch {
+  } catch (err) {
+    capture(err);
     return { sent: 0, skipped: 0 };
   }
 }

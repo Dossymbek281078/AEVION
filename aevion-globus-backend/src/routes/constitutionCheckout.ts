@@ -25,6 +25,9 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionCheckout");
 
 type Tier = "pro" | "team";
 
@@ -176,6 +179,7 @@ constitutionCheckoutRouter.post(
         provider: "gumroad",
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "checkout_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -212,7 +216,8 @@ constitutionCheckoutRouter.get(
         description: TIER_NAMES[tier],
       });
       res.redirect(303, intent.checkoutUrl);
-    } catch {
+    } catch (err) {
+      capture(err);
       res.redirect(`${publicBase()}/constitution/pricing?error=checkout_failed`);
     }
   },

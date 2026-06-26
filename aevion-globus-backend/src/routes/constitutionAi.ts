@@ -20,6 +20,9 @@ import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { validate, AiSuggestSchema } from "../lib/constitutionSchemas";
 import { aiRateGate } from "../lib/constitutionGate";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionAi");
 
 const SLIDER_KEYS = [
   "floor",
@@ -283,6 +286,7 @@ constitutionAiRouter.post(
         res.end();
       }
     } catch (err) {
+      capture(err);
       if (!aborted) {
         send({
           kind: "error",
@@ -309,6 +313,7 @@ constitutionAiRouter.post(
       try {
         qc = await callQCoreAiChat(description);
       } catch (err) {
+        capture(err);
         const stub = stubSuggest(description);
         return res.json({
           ...stub,
@@ -338,6 +343,7 @@ constitutionAiRouter.post(
       }
       return res.json({ ...result, provider: qc.mode });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "ai_suggest_failed",
         detail: err instanceof Error ? err.message : "unknown",

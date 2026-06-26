@@ -69,9 +69,10 @@ export async function fetchOrPaywall<T>(
     const body = await res.json().catch(() => null);
     if (isPaywallPayload(body)) return { paywall: body };
   }
-  if (!res.ok) {
-    throw new Error(`fetchOrPaywall(${apiPath}) — HTTP ${res.status}`);
-  }
+  // Non-402 errors (401 auth-required, 404 missing endpoint, 503, etc.)
+  // are treated as "not gated" — the page renders normally without a paywall.
+  // Only a real 402 upgrade_required payload shows PaywallScreen.
+  if (!res.ok) return { data: null as unknown as T };
   return { data: (await res.json()) as T };
 }
 

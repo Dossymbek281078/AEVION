@@ -6,6 +6,9 @@ import {
   resolveProvider,
   type ChatMessage,
 } from "../services/qcoreai/providers";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("qai");
 
 export const qaiRouter = Router();
 
@@ -126,6 +129,7 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
   } catch (err) {
     // Remove the user message we appended if the call failed
     session.messages.pop();
+    capture(err);
     const msg = err instanceof Error ? err.message : "AI provider unavailable";
     res.status(500).json({ error: msg });
   }
@@ -221,6 +225,7 @@ qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
     }
   } catch (err) {
     session.messages.pop(); // remove user message on error
+    capture(err);
     if (!closed) {
       const msg = err instanceof Error ? err.message : "stream failed";
       res.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);

@@ -1,6 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("qtradeoffline");
 
 /**
  * QTradeOffline — offline-first P2P payments в AEV.
@@ -93,6 +96,7 @@ async function ensureDb(): Promise<void> {
     useDb = true;
     console.log("[QTradeOffline] Postgres persistence enabled");
   } catch (e) {
+    capture(e);
     console.warn("[QTradeOffline] DB init failed, in-memory fallback:", e instanceof Error ? e.message : e);
   }
 }
@@ -192,6 +196,7 @@ qtradeOfflineRouter.post("/wallet/register", async (req: Request, res: Response)
       const wallet = await dbUpsertWallet(id, publicKeyJwk, INITIAL_AIRDROP);
       return res.json({ wallet, airdropped: true });
     } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error", detail: e instanceof Error ? e.message : "unknown" });
     }
   }
@@ -212,6 +217,7 @@ qtradeOfflineRouter.get("/wallet/:id", async (req: Request, res: Response) => {
       if (!w) return res.status(404).json({ error: "wallet not found" });
       return res.json({ wallet: w });
     } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error" });
     }
   }
@@ -231,7 +237,8 @@ qtradeOfflineRouter.get("/history/:id", async (req: Request, res: Response) => {
         [id],
       );
       return res.json({ items: r.rows.map((row: any) => ({ ...row, amount: Number(row.amount), timestamp: Number(row.timestamp) })) });
-    } catch {
+    } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error" });
     }
   }
@@ -246,7 +253,8 @@ qtradeOfflineRouter.get("/leaderboard", async (_req, res) => {
       const pool = getPool();
       const r = await pool.query("SELECT id, balance, created_at FROM qtradeoffline_wallets ORDER BY balance DESC LIMIT 10");
       return res.json({ items: r.rows.map((row: any) => ({ id: row.id, balance: Number(row.balance), createdAt: row.created_at })) });
-    } catch {
+    } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error" });
     }
   }
@@ -325,6 +333,7 @@ qtradeOfflineRouter.post("/sync", async (req: Request, res: Response) => {
         await client.query("COMMIT");
         results.push({ nonce: t.nonce, status: "applied" });
       } catch (e) {
+        capture(e);
         await client.query("ROLLBACK");
         results.push({ nonce: t.nonce, status: "rejected", reason: "db_error" });
       } finally {
@@ -371,7 +380,8 @@ qtradeOfflineRouter.get("/stats", async (_req, res) => {
         pool.query("SELECT COUNT(*) AS transfers, COALESCE(SUM(amount),0) AS total_volume FROM qtradeoffline_ledger WHERE kind='transfer'"),
       ]);
       return res.json({ wallets: Number(w.rows[0].wallets), totalSupply: Number(w.rows[0].total_supply), transfers: Number(l.rows[0].transfers), totalVolume: Number(l.rows[0].total_volume) });
-    } catch {
+    } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error" });
     }
   }

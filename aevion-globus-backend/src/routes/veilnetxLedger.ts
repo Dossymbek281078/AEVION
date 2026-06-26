@@ -37,6 +37,9 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { canonicalJson } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("veilnetx-ledger");
 
 export const veilnetxLedgerRouter = Router();
 
@@ -201,6 +204,7 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
       createdAt,
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] entry_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "entry_failed" });
   }
@@ -233,6 +237,7 @@ veilnetxLedgerRouter.get("/entries", readLimit, async (req, res) => {
     `, params);
     res.json({ entries: r.rows, total: r.rowCount });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] entries_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "entries_list_failed" });
   }
@@ -262,6 +267,7 @@ veilnetxLedgerRouter.get("/entries/:id", readLimit, async (req, res) => {
     });
     res.json({ entry: row, integrity: recomputed === row.entryHash ? "ok" : "broken", recomputedHash: recomputed });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] entry_get_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "entry_get_failed" });
   }
@@ -296,6 +302,7 @@ veilnetxLedgerRouter.get("/search", readLimit, async (req, res) => {
       total: r.rowCount,
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] search_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "search_failed" });
   }
@@ -312,6 +319,7 @@ veilnetxLedgerRouter.get("/chain/head", readLimit, async (_req, res) => {
     const row = r.rows[0] as { sequenceNumber: number; entryHash: string; createdAt: Date };
     res.json({ head: row.entryHash, length: Number(row.sequenceNumber), tipAt: row.createdAt });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] chain_head_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "chain_head_failed" });
   }
@@ -352,6 +360,7 @@ veilnetxLedgerRouter.get("/chain/verify", readLimit, async (_req, res) => {
       head: prevHash,
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] chain_verify_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "chain_verify_failed" });
   }
@@ -376,6 +385,7 @@ veilnetxLedgerRouter.get("/stats", readLimit, async (_req, res) => {
       perModule: r.rows,
     });
   } catch (err: unknown) {
+    capture(err);
     console.error("[veilnetx-ledger] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });
   }

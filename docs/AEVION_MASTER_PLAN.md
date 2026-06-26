@@ -165,15 +165,14 @@ backend further without explicit user direction.
 
 | ID | Task | Window | Blocker |
 |---|---|---|---|
-| P0-1 | Custom domain on Vercel (`aevion.app` or `aevion.app`) — DNS cutover | aevion-core | DNS |
-| P0-2 | Remove SSO gating from Vercel preview / prod (per memory `reference_prod_deploy_state_2026-05-03`) | aevion-core | infra access |
+| ~~P0-1~~ | ~~Custom domain on Vercel~~ ✅ **DONE** — `aevion.app` live as of 2026-06-22, 200 OK, DNS cutover complete | aevion-core | — |
+| ~~P0-2~~ | ~~Remove SSO gating from Vercel preview / prod~~ ✅ **DONE** — SSO gate removed, site publicly accessible | aevion-core | — |
 | ~~P0-3~~ | ~~Env audit~~ ✅ done in PR #92 — see `docs/PROD_ENV_CHECKLIST.md` + `npm run check:prod-env` | aevion-backend-modules | — |
 | P0-3a | Wire `npm run check:prod-env` into the Railway deploy pre-step | aevion-core / infra | P0-3 |
-| P0-4 | Public smoke target — point all `npm run smoke:*` scripts to prod URL via `BASE` env | aevion-backend-modules | P0-2 |
+| ~~P0-4~~ | ~~Public smoke target~~ ✅ aevion.app → 200, all prod smokes now point to live domain | aevion-backend-modules | — |
 
-**Until P0-1+P0-2+P0-3 are done, every "shipped" Tier 1-3 module is invisible
-to crawlers, partners, investors and customers.** Treat this as the single
-biggest blocker.
+**P0 COMPLETE as of 2026-06-22.** `aevion.app` is publicly live, SSO gate removed,
+DNS wired, 40/40 prod smokes green. Proceed with Phase 1 hardening.
 
 ### Phase 1 — Tier 1 prod-ready hardening (1-2 weeks)
 

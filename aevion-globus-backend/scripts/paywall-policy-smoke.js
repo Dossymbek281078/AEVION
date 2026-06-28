@@ -20,6 +20,9 @@
 const BASE = (process.env.BASE || "https://aevion.app/api-backend").replace(/\/+$/, "");
 const EXPECT_ENFORCED = (process.env.EXPECT_ENFORCED || "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const WAIT = process.argv.includes("--wait");
+const WAIT_TIMEOUT_MS = parseInt(process.env.WAIT_TIMEOUT_MS || "300000", 10); // 5 min default
+const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || "10000", 10); // 10s default
 
 let failed = 0;
 let passed = 0;
@@ -27,23 +30,55 @@ let passed = 0;
 function pass(msg) { console.log(`✓ ${msg}`); passed++; }
 function fail(msg) { console.error(`✗ ${msg}`); failed++; }
 
+async function fetchPolicy() {
+  const r = await fetch(`${BASE}/api/paywall/policy`);
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function enforcedSet(body) {
+  return new Set((body.modules || []).filter((m) => m.enforced).map((m) => m.module));
+}
+
 (async () => {
   console.log(`Paywall policy smoke — BASE=${BASE}`);
   if (EXPECT_ENFORCED.length) console.log(`Expected enforced modules: ${EXPECT_ENFORCED.join(", ")}`);
+  if (WAIT) console.log(`Wait mode: polling every ${POLL_INTERVAL_MS}ms until expected matches (timeout ${WAIT_TIMEOUT_MS}ms)`);
   console.log("");
 
   let body;
-  try {
-    const r = await fetch(`${BASE}/api/paywall/policy`);
-    if (r.status !== 200) {
-      fail(`/api/paywall/policy — HTTP ${r.status}`);
+
+  // Wait mode: poll until enforced set matches EXPECT_ENFORCED, then run normal checks.
+  if (WAIT && EXPECT_ENFORCED.length) {
+    const deadline = Date.now() + WAIT_TIMEOUT_MS;
+    const target = new Set(EXPECT_ENFORCED);
+    while (true) {
+      try {
+        const candidate = await fetchPolicy();
+        const cur = enforcedSet(candidate);
+        const matches =
+          cur.size === target.size && [...target].every((m) => cur.has(m));
+        const status = matches ? "✓ matched" : `current: [${[...cur].sort().join(", ") || "<none>"}]`;
+        console.log(`[${new Date().toISOString()}] ${status}`);
+        if (matches) { body = candidate; break; }
+      } catch (e) {
+        console.log(`[${new Date().toISOString()}] poll error: ${e.message}`);
+      }
+      if (Date.now() > deadline) {
+        fail(`timeout — expected ${EXPECT_ENFORCED.join(",")} not enforced after ${WAIT_TIMEOUT_MS}ms`);
+        process.exit(1);
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    pass(`enforced set matched after wait`);
+  } else {
+    try {
+      body = await fetchPolicy();
+      pass(`/api/paywall/policy — 200`);
+    } catch (e) {
+      fail(`/api/paywall/policy — ${e.message}`);
       process.exit(1);
     }
-    body = await r.json();
-    pass(`/api/paywall/policy — 200`);
-  } catch (e) {
-    console.error("Crash on initial fetch:", e.message);
-    process.exit(2);
   }
 
   if (!Array.isArray(body?.modules)) {

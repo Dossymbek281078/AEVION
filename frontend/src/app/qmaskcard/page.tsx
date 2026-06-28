@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
 /**
@@ -102,11 +104,18 @@ export default function QMaskCardPage() {
   const [chargeCategory, setChargeCategory] = useState("");
   const [charging, setCharging] = useState(false);
 
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
+
   const loadStats = useCallback(async () => {
+    // First fetch goes through the paywall helper — 402 from the gate
+    // surfaces as PaywallError → swap to <PaywallScreen> before the
+    // /masks and /charges calls even fire.
     try {
-      const r = await fetch(apiUrl("/api/qmaskcard/stats"), { cache: "no-store" });
-      if (r.ok) setStats(await r.json());
-    } catch { /* ignore */ }
+      const stats = await apiFetchOrPaywall<Stats>("/api/qmaskcard/stats", { cache: "no-store" });
+      setStats(stats);
+    } catch (e) {
+      if (e instanceof PaywallError) setPaywall(e.payload);
+    }
   }, []);
   const loadMasks = useCallback(async () => {
     if (!hasToken()) { setAuthed(false); return; }
@@ -192,6 +201,10 @@ export default function QMaskCardPage() {
     } catch { setMsg("✗ Network error"); }
     finally { setCharging(false); }
   };
+
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/fintech" backLabel="← Fintech" />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-amber-950/20 to-slate-950 text-slate-100">

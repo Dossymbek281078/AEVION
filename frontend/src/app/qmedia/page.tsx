@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
+import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
 type Track = {
@@ -48,14 +50,17 @@ export default function QMediaPage() {
   const [speed, setSpeed] = useState(1);
   const [volume, setVolume] = useState(0.9);
   const playReported = useRef<string | null>(null);
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
 
   const active = activeIdx >= 0 ? queue[activeIdx] ?? null : null;
 
   useEffect(() => {
-    fetch(apiUrl("/api/qmedia/tracks?limit=8"))
-      .then((r) => r.json())
+    // First fetch goes through the paywall helper — if PAYWALL_MODULES=qmedia
+    // is set and the user isn't entitled, the 402 lands here and the whole
+    // page swaps to <PaywallScreen> before any subsequent fetch fires.
+    apiFetchOrPaywall<{ items?: Track[] }>("/api/qmedia/tracks?limit=8")
       .then((d) => { if (Array.isArray(d.items)) setTracks(d.items); })
-      .catch(() => {});
+      .catch((e) => { if (e instanceof PaywallError) setPaywall(e.payload); });
     fetch(apiUrl("/api/qmedia/videos?limit=6"))
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.items)) setVideos(d.items); })
@@ -162,6 +167,10 @@ export default function QMediaPage() {
 
   const progressPct = useMemo(() => (duration > 0 ? (current / duration) * 100 : 0), [current, duration]);
   const recoListSrc = recos.length > 0 ? recos : tracks;
+
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/modules" backLabel="← Модули" />;
+  }
 
   return (
     <main>

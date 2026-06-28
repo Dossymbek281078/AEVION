@@ -49,17 +49,37 @@ EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.
 
 ### Railway preview (dry-run)
 
-1. Open Railway dashboard → service → **Variables**
-2. Add: `PAYWALL_MODULES=qcoreai` (lowercase, comma-separated for multiple)
-3. Deploy / redeploy. Wait for green check.
-4. Run from local:
-   ```bash
-   BASE=https://<preview>.up.railway.app \
-     EXPECT_ENFORCED=qcoreai \
-     node aevion-globus-backend/scripts/paywall-policy-smoke.js
-   ```
-   Expect: `✓ enforced set matches EXPECT_ENFORCED`
-5. UX check: log in as free-tier on the preview frontend → hit `/qcoreai/playground` → expect `<PaywallScreen>` with chips `medium / full / enterprise`. CTA → `/pricing` should land you on the tier page.
+**Recommended flow** — start the wait-mode probe BEFORE flipping the env, so the script tells you the moment the deploy lands:
+
+```bash
+# Terminal 1 — start watching (will block until the expected state matches)
+BASE=https://<preview>.up.railway.app \
+  EXPECT_ENFORCED=qcoreai \
+  node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait
+# polls /api/paywall/policy every 10s, exits 0 when enforced set matches.
+# default timeout 5 min — bump with WAIT_TIMEOUT_MS=900000 if Railway is slow.
+
+# Terminal 2 — set the env on Railway
+# 1. Open Railway dashboard → service → Variables
+# 2. Add: PAYWALL_MODULES=qcoreai
+# 3. Redeploy (Railway picks it up automatically; manual redeploy is a safe shortcut)
+```
+
+When Terminal 1 prints `✓ enforced set matched after wait`, the flip is live. Then:
+
+```bash
+# 4. UX check on the preview frontend
+#    Log in as free-tier → /qcoreai/playground → expect <PaywallScreen>
+#    with chips medium/full/enterprise → CTA navigates to /pricing.
+
+# 5. Belt-and-braces: re-run the full check (no --wait)
+BASE=https://<preview>.up.railway.app \
+  EXPECT_ENFORCED=qcoreai \
+  node aevion-globus-backend/scripts/paywall-policy-smoke.js
+# expected: "5 passed, 0 failed"
+```
+
+If anything is off, `PAYWALL_DISABLED=1` is the kill switch (§"The unflip"). Reversible in <2 min.
 
 ### Prod (after preview is good)
 

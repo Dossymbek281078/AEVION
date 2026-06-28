@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import { PaywallError, apiFetchOrPaywall, type PaywallPayload } from "@/lib/paywall";
 
 type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
@@ -16,21 +18,23 @@ const FEATURES = [
   { t: "⚡ Wireguard fast-path", d: "Для not-paranoid режима — прямой WG-туннель без Tor (10x быстрее, без скрытия источника)." },
 ];
 
-function StatusPill() {
+function StatusPill({ onPaywall }: { onPaywall?: (p: PaywallPayload) => void }) {
   const [s, setS] = useState<Status | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api-backend/api/veilnetx/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: Status | null) => {
+    apiFetchOrPaywall<Status>("/api/veilnetx/status")
+      .then((data) => {
         if (cancelled || !data) return;
         setS({ phase: data.phase, eta: data.eta, version: data.version, waitlistCount: data.waitlistCount });
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof PaywallError && onPaywall) onPaywall(e.payload);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onPaywall]);
   return (
     <div className="flex flex-wrap gap-2 text-[11px] font-mono">
       <span className="bg-cyan-950/40 border border-cyan-800 text-cyan-300 px-2.5 py-1 rounded-full">
@@ -428,6 +432,10 @@ function Row({ label, value, exposed }: { label: string; value: string; exposed:
 }
 
 export default function VeilNetXLanding() {
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/modules" backLabel="← Модули" />;
+  }
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <script
@@ -476,7 +484,7 @@ export default function VeilNetXLanding() {
           логи. KYC нет. Tor-routing включён по умолчанию. Клиенты open-source с
           воспроизводимыми билдами.
         </p>
-        <StatusPill />
+        <StatusPill onPaywall={setPaywall} />
         <div id="waitlist" className="space-y-2 pt-2 scroll-mt-24">
           <div className="text-sm text-slate-400">
             Запуск Q4 2026. Подпишитесь — уведомим первыми.

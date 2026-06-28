@@ -2,6 +2,23 @@
 
 > Closes the loop on PR #433 (`feat(qbuild): per-page SEO metadata + JSON-LD for 5 public /build pages`). Code is shipped; this is the one-time GSC submission that turns it into actual organic traffic.
 
+## TL;DR action plan
+
+A single sitting (≈20 min). Each step has a verification command — run it first, then click the corresponding GSC button.
+
+| Step | What you do (in browser) | Verify locally first (terminal) |
+|---|---|---|
+| **1** | Add property `aevion.app` in GSC → copy verification TXT token | `dig +short TXT aevion.app \| grep google-site-verification` |
+| **2** | Add the TXT record to aevion.app DNS, wait for propagation | repeat the `dig` until it returns the token |
+| **3** | Click **Verify** in GSC | (GSC shows ✓) |
+| **4** | GSC → Sitemaps → submit `sitemap.xml` and `api-backend/api/aevion/sitemap.xml` | `node aevion-globus-backend/scripts/qbuild-seo-smoke.js` → expect "7 passed, 0 failed" |
+| **5** | GSC → URL Inspection → paste each of the 5 /build URLs → **Request Indexing** | `for p in pricing vacancies salary ai-match interviews; do curl -s "https://aevion.app/build/$p" \| grep -oE '<title>[^<]+' \| head -1; done` |
+| **6** | https://search.google.com/test/rich-results → paste each URL → expect 0 errors | (Step 4 smoke already verified ≥1 JSON-LD per page) |
+
+If any verification command fails, **don't click the corresponding button** — the metadata is regressed and the submission will produce a bad index entry that needs a re-crawl later.
+
+The detailed walkthrough follows.
+
 ## What was shipped (recap)
 
 PR #433 added `export const metadata` + JSON-LD schema.org markup to the five public, high-intent QBuild landings:

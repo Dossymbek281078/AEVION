@@ -3751,12 +3751,11 @@ export default function CyberChessPage(){
     // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
     // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
     // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
-    // TEMP — TESTING: жёсткая задержка AI 20 секунд для отладки механик
-    // хода/премува. Снять когда тестирование закончится (заменить на
-    // Math.max(rawDelay, premoveFloor)). Без localStorage indirection чтобы
-    // случайно застрявший ключ не отключил задержку.
-    const delay=20000;
-    void rawDelay; void premoveFloor; // suppress unused-var warnings
+    // AI think delay: natural pace (rawDelay) floored to a premove-friendly
+    // window so the user always has time to queue premoves before the reply.
+    // (Previously hard-pinned to 20000ms as a temporary mechanics-debug hack —
+    //  that froze the board ~20s per move and made play feel broken.)
+    const delay=Math.max(rawDelay,premoveFloor);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece

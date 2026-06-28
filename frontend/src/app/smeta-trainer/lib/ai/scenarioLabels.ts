@@ -32,6 +32,7 @@ export const SCENARIO_LABELS: Record<string, ScenarioLabel> = {
   "coef-double": { label: "Двойной коэффициент", short: "Перекрывающиеся/повторённые коэффициенты условий." },
   "index-double": { label: "Двойной индекс", short: "Текущая цена материала умножается на индекс повторно." },
   "coef-unjustified": { label: "Коэф. без обоснования", short: "Коэффициент условий применён без подтверждающего документа." },
+  "returnable-sums-missing": { label: "Забыты возвратные суммы", short: "Не вычтена стоимость годных материалов от разборки (металл, кирпич)." },
 };
 
 export function scenarioLabel(code: string): ScenarioLabel {
@@ -58,5 +59,17 @@ export const BATCH_E_SCENARIOS: string[] = [
   "coef-unjustified",
 ];
 
-/** Все детекторы, добавленные после первичной серии (D + E) — покрытие банка. */
-export const TRACKED_NEW_SCENARIOS: string[] = [...NEW_DETECTOR_SCENARIOS, ...BATCH_E_SCENARIOS];
+/**
+ * Сценарий «batch G» — возвратные суммы от разборки (урок 2.5). Отслеживается
+ * в аналитике куратора вместе с D/E как «новый детектор».
+ */
+export const BATCH_G_SCENARIOS: string[] = [
+  "returnable-sums-missing",
+];
+
+/** Все детекторы, добавленные после первичной серии (D + E + G) — покрытие банка. */
+export const TRACKED_NEW_SCENARIOS: string[] = [
+  ...NEW_DETECTOR_SCENARIOS,
+  ...BATCH_E_SCENARIOS,
+  ...BATCH_G_SCENARIOS,
+];

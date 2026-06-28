@@ -20,6 +20,9 @@ import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { validate, AiSuggestSchema } from "../lib/constitutionSchemas";
 import { aiRateGate } from "../lib/constitutionGate";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionAi");
 
 const SLIDER_KEYS = [
   "floor",
@@ -338,6 +341,7 @@ constitutionAiRouter.post(
       }
       return res.json({ ...result, provider: qc.mode });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "ai_suggest_failed",
         detail: err instanceof Error ? err.message : "unknown",

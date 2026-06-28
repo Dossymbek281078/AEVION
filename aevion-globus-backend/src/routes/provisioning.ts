@@ -12,6 +12,9 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("provisioning");
 
 const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
   ? process.env.SUBSCRIPTIONS_FILE
@@ -48,6 +51,7 @@ export function writeSubscription(sub: Subscription): void {
     ensureDir();
     appendFileSync(SUBS_FILE, JSON.stringify(sub) + "\n", "utf8");
   } catch (e) {
+    capture(e);
     console.error("[provisioning] writeSubscription failed", e);
   }
 }
@@ -181,6 +185,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     }
     return { ok: true, mode: "real", id: j.id };
   } catch (e) {
+    capture(e);
     return { ok: false, mode: "real", error: e instanceof Error ? e.message : String(e) };
   }
 }

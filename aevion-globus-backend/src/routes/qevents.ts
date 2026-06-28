@@ -3,6 +3,9 @@ import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQEventsTables, isQEventsDbReady } from "../lib/ensureQEventsTables";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("qevents");
 
 export const qeventsRouter = Router();
 
@@ -152,7 +155,8 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
       )
       .slice(0, limitN);
     return res.json({ events, when: whenFilter });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -169,7 +173,8 @@ qeventsRouter.get("/events/:id", async (req: Request, res: Response) => {
     const event = memEvents.get(id);
     if (!event) return res.status(404).json({ error: "not_found" });
     return res.json({ event });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -234,7 +239,8 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
       memEvents.set(event.id, event);
     }
     return res.status(201).json({ event });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -285,7 +291,8 @@ qeventsRouter.patch("/me/events/:id", async (req: Request, res: Response) => {
     if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     Object.assign(event, { ...patchBody, updatedAt: nowIso() });
     return res.json({ event });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -310,7 +317,8 @@ qeventsRouter.delete("/me/events/:id", async (req: Request, res: Response) => {
       memEvents.delete(id);
     }
     return res.json({ ok: true });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -398,7 +406,8 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
     }
 
     return res.json({ status, attendeeCount: event.attendeeCount });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -418,7 +427,8 @@ qeventsRouter.get("/events/:id/attendees", async (req: Request, res: Response) =
       .filter((r) => r.eventId === eventId && r.status === "going")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return res.json({ attendees });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -440,7 +450,8 @@ qeventsRouter.get("/me/rsvps", async (req: Request, res: Response) => {
       .filter((r) => r.userId === auth.sub)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return res.json({ rsvps });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -475,7 +486,8 @@ qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
       days[day].push(ev);
     }
     return res.json({ year, month, days });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -516,7 +528,8 @@ qeventsRouter.post("/events/:id/waitlist", async (req: Request, res: Response) =
     if (!list.includes(auth.sub)) list.push(auth.sub);
     memWaitlist.set(eventId, list);
     return res.json({ position: list.indexOf(auth.sub) + 1 });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -543,7 +556,8 @@ qeventsRouter.get("/events/:id/waitlist", async (req: Request, res: Response) =>
     if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     const list = memWaitlist.get(eventId) ?? [];
     return res.json({ waitlist: list, count: list.length });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -564,7 +578,8 @@ qeventsRouter.post("/events/:id/share", async (req: Request, res: Response) => {
     const event = memEvents.get(id);
     if (!event) return res.status(404).json({ error: "not_found" });
     return res.json({ shareUrl: `https://aevion.app/events/${id}` });
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -650,7 +665,8 @@ qeventsRouter.get("/events/:id/ics", async (req: Request, res: Response) => {
       `attachment; filename="qevents-${safeTitle}-${event.id.slice(0, 8)}.ics"`,
     );
     return res.send(ics);
-  } catch {
+  } catch (err) {
+    capture(err);
     return res.status(500).json({ error: "internal_error" });
   }
 });

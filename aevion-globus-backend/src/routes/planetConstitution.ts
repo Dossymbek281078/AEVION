@@ -20,6 +20,9 @@ import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { resolvePlan, checkSaveLimit, FREE_SAVE_LIMIT } from "../lib/constitutionGate";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("planetConstitution");
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -236,6 +239,7 @@ planetConstitutionRouter.post(
         storage,
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "publish_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -309,6 +313,7 @@ planetConstitutionRouter.get(
         regime,
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "list_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -388,6 +393,7 @@ planetConstitutionRouter.get(
         storage: "memory",
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "stats_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -484,6 +490,7 @@ planetConstitutionRouter.get(
         items: top,
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "similar_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -519,6 +526,7 @@ planetConstitutionRouter.get(
       }
       return res.status(404).json({ error: "not_found" });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "get_failed",
         detail: err instanceof Error ? err.message : "unknown",

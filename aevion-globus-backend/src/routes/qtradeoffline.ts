@@ -1,6 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("qtradeoffline");
 
 /**
  * QTradeOffline — offline-first P2P payments в AEV.
@@ -192,6 +195,7 @@ qtradeOfflineRouter.post("/wallet/register", async (req: Request, res: Response)
       const wallet = await dbUpsertWallet(id, publicKeyJwk, INITIAL_AIRDROP);
       return res.json({ wallet, airdropped: true });
     } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error", detail: e instanceof Error ? e.message : "unknown" });
     }
   }
@@ -212,6 +216,7 @@ qtradeOfflineRouter.get("/wallet/:id", async (req: Request, res: Response) => {
       if (!w) return res.status(404).json({ error: "wallet not found" });
       return res.json({ wallet: w });
     } catch (e) {
+      capture(e);
       return res.status(500).json({ error: "db_error" });
     }
   }

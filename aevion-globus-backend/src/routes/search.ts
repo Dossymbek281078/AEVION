@@ -9,6 +9,9 @@
 import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
 import rateLimit from "express-rate-limit";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("search");
 
 export const searchRouter = Router();
 
@@ -184,7 +187,7 @@ searchRouter.get("/", searchLimit, async (req: Request, res: Response) => {
   const types = new Set(typesParam.split(",").map(t => t.trim()));
 
   let pool: any;
-  try { pool = getPool(); } catch { return res.status(503).json({ error: "db_unavailable" }); }
+  try { pool = getPool(); } catch (err) { capture(err); return res.status(503).json({ error: "db_unavailable" }); }
 
   const searches: Promise<SearchResult[]>[] = [];
   if (types.has("qstore"))  searches.push(searchQStore(pool, q, limit));

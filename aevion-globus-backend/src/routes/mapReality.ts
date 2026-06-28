@@ -3,6 +3,9 @@ import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRealityTables";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("mapReality");
 
 const pool = getPool();
 (async () => {
@@ -162,7 +165,7 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
       const row = rows[0] as { id: number; support_count: number };
       return res.status(201).json({ id: row.id, supportCount: row.support_count });
     }
-  } catch (e) { console.error("[MapReality] POST /signals DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] POST /signals DB error", e); }
 
   const signal: Signal = {
     id: memNextId++,
@@ -219,7 +222,7 @@ mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
       ]);
       return res.json({ signals: rows, total: cnt[0]?.total ?? rows.length });
     }
-  } catch (e) { console.error("[MapReality] GET /signals DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] GET /signals DB error", e); }
 
   let signals = memSignals.filter((s) => s.status === statusFilter);
   if (category && CATEGORIES.includes(category as Category)) {
@@ -287,7 +290,7 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
         data: { signals: rows, center: { lat, lng }, radius, count: rows.length },
       });
     }
-  } catch (e) { console.error("[MapReality] GET /signals/nearby DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] GET /signals/nearby DB error", e); }
 
   // In-memory fallback: Haversine filter
   const nearby = memSignals
@@ -314,7 +317,7 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
       return res.json({ signal: rows[0] });
     }
-  } catch (e) { console.error("[MapReality] GET /signals/:id DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] GET /signals/:id DB error", e); }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
@@ -363,7 +366,7 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
       );
       return res.json({ supportCount: updated[0]?.support_count ?? 0 });
     }
-  } catch (e) { console.error("[MapReality] POST /signals/:id/support DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] POST /signals/:id/support DB error", e); }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
@@ -407,7 +410,7 @@ mapRealityRouter.patch("/signals/:id/status", async (req: Request, res: Response
       );
       return res.json({ signal: updated[0] });
     }
-  } catch (e) { console.error("[MapReality] PATCH /signals/:id/status DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] PATCH /signals/:id/status DB error", e); }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
@@ -453,7 +456,7 @@ mapRealityRouter.get("/stats", async (_req: Request, res: Response) => {
         backend: "postgres",
       });
     }
-  } catch (e) { console.error("[MapReality] GET /stats DB error", e); }
+  } catch (e) { capture(e); console.error("[MapReality] GET /stats DB error", e); }
 
   const active = memSignals.filter((s) => s.status === "active");
   const byCategory: Record<string, number> = { need: 0, event: 0, request: 0 };

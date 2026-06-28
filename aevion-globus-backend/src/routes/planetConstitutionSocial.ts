@@ -25,6 +25,9 @@ import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { validate, VoteSchema, CommentCreateSchema } from "../lib/constitutionSchemas";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("planetConstitutionSocial");
 
 type Vote = -1 | 1;
 type CommentRow = {
@@ -137,6 +140,7 @@ planetConstitutionSocialRouter.post(
       memVotes.set(id, map);
       res.json({ ok: true, vote: v, isAuth, storage: "memory" });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "vote_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -168,6 +172,7 @@ planetConstitutionSocialRouter.delete(
       memVotes.get(id)?.delete(key);
       res.json({ ok: true, storage: "memory" });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "unvote_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -220,6 +225,7 @@ planetConstitutionSocialRouter.post(
       memComments.set(id, list.slice(0, 200));
       res.status(201).json({ comment: row, storage: "memory" });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "comment_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -289,6 +295,7 @@ planetConstitutionSocialRouter.get(
         storage: "memory",
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "social_get_failed",
         detail: err instanceof Error ? err.message : "unknown",

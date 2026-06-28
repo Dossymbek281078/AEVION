@@ -4,6 +4,9 @@
  */
 import { Router, Request, Response } from "express";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("puzzles");
 export const puzzlesRouter = Router();
 
 let dbReady = false;
@@ -71,7 +74,7 @@ puzzlesRouter.get("/", async (req: Request, res: Response) => {
     const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
     const puzzles = rows.rows.map((p: any) => ({ id: p.id, fen: p.fen, sol: (()=>{try{return JSON.parse(p.sol)}catch{return [p.sol]}})(), name: p.name, r: p.rating, theme: p.theme, phase: p.phase, side: p.side, goal: p.goal, ...(p.mateIn ? { mateIn: p.mateIn } : {}) }));
     res.json({ puzzles, total, returned: rows.rows.length });
-  } catch (err) { console.error("[Puzzles] GET:", err); res.status(500).json({ error: "puzzle_fetch_failed" }); }
+  } catch (err) { capture(err); console.error("[Puzzles] GET:", err); res.status(500).json({ error: "puzzle_fetch_failed" }); }
 });
 
 puzzlesRouter.get("/themes", async (_req: Request, res: Response) => {
@@ -123,5 +126,5 @@ puzzlesRouter.post("/seed", async (req: Request, res: Response) => {
       }
     }
     res.json({ ok: true, upserted });
-  } catch (err) { console.error("[Puzzles] seed:", err); res.status(500).json({ error: "seed_failed" }); }
+  } catch (err) { capture(err); console.error("[Puzzles] seed:", err); res.status(500).json({ error: "seed_failed" }); }
 });

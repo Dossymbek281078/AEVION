@@ -25,6 +25,9 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionCheckout");
 
 type Tier = "pro" | "team";
 
@@ -176,6 +179,7 @@ constitutionCheckoutRouter.post(
         provider: "gumroad",
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "checkout_failed",
         detail: err instanceof Error ? err.message : "unknown",

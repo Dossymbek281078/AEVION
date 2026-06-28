@@ -17,6 +17,9 @@
 import { Router } from "express";
 import { REVENUE_APPS, getLiveRevenueApps, getRevenueApp } from "../data/revenueApps";
 import { PADDLE_KEY, IS_PADDLE_SANDBOX, paddleGet } from "../lib/paddleClient";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("revenue");
 
 export const revenueRouter = Router();
 

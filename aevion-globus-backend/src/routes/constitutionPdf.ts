@@ -22,6 +22,9 @@ import { rateLimit } from "../lib/rateLimit";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { resolvePlan } from "../lib/constitutionGate";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionPdf");
 
 const SLIDER_KEYS = [
   "floor", "ruleOfLaw", "rotation", "transparency",
@@ -300,6 +303,7 @@ constitutionPdfRouter.post(
 
       doc.end();
     } catch (err) {
+      capture(err);
       // If headers already sent, can't change to JSON
       if (!res.headersSent) {
         res.status(500).json({

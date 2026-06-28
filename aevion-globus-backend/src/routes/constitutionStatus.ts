@@ -12,6 +12,9 @@
 import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionStatus");
 
 type ServiceKey =
   | "main"

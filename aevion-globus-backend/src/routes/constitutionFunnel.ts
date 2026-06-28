@@ -18,6 +18,9 @@ import { randomUUID, createHash } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("constitutionFunnel");
 
 const TRACKED_EVENTS = new Set([
   "page_view",
@@ -178,6 +181,7 @@ constitutionFunnelTrackRouter.post(
       pushMem(row);
       res.json({ ok: true });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "track_failed",
         detail: err instanceof Error ? err.message : "unknown",
@@ -287,6 +291,7 @@ constitutionFunnelAdminRouter.get(
         conversions: pairResults,
       });
     } catch (err) {
+      capture(err);
       res.status(500).json({
         error: "funnel_failed",
         detail: err instanceof Error ? err.message : "unknown",

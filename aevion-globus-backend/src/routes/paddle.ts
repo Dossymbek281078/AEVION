@@ -20,6 +20,9 @@ import crypto from "crypto";
 import { provisionSubscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 // paddleClient exports are re-used below; local helpers kept for backward compat
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("paddle");
 
 export const paddleRouter = Router();
 

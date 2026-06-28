@@ -109,7 +109,12 @@
       "Bash(npm -v)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(echo \"BUILD:$?\")",
-      "Bash(xargs -n1 basename)"
+      "Bash(xargs -n1 basename)",
+      "Bash(sed -n '/export interface Position/,/^}/p' frontend/src/app/smeta-trainer/lib/types.ts)",
+      "Bash(sed -n '/export interface Section/,/^}/p' frontend/src/app/smeta-trainer/lib/types.ts)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/smeta-returnable-sums --title 'feat\\(smeta-trainer\\): AI-детектор «возвратные суммы от разборки» \\(batch G\\)' --body ' *)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr checks 445 --watch --interval 20)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr merge 445 --squash)"
     ]
   }
 }

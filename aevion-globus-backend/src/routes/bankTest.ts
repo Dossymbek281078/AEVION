@@ -2,6 +2,9 @@ import { Router, type Request } from "express";
 import { createHmac, randomUUID } from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { requireProdSecret } from "../lib/qsignSecret";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("bankTest");
 function requireAuth(req: any, res: any, next: any) { const p = verifyBearerOptional(req); if (!p) return res.status(401).json({ error: "auth required" }); (req as any).auth = p; next(); }
 import { stableStringify } from "../lib/stableStringify";
 
@@ -65,6 +68,7 @@ bankTestRouter.post("/test-webhook/qright", requireAuth, async (req, res, next) 
     const body = await r.json().catch(() => ({}));
     res.status(r.status).json({ kind: "qright", upstreamStatus: r.status, eventId, email, amount, response: body });
   } catch (e) {
+    capture(e);
     next(e);
   }
 });
@@ -88,6 +92,7 @@ bankTestRouter.post("/test-webhook/chess", requireAuth, async (req, res, next) =
     const body = await r.json().catch(() => ({}));
     res.status(r.status).json({ kind: "chess", upstreamStatus: r.status, tournamentId, email, prize, response: body });
   } catch (e) {
+    capture(e);
     next(e);
   }
 });
@@ -113,6 +118,7 @@ bankTestRouter.post("/test-webhook/planet", requireAuth, async (req, res, next) 
     const body = await r.json().catch(() => ({}));
     res.status(r.status).json({ kind: "planet", upstreamStatus: r.status, eventId, email, amount, response: body });
   } catch (e) {
+    capture(e);
     next(e);
   }
 });
@@ -202,6 +208,7 @@ bankTestRouter.post("/hmac-self-test", requireAuth, async (req, res, next) => {
       results,
     });
   } catch (e) {
+    capture(e);
     next(e);
   }
 });

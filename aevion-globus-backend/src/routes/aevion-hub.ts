@@ -10,6 +10,9 @@
 import { Router, type Request } from "express";
 import { projects } from "../data/projects";
 import { buildPricingResponse } from "../data/modulePricing";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+const capture = makeServiceCapture("aevion-hub");
 
 export const aevionHubRouter = Router();
 
@@ -123,6 +126,7 @@ async function probe(
     }
     return { ok: r.ok, status: r.status, body, durationMs: Date.now() - t0 };
   } catch (err) {
+    capture(err);
     return {
       ok: false,
       status: 0,

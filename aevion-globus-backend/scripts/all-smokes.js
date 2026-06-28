@@ -163,6 +163,7 @@ const SMOKES = [
   // Constitution Pro gate (prod contract) — read-only: /me/plan free-limit
   // shape (savedScenarios/aiSuggestPerDay/pdfRequiresSign), publish-route
   // validation gates, ai-suggest liveness. Doesn't trigger 402/429.
+  { name: "constitution-prod", script: "constitution-prod-smoke.js", readOnly: false },
   { name: "constitution-pro-prod", script: "constitution-pro-prod-smoke.js", readOnly: true },
   // Gumroad ping webhook — form-encoded paid/refund/no-email/dedup. Also
   // guards the express.urlencoded body-parser fix (form pings must reach the

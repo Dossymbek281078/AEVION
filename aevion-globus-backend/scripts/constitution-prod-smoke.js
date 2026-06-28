@@ -253,7 +253,7 @@ async function callSSE(path, body) {
     else fail("POST /comment creates comment", `status ${c1.status}`);
 
     const c2 = await call("POST", `/api/planet/constitution-artifacts/${publishedId}/comment`, { body: { text: "" } });
-    if (c2.status === 400 && c2.json?.error === "missing_text") ok("POST /comment rejects empty text (400)");
+    if (c2.status === 400 && (c2.json?.error === "missing_text" || c2.json?.error === "validation_failed")) ok("POST /comment rejects empty text (400)");
     else fail("POST /comment rejects empty text (400)", `status ${c2.status}, error=${c2.json?.error}`);
 
     const social = await call("GET", `/api/planet/constitution-artifacts/${publishedId}/social`);

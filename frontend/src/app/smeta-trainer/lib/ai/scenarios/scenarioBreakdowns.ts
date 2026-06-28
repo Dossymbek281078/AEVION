@@ -10,6 +10,7 @@
 import type { Lsr, AiNotice } from "../../types";
 import { findRate, findIndex, findOverhead } from "../../corpus";
 import { MATERIAL_LOSS_RULES } from "./wasteFactorMissing";
+import { RECLAIMABLE_RULES } from "./returnableSums";
 
 /** Сценарии с собственным детерминированным разбором (помимо проёмов). */
 export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
@@ -26,6 +27,7 @@ export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
   "overhead-mismatch",
   "index-double",
   "coef-unjustified",
+  "returnable-sums-missing",
 ]);
 
 function normName(s: string): string {
@@ -332,6 +334,39 @@ export function explainCoefUnjustified(lsr: Lsr, notice: AiNotice): string | nul
   return lines.join("\n");
 }
 
+/** Разбор возвратных сумм: какие позиции разборки дают возврат и как считать. */
+export function explainReturnable(lsr: Lsr, _notice: AiNotice): string | null {
+  const hits: string[] = [];
+  for (const section of lsr.sections) {
+    if (section.category !== "демонтажные") continue;
+    for (const pos of section.positions) {
+      const title = rateTitle(pos.rateCode);
+      const t = normName(title);
+      for (const rule of RECLAIMABLE_RULES) {
+        if (rule.keywords.some((k) => t.includes(normName(k)))) {
+          hits.push(`   • «${title}» → ${rule.material}`);
+          break;
+        }
+      }
+    }
+  }
+  if (hits.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push(`**Разборка даёт возвратные материалы — их стоимость вычитается из сметы:**`);
+  lines.push(...hits);
+  lines.push("");
+  lines.push(`Как считают возврат:`);
+  lines.push(`   1. Масса/количество годного материала (по проекту организации демонтажа).`);
+  lines.push(`   2. × долю годности (металл ≈ 100%, кирпич от разборки ≈ 60–70%).`);
+  lines.push(`   3. × цену реализации (металлолом, цена годного кирпича).`);
+  lines.push("");
+  lines.push(`Результат вносится строкой «Возвратные суммы» в конце ЛСР со знаком МИНУС и`);
+  lines.push(`уменьшает итог. Без этой строки эксперт снимет стоимость возврата при проверке.`);
+  lines.push(`Учли возврат — отметьте словом «возврат» в примечании, замечание снимется.`);
+  return lines.join("\n");
+}
+
 /** Готовый текст разбора по замечанию или null (тогда — общий AI-разбор). */
 export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | null {
   switch (notice.scenario) {
@@ -360,6 +395,8 @@ export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | nul
       return explainIndexDouble(lsr, notice);
     case "coef-unjustified":
       return explainCoefUnjustified(lsr, notice);
+    case "returnable-sums-missing":
+      return explainReturnable(lsr, notice);
     default:
       return null;
   }

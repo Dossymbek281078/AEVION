@@ -294,7 +294,8 @@ function GumroadSetupCard({ full }: { full?: boolean }) {
           <div className="font-semibold text-pink-300 mb-1">Gumroad не настроен</div>
           <div className="text-gray-400 text-sm mb-3">
             Gumroad — единственный живой процессинг (Stripe/Paddle/LemonSqueezy не прошли KYC).
-            Merchant of Record, без US entity, вывод через Payoneer на KZ.
+            Merchant of Record, без US entity, вывод через Payoneer на KZ
+            <span className="text-emerald-400"> (аккаунт Payoneer одобрен ✓)</span>.
           </div>
           {full && (
             <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">

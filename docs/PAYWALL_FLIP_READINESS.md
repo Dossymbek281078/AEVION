@@ -1,6 +1,10 @@
 # Paywall flip readiness
 
-> Operator checklist for turning the platform-wide module paywall on. The gate code (`planGate.ts`) shipped dormant in PR #434; the frontend UX (`PaywallScreen`, `lib/paywall.ts`) and a probe smoke (`paywall-policy-smoke.js`) shipped in PR #438 / #441 and the followup expand-PR. Until `PAYWALL_MODULES` env is set on Railway, every `requireModule()` call is a no-op.
+> Operator checklist for turning the platform-wide module paywall on. The gate code (`planGate.ts`) shipped dormant in PR #434; the frontend UX (`PaywallScreen`, `lib/paywall.ts`) and a probe smoke (`paywall-policy-smoke.js`) shipped in PR #438 / #441 and the followup expand-PR. **PR #439** then mounted `requireModule()` on *every* monetised module (centralised `MODULE_GATE_PREFIXES` map in `src/index.ts`) — excluding `globus` (free), `cyberchess*`, `smeta-trainer`, `qbuild/build`, `constitution*` (own gate) — and added a **global `<PaywallModal>`** + `window.fetch` interceptor so a 402 surfaces an upgrade prompt from *any* module even if its page wasn't individually wired with `<PaywallScreen>`. Until `PAYWALL_MODULES` env is set on Railway, every `requireModule()` call is a no-op.
+>
+> **Payout rail is live:** revenue is collected via Gumroad (the only KYC-passed Merchant of Record) and paid out via **Payoneer → KZ** (Payoneer account approved 2026-06-25). A flip now produces money that actually reaches the founder.
+>
+> **Recommended first flip (real OPEX first):** `PAYWALL_MODULES=qcoreai,qfusionai,multichat-engine,healthai` — the AI-compute modules where each request has marginal cost. Expand from there.
 
 ## TL;DR
 
@@ -26,9 +30,10 @@ EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.
 
 | Surface | Module | Wired at | Reads policy from |
 |---|---|---|---|
-| Backend gate | `requireModule()` mounted in `src/index.ts` | dormant until env | `MODULES_PRICING.includedIn` |
+| Backend gate | `requireModule()` mounted on ALL monetised modules (`MODULE_GATE_PREFIXES`, PR #439) | dormant until env | `MODULES_PRICING.includedIn` |
 | Backend introspection | `GET /api/me/entitlements`, `GET /api/paywall/policy` | always live | same |
-| Frontend UI | `<PaywallScreen>` + `fetchOrPaywall`/`apiFetchOrPaywall` helpers | on 7+ pages so far (qcoreai, qcoreai/playground, qfusionai, multichat-engine, healthai, smeta-trainer, cyberchess) | the 402 response payload |
+| Frontend UI (per-page) | `<PaywallScreen>` + `fetchOrPaywall`/`apiFetchOrPaywall` helpers | on 7+ pages (qcoreai, qcoreai/playground, qfusionai, multichat-engine, healthai, smeta-trainer, cyberchess) | the 402 response payload |
+| Frontend UI (global) | `<PaywallModal>` + `window.fetch` interceptor (PR #439) | always live, app-wide | the 402 response payload |
 | Audit | `npm run audit:projects-pricing` (CI gate) | every PR | `projects.ts` ↔ `pricing.ts` |
 | Daily smoke | `qbuild-seo` (verifies SEO didn't regress) | `prod-readonly-sweep` | live `aevion.app` |
 
@@ -36,7 +41,7 @@ EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.
 
 - [ ] `npm run audit:projects-pricing` exit 0 — every module has a `MODULES_PRICING` row
 - [ ] `node scripts/paywall-policy-smoke.js` exit 0 — endpoint up, schema stable, **enforced: 0** in prod today
-- [ ] Confirm every module you plan to enforce has a `<PaywallScreen>`-wired frontend page. Grep: `grep -l PaywallScreen frontend/src/app/<module>/`
+- [ ] (Optional since PR #439) Confirm modules you plan to enforce have a `<PaywallScreen>`-wired page for the *best* UX. Grep: `grep -l PaywallScreen frontend/src/app/<module>/`. Modules without one still get the global `<PaywallModal>` overlay on 402 — no module is left with a silent failure.
 - [ ] Confirm `/pricing` page lists the tiers the 402 response will name (`lite`/`medium`/`full`/`enterprise`). The CTA in `PaywallScreen` deep-links to `upgradeUrl` from the backend.
 - [ ] Decide enforcement strategy: comma list (`qcoreai,qfusionai`), wildcard (`*`), or stepwise rollout (one module per day for a week)
 

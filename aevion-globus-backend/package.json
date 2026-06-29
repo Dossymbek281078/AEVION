@@ -57,7 +57,7 @@
   "dependencies": {
     "@noble/post-quantum": "^0.6.1",
     "@prisma/client": "^7.2.0",
-    "@sentry/node": "^10.59.0",
+    "@sentry/node": "^10.62.0",
     "@types/bcrypt": "^6.0.0",
     "@types/geoip-lite": "^1.4.4",
     "@types/pdfkit": "^0.17.5",

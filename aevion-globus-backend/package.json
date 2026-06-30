@@ -16,6 +16,8 @@
     "audit:projects-pricing": "node scripts/projects-pricing-audit.js",
     "audit:paywall-coverage": "node scripts/paywall-coverage-audit.js",
     "smoke:paywall-policy": "node scripts/paywall-policy-smoke.js",
+    "paywall:flip": "node scripts/paywall-flip-helper.js",
+    "seo:gsc-verify": "node scripts/gsc-pre-submit-verify.js",
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",

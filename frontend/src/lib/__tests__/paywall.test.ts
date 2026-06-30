@@ -4,6 +4,10 @@ import {
   fetchOrPaywall,
   apiFetchOrPaywall,
   tierLabel,
+  formatTiers,
+  triggerPaywall,
+  installPaywallInterceptor,
+  PAYWALL_EVENT,
   type PaywallPayload,
 } from "../paywall";
 
@@ -70,18 +74,22 @@ describe("fetchOrPaywall", () => {
     if ("paywall" in r) expect(r.paywall.module).toBe("qcoreai");
   });
 
-  it("throws on 402 with malformed body (treats as generic error)", async () => {
+  it("returns {data:null} on 402 with malformed body (caller renders normally, no paywall)", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       mockResponse(402, { unrelated: true }),
     );
-    await expect(fetchOrPaywall("/api/test")).rejects.toThrow(/HTTP 402/);
+    const r = await fetchOrPaywall("/api/test");
+    expect("data" in r).toBe(true);
+    if ("data" in r) expect(r.data).toBeNull();
   });
 
-  it("throws on non-2xx, non-402 statuses", async () => {
+  it("returns {data:null} on non-2xx, non-402 statuses (transient errors don't throw — page renders empty)", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       mockResponse(500, { error: "boom" }),
     );
-    await expect(fetchOrPaywall("/api/test")).rejects.toThrow(/HTTP 500/);
+    const r = await fetchOrPaywall("/api/test");
+    expect("data" in r).toBe(true);
+    if ("data" in r) expect(r.data).toBeNull();
   });
 });
 
@@ -133,5 +141,90 @@ describe("apiFetchOrPaywall", () => {
       mockResponse(401, { error: "unauthorized" }),
     );
     await expect(apiFetchOrPaywall("/api/test")).rejects.toThrow(/HTTP 401/);
+  });
+});
+
+describe("formatTiers", () => {
+  it("strips free and joins with /", () => {
+    expect(formatTiers(["medium", "full", "enterprise"])).toBe("Medium / Full / Enterprise");
+    expect(formatTiers(["free", "lite", "full"])).toBe("Lite / Full");
+    expect(formatTiers(["free"])).toBe("");
+  });
+});
+
+describe("triggerPaywall + PAYWALL_EVENT", () => {
+  it("dispatches PAYWALL_EVENT with payload as detail", () => {
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    triggerPaywall(VALID_402);
+    expect(handler).toHaveBeenCalledTimes(1);
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+    expect(evt.detail.module).toBe("qcoreai");
+    expect(evt.detail.requiredTiers).toEqual(["medium", "full", "enterprise"]);
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+});
+
+describe("installPaywallInterceptor", () => {
+  let origFetch: typeof fetch;
+  beforeEach(() => {
+    origFetch = window.fetch;
+    // Reset the "already installed" marker so each test runs install fresh.
+    delete (window as unknown as Record<symbol, unknown>)[Symbol.for("aevion.paywall.fetchPatched")];
+  });
+  afterEach(() => {
+    window.fetch = origFetch;
+  });
+
+  function makeResponse(status: number, body: unknown): Response {
+    const json = JSON.stringify(body);
+    return new Response(json, {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("is idempotent — second call does not double-wrap", () => {
+    installPaywallInterceptor();
+    const patched = window.fetch;
+    installPaywallInterceptor();
+    expect(window.fetch).toBe(patched);
+  });
+
+  it("passes 200 responses through unchanged + does not fire PAYWALL_EVENT", async () => {
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(200, { ok: true }));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    const res = await window.fetch("/api/anything");
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(handler).not.toHaveBeenCalled();
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+
+  it("fires PAYWALL_EVENT on a valid 402 upgrade_required body — and the body is still readable by the caller", async () => {
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(402, VALID_402));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    const res = await window.fetch("/api/qcoreai/chat");
+    // The clone-pattern keeps the original response body readable.
+    const body = await res.json();
+    expect(body.error).toBe("upgrade_required");
+    expect(handler).toHaveBeenCalledTimes(1);
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+    expect(evt.detail.module).toBe("qcoreai");
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+
+  it("does NOT fire PAYWALL_EVENT on a 402 with a non-upgrade body", async () => {
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(402, { error: "billing_required" }));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api/other");
+    expect(handler).not.toHaveBeenCalled();
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
   });
 });

@@ -849,6 +849,18 @@ export default function CyberChessPage(){
   // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290.
   const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-360-dockReserve));
   const bw=boardPx+"px";
+  // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
+  // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
+  // центрированной с пустыми полями ~30% на 2K/4K. Считаем реальный «слэк» и раздаём его
+  // боковым панелям. reserveBase совпадает с бюджетом ширины доски (см. baseBoardPx):
+  // когда доска ограничена ШИРИНОЙ (узкие экраны), boardPx≈vwPx-reserveBase → слэк→0,
+  // панели не расширяются и доска НЕ схлопывается. Расширение только при истинном просторе.
+  const reserveBase=(railShown?660:400)+dockReserve;
+  const wideSlack=Math.max(0,vwPx-boardPx-reserveBase-40);
+  const railExtra=railShown?Math.min(130,Math.round(wideSlack*0.32)):0;
+  const panelExtra=Math.min(190,Math.round(wideSlack*0.5));
+  const railW=248+railExtra;               // левый инфо-рейл
+  const rightPanelMax=340+panelExtra;      // правая панель (ходы/эвал/коуч)
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
@@ -6141,7 +6153,7 @@ export default function CyberChessPage(){
           const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
           const card={background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,padding:"10px 12px"} as const;
           const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
-          return <aside style={{flex:"0 0 248px",width:248,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
+          return <aside style={{flex:`0 0 ${railW}px`,width:railW,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
             <div style={card}>
               <div style={lbl}>Оценка</div>
               <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
@@ -7133,7 +7145,7 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:"clamp(280px,20vw,340px)",minWidth:0,maxWidth:340,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:rightPanelMax,minWidth:0,maxWidth:rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,

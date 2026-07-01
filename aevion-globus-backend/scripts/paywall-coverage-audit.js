@@ -143,11 +143,24 @@ function auditModule(moduleId) {
     }
   }
 
-  const covered = usesPaywallHelper && usesPaywallScreen;
+  // Coverage tiers after PR #439 added the global PaywallModal + window.fetch
+  // interceptor:
+  //   screen     — per-page <PaywallScreen> + apiFetchOrPaywall/fetchOrPaywall.
+  //                Best UX (page swap, dedicated CTA, deep-link to /pricing).
+  //   modal-only — module has API calls but no <PaywallScreen>; relies on the
+  //                global PaywallModal overlay (acceptable — not a silent fail).
+  //   no-api     — module has a frontend dir but no /api/<id>/* calls
+  //                (static landing / informational page).
+  const screen = usesPaywallHelper && usesPaywallScreen;
+  const status = screen
+    ? "screen"
+    : rawFetchHits.length > 0
+      ? "modal-only"
+      : "no-api-calls";
   return {
     moduleId,
     dir: path.relative(ROOT, foundDir).replace(/\\/g, "/"),
-    status: covered ? "covered" : rawFetchHits.length > 0 ? "raw-fetch" : "no-api-calls",
+    status,
     files: files.length,
     usesPaywallHelper,
     usesPaywallScreen,
@@ -167,47 +180,53 @@ if (filterModules) moduleIds = moduleIds.filter((id) => filterModules.includes(i
 
 const results = moduleIds.map(auditModule);
 
-if (wantJson) {
-  console.log(JSON.stringify({
-    total: results.length,
-    covered: results.filter((r) => r.status === "covered").length,
-    rawFetch: results.filter((r) => r.status === "raw-fetch").length,
-    noFrontend: results.filter((r) => r.status === "no-frontend").length,
-    noApiCalls: results.filter((r) => r.status === "no-api-calls").length,
-    results,
-  }, null, 2));
-  process.exit(results.some((r) => r.status === "raw-fetch") ? 1 : 0);
-}
-
-const covered = results.filter((r) => r.status === "covered");
-const rawFetch = results.filter((r) => r.status === "raw-fetch");
+const screen = results.filter((r) => r.status === "screen");
+const modalOnly = results.filter((r) => r.status === "modal-only");
 const noFrontend = results.filter((r) => r.status === "no-frontend");
 const noApiCalls = results.filter((r) => r.status === "no-api-calls");
 
+if (wantJson) {
+  console.log(JSON.stringify({
+    total: results.length,
+    screen: screen.length,
+    modalOnly: modalOnly.length,
+    noFrontend: noFrontend.length,
+    noApiCalls: noApiCalls.length,
+    results,
+  }, null, 2));
+  // Advisory now: PR #439's global PaywallModal catches every 402, so
+  // modal-only is acceptable. No exit-1 unless someone passes --strict.
+  const strict = process.argv.includes("--strict");
+  process.exit(strict && modalOnly.length > 0 ? 1 : 0);
+}
+
 console.log(`Paywall coverage audit — ${results.length} module(s) in projects.ts`);
 console.log("");
-console.log(`✓ covered (helper + screen wired):  ${covered.length}`);
-console.log(`⚠ raw-fetch (will silently 402):    ${rawFetch.length}`);
-console.log(`◌ no frontend dir found:             ${noFrontend.length}`);
-console.log(`◌ has frontend but no /api/<id>/*:   ${noApiCalls.length}`);
+console.log(`✓ screen     (per-page <PaywallScreen> — best UX):     ${screen.length}`);
+console.log(`◉ modal-only (covered by global PaywallModal #439):    ${modalOnly.length}`);
+console.log(`◌ no-api-calls (static landing page):                  ${noApiCalls.length}`);
+console.log(`◌ no frontend dir found:                                ${noFrontend.length}`);
 console.log("");
 
-if (covered.length) {
-  console.log("Covered:");
-  for (const r of covered) console.log(`    ✓ ${r.moduleId.padEnd(24)} ${r.dir}`);
+if (screen.length) {
+  console.log("✓ Screen-wired (page swaps to <PaywallScreen> on 402):");
+  for (const r of screen) console.log(`    ${r.moduleId.padEnd(24)} ${r.dir}`);
   console.log("");
 }
 
-if (rawFetch.length) {
-  console.log("⚠ Will silently 402 when PAYWALL_MODULES enforces them:");
-  for (const r of rawFetch) {
-    console.log(`    ${r.moduleId} — ${r.rawFetchCount} raw fetch(es) in ${r.dir}`);
-    for (const h of r.rawFetches) console.log(`        ${h.file}:${h.line}  →  ${h.url}`);
+if (modalOnly.length) {
+  console.log("◉ Modal-only (acceptable — global <PaywallModal> overlays on 402):");
+  console.log("  Upgrade candidates if you want a dedicated page swap instead of a modal:");
+  for (const r of modalOnly) {
+    console.log(`    ${r.moduleId.padEnd(24)} ${r.rawFetchCount} raw fetch(es)  ${r.dir}`);
   }
   console.log("");
-  console.log("  Fix: replace fetch(apiUrl('/api/<module>/...'))");
+  console.log("  To upgrade: replace fetch(apiUrl('/api/<module>/...'))");
   console.log("  with apiFetchOrPaywall('/api/<module>/...') + catch PaywallError → setPaywall(e.payload).");
   console.log("");
 }
 
-process.exit(rawFetch.length > 0 ? 1 : 0);
+// Default: always green. Pass --strict in CI/PR review to fail when any
+// module is still modal-only.
+const strict = process.argv.includes("--strict");
+process.exit(strict && modalOnly.length > 0 ? 1 : 0);

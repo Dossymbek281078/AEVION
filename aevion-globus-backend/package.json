@@ -16,6 +16,8 @@
     "audit:projects-pricing": "node scripts/projects-pricing-audit.js",
     "audit:paywall-coverage": "node scripts/paywall-coverage-audit.js",
     "smoke:paywall-policy": "node scripts/paywall-policy-smoke.js",
+    "paywall:flip": "node scripts/paywall-flip-helper.js",
+    "seo:gsc-verify": "node scripts/gsc-pre-submit-verify.js",
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",
@@ -57,7 +59,7 @@
   "dependencies": {
     "@noble/post-quantum": "^0.6.1",
     "@prisma/client": "^7.2.0",
-    "@sentry/node": "^10.62.0",
+    "@sentry/node": "^10.59.0",
     "@types/bcrypt": "^6.0.0",
     "@types/geoip-lite": "^1.4.4",
     "@types/pdfkit": "^0.17.5",
@@ -78,7 +80,7 @@
     "pg": "^8.22.0",
     "qrcode": "^1.5.4",
     "secrets.js-grempe": "^2.0.0",
-    "stripe": "^22.3.0",
+    "stripe": "^22.2.2",
     "web-push": "^3.6.7",
     "ws": "^8.21.0",
     "zod": "^4.4.3"
@@ -86,8 +88,8 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.9.4",
-    "@types/nodemailer": "^8.0.1",
+    "@types/node": "^25.9.3",
+    "@types/nodemailer": "^8.0.0",
     "@types/supertest": "^7.2.0",
     "prisma": "^7.2.0",
     "supertest": "^7.2.2",

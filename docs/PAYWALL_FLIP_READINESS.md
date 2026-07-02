@@ -1,5 +1,11 @@
 # Paywall flip readiness
 
+> **🟢 LIVE since 2026-07-01.** The paywall is switched ON in prod. `PAYWALL_MODULES=qfusionai,multichat-engine,healthai,qai,qlearn,qnews` (6 AI-compute modules with real per-request OPEX). Each returns `402 upgrade_required` to free traffic → `<PaywallScreen>`/`<PaywallModal>` → `/pricing` → **real LemonSqueezy checkout** (payout Payoneer→KZ). Verified live on `/api-backend/api/<module>/…`.
+>
+> **Deliberately NOT gated:** `qcoreai` (Free tier promises 100k tokens/mo but `includedIn=medium+` — gating it as-is breaks the advertised free quota; needs token-metering, see below), `qright`/`qsign` (same Free-promise conflict), and `cyberchess`/`smeta-trainer`/`qbuild`/`constitution*` (own gate / active parallel dev, excluded from `MODULE_GATE_PREFIXES`). Ecosystem/infra modules left open on purpose to keep the "open planet" demo intact during acquisition talks. Expand `PAYWALL_MODULES` when ready.
+>
+> **Next monetization step — qcoreai token-metering:** give free users their promised 100k tokens/mo, then 402→upgrade. Only `QCoreSpendLimit` (per-user USD budget) exists today, not a free-tier token gate. Until built, qcoreai stays open (free, as advertised) — no live contradiction.
+
 > Operator checklist for turning the platform-wide module paywall on. The gate code (`planGate.ts`) shipped dormant in PR #434; the frontend UX (`PaywallScreen`, `lib/paywall.ts`) and a probe smoke (`paywall-policy-smoke.js`) shipped in PR #438 / #441 and the followup expand-PR. **PR #439** then mounted `requireModule()` on *every* monetised module (centralised `MODULE_GATE_PREFIXES` map in `src/index.ts`) — excluding `globus` (free), `cyberchess*`, `smeta-trainer`, `qbuild/build`, `constitution*` (own gate) — and added a **global `<PaywallModal>`** + `window.fetch` interceptor so a 402 surfaces an upgrade prompt from *any* module even if its page wasn't individually wired with `<PaywallScreen>`. Until `PAYWALL_MODULES` env is set on Railway, every `requireModule()` call is a no-op.
 >
 > **Payout rail is live:** revenue is collected via Gumroad (the only KYC-passed Merchant of Record) and paid out via **Payoneer → KZ** (Payoneer account approved 2026-06-25). A flip now produces money that actually reaches the founder.

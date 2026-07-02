@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { PaywallPayload } from "@/lib/paywall";
 
 type Strategy = "speed" | "quality" | "cost" | "auto";
 
@@ -32,10 +31,9 @@ const STRATEGY_BORDER: Record<Strategy, string> = {
 
 interface Props {
   onResult?: (r: RouteResult) => void;
-  onPaywall?: (p: PaywallPayload) => void;
 }
 
-export default function FusionPlayground({ onResult, onPaywall }: Props) {
+export default function FusionPlayground({ onResult }: Props) {
   const [prompt, setPrompt] = useState("Объясни в одном абзаце, что такое идемпотентность API.");
   const [strategy, setStrategy] = useState<Strategy>("auto");
   const [context, setContext] = useState("");
@@ -58,11 +56,10 @@ export default function FusionPlayground({ onResult, onPaywall }: Props) {
         body: JSON.stringify(body),
       });
       if (r.status === 402) {
-        const body = await r.json().catch(() => null);
-        if (body && body.error === "upgrade_required" && onPaywall) {
-          onPaywall(body as PaywallPayload);
-          return;
-        }
+        // Gated: the global <PaywallModal> (window.fetch interceptor) already
+        // caught this 402 and shows the upgrade prompt. Stop quietly — no
+        // inline error, no duplicate paywall surface.
+        return;
       }
       const data = await r.json();
       if (!r.ok) {

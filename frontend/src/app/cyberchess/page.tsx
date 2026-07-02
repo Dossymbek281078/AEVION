@@ -60,6 +60,7 @@ import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import StreamMenu from "./StreamMenu";
+import StreamSourceModal from "./StreamSourceModal";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -849,6 +850,18 @@ export default function CyberChessPage(){
   // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290.
   const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-360-dockReserve));
   const bw=boardPx+"px";
+  // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
+  // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
+  // центрированной с пустыми полями ~30% на 2K/4K. Считаем реальный «слэк» и раздаём его
+  // боковым панелям. reserveBase совпадает с бюджетом ширины доски (см. baseBoardPx):
+  // когда доска ограничена ШИРИНОЙ (узкие экраны), boardPx≈vwPx-reserveBase → слэк→0,
+  // панели не расширяются и доска НЕ схлопывается. Расширение только при истинном просторе.
+  const reserveBase=(railShown?660:400)+dockReserve;
+  const wideSlack=Math.max(0,vwPx-boardPx-reserveBase-40);
+  const railExtra=railShown?Math.min(130,Math.round(wideSlack*0.32)):0;
+  const panelExtra=Math.min(190,Math.round(wideSlack*0.5));
+  const railW=248+railExtra;               // левый инфо-рейл
+  const rightPanelMax=340+panelExtra;      // правая панель (ходы/эвал/коуч)
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
@@ -1379,6 +1392,11 @@ export default function CyberChessPage(){
   // PiP — floating Picture-in-Picture для YouTube/Twitch стримов поверх доски.
   // Hook возвращает: open (bool), source (PiPSource|null), show(), hide(), toggle()
   const pip = useWorkspacePiP();
+  // Единый модал выбора источника «смотреть YouTube/Twitch» — заменяет разрозненные
+  // window.prompt (StreamMenu→PiP + daily-подсказка «включить стрим стримера»).
+  const[showStreamSource,sShowStreamSource]=useState(false);
+  const[streamSourceInitial,sStreamSourceInitial]=useState("");
+  const openStreamSource=(initial?:string)=>{sStreamSourceInitial(initial||"");sShowStreamSource(true);};
   // PiP UX polish: pulsing "variant-of-day stream?" suggestion. Dismissed by user
   // clicking either the open-stream CTA or the × button; remembered per-day so we
   // don't nag (key includes ISO date YYYY-MM-DD).
@@ -4987,11 +5005,10 @@ export default function CyberChessPage(){
           onClosePiP={()=>pip.hide()}
           onOpenMulti={()=>sShowMultiPanel(true)}
           onOpenPiP={()=>{
-            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
+            // Единый модал выбора источника (заменил window.prompt). Дефолт —
+            // сохранённый любимый Twitch-стример, если он есть.
             let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
-            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
-            if(!url)return;const src=detectMediaSource(url.trim());
-            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
+            openStreamSource(def);
           }}
         />
         <button
@@ -6141,7 +6158,7 @@ export default function CyberChessPage(){
           const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
           const card={background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,padding:"10px 12px"} as const;
           const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
-          return <aside style={{flex:"0 0 248px",width:248,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
+          return <aside style={{flex:`0 0 ${railW}px`,width:railW,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
             <div style={card}>
               <div style={lbl}>Оценка</div>
               <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
@@ -7133,7 +7150,7 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:"clamp(280px,20vw,340px)",minWidth:0,maxWidth:340,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:rightPanelMax,minWidth:0,maxWidth:rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,
@@ -10827,16 +10844,15 @@ ${question.trim()}`;
       <button
         type="button"
         onClick={()=>{
-          // Любимый стример — настраиваемый канал, без хардкода имён. Сохраняется один раз.
+          // Любимый стример — настраиваемый канал, без хардкода имён.
           let fav="";try{fav=localStorage.getItem("cc_fav_streamer_v1")||""}catch{}
-          if(!fav){
-            const v=window.prompt("Twitch-канал любимого стримера (ник или ссылка):","");
-            if(!v)return;
-            fav=v.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i,"").replace(/\/.*$/,"");
-            if(!fav)return;
-            try{localStorage.setItem("cc_fav_streamer_v1",fav)}catch{}
+          if(fav){
+            // Быстрый путь: канал уже сохранён — включаем сразу.
+            pip.show({kind:"twitch",url:fav,title:"Стрим любимого стримера"});
+          }else{
+            // Иначе — тот же единый модал выбора источника (сохранит канал как любимый).
+            openStreamSource("");
           }
-          pip.show({kind:"twitch",url:fav,title:"Стрим любимого стримера"});
           dismissPipSuggest();
         }}
         style={{
@@ -13576,6 +13592,13 @@ ${question.trim()}`;
       </div>
     )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    {/* Единый вход «смотреть YouTube/Twitch» — результат идёт в PiP-окно. */}
+    <StreamSourceModal
+      open={showStreamSource}
+      initialUrl={streamSourceInitial}
+      onClose={()=>sShowStreamSource(false)}
+      onPlay={(src)=>pip.show(src)}
+    />
     {/* QR modal */}
     {qrDataUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sQrDataUrl(null)}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>

@@ -523,7 +523,7 @@ const EXOTIC: ChessSoundPreset[] = [
 // 20 ДОПОЛНИТЕЛЬНЫХ (10 classic-extra + 10 exotic-extra) — доводят набор до 60.
 const EXTRA: ChessSoundPreset[] = [
   {
-    id: "classic-felt", name: "Фетр", emoji: "🟫", category: "classic",
+    id: "classic-felt2", name: "Фетр мягкий", emoji: "🟫", category: "classic",
     desc: "Мягкое приглушённое касание по фетровому полю.",
     events: {
       move:    [noiseMove(900, 0.16, 0.05)],
@@ -535,7 +535,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-bone", name: "Кость", emoji: "🦴", category: "classic",
+    id: "classic-bone2", name: "Кость сухая", emoji: "🦴", category: "classic",
     desc: "Сухой костяной стук старинного набора.",
     events: {
       move:    [{ kind: "click", freq: 2000, q: 6, dur: 0.05, vol: 0.20 }],
@@ -547,7 +547,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-metal", name: "Сталь", emoji: "⚙️", category: "classic",
+    id: "classic-steel", name: "Сталь", emoji: "⚙️", category: "classic",
     desc: "Холодный звон стальных фигур.",
     events: {
       move:    [{ kind: "click", freq: 3200, q: 12, dur: 0.06, vol: 0.16 }],
@@ -571,7 +571,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-ivory", name: "Слоновая кость", emoji: "🐘", category: "classic",
+    id: "classic-ivory2", name: "Слоновая кость полир.", emoji: "🐘", category: "classic",
     desc: "Гладкий полированный звон премиум-набора.",
     events: {
       move:    [tone("sine", 2200, 0.07, 0.13)],
@@ -595,7 +595,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-cork", name: "Пробка", emoji: "🟤", category: "classic",
+    id: "classic-cork2", name: "Пробка упругая", emoji: "🟤", category: "classic",
     desc: "Лёгкое упругое «пок» по пробковому полю.",
     events: {
       move:    [{ kind: "click", freq: 1400, q: 3, dur: 0.05, vol: 0.20 }],
@@ -619,7 +619,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-leather", name: "Кожа", emoji: "🟫", category: "classic",
+    id: "classic-leather2", name: "Кожа планшет", emoji: "🟫", category: "classic",
     desc: "Приглушённый кожаный «туп» по доске-планшету.",
     events: {
       move:    [noiseMove(640, 0.20, 0.06)],
@@ -655,7 +655,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-laser", name: "Лазер", emoji: "🔫", category: "exotic",
+    id: "exotic-laser2", name: "Лазер писк", emoji: "🔫", category: "exotic",
     desc: "Sci-fi бластер — нисходящий писк.",
     events: {
       move:    [tone("sawtooth", 2200, 0.07, 0.10, 600)],
@@ -691,7 +691,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-bubble", name: "Пузырь", emoji: "🫧", category: "exotic",
+    id: "exotic-bubble2", name: "Пузырь блюп", emoji: "🫧", category: "exotic",
     desc: "Подводные пузырьки — игривый «блюп».",
     events: {
       move:    [tone("sine", 600, 0.08, 0.16, 1600)],
@@ -703,7 +703,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-glitch", name: "Глитч", emoji: "📟", category: "exotic",
+    id: "exotic-glitch2", name: "Глитч FM", emoji: "📟", category: "exotic",
     desc: "Цифровой сбой — FM-щелчок с биениями.",
     events: {
       move:    [{ kind: "fm", carrier: 900, mod: 320, modIdx: 400, dur: 0.06, vol: 0.14 }],
@@ -739,7 +739,7 @@ const EXTRA: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-typewriter", name: "Печатная машинка", emoji: "⌨️", category: "exotic",
+    id: "exotic-typewriter2", name: "Печатная машинка", emoji: "⌨️", category: "exotic",
     desc: "Механический удар клавиши и возврат каретки.",
     events: {
       move:    [{ kind: "click", freq: 2400, q: 14, dur: 0.04, vol: 0.20 }, noiseMove(1600, 0.10, 0.03)],

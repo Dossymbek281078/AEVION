@@ -4,6 +4,8 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
+import { enforceFreeTokenQuota, freeTokenLimit } from "../lib/qcoreQuota";
+import { resolveUserPlan } from "../lib/planGate";
 import {
   callProvider,
   getProviders,
@@ -112,6 +114,7 @@ import {
   getBatch,
   getDueSchedules,
   getMonthlySpend,
+  getMonthlyTokens,
   getScheduledBatch,
   getSpendLimit,
   listBatches,
@@ -290,6 +293,7 @@ function publicErrorCategory(msg: string): string {
 
 qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
   try {
+    if (await enforceFreeTokenQuota(req, res)) return;
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
@@ -1034,6 +1038,32 @@ qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: "spend summary failed" });
+  }
+});
+
+/*
+ * Free-tier token quota — current-month token usage vs the 100k allowance.
+ * Lets the UI show "37,400 / 100,000 tokens used this month" and an upgrade
+ * nudge before the hard 402. Read-only; reflects the gate in lib/qcoreQuota.ts.
+ */
+qcoreaiRouter.get("/me/token-quota", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const plan = resolveUserPlan(req);
+    const limit = freeTokenLimit();
+    const used = await getMonthlyTokens(auth.sub);
+    const metered = plan.tier === "free" && process.env.QCOREAI_FREE_QUOTA === "1";
+    res.json({
+      tier: plan.tier,
+      metered,
+      usedTokens: used,
+      limitTokens: metered ? limit : null,
+      remainingTokens: metered ? Math.max(0, limit - used) : null,
+      exceeded: metered ? used >= limit : false,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "token quota summary failed" });
   }
 });
 
@@ -2021,6 +2051,7 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
 });
 
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
+  if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
 
@@ -3083,6 +3114,7 @@ const batchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qcore-bat
 
 qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
   try {
+    if (await enforceFreeTokenQuota(req, res)) return;
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
 

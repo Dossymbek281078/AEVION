@@ -60,6 +60,7 @@ import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import StreamMenu from "./StreamMenu";
+import StreamSourceModal from "./StreamSourceModal";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -1391,6 +1392,11 @@ export default function CyberChessPage(){
   // PiP — floating Picture-in-Picture для YouTube/Twitch стримов поверх доски.
   // Hook возвращает: open (bool), source (PiPSource|null), show(), hide(), toggle()
   const pip = useWorkspacePiP();
+  // Единый модал выбора источника «смотреть YouTube/Twitch» — заменяет разрозненные
+  // window.prompt (StreamMenu→PiP + daily-подсказка «включить стрим стримера»).
+  const[showStreamSource,sShowStreamSource]=useState(false);
+  const[streamSourceInitial,sStreamSourceInitial]=useState("");
+  const openStreamSource=(initial?:string)=>{sStreamSourceInitial(initial||"");sShowStreamSource(true);};
   // PiP UX polish: pulsing "variant-of-day stream?" suggestion. Dismissed by user
   // clicking either the open-stream CTA or the × button; remembered per-day so we
   // don't nag (key includes ISO date YYYY-MM-DD).
@@ -4999,11 +5005,10 @@ export default function CyberChessPage(){
           onClosePiP={()=>pip.hide()}
           onOpenMulti={()=>sShowMultiPanel(true)}
           onOpenPiP={()=>{
-            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
+            // Единый модал выбора источника (заменил window.prompt). Дефолт —
+            // сохранённый любимый Twitch-стример, если он есть.
             let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
-            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
-            if(!url)return;const src=detectMediaSource(url.trim());
-            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
+            openStreamSource(def);
           }}
         />
         <button
@@ -10839,16 +10844,15 @@ ${question.trim()}`;
       <button
         type="button"
         onClick={()=>{
-          // Любимый стример — настраиваемый канал, без хардкода имён. Сохраняется один раз.
+          // Любимый стример — настраиваемый канал, без хардкода имён.
           let fav="";try{fav=localStorage.getItem("cc_fav_streamer_v1")||""}catch{}
-          if(!fav){
-            const v=window.prompt("Twitch-канал любимого стримера (ник или ссылка):","");
-            if(!v)return;
-            fav=v.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i,"").replace(/\/.*$/,"");
-            if(!fav)return;
-            try{localStorage.setItem("cc_fav_streamer_v1",fav)}catch{}
+          if(fav){
+            // Быстрый путь: канал уже сохранён — включаем сразу.
+            pip.show({kind:"twitch",url:fav,title:"Стрим любимого стримера"});
+          }else{
+            // Иначе — тот же единый модал выбора источника (сохранит канал как любимый).
+            openStreamSource("");
           }
-          pip.show({kind:"twitch",url:fav,title:"Стрим любимого стримера"});
           dismissPipSuggest();
         }}
         style={{
@@ -13588,6 +13592,13 @@ ${question.trim()}`;
       </div>
     )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    {/* Единый вход «смотреть YouTube/Twitch» — результат идёт в PiP-окно. */}
+    <StreamSourceModal
+      open={showStreamSource}
+      initialUrl={streamSourceInitial}
+      onClose={()=>sShowStreamSource(false)}
+      onPlay={(src)=>pip.show(src)}
+    />
     {/* QR modal */}
     {qrDataUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sQrDataUrl(null)}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>

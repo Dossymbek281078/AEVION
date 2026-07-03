@@ -13,7 +13,7 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 type AgentRole = "analyst" | "writer" | "critic";
 type ConfigRoleId = "analyst" | "writer" | "writerB" | "critic";
 type Stage = "draft" | "revision" | "judge";
-type Strategy = "sequential" | "parallel" | "debate";
+type Strategy = "sequential" | "parallel" | "debate" | "council";
 
 type ProviderInfo = {
   id: string;
@@ -328,6 +328,8 @@ export default function QCoreMultiAgentPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
+  // council mode: how many crowd members to convene (2–6).
+  const [councilSize, setCouncilSize] = useState<number>(3);
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
@@ -518,6 +520,7 @@ export default function QCoreMultiAgentPage() {
       if (e.key === "1") { e.preventDefault(); setStrategy("sequential"); return; }
       if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
       if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
+      if (e.key === "4") { e.preventDefault(); setStrategy("council"); return; }
       // ? — show shortcuts modal
       if (e.key === "?") { e.preventDefault(); setShortcutModalOpen(true); return; }
     };
@@ -1323,6 +1326,7 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      if (useStrategy === "council") body.councilSize = councilSize;
       if (continueFromRunId) body.continueFromRunId = continueFromRunId;
       // V6-P integration: send promptOverrides if user picked custom prompts.
       const promptOverridesBody: Record<string, { promptId: string }> = {};
@@ -1923,7 +1927,7 @@ export default function QCoreMultiAgentPage() {
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                {(["sequential", "parallel", "debate"] as Strategy[]).map((s) => (
+                {(["sequential", "parallel", "debate", "council"] as Strategy[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => setStrategy(s)}
@@ -1932,18 +1936,41 @@ export default function QCoreMultiAgentPage() {
                       padding: "6px 12px",
                       borderRadius: 8,
                       border: "none",
-                      background: strategy === s ? "#fff" : "transparent",
-                      color: strategy === s ? "#0f172a" : "rgba(255,255,255,0.85)",
+                      background: strategy === s ? (s === "council" ? "#a855f7" : "#fff") : "transparent",
+                      color: strategy === s ? (s === "council" ? "#fff" : "#0f172a") : "rgba(255,255,255,0.85)",
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: "pointer",
                       transition: "background 0.15s",
                     }}
                   >
-                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : "Debate"}
+                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : s === "debate" ? "Debate" : "Council ✦"}
                   </button>
                 ))}
               </div>
+
+              {strategy === "council" && (
+                <div
+                  title="How many crowd members to convene. Free models do the breadth; Fable 5 synthesizes."
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 8px", borderRadius: 8,
+                    background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.35)",
+                    color: "#e9d5ff", fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <span>Council size</span>
+                  <button
+                    onClick={() => setCouncilSize((n) => Math.max(2, n - 1))}
+                    style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >−</button>
+                  <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
+                  <button
+                    onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
+                    style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >+</button>
+                </div>
+              )}
 
               {(strategy === "sequential"
                 ? (["analyst", "writer", "critic"] as ConfigRoleId[])

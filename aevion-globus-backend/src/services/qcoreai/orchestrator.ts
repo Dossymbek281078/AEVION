@@ -20,24 +20,27 @@
  * route handler forwards them as-is and persists key milestones to Postgres.
  */
 
-import { streamProvider, ChatMessage } from "./providers";
+import { streamProvider, ChatMessage, getProviders } from "./providers";
 import {
   AgentConfig,
   AgentOverride,
   AgentRole,
   buildAgent,
   buildCon,
+  buildCouncil,
   buildJudge,
   buildModerator,
   buildPro,
+  buildSynthesizer,
   buildWriterB,
+  CouncilMember,
   parseCriticVerdict,
   WRITER_REVISE_INSTRUCTION,
 } from "./agents";
 import { costUsd } from "./pricing";
 
 export type AgentStage = "draft" | "revision" | "judge";
-export type PipelineStrategy = "sequential" | "parallel" | "debate";
+export type PipelineStrategy = "sequential" | "parallel" | "debate" | "council";
 
 export type OrchestratorInput = {
   userInput: string;
@@ -50,6 +53,8 @@ export type OrchestratorInput = {
   };
   /** sequential mode only: 0 = no revision, 1 = up to one pass (default), 2 = cap. */
   maxRevisions?: number;
+  /** council mode only: how many crowd members to convene (2–6, default 3). */
+  councilSize?: number;
   /** Optional prior user/assistant turns for follow-up context. */
   history?: ChatMessage[];
   /**
@@ -80,6 +85,10 @@ export type OrchestratorEvent =
       writerB?: { provider: string; model: string };
       critic: { provider: string; model: string };
       maxRevisions: number;
+      /** council mode: the full crowd (provider/model/persona per member). */
+      council?: Array<{ provider: string; model: string; persona: string; free: boolean }>;
+      /** council mode: the premium chair that fuses the drafts. */
+      synthesizer?: { provider: string; model: string };
     }
   | {
       type: "agent_start";
@@ -599,6 +608,109 @@ async function* runDebate(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Strategy: council (crowd of free models ‖ … → premium Synthesizer)
+
+   The differentiator. N (mostly free) models each answer the SAME question
+   under a DIFFERENT persona, streaming in parallel. Then one premium model
+   (Fable 5 by default) cross-checks all drafts and fuses them into a single
+   verified answer. Free breadth, premium depth — cost-tiered automatically.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function* runCouncil(
+  input: OrchestratorInput,
+  agents: { members: CouncilMember[]; synthesizer: AgentConfig },
+  t0: number
+): AsyncGenerator<OrchestratorEvent> {
+  const { members, synthesizer } = agents;
+  const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  const budget = effectiveBudget(input);
+  let totalCost = 0;
+  const tally = (e: OrchestratorEvent) => {
+    if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
+  };
+
+  const freeById = new Map(getProviders().map((p) => [p.id, p.free] as const));
+
+  yield {
+    type: "plan",
+    strategy: "council",
+    // Fill the legacy slots so existing consumers stay happy; the council-aware
+    // UI reads the richer `council` / `synthesizer` fields below.
+    analyst: { provider: members[0].provider, model: members[0].model },
+    writer: { provider: members[0].provider, model: members[0].model },
+    critic: { provider: synthesizer.provider, model: synthesizer.model },
+    maxRevisions: 0,
+    council: members.map((m) => ({
+      provider: m.provider,
+      model: m.model,
+      persona: m.persona,
+      free: freeById.get(m.provider) ?? false,
+    })),
+    synthesizer: { provider: synthesizer.provider, model: synthesizer.model },
+  };
+
+  /* Stage 1: the whole crowd answers in parallel, each under its persona. */
+  const memberUser = yield* applyGuidance(input, input.userInput, "writer", "draft");
+  const streams = members.map((m) =>
+    streamAgent(
+      m,
+      "draft",
+      [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
+      m.persona
+    )
+  );
+
+  let drafts: string[] = [];
+  try {
+    const results = yield* mergeStreamsTally(streams, tally);
+    drafts = results.map((r) => r ?? "");
+  } catch (e) {
+    yield { type: "error", role: "writer", message: `Council members failed: ${errMsg(e)}` };
+    return;
+  }
+
+  // Keep only members that actually produced text; if the crowd went dark,
+  // there's nothing to synthesize.
+  const answered = members
+    .map((m, i) => ({ member: m, draft: drafts[i] }))
+    .filter((x) => x.draft.trim().length > 0);
+
+  if (answered.length === 0) {
+    yield { type: "error", role: "writer", message: "No council member produced an answer." };
+    return;
+  }
+
+  if (totalCost > budget) {
+    // Budget blown by the crowd (shouldn't happen with free members) — ship
+    // the longest draft rather than paying for synthesis.
+    const longest = answered.reduce((a, b) => (b.draft.length > a.draft.length ? b : a)).draft;
+    yield* bailBudget(totalCost, budget, longest, t0);
+    return;
+  }
+
+  /* Stage 2: premium Synthesizer fuses + verifies. */
+  const synthUser = buildCouncilSynthPrompt(
+    input.userInput,
+    answered.map((x) => ({ persona: x.member.persona, draft: x.draft }))
+  );
+  const synthMessages: ChatMessage[] = [
+    { role: "system", content: synthesizer.systemPrompt },
+    { role: "user", content: synthUser },
+  ];
+  let finalContent: string;
+  try {
+    finalContent = yield* forwardTally(streamAgent(synthesizer, "judge", synthMessages), tally);
+  } catch (e) {
+    yield { type: "error", role: "critic", message: `Synthesizer failed: ${errMsg(e)}` };
+    // Fallback: hand back the longest crowd draft so the user isn't empty-handed.
+    finalContent = answered.reduce((a, b) => (b.draft.length > a.draft.length ? b : a)).draft;
+  }
+
+  yield { type: "final", content: finalContent };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Tally-aware wrappers — re-yield events AND observe them for cost totals.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -638,7 +750,19 @@ export async function* runMultiAgent(
   const strategy: PipelineStrategy =
     input.strategy === "parallel" ? "parallel" :
     input.strategy === "debate" ? "debate" :
+    input.strategy === "council" ? "council" :
     "sequential";
+
+  if (strategy === "council") {
+    const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer);
+    const synthesizer = buildSynthesizer(input.overrides?.critic);
+    if (members.length < 2 || !synthesizer) {
+      yield { type: "error", message: noProviderMsg() };
+      return;
+    }
+    yield* runCouncil(input, { members, synthesizer }, t0);
+    return;
+  }
 
   const analyst = buildAgent("analyst", input.overrides?.analyst);
   const writer = buildAgent("writer", input.overrides?.writer);
@@ -790,6 +914,25 @@ function buildModeratorPrompt(
     "Produce the balanced final answer now. Bottom-line recommendation first.",
     "Output ONLY the final answer. No 'Pro said / Con said' commentary.",
   ].join("\n");
+}
+
+function buildCouncilSynthPrompt(
+  userInput: string,
+  drafts: Array<{ persona: string; draft: string }>
+): string {
+  const parts: string[] = ["User question:", userInput, ""];
+  parts.push(`The council (${drafts.length} independent models) answered:`);
+  parts.push("");
+  drafts.forEach((d, i) => {
+    parts.push(`── Member ${i + 1} · ${d.persona} ──`);
+    parts.push(d.draft);
+    parts.push("");
+  });
+  parts.push(
+    "Now produce the single best final answer per your instructions: cross-check the members, " +
+    "adjudicate disagreements, fix errors, and merge the strongest parts. Output ONLY the final answer."
+  );
+  return parts.join("\n");
 }
 
 function noProviderMsg(): string {

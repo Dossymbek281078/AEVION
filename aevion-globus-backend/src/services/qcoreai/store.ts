@@ -2071,6 +2071,41 @@ export async function getMonthlySpend(userId: string): Promise<number> {
   return parseFloat(r.rows[0]?.total ?? "0") || 0;
 }
 
+/**
+ * Sum of tokens (in + out) a user has spent in the current calendar month.
+ * Mirrors getMonthlySpend but counts tokens instead of USD — used by the
+ * free-tier quota gate (Free tariff advertises 100k tokens/month on qcoreai).
+ */
+export async function getMonthlyTokens(userId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  if (!isDbReady()) {
+    // In-memory: tokens live on messages, runs carry the sessionId + startedAt.
+    const sessions = await listSessions(userId, 200);
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    let total = 0;
+    for (const run of memRuns.values()) {
+      if (!sessionIds.has(run.sessionId) || run.startedAt < monthStart) continue;
+      for (const m of memMessagesByRun.get(run.id) ?? []) {
+        total += (m.tokensIn ?? 0) + (m.tokensOut ?? 0);
+      }
+    }
+    return total;
+  }
+
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(COALESCE(m."tokensIn",0)+COALESCE(m."tokensOut",0)),0)::bigint AS total
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id"=m."runId"
+       JOIN "QCoreSession" s ON s."id"=r."sessionId"
+      WHERE s."userId"=$1 AND r."startedAt" >= $2`,
+    [userId, monthStart]
+  );
+  return Number(r.rows[0]?.total ?? 0) || 0;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Run templates — reusable input + strategy + overrides bundles.
    Users save a named config once and apply it in one click; public

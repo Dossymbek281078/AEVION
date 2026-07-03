@@ -78,7 +78,7 @@ export interface VoiceCoachProps {
   history?: string[];
   /** Which side the local user plays as. */
   userSide?: 'w' | 'b';
-  /** Override API base; defaults to '/api/cyberchess-voice-coach'. */
+  /** Override API base; defaults to '/api-backend/api/cyberchess-voice-coach'. */
   apiBase?: string;
 }
 
@@ -156,7 +156,7 @@ export default function VoiceCoach({
   phase,
   history,
   userSide,
-  apiBase = '/api/cyberchess-voice-coach',
+  apiBase = '/api-backend/api/cyberchess-voice-coach',
 }: VoiceCoachProps): React.ReactElement | null {
   // ─── Persisted user preferences ──────────────────────────────────────
   const [muted, setMuted] = useState<boolean>(() =>

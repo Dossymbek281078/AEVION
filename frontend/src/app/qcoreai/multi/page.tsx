@@ -188,12 +188,30 @@ const ROLE_STYLE: Record<string, RoleVisual> = {
   con:     { color: "#dc2626", bg: "rgba(220,38,38,0.08)",  tag: "✕",  label: "Con",      desc: "Debate mode: argues the counter-case" },
   moderator: { color: "#7c3aed", bg: "rgba(124,58,237,0.08)", tag: "M", label: "Moderator", desc: "Debate mode: synthesizes a balanced answer" },
   judge:   { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "J",  label: "Judge",    desc: "Parallel mode: picks or merges drafts" },
+  council: { color: "#a855f7", bg: "rgba(168,85,247,0.08)", tag: "✦",  label: "Council",  desc: "Council mode: a free-model crowd member (one persona)" },
+  synth:   { color: "#c026d3", bg: "rgba(192,38,211,0.10)", tag: "★",  label: "Synthesizer", desc: "Council mode: premium chair (Fable 5) fuses + verifies the crowd" },
 };
+
+/** Cheap client-side free/paid heuristic for the model badge. */
+function isFreeModel(model?: string): boolean {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  if (/^(claude-|gpt-|grok-)/.test(m)) return false;
+  if (/gemini-1\.5-pro/.test(m)) return false;
+  if (m.startsWith("stub-")) return true;
+  if (m.includes(":free")) return true;
+  // Free-fleet vendors ship Llama/Qwen/Gemma/Mistral/Phi/Kimi/DeepSeek-distill.
+  return /(llama|qwen|gemma|mistral|nemo|phi|kimi|deepseek|nemotron)/.test(m);
+}
 
 const FINAL_STYLE = { color: "#7c3aed", bg: "rgba(124,58,237,0.08)" };
 
 /** Pick the visual style for a turn using role + stage + instance + strategy. */
 function turnStyle(role: AgentRole, stage: Stage, instance?: string, strategy?: Strategy): RoleVisual {
+  if (strategy === "council") {
+    if (role === "critic") return ROLE_STYLE.synth;   // synthesizer (chair)
+    if (role === "writer") return ROLE_STYLE.council;  // crowd member
+  }
   if (role === "writer" && instance === "pro") return ROLE_STYLE.pro;
   if (role === "writer" && instance === "con") return ROLE_STYLE.con;
   if (role === "writer" && instance === "b") return ROLE_STYLE.writerB;
@@ -2079,6 +2097,8 @@ export default function QCoreMultiAgentPage() {
                       ? "Sequential: Analyst plans, Writer drafts, Critic reviews and may send back for one revision."
                       : strategy === "parallel"
                       ? "Parallel: Analyst plans, two Writers draft on different models in parallel, Judge synthesizes."
+                      : strategy === "council"
+                      ? "Council ✦: a crowd of free models each answer under a different persona in parallel, then a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer — free breadth, premium depth."
                       : "Debate: Pro and Con each argue their case, Moderator synthesizes a balanced answer."))}
             </div>
 
@@ -5503,11 +5523,17 @@ function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: A
   const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
   const persona = personas?.[turn.role === "writer" && turn.instance === "b" ? "writerB" : turn.role];
   const streaming = turn.status === "streaming";
+  const isCouncil = strategy === "council";
+  const councilLabel =
+    isCouncil && turn.role === "critic" ? "Synthesizer" :
+    isCouncil && turn.role === "writer" && turn.instance ? turn.instance : null;
   const stageBadge =
+    isCouncil ? "" :
     turn.stage === "revision" ? " (revision)" :
     turn.stage === "judge" ? "" :
     turn.instance === "pro" || turn.instance === "con" ? "" :
     turn.instance ? ` · ${turn.instance.toUpperCase()}` : "";
+  const showFree = isCouncil && turn.role === "writer" && isFreeModel(turn.model);
   return (
     <div
       style={{
@@ -5531,8 +5557,17 @@ function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: A
           {persona?.emoji || s.tag}
         </span>
         <span style={{ fontWeight: 800, fontSize: 12, color: s.color }}>
-          {persona?.name || s.label}{stageBadge}
+          {councilLabel || persona?.name || s.label}{stageBadge}
+          {isCouncil && turn.role === "critic" ? " ★" : ""}
         </span>
+        {showFree && (
+          <span style={{
+            fontSize: 9, fontWeight: 900, letterSpacing: 0.5,
+            padding: "1px 6px", borderRadius: 999,
+            background: "rgba(16,185,129,0.15)", color: "#059669",
+            border: "1px solid rgba(16,185,129,0.4)",
+          }}>FREE</span>
+        )}
         {turn.model && (
           <span style={{ fontSize: 11, color: "#94a3b8" }}>
             {prettyModel(turn.model)}

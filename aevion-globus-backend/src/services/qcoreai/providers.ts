@@ -273,6 +273,21 @@ export function getProviders(): Provider[] {
       free: true,
       tier: "free",
     },
+    // Demo/offline provider — canned responses, no network. Only appears (and
+    // only "configured") when QCOREAI_STUB=1, so it never leaks into prod.
+    // Lets the full council pipeline run for demos/screenshots without keys.
+    ...(process.env.QCOREAI_STUB === "1"
+      ? [{
+          id: "stub" as const,
+          name: "Demo (offline stub)",
+          models: ["stub-rigorous", "stub-creative", "stub-skeptic", "stub-pragmatist", "stub-domain", "stub-synth"],
+          defaultModel: "stub-rigorous",
+          envKey: "QCOREAI_STUB",
+          configured: true,
+          free: true,
+          tier: "free" as ProviderTier,
+        }]
+      : []),
   ];
 }
 
@@ -420,16 +435,60 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
   return { reply, model, usage: data.usageMetadata || null };
 }
 
+/* ── Offline stub (QCOREAI_STUB=1) ───────────────────────────────────────── */
+
+/** Canned demo text, flavoured by the persona detected in the system prompt. */
+function stubReply(messages: ChatMessage[]): string {
+  const sys = (messages.find((m) => m.role === "system")?.content || "").toLowerCase();
+  const rawUser = messages.filter((m) => m.role === "user").pop()?.content || "";
+  const qMatch = rawUser.match(/user question:\s*([^\n]+)/i);
+  const q = (qMatch ? qMatch[1] : rawUser).trim().slice(0, 80) || "the question";
+  if (sys.includes("synthesizer") || sys.includes("chair of a multi-model council")) {
+    return `**Bottom line.** Combining the council's views: the strongest answer to “${q}” is the one all members converged on, with the skeptic's caveat folded in. Where they disagreed, the verifiable facts win. This fused answer keeps the rigorous member's structure, the creative member's framing, and the pragmatist's concrete next step — corrected for the one error the domain member flagged.`;
+  }
+  if (sys.includes("lateral-thinking") || sys.includes("creative")) {
+    return `Here's the non-obvious angle on “${q}”: reframe it as a system, not a task — the leverage is upstream of where it looks. Two adjacent ideas worth stealing follow.`;
+  }
+  if (sys.includes("skeptic")) {
+    return `Stress-testing “${q}”: the naive answer hides two assumptions and one failure mode. Name them before committing — the edge case bites at scale, not in the demo.`;
+  }
+  if (sys.includes("pragmatic")) {
+    return `Shortest working path for “${q}”: pick the sane default, ship the minimal version, measure, iterate. Concrete first step, then the one trade-off you accept.`;
+  }
+  if (sys.includes("domain-expert") || sys.includes("domain")) {
+    return `From a specialist's view of “${q}”: the term most people get wrong matters here, and the correct reasoning (not just the conclusion) points to a subtly different answer.`;
+  }
+  // Rigorous / default.
+  return `Rigorous take on “${q}”: state the definition, reason step by step, and flag the one uncertainty. Correctness first; assumptions made explicit.`;
+}
+
 export async function callProvider(
   providerId: string,
   messages: ChatMessage[],
   model: string,
   temperature: number
 ): Promise<CallResult> {
+  if (providerId === "stub") {
+    const reply = stubReply(messages);
+    return { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
+  }
   if (providerId === "anthropic") return callAnthropic(messages, model, temperature);
   if (providerId === "gemini") return callGemini(messages, model, temperature);
   if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature);
   throw new Error("No AI provider configured");
+}
+
+async function* streamStub(messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
+  const reply = stubReply(messages);
+  const words = reply.split(/(\s+)/);
+  for (const w of words) {
+    yield { kind: "text", text: w };
+    // Small delay so the demo streams visibly; skipped in test/CI (fast path).
+    if (process.env.QCOREAI_STUB_DELAY !== "0") {
+      await new Promise((r) => setTimeout(r, 12));
+    }
+  }
+  yield { kind: "done", tokensIn: 40, tokensOut: words.filter((w) => w.trim()).length };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -647,6 +706,10 @@ export async function* streamProvider(
   model: string,
   temperature: number
 ): AsyncGenerator<StreamEvent> {
+  if (providerId === "stub") {
+    yield* streamStub(messages);
+    return;
+  }
   if (providerId === "anthropic") {
     yield* streamAnthropic(messages, model, temperature);
     return;

@@ -6156,33 +6156,35 @@ export default function CyberChessPage(){
           const adv=sum(capB)-sum(capW); // >0 = белые впереди
           const evalStr=evalMate!==0?(evalMate>0?`+M${Math.abs(evalMate)}`:`-M${Math.abs(evalMate)}`):`${evalCp>=0?"+":""}${(evalCp/100).toFixed(1)}`;
           const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
-          const card={background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,padding:"10px 12px"} as const;
+          // Единый каркас карточек рейла через <Card> из ui.tsx (Фаза 2 — консолидация).
+          // elevation:none + padding 10/12 воспроизводят прежний инлайн-стиль 1:1 (без тени).
+          const cardProps={tone:"surface1" as const,radius:RADIUS.md,elevation:"none" as const,style:{padding:"10px 12px"}};
           const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
           return <aside style={{flex:`0 0 ${railW}px`,width:railW,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
-            <div style={card}>
+            <Card {...cardProps}>
               <div style={lbl}>Оценка</div>
               <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
               <div style={{marginTop:8,height:8,borderRadius:4,overflow:"hidden",display:"flex",background:"#0f172a"}}>
                 <div style={{width:`${wPct}%`,background:"#f8fafc"}}/>
                 <div style={{flex:1,background:"#0f172a"}}/>
               </div>
-            </div>
-            <div style={card}>
+            </Card>
+            <Card {...cardProps}>
               <div style={lbl}>Материал</div>
               <div style={{fontSize:13,color:CC.text,fontWeight:800}}>{adv===0?"Равенство":(adv>0?`Белые +${adv}`:`Чёрные +${-adv}`)}</div>
               <div style={{marginTop:6,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capB.join("")||"—"}</div>
               <div style={{marginTop:2,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capW.join("")||"—"}</div>
-            </div>
-            {currentOpening&&<div style={card}>
+            </Card>
+            {currentOpening&&<Card {...cardProps}>
               <div style={lbl}>Дебют</div>
               <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
-            </div>}
-            <div style={card}>
+            </Card>}
+            <Card {...cardProps}>
               <div style={lbl}>Партия</div>
               <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:CC.text}}>Stockfish 18 · d22</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
-            </div>
+            </Card>
           </aside>;
         })()}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется

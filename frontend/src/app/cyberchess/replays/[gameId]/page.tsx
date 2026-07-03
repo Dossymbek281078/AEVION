@@ -126,7 +126,7 @@ function evalToWhitePct(cp: number): number {
 
 // ----- API -----
 
-const API_BASE = "/api/cyberchess-spectator";
+const API_BASE = "/api-backend/api/cyberchess-spectator";
 
 async function fetchReplay(gameId: string): Promise<ReplayGame> {
   const res = await fetch(`${API_BASE}/replays/${encodeURIComponent(gameId)}`, {

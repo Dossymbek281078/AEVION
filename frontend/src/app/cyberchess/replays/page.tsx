@@ -84,7 +84,7 @@ function resultColor(r: string): string {
 
 // ----- API -----
 
-const API_BASE = "/api/cyberchess-spectator";
+const API_BASE = "/api-backend/api/cyberchess-spectator";
 
 async function fetchReplays(limit = 50): Promise<ReplayItem[]> {
   const res = await fetch(`${API_BASE}/replays?limit=${limit}`, {

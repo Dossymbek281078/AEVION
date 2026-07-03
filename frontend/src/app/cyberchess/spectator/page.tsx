@@ -53,7 +53,7 @@ export default function SpectatorHubPage() {
 
   const fetchList = useCallback(async () => {
     try {
-      const res = await fetch("/api/cyberchess-spectator/list", {
+      const res = await fetch("/api-backend/api/cyberchess-spectator/list", {
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

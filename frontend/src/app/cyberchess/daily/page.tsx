@@ -238,7 +238,7 @@ export default function DailyPuzzlePage() {
 
     // Send to backend (best-effort, ignore failures — UI doesn't block)
     try {
-      await fetch('/api/cyberchess-daily/solve', {
+      await fetch('/api-backend/api/cyberchess-daily/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

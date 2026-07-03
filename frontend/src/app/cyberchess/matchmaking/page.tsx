@@ -152,7 +152,7 @@ export default function CyberChessMatchmakingPage() {
     if (!userId) return;
     try {
       const r = await fetch(
-        `/api/cyberchess/matchmaking/queue/status?userId=${encodeURIComponent(userId)}`,
+        `/api-backend/api/cyberchess/matchmaking/queue/status?userId=${encodeURIComponent(userId)}`,
         { cache: "no-store" },
       );
       const data = await r.json();
@@ -202,7 +202,7 @@ export default function CyberChessMatchmakingPage() {
       }, 250);
       try {
         const es = new EventSource(
-          `/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userIdRef.current)}`,
+          `/api-backend/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userIdRef.current)}`,
         );
         es.addEventListener("matched", (ev) => {
           try {
@@ -247,7 +247,7 @@ export default function CyberChessMatchmakingPage() {
       window.localStorage.setItem("cyberchess.displayName", displayName);
     }
     try {
-      const r = await fetch("/api/cyberchess/matchmaking/queue/join", {
+      const r = await fetch("/api-backend/api/cyberchess/matchmaking/queue/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -288,7 +288,7 @@ export default function CyberChessMatchmakingPage() {
   const onLeave = useCallback(async () => {
     cleanup();
     try {
-      await fetch("/api/cyberchess/matchmaking/queue/leave", {
+      await fetch("/api-backend/api/cyberchess/matchmaking/queue/leave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: userIdRef.current }),

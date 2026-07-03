@@ -134,7 +134,7 @@ export default function TournamentsHubPage() {
       setLoading(true);
       setErrorMsg(null);
       try {
-        const r = await fetch("/api/cyberchess-tournaments/list", { cache: "no-store" });
+        const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         if (!cancelled && data?.ok && Array.isArray(data.tournaments)) {
@@ -475,7 +475,7 @@ function TournamentCard({ t }: { t: Tournament }) {
     if (!hovered || standings) return;
     let cancelled = false;
     setStandingsLoading(true);
-    fetch(`/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store" })
+    fetch(`/api-backend/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled && data?.ok && Array.isArray(data.standings)) {
@@ -647,7 +647,7 @@ function TournamentCard({ t }: { t: Tournament }) {
               onClick={async () => {
                 try {
                   const r = await fetch(
-                    `/api/cyberchess-tournaments/${t.id}/register`,
+                    `/api-backend/api/cyberchess-tournaments/${t.id}/register`,
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },

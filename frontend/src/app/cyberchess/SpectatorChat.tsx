@@ -125,7 +125,7 @@ export default function SpectatorChat(props: Props) {
     (async () => {
       try {
         const r = await fetch(
-          `/api/cyberchess-spectator/chat/${encodeURIComponent(gameId)}?limit=50`,
+          `/api-backend/api/cyberchess-spectator/chat/${encodeURIComponent(gameId)}?limit=50`,
           { cache: "no-store" },
         );
         if (!r.ok) return;
@@ -138,7 +138,7 @@ export default function SpectatorChat(props: Props) {
       }
     })();
 
-    const url = `/api/cyberchess-spectator/${encodeURIComponent(gameId)}`;
+    const url = `/api-backend/api/cyberchess-spectator/${encodeURIComponent(gameId)}`;
     const es = new EventSource(url);
     esRef.current = es;
 
@@ -198,7 +198,7 @@ export default function SpectatorChat(props: Props) {
     setError(null);
     try {
       const r = await fetch(
-        `/api/cyberchess-spectator/chat/${encodeURIComponent(gameId)}`,
+        `/api-backend/api/cyberchess-spectator/chat/${encodeURIComponent(gameId)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

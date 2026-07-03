@@ -215,7 +215,7 @@ export default function TournamentHubPage() {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch("/api/cyberchess-tournaments/leaderboard", { cache: "no-store" });
+        const r = await fetch("/api-backend/api/cyberchess-tournaments/leaderboard", { cache: "no-store" });
         if (!r.ok) return;
         const d = await r.json();
         // Пустой лидерборд = ещё ни один турнир не доигран → остаёмся на демо-поле,

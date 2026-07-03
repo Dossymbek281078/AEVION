@@ -1537,7 +1537,7 @@ export default function CyberChessPage(){
       rating:rat,
       result:over||undefined,
     };
-    fetch("/api/cyberchess-spectator/publish",{
+    fetch("/api-backend/api/cyberchess-spectator/publish",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(payload),
     }).then(r=>r.ok?r.json():null).then(d=>{
@@ -1561,7 +1561,7 @@ export default function CyberChessPage(){
         moveNumber:Math.floor(hist.length/2)+1,
         tts:true,
       };
-      fetch("/api/cyberchess-voice-coach/broadcast",{
+      fetch("/api-backend/api/cyberchess-voice-coach/broadcast",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify(broadcastBody),
       }).catch(()=>{/* best-effort */});
@@ -1583,7 +1583,7 @@ export default function CyberChessPage(){
   },[]);
   useEffect(()=>{
     if(!matchmakingId)return;
-    const es=new EventSource(`/api/cyberchess/matchmaking/match/${matchmakingId}/stream`);
+    const es=new EventSource(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/stream`);
     es.addEventListener("move",(e:MessageEvent)=>{
       try{
         const data=JSON.parse(e.data);
@@ -1613,7 +1613,7 @@ export default function CyberChessPage(){
     if(!wasMyMove){lastSentMmHistLenRef.current=hist.length;return}
     lastSentMmHistLenRef.current=hist.length;
     const userId=(typeof window!=="undefined")?(localStorage.getItem("cyberchess.userId")||"anon"):"anon";
-    fetch(`/api/cyberchess/matchmaking/match/${matchmakingId}/move`,{
+    fetch(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/move`,{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({userId,uci:`${lm.from}${lm.to}`}),
     }).catch(()=>{});
@@ -1642,7 +1642,7 @@ export default function CyberChessPage(){
       whiteToMove:game.turn()==="w",
       result:over||undefined,
     };
-    fetch("/api/cyberchess-spectator/publish",{
+    fetch("/api-backend/api/cyberchess-spectator/publish",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(payload),
     }).then(r=>r.ok?r.json():null).then(d=>{
@@ -1650,7 +1650,7 @@ export default function CyberChessPage(){
       const gid=d?.gameId||mmSpectatorGameIdRef.current||candidateId;
       if(!gid||over||hist.length===0)return;
       // Voice coach broadcast for the matchmaking game
-      fetch("/api/cyberchess-voice-coach/broadcast",{
+      fetch("/api-backend/api/cyberchess-voice-coach/broadcast",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           gameId:gid,
@@ -1672,7 +1672,7 @@ export default function CyberChessPage(){
     if(spectatorPublish||!spectatorGameIdRef.current)return;
     const id=spectatorGameIdRef.current;
     spectatorGameIdRef.current=null;
-    fetch(`/api/cyberchess-spectator/${id}`,{method:"DELETE"}).catch(()=>{});
+    fetch(`/api-backend/api/cyberchess-spectator/${id}`,{method:"DELETE"}).catch(()=>{});
   },[spectatorPublish]);
   // Avatar emoji picker (shop v2 — owned.avatar_emoji)
   const[avatarEmoji,sAvatarEmoji]=useState<string>(()=>{
@@ -2857,7 +2857,7 @@ export default function CyberChessPage(){
       if(result.confidence!=="insufficient"){
         const userId=typeof window!=="undefined"?(window.localStorage.getItem("cyberchess.userId")||"anon"):"anon";
         const report=buildReport(result,userId);
-        fetch("/api/cyberchess-anticheat/report",{
+        fetch("/api-backend/api/cyberchess-anticheat/report",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify(report),

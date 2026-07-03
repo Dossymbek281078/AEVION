@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     "trust graph",
     "creator economy",
     "digital identity",
-    "patent bureau",
+    "authorship & prior-art bureau",
     "quantum-resistant",
     "Trust OS",
   ],

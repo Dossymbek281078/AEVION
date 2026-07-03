@@ -10,7 +10,7 @@ const APPS = [
   { key: "qshield",   label: "Quantum Shield",   icon: "🛡️",  href: "/quantum-shield",    desc: "Безопасность" },
   { key: "qtrade",    label: "QTrade",           icon: "📈",  href: "/qtrade",            desc: "Торговля" },
   { key: "planet",    label: "Planet",           icon: "🌍",  href: "/planet-compliance", desc: "Комплаенс" },
-  { key: "bureau",    label: "IP Bureau",        icon: "🏛️",  href: "/bureau",            desc: "Патентное бюро" },
+  { key: "bureau",    label: "IP Bureau",        icon: "🏛️",  href: "/bureau",            desc: "Бюро авторства" },
 ];
 
 export function AppSwitcher() {

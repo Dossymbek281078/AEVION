@@ -33,7 +33,7 @@ export default function TermsPage() {
           <p>By accessing or using the AEVION platform (aevion.app and related services), you agree to be bound by these Terms of Service. If you do not agree, do not use the platform.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>2. Description of Services</h2>
-          <p>AEVION provides digital intellectual property infrastructure including: IP registration (QRight), cryptographic signatures (QSign), patent bureau services (IP Bureau), compliance and certification (Planet), awards and recognition (Awards), digital banking (AEVION Bank), and gaming (CyberChess).</p>
+          <p>AEVION provides digital intellectual property infrastructure including: IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art attestation (IP Bureau), compliance and certification (Planet), awards and recognition (Awards), digital banking (AEVION Bank), and gaming (CyberChess).</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>3. User Accounts</h2>
           <p>You must register to access certain features. You are responsible for maintaining the security of your account credentials. You must provide accurate information during registration.</p>

@@ -140,7 +140,7 @@ export default function HomePage() {
         setProjects([
           {id:"qright",code:"QR",name:"QRight",description:"IP Registry with content hash",kind:"product",status:"live",priority:1,tags:["ip","core"],runtime:{tier:"mvp_live",primaryPath:"/qright",apiHints:[],hint:"IP registration"}},
           {id:"qsign",code:"QS",name:"QSign",description:"Cryptographic signatures",kind:"product",status:"live",priority:2,tags:["crypto","core"],runtime:{tier:"mvp_live",primaryPath:"/qsign",apiHints:[],hint:"HMAC signing"}},
-          {id:"aevion-ip-bureau",code:"BUR",name:"IP Bureau",description:"Patent bureau & certificates",kind:"product",status:"live",priority:3,tags:["ip","legal"],runtime:{tier:"mvp_live",primaryPath:"/bureau",apiHints:[],hint:"Certificate-ready"}},
+          {id:"aevion-ip-bureau",code:"BUR",name:"IP Bureau",description:"Authorship & prior-art bureau",kind:"product",status:"live",priority:3,tags:["ip","legal"],runtime:{tier:"mvp_live",primaryPath:"/bureau",apiHints:[],hint:"Certificate-ready"}},
           {id:"planet",code:"PL",name:"Planet",description:"Compliance & certification",kind:"product",status:"live",priority:4,tags:["compliance"],runtime:{tier:"mvp_live",primaryPath:"/planet",apiHints:[],hint:"Evidence root"}},
           {id:"aevion-bank",code:"BNK",name:"AEVION Bank",description:"Digital wallet & royalties",kind:"product",status:"live",priority:5,tags:["finance"],runtime:{tier:"mvp_live",primaryPath:"/bank",apiHints:[],hint:"AEC economy"}},
           {id:"cyberchess",code:"CH",name:"CyberChess",description:"Next-gen chess platform",kind:"product",status:"live",priority:6,tags:["gaming"],runtime:{tier:"mvp_live",primaryPath:"/cyberchess",apiHints:[],hint:"Play AI"}},
@@ -295,7 +295,7 @@ export default function HomePage() {
               margin: 0,
             }}
           >
-            A unified platform for identity, IP registration, cryptographic signatures, patent bureau, and compliance — on an interactive ecosystem map with{" "}
+            A unified platform for identity, IP registration, cryptographic signatures, authorship & prior-art bureau, and compliance — on an interactive ecosystem map with{" "}
             <strong>27 product nodes</strong>, digital banking, chess, and open APIs.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 28 }}>
@@ -488,7 +488,7 @@ export default function HomePage() {
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why AEVION is worth $1B+</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {[
-              { title: "First-mover monopoly", desc: "The world's first electronic patent bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
+              { title: "First-mover monopoly", desc: "The world's first electronic proof-of-authorship bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
               { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
               { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },

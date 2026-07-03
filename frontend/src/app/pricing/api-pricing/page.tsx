@@ -40,7 +40,7 @@ const ENDPOINTS: Endpoint[] = [
 const GROUP_META: Record<Endpoint["group"], { label: string; color: string; bg: string }> = {
   qsign: { label: "QSign · Подписи", color: "#0d9488", bg: "rgba(13,148,136,0.06)" },
   qright: { label: "QRight · Цифровая собственность", color: "#0ea5e9", bg: "rgba(14,165,233,0.06)" },
-  bureau: { label: "IP Bureau · Электронное патентное", color: "#7c3aed", bg: "rgba(124,58,237,0.06)" },
+  bureau: { label: "IP Bureau · Бюро авторства", color: "#7c3aed", bg: "rgba(124,58,237,0.06)" },
   qcore: { label: "QCoreAI · LLM и агенты", color: "#f59e0b", bg: "rgba(245,158,11,0.06)" },
   core: { label: "Core · Спецификация и webhooks", color: "#475569", bg: "rgba(71,85,105,0.06)" },
 };

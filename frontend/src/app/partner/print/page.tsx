@@ -121,7 +121,7 @@ export default function PartnerPrintPage() {
           </div>
           <div className="card">
             <div className="card-label">MVP live · QRight</div>
-            <h3>Patent Bureau v2</h3>
+            <h3>IP Bureau v2</h3>
             <p style={{ fontSize: "10pt", color: "#444", margin: "4pt 0 6pt" }}>
               IP attestation for AI-generated content. National patent office
               integration = recurring government revenue.
@@ -165,7 +165,7 @@ export default function PartnerPrintPage() {
           <tbody>
             <tr><td>QSign (gov + enterprise)</td><td>$30M</td><td>$80M</td></tr>
             <tr><td>AEVION Bank</td><td>$50M</td><td>$200M</td></tr>
-            <tr><td>QRight (Patent Bureau)</td><td>$10M</td><td>$40M</td></tr>
+            <tr><td>QRight (IP Bureau)</td><td>$10M</td><td>$40M</td></tr>
             <tr><td>DevHub (MENA/CIS)</td><td>$20M</td><td>$80M</td></tr>
             <tr><td>QCoreAI</td><td>$15M</td><td>$60M</td></tr>
             <tr><td>Other modules</td><td>$5M</td><td>$30M</td></tr>

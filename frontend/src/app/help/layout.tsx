@@ -30,7 +30,7 @@ const faqJsonLd = {
       name: "What is AEVION?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "AEVION is a global trust infrastructure platform for digital content and intellectual property. It includes IP registration (QRight), cryptographic signatures (QSign), a patent bureau, compliance certification (Planet), creator awards, a digital bank, and more — all connected through a single identity and trust system.",
+        text: "AEVION is a global trust infrastructure platform for digital content and intellectual property. It includes IP registration (QRight), cryptographic signatures (QSign), a authorship & prior-art bureau, compliance certification (Planet), creator awards, a digital bank, and more — all connected through a single identity and trust system.",
       },
     },
     {

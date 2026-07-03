@@ -316,7 +316,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     addonMonthly: 19,
     includedIn: ["full", "enterprise"],
     availability: "live",
-    oneLiner: "Электронное патентное бюро + сертификаты",
+    oneLiner: "Электронное бюро авторства + сертификаты",
   },
 
   // ===== FINTECH =====

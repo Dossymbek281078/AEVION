@@ -116,7 +116,7 @@ const BRAND_COLORS = [
 const COVERAGE_NOTE =
   "Coverage and analyst commentary will be linked here as it lands. For first-party briefings (architecture deep-dive, demo, founder interview) email yahiin1978@gmail.com with subject \"AEVION press\".";
 
-const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a patent bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, designed to remain credible after the post-quantum transition. AEVION ships in EN, RU and KK from day one.`;
+const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a authorship & prior-art bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, designed to remain credible after the post-quantum transition. AEVION ships in EN, RU and KK from day one.`;
 
 export default async function PressPage() {
   const [stats, catalog] = await Promise.all([fetchStats(), fetchCatalog()]);

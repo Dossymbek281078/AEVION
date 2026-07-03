@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     template: "%s · AEVION",
   },
   description:
-    "Global platform for IP registration (QRight), cryptographic signatures (QSign), patent bureau, compliance certification (Planet), awards, digital banking and more. 27 product nodes on interactive Globus map.",
+    "Global platform for IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking and more. 27 product nodes on interactive Globus map.",
   openGraph: {
     title: "AEVION — Trust infrastructure & Globus",
     description:
@@ -55,7 +55,7 @@ const organizationJsonLd = {
   url: SITE,
   logo: `${SITE}/icon.png`,
   description:
-    "Trust infrastructure for digital assets and intellectual property. IP registry (QRight), cryptographic signatures (QSign), patent bureau, compliance certification (Planet), awards, digital banking.",
+    "Trust infrastructure for digital assets and intellectual property. IP registry (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking.",
   sameAs: [`${SITE}/pitch`],
   contactPoint: [
     { "@type": "ContactPoint", contactType: "investor relations", email: "yahiin1978@gmail.com", areaServed: "Worldwide" },

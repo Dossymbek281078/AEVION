@@ -47,7 +47,7 @@ export const thesis = {
   badge: "AEVION · Trust operating system",
   title: "The trust layer for the next decade of digital creation",
   lead:
-    "AEVION is one identity, one signing layer, one IP registry, one patent bureau, one compliance " +
+    "AEVION is one identity, one signing layer, one IP registry, one authorship & prior-art bureau, one compliance " +
     "rail and one wallet — already wired together as a working system. 27 product nodes, 12 with " +
     "live MVPs, all sharing the same Trust Graph. We monetise three of the largest underserved " +
     "markets at once: IP enforcement, the creator economy, and digital assets.",
@@ -200,7 +200,7 @@ export const launchedModules: PitchModule[] = [
     href: "/bureau",
     stage: "live",
     bucket: "ip-and-trust",
-    tagline: "World's first fully-digital patent bureau — court-grade certificates in seconds.",
+    tagline: "World's first cryptographic proof-of-authorship bureau — court-grade certificates in seconds.",
     problem:
       "Patent and IP filings take 6–18 months and cost $5K–$25K. There is no instant, internationally-recognised proof-of-prior-art mechanism for digital work.",
     killerFeature:
@@ -208,7 +208,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "Bureau is the legally-defensible output of the entire registry+signature pipeline. Sets the floor for what AEVION certificates are worth in court.",
     proof: ["Live cert count", "164+ WTO member states in legal scope", "Public verify portal with no-login validation"],
-    valueLine: "First-mover monopoly: any future competitor building a digital patent bureau creates a derivative work — our infrastructure is self-protected.",
+    valueLine: "First-mover monopoly: any future competitor building a digital proof-of-authorship bureau creates a derivative work — our infrastructure is self-protected.",
   },
   {
     id: "quantum-shield",

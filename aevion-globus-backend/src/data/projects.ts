@@ -100,7 +100,7 @@ export const projects: GlobusProject[] = [
   {
     id: "aevion-ip-bureau",
     code: "AIPB",
-    name: "AEVION IP Bureau — Electronic Patent Office",
+    name: "AEVION Digital IP Bureau — Proof of Authorship & Prior Art",
     description:
       "Ed25519 + Shamir SSS, PDF-сертификаты, badge/verify-портал, 6 правовых рамок (Berne/WIPO/TRIPS/eIDAS/ESIGN/KZ), org management, KYC flow, trust-edges.",
     kind: "service",

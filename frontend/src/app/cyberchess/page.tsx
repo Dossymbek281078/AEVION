@@ -61,6 +61,7 @@ import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import StreamMenu from "./StreamMenu";
 import StreamSourceModal from "./StreamSourceModal";
+import PresenceIndicator from "./PresenceIndicator";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -4990,6 +4991,7 @@ export default function CyberChessPage(){
           ariaLabel={muted?"Unmute":"Mute"}
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
+        <PresenceIndicator/>
         <button
           onClick={()=>sShowMusicPlayer(true)}
           title="Музыкальный плеер"

@@ -236,7 +236,7 @@ curl -s https://aevion.app/api/qright/register \\
   -H "Idempotency-Key: $(uuidgen)" \\
   -d '{"title":"My AI Track","kind":"music"}'
 
-# 3. Issue a court-grade Bureau certificate
+# 3. Issue an admissible-evidence Bureau certificate
 curl -s https://aevion.app/api/bureau/protect \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\

@@ -488,7 +488,7 @@ export default function HomePage() {
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why AEVION is worth $1B+</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {[
-              { title: "First-mover monopoly", desc: "The world's first electronic proof-of-authorship bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
+              { title: "First-mover lead", desc: "A first-mover, fully integrated proof-of-authorship bureau. The moat is the integrated Trust Graph and network effects — a competitor must rebuild all five layers as one system, not just copy the idea.", metric: "5-in-1", sub: "integrated pipeline" },
               { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
               { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },

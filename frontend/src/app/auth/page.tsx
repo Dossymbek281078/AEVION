@@ -601,7 +601,7 @@ export default function AuthPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             {[
               { icon: "📝", title: "IP Registration", desc: "Register and protect your digital works with SHA-256 hash" },
-              { icon: "🔐", title: "Cryptographic Signing", desc: "Sign documents with military-grade HMAC-SHA256" },
+              { icon: "🔐", title: "Cryptographic Signing", desc: "Sign documents with standards-based HMAC-SHA256" },
               { icon: "💰", title: "Digital Wallet", desc: "Earn AEC credits, receive royalties automatically" },
               { icon: "♟️", title: "Chess & Gaming", desc: "Play CyberChess, earn ratings and compete in tournaments" },
               { icon: "🏆", title: "Awards", desc: "Submit music and film to AEVION Awards, win prizes" },

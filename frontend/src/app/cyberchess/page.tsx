@@ -5441,6 +5441,16 @@ export default function CyberChessPage(){
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
                   </div>
                 </Btn>
+                {/* Онлайн-матч с реальными игроками (matchmaking) — первый класс, как «Play online» у lichess */}
+                <Btn size="lg" variant="secondary" onClick={()=>{window.location.href="/cyberchess/matchmaking"}}
+                  aria-label="Онлайн-матч с реальным соперником"
+                  style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                    border:"1px solid #ddd6fe",color:"#6d28d9"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🌐 Онлайн-матч</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>реальный соперник</span>
+                  </div>
+                </Btn>
               </div>
 
               {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}

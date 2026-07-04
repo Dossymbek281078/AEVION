@@ -457,6 +457,21 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // Per-user monthly token ledger — counts token usage from endpoints that do
+  // NOT persist a QCoreRun/QCoreMessage (single-shot /chat, /chat-stream), so
+  // getMonthlyTokens covers them for the free-tier quota gate. Keyed by
+  // (userId, ym) where ym = 'YYYY-MM'.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreTokenLedger" (
+      "userId"    TEXT   NOT NULL,
+      "ym"        TEXT   NOT NULL,
+      "tokensIn"  BIGINT NOT NULL DEFAULT 0,
+      "tokensOut" BIGINT NOT NULL DEFAULT 0,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "ym")
+    );
+  `);
+
   // Scheduled batch runs.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreScheduledBatch" (

@@ -616,6 +616,30 @@ async function* runDebate(
    verified answer. Free breadth, premium depth — cost-tiered automatically.
    ═══════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Wrap a member's agent stream so a mid-stream failure (network/429/etc.)
+ * becomes a non-fatal `error` event and an empty-string return, rather than
+ * throwing and aborting the whole council. Re-yields all events from the inner
+ * stream until it either completes (returning its text) or throws.
+ */
+async function* safeMemberStream(
+  inner: AsyncGenerator<OrchestratorEvent, string, unknown>,
+  persona: string
+): AsyncGenerator<OrchestratorEvent, string, unknown> {
+  try {
+    let acc = "";
+    while (true) {
+      const r = await inner.next();
+      if (r.done) return r.value ?? acc;
+      if (r.value.type === "chunk") acc += r.value.text;
+      yield r.value;
+    }
+  } catch (e) {
+    yield { type: "error", role: "writer", message: `Council member "${persona}" failed: ${errMsg(e)}` };
+    return "";
+  }
+}
+
 async function* runCouncil(
   input: OrchestratorInput,
   agents: { members: CouncilMember[]; synthesizer: AgentConfig },
@@ -649,13 +673,19 @@ async function* runCouncil(
     synthesizer: { provider: synthesizer.provider, model: synthesizer.model },
   };
 
-  /* Stage 1: the whole crowd answers in parallel, each under its persona. */
+  /* Stage 1: the whole crowd answers in parallel, each under its persona.
+     Each member is wrapped so an individual failure (e.g. a free-tier 429)
+     degrades to an empty draft + a non-fatal error event, instead of aborting
+     the whole council. As long as one member answers, the run continues. */
   const memberUser = yield* applyGuidance(input, input.userInput, "writer", "draft");
   const streams = members.map((m) =>
-    streamAgent(
-      m,
-      "draft",
-      [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
+    safeMemberStream(
+      streamAgent(
+        m,
+        "draft",
+        [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
+        m.persona
+      ),
       m.persona
     )
   );

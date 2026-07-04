@@ -189,14 +189,16 @@ export function getProviders(): Provider[] {
     {
       id: "openrouter",
       name: "OpenRouter (free models)",
+      // Real `:free` slugs verified against openrouter.ai/api/v1/models (2026-07-04).
+      // The catalogue churns — override per call or via OPENROUTER_MODEL.
       models: [
         "meta-llama/llama-3.3-70b-instruct:free",
-        "deepseek/deepseek-r1:free",
-        "deepseek/deepseek-chat-v3-0324:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-small-3.2-24b-instruct:free",
-        "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
+        "openai/gpt-oss-120b:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "google/gemma-4-31b-it:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "qwen/qwen3-coder:free",
       ],
       defaultModel: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
       envKey: "OPENROUTER_API_KEY",

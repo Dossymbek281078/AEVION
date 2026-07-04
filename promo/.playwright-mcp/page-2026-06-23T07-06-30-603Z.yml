@@ -1,0 +1,228 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - link "AEVION Trust · IP · Globus" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e6]: AEVION
+        - generic [ref=e7]: Trust · IP · Globus
+      - generic [ref=e8]:
+        - link "Demo" [ref=e9] [cursor=pointer]:
+          - /url: /demo
+        - link "Auth" [ref=e10] [cursor=pointer]:
+          - /url: /auth
+        - link "QRight" [ref=e11] [cursor=pointer]:
+          - /url: /qright
+        - link "QSign" [ref=e12] [cursor=pointer]:
+          - /url: /qsign
+        - link "Bureau" [ref=e13] [cursor=pointer]:
+          - /url: /bureau
+        - link "Planet" [ref=e14] [cursor=pointer]:
+          - /url: /planet
+        - link "Awards" [ref=e15] [cursor=pointer]:
+          - /url: /awards
+        - link "Bank" [ref=e16] [cursor=pointer]:
+          - /url: /bank
+        - link "Chess" [ref=e17] [cursor=pointer]:
+          - /url: /cyberchess
+        - link "Pricing" [ref=e18] [cursor=pointer]:
+          - /url: /pricing
+        - link "API" [ref=e19] [cursor=pointer]:
+          - /url: https://aevion-production-a70c.up.railway.app/api/openapi.json
+        - button "🇺🇸 EN ▼" [ref=e22] [cursor=pointer]:
+          - generic [ref=e23]: 🇺🇸
+          - generic [ref=e24]: EN
+          - generic [ref=e25]: ▼
+  - main [ref=e27]:
+    - generic [ref=e28]:
+      - navigation "Wave 1 navigation" [ref=e29]:
+        - link "← Globus" [ref=e30] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e31]: "|"
+        - link "Demo" [ref=e32] [cursor=pointer]:
+          - /url: /demo
+        - link "Deep dive" [ref=e33] [cursor=pointer]:
+          - /url: /demo/deep
+        - link "Pitch · $1B+" [ref=e34] [cursor=pointer]:
+          - /url: /pitch
+        - generic [ref=e35]: "|"
+        - link "Auth" [ref=e36] [cursor=pointer]:
+          - /url: /auth
+        - link "QRight" [ref=e37] [cursor=pointer]:
+          - /url: /qright
+        - link "QSign" [ref=e38] [cursor=pointer]:
+          - /url: /qsign
+        - link "Shield" [ref=e39] [cursor=pointer]:
+          - /url: /quantum-shield
+        - link "Bureau" [ref=e40] [cursor=pointer]:
+          - /url: /bureau
+        - link "QCoreAI" [ref=e41] [cursor=pointer]:
+          - /url: /multichat-engine
+        - generic [ref=e42]: "|"
+        - link "Music Awards" [ref=e43] [cursor=pointer]:
+          - /url: /awards/music
+        - link "Film Awards" [ref=e44] [cursor=pointer]:
+          - /url: /awards/film
+        - link "Bank" [ref=e45] [cursor=pointer]:
+          - /url: /bank
+        - link "Chess" [ref=e46] [cursor=pointer]:
+          - /url: /cyberchess
+        - link "QTradeOffline" [ref=e47] [cursor=pointer]:
+          - /url: /qtradeoffline
+        - link "HealthAI" [ref=e48] [cursor=pointer]:
+          - /url: /healthai
+        - link "QContract" [ref=e49] [cursor=pointer]:
+          - /url: /qcontract
+        - link "QPayNet" [ref=e50] [cursor=pointer]:
+          - /url: /qpaynet
+        - link "DevHub" [ref=e51] [cursor=pointer]:
+          - /url: /devhub
+        - link "Смета" [ref=e52] [cursor=pointer]:
+          - /url: /smeta-trainer
+        - link "QTrade" [ref=e53] [cursor=pointer]:
+          - /url: /qtrade
+        - link "Revenue" [ref=e54] [cursor=pointer]:
+          - /url: /revenue
+        - link "SDKs" [ref=e55] [cursor=pointer]:
+          - /url: /sdks
+        - generic [ref=e56]: "|"
+      - heading "Planet / Evidence / Certificate (MVP)" [level=1] [ref=e57]
+      - generic [ref=e58]: "Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code."
+      - region "Why Planet Compliance matters in AEVION" [ref=e59]:
+        - generic [ref=e60]: Why Planet Compliance matters
+        - heading "Cross-cutting evidence root — multi-validator certification for code, music, video, web." [level=3] [ref=e61]
+        - paragraph [ref=e62]:
+          - strong [ref=e63]: "Network role:"
+          - text: Planet is the social proof layer on top of cryptographic proof. The bigger the validator network, the more defensible every Bureau certificate becomes.
+        - generic [ref=e64]:
+          - strong [ref=e65]: "$$$ contribution:"
+          - text: Enterprise-grade compliance line of business — sold separately to ESG, audit and regulator buyers.
+        - link "See where this fits in the $1B+ pitch →" [ref=e66] [cursor=pointer]:
+          - /url: /pitch
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - generic [ref=e69]: Quick submission mode
+          - generic [ref=e70]:
+            - button "Music Awards preset" [ref=e71] [cursor=pointer]
+            - button "Film Awards preset" [ref=e72] [cursor=pointer]
+            - button "Reset to generic mode" [ref=e73] [cursor=pointer]
+            - button "Clear saved draft" [ref=e74] [cursor=pointer]
+        - generic [ref=e75]:
+          - generic [ref=e76]: Nominations for this artifact type
+          - generic [ref=e77]:
+            - generic [ref=e78]: General rating
+            - generic [ref=e79]: Quality / architecture
+            - generic [ref=e80]: Innovation / idea
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - generic [ref=e83]: artifactType
+            - combobox "artifactType" [ref=e84]:
+              - option "movie"
+              - option "music"
+              - option "code" [selected]
+              - option "web"
+          - generic [ref=e85]:
+            - generic [ref=e86]: title
+            - textbox "title" [ref=e87]: My AI Code Artifact
+          - generic [ref=e88]:
+            - generic [ref=e89]: productKey
+            - 'textbox "productKey Recommendation for track: planet_prod_v1_code" [ref=e90]': planet_prod_v1_code
+            - generic [ref=e91]:
+              - text: "Recommendation for track:"
+              - code [ref=e92]: planet_prod_v1_code
+          - generic [ref=e93]:
+            - generic [ref=e94]: tier
+            - textbox "tier" [ref=e95]: standard
+          - generic [ref=e96]:
+            - generic [ref=e97]: declaredLicense (code/web + MVP)
+            - textbox "declaredLicense (code/web + MVP)" [ref=e98]: MIT
+          - generic [ref=e99]:
+            - generic [ref=e100]: "codeFiles JSON array [{path, content}]"
+            - 'textbox "codeFiles JSON array [{path, content}]" [ref=e101]': "[ { \"path\": \"src/index.ts\", \"content\": \"export const hello = 'planet';\\n\" } ]"
+        - generic [ref=e102]:
+          - button "Create & Run Compliance" [ref=e103] [cursor=pointer]
+          - button "Resubmit (after flagged)" [disabled] [ref=e104] [cursor=pointer]
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]: What's happening on Planet
+            - generic [ref=e109]: Last 10 submissions, certificates, revocations and votes — auto-refresh every 60s.
+          - link "Full activity feed →" [ref=e110] [cursor=pointer]:
+            - /url: /planet/activity
+        - generic [ref=e111]:
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]: Recent activity
+              - generic [ref=e115]: Live feed across submissions, certificates, revocations and votes
+            - button "Loading…" [disabled] [ref=e116]
+          - generic [ref=e117]:
+            - button "All" [ref=e118] [cursor=pointer]:
+              - generic [ref=e119]: All
+            - button "Submitted" [ref=e120] [cursor=pointer]:
+              - generic [ref=e121]: ✏️
+              - generic [ref=e122]: Submitted
+            - button "Certified" [ref=e123] [cursor=pointer]:
+              - generic [ref=e124]: ✅
+              - generic [ref=e125]: Certified
+            - button "Revoked" [ref=e126] [cursor=pointer]:
+              - generic [ref=e127]: 🚫
+              - generic [ref=e128]: Revoked
+            - button "Voted" [ref=e129] [cursor=pointer]:
+              - generic [ref=e130]: 🗳️
+              - generic [ref=e131]: Voted
+          - list [ref=e132]:
+            - listitem [ref=e133]
+            - listitem [ref=e134]
+            - listitem [ref=e135]
+            - listitem [ref=e136]
+  - contentinfo [ref=e137]:
+    - generic [ref=e138]:
+      - generic [ref=e139]:
+        - generic [ref=e140]: AEVION
+        - paragraph [ref=e141]: Global trust infrastructure for digital content, intellectual property and creator economy.
+        - generic [ref=e142]: Astana, Kazakhstan
+      - generic [ref=e143]:
+        - generic [ref=e144]: Products
+        - generic [ref=e145]:
+          - link "QRight — IP Registry" [ref=e146] [cursor=pointer]:
+            - /url: /qright
+          - link "QSign — Signatures" [ref=e147] [cursor=pointer]:
+            - /url: /qsign
+          - link "IP Bureau" [ref=e148] [cursor=pointer]:
+            - /url: /bureau
+          - link "Planet Compliance" [ref=e149] [cursor=pointer]:
+            - /url: /planet
+          - link "Awards" [ref=e150] [cursor=pointer]:
+            - /url: /awards
+          - link "AEVION Bank" [ref=e151] [cursor=pointer]:
+            - /url: /bank
+          - link "CyberChess" [ref=e152] [cursor=pointer]:
+            - /url: /cyberchess
+      - generic [ref=e153]:
+        - generic [ref=e154]: Company
+        - generic [ref=e155]:
+          - link "Demo" [ref=e156] [cursor=pointer]:
+            - /url: /demo
+          - link "Terms of Service" [ref=e157] [cursor=pointer]:
+            - /url: /terms
+          - link "Privacy Policy" [ref=e158] [cursor=pointer]:
+            - /url: /privacy
+          - link "Help Center" [ref=e159] [cursor=pointer]:
+            - /url: /help
+      - generic [ref=e160]:
+        - generic [ref=e161]: Contact
+        - generic [ref=e162]:
+          - link "yahiin1978@gmail.com" [ref=e163] [cursor=pointer]:
+            - /url: mailto:yahiin1978@gmail.com
+          - generic [ref=e164]: Astana, Kazakhstan
+          - generic [ref=e165]: +7 702 625 83 77
+        - link "GitHub" [ref=e167] [cursor=pointer]:
+          - /url: https://github.com/Dossymbek281078/AEVION
+    - generic [ref=e168]:
+      - generic [ref=e169]: © 2026 AEVION. All rights reserved.
+      - generic [ref=e170]:
+        - link "Terms" [ref=e171] [cursor=pointer]:
+          - /url: /terms
+        - link "Privacy" [ref=e172] [cursor=pointer]:
+          - /url: /privacy
+        - link "Help" [ref=e173] [cursor=pointer]:
+          - /url: /help

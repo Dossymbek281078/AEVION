@@ -10,6 +10,8 @@ const csv_1 = require("../lib/csv");
 const dbPool_1 = require("../lib/dbPool");
 const projects_1 = require("../data/projects");
 const moduleRuntime_1 = require("../data/moduleRuntime");
+const platform_1 = require("../lib/sentry/platform");
+const capture = (0, platform_1.makeServiceCapture)("ecosystem");
 const ecosystemStore_1 = require("../lib/ecosystemStore");
 function sendCsv(res, baseName, rows) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -488,6 +490,7 @@ exports.ecosystemRouter.get("/graph", async (_req, res) => {
         });
     }
     catch (err) {
+        capture(err);
         console.error("[ecosystem] /graph failed", err);
         res.status(500).json({ error: "graph failed" });
     }
@@ -514,6 +517,7 @@ exports.ecosystemRouter.get("/health-matrix", (_req, res) => {
         });
     }
     catch (err) {
+        capture(err);
         console.error("[ecosystem] /health-matrix failed", err);
         res.status(500).json({ error: "matrix failed" });
     }

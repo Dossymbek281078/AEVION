@@ -1,0 +1,229 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "AEVION Доверие · IP · Globus" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: AEVION
+          - generic [ref=e8]: Доверие · IP · Globus
+        - generic [ref=e9]:
+          - link "Демо" [ref=e10] [cursor=pointer]:
+            - /url: /demo
+          - link "Авторизация" [ref=e11] [cursor=pointer]:
+            - /url: /auth
+          - link "QRight" [ref=e12] [cursor=pointer]:
+            - /url: /qright
+          - link "QSign" [ref=e13] [cursor=pointer]:
+            - /url: /qsign
+          - link "Бюро" [ref=e14] [cursor=pointer]:
+            - /url: /bureau
+          - link "Планета" [ref=e15] [cursor=pointer]:
+            - /url: /planet
+          - link "Награды" [ref=e16] [cursor=pointer]:
+            - /url: /awards
+          - link "Банк" [ref=e17] [cursor=pointer]:
+            - /url: /bank
+          - link "Шахматы" [ref=e18] [cursor=pointer]:
+            - /url: /cyberchess
+          - link "Pricing" [ref=e19] [cursor=pointer]:
+            - /url: /pricing
+          - link "API" [ref=e20] [cursor=pointer]:
+            - /url: http://127.0.0.1:4001/api/openapi.json
+          - button "🇷🇺 «Роял Юнион» ▼" [ref=e23] [cursor=pointer]:
+            - generic [ref=e24]: 🇷🇺
+            - generic [ref=e25]: «Роял Юнион»
+            - generic [ref=e26]: ▼
+    - main [ref=e29]:
+      - generic [ref=e30]:
+        - navigation "Wave 1 navigation" [ref=e31]:
+          - link "← Глобус" [ref=e32] [cursor=pointer]:
+            - /url: /
+          - generic [ref=e33]: "|"
+          - link "Демо" [ref=e34] [cursor=pointer]:
+            - /url: /demo
+          - link "Глубокое погружение" [ref=e35] [cursor=pointer]:
+            - /url: /demo/deep
+          - link "Pitch · $1B+" [ref=e36] [cursor=pointer]:
+            - /url: /pitch
+          - generic [ref=e37]: "|"
+          - link "Авторизация" [ref=e38] [cursor=pointer]:
+            - /url: /auth
+          - link "QRight" [ref=e39] [cursor=pointer]:
+            - /url: /qright
+          - link "QSign" [ref=e40] [cursor=pointer]:
+            - /url: /qsign
+          - link "Щит" [ref=e41] [cursor=pointer]:
+            - /url: /quantum-shield
+          - link "Бюро" [ref=e42] [cursor=pointer]:
+            - /url: /bureau
+          - link "QCoreAI" [ref=e43] [cursor=pointer]:
+            - /url: /multichat-engine
+          - generic [ref=e44]: "|"
+          - link "Музыкальные премии" [ref=e45] [cursor=pointer]:
+            - /url: /awards/music
+          - link "Кинопремии" [ref=e46] [cursor=pointer]:
+            - /url: /awards/film
+          - link "Банк" [ref=e47] [cursor=pointer]:
+            - /url: /bank
+          - link "Шахматы" [ref=e48] [cursor=pointer]:
+            - /url: /cyberchess
+          - link "QTradeOffline" [ref=e49] [cursor=pointer]:
+            - /url: /qtradeoffline
+          - link "HealthAI" [ref=e50] [cursor=pointer]:
+            - /url: /healthai
+          - link "QContract" [ref=e51] [cursor=pointer]:
+            - /url: /qcontract
+          - link "QPayNet" [ref=e52] [cursor=pointer]:
+            - /url: /qpaynet
+          - link "DevHub" [ref=e53] [cursor=pointer]:
+            - /url: /devhub
+          - link "Смета" [ref=e54] [cursor=pointer]:
+            - /url: /smeta-trainer
+          - link "QTrade" [ref=e55] [cursor=pointer]:
+            - /url: /qtrade
+          - link "Revenue" [ref=e56] [cursor=pointer]:
+            - /url: /revenue
+          - link "SDKs" [ref=e57] [cursor=pointer]:
+            - /url: /sdks
+          - generic [ref=e58]: "|"
+          - generic [ref=e59]: "|"
+          - link "Планета" [ref=e60] [cursor=pointer]:
+            - /url: /planet
+        - generic [ref=e61]:
+          - link "Skip to wallet" [ref=e62] [cursor=pointer]:
+            - /url: "#bank-anchor-wallet"
+          - button "Переключить на тёмную тему" [ref=e63] [cursor=pointer]: ☾
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - generic [ref=e68]: AEVION Bank · цифровой финансовый слой
+                - link "Что нового" [ref=e69] [cursor=pointer]:
+                  - /url: /bank/changelog
+                  - generic [ref=e70]: ★
+                  - text: Что нового
+              - group "Язык" [ref=e71]:
+                - button "«Роял Юнион»" [pressed] [ref=e72] [cursor=pointer]
+                - button "EN" [ref=e73] [cursor=pointer]
+                - button "KZ" [ref=e74] [cursor=pointer]
+                - button "DE" [ref=e75] [cursor=pointer]
+                - button "FR" [ref=e76] [cursor=pointer]
+                - button "ES" [ref=e77] [cursor=pointer]
+                - button "ZH" [ref=e78] [cursor=pointer]
+                - button "JA" [ref=e79] [cursor=pointer]
+                - button "AR" [ref=e80] [cursor=pointer]
+                - button "PT" [ref=e81] [cursor=pointer]
+                - button "TR" [ref=e82] [cursor=pointer]
+            - heading "Цифровой банк экосистемы" [level=1] [ref=e83]
+            - paragraph [ref=e84]: Кошелёк, P2P-переводы между авторами, автоматические роялти за использование контента, выплаты Awards. Каждая транзакция связана с Trust Graph.
+            - button "Try the demo (1 click)" [ref=e86] [cursor=pointer]:
+              - generic [ref=e87]: ▶
+              - text: Try the demo (1 click)
+          - generic [ref=e88]: Проверяем сессию…
+          - generic [ref=e89]:
+            - link "Protect your work · earn royalties →" [ref=e90] [cursor=pointer]:
+              - /url: /qright
+            - link "Earn via Planet →" [ref=e91] [cursor=pointer]:
+              - /url: /planet
+            - link "Награды" [ref=e92] [cursor=pointer]:
+              - /url: /awards
+          - generic [ref=e93]:
+            - generic [ref=e94]: How automatic royalties will work
+            - generic [ref=e95]:
+              - generic [ref=e96]:
+                - generic [ref=e97]: "1"
+                - generic [ref=e98]: Автор создаёт
+                - generic [ref=e99]: Track, film or code is registered in QRight + Planet
+              - generic [ref=e100]:
+                - generic [ref=e101]: "2"
+                - generic [ref=e102]: Кто-то использует
+                - generic [ref=e103]: Лицензия через маркетплейс
+              - generic [ref=e104]:
+                - generic [ref=e105]: "3"
+                - generic [ref=e106]: Роялти начислены
+                - generic [ref=e107]: AEVION Bank automatically distributes % to creator
+              - generic [ref=e108]:
+                - generic [ref=e109]: "4"
+                - generic [ref=e110]: Мгновенный вывод
+                - generic [ref=e111]: На карту или криптокошелёк
+          - generic [ref=e112]:
+            - generic [ref=e113]: AEVION Bank security roadmap
+            - generic [ref=e114]:
+              - generic [ref=e115]:
+                - generic [ref=e116]: Quantum Shield
+                - generic [ref=e117]: Ed25519 + Shamir Secret Sharing. Every transaction signed with three shards.
+              - generic [ref=e118]:
+                - generic [ref=e119]: Граф доверия
+                - generic [ref=e120]: Wallet reputation = verification history. Fraud visible before transaction.
+              - generic [ref=e121]:
+                - generic [ref=e122]: Аудит Merkle
+                - generic [ref=e123]: Every transaction block fixed in Merkle tree. Impossible to forge history.
+              - generic [ref=e124]:
+                - generic [ref=e125]: Planet Compliance
+                - generic [ref=e126]: Automatic AML/KYC check via Planet smart contracts.
+          - generic [ref=e127]:
+            - generic [ref=e128]:
+              - generic [ref=e129]: Конституция Bank
+              - img [ref=e130]
+              - generic [ref=e152]:
+                - generic [ref=e153]: Скандинавская модель
+                - generic [ref=e154]: Швеция / Дания / Норвегия — после 1945
+              - generic [ref=e155]:
+                - generic [ref=e156]: Инновация 55
+                - generic [ref=e157]: Устойчивость 74
+            - generic [ref=e158]:
+              - generic [ref=e159]: "AEVION Bank построен на skandinavian-Singapore mix: высокий пол снизу, верховенство закона, прозрачность, растущая экономика. Это не случайные ползунки — это банковская доверительная модель."
+              - link "Открыть в редакторе →" [ref=e160] [cursor=pointer]:
+                - /url: /constitution
+    - contentinfo [ref=e161]:
+      - generic [ref=e162]:
+        - generic [ref=e163]:
+          - generic [ref=e164]: AEVION
+          - paragraph [ref=e165]: Глобальная инфраструктура доверия.
+          - generic [ref=e166]: Astana, Kazakhstan
+        - generic [ref=e167]:
+          - generic [ref=e168]: Продукты
+          - generic [ref=e169]:
+            - link "QRight — IP Registry" [ref=e170] [cursor=pointer]:
+              - /url: /qright
+            - link "QSign — Signatures" [ref=e171] [cursor=pointer]:
+              - /url: /qsign
+            - link "Патентное бюро" [ref=e172] [cursor=pointer]:
+              - /url: /bureau
+            - link "Planet Compliance" [ref=e173] [cursor=pointer]:
+              - /url: /planet
+            - link "Награды" [ref=e174] [cursor=pointer]:
+              - /url: /awards
+            - link "Банк AEVION" [ref=e175] [cursor=pointer]:
+              - /url: /bank
+            - link "CyberChess" [ref=e176] [cursor=pointer]:
+              - /url: /cyberchess
+        - generic [ref=e177]:
+          - generic [ref=e178]: Компания
+          - generic [ref=e179]:
+            - link "Демо" [ref=e180] [cursor=pointer]:
+              - /url: /demo
+            - link "Условия" [ref=e181] [cursor=pointer]:
+              - /url: /terms
+            - link "Конфиденциальность" [ref=e182] [cursor=pointer]:
+              - /url: /privacy
+            - link "Центр помощи" [ref=e183] [cursor=pointer]:
+              - /url: /help
+        - generic [ref=e184]:
+          - generic [ref=e185]: Контакты
+          - generic [ref=e186]:
+            - link "yahiin1978@gmail.com" [ref=e187] [cursor=pointer]:
+              - /url: mailto:yahiin1978@gmail.com
+            - generic [ref=e188]: Astana, Kazakhstan
+            - generic [ref=e189]: +7 702 625 83 77
+          - link "GitHub" [ref=e191] [cursor=pointer]:
+            - /url: https://github.com/Dossymbek281078/AEVION
+      - generic [ref=e192]:
+        - generic [ref=e193]: © 2026 AEVION. All rights reserved.
+        - generic [ref=e194]:
+          - link "Условия" [ref=e195] [cursor=pointer]:
+            - /url: /terms
+          - link "Privacy" [ref=e196] [cursor=pointer]:
+            - /url: /privacy
+          - link "Помощь" [ref=e197] [cursor=pointer]:
+            - /url: /help

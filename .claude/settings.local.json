@@ -90,7 +90,6 @@
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx\\)..\\($idx+25\\)] | ForEach-Object {Write-Host $_} })",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges &&\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx-3\\)..\\($idx+30\\)] | ForEach-Object {Write-Host \"$\\($lines.IndexOf\\($_\\) + 1\\):  $_\"} })",
       "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)",
-<<<<<<< Updated upstream
       "Bash(echo \"EXIT: $?\")",
       "Bash(echo \"TSC_EXIT: $?\")",
       "Bash(python -X utf8 -c ' *)",
@@ -110,8 +109,7 @@
       "Bash(npm -v)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(echo \"BUILD:$?\")",
-      "Bash(xargs -n1 basename)"
-=======
+      "Bash(xargs -n1 basename)",
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_take_screenshot",
@@ -133,8 +131,9 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 438 --squash --delete-branch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 438 --squash)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/paywall-402-ux)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)"
->>>>>>> Stashed changes
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)",
+      "PowerShell(node -e \"try { JSON.parse\\(require\\('fs'\\).readFileSync\\('C:/Users/user/aevion-core/.claude/settings.local.json','utf8'\\)\\); console.log\\('VALID'\\) } catch\\(e\\){ console.log\\('ERROR:', e.message\\) }\")",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Size: $\\($bytes.Length\\) bytes\"; \"First 4 bytes \\(hex\\): $\\($bytes[0..3] | ForEach-Object { '{0:X2}' -f $_ }\\)\"; $text = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Trailing chars after last }: '$\\($text.Substring\\($text.LastIndexOf\\('}'\\) + 1\\)\\)'\")"
     ]
   }
 }

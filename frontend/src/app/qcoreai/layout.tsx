@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import QcoreQuotaMeter from "./QcoreQuotaMeter";
 
 export const metadata: Metadata = {
   title: {
@@ -28,5 +29,10 @@ export const metadata: Metadata = {
 };
 
 export default function QCoreAILayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <QcoreQuotaMeter />
+      {children}
+    </>
+  );
 }

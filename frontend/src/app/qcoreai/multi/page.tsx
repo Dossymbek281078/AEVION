@@ -13,7 +13,7 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 type AgentRole = "analyst" | "writer" | "critic";
 type ConfigRoleId = "analyst" | "writer" | "writerB" | "critic";
 type Stage = "draft" | "revision" | "judge";
-type Strategy = "sequential" | "parallel" | "debate";
+type Strategy = "sequential" | "parallel" | "debate" | "council";
 
 type ProviderInfo = {
   id: string;
@@ -188,12 +188,30 @@ const ROLE_STYLE: Record<string, RoleVisual> = {
   con:     { color: "#dc2626", bg: "rgba(220,38,38,0.08)",  tag: "✕",  label: "Con",      desc: "Debate mode: argues the counter-case" },
   moderator: { color: "#7c3aed", bg: "rgba(124,58,237,0.08)", tag: "M", label: "Moderator", desc: "Debate mode: synthesizes a balanced answer" },
   judge:   { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "J",  label: "Judge",    desc: "Parallel mode: picks or merges drafts" },
+  council: { color: "#a855f7", bg: "rgba(168,85,247,0.08)", tag: "✦",  label: "Council",  desc: "Council mode: a free-model crowd member (one persona)" },
+  synth:   { color: "#c026d3", bg: "rgba(192,38,211,0.10)", tag: "★",  label: "Synthesizer", desc: "Council mode: premium chair (Fable 5) fuses + verifies the crowd" },
 };
+
+/** Cheap client-side free/paid heuristic for the model badge. */
+function isFreeModel(model?: string): boolean {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  if (/^(claude-|gpt-|grok-)/.test(m)) return false;
+  if (/gemini-1\.5-pro/.test(m)) return false;
+  if (m.startsWith("stub-")) return true;
+  if (m.includes(":free")) return true;
+  // Free-fleet vendors ship Llama/Qwen/Gemma/Mistral/Phi/Kimi/DeepSeek-distill.
+  return /(llama|qwen|gemma|mistral|nemo|phi|kimi|deepseek|nemotron)/.test(m);
+}
 
 const FINAL_STYLE = { color: "#7c3aed", bg: "rgba(124,58,237,0.08)" };
 
 /** Pick the visual style for a turn using role + stage + instance + strategy. */
 function turnStyle(role: AgentRole, stage: Stage, instance?: string, strategy?: Strategy): RoleVisual {
+  if (strategy === "council") {
+    if (role === "critic") return ROLE_STYLE.synth;   // synthesizer (chair)
+    if (role === "writer") return ROLE_STYLE.council;  // crowd member
+  }
   if (role === "writer" && instance === "pro") return ROLE_STYLE.pro;
   if (role === "writer" && instance === "con") return ROLE_STYLE.con;
   if (role === "writer" && instance === "b") return ROLE_STYLE.writerB;
@@ -328,6 +346,8 @@ export default function QCoreMultiAgentPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
+  // council mode: how many crowd members to convene (2–6).
+  const [councilSize, setCouncilSize] = useState<number>(3);
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
@@ -518,6 +538,7 @@ export default function QCoreMultiAgentPage() {
       if (e.key === "1") { e.preventDefault(); setStrategy("sequential"); return; }
       if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
       if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
+      if (e.key === "4") { e.preventDefault(); setStrategy("council"); return; }
       // ? — show shortcuts modal
       if (e.key === "?") { e.preventDefault(); setShortcutModalOpen(true); return; }
     };
@@ -1323,6 +1344,7 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      if (useStrategy === "council") body.councilSize = councilSize;
       if (continueFromRunId) body.continueFromRunId = continueFromRunId;
       // V6-P integration: send promptOverrides if user picked custom prompts.
       const promptOverridesBody: Record<string, { promptId: string }> = {};
@@ -1923,7 +1945,7 @@ export default function QCoreMultiAgentPage() {
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                {(["sequential", "parallel", "debate"] as Strategy[]).map((s) => (
+                {(["sequential", "parallel", "debate", "council"] as Strategy[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => setStrategy(s)}
@@ -1932,18 +1954,41 @@ export default function QCoreMultiAgentPage() {
                       padding: "6px 12px",
                       borderRadius: 8,
                       border: "none",
-                      background: strategy === s ? "#fff" : "transparent",
-                      color: strategy === s ? "#0f172a" : "rgba(255,255,255,0.85)",
+                      background: strategy === s ? (s === "council" ? "#a855f7" : "#fff") : "transparent",
+                      color: strategy === s ? (s === "council" ? "#fff" : "#0f172a") : "rgba(255,255,255,0.85)",
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: "pointer",
                       transition: "background 0.15s",
                     }}
                   >
-                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : "Debate"}
+                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : s === "debate" ? "Debate" : "Council ✦"}
                   </button>
                 ))}
               </div>
+
+              {strategy === "council" && (
+                <div
+                  title="How many crowd members to convene. Free models do the breadth; Fable 5 synthesizes."
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 8px", borderRadius: 8,
+                    background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.35)",
+                    color: "#e9d5ff", fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <span>Council size</span>
+                  <button
+                    onClick={() => setCouncilSize((n) => Math.max(2, n - 1))}
+                    style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >−</button>
+                  <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
+                  <button
+                    onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
+                    style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >+</button>
+                </div>
+              )}
 
               {(strategy === "sequential"
                 ? (["analyst", "writer", "critic"] as ConfigRoleId[])
@@ -2052,6 +2097,8 @@ export default function QCoreMultiAgentPage() {
                       ? "Sequential: Analyst plans, Writer drafts, Critic reviews and may send back for one revision."
                       : strategy === "parallel"
                       ? "Parallel: Analyst plans, two Writers draft on different models in parallel, Judge synthesizes."
+                      : strategy === "council"
+                      ? "Council ✦: a crowd of free models each answer under a different persona in parallel, then a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer — free breadth, premium depth."
                       : "Debate: Pro and Con each argue their case, Moderator synthesizes a balanced answer."))}
             </div>
 
@@ -5476,11 +5523,17 @@ function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: A
   const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
   const persona = personas?.[turn.role === "writer" && turn.instance === "b" ? "writerB" : turn.role];
   const streaming = turn.status === "streaming";
+  const isCouncil = strategy === "council";
+  const councilLabel =
+    isCouncil && turn.role === "critic" ? "Synthesizer" :
+    isCouncil && turn.role === "writer" && turn.instance ? turn.instance : null;
   const stageBadge =
+    isCouncil ? "" :
     turn.stage === "revision" ? " (revision)" :
     turn.stage === "judge" ? "" :
     turn.instance === "pro" || turn.instance === "con" ? "" :
     turn.instance ? ` · ${turn.instance.toUpperCase()}` : "";
+  const showFree = isCouncil && turn.role === "writer" && isFreeModel(turn.model);
   return (
     <div
       style={{
@@ -5504,8 +5557,17 @@ function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: A
           {persona?.emoji || s.tag}
         </span>
         <span style={{ fontWeight: 800, fontSize: 12, color: s.color }}>
-          {persona?.name || s.label}{stageBadge}
+          {councilLabel || persona?.name || s.label}{stageBadge}
+          {isCouncil && turn.role === "critic" ? " ★" : ""}
         </span>
+        {showFree && (
+          <span style={{
+            fontSize: 9, fontWeight: 900, letterSpacing: 0.5,
+            padding: "1px 6px", borderRadius: 999,
+            background: "rgba(16,185,129,0.15)", color: "#059669",
+            border: "1px solid rgba(16,185,129,0.4)",
+          }}>FREE</span>
+        )}
         {turn.model && (
           <span style={{ fontSize: 11, color: "#94a3b8" }}>
             {prettyModel(turn.model)}

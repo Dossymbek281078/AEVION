@@ -12,8 +12,17 @@
 
 export type UsdPer1M = { input: number; output: number };
 
+// Every model listed in a "free" gateway gets an explicit { 0, 0 } so the cost
+// dashboard renders "Free" instead of a misleading "—" (unpriced). Helper below.
+function freeModels(...ids: string[]): Record<string, UsdPer1M> {
+  return Object.fromEntries(ids.map((id) => [id, { input: 0, output: 0 }]));
+}
+
 const TABLE: Record<string, Record<string, UsdPer1M>> = {
   anthropic: {
+    "claude-opus-4-8": { input: 5.0, output: 25.0 },
+    "claude-fable-5": { input: 10.0, output: 50.0 },
+    "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
     "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
     "claude-haiku-4-5-20251001": { input: 0.8, output: 4.0 },
   },
@@ -23,6 +32,7 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
     "gpt-4-turbo": { input: 10.0, output: 30.0 },
   },
   gemini: {
+    // Free-tier (rate-limited) on Flash; paid list prices shown for reference.
     "gemini-2.5-flash": { input: 0.15, output: 0.6 },
     "gemini-2.0-flash-001": { input: 0.075, output: 0.3 },
     "gemini-1.5-pro": { input: 1.25, output: 5.0 },
@@ -35,6 +45,36 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
     "grok-3": { input: 3.0, output: 15.0 },
     "grok-3-mini": { input: 0.3, output: 0.5 },
   },
+  // ── Free fleet: no per-token cost to the user ──────────────────────────
+  openrouter: freeModels(
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-oss-120b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "qwen/qwen3-coder:free",
+  ),
+  groq: freeModels(
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "deepseek-r1-distill-llama-70b",
+    "gemma2-9b-it",
+    "moonshotai/kimi-k2-instruct",
+  ),
+  cerebras: freeModels("llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"),
+  mistral: freeModels("mistral-small-latest", "open-mistral-nemo"),
+  together: freeModels(
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+  ),
+  github: freeModels(
+    "openai/gpt-4o-mini",
+    "openai/gpt-4o",
+    "meta/Meta-Llama-3.1-70B-Instruct",
+    "microsoft/Phi-3.5-MoE-instruct",
+  ),
+  ollama: freeModels("llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"),
 };
 
 export function getModelPrice(provider: string, model: string): UsdPer1M | null {

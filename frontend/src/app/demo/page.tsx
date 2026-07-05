@@ -259,7 +259,7 @@ export default function DemoShowcasePage() {
           >
             What does this <em>do</em>? Below: the live ecosystem pulse, the 90-second pipeline from
             idea to certificate, all 27 product nodes, and the cross-module flywheel that makes the
-            sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>$1B+ valuation thesis</Link>, see /pitch.
+            sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>partnership thesis</Link>, see /pitch.
           </p>
 
           <div style={{ marginTop: 28 }} className="demo-marquee-wrap">
@@ -680,7 +680,7 @@ export default function DemoShowcasePage() {
                 boxShadow: "0 8px 32px rgba(251,191,36,0.25)",
               }}
             >
-              Investor pitch · $1B+ →
+              Investor pitch →
             </Link>
             <Link
               href="/demo/deep"

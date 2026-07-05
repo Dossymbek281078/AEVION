@@ -49,7 +49,7 @@ export default function HelpOg() {
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 980, lineHeight: 1.45, display: "flex" }}>
             User FAQ for QRight, Planet, Bank, Awards, CyberChess. Plus the investor FAQ
-            behind the $1B+ thesis: TAM, moat, revenue, exit, risks.
+            behind the partnership offer: TAM, moat, revenue, terms, risks.
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
             {TOPICS.map((t) => (

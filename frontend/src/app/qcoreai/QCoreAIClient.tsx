@@ -23,7 +23,7 @@ const SUGGESTIONS = [
   "How does QRight protect my IP?",
   "Explain Trust Graph",
   "How do automatic royalties work?",
-  "What makes AEVION worth $1B?",
+  "What is the AEVION partnership offer?",
 ];
 
 const PROVIDER_ICONS: Record<string, string> = {

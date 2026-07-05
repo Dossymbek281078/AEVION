@@ -84,7 +84,7 @@ const TOC = [
   { id: "voices", label: "Customer voice" },
   { id: "ecosystem", label: "Roadmap" },
   { id: "competitive", label: "Competition" },
-  { id: "why-1b", label: "Why $1B+" },
+  { id: "why-partner", label: "Why it's defensible" },
   { id: "press", label: "Partners & press" },
   { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
@@ -413,7 +413,7 @@ export default function PitchPage() {
             <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
             <HeroStat value="$2B+" unit="modelled ARR" hint="by year 5" />
-            <HeroStat value="$1B+" unit="defensible valuation" hint="five-axis defense" />
+            <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
           </div>
 
           <div
@@ -452,7 +452,7 @@ export default function PitchPage() {
 
           <div className="pitch-no-print" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <a
-              href="#why-1b"
+              href="#why-partner"
               style={{
                 padding: "14px 26px",
                 borderRadius: 12,
@@ -464,7 +464,7 @@ export default function PitchPage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              Why $1B+ ↓
+              Why it's defensible ↓
             </a>
             <a
               href="#modules"
@@ -1242,8 +1242,8 @@ export default function PitchPage() {
         </div>
       </Section>
 
-      {/* ───────── WHY $1B+ ───────── */}
-      <Section anchor="why-1b" eyebrow="Defensibility stack" title={billionDefense.title}>
+      {/* ───────── WHY DEFENSIBLE ───────── */}
+      <Section anchor="why-partner" eyebrow="Defensibility stack" title={billionDefense.title}>
         <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{billionDefense.intro}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {billionDefense.axes.map((a) => (

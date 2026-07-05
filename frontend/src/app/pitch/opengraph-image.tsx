@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION · Investor Pitch — why this is a $1B+ opportunity";
+export const alt = "AEVION · Investor Pitch — the AEVION partnership offer";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -59,7 +59,7 @@ export default function PitchOgImage() {
         <div style={{ display: "flex", gap: 28 }}>
           <OgStat value="$340B" label="addressable market" />
           <OgStat value="$2B+" label="modelled ARR · year 5" />
-          <OgStat value="$1B+" label="defensible valuation" />
+          <OgStat value="$10M" label="returnable advance" />
           <OgStat value="12" label="live MVPs today" />
         </div>
       </div>

@@ -344,7 +344,7 @@ export default function HomePage() {
                 boxShadow: "0 8px 24px rgba(251,191,36,0.25)",
               }}
             >
-              Investor pitch · $1B+ →
+              Investor pitch →
             </Link>
           </div>
 
@@ -485,7 +485,7 @@ export default function HomePage() {
         {/* Why invest */}
         <section style={{ marginBottom: 28, padding: "24px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
           <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }}>FOR INVESTORS</div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why AEVION is worth $1B+</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why partner with AEVION</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {[
               { title: "First-mover monopoly", desc: "The world's first electronic proof-of-authorship bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },

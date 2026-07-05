@@ -193,7 +193,7 @@ export default function DemoDeepPage() {
               boxShadow: "0 8px 32px rgba(251,191,36,0.25)",
             }}
           >
-            Investor pitch · why $1B+ →
+            Investor pitch →
           </Link>
         </footer>
       </div>

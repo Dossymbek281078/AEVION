@@ -69,7 +69,7 @@ export default function InvestorPage() {
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "80px 24px 60px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: "#10b981", textTransform: "uppercase" }}>
-            One valuation · $1.05B · $10.5M per 1% · you choose the stake
+            One offer · Partnership, not a buyout · $10M returnable advance + 51/49 revenue
           </span>
         </div>
         <h1 style={{ fontSize: "clamp(36px,6vw,64px)", fontWeight: 900, lineHeight: 1.1, marginBottom: 20 }}>
@@ -408,38 +408,40 @@ export default function InvestorPage() {
         </div>
       </section>
 
-      {/* Investment terms — constant price ladder */}
+      {/* The offer — one partnership */}
       <section style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "60px 24px" }}>
         <div style={{ maxWidth: 960, margin: "0 auto" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: "#64748b", textTransform: "uppercase", marginBottom: 16 }}>
-            Investment terms — one price, you choose the stake
+            The offer — one partnership, not a ladder
           </h2>
           <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 720, lineHeight: 1.6, marginBottom: 28 }}>
-            One valuation (<strong style={{ color: "#f1f5f9" }}>$1.05B</strong>), one constant price
-            (<strong style={{ color: "#f1f5f9" }}>$10.5M per 1%</strong>). You pick only the depth — from a
-            1% primary stake (capital into growth, founder at the helm) to a 95% secondary buyout
-            ($1B net, founder → Senior Advisor, 24 months). No per-slice premium, no moving goalposts.
+            <strong style={{ color: "#f1f5f9" }}>$10M as a returnable advance</strong> plus resources
+            (compute, engineers, distribution, brand). Project revenue splits
+            {" "}<strong style={{ color: "#f1f5f9" }}>51% founder / 49% partner</strong>. The founder stays as
+            Chief Idea Officer with a majority stake; the AEVION brand is kept. This is a
+            partnership, not a buyout — the partner mostly pays in resources and a small returnable
+            advance, and the big money comes with growth.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 14 }}>
             {[
-              { stake: "1%", price: "$10.5M", note: "Primary · capital into growth" },
-              { stake: "10%", price: "$105M", note: "Primary · board seat" },
-              { stake: "25%", price: "$263M", note: "Strategic minority" },
-              { stake: "49%", price: "$516M", note: "Co-control" },
-              { stake: "75%", price: "$789M", note: "Majority secondary" },
-              { stake: "95%", price: "$1B net", note: "Full buyout · founder advises" },
+              { k: "Form", v: "Partnership", note: "Not a buyout — founder stays" },
+              { k: "Advance", v: "$10M", note: "Returnable · repaid from founder's share as it grows" },
+              { k: "Revenue", v: "51 / 49", note: "Founder / partner split" },
+              { k: "Founder", v: "Chief Idea Officer", note: "Majority stake · drives next ideas" },
+              { k: "AEV token", v: "Ring-fenced", note: "Out of the deal perimeter" },
+              { k: "Exclusivity", v: "60 days", note: "From LOI · 30-day due diligence" },
             ].map(t => (
-              <div key={t.stake} style={{ padding: 18, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div style={{ fontSize: 24, fontWeight: 900, color: "#10b981", lineHeight: 1 }}>{t.stake}</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", margin: "6px 0 6px" }}>{t.price}</div>
+              <div key={t.k} style={{ padding: 18, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", color: "#64748b", textTransform: "uppercase", lineHeight: 1, marginBottom: 8 }}>{t.k}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#10b981", margin: "0 0 6px" }}>{t.v}</div>
                 <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{t.note}</div>
               </div>
             ))}
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
-            Full ladder, deal mechanics and founder-transition terms →{" "}
+            Full deal terms and founder-partnership structure →{" "}
             <Link href="/acquire" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
-              Acquisition brief
+              Deal terms
             </Link>
           </p>
         </div>
@@ -458,7 +460,7 @@ export default function InvestorPage() {
             <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
-            One price · $10.5M per 1% · you choose the stake (1% → 95%) · contact:{" "}
+            Partnership, not a buyout · $10M returnable advance + 51/49 revenue · contact:{" "}
             <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20investment%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
               yahiin1978@gmail.com
             </a>

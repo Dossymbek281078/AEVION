@@ -55,7 +55,7 @@ export default function PitchPrintPage() {
           <Stat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned`} />
           <Stat value="$340B" unit="addressable market" hint="IP + creators + payments" />
           <Stat value="$2B+" unit="modelled ARR" hint="year 5" />
-          <Stat value="$1B+" unit="defensible valuation" hint="five-axis defense" />
+          <Stat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
         </div>
       </header>
 

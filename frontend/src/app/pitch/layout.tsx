@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AEVION · Investor Pitch — why this is a $1B+ opportunity",
+  title: "AEVION · Investor Pitch — the AEVION partnership offer",
   description:
     "27-node trust ecosystem (12 live MVPs) selling into $340B addressable market across IP enforcement, creator economy and digital payments. One identity, one pipeline, one Trust Graph.",
   keywords: [
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION — $1B+ trust infrastructure pitch",
+    title: "AEVION — trust infrastructure partnership",
     description:
       "27 nodes · 12 live MVPs · one Trust Graph · $340B addressable market across three deep buckets.",
   },

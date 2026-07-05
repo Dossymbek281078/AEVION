@@ -365,6 +365,20 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Персональный AI-доктор (информационно)",
   },
   {
+    id: "qmelanin",
+    addonMonthly: 15,
+    includedIn: ["medium", "full", "enterprise"],
+    availability: "beta",
+    oneLiner: "Протокол против седины: анализы → питание (информационно)",
+  },
+  {
+    id: "qrenew",
+    addonMonthly: 19,
+    includedIn: ["medium", "full", "enterprise"],
+    availability: "beta",
+    oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",
+  },
+  {
     id: "smeta-trainer",
     addonMonthly: 19,
     includedIn: ["medium", "full", "enterprise"],

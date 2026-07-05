@@ -19,7 +19,7 @@ const IDEAS = [
     ready: "Фундамент готов",
   },
   {
-    title: "Patent Bureau (QRight v2)",
+    title: "IP Bureau (QRight v2)",
     desc: "Первый IP-реестр с on-chain аттестацией для AI-контента. Партнёрство с национальным патентным ведомством.",
     arr: "$10-50M/год",
     accent: "#8b5cf6",

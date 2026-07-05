@@ -16,7 +16,7 @@ const RECENT_DAYS = 30;
 const investorFaqs: FAQ[] = [
   {
     q: "How is AEVION worth $1B+?",
-    a: "Five independent axes: (1) first-mover monopoly on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node. The full breakdown lives at /pitch.",
+    a: "Five independent axes: (1) first-mover lead on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node. The full breakdown lives at /pitch.",
     updated: "2026-05-10",
   },
   {
@@ -57,7 +57,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "Can I see live product, not just slides?",
-    a: "Yes — every module on /pitch is a working MVP. /qright registers IP in seconds. /bureau issues court-grade certificates. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
+    a: "Yes — the core modules on /pitch are working MVPs (each module shows its stage). /qright registers IP in seconds. /bureau issues admissible-evidence certificates. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
     updated: "2026-05-08",
   },
   {

@@ -218,7 +218,7 @@ export const translations = {
     /* Home hero */
     "home.badge": "Product MVP \u00b7 ready for demo",
     "home.title": "Trust infrastructure for digital assets and intellectual property",
-    "home.subtitle": "A unified environment for investment and partnership evaluation: identity, object registry, cryptographic signature, patent bureau, and compliance layer \u2014 on an interactive ecosystem map with 27 product nodes and open APIs.",
+    "home.subtitle": "A unified environment for investment and partnership evaluation: identity, object registry, cryptographic signature, authorship & prior-art bureau, and compliance layer \u2014 on an interactive ecosystem map with 27 product nodes and open APIs.",
     "home.cta.auth": "Start with identity (Auth)",
     "home.cta.qright": "QRight Registry",
     "home.cta.music": "Music Awards",
@@ -256,7 +256,7 @@ export const translations = {
 
     /* QRight */
     "qright.title": "QRight",
-    "qright.subtitle": "Electronic patenting (MVP): register object \u2192 hash \u2192 add to registry. Then \u2014 sign and bureau in one click.",
+    "qright.subtitle": "Electronic authorship registration (MVP): register object \u2192 hash \u2192 add to registry. Then \u2014 sign and bureau in one click.",
     "qright.form.title": "Title *",
     "qright.form.desc": "Description *",
     "qright.form.owner": "Author name (optional)",

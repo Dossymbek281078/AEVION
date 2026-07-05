@@ -115,6 +115,7 @@ import {
   getDueSchedules,
   getMonthlySpend,
   getMonthlyTokens,
+  addTokenUsage,
   getScheduledBatch,
   getSpendLimit,
   listBatches,
@@ -291,9 +292,23 @@ function publicErrorCategory(msg: string): string {
   return "chat_failed";
 }
 
+/**
+ * Normalise a provider-specific `usage` object to {tokensIn, tokensOut}.
+ * Covers Anthropic (input/output_tokens), OpenAI-style (prompt/completion_tokens)
+ * and Gemini (promptTokenCount/candidatesTokenCount).
+ */
+function usageToTokens(u: unknown): { tokensIn: number; tokensOut: number } {
+  const o = (u ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const tokensIn = num(o.input_tokens) || num(o.prompt_tokens) || num(o.promptTokenCount) || 0;
+  const tokensOut = num(o.output_tokens) || num(o.completion_tokens) || num(o.candidatesTokenCount) || 0;
+  return { tokensIn, tokensOut };
+}
+
 qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
   try {
     if (await enforceFreeTokenQuota(req, res)) return;
+    const auth = verifyBearerOptional(req);
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
@@ -320,6 +335,12 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     const temperature = clampTemperature(req.body?.temperature, 0.6);
 
     const result = await callProvider(providerId, messages, modelName, temperature);
+    // Count usage toward the free-tier monthly quota (single-shot /chat does
+    // not persist a QCoreRun/QCoreMessage, so it must ledger explicitly).
+    if (auth?.sub) {
+      const { tokensIn, tokensOut } = usageToTokens(result.usage);
+      addTokenUsage(auth.sub, tokensIn, tokensOut).catch(() => {});
+    }
     res.json({
       mode: providerId,
       provider: provider.name,
@@ -351,6 +372,8 @@ export { clampTemperature, publicErrorCategory };
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.post("/chat-stream", async (req, res) => {
+  if (await enforceFreeTokenQuota(req, res)) return;
+  const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);
   if (!messages) {
     return res.status(400).json({ error: "messages required" });
@@ -389,6 +412,8 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
   // Heartbeat — каждые 15s, чтобы держать соединение и обнаружить разрыв
   const heartbeat = setInterval(() => res.write(`:hb\n\n`), 15000);
   let aborted = false;
+  let ledgerIn = 0;
+  let ledgerOut = 0;
   req.on("close", () => { aborted = true; clearInterval(heartbeat); });
 
   try {
@@ -399,6 +424,8 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
         totalText += ev.text;
         send({ kind: "text", text: ev.text });
       } else if (ev.kind === "done") {
+        ledgerIn += Number(ev.tokensIn) || 0;
+        ledgerOut += Number(ev.tokensOut) || 0;
         send({
           kind: "done",
           model: modelName,
@@ -419,6 +446,11 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
     if (!aborted) send({ kind: "error", message: msg });
   } finally {
     clearInterval(heartbeat);
+    // Count streamed usage toward the free-tier monthly quota (chat-stream does
+    // not persist a QCoreRun/QCoreMessage). Fire-and-forget; anon → no-op.
+    if (auth?.sub && (ledgerIn > 0 || ledgerOut > 0)) {
+      addTokenUsage(auth.sub, ledgerIn, ledgerOut).catch(() => {});
+    }
     if (!aborted) {
       res.write("data: [DONE]\n\n");
       res.end();

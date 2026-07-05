@@ -47,7 +47,7 @@ export const thesis = {
   badge: "AEVION · Trust operating system",
   title: "The trust layer for the next decade of digital creation",
   lead:
-    "AEVION is one identity, one signing layer, one IP registry, one patent bureau, one compliance " +
+    "AEVION is one identity, one signing layer, one IP registry, one authorship & prior-art bureau, one compliance " +
     "rail and one wallet — already wired together as a working system. 27 product nodes, 12 with " +
     "live MVPs, all sharing the same Trust Graph. We monetise three of the largest underserved " +
     "markets at once: IP enforcement, the creator economy, and digital assets.",
@@ -62,13 +62,13 @@ export const thesis = {
       kicker: "ONE PIPELINE",
       title: "Idea → registry → signature → bureau → certificate",
       body:
-        "QRight registers the work, QSign seals it with HMAC-SHA256, IP Bureau issues a court-grade Ed25519 certificate with Shamir Secret Sharing, Planet validates compliance — all in one click.",
+        "QRight registers the work, QSign seals it with HMAC-SHA256, IP Bureau issues an Ed25519 certificate — admissible evidence of authorship & timestamp — with Shamir Secret Sharing, Planet validates compliance — all in one click.",
     },
     {
       kicker: "ONE TRUST GRAPH",
       title: "Every action accrues reputation",
       body:
-        "Bank tier, advance limits, voting weight, tournament eligibility — all derived from the same composite score across modules. Cannot be replicated by single-vertical competitors.",
+        "Bank tier, advance limits, voting weight, tournament eligibility — all derived from the same composite score across modules — an integration a single-vertical competitor would have to rebuild end-to-end.",
     },
   ],
 } as const;
@@ -200,7 +200,7 @@ export const launchedModules: PitchModule[] = [
     href: "/bureau",
     stage: "live",
     bucket: "ip-and-trust",
-    tagline: "World's first fully-digital patent bureau — court-grade certificates in seconds.",
+    tagline: "Cryptographic proof-of-authorship bureau — admissible certificates in seconds.",
     problem:
       "Patent and IP filings take 6–18 months and cost $5K–$25K. There is no instant, internationally-recognised proof-of-prior-art mechanism for digital work.",
     killerFeature:
@@ -208,7 +208,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "Bureau is the legally-defensible output of the entire registry+signature pipeline. Sets the floor for what AEVION certificates are worth in court.",
     proof: ["Live cert count", "164+ WTO member states in legal scope", "Public verify portal with no-login validation"],
-    valueLine: "First-mover monopoly: any future competitor building a digital patent bureau creates a derivative work — our infrastructure is self-protected.",
+    valueLine: "First-mover advantage: the moat is the integrated Trust Graph and network effects, not the concept — a competitor must rebuild registry, signature, timestamp, compliance and wallet as one system, then earn the graph from zero.",
   },
   {
     id: "quantum-shield",
@@ -225,7 +225,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "Shield is the cryptographic moat that makes Bureau certificates quantum-resistant — a credible '10-year defensibility' story for institutional investors.",
     proof: ["Live shield records dashboard", "Demo with 4 sample shards (2-of-3 threshold)", "Graceful fallback if API unreachable"],
-    valueLine: "Future-proofs all certificates against the post-quantum era — institutional and government-grade trust signal.",
+    valueLine: "Post-quantum signatures available (real ML-DSA-65 / FIPS 204, opt-in) — an institutional-grade trust signal ahead of the migration.",
   },
   {
     id: "bank",
@@ -383,9 +383,9 @@ export const billionDefense = {
   axes: [
     {
       number: "01",
-      title: "First-mover monopoly on digital IP infrastructure",
+      title: "First-mover lead on integrated IP infrastructure",
       body:
-        "There is no other operator running an end-to-end registry+signature+bureau+compliance+wallet pipeline. Any future competitor building the same stack creates a derivative work — protected by our own QRight records.",
+        "We know of no other operator running an end-to-end registry+signature+bureau+compliance+wallet pipeline as one system. The barrier isn't the idea — it's rebuilding all five layers integrated, then earning the Trust Graph from zero.",
     },
     {
       number: "02",
@@ -424,7 +424,7 @@ export const gtm = {
     {
       phase: "Phase 1 · Independent creators",
       body:
-        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'court-grade proof in 30 seconds'. Conversion to Bank is automatic (royalty payout settles to AEC).",
+        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'admissible proof of authorship in 30 seconds'. Conversion to Bank is automatic (royalty payout settles to AEC).",
     },
     {
       phase: "Phase 2 · IP-heavy SMBs",
@@ -658,7 +658,7 @@ export const competitive = {
       weakness:
         "Cryptographic proof exists, but no human-readable certificate, no legal framework citation, no validator network, no royalty rails on top.",
       aevionWin:
-        "QRight + Bureau wraps the same hash in a court-grade certificate citing 6 international frameworks, plus auto-routes royalties via Bank.",
+        "QRight + Bureau wraps the same hash in an admissible-evidence certificate citing 6 international frameworks, plus auto-routes royalties via Bank.",
     },
     {
       name: "Stripe Atlas / Stripe Connect for creators",

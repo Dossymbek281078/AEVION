@@ -112,7 +112,7 @@ export default function ObsOverlayPage() {
 
   useEffect(() => {
     if (!gameId) return;
-    const es = new EventSource(`/api/cyberchess-spectator/${gameId}`);
+    const es = new EventSource(`/api-backend/api/cyberchess-spectator/${gameId}`);
 
     es.onopen = () => setConnected(true);
     es.onmessage = (e) => {

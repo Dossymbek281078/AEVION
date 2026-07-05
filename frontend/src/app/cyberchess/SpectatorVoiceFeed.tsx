@@ -79,7 +79,7 @@ export default function SpectatorVoiceFeed({
 
   useEffect(() => {
     if (!gameId) return;
-    const url = `/api/cyberchess-spectator/${encodeURIComponent(gameId)}`;
+    const url = `/api-backend/api/cyberchess-spectator/${encodeURIComponent(gameId)}`;
     const es = new EventSource(url);
 
     const onVoice = (ev: MessageEvent) => {

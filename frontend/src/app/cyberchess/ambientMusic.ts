@@ -14,6 +14,8 @@ export const AMBIENT_TRACKS: AmbientTrack[] = [
   { id: "amb-zen",   name: "Zen Drift",     emoji: "🧘", desc: "Медленный медитативный дрейф — почти без ритма." },
   { id: "amb-night", name: "Night Tactics", emoji: "🌙", desc: "Минорный night-mode эмбиент с лёгким пульсом." },
   { id: "amb-focus", name: "Deep Focus",    emoji: "🎯", desc: "Нейтральный фокус-дрон + редкие высокие ноты." },
+  { id: "amb-rain",  name: "Rain Window",   emoji: "🌧", desc: "Разрежённый пад + редкие капли-ноты. Спокойный дождливый вечер." },
+  { id: "amb-uplift",name: "Uplift Major",  emoji: "☀️", desc: "Светлый мажорный джаз-пад с 9-ми — для бодрых блиц-сессий." },
 ];
 
 type TrackDef = {
@@ -55,6 +57,18 @@ const DEFS: Record<string, TrackDef> = {
     chords: [[50, 57], [50, 57], [48, 55], [50, 57]], // дрон D + квинта
     scale: [0, 7, 12, 14, 19],
     melodyChance: 0.10, padWave: "sine", melWave: "sine", padVol: 0.11, melVol: 0.07, lp: 1300,
+  },
+  "amb-rain": {
+    bpm: 54, beats: 4, subdiv: 2,
+    chords: [[45, 52, 57, 60], [43, 50, 55, 59], [41, 48, 53, 57], [43, 50, 55, 58]], // тихие add-нотки, минорный оттенок
+    scale: [0, 3, 5, 7, 10, 12], // минорная пентатоника + септима — «капли»
+    melodyChance: 0.16, padWave: "sine", melWave: "triangle", padVol: 0.09, melVol: 0.08, lp: 1600,
+  },
+  "amb-uplift": {
+    bpm: 72, beats: 4, subdiv: 2,
+    chords: [[48, 52, 55, 59, 62], [50, 53, 57, 60, 64], [45, 48, 52, 55, 59], [43, 47, 50, 53, 57]], // maj9 прогрессия
+    scale: [0, 2, 4, 7, 9, 11], // мажор + большая септима
+    melodyChance: 0.30, padWave: "triangle", melWave: "sine", padVol: 0.09, melVol: 0.11, lp: 2600,
   },
 };
 

@@ -37,7 +37,7 @@ export const DEMO_MODULE_ORDER: string[] = [
 export const ecosystemIntro = {
   title: "Why the entire AEVION platform matters for investors",
   lead:
-    "AEVION is not a collection of separate apps — it is a unified trust operating system: one user identity, a shared signing and integrity layer, IP object registry, patent bureau and compliance layer — and a visual map of how products and teams merge into an ecosystem.",
+    "AEVION is not a collection of separate apps — it is a unified trust operating system: one user identity, a shared signing and integrity layer, IP object registry, authorship & prior-art bureau and compliance layer — and a visual map of how products and teams merge into an ecosystem.",
   bullets: [
     "Integration cost reduction: reusing Auth, QSign and API instead of reinventing the wheel in every product.",
     "Faster time to market: ready-made pipeline 'registry → signature → bureau' to demonstrate maturity to investors and partners.",
@@ -116,7 +116,7 @@ export const moduleBenefits: Record<
     ],
   },
   "aevion-ip-bureau": {
-    tagline: "Electronic patent bureau: from registry to 'readiness certificate'.",
+    tagline: "Electronic proof-of-authorship bureau: from registry to 'readiness certificate'.",
     benefits: [
       "Connects QRight and QSign in a scenario understandable to lawyers and investors.",
       "Local signature storage + path to PDF/blockchain export (roadmap).",

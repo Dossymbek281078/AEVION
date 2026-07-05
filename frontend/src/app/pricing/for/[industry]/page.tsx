@@ -113,7 +113,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "voice-of-earth",
     ],
     caseStudy: {
-      title: "Электронное патентное бюро для KZ",
+      title: "Электронное бюро авторства для KZ",
       result:
         "Полный пайплайн: гражданин → QRight регистрация → IP Bureau ревью → Planet certified-сертификат. Экономия 70% бумажного оборота.",
     },

@@ -164,10 +164,10 @@ export default function TournamentDetailPage({
     setErrorMsg(null);
     try {
       const [tRes, bRes, sRes, nRes] = await Promise.all([
-        fetch(`/api/cyberchess-tournaments/${tournamentId}`, { cache: "no-store" }),
-        fetch(`/api/cyberchess-tournaments/${tournamentId}/bracket`, { cache: "no-store" }),
-        fetch(`/api/cyberchess-tournaments/${tournamentId}/standings`, { cache: "no-store" }),
-        fetch(`/api/cyberchess-tournaments/${tournamentId}/next-round`, { cache: "no-store" }),
+        fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}`, { cache: "no-store" }),
+        fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/bracket`, { cache: "no-store" }),
+        fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/standings`, { cache: "no-store" }),
+        fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/next-round`, { cache: "no-store" }),
       ]);
 
       if (!tRes.ok) throw new Error(`tournament HTTP ${tRes.status}`);
@@ -266,7 +266,7 @@ export default function TournamentDetailPage({
       lastDoneCountRef.current < total
     ) {
       lastQueueRoundRef.current = cr;
-      void fetch(`/api/cyberchess-tournaments/${tournamentId}/queue-match`, {
+      void fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/queue-match`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -289,7 +289,7 @@ export default function TournamentDetailPage({
     const userId = genLocalUserId(tournamentId);
     const displayName = getDisplayName();
     try {
-      const r = await fetch(`/api/cyberchess-tournaments/${tournamentId}/register`, {
+      const r = await fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, displayName }),
@@ -332,7 +332,7 @@ export default function TournamentDetailPage({
       return;
     }
     const userId = reg.userId;
-    const url = `/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userId)}`;
+    const url = `/api-backend/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userId)}`;
     let es: EventSource;
     try {
       es = new EventSource(url);

@@ -76,7 +76,7 @@ export default function RootOg() {
             </span>
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 1000, lineHeight: 1.45, display: "flex" }}>
-            27 nodes on one Trust Graph. IP registry, cryptographic signatures, patent bureau,
+            27 nodes on one Trust Graph. IP registry, cryptographic signatures, authorship & prior-art bureau,
             validator quorum, creator awards, digital bank — one identity, one pipeline.
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>

@@ -86,6 +86,8 @@ export type MessageRow = {
 const memSessions = new Map<string, SessionRow>();
 const memRuns = new Map<string, RunRow>();
 const memMessagesByRun = new Map<string, MessageRow[]>();
+// Per-user monthly token ledger (in-memory fallback), key = `${userId}:${ym}`.
+const memTokenLedger = new Map<string, { tokensIn: number; tokensOut: number }>();
 
 // V43 — in-memory API key store
 type ApiKeyRow = {
@@ -2092,7 +2094,7 @@ export async function getMonthlyTokens(userId: string): Promise<number> {
         total += (m.tokensIn ?? 0) + (m.tokensOut ?? 0);
       }
     }
-    return total;
+    return total + (await getLedgerTokens(userId));
   }
 
   const r = await pool.query(
@@ -2102,6 +2104,69 @@ export async function getMonthlyTokens(userId: string): Promise<number> {
        JOIN "QCoreSession" s ON s."id"=r."sessionId"
       WHERE s."userId"=$1 AND r."startedAt" >= $2`,
     [userId, monthStart]
+  );
+  const fromMessages = Number(r.rows[0]?.total ?? 0) || 0;
+  // Add ad-hoc chat usage (single-shot /chat + /chat-stream) tracked in the
+  // token ledger — those endpoints don't persist QCoreRun/QCoreMessage rows.
+  return fromMessages + (await getLedgerTokens(userId));
+}
+
+/** Current-month YYYY-MM key (local server time, matches getMonthlyTokens). */
+function currentYm(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Increment the per-user monthly token ledger. Called by token-spending
+ * endpoints that do NOT persist a QCoreRun/QCoreMessage (single-shot /chat and
+ * /chat-stream) so their usage still counts toward the free-tier quota. No-op
+ * for anonymous callers (null userId) or non-positive totals.
+ */
+export async function addTokenUsage(
+  userId: string | null | undefined,
+  tokensIn: number,
+  tokensOut: number,
+): Promise<void> {
+  if (!userId) return;
+  const tin = Math.max(0, Math.round(Number(tokensIn) || 0));
+  const tout = Math.max(0, Math.round(Number(tokensOut) || 0));
+  if (tin === 0 && tout === 0) return;
+  const ym = currentYm();
+
+  if (!isDbReady()) {
+    const key = `${userId}:${ym}`;
+    const cur = memTokenLedger.get(key) ?? { tokensIn: 0, tokensOut: 0 };
+    cur.tokensIn += tin;
+    cur.tokensOut += tout;
+    memTokenLedger.set(key, cur);
+    return;
+  }
+
+  await ensureQCoreTables(pool);
+  await pool.query(
+    `INSERT INTO "QCoreTokenLedger" ("userId","ym","tokensIn","tokensOut","updatedAt")
+     VALUES ($1,$2,$3,$4,NOW())
+     ON CONFLICT ("userId","ym") DO UPDATE
+       SET "tokensIn"  = "QCoreTokenLedger"."tokensIn"  + EXCLUDED."tokensIn",
+           "tokensOut" = "QCoreTokenLedger"."tokensOut" + EXCLUDED."tokensOut",
+           "updatedAt" = NOW()`,
+    [userId, ym, tin, tout],
+  );
+}
+
+/** Sum of ledgered tokens (in+out) for the user in the current month. */
+export async function getLedgerTokens(userId: string): Promise<number> {
+  const ym = currentYm();
+  if (!isDbReady()) {
+    const cur = memTokenLedger.get(`${userId}:${ym}`);
+    return cur ? cur.tokensIn + cur.tokensOut : 0;
+  }
+  await ensureQCoreTables(pool);
+  const r = await pool.query(
+    `SELECT COALESCE("tokensIn",0)+COALESCE("tokensOut",0) AS total
+       FROM "QCoreTokenLedger" WHERE "userId"=$1 AND "ym"=$2`,
+    [userId, ym],
   );
   return Number(r.rows[0]?.total ?? 0) || 0;
 }

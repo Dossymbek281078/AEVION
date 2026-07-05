@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "Everything about AEVION: how to register IP in QRight, how Planet validates artifacts, how Bank pays out AEC, how Awards work. Plus an investor FAQ on TAM, moat, revenue and exit.",
   openGraph: {
     title: "AEVION Help — user & investor FAQ",
-    description: "QRight, Planet, Bank, Awards, CyberChess — answers in one place. Plus the investor FAQ behind the $1B+ thesis.",
+    description: "QRight, Planet, Bank, Awards, CyberChess — answers in one place. Plus the investor FAQ behind the partnership offer.",
     type: "website",
     siteName: "AEVION",
   },
@@ -83,10 +83,10 @@ const faqJsonLd = {
     },
     {
       "@type": "Question",
-      name: "How is AEVION worth $1B+?",
+      name: "What is the AEVION partnership offer?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Five independent axes: (1) first-mover lead on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node.",
+        text: "One offer, not a ladder — a partnership, not a buyout. The partner contributes $10M as a returnable advance plus resources (compute, engineers, distribution, brand); project revenue is split 51% founder / 49% partner; the founder stays as Chief Idea Officer with a majority stake, and the AEVION brand is kept. The AEV token is ring-fenced. Full terms at /acquire.",
       },
     },
     {

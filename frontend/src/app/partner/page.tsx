@@ -42,26 +42,26 @@ const IDEAS = [
 ];
 
 const DEAL = [
-  { label: "Цена (постоянна)", value: "$10.5M за 1% · единая оценка ≈ $1.05B" },
-  { label: "Партнёрский вход", value: "25–49% = $263M–$516M (по той же цене за процент)" },
-  { label: "Доля основателя", value: "51–75% + Chief Innovation Officer / CEO" },
-  { label: "Куда идут деньги", value: "Primary (найм, масштаб) + опц. secondary основателю" },
-  { label: "Оценка post-money", value: "≈ $1.05B (та же на всех уровнях лестницы)" },
-  { label: "Команда от инвестора", value: "50-100 инженеров в течение 18 мес" },
-  { label: "Advisor fee основателя", value: "$2M/год" },
-  { label: "Вето основателя", value: "AEV cap (21M) + Constitution v1 + продуктовые направления" },
-  { label: "Юрисдикция", value: "DIFC Dubai (0% CGT, английское право)" },
-  { label: "Эксклюзивность", value: "60 дней + breakup fee $5M" },
-  { label: "Полный выкуп", value: "95% за $1B net — верхний уровень той же лестницы (/acquire)" },
+  { label: "Форма", value: "Партнёрство, не выкуп. Основатель остаётся." },
+  { label: "Финансирование", value: "$10M возвратным авансом от партнёра" },
+  { label: "Смысл аванса", value: "Освободить основателя от текущих компаний → фул-тайм на идеи AEVION" },
+  { label: "Деление дохода", value: "51% основатель / 49% партнёр (стартовая рамка)" },
+  { label: "Чем платит партнёр", value: "В основном ресурсами (compute, инженеры, дистрибуция, бренд)" },
+  { label: "Роль основателя", value: "Chief Idea Officer — автор следующих идей, мажоритарная доля" },
+  { label: "Бренд", value: "AEVION сохраняется (не merge в партнёра)" },
+  { label: "Токен AEV", value: "Вынесен из периметра (ring-fenced)" },
+  { label: "Вето основателя", value: "Constitution v1 — изменения только с письменного согласия" },
+  { label: "Due diligence", value: "Tech + legal + financial, 30 дней" },
+  { label: "Эксклюзивность", value: "60 дней с подписания LOI" },
   { label: "Контакт", value: "yahiin1978@gmail.com" },
 ];
 
-// Valuation holds at the ~$1.05B strategic entry floor in early years, then the
-// 10× ARR multiple overtakes it from year 3 — so no down-round vs. entry.
+// Partnership upside is the partner's 49% of project revenue as ARR grows —
+// not an equity valuation. Figures are forward projections, not guarantees.
 const SCENARIO = [
-  { year: "Год 1", arr: "$15-30M", val: "≈ $1.05B", color: "#10b981" },
-  { year: "Год 3", arr: "$130M", val: "$1.3B", color: "#3b82f6" },
-  { year: "Год 5", arr: "$360-490M", val: "$3.6-4.9B", color: "#a855f7" },
+  { year: "Год 1", arr: "$15-30M", val: "$7-15M", color: "#10b981" },
+  { year: "Год 3", arr: "$130M", val: "$64M", color: "#3b82f6" },
+  { year: "Год 5", arr: "$360-490M", val: "$176-240M", color: "#a855f7" },
 ];
 
 export default function PartnerPage() {
@@ -108,10 +108,10 @@ export default function PartnerPage() {
         {/* ROI CALLOUT — самое важное число для инвестора */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 1, background: "rgba(255,255,255,0.06)", borderRadius: 20, overflow: "hidden", border: "1px solid rgba(16,185,129,0.25)" }}>
           {[
-            { label: "Цена за 1%", val: "$10.5M", sub: "постоянна — оценка ≈ $1.05B на всех уровнях", color: "#94a3b8" },
-            { label: "Партнёрский вход", val: "25–49%", sub: "$263M–$516M · основатель сохраняет 51–75%", color: "#10b981" },
-            { label: "Оценка сегодня", val: "$1.05B", sub: "стратегический floor pre-revenue", color: "#3b82f6" },
-            { label: "ROI к году 5", val: "3.4–4.7×", sub: "$3.6–4.9B company · одинаков на любой доле", color: "#a855f7" },
+            { label: "Форма", val: "Партнёрство", sub: "не выкуп — основатель остаётся", color: "#94a3b8" },
+            { label: "Аванс", val: "$10M", sub: "возвратный · + ресурсы партнёра", color: "#10b981" },
+            { label: "Доход", val: "51 / 49", sub: "основатель / партнёр", color: "#3b82f6" },
+            { label: "Роль основателя", val: "Chief Idea Officer", sub: "мажоритарная доля · автор идей", color: "#a855f7" },
           ].map((c, i) => (
             <div key={c.label} style={{ padding: "24px 28px", background: i === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.03)" }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#64748b", textTransform: "uppercase", marginBottom: 8 }}>{c.label}</div>
@@ -296,13 +296,13 @@ export default function PartnerPage() {
                 <div style={{ fontSize: 36, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.02em", marginBottom: 4 }}>{s.arr}</div>
                 <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>ARR</div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>company valuation</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>партнёр · 49% дохода</div>
               </div>
             ))}
           </div>
           <div style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, fontSize: 14, color: "#94a3b8", lineHeight: 1.6 }}>
-            Вход по $10.5M за 1% (оценка $1.05B). При $4.9B в год 5: <strong style={{ color: "#10b981" }}>доля 49% = $2.4B (ROI 4.7×)</strong> · <strong style={{ color: "#3b82f6" }}>основатель 51% = $2.5B</strong>.
-            ROI одинаков на любой доле — цена за процент постоянна. Мультипликатор 10× ARR консервативен (Stripe 15-20×).
+            Партнёрство, не выкуп: $10M возвратным авансом + ресурсы. При $360-490M ARR в год 5 доля партнёра <strong style={{ color: "#10b981" }}>49% дохода = $176-240M/год</strong> · <strong style={{ color: "#3b82f6" }}>основатель 51% остаётся ведущим</strong>.
+            Партнёр платит в основном ресурсами — большой чек не нужен, большие деньги приходят по факту роста. Проекции ARR — forward-looking, не гарантия.
           </div>
         </div>
       </section>

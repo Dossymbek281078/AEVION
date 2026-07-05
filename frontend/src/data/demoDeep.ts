@@ -176,7 +176,7 @@ function buildCertificate(qrightId) {
     ],
     bullets: [
       "Visual product tour → /demo (27 nodes, live ecosystem pulse, 90-second pipeline).",
-      "Investment thesis → /pitch (why the platform clears $1B+).",
+      "Investment thesis → /pitch (why AEVION is a partnership, not a buyout).",
       "API contract → /api/openapi.json on the backend origin.",
       "Reproduce the end-to-end flow → Auth → QRight → QSign → Bureau in any browser.",
     ],

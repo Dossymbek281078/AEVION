@@ -138,7 +138,7 @@ export function PitchValueCallout({ moduleId, roleOverride, variant = "dark", co
           textDecoration: "none",
         }}
       >
-        See where this fits in the $1B+ pitch →
+        See where this fits in the partnership pitch →
       </Link>
     </section>
   );

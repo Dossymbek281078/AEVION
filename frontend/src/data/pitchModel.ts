@@ -35,7 +35,7 @@ export type PitchModule = {
   networkRole: string;
   /** dollar buckets / quantifiable proof points already on the landing */
   proof: string[];
-  /** the line that justifies a slice of the $1B+ valuation */
+  /** the line that justifies the partnership value */
   valueLine: string;
 };
 
@@ -373,13 +373,13 @@ export const ecosystemNodes: Array<Pick<PitchModule, "id" | "code" | "name" | "s
 ];
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Why $1B+ — the defensibility story                                          */
+/* Why defensible — the defensibility story                                          */
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export const billionDefense = {
-  title: "Why AEVION clears $1B+ — the defensibility stack",
+  title: "Why AEVION is defensible — the moat stack",
   intro:
-    "A $1B valuation is not 'sum of products'. It is the price of a defensible, compounding system. AEVION clears the bar on five independent axes:",
+    "AEVION's value is not 'sum of products' — it is a defensible, compounding system. It holds on five independent axes:",
   axes: [
     {
       number: "01",
@@ -694,7 +694,7 @@ export const competitive = {
 export const risks = {
   title: "Risks we know about — and what we do about them",
   intro:
-    "Every $1B+ company faces real risks. We list ours openly and ship mitigations into the product itself, not just into a slide.",
+    "Every ambitious company faces real risks. We list ours openly and ship mitigations into the product itself, not just into a slide.",
   rows: [
     {
       severity: "high",
@@ -738,7 +738,7 @@ export const risks = {
 export const ask = {
   title: "The ask",
   body:
-    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. Terms are simple and constant: one valuation ($1.05B), one price ($10.5M per 1%), and you choose only the depth — from a 1% primary stake to a 95% secondary buyout.",
+    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.",
   termsHref: "/acquire",
   termsLabel: "See the full deal ladder (1% → 95%)",
   ctaPrimary: { label: "Book an investor demo", href: "mailto:yahiin1978@gmail.com?subject=AEVION investor demo" },

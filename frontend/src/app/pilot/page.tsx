@@ -103,10 +103,10 @@ export default function PilotPage() {
         </h1>
         <p style={{ fontSize: 20, color: "#cbd5e1", maxWidth: 780, lineHeight: 1.55, marginBottom: 24 }}>
           Три пилотных контракта по фиксированной цене. Каждый включает onboarding, SDK seats, выделенный канал коммуникации, недельный success-review.{" "}
-          <strong style={{ color: "#f8fafc" }}>Pilot-fee засчитывается 100% против будущей цены приобретения</strong>, если ваша компания решит купить AEVION.
+          <strong style={{ color: "#f8fafc" }}>Pilot-fee засчитывается 100% против первого года партнёрства</strong>, если вы решите перейти к партнёрству AEVION.
         </p>
         <div style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, padding: 16, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 16 }}>
-          <strong style={{ color: "#10b981" }}>Acquisition optionality:</strong> любой пилот включает право первого отказа на acquisition по floor-цене <strong>$1B USD net</strong>{" "}(см. <Link href="/acquire" style={{ color: "#10b981" }}>/acquire</Link>) на 24 месяца после старта пилота. Стандартная exclusivity-конструкция в M&A.
+          <strong style={{ color: "#10b981" }}>Partnership optionality:</strong> любой пилот даёт приоритетный доступ к партнёрскому предложению AEVION (<strong>$10M возвратный аванс + доход 51/49</strong>, см. <Link href="/acquire" style={{ color: "#10b981" }}>/acquire</Link>) и право первого отказа на 24 месяца после старта пилота. Партнёрство, не выкуп.
         </div>
       </section>
 
@@ -197,8 +197,8 @@ export default function PilotPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 32 }}>
             {[
               { t: "Fixed price", d: "Никаких «time-and-materials». Цена зафиксирована до старта." },
-              { t: "100% credit", d: "Если ваша компания решит купить AEVION в течение 24 мес — pilot-fee засчитывается против $1B floor." },
-              { t: "Right of first refusal", d: "Pilot включает право первого отказа на acquisition по floor-цене $1B." },
+              { t: "100% credit", d: "Если в течение 24 мес вы перейдёте к партнёрству AEVION — pilot-fee засчитывается против первого года." },
+              { t: "Right of first refusal", d: "Pilot включает право первого отказа на партнёрское предложение AEVION." },
               { t: "No black-box", d: "Public health-board, public Constitution, open registry. Покупатель не делает ставку вслепую." },
             ].map(item => (
               <div key={item.t} style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16 }}>

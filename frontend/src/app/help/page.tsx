@@ -15,8 +15,8 @@ const RECENT_DAYS = 30;
 
 const investorFaqs: FAQ[] = [
   {
-    q: "How is AEVION worth $1B+?",
-    a: "Five independent axes: (1) first-mover lead on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node. The full breakdown lives at /pitch.",
+    q: "What is the AEVION partnership offer?",
+    a: "One offer, not a ladder — a partnership, not a buyout. The partner contributes $10M as a returnable advance plus resources (compute, engineers, distribution, brand); project revenue is split 51% founder / 49% partner; the founder stays as Chief Idea Officer with a majority stake, and the AEVION brand is kept. The advance frees the founder to work full-time on AEVION's next ideas and is repaid from the founder's share as the project grows. The AEV token is ring-fenced. Full terms live at /acquire.",
     updated: "2026-05-10",
   },
   {

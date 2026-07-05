@@ -5,11 +5,28 @@
  *   - callProvider(...) — classic non-streaming, returns { reply, model, usage }.
  *   - streamProvider(...) — async generator yielding text chunks + final event.
  *
- * Used by both the legacy POST /api/qcoreai/chat route and the new
- * multi-agent orchestrator.
+ * Used by both the legacy POST /api/qcoreai/chat route and the multi-agent
+ * orchestrator (sequential / parallel / debate / council).
+ *
+ * ── Free-fleet design ──────────────────────────────────────────────────────
+ * Every provider below is one of three tiers:
+ *   - "premium"  — flagship reasoning (Claude Fable/Opus, GPT-4o, Grok-3).
+ *                  Paid per token. Used for the hard depth roles (synthesis,
+ *                  judging, analysis).
+ *   - "budget"   — cheap paid models (Gemini Flash, DeepSeek, GPT-4o-mini).
+ *   - "free"     — no per-token cost to the user: free-tier gateways
+ *                  (OpenRouter :free, Groq, Cerebras, Together Free, GitHub
+ *                  Models, Mistral free tier) and local Ollama. These are the
+ *                  "crowd" — cheap parallel breadth for council/parallel modes.
+ *
+ * Most providers speak the OpenAI /chat/completions dialect, so they share one
+ * adapter (callOpenAICompat / streamOpenAICompat) driven by OPENAI_COMPAT.
+ * Only Anthropic and Gemini use their native wire formats.
  */
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+export type ProviderTier = "premium" | "budget" | "free";
 
 export type Provider = {
   id: string;
@@ -18,20 +35,102 @@ export type Provider = {
   defaultModel: string;
   envKey: string;
   configured: boolean;
+  /** true = no per-token cost to the user (free-tier gateway or local). */
+  free: boolean;
+  /** Routing hint used by the orchestrator to assign roles cost-rationally. */
+  tier: ProviderTier;
 };
 
 export type StreamEvent =
   | { kind: "text"; text: string }
   | { kind: "done"; tokensIn?: number; tokensOut?: number };
 
+/* ═══════════════════════════════════════════════════════════════════════
+   OpenAI-compatible gateway registry.
+
+   Everything here answers POST `${baseUrl}/chat/completions` with the OpenAI
+   schema. baseUrl is a getter so env overrides (OPENAI_BASE_URL, OLLAMA_BASE_URL)
+   are read at call time, not module load. `keyless` gateways (Ollama) send no
+   Authorization header. `extraHeaders` covers gateway-specific niceties
+   (OpenRouter attribution headers).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type OpenAICompatCfg = {
+  baseUrl: () => string;
+  envKey: string;
+  keyless?: boolean;
+  extraHeaders?: () => Record<string, string>;
+};
+
+const OPENAI_COMPAT: Record<string, OpenAICompatCfg> = {
+  openai: {
+    baseUrl: () => (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, ""),
+    envKey: "OPENAI_API_KEY",
+  },
+  deepseek: {
+    baseUrl: () => "https://api.deepseek.com",
+    envKey: "DEEPSEEK_API_KEY",
+  },
+  grok: {
+    baseUrl: () => "https://api.x.ai/v1",
+    envKey: "GROK_API_KEY",
+  },
+  // ── Free-tier gateways ──────────────────────────────────────────────────
+  openrouter: {
+    // One key → dozens of `:free` models (Llama, Qwen, DeepSeek R1, Gemma…).
+    baseUrl: () => "https://openrouter.ai/api/v1",
+    envKey: "OPENROUTER_API_KEY",
+    extraHeaders: () => ({
+      "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://aevion.vercel.app",
+      "X-Title": "AEVION QCoreAI",
+    }),
+  },
+  groq: {
+    baseUrl: () => "https://api.groq.com/openai/v1",
+    envKey: "GROQ_API_KEY",
+  },
+  cerebras: {
+    baseUrl: () => "https://api.cerebras.ai/v1",
+    envKey: "CEREBRAS_API_KEY",
+  },
+  mistral: {
+    baseUrl: () => "https://api.mistral.ai/v1",
+    envKey: "MISTRAL_API_KEY",
+  },
+  together: {
+    baseUrl: () => "https://api.together.xyz/v1",
+    envKey: "TOGETHER_API_KEY",
+  },
+  github: {
+    // GitHub Models — OpenAI-compatible inference, free for GitHub accounts.
+    baseUrl: () => (process.env.GITHUB_MODELS_BASE_URL || "https://models.github.ai/inference").replace(/\/$/, ""),
+    envKey: "GITHUB_MODELS_TOKEN",
+  },
+  ollama: {
+    // Local runtime — fully free, no key. Opt-in via OLLAMA_BASE_URL.
+    baseUrl: () => (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/v1").replace(/\/$/, ""),
+    envKey: "OLLAMA_BASE_URL",
+    keyless: true,
+  },
+};
+
+function isConfigured(envKey: string): boolean {
+  return !!process.env[envKey]?.trim();
+}
+
+/**
+ * The full provider catalogue. Model ids are current-as-of-writing defaults and
+ * can be overridden per call; free-gateway model ids in particular churn, so the
+ * lists below are representative rather than exhaustive.
+ */
 export function getProviders(): Provider[] {
   return [
     {
       id: "anthropic",
       name: "Claude (Anthropic)",
-      // claude-opus-4-8 = рабочий конь для кодовых задач; claude-fable-5 = топ-тир
-      // под тяжёлое рассуждение (дороже: $10/$50 vs $5/$25). Старые id оставлены
-      // для совместимости. ВАЖНО: fable-5 / opus-4-7 / opus-4-8 НЕ принимают temperature.
+      // claude-opus-4-8 = рабочий конь; claude-fable-5 = топ-тир под тяжёлое
+      // рассуждение и финальный синтез. ВАЖНО: fable-5 / opus-4-7 / opus-4-8
+      // НЕ принимают temperature.
       models: [
         "claude-opus-4-8",
         "claude-fable-5",
@@ -41,7 +140,9 @@ export function getProviders(): Provider[] {
       ],
       defaultModel: process.env.QCOREAI_ANTHROPIC_MODEL || "claude-opus-4-8",
       envKey: "ANTHROPIC_API_KEY",
-      configured: !!process.env.ANTHROPIC_API_KEY?.trim(),
+      configured: isConfigured("ANTHROPIC_API_KEY"),
+      free: false,
+      tier: "premium",
     },
     {
       id: "openai",
@@ -49,7 +150,9 @@ export function getProviders(): Provider[] {
       models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
       defaultModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
       envKey: "OPENAI_API_KEY",
-      configured: !!process.env.OPENAI_API_KEY?.trim(),
+      configured: isConfigured("OPENAI_API_KEY"),
+      free: false,
+      tier: "premium",
     },
     {
       id: "gemini",
@@ -57,7 +160,10 @@ export function getProviders(): Provider[] {
       models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
       defaultModel: "gemini-2.5-flash",
       envKey: "GEMINI_API_KEY",
-      configured: !!process.env.GEMINI_API_KEY?.trim(),
+      configured: isConfigured("GEMINI_API_KEY"),
+      // Gemini has a genuinely free tier (rate-limited) on the Flash models.
+      free: true,
+      tier: "free",
     },
     {
       id: "deepseek",
@@ -65,7 +171,9 @@ export function getProviders(): Provider[] {
       models: ["deepseek-chat", "deepseek-reasoner"],
       defaultModel: "deepseek-chat",
       envKey: "DEEPSEEK_API_KEY",
-      configured: !!process.env.DEEPSEEK_API_KEY?.trim(),
+      configured: isConfigured("DEEPSEEK_API_KEY"),
+      free: false,
+      tier: "budget",
     },
     {
       id: "grok",
@@ -73,9 +181,121 @@ export function getProviders(): Provider[] {
       models: ["grok-3", "grok-3-mini"],
       defaultModel: "grok-3-mini",
       envKey: "GROK_API_KEY",
-      configured: !!process.env.GROK_API_KEY?.trim(),
+      configured: isConfigured("GROK_API_KEY"),
+      free: false,
+      tier: "premium",
     },
+    /* ── Free fleet ─────────────────────────────────────────────────────── */
+    {
+      id: "openrouter",
+      name: "OpenRouter (free models)",
+      // Real `:free` slugs verified against openrouter.ai/api/v1/models (2026-07-04).
+      // The catalogue churns — override per call or via OPENROUTER_MODEL.
+      models: [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "openai/gpt-oss-120b:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "google/gemma-4-31b-it:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "qwen/qwen3-coder:free",
+      ],
+      defaultModel: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
+      envKey: "OPENROUTER_API_KEY",
+      configured: isConfigured("OPENROUTER_API_KEY"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "groq",
+      name: "Groq (free, ultra-fast)",
+      models: [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "deepseek-r1-distill-llama-70b",
+        "gemma2-9b-it",
+        "moonshotai/kimi-k2-instruct",
+      ],
+      defaultModel: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      envKey: "GROQ_API_KEY",
+      configured: isConfigured("GROQ_API_KEY"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "cerebras",
+      name: "Cerebras (free, fastest)",
+      models: ["llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"],
+      defaultModel: process.env.CEREBRAS_MODEL || "llama-3.3-70b",
+      envKey: "CEREBRAS_API_KEY",
+      configured: isConfigured("CEREBRAS_API_KEY"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "mistral",
+      name: "Mistral (free tier)",
+      models: ["mistral-small-latest", "open-mistral-nemo", "mistral-large-latest"],
+      defaultModel: process.env.MISTRAL_MODEL || "mistral-small-latest",
+      envKey: "MISTRAL_API_KEY",
+      configured: isConfigured("MISTRAL_API_KEY"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "together",
+      name: "Together (free model)",
+      models: [
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+      ],
+      defaultModel: process.env.TOGETHER_MODEL || "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+      envKey: "TOGETHER_API_KEY",
+      configured: isConfigured("TOGETHER_API_KEY"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "github",
+      name: "GitHub Models (free)",
+      models: ["openai/gpt-4o-mini", "openai/gpt-4o", "meta/Meta-Llama-3.1-70B-Instruct", "microsoft/Phi-3.5-MoE-instruct"],
+      defaultModel: process.env.GITHUB_MODELS_MODEL || "openai/gpt-4o-mini",
+      envKey: "GITHUB_MODELS_TOKEN",
+      configured: isConfigured("GITHUB_MODELS_TOKEN"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "ollama",
+      name: "Ollama (local, free)",
+      models: ["llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"],
+      defaultModel: process.env.OLLAMA_MODEL || "llama3.1",
+      envKey: "OLLAMA_BASE_URL",
+      configured: isConfigured("OLLAMA_BASE_URL"),
+      free: true,
+      tier: "free",
+    },
+    // Demo/offline provider — canned responses, no network. Only appears (and
+    // only "configured") when QCOREAI_STUB=1, so it never leaks into prod.
+    // Lets the full council pipeline run for demos/screenshots without keys.
+    ...(process.env.QCOREAI_STUB === "1"
+      ? [{
+          id: "stub" as const,
+          name: "Demo (offline stub)",
+          models: ["stub-rigorous", "stub-creative", "stub-skeptic", "stub-pragmatist", "stub-domain", "stub-synth"],
+          defaultModel: "stub-rigorous",
+          envKey: "QCOREAI_STUB",
+          configured: true,
+          free: true,
+          tier: "free" as ProviderTier,
+        }]
+      : []),
   ];
+}
+
+/** All configured providers whose tier is "free" (for the council swarm). */
+export function getFreeProviders(): Provider[] {
+  return getProviders().filter((p) => p.configured && p.free);
 }
 
 export function sanitizeMessages(raw: unknown): ChatMessage[] | null {
@@ -160,17 +380,35 @@ async function callAnthropic(messages: ChatMessage[], model: string, temperature
   return { reply, model: data.model || model, usage: data.usage || null };
 }
 
-async function callOpenAI(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) throw new Error("OPENAI_API_KEY not configured");
-  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const r = await fetch(`${base}/chat/completions`, {
+/** Resolve the OpenAI-compat gateway config or throw a clear error. */
+function openAICompatCfg(providerId: string): { url: string; headers: Record<string, string> } {
+  const cfg = OPENAI_COMPAT[providerId];
+  if (!cfg) throw new Error(`Unknown OpenAI-compatible provider "${providerId}"`);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (!cfg.keyless) {
+    const key = process.env[cfg.envKey]?.trim();
+    if (!key) throw new Error(`${cfg.envKey} not configured`);
+    headers.Authorization = `Bearer ${key}`;
+  }
+  if (cfg.extraHeaders) Object.assign(headers, cfg.extraHeaders());
+  return { url: `${cfg.baseUrl()}/chat/completions`, headers };
+}
+
+/** Generic non-streaming call for any OpenAI-compatible gateway. */
+async function callOpenAICompat(
+  providerId: string,
+  messages: ChatMessage[],
+  model: string,
+  temperature: number
+): Promise<CallResult> {
+  const { url, headers } = openAICompatCfg(providerId);
+  const r = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ model, messages, temperature }),
   });
   const data = (await r.json()) as any;
-  if (!r.ok) throw new Error(data?.error?.message || `OpenAI ${r.status}`);
+  if (!r.ok) throw new Error(data?.error?.message || `${providerId} ${r.status}`);
   const reply = data.choices?.[0]?.message?.content ?? "";
   return { reply, model: data.model || model, usage: data.usage || null };
 }
@@ -199,32 +437,31 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
   return { reply, model, usage: data.usageMetadata || null };
 }
 
-async function callDeepSeek(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!key) throw new Error("DEEPSEEK_API_KEY not configured");
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-  const data = (await r.json()) as any;
-  if (!r.ok) throw new Error(data?.error?.message || `DeepSeek ${r.status}`);
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
+/* ── Offline stub (QCOREAI_STUB=1) ───────────────────────────────────────── */
 
-async function callGrok(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
-  const key = process.env.GROK_API_KEY?.trim();
-  if (!key) throw new Error("GROK_API_KEY not configured");
-  const r = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-  const data = (await r.json()) as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Grok ${r.status}`);
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
+/** Canned demo text, flavoured by the persona detected in the system prompt. */
+function stubReply(messages: ChatMessage[]): string {
+  const sys = (messages.find((m) => m.role === "system")?.content || "").toLowerCase();
+  const rawUser = messages.filter((m) => m.role === "user").pop()?.content || "";
+  const qMatch = rawUser.match(/user question:\s*([^\n]+)/i);
+  const q = (qMatch ? qMatch[1] : rawUser).trim().slice(0, 80) || "the question";
+  if (sys.includes("synthesizer") || sys.includes("chair of a multi-model council")) {
+    return `**Bottom line.** Combining the council's views: the strongest answer to “${q}” is the one all members converged on, with the skeptic's caveat folded in. Where they disagreed, the verifiable facts win. This fused answer keeps the rigorous member's structure, the creative member's framing, and the pragmatist's concrete next step — corrected for the one error the domain member flagged.`;
+  }
+  if (sys.includes("lateral-thinking") || sys.includes("creative")) {
+    return `Here's the non-obvious angle on “${q}”: reframe it as a system, not a task — the leverage is upstream of where it looks. Two adjacent ideas worth stealing follow.`;
+  }
+  if (sys.includes("skeptic")) {
+    return `Stress-testing “${q}”: the naive answer hides two assumptions and one failure mode. Name them before committing — the edge case bites at scale, not in the demo.`;
+  }
+  if (sys.includes("pragmatic")) {
+    return `Shortest working path for “${q}”: pick the sane default, ship the minimal version, measure, iterate. Concrete first step, then the one trade-off you accept.`;
+  }
+  if (sys.includes("domain-expert") || sys.includes("domain")) {
+    return `From a specialist's view of “${q}”: the term most people get wrong matters here, and the correct reasoning (not just the conclusion) points to a subtly different answer.`;
+  }
+  // Rigorous / default.
+  return `Rigorous take on “${q}”: state the definition, reason step by step, and flag the one uncertainty. Correctness first; assumptions made explicit.`;
 }
 
 export async function callProvider(
@@ -233,14 +470,27 @@ export async function callProvider(
   model: string,
   temperature: number
 ): Promise<CallResult> {
-  switch (providerId) {
-    case "anthropic": return callAnthropic(messages, model, temperature);
-    case "openai": return callOpenAI(messages, model, temperature);
-    case "gemini": return callGemini(messages, model, temperature);
-    case "deepseek": return callDeepSeek(messages, model, temperature);
-    case "grok": return callGrok(messages, model, temperature);
-    default: throw new Error("No AI provider configured");
+  if (providerId === "stub") {
+    const reply = stubReply(messages);
+    return { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
   }
+  if (providerId === "anthropic") return callAnthropic(messages, model, temperature);
+  if (providerId === "gemini") return callGemini(messages, model, temperature);
+  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature);
+  throw new Error("No AI provider configured");
+}
+
+async function* streamStub(messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
+  const reply = stubReply(messages);
+  const words = reply.split(/(\s+)/);
+  for (const w of words) {
+    yield { kind: "text", text: w };
+    // Small delay so the demo streams visibly; skipped in test/CI (fast path).
+    if (process.env.QCOREAI_STUB_DELAY !== "0") {
+      await new Promise((r) => setTimeout(r, 12));
+    }
+  }
+  yield { kind: "done", tokensIn: 40, tokensOut: words.filter((w) => w.trim()).length };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -347,30 +597,18 @@ async function* streamAnthropic(
   yield { kind: "done", tokensIn, tokensOut };
 }
 
+/** Streaming call for any OpenAI-compatible gateway in OPENAI_COMPAT. */
 async function* streamOpenAICompat(
-  providerId: "openai" | "deepseek" | "grok",
+  providerId: string,
   messages: ChatMessage[],
   model: string,
   temperature: number
 ): AsyncGenerator<StreamEvent> {
-  let url: string;
-  let key: string | undefined;
-  if (providerId === "openai") {
-    key = process.env.OPENAI_API_KEY?.trim();
-    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    url = `${base}/chat/completions`;
-  } else if (providerId === "deepseek") {
-    key = process.env.DEEPSEEK_API_KEY?.trim();
-    url = "https://api.deepseek.com/chat/completions";
-  } else {
-    key = process.env.GROK_API_KEY?.trim();
-    url = "https://api.x.ai/v1/chat/completions";
-  }
-  if (!key) throw new Error(`${providerId.toUpperCase()}_API_KEY not configured`);
+  const { url, headers } = openAICompatCfg(providerId);
 
   const r = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       model,
       messages,
@@ -470,19 +708,21 @@ export async function* streamProvider(
   model: string,
   temperature: number
 ): AsyncGenerator<StreamEvent> {
-  switch (providerId) {
-    case "anthropic":
-      yield* streamAnthropic(messages, model, temperature);
-      return;
-    case "openai":
-    case "deepseek":
-    case "grok":
-      yield* streamOpenAICompat(providerId, messages, model, temperature);
-      return;
-    case "gemini":
-      yield* streamGemini(messages, model, temperature);
-      return;
-    default:
-      throw new Error(`streamProvider: unsupported provider "${providerId}"`);
+  if (providerId === "stub") {
+    yield* streamStub(messages);
+    return;
   }
+  if (providerId === "anthropic") {
+    yield* streamAnthropic(messages, model, temperature);
+    return;
+  }
+  if (providerId === "gemini") {
+    yield* streamGemini(messages, model, temperature);
+    return;
+  }
+  if (OPENAI_COMPAT[providerId]) {
+    yield* streamOpenAICompat(providerId, messages, model, temperature);
+    return;
+  }
+  throw new Error(`streamProvider: unsupported provider "${providerId}"`);
 }

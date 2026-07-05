@@ -11,7 +11,7 @@
  * model by default; Analyst and Writer use a more capable one.
  */
 
-import { getProviders } from "./providers";
+import { getProviders, getFreeProviders, Provider } from "./providers";
 
 export type AgentRole = "analyst" | "writer" | "critic";
 
@@ -178,17 +178,27 @@ export function resolveRoleProvider(
   return null;
 }
 
-/** Per-role hardcoded defaults — used when the user hasn't picked a provider. */
+/**
+ * Per-role hardcoded defaults — used when the user hasn't picked a provider.
+ *
+ * Cost-rational tiering (see providers.ts):
+ *   - Analyst decomposes the task → Opus 4.8 (workhorse reasoning).
+ *   - Writer drafts the answer     → Opus 4.8.
+ *   - Critic gates the revision    → Haiku (cheap, fast; a strict grader
+ *                                     doesn't need flagship depth).
+ * The council strategy overrides this entirely: free models do the breadth,
+ * Fable 5 does the final synthesis (see buildCouncil / buildSynthesizer).
+ */
 const ROLE_DEFAULTS: Record<AgentRole, { provider: string; model: string; temperature: number; systemPrompt: string }> = {
   analyst: {
     provider: "anthropic",
-    model: "claude-sonnet-4-20250514",
+    model: "claude-opus-4-8",
     temperature: 0.3,
     systemPrompt: ANALYST_PROMPT,
   },
   writer: {
     provider: "anthropic",
-    model: "claude-sonnet-4-20250514",
+    model: "claude-opus-4-8",
     temperature: 0.7,
     systemPrompt: WRITER_PROMPT,
   },
@@ -316,6 +326,185 @@ export function buildModerator(override?: AgentOverride): AgentConfig | null {
     role: "critic",
     systemPrompt: override?.systemPrompt?.trim() || MODERATOR_PROMPT,
     temperature: typeof override?.temperature === "number" ? override.temperature : 0.4,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Council strategy — a swarm of (mostly free) models drafts in parallel, then
+   a premium Synthesizer (Fable 5 by default) fuses the drafts into one
+   verified answer. This is QCoreAI's differentiator over "N models side by
+   side" tools: free breadth + premium depth, cost-tiered automatically.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type CouncilMember = AgentConfig & { persona: string };
+
+/** Distinct diversity lenses cycled across council members. */
+const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
+  {
+    key: "Rigorous",
+    prompt:
+      "You are a rigorous, analytical council member. Prioritise correctness, precise definitions, " +
+      "and step-by-step reasoning. State assumptions explicitly. If something is uncertain, say so.",
+  },
+  {
+    key: "Creative",
+    prompt:
+      "You are a lateral-thinking council member. Offer the non-obvious angle, alternative framings, " +
+      "and ideas the others will likely miss. Be bold but keep it grounded and useful.",
+  },
+  {
+    key: "Skeptic",
+    prompt:
+      "You are the skeptical council member. Stress-test the naive answer: name the risks, hidden " +
+      "assumptions, edge cases, and failure modes. Prefer being right over being agreeable.",
+  },
+  {
+    key: "Pragmatist",
+    prompt:
+      "You are the pragmatic council member. Give the shortest path to a working, real-world answer. " +
+      "Concrete steps, defaults, and trade-offs over theory. Lead with the bottom line.",
+  },
+  {
+    key: "Domain",
+    prompt:
+      "You are the domain-expert council member. Bring specialist depth, correct terminology, and the " +
+      "one detail a non-expert would get wrong. Cite the reasoning, not just the conclusion.",
+  },
+];
+
+const SYNTHESIZER_PROMPT = [
+  "You are the Synthesizer — the chair of a multi-model council. Several independent AI models",
+  "(each with a different persona and, often, a different vendor) answered the SAME question.",
+  "You receive the user's question and every council member's answer, labelled by persona.",
+  "",
+  "Your job — produce the single best final answer for the user:",
+  "  1. Cross-check the members against each other. Where they AGREE, treat it as high-confidence.",
+  "  2. Where they DISAGREE or one contradicts a fact, adjudicate: keep what is correct, discard",
+  "     what is wrong. Do not average away a correct minority view.",
+  "  3. Merge the strongest, most correct, most complete parts into one coherent answer.",
+  "  4. Silently fix any factual or reasoning errors you can verify.",
+  "",
+  "Output ONLY the final answer for the user. No 'Member 1 said…', no meta commentary about the",
+  "council process. Match the user's language. Use light markdown when it helps readability.",
+].join("\n");
+
+/**
+ * Enumerate concrete { provider, model } slots ordered by preference. Free
+ * providers first (each expanded across its model list for diversity), then
+ * budget, then premium. Used to auto-assemble a council even when the operator
+ * has only configured one vendor.
+ */
+function enumerateCandidateModels(preferFree: boolean): { provider: string; model: string }[] {
+  const providers = getProviders().filter((p) => p.configured);
+  const rank = (p: Provider) =>
+    preferFree
+      ? p.tier === "free" ? 0 : p.tier === "budget" ? 1 : 2
+      : p.tier === "premium" ? 0 : p.tier === "budget" ? 1 : 2;
+  const ordered = [...providers].sort((a, b) => rank(a) - rank(b));
+
+  const out: { provider: string; model: string }[] = [];
+  // First pass: one default model per provider (maximise vendor diversity).
+  for (const p of ordered) out.push({ provider: p.id, model: p.defaultModel });
+  // Second pass: extra models within each provider (fill remaining slots).
+  for (const p of ordered) {
+    for (const m of p.models) {
+      if (m === p.defaultModel) continue;
+      out.push({ provider: p.id, model: m });
+    }
+  }
+  return out;
+}
+
+/**
+ * Build up to `maxMembers` council members. Prefers configured FREE providers
+ * (the "crowd"); each member gets a distinct persona + a slightly varied
+ * temperature for genuine diversity. Degrades gracefully: with only one vendor
+ * configured it spreads across that vendor's models; with none configured it
+ * returns []. `override` (from the writer slot) lets a caller pin a base
+ * provider/model for the whole council.
+ */
+export function buildCouncil(maxMembers: number, override?: AgentOverride): CouncilMember[] {
+  const n = Math.max(2, Math.min(6, Math.floor(maxMembers) || 3));
+
+  // If the caller pinned a provider, honour it for every member (varied models
+  // where possible); otherwise auto-assemble preferring free vendors.
+  let slots: { provider: string; model: string }[];
+  if (override?.provider) {
+    const p = getProviders().find((x) => x.id === override.provider && x.configured);
+    if (p) {
+      const models = override.model && p.models.includes(override.model)
+        ? [override.model, ...p.models.filter((m) => m !== override.model)]
+        : p.models;
+      slots = models.map((m) => ({ provider: p.id, model: m }));
+    } else {
+      slots = enumerateCandidateModels(true);
+    }
+  } else {
+    // Auto-assemble preferring free vendors; enumerateCandidateModels still
+    // returns budget/premium slots when no free vendor is configured, so the
+    // council degrades gracefully to whatever exists.
+    slots = enumerateCandidateModels(true);
+  }
+
+  const members: CouncilMember[] = [];
+  const tempCycle = [0.4, 0.75, 0.9, 0.55, 1.0, 0.65];
+  for (let i = 0; i < slots.length && members.length < n; i++) {
+    const persona = COUNCIL_PERSONAS[members.length % COUNCIL_PERSONAS.length];
+    members.push({
+      role: "writer",
+      provider: slots[i].provider,
+      model: slots[i].model,
+      systemPrompt: override?.systemPrompt?.trim() || persona.prompt,
+      temperature: typeof override?.temperature === "number" ? override.temperature : tempCycle[members.length % tempCycle.length],
+      persona: persona.key,
+    });
+  }
+  return members;
+}
+
+/**
+ * Build the Synthesizer — the council chair. Prefers the strongest reasoning
+ * model available: Fable 5 → Opus 4.8 → any configured provider's default.
+ * This is where the premium spend goes: one high-quality fusion over many
+ * cheap drafts.
+ */
+export function buildSynthesizer(override?: AgentOverride): AgentConfig | null {
+  // Explicit override wins outright.
+  if (override?.provider) {
+    const built = buildAgent("critic", override);
+    if (built) return { ...built, role: "critic", systemPrompt: override.systemPrompt?.trim() || SYNTHESIZER_PROMPT, temperature: 0.4 };
+  }
+
+  const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured);
+  if (anthropic) {
+    // Prefer Fable 5 for synthesis; fall back to Opus 4.8 if Fable isn't listed.
+    const model = anthropic.models.includes("claude-fable-5")
+      ? "claude-fable-5"
+      : anthropic.models.includes("claude-opus-4-8")
+        ? "claude-opus-4-8"
+        : anthropic.defaultModel;
+    return {
+      role: "critic",
+      provider: "anthropic",
+      model,
+      systemPrompt: override?.systemPrompt?.trim() || SYNTHESIZER_PROMPT,
+      temperature: 0.4,
+    };
+  }
+
+  // No Anthropic — synthesise with the best non-free provider, else anything.
+  const providers = getProviders().filter((p) => p.configured);
+  const best =
+    providers.find((p) => p.tier === "premium") ||
+    providers.find((p) => p.tier === "budget") ||
+    providers[0];
+  if (!best) return null;
+  return {
+    role: "critic",
+    provider: best.id,
+    model: best.defaultModel,
+    systemPrompt: override?.systemPrompt?.trim() || SYNTHESIZER_PROMPT,
+    temperature: 0.4,
   };
 }
 

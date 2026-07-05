@@ -469,8 +469,10 @@ qcoreaiRouter.get("/providers", (_req, res) => {
     models: p.models,
     defaultModel: p.defaultModel,
     configured: p.configured,
+    free: p.free,
+    tier: p.tier,
   }));
-  res.json({ providers });
+  res.json({ providers, freeCount: providers.filter((p) => p.free).length });
 });
 
 qcoreaiRouter.get("/pricing", (_req, res) => {
@@ -2113,10 +2115,15 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const strategy: PipelineStrategy =
     req.body?.strategy === "parallel" ? "parallel" :
     req.body?.strategy === "debate" ? "debate" :
+    req.body?.strategy === "council" ? "council" :
     "sequential";
 
   const maxRevisions =
     typeof req.body?.maxRevisions === "number" ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 1;
+
+  // council mode: number of crowd members to convene (2–6, default 3).
+  const councilSize =
+    typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(6, Math.floor(req.body.councilSize))) : 3;
 
   // Optional spend cap. Hard upper bound 50 USD/run prevents accidental
   // misuse via negative or huge values.
@@ -2393,6 +2400,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       strategy,
       overrides,
       maxRevisions,
+      councilSize,
       history,
       guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
@@ -3368,7 +3376,7 @@ qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
     const sched = await getScheduledBatch(String(req.params.id));
     if (!sched || sched.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
 
-    const strategy = (["sequential", "parallel", "debate"].includes(sched.strategy)
+    const strategy = (["sequential", "parallel", "debate", "council"].includes(sched.strategy)
       ? sched.strategy : "sequential") as PipelineStrategy;
     const overrides = {
       analyst: parseAgentOverride((sched.overrides as any)?.analyst),
@@ -4151,6 +4159,13 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         description:
           "Analyst → Pro advocate ‖ Con advocate → Moderator synthesizes a balanced answer. Best for decisions, trade-offs, and stress-testing recommendations.",
         agents: ["analyst", "writer", "writerB", "critic"],
+      },
+      {
+        id: "council",
+        label: "Council (free swarm)",
+        description:
+          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel → a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer. Free breadth + premium depth: the highest-quality mode at near-zero crowd cost.",
+        agents: ["council", "synthesizer"],
       },
     ],
     roles: [

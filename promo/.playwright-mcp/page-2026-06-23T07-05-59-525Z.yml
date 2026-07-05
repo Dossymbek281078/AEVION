@@ -1,0 +1,192 @@
+- generic [ref=e2]:
+  - button "🇺🇸 EN ▼" [ref=e5] [cursor=pointer]:
+    - generic [ref=e6]: 🇺🇸
+    - generic [ref=e7]: EN
+    - generic [ref=e8]: ▼
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - navigation "Wave 1 navigation" [ref=e12]:
+        - link "← Globus" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e14]: "|"
+        - link "Demo" [ref=e15] [cursor=pointer]:
+          - /url: /demo
+        - link "Deep dive" [ref=e16] [cursor=pointer]:
+          - /url: /demo/deep
+        - link "Pitch · $1B+" [ref=e17] [cursor=pointer]:
+          - /url: /pitch
+        - generic [ref=e18]: "|"
+        - link "Auth" [ref=e19] [cursor=pointer]:
+          - /url: /auth
+        - link "QRight" [ref=e20] [cursor=pointer]:
+          - /url: /qright
+        - link "QSign" [ref=e21] [cursor=pointer]:
+          - /url: /qsign
+        - link "Shield" [ref=e22] [cursor=pointer]:
+          - /url: /quantum-shield
+        - link "Bureau" [ref=e23] [cursor=pointer]:
+          - /url: /bureau
+        - link "QCoreAI" [ref=e24] [cursor=pointer]:
+          - /url: /multichat-engine
+        - generic [ref=e25]: "|"
+        - link "Music Awards" [ref=e26] [cursor=pointer]:
+          - /url: /awards/music
+        - link "Film Awards" [ref=e27] [cursor=pointer]:
+          - /url: /awards/film
+        - link "Bank" [ref=e28] [cursor=pointer]:
+          - /url: /bank
+        - link "Chess" [ref=e29] [cursor=pointer]:
+          - /url: /cyberchess
+        - link "QTradeOffline" [ref=e30] [cursor=pointer]:
+          - /url: /qtradeoffline
+        - link "HealthAI" [ref=e31] [cursor=pointer]:
+          - /url: /healthai
+        - link "QContract" [ref=e32] [cursor=pointer]:
+          - /url: /qcontract
+        - link "QPayNet" [ref=e33] [cursor=pointer]:
+          - /url: /qpaynet
+        - link "DevHub" [ref=e34] [cursor=pointer]:
+          - /url: /devhub
+        - link "Смета" [ref=e35] [cursor=pointer]:
+          - /url: /smeta-trainer
+        - link "QTrade" [ref=e36] [cursor=pointer]:
+          - /url: /qtrade
+        - link "Revenue" [ref=e37] [cursor=pointer]:
+          - /url: /revenue
+        - link "SDKs" [ref=e38] [cursor=pointer]:
+          - /url: /sdks
+        - generic [ref=e39]: "|"
+        - generic [ref=e40]: "|"
+        - link "Planet" [ref=e41] [cursor=pointer]:
+          - /url: /planet
+      - generic [ref=e42]:
+        - link "✓ Auth" [ref=e44] [cursor=pointer]:
+          - /url: /auth
+          - generic [ref=e45]: ✓
+          - text: Auth
+        - link "✓ QRight" [ref=e48] [cursor=pointer]:
+          - /url: /qright
+          - generic [ref=e49]: ✓
+          - text: QRight
+        - link "3 QSign" [ref=e52] [cursor=pointer]:
+          - /url: /qsign
+          - generic [ref=e53]: "3"
+          - text: QSign
+        - link "4 Shield" [ref=e56] [cursor=pointer]:
+          - /url: /quantum-shield
+          - generic [ref=e57]: "4"
+          - text: Shield
+        - link "5 Bureau" [ref=e60] [cursor=pointer]:
+          - /url: /bureau
+          - generic [ref=e61]: "5"
+          - text: Bureau
+        - link "6 Planet" [ref=e64] [cursor=pointer]:
+          - /url: /planet
+          - generic [ref=e65]: "6"
+          - text: Planet
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - generic [ref=e70]: AEVION · Digital Signature Platform
+          - heading "Tamper-evident proofs, publicly verifiable in one link." [level=1] [ref=e71]:
+            - text: Tamper-evident proofs,
+            - text: publicly verifiable in one link.
+          - paragraph [ref=e72]:
+            - text: QSign v2 signs any JSON payload under
+            - strong [ref=e73]: RFC 8785 canonical form
+            - text: with a hybrid of
+            - strong [ref=e74]: HMAC-SHA256
+            - text: and
+            - strong [ref=e75]: Ed25519
+            - text: . Every signature is persisted, geo-anchored, revocable, and verifiable from a shareable public URL — no vendor lock-in, no trust-us.
+        - generic [ref=e77]: offline
+      - generic [ref=e78]:
+        - link "← QRight" [ref=e79] [cursor=pointer]:
+          - /url: /qright
+        - link "IP Bureau →" [ref=e80] [cursor=pointer]:
+          - /url: /bureau
+        - link "Planet" [ref=e81] [cursor=pointer]:
+          - /url: /planet
+        - link "Key registry" [ref=e82] [cursor=pointer]:
+          - /url: /qsign/keys
+      - generic [ref=e84]:
+        - generic [ref=e85]: Auth
+        - textbox "Bearer token (auto-filled from /auth)" [ref=e87]
+        - button "Show" [ref=e88] [cursor=pointer]
+        - link "Sign in →" [ref=e89] [cursor=pointer]:
+          - /url: /auth
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - generic [ref=e92]: 1. Sign payload
+          - generic [ref=e93]:
+            - generic [ref=e94]:
+              - generic [ref=e95]: Payload (JSON)
+              - generic [ref=e96]:
+                - generic [ref=e97] [cursor=pointer]: 📎 Hash a file
+                - button "Load sample" [ref=e98] [cursor=pointer]
+            - textbox [ref=e99]: "{ \"hello\": \"AEVION\", \"ts\": 1714000000 }"
+            - generic [ref=e100]: ✓ Valid JSON
+          - generic [ref=e101]:
+            - generic [ref=e102]:
+              - generic [ref=e103]: RFC 8785 canonical · SHA-256
+              - button "show canonical" [ref=e104] [cursor=pointer]
+            - code [ref=e106]: —
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]: Geo anchoring
+              - generic [ref=e110]: Opt-in to attach device GPS; otherwise server infers from IP
+            - button "Attach GPS" [ref=e111] [cursor=pointer]
+          - button "Sign with HMAC + Ed25519" [disabled] [ref=e112]
+        - generic [ref=e113]:
+          - generic [ref=e114]: 2. Verify (stateless)
+          - paragraph [ref=e115]: Re-canonicalizes the payload server-side and recomputes both signatures. No DB lookup. For DB-backed verify + revocation check, open the public URL after signing.
+          - generic [ref=e116]:
+            - generic [ref=e117]: Payload (JSON)
+            - 'textbox "{ \"hello\": \"AEVION\" }" [ref=e118]'
+          - generic [ref=e119]:
+            - generic [ref=e120]: HMAC kid
+            - textbox "leave empty → active" [ref=e121]
+            - generic [ref=e122]: HMAC sig
+            - textbox "64 hex chars" [ref=e123]
+            - generic [ref=e124]: Ed25519 kid
+            - textbox "optional" [ref=e125]
+            - generic [ref=e126]: Ed25519 sig
+            - textbox "optional · 128 hex" [ref=e127]
+          - button "Verify" [disabled] [ref=e128]
+      - generic [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e131]:
+            - generic [ref=e132]: Use the API
+            - generic [ref=e133]:
+              - text: Live snippets — copy and paste. Replace
+              - code [ref=e134]: $TOKEN
+              - text: with your bearer.
+          - generic [ref=e135]:
+            - button "curl" [ref=e136] [cursor=pointer]
+            - button "TypeScript" [ref=e137] [cursor=pointer]
+            - button "Python" [ref=e138] [cursor=pointer]
+        - generic [ref=e139]: "# 1. health curl -s https://api.aevion.app/api/qsign/v2/health | jq # 2. sign (idempotent) curl -s -X POST https://api.aevion.app/api/qsign/v2/sign \\ -H \"Authorization: Bearer $TOKEN\" \\ -H \"Content-Type: application/json\" \\ -H \"Idempotency-Key: order-2026-04-28-001\" \\ -d '{\"payload\":{\"artifact\":\"invoice-001\",\"amount\":1500.00,\"currency\":\"USD\"}}' | jq # 3. public verify (no auth) curl -s https://api.aevion.app/api/qsign/v2/<signature-id>/public | jq # 4. PDF stamp curl -sL \"https://api.aevion.app/api/qsign/v2/<signature-id>/pdf?download=1\" \\ -o signed-<signatu.pdf # 5. recent activity curl -s https://api.aevion.app/api/qsign/v2/audit?limit=20 \\ -H \"Authorization: Bearer $TOKEN\" | jq # 6. Prometheus metrics scrape curl -s https://api.aevion.app/api/qsign/v2/metrics"
+        - generic [ref=e140]:
+          - button "Copy snippet" [ref=e141] [cursor=pointer]
+          - link "OpenAPI 3.0 spec ↗" [ref=e142] [cursor=pointer]:
+            - /url: https://aevion-production-a70c.up.railway.app/api/qsign/v2/openapi.json
+          - link "SDK packages ↗" [ref=e143] [cursor=pointer]:
+            - /url: https://github.com/Dossymbek281078/AEVION/tree/main/aevion-globus-backend/sdk
+      - generic [ref=e144]:
+        - generic [ref=e145]: How QSign v2 works
+        - list [ref=e146]:
+          - listitem [ref=e147]:
+            - text: Your payload is canonicalized per
+            - strong [ref=e148]: RFC 8785 (JCS)
+            - text: — keys sorted, no whitespace, deterministic across clients.
+          - listitem [ref=e149]:
+            - text: "SHA-256 of the canonical form is signed with two independent keys:"
+            - strong [ref=e150]: HMAC-SHA256
+            - text: (shared secret) and
+            - strong [ref=e151]: Ed25519
+            - text: (public verifiable).
+          - listitem [ref=e152]: The signature row is persisted with issuer, geo, and key IDs. A shareable public URL verifies it without secrets.
+          - listitem [ref=e153]: Keys rotate with an overlap window — retired keys remain valid for verifying historical signatures forever.
+          - listitem [ref=e154]:
+            - text: Any signature can be revoked by its issuer (or admin). Revoked rows stay cryptographically valid but report
+            - code [ref=e155]: valid=false
+            - text: .

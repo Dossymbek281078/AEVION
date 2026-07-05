@@ -1,0 +1,164 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "AEVION Trust · IP · Globus" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: AEVION
+          - generic [ref=e8]: Trust · IP · Globus
+        - generic [ref=e9]:
+          - link "Demo" [ref=e10] [cursor=pointer]:
+            - /url: /demo
+          - link "Auth" [ref=e11] [cursor=pointer]:
+            - /url: /auth
+          - link "QRight" [ref=e12] [cursor=pointer]:
+            - /url: /qright
+          - link "QSign" [ref=e13] [cursor=pointer]:
+            - /url: /qsign
+          - link "Bureau" [ref=e14] [cursor=pointer]:
+            - /url: /bureau
+          - link "Planet" [ref=e15] [cursor=pointer]:
+            - /url: /planet
+          - link "Awards" [ref=e16] [cursor=pointer]:
+            - /url: /awards
+          - link "Bank" [ref=e17] [cursor=pointer]:
+            - /url: /bank
+          - link "Chess" [ref=e18] [cursor=pointer]:
+            - /url: /cyberchess
+          - link "Pricing" [ref=e19] [cursor=pointer]:
+            - /url: /pricing
+          - link "API" [ref=e20] [cursor=pointer]:
+            - /url: http://127.0.0.1:4001/api/openapi.json
+          - button "🇷🇺 RU ▼" [ref=e23] [cursor=pointer]:
+            - generic [ref=e24]: 🇷🇺
+            - generic [ref=e25]: RU
+            - generic [ref=e26]: ▼
+    - generic [ref=e29]:
+      - navigation "Wave 1 navigation" [ref=e30]:
+        - link "← Globus" [ref=e31] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e32]: "|"
+        - link "Demo" [ref=e33] [cursor=pointer]:
+          - /url: /demo
+        - link "Deep dive" [ref=e34] [cursor=pointer]:
+          - /url: /demo/deep
+        - link "Pitch · $1B+" [ref=e35] [cursor=pointer]:
+          - /url: /pitch
+        - generic [ref=e36]: "|"
+        - link "Auth" [ref=e37] [cursor=pointer]:
+          - /url: /auth
+        - link "QRight" [ref=e38] [cursor=pointer]:
+          - /url: /qright
+        - link "QSign" [ref=e39] [cursor=pointer]:
+          - /url: /qsign
+        - link "Shield" [ref=e40] [cursor=pointer]:
+          - /url: /quantum-shield
+        - link "Bureau" [ref=e41] [cursor=pointer]:
+          - /url: /bureau
+        - link "QCoreAI" [ref=e42] [cursor=pointer]:
+          - /url: /multichat-engine
+        - generic [ref=e43]: "|"
+        - link "Music Awards" [ref=e44] [cursor=pointer]:
+          - /url: /awards/music
+        - link "Film Awards" [ref=e45] [cursor=pointer]:
+          - /url: /awards/film
+        - link "Bank" [ref=e46] [cursor=pointer]:
+          - /url: /bank
+        - link "Chess" [ref=e47] [cursor=pointer]:
+          - /url: /cyberchess
+        - link "QTradeOffline" [ref=e48] [cursor=pointer]:
+          - /url: /qtradeoffline
+        - link "HealthAI" [ref=e49] [cursor=pointer]:
+          - /url: /healthai
+        - link "QContract" [ref=e50] [cursor=pointer]:
+          - /url: /qcontract
+        - link "QPayNet" [ref=e51] [cursor=pointer]:
+          - /url: /qpaynet
+        - link "DevHub" [ref=e52] [cursor=pointer]:
+          - /url: /devhub
+        - link "Смета" [ref=e53] [cursor=pointer]:
+          - /url: /smeta-trainer
+        - link "QTrade" [ref=e54] [cursor=pointer]:
+          - /url: /qtrade
+        - link "Revenue" [ref=e55] [cursor=pointer]:
+          - /url: /revenue
+        - link "SDKs" [ref=e56] [cursor=pointer]:
+          - /url: /sdks
+        - generic [ref=e57]: "|"
+        - generic [ref=e58]: "|"
+        - link "Planet" [ref=e59] [cursor=pointer]:
+          - /url: /planet
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - heading "DevHub" [level=1] [ref=e62]
+          - paragraph [ref=e63]: Build and deploy apps with AI. No GitHub or cloud accounts needed.
+        - button "+ New Project" [ref=e64] [cursor=pointer]
+      - generic [ref=e65]: Loading projects...
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - heading "Snippet shelf" [level=2] [ref=e69]
+            - paragraph [ref=e70]: Last 5 publicly shared snippets. Copy, star, or share your own.
+          - button "Refresh" [ref=e71]
+        - generic [ref=e72]: Loading snippets…
+        - generic [ref=e73]:
+          - heading "Поделиться сниппетом" [level=3] [ref=e74]
+          - generic [ref=e75]:
+            - textbox "Title" [ref=e76]
+            - textbox "Language (e.g. javascript)" [ref=e77]: javascript
+          - textbox "// paste your snippet here" [ref=e78]
+          - textbox "tags, comma, separated" [ref=e79]
+          - button "Share snippet" [disabled] [ref=e81]
+    - contentinfo [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]: AEVION
+          - paragraph [ref=e86]: Global trust infrastructure for digital content, intellectual property and creator economy.
+          - generic [ref=e87]: Astana, Kazakhstan
+        - generic [ref=e88]:
+          - generic [ref=e89]: Products
+          - generic [ref=e90]:
+            - link "QRight — IP Registry" [ref=e91] [cursor=pointer]:
+              - /url: /qright
+            - link "QSign — Signatures" [ref=e92] [cursor=pointer]:
+              - /url: /qsign
+            - link "IP Bureau" [ref=e93] [cursor=pointer]:
+              - /url: /bureau
+            - link "Planet Compliance" [ref=e94] [cursor=pointer]:
+              - /url: /planet
+            - link "Awards" [ref=e95] [cursor=pointer]:
+              - /url: /awards
+            - link "AEVION Bank" [ref=e96] [cursor=pointer]:
+              - /url: /bank
+            - link "CyberChess" [ref=e97] [cursor=pointer]:
+              - /url: /cyberchess
+        - generic [ref=e98]:
+          - generic [ref=e99]: Company
+          - generic [ref=e100]:
+            - link "Demo" [ref=e101] [cursor=pointer]:
+              - /url: /demo
+            - link "Terms of Service" [ref=e102] [cursor=pointer]:
+              - /url: /terms
+            - link "Privacy Policy" [ref=e103] [cursor=pointer]:
+              - /url: /privacy
+            - link "Help Center" [ref=e104] [cursor=pointer]:
+              - /url: /help
+        - generic [ref=e105]:
+          - generic [ref=e106]: Contact
+          - generic [ref=e107]:
+            - link "yahiin1978@gmail.com" [ref=e108] [cursor=pointer]:
+              - /url: mailto:yahiin1978@gmail.com
+            - generic [ref=e109]: Astana, Kazakhstan
+            - generic [ref=e110]: +7 702 625 83 77
+          - link "GitHub" [ref=e112] [cursor=pointer]:
+            - /url: https://github.com/Dossymbek281078/AEVION
+      - generic [ref=e113]:
+        - generic [ref=e114]: © 2026 AEVION. All rights reserved.
+        - generic [ref=e115]:
+          - link "Terms" [ref=e116] [cursor=pointer]:
+            - /url: /terms
+          - link "Privacy" [ref=e117] [cursor=pointer]:
+            - /url: /privacy
+          - link "Help" [ref=e118] [cursor=pointer]:
+            - /url: /help

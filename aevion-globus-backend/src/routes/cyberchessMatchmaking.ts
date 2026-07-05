@@ -82,6 +82,22 @@ export interface Match {
 const QUEUE = new Map<string, QueueEntry>(); // key: userId
 const MATCHES = new Map<string, Match>(); // key: matchId
 
+// Presence: любой открытый таб CyberChess пингует /presence/ping раз в ~20s.
+// Держим последний ping по userId; «онлайн» = ping в пределах PRESENCE_TTL_MS.
+// Чисто in-memory (как очередь) — сбрасывается на рестарт, это ок для «онлайн сейчас».
+const PRESENCE = new Map<string, number>(); // key: userId → lastSeen epoch ms
+const PRESENCE_TTL_MS = 45 * 1000; // 45s окно «онлайн»
+
+function onlineCount(): number {
+  const now = Date.now();
+  let n = 0;
+  for (const [id, ts] of PRESENCE) {
+    if (now - ts > PRESENCE_TTL_MS) PRESENCE.delete(id);
+    else n++;
+  }
+  return n;
+}
+
 const QUEUE_TTL_MS = 5 * 60 * 1000; // 5 min
 const MATCH_TTL_MS = 60 * 60 * 1000; // 1 hour
 const RATING_TOLERANCE = 150;
@@ -855,6 +871,32 @@ router.get("/match/:matchId/stream", (req: Request, res: Response): void => {
         }
       }
     }
+  });
+});
+
+// POST /presence/ping { userId } — heartbeat, returns current online count
+router.post("/presence/ping", (req: Request, res: Response): void => {
+  const userId = String(req.body?.userId || "").trim();
+  if (!userId) {
+    res.status(400).json({ ok: false, error: "userId_required" });
+    return;
+  }
+  PRESENCE.set(userId, Date.now());
+  res.json({
+    ok: true,
+    online: onlineCount(),
+    inQueue: [...QUEUE.values()].filter((e) => e.status === "waiting").length,
+    activeMatches: [...MATCHES.values()].filter((m) => m.status === "active").length,
+  });
+});
+
+// GET /presence — current online / queue / active-match counts (no side effect)
+router.get("/presence", (_req: Request, res: Response): void => {
+  res.json({
+    ok: true,
+    online: onlineCount(),
+    inQueue: [...QUEUE.values()].filter((e) => e.status === "waiting").length,
+    activeMatches: [...MATCHES.values()].filter((m) => m.status === "active").length,
   });
 });
 

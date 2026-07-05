@@ -61,6 +61,7 @@ import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import StreamMenu from "./StreamMenu";
 import StreamSourceModal from "./StreamSourceModal";
+import PresenceIndicator from "./PresenceIndicator";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
@@ -4990,6 +4991,7 @@ export default function CyberChessPage(){
           ariaLabel={muted?"Unmute":"Mute"}
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
+        <PresenceIndicator/>
         <button
           onClick={()=>sShowMusicPlayer(true)}
           title="Музыкальный плеер"
@@ -5437,6 +5439,16 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                     <span>👥 Vs Человек</span>
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
+                  </div>
+                </Btn>
+                {/* Онлайн-матч с реальными игроками (matchmaking) — первый класс, как «Play online» у lichess */}
+                <Btn size="lg" variant="secondary" onClick={()=>{window.location.href="/cyberchess/matchmaking"}}
+                  aria-label="Онлайн-матч с реальным соперником"
+                  style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                    border:"1px solid #ddd6fe",color:"#6d28d9"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🌐 Онлайн-матч</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>реальный соперник</span>
                   </div>
                 </Btn>
               </div>

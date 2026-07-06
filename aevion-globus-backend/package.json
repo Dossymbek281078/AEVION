@@ -75,7 +75,7 @@
     "express-rate-limit": "^8.5.2",
     "geoip-lite": "^2.0.3",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "^9.0.3",
     "opentimestamps": "^0.4.9",
     "pdfkit": "^0.19.1",
     "pg": "^8.22.0",

@@ -20,7 +20,7 @@
  * route handler forwards them as-is and persists key milestones to Postgres.
  */
 
-import { streamProvider, ChatMessage, getProviders } from "./providers";
+import { streamProviderResilient, ChatMessage, getProviders } from "./providers";
 import {
   AgentConfig,
   AgentOverride,
@@ -153,7 +153,7 @@ async function* streamAgent(
   let content = "";
   let tokensIn: number | undefined;
   let tokensOut: number | undefined;
-  for await (const ev of streamProvider(
+  for await (const ev of streamProviderResilient(
     agent.provider,
     messages,
     agent.model,

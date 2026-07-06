@@ -189,18 +189,21 @@ export function getProviders(): Provider[] {
     {
       id: "openrouter",
       name: "OpenRouter (free models)",
-      // Real `:free` slugs verified against openrouter.ai/api/v1/models (2026-07-04).
-      // The catalogue churns — override per call or via OPENROUTER_MODEL.
+      // Real `:free` slugs verified against openrouter.ai/api/v1/models (2026-07-05).
+      // Ordered by observed availability: the most-requested free models
+      // (llama-3.3-70b) 429 first under load, so less-saturated strong models
+      // lead — this order is also the 429-fallback order. Override via
+      // OPENROUTER_MODEL / per call. The catalogue churns.
       models: [
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
         "openai/gpt-oss-120b:free",
         "qwen/qwen3-next-80b-a3b-instruct:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-4-31b-it:free",
         "nousresearch/hermes-3-llama-3.1-405b:free",
         "qwen/qwen3-coder:free",
       ],
-      defaultModel: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
+      defaultModel: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free",
       envKey: "OPENROUTER_API_KEY",
       configured: isConfigured("OPENROUTER_API_KEY"),
       free: true,
@@ -408,7 +411,15 @@ async function callOpenAICompat(
     body: JSON.stringify({ model, messages, temperature }),
   });
   const data = (await r.json()) as any;
-  if (!r.ok) throw new Error(data?.error?.message || `${providerId} ${r.status}`);
+  if (!r.ok) {
+    // Include the HTTP status AND any provider error code so callers (and the
+    // 429-fallback wrapper) can classify it. OpenRouter often returns
+    // {"error":{"message":"Provider returned error","code":429}} — the bare
+    // message alone hides the 429.
+    const code = data?.error?.code ?? r.status;
+    const msg = data?.error?.message || "request failed";
+    throw new Error(`${providerId} ${r.status}: ${msg} (code ${code})`);
+  }
   const reply = data.choices?.[0]?.message?.content ?? "";
   return { reply, model: data.model || model, usage: data.usage || null };
 }
@@ -725,4 +736,92 @@ export async function* streamProvider(
     return;
   }
   throw new Error(`streamProvider: unsupported provider "${providerId}"`);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   429-resilient wrappers.
+
+   Free-tier gateways (OpenRouter etc.) return 429 when a popular free model is
+   saturated. For FREE providers only, if a call fails with a retryable status
+   BEFORE any text has streamed, we transparently fall back to the next model in
+   that provider's list (capped at MAX_FALLBACK attempts). Paid providers get no
+   silent model swap — a model change there has cost/behaviour implications the
+   caller didn't ask for.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const MAX_FALLBACK = 4;
+
+/** A provider error worth retrying on a different model (rate-limit / transient). */
+function isRetryableProviderError(e: unknown): boolean {
+  const m = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    /\b(429|502|503|529)\b/.test(m) ||
+    m.includes("rate-limit") ||
+    m.includes("rate limit") ||
+    m.includes("rate_limit") ||
+    m.includes("overloaded") ||
+    m.includes("temporarily") ||
+    m.includes("timeout")
+  );
+}
+
+/** Candidate models for a call: the requested one first, then (for free
+    providers only) the rest of that provider's list, capped at MAX_FALLBACK. */
+function fallbackCandidates(providerId: string, model: string): string[] {
+  const prov = getProviders().find((p) => p.id === providerId);
+  if (!prov || !prov.free) return [model];
+  const rest = prov.models.filter((m) => m !== model);
+  return [model, ...rest].slice(0, MAX_FALLBACK);
+}
+
+/** Non-streaming call with free-model fallback on retryable errors. */
+export async function callProviderResilient(
+  providerId: string,
+  messages: ChatMessage[],
+  model: string,
+  temperature: number
+): Promise<CallResult> {
+  const candidates = fallbackCandidates(providerId, model);
+  let lastErr: unknown;
+  for (let i = 0; i < candidates.length; i++) {
+    try {
+      return await callProvider(providerId, messages, candidates[i], temperature);
+    } catch (e) {
+      lastErr = e;
+      if (!isRetryableProviderError(e) || i === candidates.length - 1) throw e;
+      // otherwise: try the next free model
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Streaming call with free-model fallback. Falls back to the next model ONLY if
+ * the failure happens before any text was emitted (a mid-stream failure can't be
+ * un-streamed, so it propagates). Yields the same events as streamProvider.
+ */
+export async function* streamProviderResilient(
+  providerId: string,
+  messages: ChatMessage[],
+  model: string,
+  temperature: number
+): AsyncGenerator<StreamEvent> {
+  const candidates = fallbackCandidates(providerId, model);
+  let lastErr: unknown;
+  for (let i = 0; i < candidates.length; i++) {
+    let emitted = false;
+    try {
+      for await (const ev of streamProvider(providerId, messages, candidates[i], temperature)) {
+        if (ev.kind === "text" && ev.text) emitted = true;
+        yield ev;
+      }
+      return; // completed successfully
+    } catch (e) {
+      lastErr = e;
+      // Can't retry once text is out, or if error isn't retryable, or if this
+      // was the last candidate.
+      if (emitted || !isRetryableProviderError(e) || i === candidates.length - 1) throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
 }

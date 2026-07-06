@@ -8,10 +8,12 @@ import { enforceFreeTokenQuota, freeTokenLimit } from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
 import {
   callProvider,
+  callProviderResilient,
   getProviders,
   resolveProvider,
   sanitizeMessages,
   streamProvider,
+  streamProviderResilient,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
 import {
@@ -334,7 +336,7 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     const modelName = (typeof req.body?.model === "string" && req.body.model) || provider.defaultModel;
     const temperature = clampTemperature(req.body?.temperature, 0.6);
 
-    const result = await callProvider(providerId, messages, modelName, temperature);
+    const result = await callProviderResilient(providerId, messages, modelName, temperature);
     // Count usage toward the free-tier monthly quota (single-shot /chat does
     // not persist a QCoreRun/QCoreMessage, so it must ledger explicitly).
     if (auth?.sub) {
@@ -418,7 +420,7 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
 
   try {
     let totalText = "";
-    for await (const ev of streamProvider(providerId, messages, modelName, temperature)) {
+    for await (const ev of streamProviderResilient(providerId, messages, modelName, temperature)) {
       if (aborted) break;
       if (ev.kind === "text") {
         totalText += ev.text;

@@ -24,8 +24,22 @@
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
+import {
+  ensureDb as ensureMatchDb,
+  recordMatchCreated,
+  appendMove,
+  finalizeMatch,
+  getRating,
+  getLeaderboard,
+  getHistory,
+} from "./cyberchessMatchStore";
 
 const router = Router();
+
+// Persistence is write-through and non-blocking: every store call is
+// fire-and-forget with its own try/catch inside cyberchessMatchStore, so a DB
+// outage (or missing DATABASE_URL locally) NEVER breaks the in-memory flow.
+void ensureMatchDb();
 
 // ── types ──────────────────────────────────────────────────────────
 
@@ -227,6 +241,18 @@ function makeMatch(
     source: "queue",
   };
   MATCHES.set(match.matchId, match);
+
+  // write-through persist (non-blocking; no-op offline)
+  void recordMatchCreated({
+    id: match.matchId,
+    whiteUserId: match.white.userId,
+    whiteName: match.white.displayName,
+    blackUserId: match.black.userId,
+    blackName: match.black.displayName,
+    timeControl: match.timeControl,
+    whiteRatingBefore: match.white.ratingInternal,
+    blackRatingBefore: match.black.ratingInternal,
+  }).catch(() => {});
 
   // mark queue entries as matched, notify SSE if any
   a.status = "matched";
@@ -771,6 +797,8 @@ router.post("/match/:matchId/move", (req: Request, res: Response): void => {
   const move = { uci: uci.toLowerCase(), by: userId, at: Date.now() };
   m.moves.push(move);
   m.status = "active";
+  // append move to persisted game (non-blocking; stores UCI notation)
+  void appendMove(m.matchId, move.uci, m.moves.length).catch(() => {});
   // broadcast to all match subscribers (both players)
   const payload = JSON.stringify({
     matchId: m.matchId,
@@ -788,14 +816,14 @@ router.post("/match/:matchId/move", (req: Request, res: Response): void => {
 });
 
 // POST /match/:matchId/end { userId, result: "white"|"black"|"draw", reason? }
-router.post("/match/:matchId/end", (req: Request, res: Response): void => {
+router.post("/match/:matchId/end", async (req: Request, res: Response): Promise<void> => {
   const m = MATCHES.get(String(req.params.matchId ?? ""));
   if (!m) {
     res.status(404).json({ ok: false, error: "match_not_found", matchId: req.params.matchId });
     return;
   }
   const userId = String(req.body?.userId || "").trim();
-  const result = String(req.body?.result || "");
+  const result = String(req.body?.result || "") as "white" | "black" | "draw";
   const reason = String(req.body?.reason || "user_ended");
   if (userId !== m.white.userId && userId !== m.black.userId) {
     res.status(403).json({ ok: false, error: "not_a_participant" });
@@ -805,6 +833,8 @@ router.post("/match/:matchId/end", (req: Request, res: Response): void => {
     res.status(400).json({ ok: false, error: "invalid_result" });
     return;
   }
+  // Idempotency: only the first /end computes ratings (both clients may call it).
+  const firstEnd = m.status !== "ended";
   m.status = "ended";
   const payload = JSON.stringify({ matchId: m.matchId, result, reason });
   for (const sub of m.subscribers.values()) {
@@ -816,7 +846,23 @@ router.post("/match/:matchId/end", (req: Request, res: Response): void => {
     }
   }
   m.subscribers.clear();
-  res.json({ ok: true, matchId: m.matchId, status: m.status, result });
+
+  // Finalize + Glicko-2 rating update (awaited so we can return deltas to the
+  // UI; finalizeMatch is fully guarded — returns null offline/on error, never
+  // throws). Only on the first /end to avoid double-counting ratings.
+  let ratingDelta: Awaited<ReturnType<typeof finalizeMatch>> = null;
+  if (firstEnd) {
+    ratingDelta = await finalizeMatch(m.matchId, {
+      whiteUserId: m.white.userId,
+      whiteName: m.white.displayName,
+      blackUserId: m.black.userId,
+      blackName: m.black.displayName,
+      timeControl: m.timeControl,
+      result,
+      termination: reason,
+    }).catch(() => null);
+  }
+  res.json({ ok: true, matchId: m.matchId, status: m.status, result, ratingDelta });
 });
 
 // GET /match/:matchId/stream?userId=X — SSE per-match
@@ -898,6 +944,56 @@ router.get("/presence", (_req: Request, res: Response): void => {
     inQueue: [...QUEUE.values()].filter((e) => e.status === "waiting").length,
     activeMatches: [...MATCHES.values()].filter((m) => m.status === "active").length,
   });
+});
+
+// GET /rating?userId=X&speed=blitz — persisted Glicko-2 rating for a player.
+// Speed optional: omitted → all four speeds. Degrades to defaults offline.
+router.get("/rating", async (req: Request, res: Response): Promise<void> => {
+  const userId = String(req.query.userId || "").trim();
+  if (!userId) {
+    res.status(400).json({ ok: false, error: "userId_required" });
+    return;
+  }
+  const speedQ = String(req.query.speed || "").trim();
+  const speeds = speedQ ? [speedQ] : ["bullet", "blitz", "rapid", "classical"];
+  const ratings = await Promise.all(speeds.map((s) => getRating(userId, s).catch(() => null)));
+  res.json({ ok: true, userId, ratings: ratings.filter(Boolean) });
+});
+
+// GET /leaderboard?speed=blitz&limit=50 — top players by rating in a speed.
+router.get("/leaderboard", async (req: Request, res: Response): Promise<void> => {
+  const speed = String(req.query.speed || "blitz").trim();
+  const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
+  const rows = await getLeaderboard(speed, limit).catch(() => []);
+  res.json({
+    ok: true,
+    speed,
+    count: rows.length,
+    leaderboard: rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.userId,
+      displayName: r.displayName,
+      rating: Math.round(r.rating),
+      rd: Math.round(r.rd),
+      games: r.games,
+      wins: r.wins,
+      losses: r.losses,
+      draws: r.draws,
+      peak: Math.round(r.peak),
+    })),
+  });
+});
+
+// GET /history?userId=X&limit=30 — a player's finished online matches.
+router.get("/history", async (req: Request, res: Response): Promise<void> => {
+  const userId = String(req.query.userId || "").trim();
+  if (!userId) {
+    res.status(400).json({ ok: false, error: "userId_required" });
+    return;
+  }
+  const limit = parseInt(String(req.query.limit || "30"), 10) || 30;
+  const rows = await getHistory(userId, limit).catch(() => []);
+  res.json({ ok: true, userId, count: rows.length, matches: rows });
 });
 
 // GET /debug/stats — diagnostic

@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "library"
 }
 
@@ -8,17 +8,17 @@ datasource db {
 }
 
 model QRightObject {
-  id           String   @id @default(uuid())
-  title        String
-  description  String
-  kind         String
-  contentHash  String
-  ownerName    String?
-  ownerEmail   String?
-  ownerUserId  String?
-  country      String?
-  city         String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  kind        String
+  contentHash String
+  ownerName   String?
+  ownerEmail  String?
+  ownerUserId String?
+  country     String?
+  city        String?
+  createdAt   DateTime @default(now())
 }
 
 model QuantumShield {
@@ -108,15 +108,15 @@ model QCoreUserWebhook {
 // =====================================================================
 
 model QSignKey {
-  id         String    @id @default(uuid())
-  kid        String    @unique                         // stable public identifier, e.g. "qsign-hmac-v1"
-  algo       String                                    // "HMAC-SHA256" | "Ed25519"
-  publicKey  String?                                   // hex-encoded Ed25519 public key; null for HMAC
-  secretRef  String                                    // env var name resolved at runtime
-  status     String    @default("active")              // "active" | "retired"
-  notes      String?
-  createdAt  DateTime  @default(now())
-  retiredAt  DateTime?
+  id        String    @id @default(uuid())
+  kid       String    @unique // stable public identifier, e.g. "qsign-hmac-v1"
+  algo      String // "HMAC-SHA256" | "Ed25519"
+  publicKey String? // hex-encoded Ed25519 public key; null for HMAC
+  secretRef String // env var name resolved at runtime
+  status    String    @default("active") // "active" | "retired"
+  notes     String?
+  createdAt DateTime  @default(now())
+  retiredAt DateTime?
 
   @@index([status])
 }
@@ -125,17 +125,17 @@ model QSignSignature {
   id                 String    @id @default(uuid())
   hmacKid            String
   ed25519Kid         String?
-  payloadCanonical   String                             // RFC 8785 JCS stringified payload
-  payloadHash        String                             // sha256 hex of payloadCanonical
+  payloadCanonical   String // RFC 8785 JCS stringified payload
+  payloadHash        String // sha256 hex of payloadCanonical
   signatureHmac      String
   signatureEd25519   String?
-  signatureDilithium String?                            // placeholder for v2.1
+  signatureDilithium String? // placeholder for v2.1
   algoVersion        String    @default("qsign-v2.0")
   issuerUserId       String?
   issuerEmail        String?
   geoLat             Float?
   geoLng             Float?
-  geoSource          String?                            // "ip" | "gps" | null
+  geoSource          String? // "ip" | "gps" | null
   geoCountry         String?
   geoCity            String?
   createdAt          DateTime  @default(now())
@@ -157,10 +157,10 @@ model QSignRevocation {
 
 model QSignWebhook {
   id          String    @id @default(uuid())
-  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
-  url         String                                    // delivery target — must be https in prod, http in dev
-  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
-  events      String                                    // comma-separated subset of "sign,revoke"
+  ownerUserId String // owner of subscription; only events on their own sigs fire
+  url         String // delivery target — must be https in prod, http in dev
+  secret      String // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String // comma-separated subset of "sign,revoke"
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   lastFiredAt DateTime?
@@ -178,37 +178,37 @@ model QSignWebhook {
 // audit trail для каждого mint/spend.
 
 model AevWallet {
-  id                  String   @id @default(uuid())
-  deviceId            String   @unique
-  userId              String?
-  balance             Float    @default(0)
-  lifetimeMined       Float    @default(0)
-  lifetimeSpent       Float    @default(0)
-  globalSupplyMined   Float    @default(0)
-  dividendsClaimed    Float    @default(0)
-  modesPlay           Boolean  @default(true)
-  modesCompute        Boolean  @default(false)
-  modesStewardship    Boolean  @default(true)
-  startTs             DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  createdAt           DateTime @default(now())
-  ledger              AevLedgerEntry[]
+  id                String           @id @default(uuid())
+  deviceId          String           @unique
+  userId            String?
+  balance           Float            @default(0)
+  lifetimeMined     Float            @default(0)
+  lifetimeSpent     Float            @default(0)
+  globalSupplyMined Float            @default(0)
+  dividendsClaimed  Float            @default(0)
+  modesPlay         Boolean          @default(true)
+  modesCompute      Boolean          @default(false)
+  modesStewardship  Boolean          @default(true)
+  startTs           DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  createdAt         DateTime         @default(now())
+  ledger            AevLedgerEntry[]
 
   @@index([userId])
 }
 
 model AevLedgerEntry {
-  id          String     @id @default(uuid())
-  walletId    String
-  wallet      AevWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  kind        String     // "mint" | "spend"
-  amount      Float
-  sourceKind  String?    // "play" | "compute" | "stewardship" | "streak" | etc.
-  sourceModule String?   // "cyberchess" | "qsign" | "qright" | "qtrade" | ...
-  sourceAction String?   // RATE_CARD action key (e.g. "cyberchess_win_easy")
-  reason      String?    // human-readable description
+  id           String    @id @default(uuid())
+  walletId     String
+  wallet       AevWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind         String // "mint" | "spend"
+  amount       Float
+  sourceKind   String? // "play" | "compute" | "stewardship" | "streak" | etc.
+  sourceModule String? // "cyberchess" | "qsign" | "qright" | "qtrade" | ...
+  sourceAction String? // RATE_CARD action key (e.g. "cyberchess_win_easy")
+  reason       String? // human-readable description
   balanceAfter Float
-  ts          DateTime   @default(now())
+  ts           DateTime  @default(now())
 
   @@index([walletId, ts])
   @@index([sourceModule])
@@ -221,13 +221,13 @@ model AevLedgerEntry {
 // cross-device sync, leaderboard'ов и аналитики курса для куратора.
 
 model SmetaStudent {
-  id          String           @id @default(uuid())
-  deviceId    String           @unique
+  id          String          @id @default(uuid())
+  deviceId    String          @unique
   userId      String?
-  displayName String?          // как студент представился
-  group       String?          // учебная группа / поток
-  startedAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  displayName String? // как студент представился
+  group       String? // учебная группа / поток
+  startedAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   progress    SmetaProgress[]
   attempts    SmetaAttempt[]
 
@@ -236,15 +236,15 @@ model SmetaStudent {
 }
 
 model SmetaProgress {
-  id           String       @id @default(uuid())
-  studentId    String
-  student      SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  level        Int          // 1..5 (соответствует LEVELS в frontend/lib/levels.ts)
-  status       String       // "open" | "in-progress" | "done"
-  score        Int?         // 0..100 для уровней с тестами
-  completedAt  DateTime?
-  attemptsCnt  Int          @default(0) // сколько раз заходил/сдавал
-  lastVisitAt  DateTime     @default(now())
+  id          String       @id @default(uuid())
+  studentId   String
+  student     SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level       Int // 1..5 (соответствует LEVELS в frontend/lib/levels.ts)
+  status      String // "open" | "in-progress" | "done"
+  score       Int? // 0..100 для уровней с тестами
+  completedAt DateTime?
+  attemptsCnt Int          @default(0) // сколько раз заходил/сдавал
+  lastVisitAt DateTime     @default(now())
 
   @@unique([studentId, level])
   @@index([level, score])
@@ -255,10 +255,10 @@ model SmetaAttempt {
   studentId String
   student   SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
   level     Int
-  kind      String       // "quiz" | "exercise" | "lsr-submit"
-  score     Int?         // 0..100
-  payload   String?      // JSON: ответы / снимок ЛСР / детали попытки
-  feedback  String?      // ответ AI-советника / комментарий куратора
+  kind      String // "quiz" | "exercise" | "lsr-submit"
+  score     Int? // 0..100
+  payload   String? // JSON: ответы / снимок ЛСР / детали попытки
+  feedback  String? // ответ AI-советника / комментарий куратора
   ts        DateTime     @default(now())
 
   @@index([studentId, ts])
@@ -266,16 +266,16 @@ model SmetaAttempt {
 }
 
 model ChessPuzzle {
-  id       String  @id                     // lichess puzzle ID or "gen_xxx"
-  fen      String                           // position FEN (player to move)
-  sol      String                           // UCI moves JSON array string
-  name     String                           // human-readable name
-  rating   Int     @default(1200)
-  theme    String  @default("Тактика")
-  phase    String  @default("Middlegame")
-  side     String  @default("w")            // w|b
-  goal     String  @default("Best move")    // Mate|Best move
-  mateIn   Int?                             // null if not a mate puzzle
+  id        String   @id // lichess puzzle ID or "gen_xxx"
+  fen       String // position FEN (player to move)
+  sol       String // UCI moves JSON array string
+  name      String // human-readable name
+  rating    Int      @default(1200)
+  theme     String   @default("Тактика")
+  phase     String   @default("Middlegame")
+  side      String   @default("w") // w|b
+  goal      String   @default("Best move") // Mate|Best move
+  mateIn    Int? // null if not a mate puzzle
   createdAt DateTime @default(now())
 
   @@index([rating])
@@ -321,21 +321,70 @@ model CyberchessCpiState {
   @@index([psychology(sort: Desc)])
 }
 
+// Glicko-2 рейтинг игрока для онлайн-матчей, отдельно по скорости (как lichess:
+// bullet / blitz / rapid / classical). Композитный ключ (userId, speed).
+model CyberRating {
+  userId      String
+  speed       String // "bullet" | "blitz" | "rapid" | "classical"
+  displayName String?
+  rating      Float    @default(1500)
+  rd          Float    @default(350) // rating deviation (неопределённость)
+  vol         Float    @default(0.06) // волатильность σ
+  games       Int      @default(0)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+  draws       Int      @default(0)
+  peak        Float    @default(1500)
+  updatedAt   DateTime @updatedAt
+
+  @@id([userId, speed])
+  @@index([speed, rating(sort: Desc)]) // лидерборд по скорости
+}
+
+// Сыгранный онлайн-матч — переживает редеплой (замена in-memory MATCHES Map).
+// Пишется через write-through: создаётся при паринге, финализируется на /end.
+model CyberMatch {
+  id                String    @id
+  whiteUserId       String
+  whiteName         String?
+  blackUserId       String
+  blackName         String?
+  timeControl       String // "180+0" и т.п.
+  speed             String // bullet/blitz/rapid/classical
+  status            String    @default("active") // active | ended
+  result            String? // "white" | "black" | "draw" | "aborted"
+  termination       String? // "checkmate" | "resign" | "timeout" | "draw" | "abort"
+  movesSan          String    @default("") // ходы SAN через пробел ("e4 e5 Nf3 ...")
+  ply               Int       @default(0)
+  whiteRatingBefore Float?
+  blackRatingBefore Float?
+  whiteRatingAfter  Float?
+  blackRatingAfter  Float?
+  tournamentId      String?
+  createdAt         DateTime  @default(now())
+  endedAt           DateTime?
+
+  @@index([whiteUserId, createdAt(sort: Desc)])
+  @@index([blackUserId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([tournamentId])
+}
+
 // ============ HealthAI ============
 
 model HealthProfile {
-  id           String   @id
-  userId       String?
-  memberLabel  String?
-  age          Int      @default(0)
-  sex          String   @default("other")
-  heightCm     Int      @default(0)
-  weightKg     Float    @default(0)
-  conditions   String[] @default([])
-  allergies    String[] @default([])
-  medications  String[] @default([])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id
+  userId      String?
+  memberLabel String?
+  age         Int      @default(0)
+  sex         String   @default("other")
+  heightCm    Int      @default(0)
+  weightKg    Float    @default(0)
+  conditions  String[] @default([])
+  allergies   String[] @default([])
+  medications String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   symptomChecks SymptomCheck[]
   dailyLogs     HealthDailyLog[]

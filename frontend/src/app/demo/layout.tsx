@@ -4,7 +4,7 @@ import { getSiteUrl } from "@/lib/siteUrl";
 const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "AEVION · Live ecosystem demo — 27 nodes, one trust pipeline",
+  title: "AEVION · Live ecosystem demo — 37 nodes, one trust pipeline",
   description:
     "Walk through every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics. From idea to court-grade certificate in 90 seconds.",
   openGraph: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 const articleJsonLd = {
   "@context": "https://schema.org",
   "@type": "Article",
-  headline: "Live ecosystem demo — 27 nodes, one trust pipeline.",
+  headline: "Live ecosystem demo — 37 nodes, one trust pipeline.",
   name: "AEVION Live Demo",
   description:
     "Walk every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics, real backend, real data. From idea to court-grade certificate in 90 seconds.",

@@ -48,13 +48,13 @@ export const thesis = {
   title: "The trust layer for the next decade of digital creation",
   lead:
     "AEVION is one identity, one signing layer, one IP registry, one authorship & prior-art bureau, one compliance " +
-    "rail and one wallet — already wired together as a working system. 27 product nodes, 12 with " +
+    "rail and one wallet — already wired together as a working system. 37 product nodes, 12 with " +
     "live MVPs, all sharing the same Trust Graph. We monetise three of the largest underserved " +
     "markets at once: IP enforcement, the creator economy, and digital assets.",
   pillars: [
     {
       kicker: "ONE IDENTITY",
-      title: "Single AEVION account → 27 nodes",
+      title: "Single AEVION account → 37 nodes",
       body:
         "JWT issued once by Auth unlocks every product. No fragmentation, no Stripe-style integration tax for new modules.",
     },
@@ -149,7 +149,7 @@ export const launchedModules: PitchModule[] = [
     href: "/auth",
     stage: "live",
     bucket: "infrastructure",
-    tagline: "Single AEVION account — JWT that unlocks all 27 modules.",
+    tagline: "Single AEVION account — JWT that unlocks all 37 modules.",
     problem:
       "Every fintech, IP-tech and creator-tech product reinvents auth. The integration tax kills new modules and confuses users.",
     killerFeature:
@@ -157,7 +157,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "The Trust Graph cannot exist without one identity. Every other module's value composes on top of Auth.",
     proof: ["Live JWT issuance", "Used by all 11 other launched modules", "Persisted role + name + email"],
-    valueLine: "Distribution moat: every new acquisition flows once through Auth, then is monetised across 27 surfaces.",
+    valueLine: "Distribution moat: every new acquisition flows once through Auth, then is monetised across 37 surfaces.",
   },
   {
     id: "qright",
@@ -259,7 +259,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "QCoreAI is the intelligence backbone for Multichat, Bank Advisor, Bank Copilot and every future agent. Centralised model usage accounting → predictable per-token economics.",
     proof: ["5 production providers wired", "Suggestion deck explains the ecosystem", "/api/qcoreai/providers live"],
-    valueLine: "Centralised LLM spend across 27 nodes vs. 27 separate API contracts — single biggest OPEX win in the company.",
+    valueLine: "Centralised LLM spend across 37 nodes vs. 27 separate API contracts — single biggest OPEX win in the company.",
   },
   {
     id: "qtrade",
@@ -348,7 +348,7 @@ export const launchedModules: PitchModule[] = [
   },
 ];
 
-/* Ecosystem nodes that map to product slots in the 27-node Globus but don't have stand-alone landings yet. */
+/* Ecosystem nodes that map to product slots in the 37-node Globus but don't have stand-alone landings yet. */
 export const ecosystemNodes: Array<Pick<PitchModule, "id" | "code" | "name" | "stage" | "bucket" | "tagline" | "valueLine">> = [
   { id: "qfusionai", code: "QFUSIONAI", name: "QFusionAI", stage: "alpha", bucket: "intelligence", tagline: "Hybrid model router — auto-select best provider per task.", valueLine: "Reduces vendor lock-in; smooths LLM market volatility." },
   { id: "qtradeoffline", code: "QTRADE-OFFLINE", name: "QTrade Offline", stage: "vision", bucket: "money", tagline: "Trade and transfer without constant connectivity.", valueLine: "TAM expansion to emerging markets and remote regions." },
@@ -407,7 +407,7 @@ export const billionDefense = {
     },
     {
       number: "05",
-      title: "27 modules, near-zero marginal cost per node",
+      title: "37 modules, near-zero marginal cost per node",
       body:
         "Auth + Bureau + Bank + QCoreAI are shared infrastructure. Adding a new vertical (HealthAI, QPersona, Kids-AI) is mostly UI. Each new node makes every existing node more valuable — scope effect compounds without OPEX.",
     },
@@ -631,7 +631,7 @@ export const team = {
   ],
   proof:
     "Proof points instead of bios: 12 production MVPs shipped, /pitch with live API metrics, " +
-    "27-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.",
+    "37-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -650,7 +650,7 @@ export const competitive = {
       weakness:
         "Sign-only. No registry, no compliance, no creator economy, no wallet. Customers still need 4 other vendors.",
       aevionWin:
-        "QSign is one of 27 modules — same payload format, same Trust Graph edge, same audit log. Bundled at zero marginal cost.",
+        "QSign is one of 37 modules — same payload format, same Trust Graph edge, same audit log. Bundled at zero marginal cost.",
     },
     {
       name: "Blockchain timestamping (OpenTimestamps, Bitcoin OP_RETURN)",
@@ -722,9 +722,9 @@ export const risks = {
     },
     {
       severity: "medium",
-      risk: "Execution risk on 27 nodes — focus dilution",
+      risk: "Execution risk on 37 nodes — focus dilution",
       mitigation:
-        "Only 12 of 27 nodes are committed to ship in the next 18 months. Remaining 15 are roadmap signals (cheap optionality), not parallel work-streams. Engineering capital concentrated on the 4 highest-revenue modules first.",
+        "Only 12 of 37 nodes are committed to ship in the next 18 months. Remaining 15 are roadmap signals (cheap optionality), not parallel work-streams. Engineering capital concentrated on the 4 highest-revenue modules first.",
     },
     {
       severity: "low",

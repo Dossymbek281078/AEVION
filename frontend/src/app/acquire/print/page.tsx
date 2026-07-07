@@ -124,7 +124,7 @@ export default function AcquirePrintPage() {
           <tbody>
             <tr><td>Финансовый</td><td>AEV, QPayNet, AEVION Bank, Payments Rail, QTrade, QTradeOffline</td><td>5/6 в проде, AEV в обращении</td></tr>
             <tr><td>Защита и право</td><td>QSign v2, QShield, QRight, QContract, QChainGov, QMaskCard, VeilNetX, Z-Tide</td><td>7/8 в проде, QSign GA</td></tr>
-            <tr><td>Dev / DevHub</td><td>DevHub (9 integrations), QCoreAI (5+ providers, 230 routes), QBuild (60+ endpoints), Bureau v2</td><td>23 vitest · 490 vitest · 30/30 ATS tests</td></tr>
+            <tr><td>Dev / DevHub</td><td>DevHub (9 integrations), QCoreAI (5+ providers, 230 routes), QBuild (60+ endpoints), Bureau v2</td><td>23 vitest · 364 vitest · 30/30 ATS tests</td></tr>
             <tr><td>Consumer</td><td>CyberChess, HealthAI, Multichat, KidsAI, Smeta Trainer, MapReality, LifeBox, StartupX, PsyApp, QFusionAI, VeilNetX consumer, Q-Good, ShadowNet, QLife, QPersona, DeepSan, Voe</td><td>7+ retention-products live</td></tr>
             <tr><td>Governance</td><td>Constitution v1, /planet, /transparency, /launch-status, AEVION_COORDINATION, /awards, /press, /changelog</td><td>Constitution attested via QSign envelope</td></tr>
           </tbody>

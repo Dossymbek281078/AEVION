@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION Pricing — 27 modules in one subscription";
+export const alt = "AEVION Pricing — 37 modules in one subscription";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -78,7 +78,7 @@ export default async function Image() {
               maxWidth: 980,
             }}
           >
-            27 модулей в одной подписке
+            37 модулей в одной подписке
           </h1>
           <p
             style={{

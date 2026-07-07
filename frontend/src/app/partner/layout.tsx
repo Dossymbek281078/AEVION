@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AEVION — Innovation Partnership · $100M / 70% / CIO",
+  title: "AEVION — Innovation Partnership · $10M advance · 51/49 · Chief Idea Officer",
   description:
-    "Strategic partnership opportunity. $170M total: $110M secondary (founder nets $100M), $60M primary. Investor 70%, founder 30% + Chief Innovation Officer. DIFC structure.",
+    "One partnership, not a buyout: $10M returnable advance + resources (compute, engineers, distribution, brand), revenue 51% founder / 49% partner, founder stays as Chief Idea Officer with a majority stake. AEV token ring-fenced.",
   openGraph: {
     title: "AEVION Innovation Partnership",
-    description: "70% equity + team + $170M. Founder stays as CIO generating next wave of ideas.",
+    description: "Partnership, not a buyout — $10M returnable advance + resources, 51/49 revenue. Founder stays as Chief Idea Officer, generating the next ideas.",
     type: "website",
   },
 };

@@ -168,7 +168,7 @@ export default function DemoDeepPage() {
 
         <footer style={{ marginTop: 32, textAlign: "center", color: "#94a3b8", fontSize: 14, lineHeight: 1.6 }}>
           <p style={{ margin: "0 0 20px" }}>
-            Full visual narrative across the 27 nodes lives at{" "}
+            Full visual narrative across the 37 nodes lives at{" "}
             <Link href="/demo" style={{ color: "#5eead4" }}>
               /demo
             </Link>

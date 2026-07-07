@@ -41,7 +41,7 @@ export const ecosystemIntro = {
   bullets: [
     "Integration cost reduction: reusing Auth, QSign and API instead of reinventing the wheel in every product.",
     "Faster time to market: ready-made pipeline 'registry → signature → bureau' to demonstrate maturity to investors and partners.",
-    "Scalable story: 27 nodes on Globus — a growth roadmap, not a feature chaos.",
+    "Scalable story: 37 nodes on Globus — a growth roadmap, not a feature chaos.",
     "Regulatory and ESG transparency: Planet compliance as a foundation for audit and certification.",
     "Network effect: the more modules on the shared platform, the higher the value of data, reputation and cross-selling.",
   ],

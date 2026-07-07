@@ -192,7 +192,7 @@ export default function EcosystemOg() {
           }}
         >
           <div style={{ display: "flex" }}>aevion.app/ecosystem</div>
-          <div style={{ color: "#f472b6", display: "flex" }}>27 nodes · one Trust Graph</div>
+          <div style={{ color: "#f472b6", display: "flex" }}>37 nodes · one Trust Graph</div>
         </div>
       </div>
     ),

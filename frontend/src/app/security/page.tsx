@@ -30,7 +30,7 @@ const LAYERS = [
     title: "Identity — single account, scoped permissions",
     accent: "#7dd3fc",
     body:
-      "One AEVION account drives 27 modules. JWT bearer with short lifetime + refresh; passkey-ready stack. Private data is never exposed through the public Trust Graph.",
+      "One AEVION account drives 37 modules. JWT bearer with short lifetime + refresh; passkey-ready stack. Private data is never exposed through the public Trust Graph.",
     href: "/auth",
   },
   {

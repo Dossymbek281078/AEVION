@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION live ecosystem demo — 27 nodes, one trust pipeline";
+export const alt = "AEVION live ecosystem demo — 37 nodes, one trust pipeline";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

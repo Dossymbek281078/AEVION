@@ -479,7 +479,7 @@ export default function PitchPage() {
                 fontSize: 16,
               }}
             >
-              See the 27 modules
+              See the 37 modules
             </a>
             <a
               href={ask.ctaPrimary.href}
@@ -1560,7 +1560,7 @@ export default function PitchPage() {
             </Link>
           </div>
           <p style={{ marginTop: 40, fontSize: 12, color: "#475569" }}>
-            AEVION · 27 nodes · 12 live MVPs · one Trust Graph · {new Date().getFullYear()}
+            AEVION · 37 nodes · 12 live MVPs · one Trust Graph · {new Date().getFullYear()}
           </p>
         </div>
       </section>

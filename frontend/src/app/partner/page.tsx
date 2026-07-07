@@ -37,7 +37,7 @@ const IDEAS = [
     desc: "Anthropic/OpenAI не имеют compliance-дружественного присутствия в KZ/UZ/AZ. QCoreAI = «последняя миля» AI.",
     arr: "$30-80M/год",
     accent: "#ec4899",
-    ready: "490 vitest, 5+ провайдеров",
+    ready: "364 vitest, 5+ провайдеров",
   },
 ];
 
@@ -94,7 +94,7 @@ export default function PartnerPage() {
           Вы покупаете не 30 продуктов и не QSign — это копируется. Вы покупаете
           доказанную машину генерации идей (30+ модулей за 6 месяцев, один человек)
           и право владеть всем, что она произведёт дальше. Вы приводите команду и капитал.
-          Двигатель остаётся в компании как CIO — навсегда.
+          Двигатель остаётся в компании как Chief Idea Officer — навсегда.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
           <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>
@@ -142,7 +142,7 @@ export default function PartnerPage() {
                 accent: "#3b82f6",
               },
               {
-                t: "Почему основатель остаётся", d: "Сохраняет 51–75% + $2M/год advisor fee + CIO/CEO. При $4.9B оценке в году 5 его доля = $2.5–3.7B. Уходить невыгодно ни ему, ни вам.",
+                t: "Почему основатель остаётся", d: "Сохраняет 51% дохода и остаётся Chief Idea Officer — автор следующих идей AEVION, бренд за ним. Уходить невыгодно ни ему, ни вам: ценность в человеке, а не в коде.",
                 accent: "#a855f7",
               },
               {
@@ -238,7 +238,7 @@ export default function PartnerPage() {
                 Д
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#f8fafc", marginBottom: 6 }}>Досымбек Жакия</div>
-              <div style={{ fontSize: 13, color: "#10b981", fontWeight: 700, marginBottom: 16 }}>Founder & Chief Innovation Officer</div>
+              <div style={{ fontSize: 13, color: "#10b981", fontWeight: 700, marginBottom: 16 }}>Founder & Chief Idea Officer</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {[
                   { icon: "🏗", text: "Финдиректор + владелец строительных компаний (КЗ)" },

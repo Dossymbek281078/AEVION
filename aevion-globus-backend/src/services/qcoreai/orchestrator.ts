@@ -988,6 +988,22 @@ function buildModeratorPrompt(
   ].join("\n");
 }
 
+/**
+ * Cap each draft before it feeds a synthesis/aggregation prompt. The premium
+ * final synthesizer's cost is driven by how much crowd text it reads, so
+ * trimming long drafts cuts cost with minimal quality loss (the head of an
+ * answer carries most of the signal). Env-tunable; 0 disables trimming.
+ */
+const MAX_DRAFT_CHARS = (() => {
+  const n = Number(process.env.QCOREAI_MAX_DRAFT_CHARS);
+  return Number.isFinite(n) && n >= 0 ? n : 1600;
+})();
+
+function trimDraft(s: string): string {
+  if (!MAX_DRAFT_CHARS || s.length <= MAX_DRAFT_CHARS) return s;
+  return s.slice(0, MAX_DRAFT_CHARS).replace(/\s+\S*$/, "") + " …[trimmed]";
+}
+
 /** MoA aggregator-layer prompt: user question + all prior-layer responses. */
 function buildAggregatorPrompt(userInput: string, priorDrafts: string[]): string {
   const parts: string[] = ["User question:", userInput, ""];
@@ -995,7 +1011,7 @@ function buildAggregatorPrompt(userInput: string, priorDrafts: string[]): string
   parts.push("");
   priorDrafts.forEach((d, i) => {
     parts.push(`── Response ${i + 1} ──`);
-    parts.push(d);
+    parts.push(trimDraft(d));
     parts.push("");
   });
   parts.push(
@@ -1014,7 +1030,7 @@ function buildCouncilSynthPrompt(
   parts.push("");
   drafts.forEach((d, i) => {
     parts.push(`── Member ${i + 1} · ${d.persona} ──`);
-    parts.push(d.draft);
+    parts.push(trimDraft(d.draft));
     parts.push("");
   });
   parts.push(

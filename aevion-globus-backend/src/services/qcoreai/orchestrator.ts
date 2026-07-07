@@ -22,6 +22,7 @@
 
 import { streamProviderResilient, ChatMessage, getProviders } from "./providers";
 import {
+  AGGREGATOR_PROMPT,
   AgentConfig,
   AgentOverride,
   AgentRole,
@@ -55,6 +56,14 @@ export type OrchestratorInput = {
   maxRevisions?: number;
   /** council mode only: how many crowd members to convene (2–6, default 3). */
   councilSize?: number;
+  /**
+   * council mode only: Mixture-of-Agents refinement layers (1–3, default 1).
+   * 1 = proposers → final Synthesizer (fast, interactive).
+   * 2–3 = proposers → aggregator layer(s) that refine seeing all prior answers
+   * → final Synthesizer. Higher = better quality, ~Nx latency (Wang et al.,
+   * ICLR 2025). Use for high-stakes async answers, not interactive chat.
+   */
+  councilLayers?: number;
   /** Optional prior user/assistant turns for follow-up context. */
   history?: ChatMessage[];
   /**
@@ -89,6 +98,8 @@ export type OrchestratorEvent =
       council?: Array<{ provider: string; model: string; persona: string; free: boolean }>;
       /** council mode: the premium chair that fuses the drafts. */
       synthesizer?: { provider: string; model: string };
+      /** council mode: Mixture-of-Agents refinement layers in play. */
+      councilLayers?: number;
     }
   | {
       type: "agent_start";
@@ -648,6 +659,7 @@ async function* runCouncil(
   const { members, synthesizer } = agents;
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
   const budget = effectiveBudget(input);
+  const layers = Math.max(1, Math.min(3, Math.floor(input.councilLayers ?? 1)));
   let totalCost = 0;
   const tally = (e: OrchestratorEvent) => {
     if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
@@ -671,43 +683,73 @@ async function* runCouncil(
       free: freeById.get(m.provider) ?? false,
     })),
     synthesizer: { provider: synthesizer.provider, model: synthesizer.model },
+    councilLayers: layers,
   };
 
-  /* Stage 1: the whole crowd answers in parallel, each under its persona.
-     Each member is wrapped so an individual failure (e.g. a free-tier 429)
-     degrades to an empty draft + a non-fatal error event, instead of aborting
-     the whole council. As long as one member answers, the run continues. */
+  /* Layer 0 — proposers: the whole crowd answers in parallel, each under its
+     persona. Each member is wrapped so an individual failure (free-tier 429)
+     degrades to an empty draft + non-fatal error, instead of aborting the run. */
   const memberUser = yield* applyGuidance(input, input.userInput, "writer", "draft");
-  const streams = members.map((m) =>
-    safeMemberStream(
-      streamAgent(
-        m,
-        "draft",
-        [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
+  let answered: Array<{ member: CouncilMember; draft: string }>;
+  {
+    const streams = members.map((m) =>
+      safeMemberStream(
+        streamAgent(
+          m,
+          "draft",
+          [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
+          m.persona
+        ),
         m.persona
-      ),
-      m.persona
-    )
-  );
-
-  let drafts: string[] = [];
-  try {
-    const results = yield* mergeStreamsTally(streams, tally);
-    drafts = results.map((r) => r ?? "");
-  } catch (e) {
-    yield { type: "error", role: "writer", message: `Council members failed: ${errMsg(e)}` };
-    return;
+      )
+    );
+    let drafts: string[] = [];
+    try {
+      const results = yield* mergeStreamsTally(streams, tally);
+      drafts = results.map((r) => r ?? "");
+    } catch (e) {
+      yield { type: "error", role: "writer", message: `Council members failed: ${errMsg(e)}` };
+      return;
+    }
+    answered = members
+      .map((m, i) => ({ member: m, draft: drafts[i] }))
+      .filter((x) => x.draft.trim().length > 0);
   }
-
-  // Keep only members that actually produced text; if the crowd went dark,
-  // there's nothing to synthesize.
-  const answered = members
-    .map((m, i) => ({ member: m, draft: drafts[i] }))
-    .filter((x) => x.draft.trim().length > 0);
 
   if (answered.length === 0) {
     yield { type: "error", role: "writer", message: "No council member produced an answer." };
     return;
+  }
+
+  /* Layers 1..L-1 — aggregators (Mixture-of-Agents): each member re-answers,
+     now seeing ALL of the previous layer's responses, using the AGGREGATOR
+     prompt. Free models do this refinement; a layer that goes fully dark keeps
+     the previous layer's answers rather than losing everything. */
+  for (let layer = 1; layer < layers && totalCost <= budget; layer++) {
+    const aggUser = buildAggregatorPrompt(input.userInput, answered.map((x) => x.draft));
+    const streams = members.map((m) =>
+      safeMemberStream(
+        streamAgent(
+          m,
+          "draft",
+          [{ role: "system", content: AGGREGATOR_PROMPT }, ...history, { role: "user", content: aggUser }],
+          `${m.persona}·L${layer}`
+        ),
+        m.persona
+      )
+    );
+    let refined: string[] = [];
+    try {
+      const results = yield* mergeStreamsTally(streams, tally);
+      refined = results.map((r) => r ?? "");
+    } catch (e) {
+      yield { type: "error", role: "writer", message: `Aggregator layer ${layer} failed: ${errMsg(e)}` };
+      break; // keep the last good layer's answers
+    }
+    const nextAnswered = members
+      .map((m, i) => ({ member: m, draft: refined[i] }))
+      .filter((x) => x.draft.trim().length > 0);
+    if (nextAnswered.length > 0) answered = nextAnswered;
   }
 
   if (totalCost > budget) {
@@ -718,7 +760,7 @@ async function* runCouncil(
     return;
   }
 
-  /* Stage 2: premium Synthesizer fuses + verifies. */
+  /* Final layer — premium Synthesizer (Fable 5) fuses + verifies. */
   const synthUser = buildCouncilSynthPrompt(
     input.userInput,
     answered.map((x) => ({ persona: x.member.persona, draft: x.draft }))
@@ -944,6 +986,23 @@ function buildModeratorPrompt(
     "Produce the balanced final answer now. Bottom-line recommendation first.",
     "Output ONLY the final answer. No 'Pro said / Con said' commentary.",
   ].join("\n");
+}
+
+/** MoA aggregator-layer prompt: user question + all prior-layer responses. */
+function buildAggregatorPrompt(userInput: string, priorDrafts: string[]): string {
+  const parts: string[] = ["User question:", userInput, ""];
+  parts.push(`Responses from the previous layer (${priorDrafts.length}):`);
+  parts.push("");
+  priorDrafts.forEach((d, i) => {
+    parts.push(`── Response ${i + 1} ──`);
+    parts.push(d);
+    parts.push("");
+  });
+  parts.push(
+    "Synthesize these into a single, higher-quality answer per your instructions. " +
+    "Critically evaluate for accuracy — do not copy errors. Output only the improved answer."
+  );
+  return parts.join("\n");
 }
 
 function buildCouncilSynthPrompt(

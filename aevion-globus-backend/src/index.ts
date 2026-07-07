@@ -91,6 +91,8 @@ import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
+import { qmelaninRouter } from "./routes/qmelanin";
+import { qrenewRouter } from "./routes/qrenew";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
@@ -1080,6 +1082,10 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
+// QMelanin — anti-graying engine (deterministic, DB-free)
+app.use("/api/qmelanin", qmelaninRouter);
+// QRenew — cellular-renewal program (biological age + tiered stack)
+app.use("/api/qrenew", qrenewRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
 // MapReality — civic signals map (MVP: signals + supports)

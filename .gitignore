@@ -67,3 +67,8 @@ frontend/public/puzzles-report.json
 page_v*_backup.*
 # Claude Code local settings
 .claude/
+
+# Playwright MCP test artifacts (screenshots, console logs, snapshots)
+# — must NOT sit in the watched project tree or Turbopack HMR-reloads mid-test
+.playwright-mcp/
+**/.playwright-mcp/

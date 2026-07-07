@@ -11,6 +11,7 @@
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:build": "node scripts/build-smoke.js",
     "smoke:qcore-fleet": "node scripts/qcore-fleet-smoke.js",
+    "eval:qcore": "node scripts/qcore-eval.js",
     "smoke:tier3": "node scripts/tier3-smoke.js",
     "smoke:bank-prod": "node scripts/bank-prod-smoke.js",
     "smoke:qbuild-prod": "node scripts/qbuild-prod-smoke.js",

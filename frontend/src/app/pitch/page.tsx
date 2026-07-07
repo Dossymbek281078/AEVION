@@ -1560,7 +1560,7 @@ export default function PitchPage() {
             </Link>
           </div>
           <p style={{ marginTop: 40, fontSize: 12, color: "#475569" }}>
-            AEVION · 37 nodes · 12 live MVPs · one Trust Graph · {new Date().getFullYear()}
+            AEVION · 37 modules · 12 feature-complete · one Trust Graph · {new Date().getFullYear()}
           </p>
         </div>
       </section>

@@ -154,7 +154,7 @@ export default function ConstitutionApiPlaygroundPage() {
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">
             Крути ползунки слева — справа в реальном времени обновляется код
             запроса. Жми «Try now» — выполняется через тот же прокси, что
-            фронт-сайт. Внизу — каталог 19 endpoints с try-now кнопками.
+            фронт-сайт. Внизу — каталог 22 endpoints с try-now кнопками.
           </p>
           <div className="mt-3 text-xs">
             <a

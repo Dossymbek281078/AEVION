@@ -199,7 +199,7 @@ export default function PartnerPage() {
           Innovation pipeline — что строим с командой
         </div>
         <h2 style={{ fontSize: "clamp(26px, 4vw, 42px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 12 }}>
-          5 продуктов с $490M ARR потенциалом к году 5.
+          5 продуктов · иллюстративный потенциал ~$490M ARR к году 5 (компания pre-revenue — не прогноз).
         </h2>
         <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 36, lineHeight: 1.5 }}>
           Каждый из них сегодня — либо в проде, либо с готовой базой. Без команды — прототипы.

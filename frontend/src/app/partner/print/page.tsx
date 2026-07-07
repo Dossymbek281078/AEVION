@@ -98,8 +98,8 @@ export default function PartnerPrintPage() {
         {/* PAGE 2 — Innovation pipeline */}
         <div className="pb" />
         <div className="eyebrow">Innovation pipeline</div>
-        <h2>5 products · $490M ARR by year 5</h2>
-        <p>Each exists today as a prototype or MVP. With a team of 80-100 engineers, each becomes a market product.</p>
+        <h2>5 products · illustrative ~$490M ARR by year 5 (pre-revenue — not a forecast)</h2>
+        <p>Each exists today as a prototype or MVP; the company is pre-revenue. The figures below are illustrative potential under stated assumptions, not forecasts. With a team of 80-100 engineers, each becomes a market product.</p>
 
         <div className="grid2">
           <div className="card">

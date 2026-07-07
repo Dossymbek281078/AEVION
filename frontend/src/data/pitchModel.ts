@@ -74,7 +74,7 @@ export const thesis = {
 } as const;
 
 export const market = {
-  title: "$340B addressable market — three deep buckets, one platform",
+  title: "Three large markets — directional TAM, not a revenue claim",
   buckets: [
     {
       name: "IP licensing & enforcement",
@@ -94,7 +94,9 @@ export const market = {
   ],
   closing:
     "We do not pick one bucket — the same Trust Graph is sold three times to three different buyers. " +
-    "Cross-sell is a side-effect of the architecture, not a feature.",
+    "Cross-sell is a side-effect of the architecture, not a feature. These are top-down category TAM " +
+    "estimates for context, not a revenue forecast: AEVION is pre-revenue today, and the capturable " +
+    "SAM/SOM is a fraction, sized bottom-up in the data room.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -191,7 +193,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "QSign is the integrity guarantee that makes the Trust Graph trustworthy. Without it, registry entries are claims, not proofs.",
     proof: ["Live shield/shard count", "/api/qsign/sign + /verify", "Demo-ready payload editor"],
-    valueLine: "Compliance/audit revenue line on its own (~$8B HSM and signing market) — bundled here at zero marginal cost.",
+    valueLine: "Compliance/audit revenue line on its own (the multi-billion HSM and e-signing market) — bundled here at zero marginal cost.",
   },
   {
     id: "aevion-ip-bureau",
@@ -242,7 +244,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "Bank is the economic exhaust of every other module. Royalties, prizes, awards payouts and tournament wins all settle here — making Bank the single most expensive module to leave.",
     proof: ["18 shipping features + 5 Autopilot rules", "8-factor Trust Score with radar visualisation", "Multilingual EN/RU/KZ shipping today", "Build green, /bank static-rendered"],
-    valueLine: "Bank turns the platform from 'tools you visit' into 'a balance you check daily' — the daily-use root of $100+ ARPU.",
+    valueLine: "Bank turns the platform from 'tools you visit' into 'a balance you check daily' — the daily-use retention anchor of the ecosystem.",
   },
   {
     id: "qcoreai",

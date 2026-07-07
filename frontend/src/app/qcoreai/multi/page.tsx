@@ -348,6 +348,8 @@ export default function QCoreMultiAgentPage() {
   const [strategy, setStrategy] = useState<Strategy>("sequential");
   // council mode: how many crowd members to convene (2–6).
   const [councilSize, setCouncilSize] = useState<number>(3);
+  // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
+  const [councilLayers, setCouncilLayers] = useState<number>(1);
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
@@ -1344,7 +1346,7 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
-      if (useStrategy === "council") body.councilSize = councilSize;
+      if (useStrategy === "council") { body.councilSize = councilSize; body.councilLayers = councilLayers; }
       if (continueFromRunId) body.continueFromRunId = continueFromRunId;
       // V6-P integration: send promptOverrides if user picked custom prompts.
       const promptOverridesBody: Record<string, { promptId: string }> = {};
@@ -1986,6 +1988,29 @@ export default function QCoreMultiAgentPage() {
                   <button
                     onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >+</button>
+                </div>
+              )}
+
+              {strategy === "council" && (
+                <div
+                  title="Mixture-of-Agents depth. 1 = fast (proposers → Fable synthesis). 2-3 = deeper: free models refine each other's answers layer by layer before the final synthesis. Higher quality, ~Nx slower."
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 8px", borderRadius: 8,
+                    background: "rgba(192,38,211,0.12)", border: "1px solid rgba(192,38,211,0.35)",
+                    color: "#f5d0fe", fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <span>Depth (MoA)</span>
+                  <button
+                    onClick={() => setCouncilLayers((n) => Math.max(1, n - 1))}
+                    style={{ border: "none", background: "rgba(192,38,211,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
+                  >−</button>
+                  <span style={{ minWidth: 14, textAlign: "center" }}>{councilLayers}</span>
+                  <button
+                    onClick={() => setCouncilLayers((n) => Math.min(3, n + 1))}
+                    style={{ border: "none", background: "rgba(192,38,211,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>
               )}

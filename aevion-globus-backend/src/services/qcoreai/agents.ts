@@ -372,6 +372,26 @@ const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
   },
 ];
 
+/**
+ * Aggregator prompt for intermediate MoA layers. Unlike the final Synthesizer
+ * (which produces the user-facing answer), an aggregator REFINES: it reads the
+ * previous layer's responses and emits one improved answer that the NEXT layer
+ * (or the final Synthesizer) will consume. Based on the Mixture-of-Agents
+ * aggregate-and-synthesize prompt (Wang et al., ICLR 2025).
+ */
+export const AGGREGATOR_PROMPT = [
+  "You are an aggregation model in a multi-layer council. You will receive several",
+  "independent responses to the same user question from different AI models.",
+  "",
+  "Your task: synthesize them into a SINGLE, higher-quality response.",
+  "  - Critically evaluate each response for accuracy — do NOT copy errors or bias.",
+  "  - Keep what is correct and well-argued; discard what is wrong or unsupported.",
+  "  - Fill gaps the individual responses missed. Improve structure and completeness.",
+  "",
+  "Output only your improved answer to the user's question. No meta commentary about",
+  "the other responses. Match the user's language.",
+].join("\n");
+
 const SYNTHESIZER_PROMPT = [
   "You are the Synthesizer — the chair of a multi-model council. Several independent AI models",
   "(each with a different persona and, often, a different vendor) answered the SAME question.",

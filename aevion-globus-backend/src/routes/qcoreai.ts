@@ -2126,6 +2126,9 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   // council mode: number of crowd members to convene (2–6, default 3).
   const councilSize =
     typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(6, Math.floor(req.body.councilSize))) : 3;
+  // council mode: Mixture-of-Agents refinement layers (1–3, default 1).
+  const councilLayers =
+    typeof req.body?.councilLayers === "number" ? Math.max(1, Math.min(3, Math.floor(req.body.councilLayers))) : 1;
 
   // Optional spend cap. Hard upper bound 50 USD/run prevents accidental
   // misuse via negative or huge values.
@@ -2403,6 +2406,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       overrides,
       maxRevisions,
       councilSize,
+      councilLayers,
       history,
       guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
@@ -4166,8 +4170,8 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         id: "council",
         label: "Council (free swarm)",
         description:
-          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel → a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer. Free breadth + premium depth: the highest-quality mode at near-zero crowd cost.",
-        agents: ["council", "synthesizer"],
+          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost.",
+        agents: ["council", "aggregators", "synthesizer"],
       },
     ],
     roles: [

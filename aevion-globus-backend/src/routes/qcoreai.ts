@@ -2149,6 +2149,19 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
 
+  // Council convenience: `synthModel` (+ optional `synthProvider`) picks the
+  // final Synthesizer model without hand-building overrides.critic. Default
+  // (unset) keeps Fable 5. Only applies when the caller didn't already pin the
+  // critic slot. Handy for the Fable-vs-Opus cost/quality trade-off.
+  if (strategy === "council" && !overrides.critic && typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {
+    overrides.critic = {
+      provider: typeof req.body?.synthProvider === "string" && req.body.synthProvider.trim()
+        ? req.body.synthProvider.trim()
+        : "anthropic",
+      model: req.body.synthModel.trim(),
+    };
+  }
+
   // V6-P integration: promptOverrides — { role: { promptId? OR content? } }
   // Either reference a saved prompt by id (owner-scoped fetch) or pass content
   // inline. The result is merged into overrides[role].systemPrompt so the

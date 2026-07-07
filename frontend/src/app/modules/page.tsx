@@ -136,7 +136,7 @@ const _RSS = `${getApiBase()}/api/modules/changelog.rss`;
 export const metadata: Metadata = {
   title: "AEVION ecosystem modules",
   description:
-    "27 nodes of the AEVION ecosystem with live tier and status. Filter by tier, status, kind, or search by name.",
+    "37 nodes of the AEVION ecosystem with live tier and status. Filter by tier, status, kind, or search by name.",
   alternates: {
     types: {
       "application/rss+xml": _RSS,
@@ -145,13 +145,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "article",
     title: "AEVION ecosystem modules",
-    description: "27 nodes with live tier and status — filter, search, export CSV.",
+    description: "37 nodes with live tier and status — filter, search, export CSV.",
     images: [{ url: _OG, width: 1200, height: 630, alt: "AEVION ecosystem modules" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION ecosystem modules",
-    description: "27 nodes with live tier and status — filter, search, export CSV.",
+    description: "37 nodes with live tier and status — filter, search, export CSV.",
     images: [_OG],
   },
 };
@@ -188,7 +188,7 @@ const COPY = {
   en: {
     title: "AEVION ecosystem modules",
     subtitle:
-      "All 27 nodes with live tier and status. Use filters to drill down or download the full CSV.",
+      "All 37 nodes with live tier and status. Use filters to drill down or download the full CSV.",
     headTotal: "Total modules",
     headLive: "MVP live",
     headApi: "Platform API",
@@ -217,7 +217,7 @@ const COPY = {
   ru: {
     title: "Модули экосистемы AEVION",
     subtitle:
-      "Все 27 узлов с актуальным tier и статусом. Используйте фильтры или скачайте CSV.",
+      "Все 37 узлов с актуальным tier и статусом. Используйте фильтры или скачайте CSV.",
     headTotal: "Всего модулей",
     headLive: "MVP live",
     headApi: "Platform API",

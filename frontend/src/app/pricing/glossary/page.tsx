@@ -57,7 +57,7 @@ const TERMS: Term[] = [
   { id: "ltv", abbr: "LTV", full: "Lifetime Value", category: "billing", related: ["cac"], ru: "Сумма дохода с одного клиента за всё время. Affiliate AEVION получает 20% от LTV.", en: "Total revenue per customer over their lifetime. AEVION affiliates earn 20% of LTV." },
   { id: "cac", abbr: "CAC", full: "Customer Acquisition Cost", category: "billing", related: ["ltv"], ru: "Стоимость привлечения одного клиента. LTV/CAC > 3 — здоровый SaaS.", en: "Cost to acquire one customer. LTV/CAC > 3 indicates a healthy SaaS." },
   { id: "nps", abbr: "NPS", full: "Net Promoter Score", category: "billing", ru: "Метрика удовлетворённости (-100 до +100). AEVION NPS = +72 на 2026-04.", en: "Customer satisfaction metric (-100 to +100). AEVION NPS = +72 as of 2026-04." },
-  { id: "saas", abbr: "SaaS", full: "Software as a Service", category: "billing", ru: "Программное обеспечение как услуга. AEVION — multi-product SaaS с 27 модулями.", en: "Software as a Service. AEVION is a multi-product SaaS with 27 modules." },
+  { id: "saas", abbr: "SaaS", full: "Software as a Service", category: "billing", ru: "Программное обеспечение как услуга. AEVION — multi-product SaaS с 37 модулями.", en: "Software as a Service. AEVION is a multi-product SaaS with 37 modules." },
 ];
 
 const CATEGORY_META: Record<Term["category"], { ru: string; en: string; color: string; bg: string }> = {

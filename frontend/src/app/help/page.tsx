@@ -53,7 +53,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "What are the biggest risks?",
-    a: "Honestly listed at /pitch in the Risks section: regulatory drift, cold-start on Trust Graph density, LLM cost compression, single-vertical competitors, execution focus across 27 nodes, and post-quantum cliff. Each risk has a mitigation tied to a shipped product feature, not just a slide bullet.",
+    a: "Honestly listed at /pitch in the Risks section: regulatory drift, cold-start on Trust Graph density, LLM cost compression, single-vertical competitors, execution focus across 37 nodes, and post-quantum cliff. Each risk has a mitigation tied to a shipped product feature, not just a slide bullet.",
   },
   {
     q: "Can I see live product, not just slides?",

@@ -106,7 +106,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "15 SaaS-вкладок → один agent-layer под единым AEV-биллингом.",
     modules: ["DevHub (9 интеграций)", "QCoreAI (5+ AI-провайдеров)", "QBuild", "Bureau v2"],
-    proof: "9 integrations live · 23 vitest · QCoreAI 230 routes / 490 vitest · QBuild 60+ endpoints",
+    proof: "9 integrations live · 23 vitest · QCoreAI 230 routes / 364 vitest · QBuild 60+ endpoints",
     tamAnchor: "Dev-tools + IT-ops ≈ $200B → $400B",
     accent: "#8b5cf6",
   },

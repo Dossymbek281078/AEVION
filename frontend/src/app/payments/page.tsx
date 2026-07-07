@@ -527,7 +527,7 @@ export default function PaymentsPage() {
               }}
             >
               Payments Rail sits alongside QRight, QSign, IP Bureau, Planet,
-              and AEVION Bank in the 27-node ecosystem.
+              and AEVION Bank in the 37-node ecosystem.
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "Public timeline of AEVION releases across QRight, QSign, Bureau, Planet, Bank, Awards, CyberChess, QCoreAI, Multichat. Every entry links to the surfaces that shipped.",
   openGraph: {
     title: "AEVION Changelog — every release, in public",
-    description: "Open log of what shipped across all 27 nodes — by date, by module, with links to live surfaces.",
+    description: "Open log of what shipped across all 37 nodes — by date, by module, with links to live surfaces.",
     type: "website",
     siteName: "AEVION",
   },

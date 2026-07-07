@@ -35,57 +35,58 @@ export default function PartnerPrintPage() {
 
         {/* PAGE 1 — Partnership offer */}
         <div className="eyebrow">Innovation Partnership Brief · Confidential · 2026</div>
-        <h1>AEVION Innovation Partnership.<br />$170M · 70% · CIO model.</h1>
+        <h1>AEVION Partnership.<br />$10M advance · 51/49 revenue · not a buyout.</h1>
         <p>
           AEVION is an innovation lab with a completed technical foundation across five domains:
-          post-quantum signatures (FIPS 204 GA), AI routing, digital banking, IP registry,
+          post-quantum signatures (FIPS 204, opt-in), AI routing, digital banking, IP registry,
           developer platform. One founder, 30+ live modules, zero revenue today.
-          The bottleneck is execution — team and capital.
+          The bottleneck is execution — team and resources.
         </p>
         <p>
-          <strong>The offer: you bring $170M and a team of 50-100 engineers. You get 70% of the company.
-          The founder stays as Chief Innovation Officer with 30% — continuously generating the next
-          wave of ideas.</strong>
+          <strong>The offer: one partnership, not a buyout. The partner brings $10M as a returnable
+          advance plus resources (compute, engineers, distribution, brand). Project revenue splits
+          51% founder / 49% partner. The founder stays as Chief Idea Officer with a majority stake;
+          the AEVION brand is kept.</strong>
         </p>
 
-        {/* ROI table */}
+        {/* Offer terms */}
         <div className="roi-grid">
           <div className="roi-cell">
-            <div className="roi-label">You invest</div>
-            <div className="roi-val">$170M</div>
-            <div className="roi-sub">$110M secondary + $60M into company</div>
+            <div className="roi-label">Advance</div>
+            <div className="roi-val">$10M</div>
+            <div className="roi-sub">returnable · repaid from founder&apos;s share as it grows</div>
           </div>
           <div className="roi-cell">
-            <div className="roi-label">Your stake</div>
-            <div className="roi-val">70%</div>
-            <div className="roi-sub">at ~$275M pre-money valuation</div>
+            <div className="roi-label">Revenue split</div>
+            <div className="roi-val">51 / 49</div>
+            <div className="roi-sub">founder / partner</div>
           </div>
           <div className="roi-cell">
-            <div className="roi-label">ROI year 3</div>
-            <div className="roi-val">6–9×</div>
-            <div className="roi-sub">$1.0–1.6B company · your 70% = $700M–$1.1B</div>
+            <div className="roi-label">Founder</div>
+            <div className="roi-val">Chief Idea Officer</div>
+            <div className="roi-sub">majority stake · stays, drives next ideas</div>
           </div>
           <div className="roi-cell">
-            <div className="roi-label">ROI year 5</div>
-            <div className="roi-val">16–24×</div>
-            <div className="roi-sub">$3.9–5.9B company · your 70% = $2.7–4.1B</div>
+            <div className="roi-label">Partner pays</div>
+            <div className="roi-val">mostly resources</div>
+            <div className="roi-sub">compute, engineers, distribution, brand</div>
           </div>
         </div>
 
         <h2>Deal structure</h2>
         <table>
           <tbody>
-            <tr><th style={{ width: "38%" }}>Total investment</th><td><strong>~$170M</strong></td></tr>
-            <tr><th>Secondary</th><td>$110M gross → founder receives $100M net (DIFC 0% CGT)</td></tr>
-            <tr><th>Primary (into company)</th><td>$60M — hiring, operations, scaling</td></tr>
-            <tr><th>Investor stake</th><td><strong>70%</strong></td></tr>
-            <tr><th>Founder stake</th><td>30% + Chief Innovation Officer (no exit)</td></tr>
-            <tr><th>Implied pre-money</th><td>~$275M</td></tr>
-            <tr><th>Team from investor</th><td>50-100 engineers within 18 months</td></tr>
-            <tr><th>Founder advisor fee</th><td>$2M/year</td></tr>
-            <tr><th>Founder veto</th><td>Changes to core IP and product direction</td></tr>
-            <tr><th>Jurisdiction</th><td>DIFC Dubai (0% CGT, English law, DIFC Courts)</td></tr>
-            <tr><th>Exclusivity</th><td>60 days from LOI signing · breakup fee $5M</td></tr>
+            <tr><th style={{ width: "38%" }}>Form</th><td><strong>Partnership, not a buyout — founder stays</strong></td></tr>
+            <tr><th>Financing</th><td>$10M returnable advance from the partner</td></tr>
+            <tr><th>Purpose of advance</th><td>Frees the founder from current companies → full-time on AEVION ideas; repaid from founder&apos;s share as it grows</td></tr>
+            <tr><th>Revenue split</th><td><strong>51% founder / 49% partner</strong> (starting frame)</td></tr>
+            <tr><th>What the partner brings</th><td>Mostly resources (compute, engineers, distribution, brand) + a small returnable advance</td></tr>
+            <tr><th>Founder role</th><td>Chief Idea Officer — majority stake, stays (not Senior Advisor)</td></tr>
+            <tr><th>Brand</th><td>AEVION is kept (not merged into the partner)</td></tr>
+            <tr><th>AEV token</th><td>Ring-fenced (out of the deal perimeter)</td></tr>
+            <tr><th>Founder veto</th><td>Constitution v1 — changes only with the founder&apos;s written consent</td></tr>
+            <tr><th>Due diligence</th><td>Tech + legal + financial, 30 days</td></tr>
+            <tr><th>Exclusivity</th><td>60 days from LOI signing</td></tr>
             <tr><th>Contact</th><td><strong>yahiin1978@gmail.com</strong></td></tr>
           </tbody>
         </table>
@@ -140,7 +141,7 @@ export default function PartnerPrintPage() {
         </div>
 
         <div className="card" style={{ marginTop: 8 }}>
-          <div className="card-label">490 vitest · 5+ AI providers · QCoreAI</div>
+          <div className="card-label">364 vitest · 5+ AI providers · QCoreAI</div>
           <h3>AI API for MENA/CIS government sector</h3>
           <p style={{ fontSize: "10pt", color: "#444", margin: "4pt 0 6pt" }}>
             Anthropic and OpenAI have no compliance-friendly presence in KZ/UZ/AZ.
@@ -174,7 +175,7 @@ export default function PartnerPrintPage() {
         </table>
         <p style={{ fontSize: "10pt", color: "#555" }}>
           At 8-12× SaaS+fintech multiple: year 3 valuation $1.0-1.6B · year 5 valuation $3.9-5.9B.<br />
-          Your 70% at year 5: $2.7-4.1B on a $170M entry. ROI: 16-24×.
+          Partner's 49% of revenue at year 5: ≈ $176–240M/year on $360–490M ARR. Partnership, not a buyout — forward projection, not a guarantee.
         </p>
 
         <h2>Why you can't build this faster on your own</h2>
@@ -183,7 +184,7 @@ export default function PartnerPrintPage() {
           <tbody>
             <tr><td>Time to first product</td><td>18-24 months</td><td><strong>Now</strong> — QSign in production</td></tr>
             <tr><td>Foundation cost</td><td>$15-30M</td><td><strong>Already done</strong></td></tr>
-            <tr><td>Innovation pipeline</td><td>Hire product visionary ($2-5M/yr)</td><td><strong>Included</strong> — CIO in the deal</td></tr>
+            <tr><td>Innovation pipeline</td><td>Hire product visionary ($2-5M/yr)</td><td><strong>Included</strong> — Chief Idea Officer in the deal</td></tr>
             <tr><td>QSign FIPS 204 compliance</td><td>12-18 months of regulatory work</td><td><strong>Completed</strong>, SDK published</td></tr>
             <tr><td>MENA first-mover on DevHub</td><td>Available 18+ months later</td><td><strong>Available now</strong></td></tr>
           </tbody>

@@ -42,7 +42,7 @@ const ENTRIES_FALLBACK: ChangeEntry[] = [
     date: "2026-04-28",
     kind: "added",
     title: "Полная матрица тарифов на /pricing/compare",
-    body: "Side-by-side сравнение всех 27 модулей × 4 тарифов в одной таблице. Sticky tier headers, фильтр по типу модуля, скрытие SOON/by-request, цветовая подсветка для популярного тарифа.",
+    body: "Side-by-side сравнение всех 37 модулей × 4 тарифов в одной таблице. Sticky tier headers, фильтр по типу модуля, скрытие SOON/by-request, цветовая подсветка для популярного тарифа.",
     scope: "compare-page",
   },
   {
@@ -77,7 +77,7 @@ const ENTRIES_FALLBACK: ChangeEntry[] = [
     date: "2026-04-27",
     kind: "added",
     title: "Public roadmap на /pricing/roadmap",
-    body: "Все 27 модулей × 5 фаз (A-E) c прогрессом и target window. Public-facing — для прозрачности и инвесторов.",
+    body: "Все 37 модулей × 5 фаз (A-E) c прогрессом и target window. Public-facing — для прозрачности и инвесторов.",
     scope: "roadmap-page",
   },
   {

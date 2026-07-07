@@ -161,7 +161,7 @@ export async function GET(
           }}
         >
           <div style={{ display: "flex" }}>aevion.app</div>
-          <div style={{ color: theme.accent, display: "flex" }}>27 nodes · one Trust Graph</div>
+          <div style={{ color: theme.accent, display: "flex" }}>37 nodes · one Trust Graph</div>
         </div>
       </div>
     ),

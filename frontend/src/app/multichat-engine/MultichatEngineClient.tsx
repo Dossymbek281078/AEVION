@@ -695,7 +695,7 @@ function buildDemoAgents(): Agent[] {
         {
           role: "assistant",
           content:
-            "Three layers, in order of speed. (1) QSign HMAC + Ed25519 ledger gives you a notarised pre-publication timestamp — admissible as evidence in EU/US/JP courts under their respective electronic-records statutes. (2) Bureau v2 lets the holder file a takedown packet with one click; we auto-generate the DMCA / EUCD-mandated counter-evidence bundle (registry hash, signature chain, prior-art search). (3) For repeat infringers, Trust Graph downgrades reputation across all 27 modules — and yes, that is contractually defensible because every party has accepted the AEVION Terms at registration. The weak spot is jurisdictions with no electronic-records statute (a few sub-Saharan markets); for those we recommend escrowing a dated paper copy via the Bureau's notary partner network.",
+            "Three layers, in order of speed. (1) QSign HMAC + Ed25519 ledger gives you a notarised pre-publication timestamp — admissible as evidence in EU/US/JP courts under their respective electronic-records statutes. (2) Bureau v2 lets the holder file a takedown packet with one click; we auto-generate the DMCA / EUCD-mandated counter-evidence bundle (registry hash, signature chain, prior-art search). (3) For repeat infringers, Trust Graph downgrades reputation across all 37 modules — and yes, that is contractually defensible because every party has accepted the AEVION Terms at registration. The weak spot is jurisdictions with no electronic-records statute (a few sub-Saharan markets); for those we recommend escrowing a dated paper copy via the Bureau's notary partner network.",
         },
       ],
     },

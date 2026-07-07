@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     template: "%s · AEVION",
   },
   description:
-    "Global platform for IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking and more. 27 product nodes on interactive Globus map.",
+    "Global platform for IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking and more. 37 product nodes on interactive Globus map.",
   openGraph: {
     title: "AEVION — Trust infrastructure & Globus",
     description:
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION — Trust OS",
-    description: "Registry · signatures · bureau · compliance · bank · awards · 27 nodes.",
+    description: "Registry · signatures · bureau · compliance · bank · awards · 37 nodes.",
   },
 };
 

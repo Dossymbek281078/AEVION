@@ -100,6 +100,59 @@ export const market = {
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Unit economics — honest bottom-up (real prices × labelled assumptions)      */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const unitEconomics = {
+  title: "Bottom-up revenue — three flagships, transparent assumptions",
+  intro:
+    "AEVION is pre-revenue. Instead of a top-down forecast, here is a conservative bottom-up model " +
+    "for three flagship modules, built on real published prices and explicit, labelled assumptions. " +
+    "Every input is an assumption you can challenge — not a claim. Beachhead = first paying cohort; " +
+    "Regional = a 3–5-year KZ / CIS / MENA reach.",
+  flagships: [
+    {
+      module: "QBuild — construction & SME hiring",
+      market: "KZ → CIS. The founder's home market (construction-trust operator).",
+      price: "$49/mo Pro (~$470/yr annual) — undercuts HH's ~$100+/mo résumé access",
+      assumptions: [
+        "KZ has 100k+ active construction/SME employers; freemium reach ~5%",
+        "Free → Pro conversion ~2–3% (conservative for vertical SaaS)",
+      ],
+      beachhead: { unit: "500 paying employers", arr: "$235K" },
+      regional: { unit: "5,000 paying employers", arr: "$2.35M" },
+    },
+    {
+      module: "Ecosystem All-Access",
+      market: "Creators & professionals wanting IP + wallet + AI in one place.",
+      price: "$49/mo ($39/mo annual = $468/yr) — the real published All-Access price",
+      assumptions: [
+        "Consumer subscription, converts off free ecosystem usage",
+        "Distribution-gated — modelled at modest penetration",
+      ],
+      beachhead: { unit: "1,000 subscribers", arr: "$468K" },
+      regional: { unit: "10,000 subscribers", arr: "$4.68M" },
+    },
+    {
+      module: "QCoreAI — AI API for gov/enterprise",
+      market: "Compliance-friendly AI 'last mile' in KZ / UZ / AZ.",
+      price: "Usage-based: provider token cost + margin; free 100k tokens/mo",
+      assumptions: [
+        "B2B usage-based; average paying-org spend modelled conservatively",
+        "~20–30% gross margin over provider token cost",
+      ],
+      beachhead: { unit: "20 orgs × ~$500/mo", arr: "$120K" },
+      regional: { unit: "200 orgs × ~$1k/mo", arr: "$2.4M" },
+    },
+  ],
+  totals: { beachhead: "≈ $0.8M ARR", regional: "≈ $9.4M ARR" },
+  note:
+    "Three flagships only — the other 34 modules are upside, not in this figure. Deliberately modest " +
+    "and defensible: a first-question-of-due-diligence model, not a hockey stick. Market-size and " +
+    "conversion inputs are the assumptions most worth challenging.",
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Network effects — the 4 forces                                              */
 /* ────────────────────────────────────────────────────────────────────────── */
 

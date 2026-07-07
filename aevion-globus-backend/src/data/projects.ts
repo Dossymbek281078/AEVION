@@ -295,6 +295,19 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "qventure",
+    code: "QVENTURE",
+    name: "QVenture — AI Investment Analyst",
+    description:
+      "AI due-diligence для любой сферы (англоязычный рынок): прозрачный quant-скоринг 0–100 по 8 факторам на базе knowledge-base из 18 секторов + совет из 4 ролей (учёный · дата-аналитик · экономист · юрист через QCoreAI) + конкретная стратегия входа (тикет, транши, оценка, risk-adjusted ROI/IRR). Детерминированное ядро — цифры доказуемы, не галлюцинация. MVP 2026-07-07 — /api/qventure.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["investing", "ai", "analytics", "duediligence", "vc"],
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ===== OTHER PROJECTS (IDEA STAGE) =====
   {

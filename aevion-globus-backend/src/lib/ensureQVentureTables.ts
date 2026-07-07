@@ -1,0 +1,62 @@
+import type pg from "pg";
+
+type PgPoolInstance = InstanceType<typeof pg.Pool>;
+
+let ensured = false;
+let dbReady: boolean | null = null;
+let dbError: string | null = null;
+
+export function isQVentureDbReady(): boolean {
+  return dbReady === true;
+}
+
+export function getQVentureDbError(): string | null {
+  return dbError;
+}
+
+/**
+ * Create the QVenture tables on first call. Defensive: if Postgres is
+ * unavailable, flip dbReady=false and let the route use its in-memory store —
+ * same pattern as ensureStartupExchangeTables / ensureQNewsTables.
+ */
+export async function ensureQVentureTables(pool: PgPoolInstance): Promise<void> {
+  if (ensured) return;
+  try {
+    await pool.query("SELECT 1");
+  } catch (e: unknown) {
+    dbReady = false;
+    ensured = true;
+    dbError = e instanceof Error ? e.message : "database unavailable";
+    console.warn(`[QVenture] Database unavailable — in-memory store active: ${dbError}`);
+    return;
+  }
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qventure_analyses (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sector TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        geography TEXT,
+        ask_usd BIGINT,
+        composite NUMERIC NOT NULL,
+        verdict TEXT NOT NULL,
+        result JSONB NOT NULL,
+        content_hash TEXT,
+        visibility TEXT NOT NULL DEFAULT 'public',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_created ON qventure_analyses(created_at DESC);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_verdict ON qventure_analyses(verdict);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_sector ON qventure_analyses(sector);`);
+    dbReady = true;
+    ensured = true;
+    console.log("[QVenture] Tables ready (Postgres).");
+  } catch (e: unknown) {
+    dbReady = false;
+    ensured = true;
+    dbError = e instanceof Error ? e.message : "table creation failed";
+    console.warn(`[QVenture] Table creation failed — in-memory store active: ${dbError}`);
+  }
+}

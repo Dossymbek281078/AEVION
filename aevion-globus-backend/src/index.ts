@@ -96,6 +96,7 @@ import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
+import { qventureRouter } from "./routes/qventure";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
@@ -923,6 +924,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/kids-ai", "kids-ai-content"],
   ["/api/voice-of-earth", "voice-of-earth"],
   ["/api/startupx", "startup-exchange"],
+  ["/api/qventure", "qventure"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
   ["/api/qevents", "qevents"],
@@ -1086,6 +1088,8 @@ app.use("/api/qnews", qnewsRouter);
 app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
+// QVenture — AI investment analyst: quant score + 4-role council + entry strategy
+app.use("/api/qventure", qventureRouter);
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
 // Voice of Earth — multilang music tracks + voting

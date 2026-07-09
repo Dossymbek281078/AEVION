@@ -13504,7 +13504,7 @@ ${question.trim()}`;
                     const myBlunders=analysis.filter((a,i)=>(pCol==="w"?i%2===0:i%2===1)&&(a.quality==="blunder"||a.quality==="mistake"));
                     const moves=hist.slice(0,30).join(" ");
                     const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((_,k)=>Math.floor(k/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
-                    const res=await fetch("/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
+                    const res=await fetch("/api-backend/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
                     const d=await res.json().catch(()=>null);
                     sAiReview({text:d?.reply||"Тренер не отвечает — попробуй позже.",loading:false});
                   }catch{sAiReview({text:"Тренер недоступен.",loading:false});}

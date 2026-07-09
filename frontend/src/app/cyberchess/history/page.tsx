@@ -39,6 +39,42 @@ const SPEED_ICON: Record<string, string> = {
   classical: "♟",
 };
 
+const SPEED_ORDER = ["bullet", "blitz", "rapid", "classical"] as const;
+const SPEED_LABEL: Record<string, string> = {
+  bullet: "Пуля",
+  blitz: "Блиц",
+  rapid: "Рапид",
+  classical: "Классика",
+};
+
+// Компактная спарклайн-линия динамики рейтинга (без внешних зависимостей).
+function Sparkline({ pts, w = 132, h = 34 }: { pts: number[]; w?: number; h?: number }) {
+  if (pts.length < 2) return null;
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
+  const range = max - min || 1;
+  const pad = 3;
+  const stepX = (w - pad * 2) / (pts.length - 1);
+  const coords = pts.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / range) * (h - pad * 2);
+    return [x, y] as const;
+  });
+  const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const fillPts = `${pad},${(h - pad).toFixed(1)} ${line} ${(w - pad).toFixed(1)},${(h - pad).toFixed(1)}`;
+  const up = pts[pts.length - 1] >= pts[0];
+  const stroke = up ? "#10b981" : "#f43f5e";
+  const fillC = up ? "rgba(16,185,129,0.12)" : "rgba(244,63,94,0.12)";
+  const [lx, ly] = coords[coords.length - 1];
+  return (
+    <svg width={w} height={h} style={{ display: "block", width: "100%" }} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <polygon points={fillPts} fill={fillC} stroke="none" />
+      <polyline points={line} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lx} cy={ly} r={2.5} fill={stroke} />
+    </svg>
+  );
+}
+
 // Переигрываем UCI-строку ("e2e4 e7e5 g1f3 …") в SAN для читаемой записи.
 function uciToSan(uciLine: string | undefined, max = 12): string {
   if (!uciLine) return "";
@@ -130,6 +166,25 @@ export default function CyberChessHistoryPage() {
     return { w, l, d };
   }, [matches, userId]);
 
+  // Динамика рейтинга по каждой скорости — из «рейтинга-после» игрока в матчах.
+  // matches приходят DESC (свежие первыми); разворачиваем в хронологию.
+  const trends = useMemo(() => {
+    const bySpeed = new Map<string, { pts: number[]; tc: string }>();
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const m = matches[i];
+      const iAmWhite = m.whiteUserId === userId;
+      const after = iAmWhite ? m.whiteRatingAfter : m.blackRatingAfter;
+      if (after == null) continue;
+      const cur = bySpeed.get(m.speed) || { pts: [], tc: m.timeControl };
+      cur.pts.push(Math.round(after));
+      cur.tc = m.timeControl;
+      bySpeed.set(m.speed, cur);
+    }
+    return SPEED_ORDER.map((sp) => ({ speed: sp, ...(bySpeed.get(sp) || { pts: [], tc: "" }) })).filter(
+      (t) => t.pts.length >= 2,
+    );
+  }, [matches, userId]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-4 py-8">
@@ -177,7 +232,48 @@ export default function CyberChessHistoryPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-2">
+          <>
+            {trends.length > 0 && (
+              <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {trends.map((t) => {
+                  const first = t.pts[0];
+                  const last = t.pts[t.pts.length - 1];
+                  const delta = last - first;
+                  const peak = Math.max(...t.pts);
+                  return (
+                    <div
+                      key={t.speed}
+                      className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-300">
+                          {SPEED_ICON[t.speed] || "♟"} {SPEED_LABEL[t.speed] || t.speed}
+                        </span>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="font-mono text-lg font-black text-slate-100">{last}</span>
+                          <span
+                            className={`font-mono text-xs font-bold ${
+                              delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-slate-500"
+                            }`}
+                          >
+                            {delta > 0 ? "+" : ""}
+                            {delta}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5">
+                        <Sparkline pts={t.pts} />
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>{t.pts.length} партий</span>
+                        <span>пик {peak}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="space-y-2">
             {matches.map((m) => {
               const iAmWhite = m.whiteUserId === userId;
               const oppName = (iAmWhite ? m.blackName : m.whiteName) || "Соперник";
@@ -252,7 +348,8 @@ export default function CyberChessHistoryPage() {
                 </div>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -9,6 +9,7 @@ import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByGlobusName } from "@/lib/constitution";
+import { MODULE_NODES, TAM, BOTTOM_UP_REGIONAL_ARR, BOTTOM_UP_BEACHHEAD_ARR } from "@/data/pitchFacts";
 
 type ModuleRuntime = {
   tier: "mvp_live" | "platform_api" | "portal_only";
@@ -489,11 +490,11 @@ export default function HomePage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {[
               { title: "First-mover lead", desc: "A first-mover, fully integrated proof-of-authorship bureau. The moat is the integrated Trust Graph and network effects — a competitor must rebuild all five layers as one system, not just copy the idea.", metric: "5-in-1", sub: "integrated pipeline" },
-              { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
+              { title: `${TAM} addressable market`, desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: TAM, sub: "TAM" },
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
-              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
+              { title: `${MODULE_NODES} product nodes`, desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: `${MODULE_NODES}`, sub: "nodes on the map" },
               { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
-              { title: "Bottom-up revenue model", desc: "Conservative bottom-up from real published prices on 3 of the modules: ≈$0.8M beachhead → ≈$9.4M regional modelled ARR. The rest is upside. Company is pre-revenue today.", metric: "≈$9.4M", sub: "modelled ARR · 3 flagships" },
+              { title: "Bottom-up revenue model", desc: `Conservative bottom-up from real published prices on 3 of the modules: ${BOTTOM_UP_BEACHHEAD_ARR} beachhead → ${BOTTOM_UP_REGIONAL_ARR} regional modelled ARR. The rest is upside. Company is pre-revenue today.`, metric: BOTTOM_UP_REGIONAL_ARR, sub: "modelled ARR · 3 flagships" },
             ].map((card) => (
               <div key={card.title} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>

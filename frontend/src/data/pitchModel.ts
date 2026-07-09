@@ -520,10 +520,11 @@ export const financials = {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export const customerVoice = {
-  title: "What early users say",
+  title: "How the pipeline lands — illustrative scenarios",
   intro:
-    "Independent creators and early enterprise pilots are shipping today. Quotes below are paraphrased " +
-    "from active conversations — full attributed versions go out under NDA per the investor demo flow.",
+    "The company is pre-revenue and the cards below are NOT attributed customer quotes. Each is an " +
+    "illustrative scenario showing how a target user in that segment would run the pipeline end-to-end. " +
+    "They will be replaced with real, attributed testimonials once early customers ship and consent.",
   quotes: [
     {
       avatar: "🎵",
@@ -555,7 +556,7 @@ export const customerVoice = {
     },
   ],
   disclosure:
-    "All quotes are paraphrased from active customer conversations and shown with consent for the investor pitch surface. Full attributed versions available under NDA.",
+    "Illustrative composites of target use cases — not real customer quotes. Attributed testimonials will replace these once early customers consent.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */

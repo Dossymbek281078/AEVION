@@ -83,7 +83,7 @@ const TOC = [
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
   { id: "use-cases", label: "Use cases" },
-  { id: "voices", label: "Customer voice" },
+  { id: "voices", label: "Use scenarios" },
   { id: "ecosystem", label: "Roadmap" },
   { id: "competitive", label: "Competition" },
   { id: "why-partner", label: "Why it's defensible" },
@@ -1140,7 +1140,7 @@ export default function PitchPage() {
       </Section>
 
       {/* ───────── CUSTOMER VOICE ───────── */}
-      <Section anchor="voices" eyebrow="What early users say" title={customerVoice.title}>
+      <Section anchor="voices" eyebrow="Illustrative — not real quotes" title={customerVoice.title}>
         <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{customerVoice.intro}</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {customerVoice.quotes.map((q) => (

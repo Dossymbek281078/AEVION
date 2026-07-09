@@ -49,6 +49,10 @@ const RETIRED: Array<{ pattern: RegExp; reason: string }> = [
     pattern: /Seed \$5M/i,
     reason: '"Seed $5M" — retired ask (canonical offer is a $10M returnable advance, not an equity seed)',
   },
+  {
+    pattern: /\b29\b[^\n]{0,20}(product nodes|modules? live|nodes)/i,
+    reason: '"29 … nodes" — stale module count (canonical public count is 37 nodes; import MODULE_NODES from pitchFacts)',
+  },
 ];
 
 describe("pitch numbers — retired figures must not resurface", () => {
@@ -65,4 +69,21 @@ describe("pitch numbers — retired figures must not resurface", () => {
       }
     });
   }
+});
+
+/**
+ * Lock the canonical counts to the registry. If someone adds/removes a module
+ * in aevion-globus-backend/src/data/projects.ts, this fails until pitchFacts is
+ * updated to match — so the single source of truth can't silently drift.
+ */
+describe("pitchFacts — canonical counts stay in sync with the registry", () => {
+  it("MODULE_NODES = 37 (38 registry entries − the globus map shell)", async () => {
+    const { MODULE_NODES } = await import("@/data/pitchFacts");
+    expect(MODULE_NODES).toBe(37);
+  });
+
+  it("LIVE_MODULES = 35 (status:\"live\" in projects.ts)", async () => {
+    const { LIVE_MODULES } = await import("@/data/pitchFacts");
+    expect(LIVE_MODULES).toBe(35);
+  });
 });

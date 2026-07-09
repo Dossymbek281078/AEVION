@@ -161,18 +161,20 @@ export const unitEconomics = {
 export const launchGrowth = {
   title: "The Universe Seat — one price, the whole ecosystem",
   seat: {
-    headline: "$79 / mo",
-    annual: "$63/mo billed annually ($756/yr)",
-    what: "One seat unlocks every module today + everything shipped next — plus a free tier below it.",
+    headline: "$149.99 / mo",
+    annual: "One premium seat — no tiers. Introductory price for the first 6–12 months; rises as the ecosystem matures.",
+    what: "One seat unlocks every module today + everything shipped next. A free tier sits underneath as the on-ramp.",
     anchor:
-      "Priced against the stack, not a single tool. Serious usage on any one tool already runs $100–200/mo " +
-      "(Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working creator stacks several — " +
-      "Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across four logins. AEVION " +
-      "is one seat at $79 — a deep discount to the stack it replaces.",
+      "Priced against the stack, not a single tool — we set the price, Apple-style. Serious usage on any one " +
+      "tool already runs $100–200/mo (Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working " +
+      "creator stacks several — Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across " +
+      "four logins. AEVION is one seat at $149.99 — still below a single premium tool, and a deep discount to " +
+      "the stack it replaces.",
     honesty:
-      "$79 is a proposed premium seat and a repositioning of today's live $49 All-Access (still the " +
-      "published price). Most modules are early MVPs, so \"replaces your stack\" is the promise the " +
-      "price rests on — which is why a free tier sits underneath it to earn the upgrade.",
+      "$149.99 is a proposed single premium seat — today's live product is a 4-tier plan ($0/$19/$29/$49). " +
+      "Most modules are early MVPs and the cross-module agent layer isn't built yet, so \"replaces your stack\" " +
+      "is the promise the price rests on — which is why the intro price + a free tier underneath are there to " +
+      "earn the upgrade before the price rises.",
   },
   // Gross margin / token COGS — the seat bundles AI, so revenue ≠ gross profit.
   economics: {
@@ -199,25 +201,26 @@ export const launchGrowth = {
   assumptions: [
     "Distribution: a launch with Anthropic reaches ~1.5M Claude users over year 1 (a small slice of their base) — the single biggest assumption, and unproven until a deal is signed.",
     "Reach → free signup: 4% (conservative for a cross-promo CTA).",
-    "Free → paid seat: ramps 0.8% (M1) → 1.8% (M6) → 2.5% (M12) as the ecosystem proves out.",
-    "Seat ARPU: $756/yr (annual price — conservative vs the $79/mo list).",
+    "Free → paid seat: ramps 0.4% (M1) → 1.0% (M6) → 1.3% (M12) — premium price + early-MVP depth means cold conversion is deliberately low.",
+    "Seat ARPU: ~$1,500/yr (annual-leaning, conservative vs the $149.99/mo list).",
     "Reach front-loads: 20% lands by M1, 60% by M6, 100% by M12.",
   ],
   // Growth dynamics at the base scenario (1.5M reach).
   rows: [
-    { month: "Month 1", reached: "300K", free: "12K", paid: "~100", arr: "≈$0.08M run-rate" },
-    { month: "Month 6", reached: "900K", free: "36K", paid: "~650", arr: "≈$0.49M run-rate" },
-    { month: "Month 12", reached: "1.5M", free: "60K", paid: "~1,500", arr: "≈$1.13M" },
+    { month: "Month 1", reached: "300K", free: "12K", paid: "~50", arr: "≈$0.08M run-rate" },
+    { month: "Month 6", reached: "900K", free: "36K", paid: "~350", arr: "≈$0.53M run-rate" },
+    { month: "Month 12", reached: "1.5M", free: "60K", paid: "~780", arr: "≈$1.2M" },
   ],
   scenarios: [
-    { label: "Conservative — 250K reach", arr: "≈$0.19M ARR" },
-    { label: "Base — 1.5M reach", arr: "≈$1.13M ARR" },
-    { label: "Aggressive — 8M reach (featured/bundled)", arr: "≈$6.0M ARR" },
+    { label: "Conservative — 250K reach", arr: "≈$0.2M ARR" },
+    { label: "Base — 1.5M reach", arr: "≈$1.2M ARR" },
+    { label: "Aggressive — 8M reach (featured/bundled)", arr: "≈$6.2M ARR" },
   ],
   note:
     "This is a scenario, not a forecast — it stands or falls on the distribution assumption, and no " +
-    "Anthropic deal is signed. The base case (≈$1.13M ARR by month 12) lands on the ≈$0.8M beachhead of " +
-    "the bottom-up model above, so the two independent methods agree — the honest signal for diligence.",
+    "Anthropic deal is signed. Fewer paid seats than a cheaper tier would win, but a higher premium ARPU; " +
+    "the base case (≈$1.2M ARR by month 12) still lands on the ≈$0.8M beachhead of the bottom-up model above, " +
+    "so the two independent methods agree — the honest signal for diligence.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */

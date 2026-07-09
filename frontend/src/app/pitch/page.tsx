@@ -941,6 +941,27 @@ export default function PitchPage() {
         </div>
 
         <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.6, margin: "18px 0 0", fontStyle: "italic" }}>{launchGrowth.note}</p>
+
+        {/* Gross margin / token COGS */}
+        <div
+          style={{
+            marginTop: 22,
+            padding: 20,
+            borderRadius: 14,
+            background: "rgba(15,23,42,0.6)",
+            border: "1px solid rgba(251,191,36,0.28)",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#fbbf24", marginBottom: 10 }}>{launchGrowth.economics.title}</div>
+          <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 8px" }}>{launchGrowth.economics.moat}</p>
+          <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 10px" }}>{launchGrowth.economics.margin}</p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 12.5, color: "#94a3b8", lineHeight: 1.6 }}>
+            {launchGrowth.economics.levers.map((l) => (
+              <li key={l} style={{ marginBottom: 3 }}>{l}</li>
+            ))}
+          </ul>
+          <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, margin: 0, fontStyle: "italic" }}>{launchGrowth.economics.honesty}</p>
+        </div>
       </Section>
 
       {/* ───────── NETWORK EFFECTS ───────── */}

@@ -165,13 +165,35 @@ export const launchGrowth = {
     annual: "$63/mo billed annually ($756/yr)",
     what: "One seat unlocks every module today + everything shipped next — plus a free tier below it.",
     anchor:
-      "Priced against the stack, not a single tool. A working creator already pays Claude ($20) + " +
-      "Midjourney ($30) + ElevenLabs ($22) + Higgsfield ($29) ≈ $100+/mo across four logins. AEVION " +
-      "is one seat at $79 — a discount to the stack it replaces.",
+      "Priced against the stack, not a single tool. Serious usage on any one tool already runs $100–200/mo " +
+      "(Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working creator stacks several — " +
+      "Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across four logins. AEVION " +
+      "is one seat at $79 — a deep discount to the stack it replaces.",
     honesty:
       "$79 is a proposed premium seat and a repositioning of today's live $49 All-Access (still the " +
       "published price). Most modules are early MVPs, so \"replaces your stack\" is the promise the " +
       "price rests on — which is why a free tier sits underneath it to earn the upgrade.",
+  },
+  // Gross margin / token COGS — the seat bundles AI, so revenue ≠ gross profit.
+  economics: {
+    title: "Gross margin & token COGS — revenue is not gross profit",
+    moat:
+      "AEVION already meters every request per user (tokensIn/out across all providers) and routes across " +
+      "a deep provider roster — including free (OpenRouter, Together, Groq, Cerebras) and local (Ollama, " +
+      "LM Studio, $0 marginal) models. A single-vendor AI product cannot arbitrage cost this way.",
+    margin:
+      "At efficient routing (~$0.5/1M blended) and ~15% allowance utilisation, gross margin is ~85–95% " +
+      "across paid tiers (Lite $19/2M · Medium $29/10M · Full $49/50M tokens/mo). The tail risk is a " +
+      "power user maxing the cap on a frontier model — which is why margin depends on two levers, not luck.",
+    levers: [
+      "Efficient default routing — frontier (Opus/GPT-4o) on request or on higher tiers, cheap models by default.",
+      "Enforce the per-tier monthly token cap (metered today; enforcement is a pre-launch fast-follow).",
+      "Overage billing + bring-your-own-key for heavy users — offloads COGS toward zero.",
+    ],
+    honesty:
+      "Today the caps are metered but not fully enforced on paid tiers, and the Anthropic provider still " +
+      "defaults to an expensive model. Both are cheap fixes, but until they ship the ~85–95% margin is a " +
+      "target, not a measured number. Stated plainly so diligence doesn't have to discover it.",
   },
   // Funnel inputs — every one is an assumption, not a claim.
   assumptions: [

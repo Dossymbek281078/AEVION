@@ -167,6 +167,20 @@ function StrategyPanel({ s }: { s: Strategy }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+// One-click showcase: a realistic seed-stage opportunity so a first-time
+// visitor sees a full memo without typing anything.
+const SAMPLE = {
+  name: "NeuroDx",
+  sector: "healthtech",
+  stage: "seed" as (typeof STAGES)[number],
+  geography: "US",
+  askUsd: "6,000,000",
+  description:
+    "FDA-pathway diagnostic that detects early-stage Alzheimer's from a standard retinal scan using a self-supervised vision model, turning any optometrist's chair into a screening point years before symptom onset.",
+  tractionNotes:
+    "$55k MRR across 14 clinics growing 22% MoM, breakthrough-device designation filed, 89% sensitivity vs PET baseline in a 1,200-patient cohort, LTV/CAC 5.1x.",
+};
+
 const SECTION: React.CSSProperties = { border: "1px solid #e2e8f0", borderRadius: 14, padding: 20, background: "#fff", marginBottom: 18 };
 const H2: React.CSSProperties = { margin: "0 0 14px", fontSize: 18, fontWeight: 800, color: "#0f172a" };
 const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" };
@@ -192,19 +206,21 @@ export default function QVenturePage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = useCallback(async () => {
+  // Takes explicit data (not form state) so the sample button can run without
+  // waiting for a setForm re-render — no stale-closure race.
+  const runAnalysis = useCallback(async (data: typeof form) => {
     setError(null);
-    if (!form.name.trim()) { setError("Company / product name is required."); return; }
-    if (form.description.trim().length < 12) { setError("Add a longer description (min 12 characters)."); return; }
+    if (!data.name.trim()) { setError("Company / product name is required."); return; }
+    if (data.description.trim().length < 12) { setError("Add a longer description (min 12 characters)."); return; }
     setLoading(true);
     setResult(null);
     try {
       const payload: Record<string, unknown> = {
-        name: form.name.trim(), sector: form.sector, stage: form.stage,
-        geography: form.geography.trim() || "US", description: form.description.trim(),
-        tractionNotes: form.tractionNotes.trim() || undefined,
+        name: data.name.trim(), sector: data.sector, stage: data.stage,
+        geography: data.geography.trim() || "US", description: data.description.trim(),
+        tractionNotes: data.tractionNotes.trim() || undefined,
       };
-      const ask = parseFloat(form.askUsd.replace(/[^0-9.]/g, ""));
+      const ask = parseFloat(data.askUsd.replace(/[^0-9.]/g, ""));
       if (isFinite(ask) && ask > 0) payload.askUsd = ask;
 
       const res = await fetch(apiUrl("/api/qventure/analyze"), {
@@ -218,7 +234,15 @@ export default function QVenturePage() {
     } finally {
       setLoading(false);
     }
-  }, [form]);
+  }, []);
+
+  const submit = useCallback(() => runAnalysis(form), [runAnalysis, form]);
+
+  const runSample = useCallback(() => {
+    setForm(SAMPLE);
+    runAnalysis(SAMPLE);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [runAnalysis]);
 
   return (
     <>
@@ -281,12 +305,21 @@ export default function QVenturePage() {
               placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
           </div>
           {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
-          <button onClick={submit} disabled={loading} style={{
-            padding: "12px 28px", background: loading ? "#94a3b8" : "#7c3aed", color: "#fff", border: "none",
-            borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
-          }}>
-            {loading ? "Analyzing…" : "Run analysis"}
-          </button>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={submit} disabled={loading} style={{
+              padding: "12px 28px", background: loading ? "#94a3b8" : "#7c3aed", color: "#fff", border: "none",
+              borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
+            }}>
+              {loading ? "Analyzing…" : "Run analysis"}
+            </button>
+            <button onClick={runSample} disabled={loading} type="button" style={{
+              padding: "12px 22px", background: "#fff", color: "#7c3aed", border: "1px solid #ddd6fe",
+              borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer",
+            }}>
+              ✨ See a sample analysis
+            </button>
+            <span style={{ fontSize: 12.5, color: "#94a3b8" }}>No input needed — loads a real seed-stage case.</span>
+          </div>
         </div>
 
         {/* Result */}

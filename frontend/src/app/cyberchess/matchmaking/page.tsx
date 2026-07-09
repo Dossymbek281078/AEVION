@@ -117,6 +117,14 @@ export default function CyberChessMatchmakingPage() {
     const fide = loadEstimateFromStorage();
     setFideEstimate(fide);
     setRating(getStoredRating());
+    // Rematch deep-link: /cyberchess/matchmaking?tc=180+0 preselects time control.
+    try {
+      const tc = new URLSearchParams(window.location.search).get("tc");
+      const allowed = ["60+0", "180+0", "300+5", "600+10", "1800+0"];
+      if (tc && allowed.includes(tc)) setTimeControl(tc as TimeControl);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // Fetch persisted Glicko rating for the current speed; prefer it (authoritative,
@@ -375,6 +383,20 @@ export default function CyberChessMatchmakingPage() {
           <p className="text-slate-400">
             Подберём живого игрока с похожим рейтингом ({rating - 150}–{rating + 150}) и тем же контролем времени.
           </p>
+          <nav className="flex flex-wrap gap-2 pt-1">
+            <a
+              href="/cyberchess/leaderboard"
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              🏆 Лидерборд
+            </a>
+            <a
+              href="/cyberchess/history"
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              📜 История матчей
+            </a>
+          </nav>
         </header>
 
         {/* Settings card */}

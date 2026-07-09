@@ -298,7 +298,7 @@ export async function getLeaderboard(speed: string, limit = 50): Promise<RatingR
 export async function getHistory(userId: string, limit = 30): Promise<any[]> {
   return q(
     `SELECT "id","whiteUserId","whiteName","blackUserId","blackName","timeControl","speed",
-            "status","result","termination","ply","whiteRatingBefore","blackRatingBefore",
+            "status","result","termination","ply","movesSan","whiteRatingBefore","blackRatingBefore",
             "whiteRatingAfter","blackRatingAfter","createdAt","endedAt"
        FROM "CyberMatch"
       WHERE ("whiteUserId"=$1 OR "blackUserId"=$1) AND "status"='ended'

@@ -199,7 +199,7 @@ export default function PartnerPage() {
           Innovation pipeline — что строим с командой
         </div>
         <h2 style={{ fontSize: "clamp(26px, 4vw, 42px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 12 }}>
-          5 продуктов с $490M ARR потенциалом к году 5.
+          5 продуктов · иллюстративный потенциал ~$490M ARR к году 5 (компания pre-revenue — не прогноз).
         </h2>
         <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 36, lineHeight: 1.5 }}>
           Каждый из них сегодня — либо в проде, либо с готовой базой. Без команды — прототипы.
@@ -302,7 +302,7 @@ export default function PartnerPage() {
           </div>
           <div style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, fontSize: 14, color: "#94a3b8", lineHeight: 1.6 }}>
             Партнёрство, не выкуп: $10M возвратным авансом + ресурсы. При $360-490M ARR в год 5 доля партнёра <strong style={{ color: "#10b981" }}>49% дохода = $176-240M/год</strong> · <strong style={{ color: "#3b82f6" }}>основатель 51% остаётся ведущим</strong>.
-            Партнёр платит в основном ресурсами — большой чек не нужен, большие деньги приходят по факту роста. Проекции ARR — forward-looking, не гарантия.
+            Партнёр платит в основном ресурсами — большой чек не нужен, большие деньги приходят по факту роста. Проекции ARR — иллюстративные, forward-looking, не прогноз и не гарантия: компания сейчас pre-revenue ($0 выручки).
           </div>
         </div>
       </section>

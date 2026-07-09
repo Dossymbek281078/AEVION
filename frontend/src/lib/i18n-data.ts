@@ -6218,7 +6218,7 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "referralLanding.cta.continue": "Continue to my wallet",
   "referralLanding.cta.login": "I already have an account",
   "referralLanding.about.label": "About AEVION",
-  "referralLanding.about.body": "Trust-graph wallet, automatic royalties on creative IP, social payments, gated credit, and an 18-badge achievement system. 12 live MVPs and counting.",
+  "referralLanding.about.body": "Trust-graph wallet, automatic royalties on creative IP, social payments, gated credit, and an 18-badge achievement system. 37 modules deployed, about a dozen feature-complete.",
   "referralLanding.backHome": "Back to AEVION home",
   "referralLanding.bad.title": "Invalid invite link",
   "referralLanding.bad.body": "The referral code is missing or malformed. Ask your inviter to share their original link.",

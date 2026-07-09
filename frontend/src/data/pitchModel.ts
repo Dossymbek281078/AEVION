@@ -74,7 +74,7 @@ export const thesis = {
 } as const;
 
 export const market = {
-  title: "$340B addressable market — three deep buckets, one platform",
+  title: "Three large markets — directional TAM, not a revenue claim",
   buckets: [
     {
       name: "IP licensing & enforcement",
@@ -94,7 +94,62 @@ export const market = {
   ],
   closing:
     "We do not pick one bucket — the same Trust Graph is sold three times to three different buyers. " +
-    "Cross-sell is a side-effect of the architecture, not a feature.",
+    "Cross-sell is a side-effect of the architecture, not a feature. These are top-down category TAM " +
+    "estimates for context, not a revenue forecast: AEVION is pre-revenue today, and the capturable " +
+    "SAM/SOM is a fraction, sized bottom-up in the data room.",
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Unit economics — honest bottom-up (real prices × labelled assumptions)      */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const unitEconomics = {
+  title: "Bottom-up revenue — three flagships, transparent assumptions",
+  intro:
+    "AEVION is pre-revenue. Instead of a top-down forecast, here is a conservative bottom-up model " +
+    "for three flagship modules, built on real published prices and explicit, labelled assumptions. " +
+    "Every input is an assumption you can challenge — not a claim. Beachhead = first paying cohort; " +
+    "Regional = a 3–5-year KZ / CIS / MENA reach.",
+  flagships: [
+    {
+      module: "QBuild — construction & SME hiring",
+      market: "KZ → CIS. The founder's home market (construction-trust operator).",
+      price: "$49/mo Pro (~$470/yr annual) — undercuts HH's ~$100+/mo résumé access",
+      assumptions: [
+        "KZ has 100k+ active construction/SME employers; freemium reach ~5%",
+        "Free → Pro conversion ~2–3% (conservative for vertical SaaS)",
+      ],
+      beachhead: { unit: "500 paying employers", arr: "$235K" },
+      regional: { unit: "5,000 paying employers", arr: "$2.35M" },
+    },
+    {
+      module: "Ecosystem All-Access",
+      market: "Creators & professionals wanting IP + wallet + AI in one place.",
+      price: "$49/mo ($39/mo annual = $468/yr) — the real published All-Access price",
+      assumptions: [
+        "Consumer subscription, converts off free ecosystem usage",
+        "Distribution-gated — modelled at modest penetration",
+      ],
+      beachhead: { unit: "1,000 subscribers", arr: "$468K" },
+      regional: { unit: "10,000 subscribers", arr: "$4.68M" },
+    },
+    {
+      module: "QCoreAI — AI API for gov/enterprise",
+      market: "Compliance-friendly AI 'last mile' in KZ / UZ / AZ.",
+      price: "Usage-based: provider token cost + margin; free 100k tokens/mo",
+      assumptions: [
+        "B2B usage-based; average paying-org spend modelled conservatively",
+        "~20–30% gross margin over provider token cost",
+      ],
+      beachhead: { unit: "20 orgs × ~$500/mo", arr: "$120K" },
+      regional: { unit: "200 orgs × ~$1k/mo", arr: "$2.4M" },
+    },
+  ],
+  totals: { beachhead: "≈ $0.8M ARR", regional: "≈ $9.4M ARR" },
+  note:
+    "Three flagships only — the other 34 modules are upside, not in this figure. Deliberately modest " +
+    "and defensible: a first-question-of-due-diligence model, not a hockey stick. Market-size and " +
+    "conversion inputs are the assumptions most worth challenging.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -191,7 +246,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "QSign is the integrity guarantee that makes the Trust Graph trustworthy. Without it, registry entries are claims, not proofs.",
     proof: ["Live shield/shard count", "/api/qsign/sign + /verify", "Demo-ready payload editor"],
-    valueLine: "Compliance/audit revenue line on its own (~$8B HSM and signing market) — bundled here at zero marginal cost.",
+    valueLine: "Compliance/audit revenue line on its own (the multi-billion HSM and e-signing market) — bundled here at zero marginal cost.",
   },
   {
     id: "aevion-ip-bureau",
@@ -242,7 +297,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "Bank is the economic exhaust of every other module. Royalties, prizes, awards payouts and tournament wins all settle here — making Bank the single most expensive module to leave.",
     proof: ["18 shipping features + 5 Autopilot rules", "8-factor Trust Score with radar visualisation", "Multilingual EN/RU/KZ shipping today", "Build green, /bank static-rendered"],
-    valueLine: "Bank turns the platform from 'tools you visit' into 'a balance you check daily' — the daily-use root of $100+ ARPU.",
+    valueLine: "Bank turns the platform from 'tools you visit' into 'a balance you check daily' — the daily-use retention anchor of the ecosystem.",
   },
   {
     id: "qcoreai",
@@ -445,16 +500,18 @@ export const gtm = {
 } as const;
 
 export const financials = {
-  title: "Trajectory — modelled at $2B+ ARR by year 5",
+  title: "Illustrative upside trajectory — aspiration, not the base case",
   rows: [
     { year: "Year 1", arr: "$0.5M", drivers: "Creator wedge, paid Bureau certs, AI-music Awards." },
     { year: "Year 2", arr: "$8M", drivers: "Bank monetisation, Trust-tier subscriptions, IP-Bureau B2B deals." },
     { year: "Year 3", arr: "$60M", drivers: "Compliance line live, 3 enterprise pilots → contracts, QPayNet embedded." },
     { year: "Year 4", arr: "$420M", drivers: "Cross-vertical (Health/Kids/Persona) live; international IP partnerships." },
-    { year: "Year 5", arr: "$2.0B+", drivers: "Open APIs become the default trust rail; royalty rake on $50B+ flow." },
   ],
   disclaimer:
-    "Modelled, not promised. Inputs: comparable SaaS take rates, observed creator-economy GMV, and historical IP-bureau cert pricing.",
+    "Illustrative aspiration — not the base case and not a forecast. The company is pre-revenue ($0) today. " +
+    "The defensible base case is the bottom-up model above (≈$0.8M beachhead → ≈$9.4M regional ARR from three flagships); " +
+    "this curve is top-down upside if the ecosystem flywheel compounds. Inputs: comparable SaaS take rates, " +
+    "observed creator-economy GMV, historical IP-bureau cert pricing.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */

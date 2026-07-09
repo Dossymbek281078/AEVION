@@ -2867,6 +2867,42 @@ export default function CyberChessPage(){
     }catch{/* anti-cheat is optional — never break game-end */}
   },[over,pCol]);
 
+  /* ── Online match: finalize on backend + real Glicko rating delta ──────
+     Онлайн-матч (?matchId=) раньше НЕ вызывал /end → рейтинги реальных партий
+     не обновлялись. Теперь при завершении партии постим результат, backend
+     считает Glicko-2 и отдаёт ratingDelta, а мы показываем его тем же каналом
+     ratDelta (модалка + плавающий чип). Идемпотентно на бэке (firstEnd). */
+  const mmEndSentRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over||!matchmakingId)return;
+    const key=`${matchmakingId}|${gameStartTimeRef.current}`;
+    if(mmEndSentRef.current===key)return;
+    mmEndSentRef.current=key;
+    const overLow=over.toLowerCase();
+    const winHints=["you win","победа!","трофей","цель достигнута","сдался — вы победили","timed out"];
+    const lossHints=["поражение","you resigned","resigned","time out","взорван","ферзь пал","you lost"];
+    const drawHints=["draw","stalemate","ничья","repetition","insufficient","50-move"];
+    let result:"white"|"black"|"draw"|null=null;
+    if(drawHints.some(h=>overLow.includes(h)))result="draw";
+    else if(winHints.some(h=>overLow.includes(h)))result=pCol==="w"?"white":"black";
+    else if(lossHints.some(h=>overLow.includes(h)))result=pCol==="w"?"black":"white";
+    if(!result)return; // не смогли определить исход — не финализируем
+    const userId=(typeof window!=="undefined")?(localStorage.getItem("cyberchess.userId")||"anon"):"anon";
+    fetch(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/end`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({userId,result,reason:over}),
+    }).then(r=>r.json()).then(data=>{
+      const rd=data?.ratingDelta;
+      if(!rd)return; // оффлайн/без БД — тихо
+      const mine=pCol==="w"?rd.white:rd.black;
+      if(!mine||typeof mine.after!=="number")return;
+      const d=Math.round(mine.after-mine.before);
+      sRatDelta({d,newRat:Math.round(mine.after),ts:Date.now()});
+      try{localStorage.setItem("cyberchess.rating",String(Math.round(mine.after)))}catch{}
+      window.setTimeout(()=>sRatDelta(null),4200);
+    }).catch(()=>{});
+  },[over,matchmakingId,pCol]);
+
   /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */
   const autoAnalysedRef=useRef<string|null>(null);
   useEffect(()=>{
@@ -13468,7 +13504,7 @@ ${question.trim()}`;
                     const myBlunders=analysis.filter((a,i)=>(pCol==="w"?i%2===0:i%2===1)&&(a.quality==="blunder"||a.quality==="mistake"));
                     const moves=hist.slice(0,30).join(" ");
                     const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((_,k)=>Math.floor(k/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
-                    const res=await fetch("/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
+                    const res=await fetch("/api-backend/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
                     const d=await res.json().catch(()=>null);
                     sAiReview({text:d?.reply||"Тренер не отвечает — попробуй позже.",loading:false});
                   }catch{sAiReview({text:"Тренер недоступен.",loading:false});}

@@ -91,11 +91,14 @@ import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
+import { qmelaninRouter } from "./routes/qmelanin";
+import { qrenewRouter } from "./routes/qrenew";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
+import { qventureRouter } from "./routes/qventure";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
@@ -923,6 +926,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/kids-ai", "kids-ai-content"],
   ["/api/voice-of-earth", "voice-of-earth"],
   ["/api/startupx", "startup-exchange"],
+  ["/api/qventure", "qventure"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
   ["/api/qevents", "qevents"],
@@ -1080,12 +1084,18 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
+// QMelanin — anti-graying engine (deterministic, DB-free)
+app.use("/api/qmelanin", qmelaninRouter);
+// QRenew — cellular-renewal program (biological age + tiered stack)
+app.use("/api/qrenew", qrenewRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
 // MapReality — civic signals map (MVP: signals + supports)
 app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
+// QVenture — AI investment analyst: quant score + 4-role council + entry strategy
+app.use("/api/qventure", qventureRouter);
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
 // Voice of Earth — multilang music tracks + voting

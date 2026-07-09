@@ -52,13 +52,13 @@ export default function PitchOgImage() {
             <span style={{ color: "#5eead4" }}>for digital creation</span>
           </div>
           <div style={{ fontSize: 26, color: "#cbd5e1", maxWidth: 900, lineHeight: 1.4, display: "flex" }}>
-            37 product nodes · 12 live MVPs · one Trust Graph
+            37 modules deployed · 12 feature-complete · one Trust Graph
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 28 }}>
           <OgStat value="$340B" label="addressable market" />
-          <OgStat value="$2B+" label="modelled ARR · year 5" />
+          <OgStat value="≈$9.4M" label="modelled ARR · bottom-up" />
           <OgStat value="$10M" label="returnable advance" />
           <OgStat value="12" label="live MVPs today" />
         </div>

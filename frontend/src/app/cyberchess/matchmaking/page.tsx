@@ -72,6 +72,18 @@ function getStoredRating(): number {
   return Math.max(100, Math.min(3000, Math.round(v)));
 }
 
+// Speed class from time control — mirrors backend cyberchessMatchStore.speedOf
+// (lichess-style: estimate = base + 40*inc). Rating is tracked per speed.
+function speedOf(tc: string): string {
+  const m = /^(\d+)\+(\d+)$/.exec(tc);
+  if (!m) return "blitz";
+  const est = parseInt(m[1], 10) + 40 * parseInt(m[2], 10);
+  if (est < 180) return "bullet";
+  if (est < 480) return "blitz";
+  if (est < 1500) return "rapid";
+  return "classical";
+}
+
 function formatDuration(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const mm = Math.floor(s / 60).toString().padStart(2, "0");
@@ -86,6 +98,11 @@ export default function CyberChessMatchmakingPage() {
   const [rating, setRating] = useState<number>(1500);
   const [fideEstimate, setFideEstimate] = useState<number | null>(null);
   const [displayName, setDisplayName] = useState<string>("Игрок");
+  // Persisted server rating for the current speed (survives redeploy). null =
+  // not loaded / no ranked games yet → fall back to local estimate.
+  const [serverRating, setServerRating] = useState<
+    { rating: number; rd: number; games: number; provisional: boolean } | null
+  >(null);
   const [state, setState] = useState<QueueState>({ phase: "idle" });
   const userIdRef = useRef<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,7 +117,51 @@ export default function CyberChessMatchmakingPage() {
     const fide = loadEstimateFromStorage();
     setFideEstimate(fide);
     setRating(getStoredRating());
+    // Rematch deep-link: /cyberchess/matchmaking?tc=180+0 preselects time control.
+    try {
+      const tc = new URLSearchParams(window.location.search).get("tc");
+      const allowed = ["60+0", "180+0", "300+5", "600+10", "1800+0"];
+      if (tc && allowed.includes(tc)) setTimeControl(tc as TimeControl);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  // Fetch persisted Glicko rating for the current speed; prefer it (authoritative,
+  // survives redeploy) once the player has ranked games. Silent fallback otherwise.
+  useEffect(() => {
+    const userId = userIdRef.current || getOrCreateUserId();
+    const speed = speedOf(timeControl);
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api-backend/api/cyberchess/matchmaking/rating?userId=${encodeURIComponent(userId)}&speed=${speed}`,
+          { cache: "no-store" },
+        );
+        const data = await r.json();
+        if (!alive || !data?.ok) return;
+        const row = Array.isArray(data.ratings) ? data.ratings[0] : null;
+        if (row && Number(row.games) > 0) {
+          const rr = Math.round(Number(row.rating));
+          setServerRating({
+            rating: rr,
+            rd: Math.round(Number(row.rd)),
+            games: Number(row.games),
+            provisional: Number(row.rd) > 110,
+          });
+          setRating(Math.max(100, Math.min(3000, rr)));
+        } else {
+          setServerRating(null); // no ranked games in this speed yet
+        }
+      } catch {
+        if (alive) setServerRating(null); // offline → keep local estimate
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [timeControl]);
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
@@ -322,6 +383,20 @@ export default function CyberChessMatchmakingPage() {
           <p className="text-slate-400">
             Подберём живого игрока с похожим рейтингом ({rating - 150}–{rating + 150}) и тем же контролем времени.
           </p>
+          <nav className="flex flex-wrap gap-2 pt-1">
+            <a
+              href="/cyberchess/leaderboard"
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              🏆 Лидерборд
+            </a>
+            <a
+              href="/cyberchess/history"
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              📜 История матчей
+            </a>
+          </nav>
         </header>
 
         {/* Settings card */}
@@ -372,6 +447,15 @@ export default function CyberChessMatchmakingPage() {
             <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
               <label className="text-sm text-slate-400">Твой рейтинг</label>
               <div className="flex items-center gap-2">
+                {serverRating && (
+                  <span
+                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · провизорный (мало партий)" : ""}`}
+                    className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30"
+                  >
+                    ♟ {speedOf(timeControl)} {serverRating.rating}
+                    {serverRating.provisional ? "?" : ""} · {serverRating.games} партий
+                  </span>
+                )}
                 {fideEstimate !== null && (
                   <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
                     FIDE ~{fideEstimate}

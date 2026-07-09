@@ -19,6 +19,7 @@ import {
   risks,
   team,
   thesis,
+  unitEconomics,
   useCases,
   videoReels,
   type LaunchStage,
@@ -78,6 +79,7 @@ const TOC = [
   { id: "pillars", label: "Pillars" },
   { id: "videos", label: "Walkthroughs" },
   { id: "market", label: "Market" },
+  { id: "unit-economics", label: "Revenue model" },
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
   { id: "use-cases", label: "Use cases" },
@@ -88,7 +90,7 @@ const TOC = [
   { id: "press", label: "Partners & press" },
   { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
-  { id: "financials", label: "Financials" },
+  { id: "financials", label: "Upside scenario" },
   { id: "team", label: "Team" },
 ];
 
@@ -412,7 +414,7 @@ export default function PitchPage() {
           >
             <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
-            <HeroStat value="$2B+" unit="modelled ARR" hint="by year 5" />
+            <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
             <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
           </div>
 
@@ -814,6 +816,50 @@ export default function PitchPage() {
         >
           {market.closing}
         </p>
+      </Section>
+
+      {/* ───────── UNIT ECONOMICS ───────── */}
+      <Section anchor="unit-economics" eyebrow="Bottom-up, not top-down" title={unitEconomics.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 24px", maxWidth: 820 }}>
+          {unitEconomics.intro}
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {unitEconomics.flagships.map((f) => (
+            <div key={f.module} style={{ padding: 20, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", marginBottom: 6 }}>{f.module}</div>
+              <div style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.5, marginBottom: 10 }}>{f.market}</div>
+              <div style={{ fontSize: 12.5, color: "#cbd5e1", lineHeight: 1.5, marginBottom: 12 }}>{f.price}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b", marginBottom: 6 }}>Assumptions</div>
+              <ul style={{ margin: "0 0 14px", paddingLeft: 16 }}>
+                {f.assumptions.map((a) => (
+                  <li key={a} style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5, marginBottom: 3 }}>{a}</li>
+                ))}
+              </ul>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1, padding: "10px 12px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b" }}>Beachhead</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#10b981", lineHeight: 1.15 }}>{f.beachhead.arr}</div>
+                  <div style={{ fontSize: 10.5, color: "#64748b" }}>{f.beachhead.unit}</div>
+                </div>
+                <div style={{ flex: 1, padding: "10px 12px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b" }}>Regional (3–5 yr)</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#3b82f6", lineHeight: 1.15 }}>{f.regional.arr}</div>
+                  <div style={{ fontSize: 10.5, color: "#64748b" }}>{f.regional.unit}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", margin: "22px 0 0", padding: "18px 20px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b" }}>Blended · 3 flagships</div>
+            <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 4 }}>
+              Beachhead <strong style={{ color: "#10b981" }}>{unitEconomics.totals.beachhead}</strong>
+              {" · "}Regional <strong style={{ color: "#3b82f6" }}>{unitEconomics.totals.regional}</strong>
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 260, fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55 }}>{unitEconomics.note}</div>
+        </div>
       </Section>
 
       {/* ───────── NETWORK EFFECTS ───────── */}
@@ -1560,7 +1606,7 @@ export default function PitchPage() {
             </Link>
           </div>
           <p style={{ marginTop: 40, fontSize: 12, color: "#475569" }}>
-            AEVION · 37 nodes · 12 live MVPs · one Trust Graph · {new Date().getFullYear()}
+            AEVION · 37 modules · 12 feature-complete · one Trust Graph · {new Date().getFullYear()}
           </p>
         </div>
       </section>

@@ -14,7 +14,7 @@
 //   • Sort dropdown: fill (players/maxPlayers) | startsAt date | prize
 //   • Live indicator with pulse dot for status === "live" tournaments
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 const T = {
@@ -127,30 +127,26 @@ export default function TournamentsHubPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>(MOCK_FALLBACK);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState<boolean>(false);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      if (data?.ok && Array.isArray(data.tournaments)) setTournaments(data.tournaments);
+    } catch (e) {
+      setErrorMsg((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const fetchList = async () => {
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = await r.json();
-        if (!cancelled && data?.ok && Array.isArray(data.tournaments)) {
-          setTournaments(data.tournaments);
-        }
-      } catch (e) {
-        if (!cancelled) setErrorMsg((e as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchList();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void reload();
+  }, [reload]);
 
   const filtered = useMemo(() => {
     const arr = tournaments.filter((t) => {
@@ -206,22 +202,41 @@ export default function TournamentsHubPage() {
 
       {/* Header */}
       <header style={{ marginBottom: 32 }}>
-        <h1
-          style={{
-            fontSize: 36,
-            margin: 0,
-            letterSpacing: -0.5,
-            color: T.text,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>🏆</span>
-          <span>Турниры AEVION</span>
-        </h1>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <h1
+            style={{
+              fontSize: 36,
+              margin: 0,
+              letterSpacing: -0.5,
+              color: T.text,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span>🏆</span>
+            <span>Турниры AEVION</span>
+          </h1>
+          <button
+            onClick={() => setCreateOpen(true)}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: `linear-gradient(135deg, ${T.accent}, ${T.blue})`,
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: `0 4px 16px ${T.accent}44`,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ＋ Создать турнир
+          </button>
+        </div>
         <p style={{ color: T.dim, marginTop: 8, fontSize: 14 }}>
-          Single elimination, Swiss или round-robin — выбирай формат и регистрируйся.
+          Single elimination, Swiss или round-robin — создай свой турнир или регистрируйся в чужой.
         </p>
         {loading && (
           <div style={{ color: T.faint, marginTop: 8, fontSize: 12 }}>Загружаем список...</div>
@@ -232,6 +247,16 @@ export default function TournamentsHubPage() {
           </div>
         )}
       </header>
+
+      {createOpen && (
+        <CreateTournamentModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            void reload();
+          }}
+        />
+      )}
 
       {/* Filters */}
       <section
@@ -708,4 +733,279 @@ function btnPrimary(color: string): React.CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
   };
+}
+
+// ── Create-tournament modal ────────────────────────────────────────
+// POSTs to /api-backend/api/cyberchess-tournaments/ and, on success, closes
+// and refreshes the list. Any player can spin up a joinable event.
+function CreateTournamentModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [format, setFormat] = useState<Format>("single_elimination");
+  const [timeControl, setTimeControl] = useState<TimeControl>("blitz");
+  const [maxPlayers, setMaxPlayers] = useState(8);
+  const [eloMin, setEloMin] = useState(0);
+  const [eloMax, setEloMax] = useState(3000);
+  const [prizeChessy, setPrizeChessy] = useState(0);
+  const [startsAt, setStartsAt] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    background: T.bg,
+    border: `1px solid ${T.border}`,
+    borderRadius: 8,
+    padding: "9px 11px",
+    color: T.text,
+    fontSize: 14,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: T.faint,
+    marginBottom: 5,
+  };
+
+  const submit = async () => {
+    if (title.trim().length < 3) {
+      setErr("Название минимум 3 символа");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    let userId = "";
+    let displayName = "";
+    try {
+      userId = window.localStorage.getItem("cyberchess.userId") || "";
+      displayName = window.localStorage.getItem("cyberchess.displayName") || "";
+    } catch {
+      /* ignore */
+    }
+    try {
+      const r = await fetch("/api-backend/api/cyberchess-tournaments/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          format,
+          timeControl,
+          maxPlayers,
+          eloMin,
+          eloMax,
+          prizeChessy,
+          startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+          description: description.trim() || undefined,
+          userId: userId || undefined,
+          displayName: displayName || undefined,
+        }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data?.ok) {
+        throw new Error(data?.hint || data?.error || `HTTP ${r.status}`);
+      }
+      onCreated();
+    } catch (e) {
+      setErr((e as Error).message || "Не удалось создать турнир");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(3,6,15,0.78)",
+        backdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 16,
+          padding: 24,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 22, color: T.text }}>＋ Новый турнир</h2>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", color: T.faint, fontSize: 20, cursor: "pointer" }}
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
+        </div>
+        <p style={{ color: T.dim, fontSize: 13, marginTop: 0, marginBottom: 18 }}>
+          Твой турнир появится в списке и будет открыт для регистрации других игроков.
+        </p>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Название</label>
+          <input
+            style={inputStyle}
+            value={title}
+            maxLength={80}
+            placeholder="Напр. Пятничный блиц"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Формат</label>
+            <select style={inputStyle} value={format} onChange={(e) => setFormat(e.target.value as Format)}>
+              <option value="single_elimination">Single elimination</option>
+              <option value="swiss">Швейцарка</option>
+              <option value="round_robin">Round-robin</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Контроль времени</label>
+            <select
+              style={inputStyle}
+              value={timeControl}
+              onChange={(e) => setTimeControl(e.target.value as TimeControl)}
+            >
+              <option value="blitz">Блиц</option>
+              <option value="rapid">Рапид</option>
+              <option value="classic">Классика</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Игроков</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={maxPlayers}
+              min={2}
+              max={128}
+              onChange={(e) => setMaxPlayers(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>ELO мин</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={eloMin}
+              min={0}
+              max={3000}
+              onChange={(e) => setEloMin(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>ELO макс</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={eloMax}
+              min={0}
+              max={3000}
+              onChange={(e) => setEloMax(Number(e.target.value))}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Приз (Chessy)</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={prizeChessy}
+              min={0}
+              onChange={(e) => setPrizeChessy(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Старт (необязательно)</label>
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={labelStyle}>Описание (необязательно)</label>
+          <textarea
+            style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
+            value={description}
+            maxLength={300}
+            placeholder="Пара слов о турнире"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        {err && (
+          <div style={{ color: T.red, fontSize: 13, marginBottom: 12 }}>⚠ {err}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: `1px solid ${T.border}`,
+              background: "transparent",
+              color: T.dim,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Отмена
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy}
+            style={{
+              padding: "10px 22px",
+              borderRadius: 10,
+              border: "none",
+              background: busy ? T.faint : `linear-gradient(135deg, ${T.accent}, ${T.blue})`,
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: busy ? "wait" : "pointer",
+            }}
+          >
+            {busy ? "Создаём…" : "Создать турнир"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

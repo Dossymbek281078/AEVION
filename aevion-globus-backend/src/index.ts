@@ -1158,6 +1158,23 @@ const httpServer = app.listen(PORT, () => {
   startWebhookWorker();
 });
 
+// Last-resort process-level backstops. Express 5 auto-forwards async request-
+// handler rejections to the error middleware, but a throw inside a setInterval/
+// timer callback (e.g. the 3s matchmaking pairing scan) or a stray unhandled
+// promise rejection bypasses Express entirely — without these, one such throw
+// terminates the whole backend and takes every AEVION module down with it.
+// Policy: log + capture, NEVER exit. A single bad tick must not kill the process.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+  try { captureException(err, { where: "uncaughtException" }); } catch { /* never throw from the backstop */ }
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+  try {
+    captureException(reason instanceof Error ? reason : new Error(String(reason)), { where: "unhandledRejection" });
+  } catch { /* never throw from the backstop */ }
+});
+
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
 // but lets clients interject mid-run guidance on the same connection.
 attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");

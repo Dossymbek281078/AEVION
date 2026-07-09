@@ -239,6 +239,28 @@ export async function finalizeMatch(
   if (!dbReady && !dbInitTried) await ensureDb();
   if (!dbReady) return null;
 
+  // DB-layer idempotency: if this match row is already finalized, return the
+  // stored deltas WITHOUT re-applying rating changes. Guards against double-
+  // finalize corrupting Glicko-2 (the in-memory MATCHES guard is volatile and
+  // is wiped on process restart while the DB row persists).
+  const existing = await q(
+    `SELECT "status","whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
+       FROM "CyberMatch" WHERE "id"=$1`,
+    [matchId],
+  );
+  const prior = existing?.[0];
+  if (prior && prior.status === "ended") {
+    const wb = Number(prior.whiteRatingBefore), wa = Number(prior.whiteRatingAfter);
+    const bb = Number(prior.blackRatingBefore), ba = Number(prior.blackRatingAfter);
+    if ([wb, wa, bb, ba].every(Number.isFinite)) {
+      return {
+        white: { before: Math.round(wb), after: Math.round(wa) },
+        black: { before: Math.round(bb), after: Math.round(ba) },
+      };
+    }
+    return null; // finalized but deltas unknown — do not double-apply
+  }
+
   const speed = speedOf(info.timeControl);
   const wRat = await getRating(info.whiteUserId, speed);
   const bRat = await getRating(info.blackUserId, speed);

@@ -132,11 +132,16 @@ function tryWriteToDisk(): void {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+    // Atomic write: serialize to a temp file then rename over the target, so a
+    // crash/redeploy mid-write can never leave a truncated JSON that silently
+    // falls back to seed fixtures (losing every registration/result).
+    const tmp = `${DATA_FILE}.tmp`;
     fs.writeFileSync(
-      DATA_FILE,
+      tmp,
       JSON.stringify({ tournaments: TOURNAMENTS }, null, 2),
       "utf-8",
     );
+    fs.renameSync(tmp, DATA_FILE);
   } catch (e) {
     console.warn(
       "[cyberchess-tournaments] persistence disabled (write failed):",

@@ -27,9 +27,48 @@ import { listSectors } from "../lib/qventure/sectors";
 const captureQVentureError = makeServiceCapture("qventure");
 
 const pool = getPool();
+
+// Canonical public showcase — a stable, shareable example report. Persisted
+// once under a fixed id so "See a live example →" never breaks across restarts.
+const DEMO_ID = "demo-neurodx";
+const DEMO_INPUT: AnalysisInput = {
+  name: "NeuroDx",
+  sector: "healthtech",
+  stage: "seed",
+  geography: "US",
+  askUsd: 6_000_000,
+  description:
+    "FDA-pathway diagnostic that detects early-stage Alzheimer's from a standard retinal scan using a self-supervised vision model, turning any optometrist's chair into a screening point years before symptom onset.",
+  tractionNotes:
+    "$55k MRR across 14 clinics growing 22% MoM, breakthrough-device designation filed, 89% sensitivity vs PET baseline in a 1,200-patient cohort, LTV/CAC 5.1x.",
+};
+
+async function ensureDemoAnalysis(): Promise<void> {
+  try {
+    if (await getById(DEMO_ID)) return; // already seeded
+    const engineResult = analyze(DEMO_INPUT);
+    const council = await runCouncil(DEMO_INPUT, engineResult);
+    await persist({
+      id: DEMO_ID,
+      name: DEMO_INPUT.name,
+      sector: engineResult.sector.id,
+      stage: DEMO_INPUT.stage,
+      geography: DEMO_INPUT.geography ?? "US",
+      askUsd: DEMO_INPUT.askUsd ?? null,
+      composite: engineResult.composite,
+      verdict: engineResult.verdict,
+      result: { ...engineResult, council },
+      contentHash: contentHash(DEMO_INPUT),
+      visibility: "public",
+      createdAt: nowIso(),
+    });
+  } catch { /* best-effort — demo link degrades gracefully to not_found */ }
+}
+
 (async () => {
   try { await ensureQVentureTables(pool); }
   catch { /* silent — in-memory fallback active */ }
+  void ensureDemoAnalysis();
 })();
 
 // ── Limiters ────────────────────────────────────────────────────────────────

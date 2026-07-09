@@ -59,4 +59,7 @@ export const IS_PRE_REVENUE = true;
 export const UNIVERSE_SEAT_MONTHLY = "$149.99";
 export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,500/yr"; // effective ARPU used in the growth model
 export const UNIVERSE_SEAT_INTRO_NOTE = "Introductory price for the first 6–12 months — may rise as the ecosystem matures.";
-export const LIVE_ALL_ACCESS_MONTHLY = "$49"; // what the live product charges today (4-tier: $0/19/29/49)
+// Live plan is now 5-tier: Free / Lite $19 / Medium $29 / Full $49 / Universe(pro) $149.99.
+// The $149.99 "Universe" tier (id "pro") is defined in the backend pricing registry
+// (aevion-globus-backend/src/data/pricing.ts); its checkout goes live once its Gumroad product exists.
+export const LIVE_TOP_TIER_MONTHLY = "$49"; // highest tier with live checkout today (Full)

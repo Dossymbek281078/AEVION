@@ -60,7 +60,7 @@ checkoutRouter.post("/session", async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
 
-    if (!body.tierId || !["free", "lite", "medium", "full", "enterprise"].includes(body.tierId)) {
+    if (!body.tierId || !["free", "lite", "medium", "full", "pro", "enterprise"].includes(body.tierId)) {
       return res.status(400).json({ error: "invalid_tier" });
     }
     const tier = getTier(body.tierId)!;

@@ -171,10 +171,11 @@ export const launchGrowth = {
       "four logins. AEVION is one seat at $149.99 — still below a single premium tool, and a deep discount to " +
       "the stack it replaces.",
     honesty:
-      "$149.99 is a proposed single premium seat — today's live product is a 4-tier plan ($0/$19/$29/$49). " +
-      "Most modules are early MVPs and the cross-module agent layer isn't built yet, so \"replaces your stack\" " +
-      "is the promise the price rests on — which is why the intro price + a free tier underneath are there to " +
-      "earn the upgrade before the price rises.",
+      "$149.99 is now a real \"Universe\" tier in the live plan, sitting above the kept on-ramps " +
+      "($0/$19/$29/$49) — its checkout goes live once its Gumroad product is set up. Most modules are early " +
+      "MVPs and the cross-module agent layer is still early, so \"replaces your stack\" is the promise the " +
+      "price rests on — which is why the intro price + a free tier underneath are there to earn the upgrade " +
+      "before the price rises.",
   },
   // Gross margin / token COGS — the seat bundles AI, so revenue ≠ gross profit.
   economics: {

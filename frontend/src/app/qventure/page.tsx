@@ -90,6 +90,12 @@ export default function QVenturePage() {
             (scientist · data analyst · economist · lawyer), and a concrete entry strategy — how much to
             invest, at what valuation, staged over which milestones, for what risk-adjusted return.
           </p>
+          <Link href="/qventure/a/demo-neurodx" style={{
+            display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
+            fontSize: 14, fontWeight: 700, color: "#7c3aed", textDecoration: "none",
+          }}>
+            See a live example → <span style={{ fontWeight: 400, color: "#94a3b8" }}>(NeuroDx report)</span>
+          </Link>
         </div>
 
         {/* Mode switch + watchlist link */}
@@ -115,8 +121,76 @@ export default function QVenturePage() {
         {mode === "single"
           ? <SinglePanel sectors={sectors} />
           : <ComparePanel sectors={sectors} />}
+
+        <MarketingSections />
       </ProductPageShell>
     </>
+  );
+}
+
+// ─── Marketing block ──────────────────────────────────────────────────────────
+
+function MarketingSections() {
+  const steps = [
+    { icon: "📝", title: "Describe the deal", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
+    { icon: "🧠", title: "AI runs the analysis", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
+    { icon: "📊", title: "Act on the memo", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
+  ];
+  const audience = [
+    { icon: "👼", label: "Angel investors", body: "Screen inbound in seconds; write with conviction, not vibes." },
+    { icon: "🏦", label: "Micro-VCs & solo GPs", body: "A repeatable rubric across every deal in the pipeline." },
+    { icon: "🔭", label: "Scouts", body: "Turn a founder chat into a shareable, fund-grade memo." },
+    { icon: "🤝", label: "Syndicates", body: "Align the group with one transparent score and strategy." },
+  ];
+  const trust = [
+    ["Deterministic", "The score is reproducible math, not a black box."],
+    ["18 sectors", "Grounded in a curated market knowledge base."],
+    ["4 experts", "Scientist · data analyst · economist · lawyer."],
+    ["Transparent", "Every factor shows its weight and rationale."],
+  ];
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={SECTION}>
+        <h2 style={H2}>How it works</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ padding: "4px 4px" }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed" }}>STEP {i + 1}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "2px 0 6px" }}>{s.title}</div>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={SECTION}>
+        <h2 style={H2}>Who it&apos;s for</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+          {audience.map((a, i) => (
+            <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
+              <div style={{ fontSize: 22, marginBottom: 6 }}>{a.icon}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: "#0f172a" }}>{a.label}</div>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>{a.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...SECTION, background: "linear-gradient(135deg, #0f172a, #1e293b)", borderColor: "transparent" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+          {trust.map(([k, v], i) => (
+            <div key={i}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#a78bfa" }}>{k}</div>
+              <div style={{ fontSize: 12.5, color: "#cbd5e1", marginTop: 3, lineHeight: 1.4 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)", fontSize: 11.5, color: "#94a3b8" }}>
+          QVenture is an AI screening tool for research purposes — not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.
+        </div>
+      </div>
+    </div>
   );
 }
 

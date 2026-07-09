@@ -117,6 +117,7 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from 
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
+import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP";
@@ -1343,16 +1344,16 @@ export default function CyberChessPage(){
   // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
   // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
   const firstRunRef=useRef(false);
-  // Закрытие приветствия-награды: на первом визите далее запускаем тур (если не виден).
+  // Закрытие приветствия-награды. Тур больше НЕ авто-открывается сразу после мастера
+  // настройки (меньше стопки на первом визите) — доступен вручную через палитру команд
+  // (см. "Обзорный тур"). Ref сбрасываем, чтобы не удерживать «первый запуск».
   const closeDailyReward=useCallback(()=>{
-    const wasWelcome=dailyReward?.isWelcome;
     sDailyReward(null);
-    if(wasWelcome&&firstRunRef.current){
-      firstRunRef.current=false;
-      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
-      if(!tourSeen)setTimeout(()=>sTourStep(0),300);
-    }
-  },[dailyReward]);
+    firstRunRef.current=false;
+  },[]);
+  // Любой первично-визитный оверлей открыт? Пока да — не наслаиваем баннеры
+  // (AEVION-плашка, стрим-подсказка), чтобы на экране был только один интеррапт.
+  const anyOnboardingModal=showOnboarding||tourStep>=0||!!dailyReward;
   const[dueReminders,sDueReminders]=useState<Array<{entryId:string;milestone:1|3|7;daysSinceStudy:number}>>([]);
   const[hotseat,sHotseat]=useState(false);
   const[showEndgames,sShowEndgames]=useState(false);
@@ -1785,7 +1786,7 @@ export default function CyberChessPage(){
   const[acResult,sAcResult]=useState<AntiCheatResult|null>(null);
   const[showAcPanel,sShowAcPanel]=useState(false);
   // Right-panel sub-tab during play — splits long scroll into focused views
-  const[rpTab,sRpTab]=useState<"moves"|"info"|"coach">("moves");
+  const[rpTab,sRpTab]=useState<"moves"|"info"|"coach"|"explorer">("moves");
   useEffect(()=>{
     if(showFidePanel&&fideOpened===0){
       sFideOpened(1);
@@ -2149,7 +2150,19 @@ export default function CyberChessPage(){
     // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
     // Cloud API extension убрана из mount — зовём lazy только когда пользователь
     // открывает Puzzle tab (см. отдельный useEffect ниже).
-    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    // Puzzle pool: сперва пробуем серверный эндпоинт (фильтрация + shuffle на бэке),
+    // при любой проблеме — падаем на bundled /puzzles.json. Zero-regression: если
+    // эндпоинт отсутствует/пуст/ошибка — поведение ровно как раньше.
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=1500");
+        if(r.ok){
+          const d=await r.json();
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+        }
+      }catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{sPuzzles([]);}
+    })();
     // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
     const loadOpenings=()=>{
       fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
@@ -6221,8 +6234,8 @@ export default function CyberChessPage(){
         // only stops it from covering the panel when there's room for both.
         // paddingRight = резерв под правый WorkspaceDock (56, всегда) + баннер «Проекты» (244,
         // когда показан). Инлайн (надёжнее CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -7240,6 +7253,7 @@ export default function CyberChessPage(){
             {([
               {id:"moves" as const,label:"Ходы"},
               {id:"info"  as const,label:"Инфо"},
+              {id:"explorer" as const,label:"Дебют"},
               {id:"coach" as const,label:"Коуч"},
             ]).map(t=>(
               <button key={t.id} onClick={()=>sRpTab(t.id)} style={{
@@ -7249,6 +7263,18 @@ export default function CyberChessPage(){
               }}>{t.label}</button>
             ))}
           </div>}
+          {/* ── Opening Explorer (Lichess Masters) — мастер-статистика по текущей позиции ── */}
+          {on&&!setup&&tab==="play"&&rpTab==="explorer"&&<OpeningExplorerPanel
+            fen={game.fen()}
+            onPlayMove={(uci)=>{
+              // Кликом по ходу мастеров играем его на доске, но только когда это
+              // ход игрока в активной партии — иначе exec может рассинхронить бота.
+              if(!on||over||game.turn()!==pCol)return;
+              const from=uci.slice(0,2) as Square;const to=uci.slice(2,4) as Square;
+              const pr=uci.length>4?(uci[4] as "q"|"r"|"b"|"n"):undefined;
+              try{exec(from,to,pr)}catch{}
+            }}
+          />}
           {/* ── Live Stats Card — показываем только в Info (не в Coach — там eval дублируется) ── */}
           {on&&!setup&&(tab==="play"&&rpTab==="info")&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
@@ -10908,7 +10934,7 @@ ${question.trim()}`;
           1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
           2) "×" → dismiss for the rest of the day (localStorage-keyed by date)
         Не показываем во время активной партии (!on) — чтобы не перекрывать доску. */}
-    {showPipSuggest&&!on&&<div
+    {showPipSuggest&&!on&&!anyOnboardingModal&&<div
       role="alert"
       style={{
         position:"fixed",right:20,bottom:20,zIndex:7900,
@@ -13829,7 +13855,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with
@@ -13959,6 +13985,7 @@ ${question.trim()}`;
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
         {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
         {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
+        {id:"help-tour",    icon:"🧭",group:"Settings", label:"Обзорный тур",         hint:"4 шага — как всё устроено",    run:()=>sTourStep(0)},
 
         // ── РАЗДЕЛЫ — навигация на маршруты, которые раньше были доступны только по URL ──
         {id:"nav-sections", icon:"☰", group:"Разделы", label:"Все разделы",          hint:"Навигационный хаб — все режимы и киллер-фичи", run:()=>sShowSections(true)},

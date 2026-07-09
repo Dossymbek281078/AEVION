@@ -287,6 +287,114 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
   }
 });
 
+// GET /compare/pdf?a=<id>&b=<id> — a single side-by-side comparison PDF of two
+// stored analyses (scores, verdicts, factor-by-factor delta, memo snippets).
+qventureRouter.get("/compare/pdf", async (req: Request, res: Response) => {
+  try {
+    const aId = typeof req.query.a === "string" ? req.query.a : "";
+    const bId = typeof req.query.b === "string" ? req.query.b : "";
+    if (!aId || !bId) return badRequest(res, "both a and b query params are required");
+
+    const [a, b] = await Promise.all([getById(aId), getById(bId)]);
+    if (!a || !b) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    const W = 495;
+    const firstSentences = (t: string, n = 2) => t.trim().replace(/\s+/g, " ").split(/(?<=[.!?])\s+/).slice(0, n).join(" ");
+    const vColor = (v: string) => (v === "invest" ? "#15803d" : v === "watch" ? "#b45309" : "#b91c1c");
+
+    // Header
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Deal Comparison");
+    doc.fontSize(9).font("Helvetica").fillColor("#64748b")
+      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+    doc.moveDown(0.8);
+
+    // Two headline blocks
+    const headline = (r: NonNullable<Awaited<ReturnType<typeof getById>>>) => {
+      doc.fontSize(15).font("Helvetica-Bold").fillColor("#0f172a").text(r.name, { continued: true });
+      doc.font("Helvetica").fontSize(11).fillColor("#64748b").text(`   ${r.result.sector.label} · ${r.stage}`);
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(vColor(r.verdict))
+        .text(`Score ${r.composite}/100  —  ${r.verdict.toUpperCase()} (conviction: ${r.result.strategy.conviction})`);
+      doc.moveDown(0.5);
+    };
+    doc.fillColor("#7c3aed").fontSize(11).font("Helvetica-Bold").text("COMPANY A");
+    headline(a);
+    doc.fillColor("#7c3aed").fontSize(11).font("Helvetica-Bold").text("COMPANY B");
+    headline(b);
+
+    const winner = a.composite === b.composite ? null : a.composite > b.composite ? a : b;
+    doc.moveDown(0.2);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a")
+      .text(winner ? `Higher composite: ${winner.name} (${winner.composite}/100)` : "Composite scores are tied.");
+    doc.moveDown(0.8);
+
+    // Factor-by-factor delta table
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Factor-by-factor delta (B − A)");
+    doc.moveDown(0.3);
+    const col = { factor: 50, a: 300, b: 375, d: 450 };
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#64748b");
+    doc.text("Factor", col.factor, doc.y, { continued: false });
+    let rowY = doc.y - 12;
+    doc.text("A", col.a, rowY); doc.text("B", col.b, rowY); doc.text("Δ", col.d, rowY);
+    doc.moveDown(0.2);
+    doc.font("Helvetica");
+    for (const fa of a.result.factors) {
+      const fb = b.result.factors.find((x) => x.key === fa.key);
+      const bs = fb ? fb.score : 0;
+      const delta = bs - fa.score;
+      rowY = doc.y;
+      doc.fillColor("#0f172a").fontSize(9.5).text(`${fa.label} (${Math.round(fa.weight * 100)}%)`, col.factor, rowY, { width: 240 });
+      const lineY = doc.y - 11;
+      doc.fillColor("#334155").text(String(fa.score), col.a, lineY);
+      doc.fillColor("#334155").text(String(bs), col.b, lineY);
+      doc.fillColor(delta > 0 ? "#15803d" : delta < 0 ? "#b91c1c" : "#94a3b8").font("Helvetica-Bold")
+        .text(`${delta > 0 ? "+" : ""}${delta}`, col.d, lineY);
+      doc.font("Helvetica");
+    }
+    // Composite row
+    doc.moveDown(0.2);
+    rowY = doc.y;
+    const cd = Math.round((b.composite - a.composite) * 10) / 10;
+    doc.font("Helvetica-Bold").fillColor("#0f172a").fontSize(10).text("Composite", col.factor, rowY);
+    const cY = doc.y - 12;
+    doc.text(String(a.composite), col.a, cY);
+    doc.text(String(b.composite), col.b, cY);
+    doc.fillColor(cd >= 0 ? "#15803d" : "#b91c1c").text(`${cd > 0 ? "+" : ""}${cd}`, col.d, cY);
+    doc.font("Helvetica").fillColor("#0f172a");
+    doc.moveDown(1);
+
+    // Per-side memo snippets
+    doc.x = 50;
+    for (const r of [a, b]) {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor(vColor(r.verdict)).text(`${r.name} — ${r.verdict.toUpperCase()}`);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#334155").text(firstSentences(r.result.council.memo, 3), { width: W });
+      doc.moveDown(0.5);
+    }
+    doc.moveDown(0.4);
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text("Generated by an AI screening tool for research purposes. Not investment advice, an offer, or a solicitation. Figures are model estimates.", { width: W });
+
+    doc.end();
+    const pdf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    const nm = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 24);
+    res.setHeader("Content-Disposition", `attachment; filename="qventure-compare-${nm(a.name)}-vs-${nm(b.name)}.pdf"`);
+    return res.send(pdf);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    return res.status(500).json({ ok: false, error: "compare_pdf_failed" });
+  }
+});
+
 qventureRouter.get("/stats", async (_req: Request, res: Response) => {
   try {
     const rows = await listRecent(500);

@@ -163,3 +163,70 @@ export function planFromMessage(message: string): AgentPlan {
     rationale: "No action intent detected — answering as text.",
   };
 }
+
+/**
+ * ── LLM-assisted planning ───────────────────────────────────────────────────
+ * A step up from the rule matcher: ask the model (through the EXISTING
+ * /api/qcoreai/chat endpoint — no provider changes) to classify intent and
+ * return JSON. This is prompt-driven planning, NOT the provider tool-use API;
+ * naming it honestly matters. The page calls the chat endpoint with the system
+ * prompt below, then parses the reply with `parseLLMPlan`, falling back to the
+ * rule planner when the model returns anything unusable.
+ */
+export function buildPlannerSystemPrompt(tools: AgentTool[] = TOOLS): string {
+  const list = tools
+    .map((t) => `- "${t.id}": ${t.description} required params: [${t.required.join(", ") || "none"}]`)
+    .join("\n");
+  return (
+    "You are AEVION Agent's planner. Read the user's message and decide how to handle it.\n" +
+    "Reply with ONLY a JSON object, no prose, no code fences:\n" +
+    '{"mode":"chat"|"action","toolId":<tool id or null>,"params":{...},"rationale":"<short>"}\n' +
+    "If the user is asking a question or wants text, use mode \"chat\" (toolId null).\n" +
+    "If they want one of these actions, use mode \"action\" and fill params from the message:\n" +
+    list
+  );
+}
+
+/**
+ * Parse an LLM planner reply into an AgentPlan. Tolerant of surrounding prose /
+ * code fences. Returns null when the reply is unusable or names an unknown tool
+ * (caller should fall back to `planFromMessage`).
+ */
+export function parseLLMPlan(raw: string, tools: AgentTool[] = TOOLS): AgentPlan | null {
+  if (typeof raw !== "string") return null;
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(match[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  if (obj.mode !== "action") {
+    return {
+      mode: "chat",
+      toolId: null,
+      tool: null,
+      params: null,
+      missing: [],
+      rationale: typeof obj.rationale === "string" ? obj.rationale : "LLM planner: answering as text.",
+    };
+  }
+
+  const tool = tools.find((t) => t.id === obj.toolId);
+  if (!tool) return null; // unknown tool → let the caller fall back to rules
+
+  const given = obj.params && typeof obj.params === "object" ? (obj.params as Record<string, unknown>) : {};
+  // Merge model-provided params over the rule-built defaults so required keys exist.
+  const params = { ...tool.buildBody(typeof given.text === "string" ? given.text : ""), ...given };
+  const missing = tool.required.filter((k) => !NON_EMPTY(params[k]));
+  return {
+    mode: "action",
+    toolId: tool.id,
+    tool,
+    params,
+    missing,
+    rationale: typeof obj.rationale === "string" ? obj.rationale : `LLM planner: ${tool.label}.`,
+  };
+}

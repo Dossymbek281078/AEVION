@@ -2,11 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { planFromMessage, TOOLS, type AgentPlan } from "./lib/planner";
+import { planFromMessage, parseLLMPlan, buildPlannerSystemPrompt, TOOLS, type AgentPlan } from "./lib/planner";
+import {
+  diffLocalModels,
+  loadLastModels,
+  saveLastModels,
+  appendFeedback,
+  type LocalModelSnapshot,
+  type ModelDiff,
+  type Rating,
+} from "./lib/agentMemory";
 
 type Provider = {
   id: string;
   name: string;
+  models: string[];
   defaultModel: string;
   configured: boolean;
   free: boolean;
@@ -20,7 +30,6 @@ type RunResult =
   | { kind: "text"; text: string }
   | { kind: "error"; text: string };
 
-// Pull the answer text out of whatever shape /chat returns.
 function readChatText(data: unknown): string {
   const o = (data ?? {}) as Record<string, unknown>;
   const direct = o.text ?? o.reply ?? o.content ?? o.message ?? o.answer;
@@ -35,15 +44,31 @@ export default function AgentPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [ranPlan, setRanPlan] = useState<AgentPlan | null>(null);
+  const [rated, setRated] = useState<Rating | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [smart, setSmart] = useState(true);
+  const [modelUpdates, setModelUpdates] = useState<ModelDiff>({ added: [], removed: [] });
 
-  const plan: AgentPlan = useMemo(() => planFromMessage(message), [message]);
+  const rulePlan: AgentPlan = useMemo(() => planFromMessage(message), [message]);
+
+  const localProviders = providers.filter((p) => p.local && p.configured);
+  const localId = localProviders[0]?.id;
 
   useEffect(() => {
     let cancelled = false;
     fetch(apiUrl("/api/qcoreai/providers"))
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!cancelled && Array.isArray(j?.providers)) setProviders(j.providers as Provider[]);
+        if (cancelled || !Array.isArray(j?.providers)) return;
+        const ps = j.providers as Provider[];
+        setProviders(ps);
+        // Offline-model update tracking: diff the local roster vs last visit.
+        const snap: LocalModelSnapshot[] = ps
+          .filter((p) => p.local)
+          .map((p) => ({ id: p.id, models: p.models || [] }));
+        setModelUpdates(diffLocalModels(loadLastModels(), snap));
+        saveLastModels(snap);
       })
       .catch(() => {});
     return () => {
@@ -51,18 +76,50 @@ export default function AgentPage() {
     };
   }, []);
 
-  const localProviders = providers.filter((p) => p.local);
+  async function classifyWithLLM(text: string): Promise<AgentPlan | null> {
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/chat"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: buildPlannerSystemPrompt() },
+            { role: "user", content: text },
+          ],
+          ...(offline && localId ? { provider: localId } : {}),
+          temperature: 0,
+        }),
+      });
+      if (!r.ok) return null;
+      const data = await r.json().catch(() => ({}));
+      return parseLLMPlan(readChatText(data));
+    } catch {
+      return null;
+    }
+  }
 
   async function run() {
     if (!message.trim() || running) return;
     setRunning(true);
     setResult(null);
+    setRated(null);
     try {
+      // Smart planning: let the model classify; fall back to the rule planner.
+      let plan = rulePlan;
+      if (smart) {
+        const llm = await classifyWithLLM(message.trim());
+        if (llm) plan = llm;
+      }
+      setRanPlan(plan);
+
       if (plan.mode === "chat") {
         const r = await fetch(apiUrl("/api/qcoreai/chat"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: message.trim() }] }),
+          body: JSON.stringify({
+            messages: [{ role: "user", content: message.trim() }],
+            ...(offline && localId ? { provider: localId } : {}),
+          }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || `chat failed (${r.status})`);
@@ -70,7 +127,6 @@ export default function AgentPage() {
         return;
       }
 
-      // action mode
       if (plan.missing.length) {
         setResult({ kind: "error", text: `Can't run yet — add: ${plan.missing.join(", ")}.` });
         return;
@@ -103,6 +159,28 @@ export default function AgentPage() {
     }
   }
 
+  function rate(r: Rating) {
+    if (rated) return;
+    setRated(r);
+    appendFeedback({
+      ts: Date.now(),
+      message: message.trim().slice(0, 200),
+      mode: ranPlan?.mode ?? "chat",
+      toolId: ranPlan?.toolId ?? null,
+      rating: r,
+    });
+  }
+
+  const toggle = (on: boolean): React.CSSProperties => ({
+    fontSize: 12.5,
+    padding: "5px 12px",
+    borderRadius: 999,
+    cursor: "pointer",
+    border: `1px solid ${on ? "rgba(94,234,212,0.6)" : "rgba(51,65,85,0.6)"}`,
+    background: on ? "rgba(94,234,212,0.12)" : "rgba(15,23,42,0.6)",
+    color: on ? "#5eead4" : "#94a3b8",
+  });
+
   return (
     <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh", padding: "40px 20px" }}>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
@@ -112,16 +190,31 @@ export default function AgentPage() {
         <h1 style={{ fontSize: "clamp(26px,4vw,38px)", fontWeight: 900, letterSpacing: "-0.02em", margin: "0 0 10px" }}>
           One window — text or action
         </h1>
-        <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.6, margin: "0 0 24px" }}>
-          Ask a question and get an answer, or ask for a thing — an image, a voice clip, a payment link, an email —
-          and it&apos;s done here, without opening another tab. The agent reads your message, picks the right AEVION
-          capability, and runs it. This is a first slice: it orchestrates existing endpoints, not every service yet.
+        <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.6, margin: "0 0 20px" }}>
+          Ask a question or ask for a thing — image, voice, payment link, email — and it&apos;s done here.
+          Smart planning lets the model route your message; Offline routes chat + planning to a local model
+          ($0 tokens, private). Actions still use their own services.
         </p>
 
-        {/* Providers — incl. offline/local runtimes */}
-        <div style={{ marginBottom: 20 }}>
+        {/* Mode toggles */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+          <span onClick={() => setSmart((v) => !v)} style={toggle(smart)}>🧠 Smart planning {smart ? "on" : "off"}</span>
+          <span
+            onClick={() => localId && setOffline((v) => !v)}
+            style={{ ...toggle(offline && !!localId), opacity: localId ? 1 : 0.5 }}
+            title={localId ? `Local model: ${localId}` : "No configured local runtime detected"}
+          >
+            🔒 Offline {localId ? (offline ? "on" : "off") : "unavailable"}
+          </span>
+        </div>
+
+        {/* Providers — incl. offline/local runtimes + update badge */}
+        <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b", marginBottom: 8 }}>
-            Models {localProviders.length > 0 && <span style={{ color: "#5eead4" }}>· {localProviders.length} offline/local available</span>}
+            Models {localProviders.length > 0 && <span style={{ color: "#5eead4" }}>· {localProviders.length} offline/local</span>}
+            {modelUpdates.added.length > 0 && (
+              <span style={{ color: "#a3e635" }}> · {modelUpdates.added.length} new since last visit</span>
+            )}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {providers.length === 0 && <span style={{ fontSize: 12, color: "#475569" }}>Loading providers…</span>}
@@ -160,18 +253,15 @@ export default function AgentPage() {
                   fontSize: 12.5,
                   padding: "5px 11px",
                   borderRadius: 999,
-                  border: `1px solid ${plan.toolId === t.id ? "rgba(94,234,212,0.6)" : "rgba(51,65,85,0.6)"}`,
-                  background: plan.toolId === t.id ? "rgba(94,234,212,0.12)" : "rgba(15,23,42,0.6)",
-                  color: plan.toolId === t.id ? "#5eead4" : "#94a3b8",
+                  border: `1px solid ${rulePlan.toolId === t.id ? "rgba(94,234,212,0.6)" : "rgba(51,65,85,0.6)"}`,
+                  background: rulePlan.toolId === t.id ? "rgba(94,234,212,0.12)" : "rgba(15,23,42,0.6)",
+                  color: rulePlan.toolId === t.id ? "#5eead4" : "#94a3b8",
                 }}
                 title={t.description}
               >
                 {t.emoji} {t.label}
               </span>
             ))}
-            <span style={{ fontSize: 12.5, padding: "5px 11px", borderRadius: 999, border: `1px solid ${plan.mode === "chat" ? "rgba(94,234,212,0.6)" : "rgba(51,65,85,0.6)"}`, background: plan.mode === "chat" ? "rgba(94,234,212,0.12)" : "rgba(15,23,42,0.6)", color: plan.mode === "chat" ? "#5eead4" : "#94a3b8" }}>
-              💬 Chat
-            </span>
           </div>
         </div>
 
@@ -194,14 +284,14 @@ export default function AgentPage() {
           }}
         />
 
-        {/* Plan preview */}
+        {/* Rule-plan preview (instant; Smart planning refines on Run) */}
         {message.trim() && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
-            <strong style={{ color: plan.mode === "action" ? "#5eead4" : "#7dd3fc" }}>
-              {plan.mode === "action" ? `${plan.tool?.emoji} ${plan.tool?.label}` : "💬 Chat"}
+            <strong style={{ color: rulePlan.mode === "action" ? "#5eead4" : "#7dd3fc" }}>
+              {rulePlan.mode === "action" ? `${rulePlan.tool?.emoji} ${rulePlan.tool?.label}` : "💬 Chat"}
             </strong>{" "}
-            — {plan.rationale}
-            {plan.params && <pre style={{ margin: "8px 0 0", padding: 10, background: "rgba(15,23,42,0.7)", borderRadius: 8, fontSize: 12, color: "#cbd5e1", overflowX: "auto" }}>{JSON.stringify(plan.params, null, 2)}</pre>}
+            — {rulePlan.rationale}
+            {smart && <span style={{ color: "#64748b" }}> (Smart planning may refine this on Run)</span>}
           </div>
         )}
 
@@ -220,7 +310,7 @@ export default function AgentPage() {
             cursor: running || !message.trim() ? "default" : "pointer",
           }}
         >
-          {running ? "Running…" : plan.mode === "action" ? `Run ${plan.tool?.label}` : "Ask"}
+          {running ? "Running…" : "Run"}
         </button>
 
         {/* Result */}
@@ -235,6 +325,21 @@ export default function AgentPage() {
             )}
             {result.kind === "text" && <div style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{result.text}</div>}
             {result.kind === "error" && <div style={{ fontSize: 13.5, color: "#fca5a5" }}>⚠️ {result.text}</div>}
+
+            {/* Eval loop — feedback substrate, not self-learning */}
+            {result.kind !== "error" && (
+              <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#64748b" }}>
+                {rated ? (
+                  <span>Thanks — logged for future tuning.</span>
+                ) : (
+                  <>
+                    <span>Was this good?</span>
+                    <span onClick={() => rate("up")} style={{ cursor: "pointer", fontSize: 16 }} role="button" aria-label="thumbs up">👍</span>
+                    <span onClick={() => rate("down")} style={{ cursor: "pointer", fontSize: 16 }} role="button" aria-label="thumbs down">👎</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

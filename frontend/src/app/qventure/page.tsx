@@ -330,6 +330,19 @@ export default function QVenturePage() {
                 <div>
                   <h2 style={{ ...H2, marginBottom: 4 }}>{result.name}</h2>
                   <div style={{ fontSize: 13, color: "#64748b" }}>{result.result.sector.label} · {result.result.stage}</div>
+                  <a
+                    href={apiUrl(`/api/qventure/analyses/${result.id}/pdf`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
+                      padding: "8px 16px", background: "#fff", color: "#7c3aed",
+                      border: "1px solid #ddd6fe", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    ⬇ Export memo to PDF
+                  </a>
                 </div>
                 <ScoreGauge score={result.composite} verdict={result.verdict} />
               </div>

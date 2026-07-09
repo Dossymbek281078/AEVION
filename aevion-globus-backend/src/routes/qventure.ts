@@ -178,6 +178,115 @@ qventureRouter.get("/analyses/:id", async (req: Request, res: Response) => {
   }
 });
 
+// GET /analyses/:id/pdf — render the stored memo as a downloadable PDF.
+// Uses pdfkit (already in deps for Planet certs). Helvetica has no emoji glyphs,
+// so the layout stays ASCII/text — clean and printable.
+qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
+  try {
+    const row = await getById(String(req.params.id));
+    if (!row) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    const r = row.result;
+    const s = r.strategy;
+    const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+    const W = 495;
+
+    // Header
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Investment Memo");
+    doc.fontSize(9).font("Helvetica").fillColor("#64748b")
+      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+    doc.moveDown(0.8);
+
+    // Company + verdict banner
+    doc.fontSize(17).font("Helvetica-Bold").fillColor("#0f172a").text(row.name);
+    doc.fontSize(10).font("Helvetica").fillColor("#334155")
+      .text(`${r.sector.label} · ${r.stage} · ${row.geography ?? "US"}${row.askUsd ? ` · raising ${usd(row.askUsd)}` : ""}`);
+    doc.moveDown(0.4);
+    const verdictColor = row.verdict === "invest" ? "#15803d" : row.verdict === "watch" ? "#b45309" : "#b91c1c";
+    doc.fontSize(15).font("Helvetica-Bold").fillColor(verdictColor)
+      .text(`Score ${row.composite}/100  —  ${row.verdict.toUpperCase()}  (conviction: ${s.conviction})`);
+    doc.moveDown(0.8);
+
+    // Investment memo
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Investment memo");
+    doc.moveDown(0.2);
+    doc.fontSize(10).font("Helvetica").fillColor("#1e293b").text(r.council.memo, { width: W, align: "left" });
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text(`Narrative engine: ${r.council.aiUsed ? `live model (${r.council.aiProvider})` : "deterministic (no AI key)"}`);
+    doc.moveDown(0.8);
+
+    // Entry strategy
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Entry strategy");
+    doc.moveDown(0.2);
+    doc.fontSize(10).font("Helvetica").fillColor("#334155");
+    doc.text(`Ticket: ${usd(s.ticketUsd.target)} target  (range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)})`);
+    doc.text(`Target ownership: ${s.ownershipTargetPct}%`);
+    doc.text(`Valuation band (pre-money): ${usd(s.valuationBandUsd.low)} / ${usd(s.valuationBandUsd.base)} / ${usd(s.valuationBandUsd.high)}`);
+    doc.text(`Return: ${s.returns.expectedMoic}x expected (${s.returns.baseMoic}x base) · ~${s.returns.targetIrrPct}% IRR over ${s.returns.horizonYears}yr · loss prob ${Math.round(s.returns.lossProbability * 100)}%`);
+    doc.moveDown(0.3);
+    doc.font("Helvetica-Bold").fillColor("#0f172a").text("Deployment schedule:");
+    doc.font("Helvetica").fillColor("#334155");
+    for (const t of s.tranches) doc.text(`  • ${t.pct}% — ${t.label}: ${t.trigger}`, { width: W });
+    doc.moveDown(0.2);
+    doc.fillColor("#166534").text(`Portfolio: ${s.portfolioNote}`, { width: W });
+    doc.moveDown(0.8);
+
+    // Score breakdown
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Score breakdown");
+    doc.moveDown(0.2);
+    doc.fontSize(9.5).font("Helvetica").fillColor("#334155");
+    for (const f of r.factors) {
+      doc.font("Helvetica-Bold").fillColor("#0f172a")
+        .text(`${f.label} — ${f.score}/100 (weight ${Math.round(f.weight * 100)}%)`, { continued: false });
+      doc.font("Helvetica").fillColor("#475569").text(f.rationale, { width: W });
+      doc.moveDown(0.15);
+    }
+    doc.moveDown(0.6);
+
+    // Analyst council
+    doc.addPage();
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Analyst council");
+    doc.moveDown(0.3);
+    for (const l of r.council.lenses) {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a").text(`${l.role} — ${l.headline}`, { width: W });
+      doc.fontSize(9.5).font("Helvetica").fillColor("#166534");
+      for (const p of l.points) doc.text(`  + ${p}`, { width: W });
+      doc.fillColor("#b91c1c");
+      for (const rk of l.risks) doc.text(`  ! ${rk}`, { width: W });
+      doc.moveDown(0.5);
+    }
+
+    // Assumptions
+    doc.moveDown(0.3);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#92400e").text("Assumptions & limitations");
+    doc.fontSize(9).font("Helvetica").fillColor("#78350f");
+    for (const a of r.assumptions) doc.text(`  • ${a}`, { width: W });
+    doc.moveDown(0.6);
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text("This memo is generated by an AI screening tool for research purposes and is not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.", { width: W });
+
+    doc.end();
+    const pdf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    const safeName = row.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) || "memo";
+    res.setHeader("Content-Disposition", `attachment; filename="qventure-${safeName}.pdf"`);
+    return res.send(pdf);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    return res.status(500).json({ ok: false, error: "pdf_failed" });
+  }
+});
+
 qventureRouter.get("/stats", async (_req: Request, res: Response) => {
   try {
     const rows = await listRecent(500);

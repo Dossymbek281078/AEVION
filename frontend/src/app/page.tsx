@@ -260,9 +260,35 @@ export default function HomePage() {
         }}
       >
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+          <Link
+            href="/qventure"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 16,
+              padding: "8px 16px",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.10)",
+              border: "1px solid rgba(255,255,255,0.28)",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: 13.5,
+              fontWeight: 600,
+            }}
+          >
+            <span style={{
+              fontSize: 10.5, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase",
+              padding: "3px 8px", borderRadius: 999, background: "#7c3aed", color: "#fff",
+            }}>
+              New planet
+            </span>
+            <span>QVenture — AI Investment Analyst: fund-grade due diligence in seconds</span>
+            <span aria-hidden style={{ opacity: 0.8 }}>→</span>
+          </Link>
           <div
             style={{
-              display: "inline-block",
+              display: "block",
               fontSize: 12,
               fontWeight: 800,
               letterSpacing: "0.06em",
@@ -271,6 +297,7 @@ export default function HomePage() {
               borderRadius: 999,
               background: "rgba(255,255,255,0.12)",
               border: "1px solid rgba(255,255,255,0.2)",
+              width: "fit-content",
             }}
           >
             Product MVP · ready for demo

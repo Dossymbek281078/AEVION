@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 /**
  * AEVION QMelanin — anti-graying engine.
@@ -291,4 +292,145 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
     disclaimer: DISCLAIMER,
     timestamp: nowIso(),
   });
+});
+
+/**
+ * POST /track
+ * body: { entries: [{ date, grayCountZone, subjectiveScore? }] }  (client-held state)
+ * → stateless trend: gray-count delta first→last, direction, weeks tracked. No DB.
+ */
+qmelaninRouter.post("/track", (req: Request, res: Response) => {
+  const raw = Array.isArray(req.body?.entries) ? req.body.entries : [];
+  const entries = raw
+    .map((e: Record<string, unknown>) => ({
+      date: String(e.date ?? ""),
+      grayCountZone: num(e.grayCountZone),
+      subjectiveScore: num(e.subjectiveScore),
+    }))
+    .filter((e: { grayCountZone: number | null }) => e.grayCountZone !== null)
+    .sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date));
+
+  if (entries.length < 1) {
+    return res.status(400).json({ error: "no_entries", hint: "Нужна хотя бы одна запись с grayCountZone." });
+  }
+
+  const first = entries[0];
+  const last = entries[entries.length - 1];
+  const delta = last.grayCountZone! - first.grayCountZone!;
+  const direction = delta < 0 ? "improving" : delta > 0 ? "worsening" : "stable";
+
+  let weeks: number | null = null;
+  const t0 = Date.parse(first.date);
+  const t1 = Date.parse(last.date);
+  if (Number.isFinite(t0) && Number.isFinite(t1) && t1 >= t0) {
+    weeks = Math.round((t1 - t0) / (7 * 24 * 3600 * 1000));
+  }
+
+  res.json({
+    points: entries.length,
+    firstCount: first.grayCountZone,
+    lastCount: last.grayCountZone,
+    delta,
+    direction,
+    weeksTracked: weeks,
+    interpretation:
+      direction === "improving"
+        ? "Число седых в зоне снизилось — но это чувствительно к освещению/ракурсу фото; смотрите на тренд, не на одну точку."
+        : direction === "worsening"
+        ? "Число седых растёт — норма при возрастной седине; программа целится в замедление, не гарантирует откат."
+        : "Стабильно — уже неплохо для активной седины.",
+    disclaimer: DISCLAIMER,
+    timestamp: nowIso(),
+  });
+});
+
+/**
+ * POST /ai-plan
+ * body: { deficientKeys? | values? }
+ * → deterministic food lists (from the engine) arranged by AI into a 1-day menu
+ *   that RESPECTS the interaction timing rules. The AI only sequences the SAME
+ *   foods across meals — it must not add supplements or invent doses. Falls back
+ *   to a deterministic day-plan when no AI provider is configured.
+ */
+qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
+  const b = req.body || {};
+  let deficientKeys: BiomarkerKey[] = [];
+  if (Array.isArray(b.deficientKeys)) {
+    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BIOMARKER_BY_KEY);
+  } else if (b.values) {
+    deficientKeys = BIOMARKERS.filter((spec) => {
+      const v = num(b.values[spec.key]);
+      return v !== null && v < spec.optimalLow;
+    }).map((s) => s.key);
+  }
+
+  // The complete pool of allowed foods (targeted deficiencies + always-on base).
+  const targetedFoods = deficientKeys.flatMap((k) => FOOD_SOURCES[k]);
+  const allowedFoods = Array.from(
+    new Set([...targetedFoods, ...SUBSTRATE_FOODS, ...ANTIOXIDANT_FOODS]),
+  );
+  const interactions = resolveInteractions(deficientKeys);
+
+  const fallbackDay = {
+    breakfast: ["яйца", ...ANTIOXIDANT_FOODS.slice(0, 1)],
+    lunch: [...targetedFoods.slice(0, 2), "листовая зелень + витамин C (для железа)"],
+    dinner: [...SUBSTRATE_FOODS.slice(0, 2)],
+    snack: ["грецкий орех / тыквенные семечки"],
+    note: "Детерминированная раскладка (AI-провайдер не подключён). Железо — с витамином C, отдельно от чая/кофе; цинк и медь — в разные приёмы.",
+  };
+
+  const providers = getProviders().filter((p) => p.configured);
+  if (providers.length === 0) {
+    return res.json({
+      source: "deterministic-fallback",
+      allowedFoods,
+      interactions,
+      dayPlan: fallbackDay,
+      disclaimer: DISCLAIMER,
+      timestamp: nowIso(),
+    });
+  }
+
+  const rulesText = interactions.map((i) => `- ${i.rule}`).join("\n");
+  const prompt = [
+    "Ты нутрициолог. Составь меню на ОДИН день (завтрак, обед, ужин, перекус) СТРОГО из списка разрешённых продуктов ниже.",
+    "ЗАПРЕЩЕНО: добавлять добавки/БАДы, указывать дозировки в мг/МЕ, вводить продукты не из списка.",
+    "Твоя задача — только распределить эти продукты по приёмам пищи так, чтобы соблюсти правила совместимости.",
+    "",
+    `Разрешённые продукты: ${allowedFoods.join(", ")}.`,
+    "",
+    `Правила совместимости (обязательно соблюсти по таймингу приёмов):\n${rulesText}`,
+    "",
+    'Верни ТОЛЬКО JSON: {"breakfast": string[], "lunch": string[], "dinner": string[], "snack": string[], "note": string}.',
+  ].join("\n");
+
+  try {
+    const p = providers[0];
+    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3);
+    const rawReply = result.reply.trim();
+    const jsonStr = rawReply.startsWith("{")
+      ? rawReply
+      : rawReply.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? rawReply;
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    return res.json({
+      source: "ai",
+      model: result.model,
+      allowedFoods,
+      interactions,
+      dayPlan: parsed,
+      guardrail: "AI только компонует продукты; дозировки и добавки — вне его полномочий, их не назначаем.",
+      disclaimer: DISCLAIMER,
+      timestamp: nowIso(),
+    });
+  } catch {
+    // Any AI/parse failure → safe deterministic day.
+    return res.json({
+      source: "deterministic-fallback",
+      allowedFoods,
+      interactions,
+      dayPlan: fallbackDay,
+      disclaimer: DISCLAIMER,
+      timestamp: nowIso(),
+    });
+  }
 });

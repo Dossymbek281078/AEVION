@@ -40,14 +40,52 @@ interface Plan {
   disclaimer: string;
 }
 
+interface DayPlan {
+  breakfast?: string[];
+  lunch?: string[];
+  dinner?: string[];
+  snack?: string[];
+  note?: string;
+}
+interface AiPlan {
+  source: "ai" | "deterministic-fallback";
+  model?: string;
+  dayPlan: DayPlan;
+  guardrail?: string;
+  disclaimer: string;
+}
+
 export default function QMelaninClient() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   function setVal(k: string, v: string) {
     setValues((prev) => ({ ...prev, [k]: v }));
+  }
+
+  async function buildDayMenu() {
+    setAiLoading(true);
+    try {
+      const numeric: Record<string, number> = {};
+      for (const [k, v] of Object.entries(values)) {
+        const n = parseFloat(v);
+        if (Number.isFinite(n)) numeric[k] = n;
+      }
+      const res = await fetch(apiUrl("/api/qmelanin/ai-plan"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ values: numeric }),
+      });
+      if (res.ok) setAiPlan((await res.json()) as AiPlan);
+    } catch {
+      /* AI-раскладка опциональна; детерминированный протокол выше остаётся источником истины */
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   async function buildPlan() {
@@ -163,9 +201,45 @@ export default function QMelaninClient() {
             </div>
 
             <p style={styles.disclaimer}>{plan.disclaimer}</p>
+
+            <div style={styles.aiBar}>
+              <button onClick={buildDayMenu} disabled={aiLoading} style={styles.btnGhost}>
+                {aiLoading ? "AI собирает меню дня…" : "AI-раскладка на день"}
+              </button>
+              <span style={styles.aiHint}>
+                AI только распределяет те же продукты по приёмам с учётом совместимости — дозы и добавки не назначает.
+              </span>
+            </div>
           </section>
         )}
 
+        {aiPlan && (
+          <section style={styles.card}>
+            <h2 style={styles.h2}>Меню на день {aiPlan.source === "ai" ? "(AI)" : "(детерминированное)"}</h2>
+            {(["breakfast", "lunch", "dinner", "snack"] as const).map((meal) => {
+              const items = aiPlan.dayPlan[meal];
+              if (!items || items.length === 0) return null;
+              const title = { breakfast: "Завтрак", lunch: "Обед", dinner: "Ужин", snack: "Перекус" }[meal];
+              return (
+                <div key={meal} style={styles.block}>
+                  <div style={styles.blockTitle}>{title}</div>
+                  <div style={styles.foods}>
+                    {items.map((f, i) => (
+                      <span key={`${f}-${i}`} style={styles.chip}>{f}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {aiPlan.dayPlan.note && <p style={styles.summary}>{aiPlan.dayPlan.note}</p>}
+            {aiPlan.model && <p style={styles.method}>Модель: {aiPlan.model}. {aiPlan.guardrail}</p>}
+            <p style={styles.disclaimer}>{aiPlan.disclaimer}</p>
+          </section>
+        )}
+
+        <p style={styles.foot}>
+          <a href="/qmelanin/track" style={styles.link}>Дневник седины →</a> · фотофиксация и недельный тренд.
+        </p>
         <p style={styles.foot}>
           Связанный модуль: <a href="/qrenew" style={styles.link}>QRenew</a> — программа клеточного
           обновления, где седина рассматривается как видимый биомаркер общего старения.
@@ -203,6 +277,10 @@ const styles: Record<string, React.CSSProperties> = {
   ruleWhy: { color: "#8b9bb0", fontSize: 12.5 },
   schedule: { marginTop: 18, background: "#13203a", borderRadius: 12, padding: 14, fontSize: 13.5, color: "#c3d0e0", lineHeight: 1.6 },
   disclaimer: { marginTop: 16, fontSize: 12.5, color: "#8b9bb0", borderTop: "1px solid #1c2942", paddingTop: 14 },
-  foot: { marginTop: 26, color: "#8b9bb0", fontSize: 14 },
+  foot: { marginTop: 20, color: "#8b9bb0", fontSize: 14 },
   link: { color: "#c8823f" },
+  aiBar: { marginTop: 18, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid #1c2942", paddingTop: 16 },
+  aiHint: { fontSize: 12.5, color: "#8b9bb0", flex: "1 1 240px" },
+  btnGhost: { background: "transparent", color: "#c8823f", border: "1px solid #c8823f", borderRadius: 10, padding: "10px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  method: { marginTop: 12, fontSize: 12.5, color: "#8b9bb0", fontFamily: "monospace" },
 };

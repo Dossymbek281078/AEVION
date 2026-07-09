@@ -76,6 +76,30 @@ async function main() {
     "qmelanin plan gives copper food sources");
   assert(plan.json?.schedule?.retestInDays === 90, "qmelanin plan schedules 90-day retest");
 
+  // ── QMelanin · Track (weekly gray-count trend) ───────────────────────────
+  const track = await jpost("/api/qmelanin/track", {
+    entries: [
+      { date: "2026-01-05", grayCountZone: 20 },
+      { date: "2026-03-05", grayCountZone: 14 },
+      { date: "2026-02-05", grayCountZone: 17 },
+    ],
+  });
+  assert(track.status === 200 && track.json?.points === 3 && track.json?.direction === "improving",
+    "qmelanin track sorts by date & flags improving trend", `dir=${track.json?.direction} first=${track.json?.firstCount} last=${track.json?.lastCount}`);
+  assert(track.json?.firstCount === 20 && track.json?.lastCount === 14 && track.json?.delta === -6,
+    "qmelanin track computes first→last delta across weeks", `delta=${track.json?.delta}`);
+  const trackEmpty = await jpost("/api/qmelanin/track", { entries: [] });
+  assert(trackEmpty.status === 400 && trackEmpty.json?.error === "no_entries",
+    "qmelanin track rejects empty entries (400)");
+
+  // ── QMelanin · AI day-plan (AI sequences allowed foods, never invents doses) ─
+  const aiPlan = await jpost("/api/qmelanin/ai-plan", { deficientKeys: defKeys });
+  assert(aiPlan.status === 200 && aiPlan.json?.dayPlan && Array.isArray(aiPlan.json?.allowedFoods) && aiPlan.json.allowedFoods.length > 0,
+    "qmelanin ai-plan returns a day menu from allowed foods", `source=${aiPlan.json?.source}`);
+  const aiJson = JSON.stringify(aiPlan.json?.dayPlan || {});
+  assert(!/\d+\s*(мг|мкг|ме|iu|mg|mcg)/i.test(aiJson),
+    "qmelanin ai-plan menu contains no dosages (guardrail)", "found dose-like token");
+
   // ── QRenew ──────────────────────────────────────────────────────────────
   const rh = await jget("/api/qrenew/health");
   assert(rh.status === 200 && rh.json?.status === "ok", "qrenew /health ok", `status=${rh.status}`);
@@ -114,6 +138,19 @@ async function main() {
     "qrenew still recommends Tier A/B core");
   assert((assessDia.json?.informOnly || []).some((x) => x.tier === "D"),
     "qrenew keeps Tier D as info-only, never recommended");
+
+  // ── QRenew · Report (biological-age trajectory baseline vs latest) ───────
+  const report = await jpost("/api/qrenew/report", {
+    baseline: { albumin: 40, creatinine: 95, glucose: 6.5, crp: 8, lymphocytePct: 20, mcv: 95, rdw: 15.5, alp: 110, wbc: 9, age: 50 },
+    latest: { albumin: 47, creatinine: 80, glucose: 4.9, crp: 0.6, lymphocytePct: 37, mcv: 89, rdw: 12.6, alp: 62, wbc: 5.5, age: 51 },
+  });
+  assert(report.status === 200 && report.json?.trajectory === "improving" && report.json?.ageGapChange < 0,
+    "qrenew report detects narrowing age-gap as improving", `traj=${report.json?.trajectory} gapΔ=${report.json?.ageGapChange}`);
+  assert(typeof report.json?.baseline?.phenotypicAge === "number" && typeof report.json?.latest?.phenotypicAge === "number",
+    "qrenew report returns PhenoAge for both timepoints");
+  const reportBad = await jpost("/api/qrenew/report", { baseline: { age: 40 }, latest: { age: 41 } });
+  assert(reportBad.status === 400 && reportBad.json?.error === "missing_biomarkers",
+    "qrenew report rejects incomplete timepoints (400)");
 
   console.log(`\n${failed === 0 ? "ALL PASS" : "FAILURES"} — ${step} checks, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

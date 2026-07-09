@@ -14,6 +14,7 @@ import {
   sanitizeMessages,
   streamProvider,
   streamProviderResilient,
+  type Provider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
 import {
@@ -280,6 +281,19 @@ function clampTemperature(raw: unknown, fallback = 0.6): number {
   return raw;
 }
 
+// Guard against bogus/unknown model names from callers (e.g. an old client that
+// sends model: "default", or a slug meant for a different provider). An
+// unrecognized model would otherwise be forwarded verbatim to the upstream API,
+// 404 there ("model: default"), and surface as recurring Sentry noise. When the
+// requested model isn't one the selected provider actually serves, fall back to
+// that provider's default model instead of erroring.
+function resolveModel(provider: Provider, requested: unknown): string {
+  if (typeof requested === "string" && provider.models.includes(requested)) {
+    return requested;
+  }
+  return provider.defaultModel;
+}
+
 // Strip provider-specific internals from upstream errors before they reach
 // the client. Callers don't need (and shouldn't see) phrases like
 // "Anthropic auth failed: invalid API key prefix sk-ant-..."; they get a
@@ -333,7 +347,7 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     }
 
     const provider = getProviders().find((p) => p.id === providerId)!;
-    const modelName = (typeof req.body?.model === "string" && req.body.model) || provider.defaultModel;
+    const modelName = resolveModel(provider, req.body?.model);
     const temperature = clampTemperature(req.body?.temperature, 0.6);
 
     const result = await callProviderResilient(providerId, messages, modelName, temperature);
@@ -396,7 +410,7 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
   }
 
   const provider = getProviders().find((p) => p.id === providerId)!;
-  const modelName = (typeof req.body?.model === "string" && req.body.model) || provider.defaultModel;
+  const modelName = resolveModel(provider, req.body?.model);
   const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
 
   // SSE headers
@@ -1399,10 +1413,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
       return res.status(503).json({ error: "no AI provider configured" });
     }
     const provider = getProviders().find((p) => p.id === providerId)!;
-    const modelName =
-      typeof req.body?.model === "string" && req.body.model
-        ? req.body.model
-        : provider.defaultModel;
+    const modelName = resolveModel(provider, req.body?.model);
     const temperature =
       typeof req.body?.temperature === "number" ? req.body.temperature : 0.5;
 

@@ -159,6 +159,7 @@ export default function PartnerPrintPage() {
         <div className="pb" />
         <div className="eyebrow">Financial scenario</div>
         <h2>ARR projection with 80-100 person team</h2>
+        <p style={{ fontSize: "10pt", color: "#555", fontStyle: "italic" }}>Illustrative potential under stated assumptions — the company is currently pre-revenue ($0). Not a forecast or guarantee.</p>
         <table>
           <thead>
             <tr><th>Product</th><th>Year 3 ARR</th><th>Year 5 ARR</th></tr>

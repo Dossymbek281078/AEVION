@@ -493,7 +493,7 @@ export default function HomePage() {
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
               { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
               { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
-              { title: "Year 5: $2B+ revenue", desc: "Platform subscriptions + transaction fees + API licensing + advertising + banking services. Revenue compounds, not grows linearly.", metric: "$2B+", sub: "Year 5 ARR" },
+              { title: "Bottom-up revenue model", desc: "Conservative bottom-up from real published prices on 3 of the modules: ≈$0.8M beachhead → ≈$9.4M regional modelled ARR. The rest is upside. Company is pre-revenue today.", metric: "≈$9.4M", sub: "modelled ARR · 3 flagships" },
             ].map((card) => (
               <div key={card.title} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>

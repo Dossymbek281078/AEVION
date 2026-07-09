@@ -479,6 +479,13 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Маркетплейс защищённых стартап-идей",
   },
   {
+    id: "qventure",
+    addonMonthly: 39,
+    includedIn: ["full", "enterprise"],
+    availability: "beta",
+    oneLiner: "AI due-diligence: quant-скоринг + совет 4 ролей + стратегия входа",
+  },
+  {
     id: "deepsan",
     addonMonthly: 9,
     includedIn: ["full", "enterprise"],

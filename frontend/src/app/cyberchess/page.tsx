@@ -1728,6 +1728,10 @@ export default function CyberChessPage(){
   // matchmakingWins — incrementit ниже когда over='You win' и matchmakingId != null
   const[matchmakingWins,sMatchmakingWins]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_matchmaking_wins_v1")||"0")||0}catch{return 0}});
   useEffect(()=>{try{localStorage.setItem("cc_matchmaking_wins_v1",String(matchmakingWins))}catch{}},[matchmakingWins]);
+  // Онлайн-рейтинг игрока (Glicko-2) — обновляется /end-обработчиком в localStorage.
+  // Читаем в effect (не в render) чтобы не ломать гидрацию; refresh после конца партии.
+  const[onlineRating,sOnlineRating]=useState<number|null>(null);
+  useEffect(()=>{try{const v=localStorage.getItem("cyberchess.rating");const n=v?Math.round(Number(v)):NaN;sOnlineRating(Number.isFinite(n)?n:null)}catch{}},[over,matchmakingId]);
   // spectatorStreams — Set unique gameId (persist в localStorage)
   const[spectatorStreams,sSpectatorStreams]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_spectator_streams_v1")||"0")||0}catch{return 0}});
   useEffect(()=>{try{localStorage.setItem("cc_spectator_streams_v1",String(spectatorStreams))}catch{}},[spectatorStreams]);
@@ -5572,6 +5576,23 @@ export default function CyberChessPage(){
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ▲ Анализ
                 </button>
+                {/* Рейтинг-платформа: лидерборд (с текущим онлайн-рейтингом) и история партий */}
+                <Link href="/cyberchess/leaderboard"
+                  className="cc-focus-ring"
+                  aria-label="Рейтинг-лидерборд онлайн-матчей"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
+                    border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  🏆 Рейтинг{onlineRating!=null&&<span style={{color:"#b45309",fontWeight:900,fontSize:11}}>{onlineRating}</span>}
+                </Link>
+                <Link href="/cyberchess/history"
+                  className="cc-focus-ring"
+                  aria-label="История онлайн-матчей"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
+                    border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  📜 История
+                </Link>
               </div>
 
             </div>
@@ -13548,6 +13569,11 @@ ${question.trim()}`;
                 flex:1,padding:"11px 0",borderRadius:10,border:"1px solid rgba(255,255,255,0.18)",
                 background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",minWidth:70,
               }}>📊 Анализ</button>
+              {/* Онлайн-матч: прямая ссылка на историю — кривая рейтинга + реванш */}
+              {matchmakingId&&<button onClick={()=>{window.location.href="/cyberchess/history"}} style={{
+                flex:1,padding:"11px 0",borderRadius:10,border:"1px solid rgba(255,255,255,0.18)",
+                background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",minWidth:70,
+              }}>📜 История</button>}
               <button onClick={async()=>{
                 try{
                   const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;

@@ -109,7 +109,10 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     const phase = String(req.query.phase || "").trim().toLowerCase();
     const minRating = toInt(req.query.minRating, 0);
     const maxRating = toInt(req.query.maxRating, 4000);
-    const limit = Math.min(200, Math.max(1, toInt(req.query.limit, 50)));
+    // Cap high enough to serve a full initial training bank in one request
+    // (the whole current pool is ~10.8k). Bounded so a grown million-scale pool
+    // still returns a sane sample per request.
+    const limit = Math.min(25000, Math.max(1, toInt(req.query.limit, 50)));
     const offset = Math.max(0, toInt(req.query.offset, 0));
     const shuffle = req.query.shuffle === "1" || req.query.shuffle === "true";
 

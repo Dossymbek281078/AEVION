@@ -2155,7 +2155,7 @@ export default function CyberChessPage(){
     // эндпоинт отсутствует/пуст/ошибка — поведение ровно как раньше.
     (async()=>{
       try{
-        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=1500");
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
         if(r.ok){
           const d=await r.json();
           if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}

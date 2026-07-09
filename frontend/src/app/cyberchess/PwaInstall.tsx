@@ -402,6 +402,13 @@ export default function PwaInstall() {
   if (installed) return null;
   if (dismissed) return null;
   if (isStandalone()) return null;
+  // Не наслаиваемся на первично-визитный онбординг (мастер настройки / приветствие /
+  // тур). Показываем install-баннер только после того, как пользователь прошёл онбординг.
+  try {
+    if (localStorage.getItem('aevion_cyberchess_onboarding_done_v1') !== '1') return null;
+  } catch {
+    /* ignore */
+  }
 
   /* ====== Основной install-баннер ====== */
 

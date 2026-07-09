@@ -1,0 +1,52 @@
+{
+  "name": "aevion-council-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AEVION QCoreAI Council — one-click offline desktop app (Electron). Bundles the backend + frontend and orchestrates a local Ollama runtime so the multi-agent Council runs with the internet off.",
+  "main": "main.js",
+  "author": "AEVION",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "stage": "powershell -ExecutionPolicy Bypass -File stage-resources.ps1",
+    "dist": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.aevion.council",
+    "productName": "AEVION Council",
+    "directories": {
+      "output": "out",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "resources/frontend",
+        "to": "frontend"
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "AEVION-Council-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

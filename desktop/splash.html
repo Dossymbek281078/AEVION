@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AEVION Council — starting</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    background:
+      radial-gradient(900px 500px at 80% -10%, rgba(168,85,247,0.16), transparent 60%),
+      radial-gradient(700px 420px at 5% 110%, rgba(217,70,239,0.10), transparent 55%),
+      #0d0b14;
+    color: #cbc9d6;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { padding: 40px 40px 8px; }
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+    font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: #a855f7;
+    display: flex; align-items: center; gap: 10px; margin: 0 0 14px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399;
+         box-shadow: 0 0 0 4px rgba(52,211,153,.15); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  h1 { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 600;
+       color: #eceaf2; font-size: 30px; margin: 0 0 6px; }
+  p.sub { margin: 0; color: #8b8792; font-size: 14px; max-width: 60ch; }
+  .logs {
+    flex: 1; margin: 20px 40px 40px; padding: 16px 18px; overflow-y: auto;
+    background: rgba(23,20,31,.6); border: 1px solid rgba(168,85,247,0.16); border-radius: 12px;
+    font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12.5px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .logs .line { color: #b9b5c6; }
+  .logs .line.ollama { color: #6ee7b7; }
+  .logs .line.backend { color: #c4b5fd; }
+  .logs .line.frontend { color: #f0abfc; }
+  .logs .line.app { color: #eceaf2; font-weight: 600; }
+</style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow"><span class="dot"></span> AEVION · QCoreAI</p>
+    <h1>Starting your offline Council…</h1>
+    <p class="sub">Bringing up the local model runtime, the backend, and the interface.
+      First run may download models — after that it works with the internet off.</p>
+  </header>
+  <div class="logs" id="logs"></div>
+  <script>
+    const box = document.getElementById("logs");
+    function add(line) {
+      const el = document.createElement("div");
+      el.className = "line";
+      const m = /^\[(ollama|backend|frontend|app)\]/.exec(line);
+      if (m) el.classList.add(m[1]);
+      el.textContent = line;
+      box.appendChild(el);
+      box.scrollTop = box.scrollHeight;
+    }
+    if (window.aevion && window.aevion.onLog) {
+      window.aevion.onLog(add);
+    }
+  </script>
+</body>
+</html>

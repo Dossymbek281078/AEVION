@@ -135,8 +135,14 @@ export function clearRepertoireCaches(): void {
 
 // ===== Lichess Explorer API =====
 
-const LICHESS_GAMES_ENDPOINT = "https://explorer.lichess.ovh/lichess";
-const LICHESS_MASTERS_ENDPOINT = "https://explorer.lichess.ovh/masters";
+// Route through our backend proxy — NOT explorer.lichess.ovh directly. A direct
+// browser call gets an HTML rate-limit / Cloudflare challenge page back (not
+// JSON) cross-origin, so real book stats silently fell back to mock data.
+// These constants are now the proxy `db` selector, not full URLs.
+// See aevion-globus-backend/src/routes/cyberchessOpening.ts.
+const EXPLORER_PROXY = "/api-backend/api/cyberchess-opening";
+const LICHESS_GAMES_ENDPOINT = "lichess";
+const LICHESS_MASTERS_ENDPOINT = "masters";
 
 // Use `play` param (UCI list) where possible to skip FEN computation,
 // but Lichess explorer requires either `fen` or `play`. We'll use `play`
@@ -144,13 +150,13 @@ const LICHESS_MASTERS_ENDPOINT = "https://explorer.lichess.ovh/masters";
 // need a chess engine to convert — we fall back to mock when no UCI.
 
 async function lichessExplorerFetch(
-  endpoint: string,
+  db: string,
   params: Record<string, string>,
   signal?: AbortSignal
 ): Promise<any | null> {
   try {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`${endpoint}?${qs}`, { signal });
+    const qs = new URLSearchParams({ db, ...params }).toString();
+    const res = await fetch(`${EXPLORER_PROXY}?${qs}`, { signal });
     if (!res.ok) return null;
     return await res.json();
   } catch {

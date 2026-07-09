@@ -415,8 +415,8 @@ const SYNTHESIZER_PROMPT = [
  * budget, then premium. Used to auto-assemble a council even when the operator
  * has only configured one vendor.
  */
-function enumerateCandidateModels(preferFree: boolean): { provider: string; model: string }[] {
-  const providers = getProviders().filter((p) => p.configured);
+function enumerateCandidateModels(preferFree: boolean, localOnly = false): { provider: string; model: string }[] {
+  const providers = getProviders().filter((p) => p.configured && (!localOnly || p.local));
   const rank = (p: Provider) =>
     preferFree
       ? p.tier === "free" ? 0 : p.tier === "budget" ? 1 : 2
@@ -442,29 +442,35 @@ function enumerateCandidateModels(preferFree: boolean): { provider: string; mode
  * temperature for genuine diversity. Degrades gracefully: with only one vendor
  * configured it spreads across that vendor's models; with none configured it
  * returns []. `override` (from the writer slot) lets a caller pin a base
- * provider/model for the whole council.
+ * provider/model for the whole council. `opts.localOnly` restricts the crowd
+ * to local runtimes so the whole council works with the internet off.
  */
-export function buildCouncil(maxMembers: number, override?: AgentOverride): CouncilMember[] {
+export function buildCouncil(
+  maxMembers: number,
+  override?: AgentOverride,
+  opts?: { localOnly?: boolean }
+): CouncilMember[] {
   const n = Math.max(2, Math.min(6, Math.floor(maxMembers) || 3));
+  const localOnly = opts?.localOnly === true;
 
   // If the caller pinned a provider, honour it for every member (varied models
-  // where possible); otherwise auto-assemble preferring free vendors.
+  // where possible); otherwise auto-assemble preferring free vendors. Under
+  // localOnly a non-local pin is ignored — we always draw from local runtimes.
   let slots: { provider: string; model: string }[];
-  if (override?.provider) {
-    const p = getProviders().find((x) => x.id === override.provider && x.configured);
-    if (p) {
-      const models = override.model && p.models.includes(override.model)
-        ? [override.model, ...p.models.filter((m) => m !== override.model)]
-        : p.models;
-      slots = models.map((m) => ({ provider: p.id, model: m }));
-    } else {
-      slots = enumerateCandidateModels(true);
-    }
+  const pinned = override?.provider
+    ? getProviders().find((x) => x.id === override.provider && x.configured && (!localOnly || x.local))
+    : undefined;
+  if (pinned) {
+    const models = override!.model && pinned.models.includes(override!.model)
+      ? [override!.model, ...pinned.models.filter((m) => m !== override!.model)]
+      : pinned.models;
+    slots = models.map((m) => ({ provider: pinned.id, model: m }));
   } else {
     // Auto-assemble preferring free vendors; enumerateCandidateModels still
     // returns budget/premium slots when no free vendor is configured, so the
-    // council degrades gracefully to whatever exists.
-    slots = enumerateCandidateModels(true);
+    // council degrades gracefully to whatever exists. localOnly restricts to
+    // local runtimes (returns [] when none is configured → caller errors out).
+    slots = enumerateCandidateModels(true, localOnly);
   }
 
   const members: CouncilMember[] = [];
@@ -490,12 +496,42 @@ export function buildCouncil(maxMembers: number, override?: AgentOverride): Coun
  * quality, ~23% cheaper. Fable 5 stays available for max-stakes runs via the
  * `synthModel` override or the QCOREAI_SYNTH_MODEL env. This is where the
  * premium spend goes: one high-quality fusion over many cheap drafts.
+ *
+ * `opts.localOnly` forces a LOCAL chair (Ollama/LM Studio/…): the whole council
+ * then runs with the internet off. A cloud override provider is ignored in that
+ * mode; returns null when no local runtime is configured.
  */
-export function buildSynthesizer(override?: AgentOverride): AgentConfig | null {
-  // Explicit override wins outright.
+export function buildSynthesizer(
+  override?: AgentOverride,
+  opts?: { localOnly?: boolean }
+): AgentConfig | null {
+  const localOnly = opts?.localOnly === true;
+
+  // Explicit override wins — but under localOnly only if it names a local,
+  // configured provider (otherwise we'd break the offline guarantee).
   if (override?.provider) {
-    const built = buildAgent("critic", override);
-    if (built) return { ...built, role: "critic", systemPrompt: override.systemPrompt?.trim() || SYNTHESIZER_PROMPT, temperature: 0.4 };
+    const p = getProviders().find((x) => x.id === override.provider && x.configured);
+    if (p && (!localOnly || p.local)) {
+      const built = buildAgent("critic", override);
+      if (built) return { ...built, role: "critic", systemPrompt: override.systemPrompt?.trim() || SYNTHESIZER_PROMPT, temperature: 0.4 };
+    }
+  }
+
+  // Offline chair: pick the strongest local runtime available (its default
+  // model is usually the largest one the operator pulled). No cloud fallback.
+  if (localOnly) {
+    const chair = getProviders().find((p) => p.configured && p.local);
+    if (!chair) return null;
+    const model = override?.model && chair.models.includes(override.model)
+      ? override.model
+      : chair.defaultModel;
+    return {
+      role: "critic",
+      provider: chair.id,
+      model,
+      systemPrompt: override?.systemPrompt?.trim() || SYNTHESIZER_PROMPT,
+      temperature: 0.4,
+    };
   }
 
   const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured);

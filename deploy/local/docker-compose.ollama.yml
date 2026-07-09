@@ -1,0 +1,51 @@
+# AEVION QCoreAI — local model runtime (Ollama) via Docker.
+#
+# Runs Ollama in a container and auto-pulls a few small, diverse models so the
+# offline Council has a crowd to convene. The AEVION backend/frontend still run
+# from the repo (npm run dev) — point the backend at this runtime with:
+#   OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+#
+# Start:   docker compose -f deploy/local/docker-compose.ollama.yml up -d
+# Models:  override with  MODELS="llama3.2 qwen2.5:7b gemma2:2b"  in the env.
+# GPU:     uncomment the `deploy.resources` block if you have NVIDIA + toolkit.
+#
+# Once the models are pulled, this works with the internet fully off.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aevion-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for NVIDIA GPU acceleration:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot sidecar: waits for Ollama, pulls the model set, then exits.
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: aevion-ollama-pull
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - MODELS=${MODELS:-llama3.2 qwen2.5:7b gemma2:2b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        echo "waiting for ollama..." &&
+        until ollama list >/dev/null 2>&1; do sleep 1; done &&
+        for m in $${MODELS}; do echo "pulling $$m"; ollama pull $$m; done &&
+        echo "done: $${MODELS}"
+    restart: "no"
+
+volumes:
+  ollama-models:

@@ -7,7 +7,9 @@
  *   - the free fleet is present (OpenRouter/Groq/Cerebras/Mistral/Together/…),
  *   - council auto-assembles preferring FREE vendors,
  *   - it degrades gracefully to one vendor's models,
- *   - the Synthesizer defaults to Opus 4.8 (best quality/cost chair).
+ *   - the Synthesizer defaults to Opus 4.8 (best quality/cost chair),
+ *   - local runtimes (Ollama/LM Studio/Jan/LocalAI/llama.cpp) are catalogued,
+ *   - the offline council convenes crowd + chair from local runtimes only.
  *
  * Run (from aevion-globus-backend/, after `npx tsc`):
  *   node scripts/qcore-fleet-smoke.js
@@ -26,10 +28,10 @@ function ok(name, cond) {
 
 // Clean provider env so "configured" reflects only what each case sets.
 for (const k of Object.keys(process.env)) {
-  if (/_(API_KEY|TOKEN)$/.test(k) || k === "OLLAMA_BASE_URL") delete process.env[k];
+  if (/_(API_KEY|TOKEN|BASE_URL)$/.test(k)) delete process.env[k];
 }
 
-const { getProviders, getFreeProviders } = require(providersPath);
+const { getProviders, getFreeProviders, getLocalProviders } = require(providersPath);
 const { buildCouncil, buildSynthesizer } = require(agentsPath);
 
 console.log("QCoreAI free-fleet + council smoke\n");
@@ -68,6 +70,32 @@ const cFleet = buildCouncil(3);
 ok("fleet council has 3 members", cFleet.length === 3);
 ok("fleet council all free vendors", cFleet.every((m) => ["openrouter", "groq", "cerebras"].includes(m.provider)));
 ok("fleet council personas distinct", new Set(cFleet.map((m) => m.persona)).size === 3);
+
+// 4. Local runtimes (offline) — catalogue + offline council assembly.
+const localIds = all.filter((p) => p.local).map((p) => p.id);
+for (const id of ["ollama", "lmstudio", "jan", "localai", "llamacpp"]) {
+  ok(`local runtimes include ${id}`, localIds.includes(id));
+}
+ok("all local runtimes are free", all.filter((p) => p.local).every((p) => p.free === true));
+ok("no local runtime configured yet", getLocalProviders().length === 0);
+// Offline council with no local runtime must NOT assemble (guarantee preserved).
+ok("offline council empty without local runtime", buildCouncil(3, undefined, { localOnly: true }).length === 0);
+ok("offline synth null without local runtime", buildSynthesizer(undefined, { localOnly: true }) === null);
+
+// Configure a local runtime (LM Studio). Cloud free vendors are still set from
+// section 3 — offline mode must ignore them and use only the local runtime.
+process.env.LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1";
+ok("1 local runtime now configured", getLocalProviders().length === 1);
+const cOffline = buildCouncil(3, undefined, { localOnly: true });
+ok("offline council assembles from local runtime", cOffline.length >= 2);
+ok("offline council all local", cOffline.every((m) => m.provider === "lmstudio"));
+ok("offline council ignores cloud free vendors", cOffline.every((m) => !["openrouter", "groq", "cerebras"].includes(m.provider)));
+const offSynth = buildSynthesizer(undefined, { localOnly: true });
+ok("offline synth is a local runtime", offSynth?.provider === "lmstudio");
+// Cloud override must be ignored under offline; a local override is honoured.
+ok("offline synth ignores cloud override", buildSynthesizer({ provider: "anthropic", model: "claude-opus-4-8" }, { localOnly: true })?.provider === "lmstudio");
+// Sanity: non-offline council still prefers the cloud free fleet, not the local one.
+ok("online council still uses cloud free fleet", buildCouncil(3).some((m) => ["openrouter", "groq", "cerebras"].includes(m.provider)));
 
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

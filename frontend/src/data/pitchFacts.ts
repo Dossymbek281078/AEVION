@@ -56,7 +56,7 @@ export const IS_PRE_REVENUE = true;
  * Justification anchor = sum-of-parts: a working creator's AI stack (Claude +
  * Midjourney + ElevenLabs + Higgsfield ≈ $100+/mo) vs one AEVION seat.
  */
-export const UNIVERSE_SEAT_MONTHLY = "$79";
-export const UNIVERSE_SEAT_ANNUAL_PER_MO = "$63"; // annual −20%
-export const UNIVERSE_SEAT_ANNUAL_TOTAL = "$756"; // effective ARPU used in the growth model
-export const LIVE_ALL_ACCESS_MONTHLY = "$49"; // what the live product charges today
+export const UNIVERSE_SEAT_MONTHLY = "$149.99";
+export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,500/yr"; // effective ARPU used in the growth model
+export const UNIVERSE_SEAT_INTRO_NOTE = "Introductory price for the first 6–12 months — may rise as the ecosystem matures.";
+export const LIVE_ALL_ACCESS_MONTHLY = "$49"; // what the live product charges today (4-tier: $0/19/29/49)

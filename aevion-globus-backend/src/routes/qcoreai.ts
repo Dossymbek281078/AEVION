@@ -473,8 +473,14 @@ qcoreaiRouter.get("/providers", (_req, res) => {
     configured: p.configured,
     free: p.free,
     tier: p.tier,
+    local: p.local === true,
   }));
-  res.json({ providers, freeCount: providers.filter((p) => p.free).length });
+  res.json({
+    providers,
+    freeCount: providers.filter((p) => p.free).length,
+    // Configured local runtimes → the offline council is available when > 0.
+    localCount: providers.filter((p) => p.local && p.configured).length,
+  });
 });
 
 qcoreaiRouter.get("/pricing", (_req, res) => {
@@ -2129,6 +2135,10 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   // council mode: Mixture-of-Agents refinement layers (1–3, default 1).
   const councilLayers =
     typeof req.body?.councilLayers === "number" ? Math.max(1, Math.min(3, Math.floor(req.body.councilLayers))) : 1;
+  // council mode: offline — convene crowd + chair from local runtimes only
+  // (Ollama / LM Studio / Jan / LocalAI / llama.cpp). Accepts `offline` or
+  // `localOnly`. Ignored for non-council strategies.
+  const localOnly = req.body?.offline === true || req.body?.localOnly === true;
 
   // Optional spend cap. Hard upper bound 50 USD/run prevents accidental
   // misuse via negative or huge values.
@@ -2151,8 +2161,9 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // Council convenience: `synthModel` (+ optional `synthProvider`) picks the
   // final Synthesizer model without hand-building overrides.critic. Default
-  // (unset) keeps Fable 5. Only applies when the caller didn't already pin the
-  // critic slot. Handy for the Fable-vs-Opus cost/quality trade-off.
+  // (unset) uses Opus 4.8 (best quality/cost chair). Only applies when the
+  // caller didn't already pin the critic slot. Handy for the Fable-vs-Opus
+  // cost/quality trade-off, or a local chair under offline mode.
   if (strategy === "council" && !overrides.critic && typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {
     overrides.critic = {
       provider: typeof req.body?.synthProvider === "string" && req.body.synthProvider.trim()
@@ -2420,6 +2431,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       maxRevisions,
       councilSize,
       councilLayers,
+      localOnly,
       history,
       guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
@@ -4183,7 +4195,7 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         id: "council",
         label: "Council (free swarm)",
         description:
-          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Opus 4.8 by default) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost.",
+          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Opus 4.8 by default) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost. Set offline:true to run the whole council on local runtimes (Ollama / LM Studio / Jan / LocalAI / llama.cpp) with the internet off.",
         agents: ["council", "aggregators", "synthesizer"],
       },
     ],

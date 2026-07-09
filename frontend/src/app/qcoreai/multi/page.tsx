@@ -350,6 +350,8 @@ export default function QCoreMultiAgentPage() {
   const [councilSize, setCouncilSize] = useState<number>(3);
   // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
   const [councilLayers, setCouncilLayers] = useState<number>(1);
+  // council mode: run crowd + chair on local runtimes only → works offline.
+  const [councilOffline, setCouncilOffline] = useState<boolean>(false);
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
@@ -1346,7 +1348,11 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
-      if (useStrategy === "council") { body.councilSize = councilSize; body.councilLayers = councilLayers; }
+      if (useStrategy === "council") {
+        body.councilSize = councilSize;
+        body.councilLayers = councilLayers;
+        if (councilOffline) body.offline = true;
+      }
       if (continueFromRunId) body.continueFromRunId = continueFromRunId;
       // V6-P integration: send promptOverrides if user picked custom prompts.
       const promptOverridesBody: Record<string, { promptId: string }> = {};
@@ -2013,6 +2019,24 @@ export default function QCoreMultiAgentPage() {
                     style={{ border: "none", background: "rgba(192,38,211,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>
+              )}
+
+              {strategy === "council" && (
+                <button
+                  onClick={() => setCouncilOffline((v) => !v)}
+                  title="Offline: run the whole council (crowd + chair) on local runtimes only — Ollama / LM Studio / Jan / LocalAI / llama.cpp. Works with the internet off. Requires a local runtime configured on the backend."
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 10px", borderRadius: 8, cursor: "pointer",
+                    background: councilOffline ? "rgba(52,211,153,0.22)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${councilOffline ? "rgba(52,211,153,0.6)" : "rgba(255,255,255,0.18)"}`,
+                    color: councilOffline ? "#6ee7b7" : "rgba(255,255,255,0.7)",
+                    fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>{councilOffline ? "◉" : "○"}</span>
+                  <span>Offline (local)</span>
+                </button>
               )}
 
               {(strategy === "sequential"

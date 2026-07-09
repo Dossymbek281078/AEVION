@@ -64,6 +64,13 @@ export type OrchestratorInput = {
    * ICLR 2025). Use for high-stakes async answers, not interactive chat.
    */
   councilLayers?: number;
+  /**
+   * council mode only: when true, convene the crowd AND the chair from LOCAL
+   * runtimes only (Ollama / LM Studio / Jan / LocalAI / llama.cpp). The whole
+   * council then runs with the internet off. Errors out (no-provider) if no
+   * local runtime is configured.
+   */
+  localOnly?: boolean;
   /** Optional prior user/assistant turns for follow-up context. */
   history?: ChatMessage[];
   /**
@@ -100,6 +107,8 @@ export type OrchestratorEvent =
       synthesizer?: { provider: string; model: string };
       /** council mode: Mixture-of-Agents refinement layers in play. */
       councilLayers?: number;
+      /** council mode: true = crowd + chair are all local (runs offline). */
+      localOnly?: boolean;
     }
   | {
       type: "agent_start";
@@ -684,6 +693,7 @@ async function* runCouncil(
     })),
     synthesizer: { provider: synthesizer.provider, model: synthesizer.model },
     councilLayers: layers,
+    localOnly: input.localOnly === true,
   };
 
   /* Layer 0 — proposers: the whole crowd answers in parallel, each under its
@@ -826,10 +836,11 @@ export async function* runMultiAgent(
     "sequential";
 
   if (strategy === "council") {
-    const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer);
-    const synthesizer = buildSynthesizer(input.overrides?.critic);
+    const localOnly = input.localOnly === true;
+    const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer, { localOnly });
+    const synthesizer = buildSynthesizer(input.overrides?.critic, { localOnly });
     if (members.length < 2 || !synthesizer) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: localOnly ? noLocalProviderMsg() : noProviderMsg() };
       return;
     }
     yield* runCouncil(input, { members, synthesizer }, t0);
@@ -1042,6 +1053,10 @@ function buildCouncilSynthPrompt(
 
 function noProviderMsg(): string {
   return "No AI provider is configured. Add ANTHROPIC_API_KEY (or OPENAI / GEMINI / DEEPSEEK / GROK) to backend env.";
+}
+
+function noLocalProviderMsg(): string {
+  return "Offline council needs a local runtime. Start one and set its base URL: OLLAMA_BASE_URL, LMSTUDIO_BASE_URL, JAN_BASE_URL, LOCALAI_BASE_URL, or LLAMACPP_BASE_URL.";
 }
 
 function errMsg(e: unknown): string {

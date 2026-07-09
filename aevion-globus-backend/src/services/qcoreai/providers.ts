@@ -39,6 +39,12 @@ export type Provider = {
   free: boolean;
   /** Routing hint used by the orchestrator to assign roles cost-rationally. */
   tier: ProviderTier;
+  /**
+   * true = runs on the user's own machine (Ollama, LM Studio, Jan, LocalAI,
+   * llama.cpp). These keep working with the internet fully off — the basis for
+   * the offline council. All local providers are also `free`.
+   */
+  local?: boolean;
 };
 
 export type StreamEvent =
@@ -106,10 +112,39 @@ const OPENAI_COMPAT: Record<string, OpenAICompatCfg> = {
     baseUrl: () => (process.env.GITHUB_MODELS_BASE_URL || "https://models.github.ai/inference").replace(/\/$/, ""),
     envKey: "GITHUB_MODELS_TOKEN",
   },
+  // ── Local runtimes (offline-capable) ────────────────────────────────────
+  // Each exposes an OpenAI-compatible /chat/completions on localhost, so the
+  // same adapter drives them. Keyless. Opt-in via their *_BASE_URL env, which
+  // also means they never appear in a cloud deploy unless explicitly set.
   ollama: {
     // Local runtime — fully free, no key. Opt-in via OLLAMA_BASE_URL.
     baseUrl: () => (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/v1").replace(/\/$/, ""),
     envKey: "OLLAMA_BASE_URL",
+    keyless: true,
+  },
+  lmstudio: {
+    // LM Studio — GUI runtime, OpenAI server on :1234. Opt-in via LMSTUDIO_BASE_URL.
+    baseUrl: () => (process.env.LMSTUDIO_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/$/, ""),
+    envKey: "LMSTUDIO_BASE_URL",
+    keyless: true,
+  },
+  jan: {
+    // Jan — fully-offline desktop app, OpenAI server on :1337. Opt-in via JAN_BASE_URL.
+    baseUrl: () => (process.env.JAN_BASE_URL || "http://127.0.0.1:1337/v1").replace(/\/$/, ""),
+    envKey: "JAN_BASE_URL",
+    keyless: true,
+  },
+  localai: {
+    // LocalAI — drop-in OpenAI replacement, default :8080. Opt-in via LOCALAI_BASE_URL.
+    baseUrl: () => (process.env.LOCALAI_BASE_URL || "http://127.0.0.1:8080/v1").replace(/\/$/, ""),
+    envKey: "LOCALAI_BASE_URL",
+    keyless: true,
+  },
+  llamacpp: {
+    // llama.cpp server — bare engine, default :8080. Opt-in via LLAMACPP_BASE_URL
+    // (set a distinct port if sharing the host with LocalAI).
+    baseUrl: () => (process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080/v1").replace(/\/$/, ""),
+    envKey: "LLAMACPP_BASE_URL",
     keyless: true,
   },
 };
@@ -268,15 +303,63 @@ export function getProviders(): Provider[] {
       free: true,
       tier: "free",
     },
+    /* ── Local runtimes (offline-capable) ───────────────────────────────── */
     {
       id: "ollama",
-      name: "Ollama (local, free)",
+      name: "Ollama (local, offline)",
       models: ["llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"],
       defaultModel: process.env.OLLAMA_MODEL || "llama3.1",
       envKey: "OLLAMA_BASE_URL",
       configured: isConfigured("OLLAMA_BASE_URL"),
       free: true,
       tier: "free",
+      local: true,
+    },
+    {
+      id: "lmstudio",
+      name: "LM Studio (local, offline)",
+      // Model id = whatever you've loaded in LM Studio. Override via LMSTUDIO_MODEL.
+      models: ["qwen2.5-7b-instruct", "llama-3.2-3b-instruct", "mistral-7b-instruct"],
+      defaultModel: process.env.LMSTUDIO_MODEL || "qwen2.5-7b-instruct",
+      envKey: "LMSTUDIO_BASE_URL",
+      configured: isConfigured("LMSTUDIO_BASE_URL"),
+      free: true,
+      tier: "free",
+      local: true,
+    },
+    {
+      id: "jan",
+      name: "Jan (local, offline)",
+      models: ["llama3.2-3b-instruct", "qwen2.5-7b-instruct", "mistral-7b-instruct"],
+      defaultModel: process.env.JAN_MODEL || "llama3.2-3b-instruct",
+      envKey: "JAN_BASE_URL",
+      configured: isConfigured("JAN_BASE_URL"),
+      free: true,
+      tier: "free",
+      local: true,
+    },
+    {
+      id: "localai",
+      name: "LocalAI (local, offline)",
+      models: ["llama-3.2-3b-instruct", "qwen2.5-7b-instruct", "phi-3-mini"],
+      defaultModel: process.env.LOCALAI_MODEL || "llama-3.2-3b-instruct",
+      envKey: "LOCALAI_BASE_URL",
+      configured: isConfigured("LOCALAI_BASE_URL"),
+      free: true,
+      tier: "free",
+      local: true,
+    },
+    {
+      id: "llamacpp",
+      name: "llama.cpp (local, offline)",
+      // The server usually ignores the model field (serves the loaded gguf).
+      models: ["local-gguf"],
+      defaultModel: process.env.LLAMACPP_MODEL || "local-gguf",
+      envKey: "LLAMACPP_BASE_URL",
+      configured: isConfigured("LLAMACPP_BASE_URL"),
+      free: true,
+      tier: "free",
+      local: true,
     },
     // Demo/offline provider — canned responses, no network. Only appears (and
     // only "configured") when QCOREAI_STUB=1, so it never leaks into prod.
@@ -299,6 +382,15 @@ export function getProviders(): Provider[] {
 /** All configured providers whose tier is "free" (for the council swarm). */
 export function getFreeProviders(): Provider[] {
   return getProviders().filter((p) => p.configured && p.free);
+}
+
+/**
+ * All configured providers that run locally (Ollama / LM Studio / Jan / LocalAI
+ * / llama.cpp). These keep working with the internet fully off — the pool the
+ * offline council draws from for both its crowd and its chair.
+ */
+export function getLocalProviders(): Provider[] {
+  return getProviders().filter((p) => p.configured && p.local);
 }
 
 export function sanitizeMessages(raw: unknown): ChatMessage[] | null {

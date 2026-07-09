@@ -794,7 +794,8 @@ function CreateTournamentModal({
       /* ignore */
     }
     try {
-      const r = await fetch("/api-backend/api/cyberchess-tournaments/", {
+      // No trailing slash — hit the route directly and avoid a 308 POST redirect.
+      const r = await fetch("/api-backend/api/cyberchess-tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

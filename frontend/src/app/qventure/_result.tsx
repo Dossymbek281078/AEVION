@@ -4,8 +4,9 @@
 // public read-only /qventure/a/[id] share page. Keeps a single source of truth
 // for the memo layout so the shared page looks identical to the live result.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { isSaved, toggleWatchlist } from "./_watchlist";
 
 // ─── Types (mirror backend engine.ts) ────────────────────────────────────────
 
@@ -197,6 +198,38 @@ export function ShareButton({ id }: { id: string }) {
   );
 }
 
+// ─── Save to watchlist ────────────────────────────────────────────────────────
+
+export function SaveButton({ result }: { result: AnalysisResult }) {
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setSaved(isSaved(result.id)); }, [result.id]);
+  const onClick = () => {
+    const now = saved; // toggle returns new state; keep UI in sync
+    const nextSaved = toggleWatchlist({
+      id: result.id,
+      name: result.name,
+      sector: result.result.sector.label,
+      stage: result.result.stage,
+      composite: result.composite,
+      verdict: result.verdict,
+      savedAt: new Date().toISOString(),
+    });
+    setSaved(nextSaved);
+    void now;
+  };
+  return (
+    <button type="button" onClick={onClick} style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer",
+      background: saved ? "#7c3aed" : "#fff",
+      color: saved ? "#fff" : "#7c3aed",
+      border: "1px solid #ddd6fe",
+    }}>
+      {saved ? "★ Saved" : "☆ Save to watchlist"}
+    </button>
+  );
+}
+
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
@@ -222,6 +255,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
                 ⬇ Export memo to PDF
               </a>
               {!shared && <ShareButton id={result.id} />}
+              <SaveButton result={result} />
             </div>
           </div>
           <ScoreGauge score={result.composite} verdict={result.verdict} />

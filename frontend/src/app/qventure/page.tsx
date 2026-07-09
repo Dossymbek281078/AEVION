@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
@@ -91,19 +92,24 @@ export default function QVenturePage() {
           </p>
         </div>
 
-        {/* Mode switch */}
-        <div style={{ display: "inline-flex", gap: 2, padding: 3, background: "#f1f5f9", borderRadius: 10, marginBottom: 16 }}>
-          {(["single", "compare"] as const).map((m) => (
-            <button key={m} type="button" onClick={() => setMode(m)} style={{
-              padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
-              fontSize: 13.5, fontWeight: 700,
-              background: mode === m ? "#fff" : "transparent",
-              color: mode === m ? "#7c3aed" : "#64748b",
-              boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
-            }}>
-              {m === "single" ? "Analyze one" : "⚖ Compare two"}
-            </button>
-          ))}
+        {/* Mode switch + watchlist link */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ display: "inline-flex", gap: 2, padding: 3, background: "#f1f5f9", borderRadius: 10 }}>
+            {(["single", "compare"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setMode(m)} style={{
+                padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 13.5, fontWeight: 700,
+                background: mode === m ? "#fff" : "transparent",
+                color: mode === m ? "#7c3aed" : "#64748b",
+                boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
+              }}>
+                {m === "single" ? "Analyze one" : "⚖ Compare two"}
+              </button>
+            ))}
+          </div>
+          <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+            ★ Watchlist →
+          </Link>
         </div>
 
         {mode === "single"
@@ -223,9 +229,23 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
 
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
         {head(a, "a")}
         {head(b, "b")}
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <a
+          href={apiUrl(`/api/qventure/compare/pdf?a=${encodeURIComponent(a.id)}&b=${encodeURIComponent(b.id)}`)}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "9px 18px", background: "#fff", color: "#7c3aed",
+            border: "1px solid #ddd6fe", borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: "none",
+          }}
+        >
+          ⬇ Export comparison to PDF
+        </a>
       </div>
 
       <div style={SECTION}>

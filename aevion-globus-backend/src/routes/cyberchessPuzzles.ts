@@ -12,7 +12,6 @@
 
 import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
-import * as path from "node:path";
 
 const router = Router();
 
@@ -28,49 +27,72 @@ interface Puzzle {
   mateIn?: number;
 }
 
-// Pool path is overridable so ops can point at a large imported dump on a
-// mounted volume without a redeploy.
-const POOL_PATH =
-  process.env.CYBERCHESS_PUZZLES_PATH ||
-  path.resolve(process.cwd(), "data", "cyberchess-puzzles.json");
+// Optional LOCAL pool file — for ops who mount a large imported dump on a
+// volume. NOTE: on Railway a persistent volume is mounted at data/ (so
+// tournament writes survive redeploys), which SHADOWS any seed committed under
+// data/. So we do NOT ship a seed file there; instead the default source is the
+// already-public puzzles.json served by the frontend (single source of truth).
+const POOL_PATH = process.env.CYBERCHESS_PUZZLES_PATH || "";
+const POOL_URL =
+  process.env.CYBERCHESS_PUZZLES_URL ||
+  "https://aevion.vercel.app/puzzles.json";
 
 let POOL: Puzzle[] = [];
-let loaded = false;
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
+let loadPromise: Promise<void> | null = null;
 
-function loadPool(): void {
-  if (loaded) return;
-  loaded = true;
-  try {
-    if (!fs.existsSync(POOL_PATH)) {
-      console.log("[cyberchess-puzzles] no pool file at", POOL_PATH, "— serving empty (frontend falls back)");
-      return;
-    }
-    const raw = fs.readFileSync(POOL_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    const arr: unknown = Array.isArray(parsed) ? parsed : (parsed && parsed.puzzles);
-    if (!Array.isArray(arr)) {
-      console.warn("[cyberchess-puzzles] pool file has unexpected shape — serving empty");
-      return;
-    }
-    POOL = (arr as Puzzle[]).filter(
-      (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
-    );
-    for (let i = 0; i < POOL.length; i++) {
-      const key = String(POOL[i].theme || "").toLowerCase();
-      const bucket = THEME_INDEX.get(key);
-      if (bucket) bucket.push(i);
-      else THEME_INDEX.set(key, [i]);
-    }
-    console.log(`[cyberchess-puzzles] loaded ${POOL.length} puzzles, ${THEME_INDEX.size} themes`);
-  } catch (e) {
-    console.warn("[cyberchess-puzzles] load failed:", e instanceof Error ? e.message : e);
-    POOL = [];
+function ingest(arr: unknown, source: string): void {
+  if (!Array.isArray(arr)) {
+    console.warn(`[cyberchess-puzzles] ${source}: unexpected shape — serving empty`);
+    return;
   }
+  POOL = (arr as Puzzle[]).filter(
+    (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
+  );
+  THEME_INDEX.clear();
+  for (let i = 0; i < POOL.length; i++) {
+    const key = String(POOL[i].theme || "").toLowerCase();
+    const bucket = THEME_INDEX.get(key);
+    if (bucket) bucket.push(i);
+    else THEME_INDEX.set(key, [i]);
+  }
+  console.log(`[cyberchess-puzzles] loaded ${POOL.length} puzzles, ${THEME_INDEX.size} themes (${source})`);
 }
 
-loadPool();
+// Load once, cached via a shared promise. Local file (if configured) wins;
+// otherwise fetch the public pool URL. Any failure → empty pool (frontend
+// falls back to its bundled copy). Never throws.
+function ensureLoaded(): Promise<void> {
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    // 1) explicit local file (large mounted dump)
+    if (POOL_PATH) {
+      try {
+        if (fs.existsSync(POOL_PATH)) {
+          const parsed = JSON.parse(fs.readFileSync(POOL_PATH, "utf-8"));
+          ingest(Array.isArray(parsed) ? parsed : parsed && parsed.puzzles, `file ${POOL_PATH}`);
+          if (POOL.length > 0) return;
+        }
+      } catch (e) {
+        console.warn("[cyberchess-puzzles] local file load failed:", e instanceof Error ? e.message : e);
+      }
+    }
+    // 2) public URL (default source of truth)
+    try {
+      const r = await fetch(POOL_URL);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const parsed = await r.json();
+      ingest(Array.isArray(parsed) ? parsed : parsed && (parsed as { puzzles?: unknown }).puzzles, `url ${POOL_URL}`);
+    } catch (e) {
+      console.warn("[cyberchess-puzzles] url load failed:", e instanceof Error ? e.message : e);
+    }
+  })();
+  return loadPromise;
+}
+
+// warm the pool at startup (non-blocking)
+void ensureLoaded();
 
 function toInt(v: unknown, dflt: number): number {
   const n = Number(v);
@@ -80,8 +102,9 @@ function toInt(v: unknown, dflt: number): number {
 // GET / — filtered, paginated puzzle query.
 // Query: theme, minRating, maxRating, phase, limit (<=200), offset,
 //        shuffle=1 (random sample within the filtered set).
-router.get("/", (req: Request, res: Response): void => {
+router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
+    await ensureLoaded();
     const theme = String(req.query.theme || "").trim().toLowerCase();
     const phase = String(req.query.phase || "").trim().toLowerCase();
     const minRating = toInt(req.query.minRating, 0);
@@ -129,7 +152,8 @@ router.get("/", (req: Request, res: Response): void => {
 });
 
 // GET /themes — distinct themes with counts, for building filter UIs.
-router.get("/themes", (_req: Request, res: Response): void => {
+router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
+  await ensureLoaded();
   const themes = [...THEME_INDEX.entries()]
     .map(([key, idxs]) => ({ theme: POOL[idxs[0]]?.theme ?? key, count: idxs.length }))
     .sort((a, b) => b.count - a.count);
@@ -137,8 +161,9 @@ router.get("/themes", (_req: Request, res: Response): void => {
 });
 
 // GET /meta — pool health/size (cheap smoke).
-router.get("/meta", (_req: Request, res: Response): void => {
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH });
+router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
+  await ensureLoaded();
+  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH || POOL_URL });
 });
 
 export default router;

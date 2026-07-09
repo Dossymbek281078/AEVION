@@ -107,6 +107,10 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/developers/fintech/examples", changeFrequency: "monthly", priority: 0.6 },
   { path: "/developers/fintech/migration", changeFrequency: "monthly", priority: 0.5 },
   { path: "/developers/fintech/rate-limits", changeFrequency: "monthly", priority: 0.5 },
+  // QVenture — AI Investment Analyst
+  { path: "/qventure", changeFrequency: "daily", priority: 0.85 },
+  { path: "/qventure/watchlist", changeFrequency: "weekly", priority: 0.5 },
+  { path: "/qventure/a/demo-neurodx", changeFrequency: "monthly", priority: 0.6 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
   // Constitution module

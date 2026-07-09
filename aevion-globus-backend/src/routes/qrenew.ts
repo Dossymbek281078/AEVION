@@ -256,3 +256,61 @@ qrenewRouter.post("/assess", (req: Request, res: Response) => {
     timestamp: nowIso(),
   });
 });
+
+/**
+ * POST /report
+ * body: { baseline: {<PhenoInput>}, latest: {<PhenoInput>} }
+ * → biological-age trajectory: PhenoAge at both points + delta improvement +
+ *   whether the gap to chronological age narrowed. Stateless.
+ */
+qrenewRouter.post("/report", (req: Request, res: Response) => {
+  const b = req.body || {};
+  const keys: (keyof PhenoInput)[] = ["albumin", "creatinine", "glucose", "crp", "lymphocytePct", "mcv", "rdw", "alp", "wbc", "age"];
+
+  function parsePoint(src: unknown): { ok: true; input: PhenoInput } | { ok: false; missing: string[] } {
+    const o = (src || {}) as Record<string, unknown>;
+    const parsed: Partial<PhenoInput> = {};
+    const missing: string[] = [];
+    for (const k of keys) {
+      const v = num(o[k]);
+      if (v === null) missing.push(k);
+      else parsed[k] = v;
+    }
+    return missing.length ? { ok: false, missing } : { ok: true, input: parsed as PhenoInput };
+  }
+
+  const base = parsePoint(b.baseline);
+  const late = parsePoint(b.latest);
+  if (!base.ok || !late.ok) {
+    return res.status(400).json({
+      error: "missing_biomarkers",
+      baselineMissing: base.ok ? [] : base.missing,
+      latestMissing: late.ok ? [] : late.missing,
+      required: keys,
+    });
+  }
+
+  const baseBio = phenoAge(base.input);
+  const lateBio = phenoAge(late.input);
+  const baseGap = Math.round((baseBio - base.input.age) * 10) / 10;
+  const lateGap = Math.round((lateBio - late.input.age) * 10) / 10;
+  const bioChange = Math.round((lateBio - baseBio) * 10) / 10;
+  const gapChange = Math.round((lateGap - baseGap) * 10) / 10; // negative = gap narrowed (good)
+
+  res.json({
+    baseline: { chronologicalAge: base.input.age, phenotypicAge: baseBio, ageGap: baseGap },
+    latest: { chronologicalAge: late.input.age, phenotypicAge: lateBio, ageGap: lateGap },
+    phenoAgeChange: bioChange,
+    ageGapChange: gapChange,
+    trajectory: gapChange < -0.5 ? "improving" : gapChange > 0.5 ? "worsening" : "stable",
+    interpretation:
+      gapChange < -0.5
+        ? "Разрыв между биологическим и паспортным возрастом сократился — программа обновления в верном направлении."
+        : gapChange > 0.5
+        ? "Разрыв вырос — стоит усилить Tier A (нагрузка/сон/питание) и пересмотреть факторы стресса/воспаления."
+        : "Без значимого сдвига — норма для короткого окна; биовозраст двигается за 6–12 мес.",
+    method: "PhenoAge (Levine et al., 2018)",
+    disclaimer: DISCLAIMER,
+    timestamp: nowIso(),
+  });
+});

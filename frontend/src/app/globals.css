@@ -551,6 +551,7 @@ code {
 /* Reduce-motion: skip the bounce, keep the visual change instant. */
 @media (prefers-reduced-motion: reduce) {
   .cc-piece-snap > div { animation: none !important; }
+  .cc-piece-slide { animation: none !important; }
 }
 
 /* ── Global a11y focus ring ───────────────────────────── */

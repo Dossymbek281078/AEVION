@@ -4183,7 +4183,7 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         id: "council",
         label: "Council (free swarm)",
         description:
-          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost.",
+          "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Opus 4.8 by default) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost.",
         agents: ["council", "aggregators", "synthesizer"],
       },
     ],

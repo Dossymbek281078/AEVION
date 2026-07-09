@@ -623,7 +623,7 @@ async function* runDebate(
 
    The differentiator. N (mostly free) models each answer the SAME question
    under a DIFFERENT persona, streaming in parallel. Then one premium model
-   (Fable 5 by default) cross-checks all drafts and fuses them into a single
+   (Opus 4.8 by default) cross-checks all drafts and fuses them into a single
    verified answer. Free breadth, premium depth — cost-tiered automatically.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -760,7 +760,7 @@ async function* runCouncil(
     return;
   }
 
-  /* Final layer — premium Synthesizer (Fable 5) fuses + verifies. */
+  /* Final layer — premium Synthesizer (Opus 4.8 by default) fuses + verifies. */
   const synthUser = buildCouncilSynthPrompt(
     input.userInput,
     answered.map((x) => ({ persona: x.member.persona, draft: x.draft }))

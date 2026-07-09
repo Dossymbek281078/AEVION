@@ -189,7 +189,7 @@ const ROLE_STYLE: Record<string, RoleVisual> = {
   moderator: { color: "#7c3aed", bg: "rgba(124,58,237,0.08)", tag: "M", label: "Moderator", desc: "Debate mode: synthesizes a balanced answer" },
   judge:   { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "J",  label: "Judge",    desc: "Parallel mode: picks or merges drafts" },
   council: { color: "#a855f7", bg: "rgba(168,85,247,0.08)", tag: "✦",  label: "Council",  desc: "Council mode: a free-model crowd member (one persona)" },
-  synth:   { color: "#c026d3", bg: "rgba(192,38,211,0.10)", tag: "★",  label: "Synthesizer", desc: "Council mode: premium chair (Fable 5) fuses + verifies the crowd" },
+  synth:   { color: "#c026d3", bg: "rgba(192,38,211,0.10)", tag: "★",  label: "Synthesizer", desc: "Council mode: premium chair (Opus 4.8) fuses + verifies the crowd" },
 };
 
 /** Cheap client-side free/paid heuristic for the model badge. */
@@ -1971,7 +1971,7 @@ export default function QCoreMultiAgentPage() {
 
               {strategy === "council" && (
                 <div
-                  title="How many crowd members to convene. Free models do the breadth; Fable 5 synthesizes."
+                  title="How many crowd members to convene. Free models do the breadth; a premium chair (Opus 4.8) synthesizes."
                   style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px", borderRadius: 8,
@@ -1994,7 +1994,7 @@ export default function QCoreMultiAgentPage() {
 
               {strategy === "council" && (
                 <div
-                  title="Mixture-of-Agents depth. 1 = fast (proposers → Fable synthesis). 2-3 = deeper: free models refine each other's answers layer by layer before the final synthesis. Higher quality, ~Nx slower."
+                  title="Mixture-of-Agents depth. 1 = fast (proposers → premium synthesis). 2-3 = deeper: free models refine each other's answers layer by layer before the final synthesis. Higher quality, ~Nx slower."
                   style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px", borderRadius: 8,
@@ -2123,7 +2123,7 @@ export default function QCoreMultiAgentPage() {
                       : strategy === "parallel"
                       ? "Parallel: Analyst plans, two Writers draft on different models in parallel, Judge synthesizes."
                       : strategy === "council"
-                      ? "Council ✦: a crowd of free models each answer under a different persona in parallel, then a premium Synthesizer (Fable 5) cross-checks and fuses them into one verified answer — free breadth, premium depth."
+                      ? "Council ✦: a crowd of free models each answer under a different persona in parallel, then a premium Synthesizer (Opus 4.8) cross-checks and fuses them into one verified answer — free breadth, premium depth."
                       : "Debate: Pro and Con each argue their case, Moderator synthesizes a balanced answer."))}
             </div>
 

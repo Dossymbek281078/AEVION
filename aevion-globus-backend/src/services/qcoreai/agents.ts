@@ -187,7 +187,8 @@ export function resolveRoleProvider(
  *   - Critic gates the revision    → Haiku (cheap, fast; a strict grader
  *                                     doesn't need flagship depth).
  * The council strategy overrides this entirely: free models do the breadth,
- * Fable 5 does the final synthesis (see buildCouncil / buildSynthesizer).
+ * a premium chair (Opus 4.8 by default) does the final synthesis
+ * (see buildCouncil / buildSynthesizer).
  */
 const ROLE_DEFAULTS: Record<AgentRole, { provider: string; model: string; temperature: number; systemPrompt: string }> = {
   analyst: {
@@ -331,7 +332,7 @@ export function buildModerator(override?: AgentOverride): AgentConfig | null {
 
 /* ═══════════════════════════════════════════════════════════════════════
    Council strategy — a swarm of (mostly free) models drafts in parallel, then
-   a premium Synthesizer (Fable 5 by default) fuses the drafts into one
+   a premium Synthesizer (Opus 4.8 by default) fuses the drafts into one
    verified answer. This is QCoreAI's differentiator over "N models side by
    side" tools: free breadth + premium depth, cost-tiered automatically.
    ═══════════════════════════════════════════════════════════════════════ */
@@ -483,10 +484,12 @@ export function buildCouncil(maxMembers: number, override?: AgentOverride): Coun
 }
 
 /**
- * Build the Synthesizer — the council chair. Prefers the strongest reasoning
- * model available: Fable 5 → Opus 4.8 → any configured provider's default.
- * This is where the premium spend goes: one high-quality fusion over many
- * cheap drafts.
+ * Build the Synthesizer — the council chair. Defaults to Opus 4.8: a 16-Q
+ * benchmark (2026-07-09) showed the Opus chair matches Fable 5's 92% win-rate
+ * over a single flagship at 2.8× the flagship cost vs Fable's 3.6× — same
+ * quality, ~23% cheaper. Fable 5 stays available for max-stakes runs via the
+ * `synthModel` override or the QCOREAI_SYNTH_MODEL env. This is where the
+ * premium spend goes: one high-quality fusion over many cheap drafts.
  */
 export function buildSynthesizer(override?: AgentOverride): AgentConfig | null {
   // Explicit override wins outright.
@@ -497,12 +500,16 @@ export function buildSynthesizer(override?: AgentOverride): AgentConfig | null {
 
   const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured);
   if (anthropic) {
-    // Prefer Fable 5 for synthesis; fall back to Opus 4.8 if Fable isn't listed.
-    const model = anthropic.models.includes("claude-fable-5")
-      ? "claude-fable-5"
+    // Chair model: env override → best-quality/cost default (Opus 4.8) →
+    // Fable 5 → provider default. Env lets ops flip the chair without a deploy.
+    const envModel = process.env.QCOREAI_SYNTH_MODEL?.trim();
+    const model = envModel && anthropic.models.includes(envModel)
+      ? envModel
       : anthropic.models.includes("claude-opus-4-8")
         ? "claude-opus-4-8"
-        : anthropic.defaultModel;
+        : anthropic.models.includes("claude-fable-5")
+          ? "claude-fable-5"
+          : anthropic.defaultModel;
     return {
       role: "critic",
       provider: "anthropic",

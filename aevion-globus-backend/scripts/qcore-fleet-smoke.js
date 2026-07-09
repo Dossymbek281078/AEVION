@@ -7,7 +7,7 @@
  *   - the free fleet is present (OpenRouter/Groq/Cerebras/Mistral/Together/…),
  *   - council auto-assembles preferring FREE vendors,
  *   - it degrades gracefully to one vendor's models,
- *   - the Synthesizer prefers Fable 5.
+ *   - the Synthesizer defaults to Opus 4.8 (best quality/cost chair).
  *
  * Run (from aevion-globus-backend/, after `npx tsc`):
  *   node scripts/qcore-fleet-smoke.js
@@ -43,14 +43,21 @@ for (const id of ["openrouter", "groq", "cerebras", "mistral", "together", "gith
 }
 ok("anthropic is premium (not free)", all.find((p) => p.id === "anthropic")?.tier === "premium" && all.find((p) => p.id === "anthropic")?.free === false);
 
-// 2. Only Anthropic configured → council degrades to varied Anthropic models; synth = Fable 5.
+// 2. Only Anthropic configured → council degrades to varied Anthropic models; synth = Opus 4.8.
 process.env.ANTHROPIC_API_KEY = "sk-test";
 ok("no free vendor configured yet", getFreeProviders().length === 0);
 const cSolo = buildCouncil(3);
 ok("council degrades to 3 members on one vendor", cSolo.length === 3);
 ok("solo council all anthropic", cSolo.every((m) => m.provider === "anthropic"));
 ok("solo council uses distinct models", new Set(cSolo.map((m) => m.model)).size === cSolo.length);
-ok("synthesizer prefers Fable 5", buildSynthesizer()?.model === "claude-fable-5");
+ok("synthesizer defaults to Opus 4.8", buildSynthesizer()?.model === "claude-opus-4-8");
+ok("synthesizer honours QCOREAI_SYNTH_MODEL env", (() => {
+  process.env.QCOREAI_SYNTH_MODEL = "claude-fable-5";
+  const m = buildSynthesizer()?.model;
+  delete process.env.QCOREAI_SYNTH_MODEL;
+  return m === "claude-fable-5";
+})());
+ok("synthesizer honours explicit synthModel override", buildSynthesizer({ provider: "anthropic", model: "claude-fable-5" })?.model === "claude-fable-5");
 
 // 3. Free fleet configured → council prefers FREE vendors first.
 process.env.OPENROUTER_API_KEY = "o";

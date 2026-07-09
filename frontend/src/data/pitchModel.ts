@@ -500,16 +500,18 @@ export const gtm = {
 } as const;
 
 export const financials = {
-  title: "Trajectory — modelled at $2B+ ARR by year 5",
+  title: "Illustrative upside trajectory — aspiration, not the base case",
   rows: [
     { year: "Year 1", arr: "$0.5M", drivers: "Creator wedge, paid Bureau certs, AI-music Awards." },
     { year: "Year 2", arr: "$8M", drivers: "Bank monetisation, Trust-tier subscriptions, IP-Bureau B2B deals." },
     { year: "Year 3", arr: "$60M", drivers: "Compliance line live, 3 enterprise pilots → contracts, QPayNet embedded." },
     { year: "Year 4", arr: "$420M", drivers: "Cross-vertical (Health/Kids/Persona) live; international IP partnerships." },
-    { year: "Year 5", arr: "$2.0B+", drivers: "Open APIs become the default trust rail; royalty rake on $50B+ flow." },
   ],
   disclaimer:
-    "Modelled, not promised. Inputs: comparable SaaS take rates, observed creator-economy GMV, and historical IP-bureau cert pricing.",
+    "Illustrative aspiration — not the base case and not a forecast. The company is pre-revenue ($0) today. " +
+    "The defensible base case is the bottom-up model above (≈$0.8M beachhead → ≈$9.4M regional ARR from three flagships); " +
+    "this curve is top-down upside if the ecosystem flywheel compounds. Inputs: comparable SaaS take rates, " +
+    "observed creator-economy GMV, historical IP-bureau cert pricing.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */

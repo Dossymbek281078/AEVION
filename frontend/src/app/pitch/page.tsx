@@ -90,7 +90,7 @@ const TOC = [
   { id: "press", label: "Partners & press" },
   { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
-  { id: "financials", label: "Financials" },
+  { id: "financials", label: "Upside scenario" },
   { id: "team", label: "Team" },
 ];
 
@@ -414,7 +414,7 @@ export default function PitchPage() {
           >
             <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
-            <HeroStat value="$2B+" unit="modelled ARR" hint="by year 5" />
+            <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
             <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
           </div>
 

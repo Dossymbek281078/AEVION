@@ -13,8 +13,13 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install runtime deps only (no dev tooling needed for the .mjs script).
+# --ignore-scripts skips the package's postinstall (`prisma generate`): this
+# image copies no prisma/ schema and the reconcile script talks to Postgres via
+# raw `pg`, not Prisma Client — so the generate step is both impossible (no
+# schema in context yet) and unnecessary. Without this flag the build fails at
+# "Could not find Prisma Schema", which is exactly what reddened this service.
 COPY aevion-globus-backend/package.json aevion-globus-backend/package-lock.json ./
-RUN npm install --no-audit --no-fund --omit=dev
+RUN npm install --no-audit --no-fund --omit=dev --ignore-scripts
 
 # Copy the rest of the backend (scripts/, src/ optional, etc.)
 COPY aevion-globus-backend/ ./

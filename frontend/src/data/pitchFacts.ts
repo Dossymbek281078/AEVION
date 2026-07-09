@@ -46,3 +46,17 @@ export const REVENUE_SPLIT = "51/49";
 export const BOTTOM_UP_BEACHHEAD_ARR = "≈$0.8M";
 export const BOTTOM_UP_REGIONAL_ARR = "≈$9.4M";
 export const IS_PRE_REVENUE = true;
+
+// ── Universe Seat (one seat = the whole ecosystem) ───────────────────────────
+/**
+ * PROPOSED premium "Universe Seat" price for a branded launch. This is a
+ * repositioning of today's LIVE published All-Access price ($49/mo — still what
+ * the pricing pages and Gumroad charge). $79 is a go-forward pricing DECISION,
+ * not the live price; the live checkout is intentionally NOT changed here.
+ * Justification anchor = sum-of-parts: a working creator's AI stack (Claude +
+ * Midjourney + ElevenLabs + Higgsfield ≈ $100+/mo) vs one AEVION seat.
+ */
+export const UNIVERSE_SEAT_MONTHLY = "$79";
+export const UNIVERSE_SEAT_ANNUAL_PER_MO = "$63"; // annual −20%
+export const UNIVERSE_SEAT_ANNUAL_TOTAL = "$756"; // effective ARPU used in the growth model
+export const LIVE_ALL_ACCESS_MONTHLY = "$49"; // what the live product charges today

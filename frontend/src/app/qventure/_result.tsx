@@ -237,6 +237,83 @@ export function SaveButton({ result }: { result: AnalysisResult }) {
   );
 }
 
+// ─── Recent comparable rounds (loads independently) ───────────────────────────
+
+interface Comparable {
+  company: string; amountText: string; amountUsd: number | null; round: string; date: string; url: string | null;
+}
+interface ComparablesData {
+  mode: "live" | "illustrative" | "unavailable"; comps: Comparable[]; disclaimer: string;
+}
+
+function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: string }) {
+  const [data, setData] = useState<ComparablesData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(apiUrl(`/api/qventure/comparables?sector=${encodeURIComponent(sectorLabel)}&stage=${encodeURIComponent(stage)}`))
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setData(j?.ok ? j.data : null); })
+      .catch(() => { if (!cancelled) setData(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sectorLabel, stage]);
+
+  if (loading) {
+    return (
+      <div style={SECTION}>
+        <h2 style={H2}>Recent comparable rounds</h2>
+        <div style={{ fontSize: 13, color: "#94a3b8" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
+      </div>
+    );
+  }
+  if (!data || data.comps.length === 0) return null;
+
+  const badge = data.mode === "live"
+    ? { text: "LIVE · web-sourced", bg: "#16a34a" }
+    : { text: "ILLUSTRATIVE · model-recalled", bg: "#d97706" };
+
+  return (
+    <div style={SECTION}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <h2 style={{ ...H2, margin: 0 }}>Recent comparable rounds</h2>
+        <span style={{ padding: "3px 10px", borderRadius: 999, background: badge.bg, color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>{badge.text}</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
+              <th style={{ padding: "6px 8px" }}>Company</th>
+              <th style={{ padding: "6px 8px" }}>Amount</th>
+              <th style={{ padding: "6px 8px" }}>Round</th>
+              <th style={{ padding: "6px 8px" }}>Date</th>
+              {data.mode === "live" && <th style={{ padding: "6px 8px" }}>Source</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {data.comps.map((c, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "8px", fontWeight: 700, color: "#0f172a" }}>{c.company}</td>
+                <td style={{ padding: "8px", color: "#0f172a" }}>{c.amountText || (c.amountUsd ? `$${(c.amountUsd / 1e6).toFixed(1)}M` : "—")}</td>
+                <td style={{ padding: "8px", color: "#334155" }}>{c.round || "—"}</td>
+                <td style={{ padding: "8px", color: "#64748b" }}>{c.date || "—"}</td>
+                {data.mode === "live" && (
+                  <td style={{ padding: "8px" }}>
+                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none" }}>link ↗</a> : "—"}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>{data.disclaimer}</div>
+    </div>
+  );
+}
+
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
@@ -281,6 +358,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Entry strategy</h2>
         <StrategyPanel s={result.result.strategy} />
       </div>
+
+      <ComparablesBlock sectorLabel={result.result.sector.label} stage={result.result.stage} />
 
       <div style={SECTION}>
         <h2 style={H2}>Score breakdown</h2>

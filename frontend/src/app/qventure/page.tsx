@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -218,10 +218,60 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [run]);
 
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onDeckFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be re-selected later
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setExtractNote("Please upload a PDF pitch deck."); return;
+    }
+    setExtracting(true); setError(null); setExtractNote(null);
+    try {
+      const res = await fetch(apiUrl("/api/qventure/extract"), {
+        method: "POST", headers: { "Content-Type": "application/pdf" }, body: file,
+      });
+      const j = await res.json();
+      if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Could not read that deck — enter the details manually."); return; }
+      const d = j.data;
+      setForm({
+        name: d.name || "",
+        sector: d.sector || "ai_app",
+        stage: ((STAGES as readonly string[]).includes(d.stage) ? d.stage : "seed") as FormShape["stage"],
+        geography: d.geography || "US",
+        askUsd: d.askUsd ? String(d.askUsd) : "",
+        description: d.description || "",
+        tractionNotes: d.tractionNotes || "",
+      });
+      setExtractNote(d.aiUsed
+        ? "✓ Pre-filled from your deck (AI-parsed). Review the fields and run the analysis."
+        : "✓ Pre-filled from your deck (text-parsed). Review the fields and run the analysis.");
+    } catch {
+      setExtractNote("Upload failed — check your connection and try again.");
+    } finally {
+      setExtracting(false);
+    }
+  }, []);
+
   return (
     <>
       <div style={SECTION}>
         <h2 style={H2}>Analyze an opportunity</h2>
+        <div style={{ border: "1px dashed #c4b5fd", background: "#faf5ff", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={onDeckFile} style={{ display: "none" }} />
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={extracting || loading} style={{
+            padding: "10px 18px", background: extracting ? "#a78bfa" : "#7c3aed", color: "#fff", border: "none",
+            borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: extracting ? "wait" : "pointer", whiteSpace: "nowrap",
+          }}>
+            {extracting ? "Reading deck…" : "📄 Upload pitch deck (PDF)"}
+          </button>
+          <span style={{ fontSize: 12.5, color: extractNote ? "#7c3aed" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
+            {extractNote || "We extract the fields and pre-fill the form — you review, then run."}
+          </span>
+        </div>
         <FormFields form={form} set={set} sectors={sectors} full />
         {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

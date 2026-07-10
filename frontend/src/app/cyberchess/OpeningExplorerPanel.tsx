@@ -18,28 +18,46 @@
 
 "use client";
 import { useEffect, useState } from "react";
+import { Chess } from "chess.js";
 import { fetchOpening, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { getBookContinuations, type BookResult } from "./localOpeningBook";
 
 export default function OpeningExplorerPanel({
   fen,
   onPlayMove,
+  sanPath,
 }: {
   fen: string;
   onPlayMove?: (uci: string) => void;
+  sanPath?: string[]; // SAN move path from the start — drives our deep tree tier
 }) {
   const [data, setData] = useState<OpeningEntry | null>(null);
   const [book, setBook] = useState<BookResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
 
+  // Play a move that may only have a SAN (our tree carries SAN, no UCI). Resolve
+  // UCI from the current FEN with chess.js so onPlayMove keeps its UCI contract.
+  const play = (uci: string, san: string) => {
+    if (!onPlayMove) return;
+    if (uci) return onPlayMove(uci);
+    try {
+      const g = new Chess(fen);
+      const mv = g.move(san);
+      if (mv) onPlayMove(mv.from + mv.to + (mv.promotion || ""));
+    } catch {
+      /* illegal in this position — ignore */
+    }
+  };
+
+  const pathKey = sanPath ? sanPath.join(" ") : "";
   useEffect(() => {
     const ac = new AbortController();
     let alive = true;
     const t = setTimeout(() => {
       setLoading(true);
       setErr(false);
-      fetchOpening(fen, ac.signal)
+      fetchOpening(fen, ac.signal, sanPath)
         .then(async (d) => {
           if (!alive) return;
           setData(d);
@@ -75,7 +93,7 @@ export default function OpeningExplorerPanel({
       clearTimeout(t);
       ac.abort();
     };
-  }, [fen]);
+  }, [fen, pathKey]);
 
   const wrap: React.CSSProperties = {
     padding: "8px 10px",
@@ -201,7 +219,7 @@ export default function OpeningExplorerPanel({
   return (
     <div style={wrap}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={label}>ДЕБЮТ · МАСТЕРА</div>
+        <div style={label}>{data?.source === "tree" ? "ДЕБЮТ · ЭЛИТА 2400+" : "ДЕБЮТ · МАСТЕРА"}</div>
         {loading && <span style={{ fontSize: 10, color: "#64748b" }}>…</span>}
       </div>
       {opening?.name && (
@@ -219,8 +237,8 @@ export default function OpeningExplorerPanel({
           const clickable = !!onPlayMove;
           return (
             <div
-              key={m.uci}
-              onClick={clickable ? () => onPlayMove!(m.uci) : undefined}
+              key={m.san}
+              onClick={clickable ? () => play(m.uci, m.san) : undefined}
               style={{
                 display: "flex",
                 alignItems: "center",

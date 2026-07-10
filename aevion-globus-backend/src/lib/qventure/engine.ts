@@ -160,8 +160,11 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
 
   const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput });
 
+  const citedSource = sector.sources[0];
   const assumptions = [
-    `Sector reference data (${sector.label}) is directional, 2024–2026 public-consensus ranges — override with primary diligence.`,
+    citedSource
+      ? `Market size / growth for ${sector.label} is anchored to ${citedSource.publisher} (${citedSource.year}): ${citedSource.claim}. Full citations are listed under "Market data sources".`
+      : `Sector reference data (${sector.label}) is directional — override with primary diligence.`,
     `Stage norms reflect US-market ${stage} deals; adjust for geography "${rawInput.geography || "US"}".`,
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];

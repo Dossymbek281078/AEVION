@@ -5,8 +5,22 @@ import {
   canSend,
   describeToolActivity,
   summarizeRun,
+  buildAgentEvent,
+  AGENT_EVENT_NAME,
   type DockTranscriptMsg,
 } from "./agentDock.lib";
+
+describe("buildAgentEvent", () => {
+  test("trims prompt, defaults autoSend false, uses the shared event name", () => {
+    expect(buildAgentEvent("  make an image  ")).toEqual({
+      name: AGENT_EVENT_NAME,
+      detail: { prompt: "make an image", autoSend: false },
+    });
+  });
+  test("honours autoSend true", () => {
+    expect(buildAgentEvent("go", true).detail.autoSend).toBe(true);
+  });
+});
 
 describe("clampMaxSteps", () => {
   test("clamps to 1..8 and defaults on garbage", () => {

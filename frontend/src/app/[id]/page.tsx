@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { AgentPromptChips } from "@/components/AgentPromptChips";
+import { suggestPromptsFor } from "@/components/agentPrompts";
 import { apiUrl } from "@/lib/apiBase";
 import { getServerT, tServer, type Lang as ServerLang } from "@/lib/i18n-server";
 
@@ -281,6 +283,8 @@ export default async function ProjectByIdPage({
             {t("modulePage.btn.qrightPrefill")}
           </Link>
         </div>
+
+        <AgentPromptChips prompts={suggestPromptsFor(project)} />
 
         <div
           style={{

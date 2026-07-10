@@ -12,13 +12,15 @@
  * mismatch), and renders nothing on the server beyond an inert launcher button.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import {
   buildRunRequest,
   canSend,
   describeToolActivity,
   summarizeRun,
+  AGENT_EVENT_NAME,
+  type AgentEventDetail,
   type DockRunResponse,
   type ToolActivity,
 } from "./agentDock.lib";
@@ -47,8 +49,8 @@ export function AgentDock() {
     });
   };
 
-  const send = async () => {
-    const message = input;
+  const send = async (explicit?: string) => {
+    const message = explicit ?? input;
     if (!canSend(message) || busy) return;
     setInput("");
     setLog((l) => [...l, { role: "user", text: message.trim() }]);
@@ -80,6 +82,25 @@ export function AgentDock() {
       scrollToEnd();
     }
   };
+
+  // Keep a live ref to send so the (empty-deps) global listener never fires a
+  // stale closure over busy/input.
+  const sendRef = useRef(send);
+  sendRef.current = send;
+
+  // Any page can dispatch AGENT_EVENT_NAME to open + prefill (± auto-send) the
+  // dock — e.g. the per-module prompt chips on /[id].
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<AgentEventDetail>).detail;
+      if (!detail || typeof detail.prompt !== "string") return;
+      setOpen(true);
+      setInput(detail.prompt);
+      if (detail.autoSend) void sendRef.current(detail.prompt);
+    };
+    window.addEventListener(AGENT_EVENT_NAME, handler as EventListener);
+    return () => window.removeEventListener(AGENT_EVENT_NAME, handler as EventListener);
+  }, []);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

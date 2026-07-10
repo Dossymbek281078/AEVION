@@ -25,6 +25,7 @@ import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 import { fetchComparables } from "../lib/qventure/comparables";
+import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
 
 const captureQVentureError = makeServiceCapture("qventure");
 
@@ -151,6 +152,26 @@ qventureRouter.get("/comparables", analyzeLimiter, async (req: Request, res: Res
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "comparables_failed" });
+  }
+});
+
+// GET /benchmark?sector=<id>&stage=<stage>&score=<0..100> — proprietary signal:
+// where this deal's score ranks against every comparable deal QVenture has
+// already scored. Read-only over the persisted corpus; strengthens with usage.
+qventureRouter.get("/benchmark", analyzeLimiter, async (req: Request, res: Response) => {
+  try {
+    const sectorId = typeof req.query.sector === "string" ? req.query.sector.trim().slice(0, 40) : "";
+    const stage = typeof req.query.stage === "string" ? req.query.stage.trim().slice(0, 20) : "seed";
+    const score = Number(req.query.score);
+    if (!sectorId) return badRequest(res, "sector is required");
+    if (!isFinite(score)) return badRequest(res, "score (0–100) is required");
+    const sectorLabel = listSectors().find((s) => s.id === sectorId)?.label ?? sectorId;
+    const samples = await fetchBenchmarkSamples();
+    const data = computeBenchmark(samples, score, sectorId, sectorLabel, stage);
+    res.json({ ok: true, data });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "benchmark_failed" });
   }
 });
 
@@ -571,6 +592,26 @@ async function listRecent(limit: number, verdict?: string): Promise<StoredAnalys
   }
   const filtered = verdict ? memStore.filter((r) => r.verdict === verdict) : memStore;
   return filtered.slice(0, limit);
+}
+
+// Lightweight projection of the whole public corpus for the benchmark signal —
+// just the fields it needs (composite/stage/sector), never the heavy result blob.
+async function fetchBenchmarkSamples(): Promise<BenchmarkSample[]> {
+  if (isQVentureDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT composite, stage, sector FROM qventure_analyses WHERE visibility = 'public'`
+      );
+      return rows.map((r: Record<string, unknown>) => ({
+        composite: Number(r.composite),
+        stage: String(r.stage),
+        sector: String(r.sector),
+      }));
+    } catch (e: unknown) {
+      captureQVentureError(e);
+    }
+  }
+  return memStore.map((r) => ({ composite: r.composite, stage: r.stage, sector: r.sector }));
 }
 
 async function getById(id: string): Promise<StoredAnalysis | null> {

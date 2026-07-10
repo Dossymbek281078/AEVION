@@ -20,6 +20,7 @@ import { requireModule } from "./lib/planGate";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { agentRuntimeRouter } from "./routes/agentRuntime";
+import { mcpDemoRouter } from "./routes/mcpDemo";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { attachConstitutionCollab } from "./services/constitution/collab";
 import { quantumShieldRouter } from "./routes/quantum-shield";
@@ -254,6 +255,9 @@ app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
 // Our own agent runtime — a real provider tool-use loop, kept separate from
 // qcoreai (owned by another work stream). Ungated: no module id in the registry.
 app.use("/api/agent-runtime", agentRuntimeRouter);
+// First-party MCP server (AEVION registry tools) — lets the agent-runtime MCP
+// bridge prove the full runtime→bridge→MCP-server→tool path in our own zone.
+app.use("/api/mcp-demo", mcpDemoRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);

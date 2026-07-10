@@ -1,0 +1,15 @@
+{
+  "schema": "aevion-authorship/1",
+  "project": "aevion-cyberchess",
+  "author": "Досымбек Жакия (Dossymbek Zhakiya)",
+  "copyrightHolder": "Досымбек Жакия / AEVION",
+  "brand": "AEVION — Artificial Evolution of Value, Innovation, Ownership and Networks",
+  "contact": "yahiin1978@gmail.com",
+  "signedAt": "2026-07-10T00:00:00Z",
+  "fileCount": 2817,
+  "manifestSha256": "6d02992644fd76cd9fea9bb0ccbb6a59073fb9ce191a9a4c15a5740476ac5722",
+  "pubkeyFingerprint": "a3e109c96646fff6d5d73c7599d537eb73fbdf8895b712fee157d7b7fd598648",
+  "algorithm": "Ed25519 over SHA-256 manifest",
+  "signature": "mvHBI0Ijyy9M3FDveq+Sb1A+td63wQYJWz+Sp0Foy6h6TjkKZ3foF0kNXKwYtFWPfPsyl04FIokOFcCWK7vvDw==",
+  "payloadB64": "eyJwcm9qZWN0IjoiYWV2aW9uLWN5YmVyY2hlc3MiLCJhdXRob3IiOiLQlNC+0YHRi9C80LHQtdC6INCW0LDQutC40Y8gKERvc3N5bWJlayBaaGFraXlhKSIsImhvbGRlciI6ItCU0L7RgdGL0LzQsdC10Log0JbQsNC60LjRjyAvIEFFVklPTiIsInNpZ25lZEF0IjoiMjAyNi0wNy0xMFQwMDowMDowMFoiLCJmaWxlQ291bnQiOjI4MTcsIm1hbmlmZXN0U2hhMjU2IjoiNmQwMjk5MjY0NGZkNzZjZDlmZWE5YmIwY2NiYjZhNTkwNzNmYjljZTE5MWE5YTRjMTVhNTc0MDQ3NmFjNTcyMiIsImZwIjoiYTNlMTA5Yzk2NjQ2ZmZmNmQ1ZDczYzc1OTlkNTM3ZWI3M2ZiZGY4ODk1YjcxMmZlZTE1N2Q3YjdmZDU5ODY0OCJ9"
+}

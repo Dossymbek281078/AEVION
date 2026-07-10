@@ -194,6 +194,43 @@ describe("makeExecutor", () => {
     expect(seenBody.name).toBe("AEVION payment");
     expect(seenBody.description).toBe("");
   });
+
+  // Each new tool must hit its own DevHub endpoint with the endpoint's body shape.
+  test.each([
+    ["generate_music", "/api/devhub/media/music", { prompt: "lofi beat", musicLengthMs: 10000 }, { prompt: "lofi beat", musicLengthMs: 10000 }],
+    ["generate_sound_effect", "/api/devhub/media/sfx", { text: "glass shatter", durationSeconds: 2 }, { text: "glass shatter", durationSeconds: 2 }],
+    ["send_sms", "/api/devhub/media/sms", { recipient: "+15551234567", content: "hi" }, { recipient: "+15551234567", content: "hi" }],
+    ["translate_text", "/api/devhub/media/translate", { text: "hello", targetLang: "RU" }, { text: "hello", targetLang: "RU" }],
+  ])("%s routes to %s with the mapped body", async (name, path, input, expectedBody) => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch);
+    const r = await exec({ id: "t1", name: name as string, input: input as Record<string, unknown> });
+
+    expect(seenUrl).toBe(`http://127.0.0.1:4001${path}`);
+    expect(seenBody).toEqual(expectedBody);
+    expect(r.ok).toBe(true);
+  });
+
+  test("optional fields are omitted from the body when absent", async () => {
+    let seenBody: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: string, init?: { body?: string }) => {
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch);
+    await exec({ id: "t1", name: "generate_music", input: { prompt: "ambient" } });
+
+    expect(seenBody).toEqual({ prompt: "ambient" });
+    expect("musicLengthMs" in seenBody).toBe(false);
+  });
 });
 
 // ── makeAnthropicCallModel (wire-format conversion) ──────────────────

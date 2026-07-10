@@ -59,6 +59,56 @@ export const TOOL_SPECS: ToolSpec[] = [
       required: ["to", "htmlBody"],
     },
   },
+  {
+    name: "generate_music",
+    description: "Compose an instrumental music clip from a text description (ElevenLabs Music).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "Describe the music (mood, genre, instruments)." },
+        musicLengthMs: { type: "integer", description: "Optional clip length in milliseconds (e.g. 10000 = 10s)." },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "generate_sound_effect",
+    description: "Generate a short sound effect from a text description (ElevenLabs SFX).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Describe the sound (e.g. 'glass shattering on tile')." },
+        durationSeconds: { type: "number", description: "Optional length in seconds (0.5–22)." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "send_sms",
+    description: "Send an SMS text message (Brevo/Twilio-backed).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        recipient: { type: "string", description: "Recipient phone number in E.164 form (e.g. +15551234567)." },
+        content: { type: "string", description: "Message text." },
+        sender: { type: "string", description: "Optional sender name/number." },
+      },
+      required: ["recipient", "content"],
+    },
+  },
+  {
+    name: "translate_text",
+    description: "Translate text into another language (DeepL).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Text to translate." },
+        targetLang: { type: "string", description: "Target language code (e.g. EN, RU, KK, DE, FR)." },
+        sourceLang: { type: "string", description: "Optional source language code; auto-detected if omitted." },
+      },
+      required: ["text", "targetLang"],
+    },
+  },
 ];
 
 /** Map a tool name → the DevHub endpoint path that performs it. */
@@ -67,6 +117,10 @@ const ENDPOINT_BY_TOOL: Record<string, string> = {
   text_to_speech: "/api/devhub/media/tts",
   payment_link: "/api/devhub/media/payment-link",
   send_email: "/api/devhub/media/email",
+  generate_music: "/api/devhub/media/music",
+  generate_sound_effect: "/api/devhub/media/sfx",
+  send_sms: "/api/devhub/media/sms",
+  translate_text: "/api/devhub/media/translate",
 };
 
 /** Rename model-facing params to the DevHub endpoint's body shape where needed. */
@@ -75,6 +129,10 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
   if (name === "text_to_speech") return { text: input.text, ...(input.voice ? { voice: input.voice } : {}) };
   if (name === "payment_link") return { name: input.name ?? "AEVION payment", amountCents: input.amountCents, description: input.description ?? "" };
   if (name === "send_email") return { to: input.to, subject: input.subject ?? "Message from AEVION Agent", htmlBody: input.htmlBody };
+  if (name === "generate_music") return { prompt: input.prompt, ...(input.musicLengthMs ? { musicLengthMs: input.musicLengthMs } : {}) };
+  if (name === "generate_sound_effect") return { text: input.text, ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}) };
+  if (name === "send_sms") return { recipient: input.recipient, content: input.content, ...(input.sender ? { sender: input.sender } : {}) };
+  if (name === "translate_text") return { text: input.text, targetLang: input.targetLang, ...(input.sourceLang ? { sourceLang: input.sourceLang } : {}) };
   return input;
 }
 

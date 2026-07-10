@@ -7,8 +7,9 @@
       Lichess API token on the backend (LICHESS_API_TOKEN), because since Feb 2026
       Lichess gated explorer.lichess.ovh behind login (anonymous → 401).
    2. FALLBACK self-contained book (getBookContinuations → bundled /openings.json,
-      computed client-side). Book/theory continuations with opening names, no
-      stats. Always works offline — the panel is never empty on a known line.
+      ~3,800 CC0 ECO lines / ~5,500 positions, computed client-side). Book/theory
+      continuations with opening names, no stats. Always works offline — the panel
+      is never empty on a known line.
 
    Robustness:
      - debounced ~350ms on fen change
@@ -91,7 +92,17 @@ export default function OpeningExplorerPanel({
     letterSpacing: 0.4,
   };
 
-  if (loading && !data && !book) {
+  const masterMoves = data?.moves ?? [];
+  const isMaster = masterMoves.length > 0;
+  const bookMoves = book?.moves ?? [];
+  const opening = data?.opening ?? book?.opening ?? null;
+
+  // While anything is still in flight and we have nothing to show yet, show the
+  // loading state — NOT "out of book". The self-contained book build (fetch +
+  // ~3,800 lines through chess.js) takes ~1–2s on first open, and `data` is set
+  // to an empty result before the book resolves; without this guard the panel
+  // would briefly flash "вне дебютной книги" even for the starting position.
+  if (loading && !isMaster && bookMoves.length === 0) {
     return (
       <div style={wrap}>
         <div style={label}>ДЕБЮТ</div>
@@ -99,11 +110,6 @@ export default function OpeningExplorerPanel({
       </div>
     );
   }
-
-  const masterMoves = data?.moves ?? [];
-  const isMaster = masterMoves.length > 0;
-  const bookMoves = book?.moves ?? [];
-  const opening = data?.opening ?? book?.opening ?? null;
 
   // Nothing to show from either tier → calm out-of-book message.
   if (!isMaster && bookMoves.length === 0) {

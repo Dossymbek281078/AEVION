@@ -4,6 +4,21 @@ import { useEffect, useRef } from "react";
 import { useI18n, translations, type Lang } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 
+// Warn ONCE if the translate endpoint fails, so a backend misconfiguration
+// (e.g. no translation key set) surfaces as an obvious signal instead of
+// masquerading as "i18n is just broken". Previously this failure was swallowed
+// silently, which hid a years-long site-wide language-switching outage.
+let i18nWarned = false;
+function warnI18nOnce(reason: unknown) {
+  if (i18nWarned) return;
+  i18nWarned = true;
+  console.warn(
+    "[AutoTranslate] live translation unavailable — non-seed strings will stay in the source language. " +
+      "Check GET /api/i18n/health (needs DEEPL_API_KEY or ANTHROPIC_API_KEY). Reason:",
+    reason
+  );
+}
+
 const dict: Record<string, string> = {
   "Trust \u00b7 IP \u00b7 Globus": "\u0414\u043e\u0432\u0435\u0440\u0438\u0435 \u00b7 IP \u00b7 Globus",
   "Demo": "\u0414\u0435\u043c\u043e",
@@ -489,9 +504,12 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
             if (tr !== batch[i]) changed = true;
           }
           if (!destroyed) { saveCache(lang, cache); if (changed) apply(root); }
+        } else {
+          warnI18nOnce(`HTTP ${r.status}`);
         }
-      } catch {
-        /* offline / 5xx — leave source text, don't hammer */
+      } catch (e) {
+        // offline / 5xx — leave source text, don't hammer; surface once.
+        warnI18nOnce(e);
       }
       if (!destroyed && pending.size > 0) scheduleFlush();
     };

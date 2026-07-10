@@ -415,7 +415,11 @@ const SYNTHESIZER_PROMPT = [
  * budget, then premium. Used to auto-assemble a council even when the operator
  * has only configured one vendor.
  */
-function enumerateCandidateModels(preferFree: boolean, localOnly = false): { provider: string; model: string }[] {
+function enumerateCandidateModels(
+  preferFree: boolean,
+  localOnly = false,
+  modelsOverride?: Record<string, string[]>
+): { provider: string; model: string }[] {
   const providers = getProviders().filter((p) => p.configured && (!localOnly || p.local));
   const rank = (p: Provider) =>
     preferFree
@@ -423,13 +427,18 @@ function enumerateCandidateModels(preferFree: boolean, localOnly = false): { pro
       : p.tier === "premium" ? 0 : p.tier === "budget" ? 1 : 2;
   const ordered = [...providers].sort((a, b) => rank(a) - rank(b));
 
+  // Effective model list: a runtime-discovered list (real, pulled models) wins
+  // over the static catalogue so the council never picks a model that isn't there.
+  const eff = (p: Provider) => (modelsOverride?.[p.id]?.length ? modelsOverride[p.id] : p.models);
+  const effDefault = (p: Provider) => eff(p)[0] ?? p.defaultModel;
+
   const out: { provider: string; model: string }[] = [];
   // First pass: one default model per provider (maximise vendor diversity).
-  for (const p of ordered) out.push({ provider: p.id, model: p.defaultModel });
+  for (const p of ordered) out.push({ provider: p.id, model: effDefault(p) });
   // Second pass: extra models within each provider (fill remaining slots).
   for (const p of ordered) {
-    for (const m of p.models) {
-      if (m === p.defaultModel) continue;
+    for (const m of eff(p)) {
+      if (m === effDefault(p)) continue;
       out.push({ provider: p.id, model: m });
     }
   }
@@ -448,10 +457,11 @@ function enumerateCandidateModels(preferFree: boolean, localOnly = false): { pro
 export function buildCouncil(
   maxMembers: number,
   override?: AgentOverride,
-  opts?: { localOnly?: boolean }
+  opts?: { localOnly?: boolean; localModels?: Record<string, string[]> }
 ): CouncilMember[] {
   const n = Math.max(2, Math.min(6, Math.floor(maxMembers) || 3));
   const localOnly = opts?.localOnly === true;
+  const localModels = opts?.localModels;
 
   // If the caller pinned a provider, honour it for every member (varied models
   // where possible); otherwise auto-assemble preferring free vendors. Under
@@ -461,16 +471,19 @@ export function buildCouncil(
     ? getProviders().find((x) => x.id === override.provider && x.configured && (!localOnly || x.local))
     : undefined;
   if (pinned) {
-    const models = override!.model && pinned.models.includes(override!.model)
-      ? [override!.model, ...pinned.models.filter((m) => m !== override!.model)]
-      : pinned.models;
+    // Use discovered (real) models for the pinned runtime when available.
+    const pinnedModels = localModels?.[pinned.id]?.length ? localModels[pinned.id] : pinned.models;
+    const models = override!.model && pinnedModels.includes(override!.model)
+      ? [override!.model, ...pinnedModels.filter((m) => m !== override!.model)]
+      : pinnedModels;
     slots = models.map((m) => ({ provider: pinned.id, model: m }));
   } else {
     // Auto-assemble preferring free vendors; enumerateCandidateModels still
     // returns budget/premium slots when no free vendor is configured, so the
     // council degrades gracefully to whatever exists. localOnly restricts to
     // local runtimes (returns [] when none is configured → caller errors out).
-    slots = enumerateCandidateModels(true, localOnly);
+    // localModels (discovered, pulled models) override the static catalogue.
+    slots = enumerateCandidateModels(true, localOnly, localModels);
   }
 
   const members: CouncilMember[] = [];
@@ -503,7 +516,7 @@ export function buildCouncil(
  */
 export function buildSynthesizer(
   override?: AgentOverride,
-  opts?: { localOnly?: boolean }
+  opts?: { localOnly?: boolean; localModels?: Record<string, string[]> }
 ): AgentConfig | null {
   const localOnly = opts?.localOnly === true;
 
@@ -517,14 +530,15 @@ export function buildSynthesizer(
     }
   }
 
-  // Offline chair: pick the strongest local runtime available (its default
-  // model is usually the largest one the operator pulled). No cloud fallback.
+  // Offline chair: pick the strongest local runtime available. Prefer a real
+  // pulled model (discovered) so the chair never 404s on a model that isn't there.
   if (localOnly) {
     const chair = getProviders().find((p) => p.configured && p.local);
     if (!chair) return null;
-    const model = override?.model && chair.models.includes(override.model)
+    const discovered = opts?.localModels?.[chair.id];
+    const model = override?.model && (discovered ?? chair.models).includes(override.model)
       ? override.model
-      : chair.defaultModel;
+      : discovered?.[0] ?? chair.defaultModel;
     return {
       role: "critic",
       provider: chair.id,

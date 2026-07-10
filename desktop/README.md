@@ -57,11 +57,40 @@ Notes:
   frontend (`.next` [+ `node_modules` for `next start`]) into `resources/`.
 - **Leaner build**: set Next's `output: "standalone"` and the stager bundles the
   self-contained server instead of the full `node_modules` — much smaller `.exe`.
-- **Signing**: add an EV/OV code-signing cert (`CSC_LINK` / `CSC_KEY_PASSWORD`)
-  so Windows SmartScreen doesn't warn on install. Unsigned builds run but warn.
 - **Ollama**: not embedded — the app starts it if present and guides the user to
   install it otherwise. Bundling model weights would make the installer many GB;
   pulling on first run is the pragmatic default.
+
+### Building on Windows — the winCodeSign gotcha
+
+`electron-builder --dir` **works** and produces `out/win-unpacked/` (a directly
+runnable app). But the **NSIS installer** (`--win nsis`) fetches the
+`winCodeSign` package, which contains macOS `*.dylib` **symlinks**. Extracting a
+symlink on Windows needs the symlink privilege, so without **admin** or
+**Developer Mode** the extraction fails (`Cannot create symbolic link … client
+does not have the required privilege`) and the installer build aborts.
+electron-builder re-downloads winCodeSign to a fresh cache path each run, so
+editing the cached archive doesn't help. Fixes, in order of preference:
+  1. Enable **Windows Developer Mode** (Settings → For developers), then rebuild.
+  2. Run the build shell **as Administrator**.
+
+### Signing
+
+- **Real distribution** needs an **OV/EV code-signing certificate** from a CA
+  (`CSC_LINK` = path to the `.pfx`, `CSC_KEY_PASSWORD` = its password). Only a
+  CA-issued cert removes SmartScreen warnings on machines you don't control.
+- **Self-signed (dev/internal)**: generate a cert and sign the built exe without
+  electron-builder (bypasses the winCodeSign blocker):
+  ```powershell
+  $c = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=AEVION' `
+        -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy Exportable
+  Set-AuthenticodeSignature 'out\win-unpacked\AEVION Council.exe' -Certificate $c `
+        -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
+  ```
+  The signature is **Valid only where the cert is trusted** — import the public
+  `.cer` into `Cert:\CurrentUser\Root` + `Cert:\CurrentUser\TrustedPublisher` on
+  each target machine (no admin needed for the CurrentUser stores). Other
+  machines still see it as untrusted — that's the self-signed limitation.
 
 ## Files
 

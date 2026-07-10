@@ -23,7 +23,12 @@ export type OpeningEntry = {
 const cache = new Map<string, { ts: number; data: OpeningEntry | null }>();
 const TTL_MS = 30 * 60 * 1000; // 30 минут
 
-const ENDPOINT = "https://explorer.lichess.ovh/masters";
+// Go through our backend proxy — NOT explorer.lichess.ovh directly. A direct
+// browser call gets an HTML rate-limit / Cloudflare challenge page back (not
+// JSON) cross-origin, so the panel showed "no master games" even for the
+// starting position. The proxy does a server-to-server fetch with shared
+// caching. See aevion-globus-backend/src/routes/cyberchessOpening.ts.
+const ENDPOINT = "/api-backend/api/cyberchess-opening";
 
 export async function fetchOpening(fen: string, signal?: AbortSignal): Promise<OpeningEntry | null> {
   const key = fen;
@@ -31,7 +36,7 @@ export async function fetchOpening(fen: string, signal?: AbortSignal): Promise<O
   const hit = cache.get(key);
   if (hit && now - hit.ts < TTL_MS) return hit.data;
   try {
-    const url = `${ENDPOINT}?fen=${encodeURIComponent(fen)}&topGames=0&moves=10`;
+    const url = `${ENDPOINT}?fen=${encodeURIComponent(fen)}`;
     const res = await fetch(url, { signal });
     if (!res.ok) {
       cache.set(key, { ts: now, data: null });

@@ -165,6 +165,12 @@ export default function VenturesPage() {
               массовую TikTok-аудиторию в экосистему. Отдельный товарный знак не
               плодим.
             </p>
+            <p className="vtx-fmuted" style={{ marginTop: "-6px" }}>
+              Наука за брендом →{" "}
+              <a href="/qmelanin" style={{ color: "var(--amberS)", textDecoration: "underline" }}>
+                модуль qmelanin / qrenew
+              </a>
+            </p>
             <p className="vtx-fbody">
               Жевательные gummy для волос, кожи и клеточного возраста. Легенда —
               на исследовательском тезисе: <b>седина — видимый биомаркер

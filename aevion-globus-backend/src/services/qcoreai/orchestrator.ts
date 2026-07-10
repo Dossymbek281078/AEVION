@@ -20,7 +20,7 @@
  * route handler forwards them as-is and persists key milestones to Postgres.
  */
 
-import { streamProviderResilient, ChatMessage, getProviders } from "./providers";
+import { streamProviderResilient, ChatMessage, getProviders, discoverLocalModels } from "./providers";
 import {
   AGGREGATOR_PROMPT,
   AgentConfig,
@@ -837,8 +837,11 @@ export async function* runMultiAgent(
 
   if (strategy === "council") {
     const localOnly = input.localOnly === true;
-    const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer, { localOnly });
-    const synthesizer = buildSynthesizer(input.overrides?.critic, { localOnly });
+    // Offline: discover which models each local runtime has actually pulled, so
+    // the council convenes only models that exist (no 404 on a not-pulled model).
+    const localModels = localOnly ? await discoverLocalModels() : undefined;
+    const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer, { localOnly, localModels });
+    const synthesizer = buildSynthesizer(input.overrides?.critic, { localOnly, localModels });
     if (members.length < 2 || !synthesizer) {
       yield { type: "error", message: localOnly ? noLocalProviderMsg() : noProviderMsg() };
       return;

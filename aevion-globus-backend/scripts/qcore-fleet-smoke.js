@@ -97,5 +97,18 @@ ok("offline synth ignores cloud override", buildSynthesizer({ provider: "anthrop
 // Sanity: non-offline council still prefers the cloud free fleet, not the local one.
 ok("online council still uses cloud free fleet", buildCouncil(3).some((m) => ["openrouter", "groq", "cerebras"].includes(m.provider)));
 
+// 5. Discovered (real, pulled) models override the static catalogue offline.
+// Simulates what discoverLocalModels() returns from a live Ollama runtime.
+const discovered = { lmstudio: ["qwen2.5:7b", "llama3.2:3b", "phi3:mini"] };
+const cDisc = buildCouncil(3, undefined, { localOnly: true, localModels: discovered });
+ok("offline council uses discovered models", cDisc.every((m) => discovered.lmstudio.includes(m.model)));
+ok("offline council rejects non-discovered static models", cDisc.every((m) => !["qwen2.5-7b-instruct"].includes(m.model)));
+ok("offline chair uses a discovered model", (() => {
+  const s = buildSynthesizer(undefined, { localOnly: true, localModels: discovered });
+  return s && s.provider === "lmstudio" && discovered.lmstudio.includes(s.model);
+})());
+// Empty discovery (runtime unreachable) falls back to the static catalogue.
+ok("offline council falls back to static when discovery empty", buildCouncil(3, undefined, { localOnly: true, localModels: {} }).length >= 2);
+
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

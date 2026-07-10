@@ -393,6 +393,60 @@ export function getLocalProviders(): Provider[] {
   return getProviders().filter((p) => p.configured && p.local);
 }
 
+/** GET a JSON body with a short timeout; null on any failure. */
+async function fetchJsonSafe(url: string, timeoutMs = 2500): Promise<any | null> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Ask a single local runtime which models are ACTUALLY pulled/loaded, so the
+ * offline council convenes only models that exist (no 404s on a model the user
+ * never downloaded). Best-effort: returns [] if the runtime is unreachable.
+ *   - Ollama exposes the native `/api/tags` ({ models: [{ name }] }).
+ *   - LM Studio / Jan / LocalAI / llama.cpp expose OpenAI `/models` ({ data:[{id}] }).
+ */
+export async function listRuntimeModels(providerId: string): Promise<string[]> {
+  const cfg = OPENAI_COMPAT[providerId];
+  if (!cfg) return [];
+  const base = cfg.baseUrl(); // e.g. http://127.0.0.1:11434/v1
+  if (providerId === "ollama") {
+    const host = base.replace(/\/v1$/, "");
+    const j = await fetchJsonSafe(`${host}/api/tags`);
+    const names = Array.isArray(j?.models) ? j.models.map((m: any) => m?.name).filter(Boolean) : [];
+    return names;
+  }
+  const j = await fetchJsonSafe(`${base}/models`);
+  const ids = Array.isArray(j?.data) ? j.data.map((m: any) => m?.id).filter(Boolean) : [];
+  return ids;
+}
+
+/**
+ * Discover the real, pulled models for every configured LOCAL runtime, in
+ * parallel. Feeds the offline council so it only assembles models that exist.
+ * Providers that are unreachable or expose nothing are simply omitted.
+ */
+export async function discoverLocalModels(): Promise<Record<string, string[]>> {
+  const locals = getLocalProviders();
+  const entries = await Promise.all(
+    locals.map(async (p) => [p.id, await listRuntimeModels(p.id)] as const)
+  );
+  const out: Record<string, string[]> = {};
+  for (const [id, models] of entries) {
+    if (models.length) out[id] = models;
+  }
+  return out;
+}
+
 export function sanitizeMessages(raw: unknown): ChatMessage[] | null {
   if (!Array.isArray(raw)) return null;
   const out: ChatMessage[] = [];

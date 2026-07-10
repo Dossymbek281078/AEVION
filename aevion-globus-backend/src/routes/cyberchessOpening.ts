@@ -17,6 +17,7 @@
 // {moves:[]} result, never a crash.
 
 import { Router, type Request, type Response } from "express";
+import { ensureTreeLoaded, lookupPath } from "./cyberchessOpeningTree";
 
 const router = Router();
 
@@ -99,44 +100,78 @@ async function fetchUpstream(db: string, qs: string): Promise<unknown | null> {
 
 const EMPTY = { white: 0, draws: 0, black: 0, opening: null, moves: [] as unknown[] };
 
-// GET / — explorer pass-through.
-// Query: db (masters|lichess, default masters), fen | play (one required),
-//        moves, topGames, recentGames, ratings, speeds.
-router.get("/", async (req: Request, res: Response): Promise<void> => {
+// Live Lichess masters/community — only meaningful when a token is configured
+// (anonymous access is 401 since Feb 2026). Returns the entry or null.
+async function tryLichess(req: Request): Promise<object | null> {
+  if (!process.env.LICHESS_API_TOKEN) return null;
   const q = buildQuery(req);
-  if (!q) {
-    res.json({ ok: true, cached: false, ...EMPTY });
-    return;
-  }
-
+  if (!q) return null;
   const now = Date.now();
   const hit = cache.get(q.key);
-  if (hit) {
-    const ttl = hit.data ? CACHE_TTL_MS : NEG_TTL_MS;
-    if (now - hit.ts < ttl) {
-      res.json({ ok: true, cached: true, ...(hit.data ? (hit.data as object) : EMPTY) });
+  if (hit && now - hit.ts < (hit.data ? CACHE_TTL_MS : NEG_TTL_MS)) return hit.data as object | null;
+  let p = inflight.get(q.key);
+  if (!p) {
+    p = fetchUpstream(q.db, q.qs).then((data) => {
+      cache.set(q.key, { ts: Date.now(), data });
+      prune();
+      inflight.delete(q.key);
+      return data;
+    });
+    inflight.set(q.key, p);
+  }
+  return (await p) as object | null;
+}
+
+// GET / — opening explorer, three tiers:
+//   1. live Lichess masters (needs LICHESS_API_TOKEN)          — query: fen|play
+//   2. our own deep tree, built from CC0 Lichess Elite games    — query: path (SAN)
+//   3. empty → the frontend falls back to its static book
+// Query: path=e4,e5,Nf3 (or space-separated) — SAN move path from the start.
+//        fen|play|db|moves|ratings|speeds — for the Lichess tier.
+router.get("/", async (req: Request, res: Response): Promise<void> => {
+  // Tier 1: live Lichess (token only)
+  try {
+    const live = await tryLichess(req);
+    if (live && Array.isArray((live as { moves?: unknown[] }).moves) && (live as { moves: unknown[] }).moves.length) {
+      res.json({ ok: true, source: "lichess", cached: false, ...(live as object) });
       return;
+    }
+  } catch (e) {
+    console.warn("[cyberchess-opening] lichess tier failed:", e instanceof Error ? e.message : e);
+  }
+
+  // Tier 2: our deep tree, by SAN move path
+  if (typeof req.query.path === "string") {
+    try {
+      await ensureTreeLoaded();
+      const sanPath = String(req.query.path).trim().split(/[\s,]+/).filter(Boolean);
+      const node = lookupPath(sanPath);
+      if (node) {
+        res.json({
+          ok: true,
+          source: "tree",
+          white: node.white,
+          draws: node.draws,
+          black: node.black,
+          opening: null,
+          moves: node.moves.map((r) => ({
+            san: r.m,
+            uci: "",
+            white: r.w,
+            draws: r.d,
+            black: r.b,
+            games: r.n,
+          })),
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn("[cyberchess-opening] tree tier failed:", e instanceof Error ? e.message : e);
     }
   }
 
-  try {
-    let p = inflight.get(q.key);
-    if (!p) {
-      p = fetchUpstream(q.db, q.qs).then((data) => {
-        cache.set(q.key, { ts: Date.now(), data });
-        prune();
-        inflight.delete(q.key);
-        return data;
-      });
-      inflight.set(q.key, p);
-    }
-    const data = await p;
-    res.json({ ok: true, cached: false, ...(data ? (data as object) : EMPTY) });
-  } catch (e) {
-    inflight.delete(q.key);
-    console.warn("[cyberchess-opening] proxy failed:", e instanceof Error ? e.message : e);
-    res.json({ ok: true, cached: false, ...EMPTY });
-  }
+  // Tier 3: nothing → frontend static book fallback
+  res.json({ ok: true, source: "none", ...EMPTY });
 });
 
 export default router;

@@ -3,12 +3,13 @@
    Возвращает топ-ходы из мастерской базы для текущей позиции. */
 
 export type OpeningMove = {
-  uci: string; // e.g. "e2e4"
+  uci: string; // e.g. "e2e4" (empty for our-tree source; computed on click)
   san: string;
   white: number;
   draws: number;
   black: number;
   averageRating?: number;
+  games?: number; // total games (our-tree source)
 };
 
 export type OpeningEntry = {
@@ -16,6 +17,7 @@ export type OpeningEntry = {
   draws: number;
   black: number;
   total: number;
+  source?: "lichess" | "tree" | "none";
   opening?: { eco?: string; name?: string };
   moves: OpeningMove[];
 };
@@ -30,13 +32,21 @@ const TTL_MS = 30 * 60 * 1000; // 30 минут
 // caching. See aevion-globus-backend/src/routes/cyberchessOpening.ts.
 const ENDPOINT = "/api-backend/api/cyberchess-opening";
 
-export async function fetchOpening(fen: string, signal?: AbortSignal): Promise<OpeningEntry | null> {
-  const key = fen;
+export async function fetchOpening(
+  fen: string,
+  signal?: AbortSignal,
+  sanPath?: string[],
+): Promise<OpeningEntry | null> {
+  // Cache key includes the move path — the same FEN reached by a different move
+  // order is a different node in our (move-order-keyed) tree.
+  const key = sanPath ? `${fen}|${sanPath.join(" ")}` : fen;
   const now = Date.now();
   const hit = cache.get(key);
   if (hit && now - hit.ts < TTL_MS) return hit.data;
   try {
-    const url = `${ENDPOINT}?fen=${encodeURIComponent(fen)}`;
+    let url = `${ENDPOINT}?fen=${encodeURIComponent(fen)}`;
+    // `path` drives our own deep tree tier; `fen` drives the Lichess tier.
+    if (sanPath) url += `&path=${encodeURIComponent(sanPath.join(","))}`;
     const res = await fetch(url, { signal });
     if (!res.ok) {
       cache.set(key, { ts: now, data: null });
@@ -48,14 +58,16 @@ export async function fetchOpening(fen: string, signal?: AbortSignal): Promise<O
       draws: j.draws || 0,
       black: j.black || 0,
       total: (j.white || 0) + (j.draws || 0) + (j.black || 0),
+      source: j.source,
       opening: j.opening,
       moves: (j.moves || []).map((m: any) => ({
-        uci: m.uci,
+        uci: m.uci || "",
         san: m.san,
         white: m.white || 0,
         draws: m.draws || 0,
         black: m.black || 0,
         averageRating: m.averageRating,
+        games: m.games,
       })),
     };
     cache.set(key, { ts: now, data });

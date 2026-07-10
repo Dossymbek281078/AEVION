@@ -92,7 +92,17 @@ export default function OpeningExplorerPanel({
     letterSpacing: 0.4,
   };
 
-  if (loading && !data && !book) {
+  const masterMoves = data?.moves ?? [];
+  const isMaster = masterMoves.length > 0;
+  const bookMoves = book?.moves ?? [];
+  const opening = data?.opening ?? book?.opening ?? null;
+
+  // While anything is still in flight and we have nothing to show yet, show the
+  // loading state — NOT "out of book". The self-contained book build (fetch +
+  // ~3,800 lines through chess.js) takes ~1–2s on first open, and `data` is set
+  // to an empty result before the book resolves; without this guard the panel
+  // would briefly flash "вне дебютной книги" even for the starting position.
+  if (loading && !isMaster && bookMoves.length === 0) {
     return (
       <div style={wrap}>
         <div style={label}>ДЕБЮТ</div>
@@ -100,11 +110,6 @@ export default function OpeningExplorerPanel({
       </div>
     );
   }
-
-  const masterMoves = data?.moves ?? [];
-  const isMaster = masterMoves.length > 0;
-  const bookMoves = book?.moves ?? [];
-  const opening = data?.opening ?? book?.opening ?? null;
 
   // Nothing to show from either tier → calm out-of-book message.
   if (!isMaster && bookMoves.length === 0) {

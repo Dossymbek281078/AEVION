@@ -45,7 +45,10 @@ const DEMO_INPUT: AnalysisInput = {
 
 async function ensureDemoAnalysis(): Promise<void> {
   try {
-    if (await getById(DEMO_ID)) return; // already seeded
+    const existing = await getById(DEMO_ID);
+    // Re-seed if missing OR if it predates the cited-sources upgrade.
+    if (existing && (existing.result?.sector?.sources?.length ?? 0) > 0) return;
+    if (existing) await deleteById(DEMO_ID);
     const engineResult = analyze(DEMO_INPUT);
     const council = await runCouncil(DEMO_INPUT, engineResult);
     await persist({
@@ -304,6 +307,18 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
       doc.moveDown(0.5);
     }
 
+    // Market data sources
+    const srcs = r.sector.sources ?? [];
+    if (srcs.length) {
+      doc.moveDown(0.3);
+      doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text("Market data sources");
+      doc.fontSize(9).font("Helvetica");
+      for (const src of srcs) {
+        doc.fillColor("#0f172a").text(`  • ${src.publisher} (${src.year}) — ${src.claim}`, { width: W });
+        doc.fillColor("#2563eb").text(`     ${src.url}`, { width: W });
+      }
+    }
+
     // Assumptions
     doc.moveDown(0.3);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#92400e").text("Assumptions & limitations");
@@ -522,6 +537,19 @@ async function getById(id: string): Promise<StoredAnalysis | null> {
     }
   }
   return memStore.find((r) => r.id === id) ?? null;
+}
+
+async function deleteById(id: string): Promise<void> {
+  if (isQVentureDbReady()) {
+    try {
+      await pool.query(`DELETE FROM qventure_analyses WHERE id = $1`, [id]);
+      return;
+    } catch (e: unknown) {
+      captureQVentureError(e);
+    }
+  }
+  const idx = memStore.findIndex((r) => r.id === id);
+  if (idx >= 0) memStore.splice(idx, 1);
 }
 
 function rowToRecord(row: Record<string, unknown>): StoredAnalysis {

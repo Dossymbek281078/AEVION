@@ -40,6 +40,13 @@ export interface Strategy {
   reasoning: string[];
 }
 
+export interface SectorSource {
+  publisher: string;
+  year: number;
+  claim: string;
+  url: string;
+}
+
 export interface AnalysisResult {
   id: string;
   name: string;
@@ -49,7 +56,7 @@ export interface AnalysisResult {
     factors: ScoreFactor[];
     strategy: Strategy;
     assumptions: string[];
-    sector: { label: string };
+    sector: { label: string; sources?: SectorSource[] };
     stage: string;
     council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
   };
@@ -286,6 +293,25 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           {result.result.council.lenses.map((l) => <LensCard key={l.lens} lens={l} />)}
         </div>
       </div>
+
+      {result.result.sector.sources && result.result.sector.sources.length > 0 && (
+        <div style={SECTION}>
+          <h2 style={{ ...H2, marginBottom: 6 }}>Market data sources</h2>
+          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#64748b" }}>
+            Market-size and growth figures for {result.result.sector.label} are anchored to recent third-party research:
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#334155" }}>
+            {result.result.sector.sources.map((s, i) => (
+              <li key={i} style={{ marginBottom: 8 }}>
+                <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none" }}>
+                  {s.publisher} ({s.year})
+                </a>
+                <span style={{ color: "#475569" }}> — {s.claim}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div style={{ ...SECTION, background: "#fffbeb", borderColor: "#fde68a" }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 6 }}>Assumptions & limitations</div>

@@ -109,6 +109,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/developers/fintech/rate-limits", changeFrequency: "monthly", priority: 0.5 },
   // QVenture — AI Investment Analyst
   { path: "/qventure", changeFrequency: "daily", priority: 0.85 },
+  { path: "/qventure/gallery", changeFrequency: "weekly", priority: 0.7 },
   { path: "/qventure/watchlist", changeFrequency: "weekly", priority: 0.5 },
   { path: "/qventure/a/demo-neurodx", changeFrequency: "monthly", priority: 0.6 },
   // Launch status

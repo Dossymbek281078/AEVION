@@ -301,6 +301,13 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Внутренний модуль монетизации (auth-gated, не plan-gated)",
   },
   {
+    id: "ventures",
+    addonMonthly: 0,
+    includedIn: ["free", "lite", "medium", "full", "enterprise"],
+    availability: "live",
+    oneLiner: "Идея-Маркет: витрина бизнес-моделей + венчур AEVIA",
+  },
+  {
     id: "qcoreai",
     addonMonthly: 29,
     includedIn: ["medium", "full", "enterprise"],

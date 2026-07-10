@@ -10,6 +10,7 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PaywallModal } from "@/components/PaywallModal";
+import { AgentDock } from "@/components/AgentDock";
 
 // Prefixes where standalone app shells take over — no global header/footer.
 // These pages are full apps (game, dashboards, trading) — the global product nav
@@ -39,6 +40,10 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         <WebVitals />
         <InstallPrompt />
         <PaywallModal />
+        {/* Global AI Agent — available on product/module pages. Hidden on the
+            full-app shells (qcoreai, multichat, cyberchess, build…) which own
+            their own in-app AI/UX and are worked in separate sessions. */}
+        {!isApp && <AgentDock />}
       </AutoTranslate>
     </I18nProvider>
   );

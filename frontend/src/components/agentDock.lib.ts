@@ -1,0 +1,76 @@
+/**
+ * Pure helpers for the global AgentDock widget.
+ *
+ * Kept separate from the React component so the request/response shaping is unit
+ * tested without a DOM. The dock talks to POST /api/agent-runtime/run — our own
+ * agent runtime (real Anthropic tool-use over DevHub + remote MCP tools).
+ */
+
+/** One turn of the runtime transcript (mirror of the backend LoopMessage). */
+export interface DockTranscriptMsg {
+  role: "user" | "assistant" | "tool";
+  text?: string;
+  toolCalls?: Array<{ id: string; name: string }>;
+  toolResults?: Array<{ callId: string; name: string; ok: boolean }>;
+}
+
+export interface DockRunResponse {
+  ok?: boolean;
+  finalText?: string;
+  steps?: number;
+  hitMaxSteps?: boolean;
+  transcript?: DockTranscriptMsg[];
+  error?: string;
+}
+
+/** One line in the "what the agent did" activity list. */
+export interface ToolActivity {
+  name: string;
+  ok: boolean;
+}
+
+/** Clamp the tool-step budget to the backend's accepted 1..8 range (default 5). */
+export function clampMaxSteps(n: unknown): number {
+  const v = Math.floor(Number(n));
+  if (!Number.isFinite(v)) return 5;
+  return Math.min(8, Math.max(1, v));
+}
+
+/** Build the /run request body from a raw user message. */
+export function buildRunRequest(message: string, maxSteps?: number): { message: string; maxSteps: number } {
+  return { message: message.trim(), maxSteps: clampMaxSteps(maxSteps ?? 5) };
+}
+
+/** Whether a message is worth sending (non-empty after trim). */
+export function canSend(message: string): boolean {
+  return message.trim().length > 0;
+}
+
+/**
+ * Reduce a run transcript to the ordered list of tool calls and whether each
+ * succeeded — pairing every tool_use with its matching result by call id.
+ */
+export function describeToolActivity(transcript?: DockTranscriptMsg[]): ToolActivity[] {
+  if (!Array.isArray(transcript)) return [];
+  const okById = new Map<string, boolean>();
+  for (const m of transcript) {
+    if (m.role === "tool") for (const r of m.toolResults ?? []) okById.set(r.callId, r.ok);
+  }
+  const out: ToolActivity[] = [];
+  for (const m of transcript) {
+    if (m.role === "assistant") {
+      for (const c of m.toolCalls ?? []) out.push({ name: c.name, ok: okById.get(c.id) ?? false });
+    }
+  }
+  return out;
+}
+
+/** Human-friendly summary text for a completed run (for the header/status line). */
+export function summarizeRun(res: DockRunResponse): string {
+  if (res.ok === false || res.error) return res.error || "The agent hit an error.";
+  const acts = describeToolActivity(res.transcript);
+  if (acts.length === 0) return "Answered directly.";
+  const used = acts.map((a) => a.name).join(", ");
+  const failed = acts.filter((a) => !a.ok).length;
+  return failed ? `Used ${used} (${failed} failed).` : `Used ${used}.`;
+}

@@ -76,13 +76,16 @@ async function fetchUpstream(db: string, qs: string): Promise<unknown | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const r = await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "AEVION-CyberChess/1.0 (opening explorer proxy)",
-      },
-    });
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "User-Agent": "AEVION-CyberChess/1.0 (opening explorer proxy)",
+    };
+    // Since Feb 2026 Lichess gated explorer.lichess.ovh behind login
+    // (anonymous → 401). A personal API token re-enables live master stats;
+    // without it the frontend degrades to its self-contained opening book.
+    const token = process.env.LICHESS_API_TOKEN;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const r = await fetch(url, { signal: ctrl.signal, headers });
     if (!r.ok) return null;
     const ct = r.headers.get("content-type") || "";
     if (!ct.includes("json")) return null; // HTML challenge page → treat as failure

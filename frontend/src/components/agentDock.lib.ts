@@ -6,6 +6,24 @@
  * agent runtime (real Anthropic tool-use over DevHub + remote MCP tools).
  */
 
+/**
+ * Global signal that any page can dispatch to drive the AgentDock: open it and
+ * prefill (and optionally auto-send) a prompt. Kept as a window CustomEvent so
+ * unrelated pages need no shared store or import of the dock component.
+ */
+export const AGENT_EVENT_NAME = "aevion:agent" as const;
+
+export interface AgentEventDetail {
+  prompt: string;
+  /** When true, send immediately; default false = prefill so the user reviews. */
+  autoSend?: boolean;
+}
+
+/** Build the CustomEvent that opens/prefills the dock (kept pure for testing). */
+export function buildAgentEvent(prompt: string, autoSend = false): { name: string; detail: AgentEventDetail } {
+  return { name: AGENT_EVENT_NAME, detail: { prompt: prompt.trim(), autoSend } };
+}
+
 /** One turn of the runtime transcript (mirror of the backend LoopMessage). */
 export interface DockTranscriptMsg {
   role: "user" | "assistant" | "tool";

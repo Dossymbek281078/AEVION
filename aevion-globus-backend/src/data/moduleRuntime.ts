@@ -27,6 +27,12 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     apiHints: ["/api/globus/projects"],
     hint: "Портал + 3D карта",
   },
+  ventures: {
+    tier: "mvp_live",
+    primaryPath: "/ventures",
+    apiHints: [],
+    hint: "Идея-Маркет: 20 моделей до $10M + венчур AEVIA",
+  },
   qcoreai: {
     tier: "mvp_live",
     primaryPath: "/qcoreai",

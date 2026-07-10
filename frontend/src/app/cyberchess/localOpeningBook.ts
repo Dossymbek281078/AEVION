@@ -5,8 +5,10 @@
    (anonymous access disabled over DDoS concerns), so without a Lichess API
    token the master-games endpoint returns 401. Rather than show an empty
    "no master games" panel, we derive real book continuations from the bundled
-   /openings.json (163 named ECO lines) — computed entirely client-side with
-   chess.js. No stats (W/D/L) — this is theory/book moves, labelled honestly.
+   /openings.json (~3,800 named ECO lines from the CC0 lichess-org/chess-openings
+   dataset → ~5,500 positions) — computed entirely client-side with chess.js.
+   No stats (W/D/L) — this is theory/book moves, labelled honestly.
+   Regenerate the dataset with scripts/expand-openings.mjs.
 
    Position key matches page.tsx: "<placement> <turn> <castling>" (ignores the
    en-passant / halfmove / fullmove fields so transpositions collapse). */

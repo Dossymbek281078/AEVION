@@ -7,8 +7,9 @@
       Lichess API token on the backend (LICHESS_API_TOKEN), because since Feb 2026
       Lichess gated explorer.lichess.ovh behind login (anonymous → 401).
    2. FALLBACK self-contained book (getBookContinuations → bundled /openings.json,
-      computed client-side). Book/theory continuations with opening names, no
-      stats. Always works offline — the panel is never empty on a known line.
+      ~3,800 CC0 ECO lines / ~5,500 positions, computed client-side). Book/theory
+      continuations with opening names, no stats. Always works offline — the panel
+      is never empty on a known line.
 
    Robustness:
      - debounced ~350ms on fen change

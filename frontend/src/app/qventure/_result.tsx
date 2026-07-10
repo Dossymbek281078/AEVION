@@ -56,7 +56,7 @@ export interface AnalysisResult {
     factors: ScoreFactor[];
     strategy: Strategy;
     assumptions: string[];
-    sector: { label: string; sources?: SectorSource[] };
+    sector: { id?: string; label: string; sources?: SectorSource[] };
     stage: string;
     council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
   };
@@ -314,6 +314,105 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
   );
 }
 
+interface BenchmarkBucket { label: string; count: number; containsScore: boolean }
+interface BenchmarkData {
+  mode: "ok" | "insufficient";
+  basisLabel: string;
+  count: number;
+  totalCount: number;
+  score: number;
+  percentile: number | null;
+  median: number | null;
+  p25: number | null;
+  p75: number | null;
+  best: number | null;
+  buckets: BenchmarkBucket[];
+  needed: number;
+  disclaimer: string;
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// Proprietary network signal — where this score ranks against QVenture's corpus.
+function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: string; sectorLabel: string; stage: string; score: number }) {
+  const [data, setData] = useState<BenchmarkData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(apiUrl(`/api/qventure/benchmark?sector=${encodeURIComponent(sectorId)}&stage=${encodeURIComponent(stage)}&score=${encodeURIComponent(String(score))}`))
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setData(j?.ok ? j.data : null); })
+      .catch(() => { if (!cancelled) setData(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sectorId, stage, score]);
+
+  if (loading || !data) return null;
+
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+      <h2 style={{ ...H2, margin: 0 }}>QVenture benchmark</h2>
+      <span style={{ padding: "3px 10px", borderRadius: 999, background: "#0f172a", color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>NETWORK SIGNAL</span>
+    </div>
+  );
+
+  if (data.mode === "insufficient") {
+    return (
+      <div style={SECTION}>
+        {header}
+        <div style={{ fontSize: 13, color: "#64748b" }}>{data.disclaimer}</div>
+      </div>
+    );
+  }
+
+  const maxBucket = Math.max(1, ...data.buckets.map((b) => b.count));
+  const pctColor = (data.percentile ?? 0) >= 66 ? "#16a34a" : (data.percentile ?? 0) >= 33 ? "#d97706" : "#dc2626";
+
+  return (
+    <div style={SECTION}>
+      {header}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, color: pctColor, lineHeight: 1 }}>{ordinal(data.percentile ?? 0)}</span>
+        <span style={{ fontSize: 14, color: "#334155" }}>percentile</span>
+        <span style={{ fontSize: 13, color: "#64748b" }}>— scores higher than {data.percentile}% of {data.count} {data.basisLabel}</span>
+      </div>
+
+      {/* Distribution histogram with this deal's bucket highlighted */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 74, margin: "16px 0 6px" }}>
+        {data.buckets.map((b) => (
+          <div key={b.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ fontSize: 10.5, color: b.containsScore ? "#0f172a" : "#94a3b8", fontWeight: b.containsScore ? 800 : 400 }}>{b.count}</div>
+            <div
+              title={`${b.count} deals scored ${b.label}`}
+              style={{
+                width: "100%",
+                height: `${Math.max(4, (b.count / maxBucket) * 52)}px`,
+                background: b.containsScore ? pctColor : "#e2e8f0",
+                borderRadius: "4px 4px 0 0",
+              }}
+            />
+            <div style={{ fontSize: 10, color: b.containsScore ? "#0f172a" : "#94a3b8", fontWeight: b.containsScore ? 700 : 400 }}>{b.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "#64748b", marginTop: 10 }}>
+        {data.p25 != null && <span>25th pct: <b style={{ color: "#334155" }}>{Math.round(data.p25)}</b></span>}
+        {data.median != null && <span>median: <b style={{ color: "#334155" }}>{Math.round(data.median)}</b></span>}
+        {data.p75 != null && <span>75th pct: <b style={{ color: "#334155" }}>{Math.round(data.p75)}</b></span>}
+        {data.best != null && <span>best seen: <b style={{ color: "#334155" }}>{Math.round(data.best)}</b></span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>{data.disclaimer}</div>
+    </div>
+  );
+}
+
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
@@ -345,6 +444,13 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           <ScoreGauge score={result.composite} verdict={result.verdict} />
         </div>
       </div>
+
+      <BenchmarkBlock
+        sectorId={result.result.sector.id ?? ""}
+        sectorLabel={result.result.sector.label}
+        stage={result.result.stage}
+        score={result.composite}
+      />
 
       <div style={SECTION}>
         <h2 style={H2}>Investment memo</h2>

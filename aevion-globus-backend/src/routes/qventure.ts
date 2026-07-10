@@ -24,6 +24,7 @@ import { analyze, STAGES, type AnalysisInput, type Stage } from "../lib/qventure
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
+import { fetchComparables } from "../lib/qventure/comparables";
 
 const captureQVentureError = makeServiceCapture("qventure");
 
@@ -135,6 +136,22 @@ qventureRouter.get("/health", (_req: Request, res: Response) => {
 
 qventureRouter.get("/sectors", (_req: Request, res: Response) => {
   res.json({ ok: true, data: listSectors(), stages: STAGES });
+});
+
+// GET /comparables?sector=<label>&stage=<stage> — recent comparable rounds.
+// Loaded independently by the frontend after a result renders (keeps analyze
+// fast). Live web-sourced when SERPER_API_KEY is set, else illustrative.
+qventureRouter.get("/comparables", analyzeLimiter, async (req: Request, res: Response) => {
+  try {
+    const sector = typeof req.query.sector === "string" ? req.query.sector.trim().slice(0, 80) : "";
+    const stage = typeof req.query.stage === "string" ? req.query.stage.trim().slice(0, 20) : "seed";
+    if (!sector) return badRequest(res, "sector is required");
+    const data = await fetchComparables(sector, stage);
+    res.json({ ok: true, data });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "comparables_failed" });
+  }
 });
 
 // POST /extract — upload a pitch-deck PDF (raw application/pdf body), get back

@@ -442,6 +442,7 @@ export function isLiveGame(gameId: string): boolean {
 // ---------- Cleanup loop ----------
 
 const cleanupTimer = setInterval(() => {
+ try {
   const now = Date.now();
 
   // Stale games — auto-end + notify subscribers
@@ -474,6 +475,10 @@ const cleanupTimer = setInterval(() => {
   for (const [gid, slot] of voiceRateBucket) {
     if (slot.resetAt <= now) voiceRateBucket.delete(gid);
   }
+ } catch (e) {
+  // A throw here bypasses Express and would crash the whole backend.
+  console.error("[cyberchess spectator] cleanup tick failed", e);
+ }
 }, CLEANUP_INTERVAL_MS);
 
 // Don't block Node exit on the cleanup timer in tests/scripts.

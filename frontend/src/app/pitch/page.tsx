@@ -20,6 +20,7 @@ import {
   team,
   thesis,
   unitEconomics,
+  launchGrowth,
   useCases,
   videoReels,
   type LaunchStage,
@@ -80,6 +81,7 @@ const TOC = [
   { id: "videos", label: "Walkthroughs" },
   { id: "market", label: "Market" },
   { id: "unit-economics", label: "Revenue model" },
+  { id: "launch-growth", label: "Seat & growth" },
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
   { id: "use-cases", label: "Use cases" },
@@ -859,6 +861,106 @@ export default function PitchPage() {
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 260, fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55 }}>{unitEconomics.note}</div>
+        </div>
+      </Section>
+
+      {/* ───────── UNIVERSE SEAT + LAUNCH GROWTH ───────── */}
+      <Section anchor="launch-growth" eyebrow="One seat, the whole ecosystem" title={launchGrowth.title}>
+        {/* Seat definition */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 20,
+            padding: 24,
+            borderRadius: 16,
+            background: "linear-gradient(135deg, rgba(13,148,136,0.18), rgba(14,165,233,0.12))",
+            border: "1px solid rgba(13,148,136,0.4)",
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ minWidth: 160 }}>
+            <div style={{ fontSize: 34, fontWeight: 900, color: "#5eead4", letterSpacing: "-0.02em" }}>{launchGrowth.seat.headline}</div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>{launchGrowth.seat.annual}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <p style={{ fontSize: 15, color: "#e2e8f0", lineHeight: 1.6, margin: "0 0 10px" }}>{launchGrowth.seat.what}</p>
+            <p style={{ fontSize: 13.5, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 8px" }}>{launchGrowth.seat.anchor}</p>
+            <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, margin: 0, fontStyle: "italic" }}>{launchGrowth.seat.honesty}</p>
+          </div>
+        </div>
+
+        {/* Growth dynamics table */}
+        <div style={{ overflowX: "auto", marginBottom: 20 }}>
+          <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "#94a3b8", borderBottom: "1px solid rgba(51,65,85,0.6)" }}>
+                <th style={{ padding: "8px 10px", fontWeight: 800 }}>Base scenario · 1.5M reach</th>
+                <th style={{ padding: "8px 10px", fontWeight: 800 }}>Reached</th>
+                <th style={{ padding: "8px 10px", fontWeight: 800 }}>Free users</th>
+                <th style={{ padding: "8px 10px", fontWeight: 800 }}>Paid seats</th>
+                <th style={{ padding: "8px 10px", fontWeight: 800 }}>ARR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {launchGrowth.rows.map((r, i) => {
+                const peak = i === launchGrowth.rows.length - 1;
+                return (
+                  <tr key={r.month} style={{ borderBottom: "1px solid rgba(51,65,85,0.35)" }}>
+                    <td style={{ padding: "8px 10px", fontWeight: 800, color: peak ? "#5eead4" : "#e2e8f0" }}>{r.month}</td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>{r.reached}</td>
+                    <td style={{ padding: "8px 10px", color: "#cbd5e1" }}>{r.free}</td>
+                    <td style={{ padding: "8px 10px", color: peak ? "#5eead4" : "#cbd5e1", fontWeight: peak ? 800 : 400 }}>{r.paid}</td>
+                    <td style={{ padding: "8px 10px", color: peak ? "#5eead4" : "#cbd5e1", fontWeight: peak ? 800 : 400 }}>{r.arr}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Scenario range + assumptions */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b", marginBottom: 8 }}>Sensitivity to distribution</div>
+            {launchGrowth.scenarios.map((s) => (
+              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: "1px solid rgba(51,65,85,0.3)", fontSize: 13 }}>
+                <span style={{ color: "#94a3b8" }}>{s.label}</span>
+                <strong style={{ color: "#cbd5e1" }}>{s.arr}</strong>
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b", marginBottom: 8 }}>Inputs (each is a challengeable assumption)</div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#94a3b8", lineHeight: 1.6 }}>
+              {launchGrowth.assumptions.map((a) => (
+                <li key={a} style={{ marginBottom: 4 }}>{a}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.6, margin: "18px 0 0", fontStyle: "italic" }}>{launchGrowth.note}</p>
+
+        {/* Gross margin / token COGS */}
+        <div
+          style={{
+            marginTop: 22,
+            padding: 20,
+            borderRadius: 14,
+            background: "rgba(15,23,42,0.6)",
+            border: "1px solid rgba(251,191,36,0.28)",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#fbbf24", marginBottom: 10 }}>{launchGrowth.economics.title}</div>
+          <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 8px" }}>{launchGrowth.economics.moat}</p>
+          <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 10px" }}>{launchGrowth.economics.margin}</p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 12.5, color: "#94a3b8", lineHeight: 1.6 }}>
+            {launchGrowth.economics.levers.map((l) => (
+              <li key={l} style={{ marginBottom: 3 }}>{l}</li>
+            ))}
+          </ul>
+          <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, margin: 0, fontStyle: "italic" }}>{launchGrowth.economics.honesty}</p>
         </div>
       </Section>
 

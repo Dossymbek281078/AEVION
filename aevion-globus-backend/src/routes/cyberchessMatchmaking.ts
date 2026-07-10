@@ -67,6 +67,10 @@ export interface QueueEntry {
   ws?: unknown;
   status: QueueStatus;
   matchedTo?: string; // matchId once matched
+  // Lazy SSE listeners (opened /queue/stream without actually joining) are
+  // parked in the queue only to receive notifications — they must NEVER be
+  // paired against a real queuer. Marked passive and excluded from pairing.
+  passive?: boolean;
 }
 
 export interface MatchPlayer {
@@ -134,6 +138,37 @@ function rateLimitOk(ip: string): boolean {
   fresh.push(now);
   rateHits.set(ip, fresh);
   return true;
+}
+
+// ── per-match move flood guard ─────────────────────────────────────
+// Hard ceiling on stored moves (longest sensible game << this) and a short
+// sliding window so a single authenticated participant can't flood /move.
+const MAX_MOVES_PER_MATCH = 700;
+const MOVE_RATE_WINDOW_MS = 2000;
+const MOVE_RATE_MAX = 12; // ~6 moves/s/player — ample for bullet
+const moveHits = new Map<string, number[]>();
+
+function moveRateOk(matchId: string, userId: string): boolean {
+  const key = `${matchId}|${userId}`;
+  const now = Date.now();
+  const arr = moveHits.get(key) ?? [];
+  const fresh = arr.filter((t) => now - t < MOVE_RATE_WINDOW_MS);
+  if (fresh.length >= MOVE_RATE_MAX) {
+    moveHits.set(key, fresh);
+    return false;
+  }
+  fresh.push(now);
+  moveHits.set(key, fresh);
+  return true;
+}
+
+// Evict stale move-rate buckets (bounded with the match lifetime, but sweep
+// anyway so ended matches don't linger). Called from the pairing tick.
+function sweepMoveHits(): void {
+  const now = Date.now();
+  for (const [key, arr] of moveHits) {
+    if (!arr.some((t) => now - t < MOVE_RATE_WINDOW_MS)) moveHits.delete(key);
+  }
 }
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -304,6 +339,7 @@ function tryPair(entry: QueueEntry): Match | null {
   for (const other of QUEUE.values()) {
     if (other.userId === entry.userId) continue;
     if (other.status !== "waiting") continue;
+    if (other.passive) continue; // notification-only listener, not a real queuer
     if (other.timeControl !== entry.timeControl) continue;
     const gap = Math.abs(other.ratingInternal - entry.ratingInternal);
     if (gap > RATING_TOLERANCE) continue;
@@ -317,23 +353,44 @@ function tryPair(entry: QueueEntry): Match | null {
   return match;
 }
 
+// Evict rate-limit buckets whose hits have all aged out — otherwise rateHits
+// grows one entry per unique client IP forever (memory leak behind a proxy).
+function sweepRateHits(): void {
+  const now = Date.now();
+  for (const [ip, arr] of rateHits) {
+    if (!arr.some((t) => now - t < RATE_WINDOW_MS)) rateHits.delete(ip);
+  }
+}
+
 function pairingScan(): void {
   purgeStaleQueue();
   purgeStaleMatches();
+  sweepRateHits();
+  sweepMoveHits();
   // walk waiting entries in join order and try to pair
   const waiting = [...QUEUE.values()]
-    .filter((e) => e.status === "waiting")
+    .filter((e) => e.status === "waiting" && !e.passive)
     .sort((a, b) => a.joinedAt - b.joinedAt);
   for (const e of waiting) {
-    if (e.status !== "waiting") continue;
+    if (e.status !== "waiting" || e.passive) continue;
     tryPair(e);
+  }
+}
+
+// Guarded tick: a throw inside a bare setInterval callback bypasses Express and
+// would crash the whole backend. Swallow + log so one bad scan can't kill it.
+function safePairingScan(): void {
+  try {
+    pairingScan();
+  } catch (e) {
+    console.error("[cyberchess matchmaking] pairingScan tick failed", e);
   }
 }
 
 // background loop — guarded against double-start in dev hot-reload
 const G = global as unknown as { __cc_matchmaking_timer?: NodeJS.Timeout };
 if (!G.__cc_matchmaking_timer) {
-  G.__cc_matchmaking_timer = setInterval(pairingScan, PAIRING_INTERVAL_MS);
+  G.__cc_matchmaking_timer = setInterval(safePairingScan, PAIRING_INTERVAL_MS);
   // best-effort: don't keep the process alive solely for matchmaking
   if (typeof G.__cc_matchmaking_timer.unref === "function") {
     G.__cc_matchmaking_timer.unref();
@@ -657,6 +714,7 @@ router.get("/queue/stream", (req: Request, res: Response): void => {
       joinedAt: Date.now(),
       queueId: `q_${randomUUID()}`,
       status: "waiting",
+      passive: true, // notification-only listener — never pair this entry
     };
     QUEUE.set(userId, entry);
   }
@@ -792,6 +850,19 @@ router.post("/match/:matchId/move", (req: Request, res: Response): void => {
   // very lax uci shape check: 4-5 chars, two squares + optional promo
   if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci)) {
     res.status(400).json({ ok: false, error: "malformed_uci", hint: "expected e2e4 or e7e8q" });
+    return;
+  }
+  // Hard ceiling: the longest legal game is well under this. Caps in-memory
+  // moves[] growth + DB writes so one authenticated player can't DoS by
+  // scripting endless /move calls on a live match.
+  if (m.moves.length >= MAX_MOVES_PER_MATCH) {
+    res.status(409).json({ ok: false, error: "move_limit_reached" });
+    return;
+  }
+  // Per-match move rate limit — a real game never needs more than a few
+  // moves/second; this blocks scripted flooding while allowing bullet play.
+  if (!moveRateOk(m.matchId, userId)) {
+    res.status(429).json({ ok: false, error: "rate_limited" });
     return;
   }
   const move = { uci: uci.toLowerCase(), by: userId, at: Date.now() };

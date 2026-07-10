@@ -27,9 +27,48 @@ import { listSectors } from "../lib/qventure/sectors";
 const captureQVentureError = makeServiceCapture("qventure");
 
 const pool = getPool();
+
+// Canonical public showcase — a stable, shareable example report. Persisted
+// once under a fixed id so "See a live example →" never breaks across restarts.
+const DEMO_ID = "demo-neurodx";
+const DEMO_INPUT: AnalysisInput = {
+  name: "NeuroDx",
+  sector: "healthtech",
+  stage: "seed",
+  geography: "US",
+  askUsd: 6_000_000,
+  description:
+    "FDA-pathway diagnostic that detects early-stage Alzheimer's from a standard retinal scan using a self-supervised vision model, turning any optometrist's chair into a screening point years before symptom onset.",
+  tractionNotes:
+    "$55k MRR across 14 clinics growing 22% MoM, breakthrough-device designation filed, 89% sensitivity vs PET baseline in a 1,200-patient cohort, LTV/CAC 5.1x.",
+};
+
+async function ensureDemoAnalysis(): Promise<void> {
+  try {
+    if (await getById(DEMO_ID)) return; // already seeded
+    const engineResult = analyze(DEMO_INPUT);
+    const council = await runCouncil(DEMO_INPUT, engineResult);
+    await persist({
+      id: DEMO_ID,
+      name: DEMO_INPUT.name,
+      sector: engineResult.sector.id,
+      stage: DEMO_INPUT.stage,
+      geography: DEMO_INPUT.geography ?? "US",
+      askUsd: DEMO_INPUT.askUsd ?? null,
+      composite: engineResult.composite,
+      verdict: engineResult.verdict,
+      result: { ...engineResult, council },
+      contentHash: contentHash(DEMO_INPUT),
+      visibility: "public",
+      createdAt: nowIso(),
+    });
+  } catch { /* best-effort — demo link degrades gracefully to not_found */ }
+}
+
 (async () => {
   try { await ensureQVentureTables(pool); }
   catch { /* silent — in-memory fallback active */ }
+  void ensureDemoAnalysis();
 })();
 
 // ── Limiters ────────────────────────────────────────────────────────────────
@@ -175,6 +214,223 @@ qventureRouter.get("/analyses/:id", async (req: Request, res: Response) => {
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "get_failed" });
+  }
+});
+
+// GET /analyses/:id/pdf — render the stored memo as a downloadable PDF.
+// Uses pdfkit (already in deps for Planet certs). Helvetica has no emoji glyphs,
+// so the layout stays ASCII/text — clean and printable.
+qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
+  try {
+    const row = await getById(String(req.params.id));
+    if (!row) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    const r = row.result;
+    const s = r.strategy;
+    const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+    const W = 495;
+
+    // Header
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Investment Memo");
+    doc.fontSize(9).font("Helvetica").fillColor("#64748b")
+      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+    doc.moveDown(0.8);
+
+    // Company + verdict banner
+    doc.fontSize(17).font("Helvetica-Bold").fillColor("#0f172a").text(row.name);
+    doc.fontSize(10).font("Helvetica").fillColor("#334155")
+      .text(`${r.sector.label} · ${r.stage} · ${row.geography ?? "US"}${row.askUsd ? ` · raising ${usd(row.askUsd)}` : ""}`);
+    doc.moveDown(0.4);
+    const verdictColor = row.verdict === "invest" ? "#15803d" : row.verdict === "watch" ? "#b45309" : "#b91c1c";
+    doc.fontSize(15).font("Helvetica-Bold").fillColor(verdictColor)
+      .text(`Score ${row.composite}/100  —  ${row.verdict.toUpperCase()}  (conviction: ${s.conviction})`);
+    doc.moveDown(0.8);
+
+    // Investment memo
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Investment memo");
+    doc.moveDown(0.2);
+    doc.fontSize(10).font("Helvetica").fillColor("#1e293b").text(r.council.memo, { width: W, align: "left" });
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text(`Narrative engine: ${r.council.aiUsed ? `live model (${r.council.aiProvider})` : "deterministic (no AI key)"}`);
+    doc.moveDown(0.8);
+
+    // Entry strategy
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Entry strategy");
+    doc.moveDown(0.2);
+    doc.fontSize(10).font("Helvetica").fillColor("#334155");
+    doc.text(`Ticket: ${usd(s.ticketUsd.target)} target  (range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)})`);
+    doc.text(`Target ownership: ${s.ownershipTargetPct}%`);
+    doc.text(`Valuation band (pre-money): ${usd(s.valuationBandUsd.low)} / ${usd(s.valuationBandUsd.base)} / ${usd(s.valuationBandUsd.high)}`);
+    doc.text(`Return: ${s.returns.expectedMoic}x expected (${s.returns.baseMoic}x base) · ~${s.returns.targetIrrPct}% IRR over ${s.returns.horizonYears}yr · loss prob ${Math.round(s.returns.lossProbability * 100)}%`);
+    doc.moveDown(0.3);
+    doc.font("Helvetica-Bold").fillColor("#0f172a").text("Deployment schedule:");
+    doc.font("Helvetica").fillColor("#334155");
+    for (const t of s.tranches) doc.text(`  • ${t.pct}% — ${t.label}: ${t.trigger}`, { width: W });
+    doc.moveDown(0.2);
+    doc.fillColor("#166534").text(`Portfolio: ${s.portfolioNote}`, { width: W });
+    doc.moveDown(0.8);
+
+    // Score breakdown
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Score breakdown");
+    doc.moveDown(0.2);
+    doc.fontSize(9.5).font("Helvetica").fillColor("#334155");
+    for (const f of r.factors) {
+      doc.font("Helvetica-Bold").fillColor("#0f172a")
+        .text(`${f.label} — ${f.score}/100 (weight ${Math.round(f.weight * 100)}%)`, { continued: false });
+      doc.font("Helvetica").fillColor("#475569").text(f.rationale, { width: W });
+      doc.moveDown(0.15);
+    }
+    doc.moveDown(0.6);
+
+    // Analyst council
+    doc.addPage();
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Analyst council");
+    doc.moveDown(0.3);
+    for (const l of r.council.lenses) {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a").text(`${l.role} — ${l.headline}`, { width: W });
+      doc.fontSize(9.5).font("Helvetica").fillColor("#166534");
+      for (const p of l.points) doc.text(`  + ${p}`, { width: W });
+      doc.fillColor("#b91c1c");
+      for (const rk of l.risks) doc.text(`  ! ${rk}`, { width: W });
+      doc.moveDown(0.5);
+    }
+
+    // Assumptions
+    doc.moveDown(0.3);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#92400e").text("Assumptions & limitations");
+    doc.fontSize(9).font("Helvetica").fillColor("#78350f");
+    for (const a of r.assumptions) doc.text(`  • ${a}`, { width: W });
+    doc.moveDown(0.6);
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text("This memo is generated by an AI screening tool for research purposes and is not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.", { width: W });
+
+    doc.end();
+    const pdf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    const safeName = row.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) || "memo";
+    res.setHeader("Content-Disposition", `attachment; filename="qventure-${safeName}.pdf"`);
+    return res.send(pdf);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    return res.status(500).json({ ok: false, error: "pdf_failed" });
+  }
+});
+
+// GET /compare/pdf?a=<id>&b=<id> — a single side-by-side comparison PDF of two
+// stored analyses (scores, verdicts, factor-by-factor delta, memo snippets).
+qventureRouter.get("/compare/pdf", async (req: Request, res: Response) => {
+  try {
+    const aId = typeof req.query.a === "string" ? req.query.a : "";
+    const bId = typeof req.query.b === "string" ? req.query.b : "";
+    if (!aId || !bId) return badRequest(res, "both a and b query params are required");
+
+    const [a, b] = await Promise.all([getById(aId), getById(bId)]);
+    if (!a || !b) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    const W = 495;
+    const firstSentences = (t: string, n = 2) => t.trim().replace(/\s+/g, " ").split(/(?<=[.!?])\s+/).slice(0, n).join(" ");
+    const vColor = (v: string) => (v === "invest" ? "#15803d" : v === "watch" ? "#b45309" : "#b91c1c");
+
+    // Header
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Deal Comparison");
+    doc.fontSize(9).font("Helvetica").fillColor("#64748b")
+      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+    doc.moveDown(0.8);
+
+    // Two headline blocks
+    const headline = (r: NonNullable<Awaited<ReturnType<typeof getById>>>) => {
+      doc.fontSize(15).font("Helvetica-Bold").fillColor("#0f172a").text(r.name, { continued: true });
+      doc.font("Helvetica").fontSize(11).fillColor("#64748b").text(`   ${r.result.sector.label} · ${r.stage}`);
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(vColor(r.verdict))
+        .text(`Score ${r.composite}/100  —  ${r.verdict.toUpperCase()} (conviction: ${r.result.strategy.conviction})`);
+      doc.moveDown(0.5);
+    };
+    doc.fillColor("#7c3aed").fontSize(11).font("Helvetica-Bold").text("COMPANY A");
+    headline(a);
+    doc.fillColor("#7c3aed").fontSize(11).font("Helvetica-Bold").text("COMPANY B");
+    headline(b);
+
+    const winner = a.composite === b.composite ? null : a.composite > b.composite ? a : b;
+    doc.moveDown(0.2);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a")
+      .text(winner ? `Higher composite: ${winner.name} (${winner.composite}/100)` : "Composite scores are tied.");
+    doc.moveDown(0.8);
+
+    // Factor-by-factor delta table
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Factor-by-factor delta (B − A)");
+    doc.moveDown(0.3);
+    const col = { factor: 50, a: 300, b: 375, d: 450 };
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#64748b");
+    doc.text("Factor", col.factor, doc.y, { continued: false });
+    let rowY = doc.y - 12;
+    doc.text("A", col.a, rowY); doc.text("B", col.b, rowY); doc.text("Δ", col.d, rowY);
+    doc.moveDown(0.2);
+    doc.font("Helvetica");
+    for (const fa of a.result.factors) {
+      const fb = b.result.factors.find((x) => x.key === fa.key);
+      const bs = fb ? fb.score : 0;
+      const delta = bs - fa.score;
+      rowY = doc.y;
+      doc.fillColor("#0f172a").fontSize(9.5).text(`${fa.label} (${Math.round(fa.weight * 100)}%)`, col.factor, rowY, { width: 240 });
+      const lineY = doc.y - 11;
+      doc.fillColor("#334155").text(String(fa.score), col.a, lineY);
+      doc.fillColor("#334155").text(String(bs), col.b, lineY);
+      doc.fillColor(delta > 0 ? "#15803d" : delta < 0 ? "#b91c1c" : "#94a3b8").font("Helvetica-Bold")
+        .text(`${delta > 0 ? "+" : ""}${delta}`, col.d, lineY);
+      doc.font("Helvetica");
+    }
+    // Composite row
+    doc.moveDown(0.2);
+    rowY = doc.y;
+    const cd = Math.round((b.composite - a.composite) * 10) / 10;
+    doc.font("Helvetica-Bold").fillColor("#0f172a").fontSize(10).text("Composite", col.factor, rowY);
+    const cY = doc.y - 12;
+    doc.text(String(a.composite), col.a, cY);
+    doc.text(String(b.composite), col.b, cY);
+    doc.fillColor(cd >= 0 ? "#15803d" : "#b91c1c").text(`${cd > 0 ? "+" : ""}${cd}`, col.d, cY);
+    doc.font("Helvetica").fillColor("#0f172a");
+    doc.moveDown(1);
+
+    // Per-side memo snippets
+    doc.x = 50;
+    for (const r of [a, b]) {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor(vColor(r.verdict)).text(`${r.name} — ${r.verdict.toUpperCase()}`);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#334155").text(firstSentences(r.result.council.memo, 3), { width: W });
+      doc.moveDown(0.5);
+    }
+    doc.moveDown(0.4);
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text("Generated by an AI screening tool for research purposes. Not investment advice, an offer, or a solicitation. Figures are model estimates.", { width: W });
+
+    doc.end();
+    const pdf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    const nm = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 24);
+    res.setHeader("Content-Disposition", `attachment; filename="qventure-compare-${nm(a.name)}-vs-${nm(b.name)}.pdf"`);
+    return res.send(pdf);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    return res.status(500).json({ ok: false, error: "compare_pdf_failed" });
   }
 });
 

@@ -46,3 +46,20 @@ export const REVENUE_SPLIT = "51/49";
 export const BOTTOM_UP_BEACHHEAD_ARR = "≈$0.8M";
 export const BOTTOM_UP_REGIONAL_ARR = "≈$9.4M";
 export const IS_PRE_REVENUE = true;
+
+// ── Universe Seat (one seat = the whole ecosystem) ───────────────────────────
+/**
+ * PROPOSED premium "Universe Seat" price for a branded launch. This is a
+ * repositioning of today's LIVE published All-Access price ($49/mo — still what
+ * the pricing pages and Gumroad charge). $79 is a go-forward pricing DECISION,
+ * not the live price; the live checkout is intentionally NOT changed here.
+ * Justification anchor = sum-of-parts: a working creator's AI stack (Claude +
+ * Midjourney + ElevenLabs + Higgsfield ≈ $100+/mo) vs one AEVION seat.
+ */
+export const UNIVERSE_SEAT_MONTHLY = "$149.99";
+export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,500/yr"; // effective ARPU used in the growth model
+export const UNIVERSE_SEAT_INTRO_NOTE = "Introductory price for the first 6–12 months — may rise as the ecosystem matures.";
+// Live plan is now 5-tier: Free / Lite $19 / Medium $29 / Full $49 / Universe(pro) $149.99.
+// The $149.99 "Universe" tier (id "pro") is defined in the backend pricing registry
+// (aevion-globus-backend/src/data/pricing.ts); its checkout goes live once its Gumroad product exists.
+export const LIVE_TOP_TIER_MONTHLY = "$49"; // highest tier with live checkout today (Full)

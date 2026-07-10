@@ -39,12 +39,14 @@ import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
+import cyberchessPuzzlesRouter from "./routes/cyberchessPuzzles";
 import cyberchessTournamentsRouter from "./routes/cyberchessTournaments";
 import cyberchessDailyRouter from "./routes/cyberchessDaily";
 import cyberchessVoiceCoachRouter from "./routes/cyberchessVoiceCoach";
 import cyberchessSpectatorRouter from "./routes/cyberchessSpectator";
 import cyberchessMatchmakingRouter from "./routes/cyberchessMatchmaking";
 import cyberchessAnticheatRouter from "./routes/cyberchessAnticheat";
+import cyberchessOpeningRouter from "./routes/cyberchessOpening";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
@@ -949,12 +951,14 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/cyberchess-puzzles", cyberchessPuzzlesRouter);
 app.use("/api/cyberchess-tournaments", cyberchessTournamentsRouter);
 app.use("/api/cyberchess-daily", cyberchessDailyRouter);
 app.use("/api/cyberchess-voice-coach", cyberchessVoiceCoachRouter);
 app.use("/api/cyberchess-spectator", cyberchessSpectatorRouter);
 app.use("/api/cyberchess/matchmaking", cyberchessMatchmakingRouter);
 app.use("/api/cyberchess-anticheat", cyberchessAnticheatRouter);
+app.use("/api/cyberchess-opening", cyberchessOpeningRouter);
 app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================
@@ -1156,6 +1160,23 @@ const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
+});
+
+// Last-resort process-level backstops. Express 5 auto-forwards async request-
+// handler rejections to the error middleware, but a throw inside a setInterval/
+// timer callback (e.g. the 3s matchmaking pairing scan) or a stray unhandled
+// promise rejection bypasses Express entirely — without these, one such throw
+// terminates the whole backend and takes every AEVION module down with it.
+// Policy: log + capture, NEVER exit. A single bad tick must not kill the process.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+  try { captureException(err, { where: "uncaughtException" }); } catch { /* never throw from the backstop */ }
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+  try {
+    captureException(reason instanceof Error ? reason : new Error(String(reason)), { where: "unhandledRejection" });
+  } catch { /* never throw from the backstop */ }
 });
 
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)

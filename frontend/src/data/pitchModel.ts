@@ -153,6 +153,78 @@ export const unitEconomics = {
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Universe Seat + Anthropic-launch growth                                     */
+/* One seat = the whole ecosystem. Every number below is a labelled assumption */
+/* you can challenge. No Anthropic distribution deal is signed; pre-revenue.    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const launchGrowth = {
+  title: "The Universe Seat — one price, the whole ecosystem",
+  seat: {
+    headline: "$149.99 / mo",
+    annual: "One premium seat — no tiers. Introductory price for the first 6–12 months; rises as the ecosystem matures.",
+    what: "One seat unlocks every module today + everything shipped next. A free tier sits underneath as the on-ramp.",
+    anchor:
+      "Priced against the stack, not a single tool — we set the price, Apple-style. Serious usage on any one " +
+      "tool already runs $100–200/mo (Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working " +
+      "creator stacks several — Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across " +
+      "four logins. AEVION is one seat at $149.99 — still below a single premium tool, and a deep discount to " +
+      "the stack it replaces.",
+    honesty:
+      "$149.99 is now a real \"Universe\" tier in the live plan, sitting above the kept on-ramps " +
+      "($0/$19/$29/$49) — its checkout goes live once its Gumroad product is set up. Most modules are early " +
+      "MVPs and the cross-module agent layer is still early, so \"replaces your stack\" is the promise the " +
+      "price rests on — which is why the intro price + a free tier underneath are there to earn the upgrade " +
+      "before the price rises.",
+  },
+  // Gross margin / token COGS — the seat bundles AI, so revenue ≠ gross profit.
+  economics: {
+    title: "Gross margin & token COGS — revenue is not gross profit",
+    moat:
+      "AEVION already meters every request per user (tokensIn/out across all providers) and routes across " +
+      "a deep provider roster — including free (OpenRouter, Together, Groq, Cerebras) and local (Ollama, " +
+      "LM Studio, $0 marginal) models. A single-vendor AI product cannot arbitrage cost this way.",
+    margin:
+      "At efficient routing (~$0.5/1M blended) and ~15% allowance utilisation, gross margin is ~85–95% " +
+      "across paid tiers (Lite $19/2M · Medium $29/10M · Full $49/50M tokens/mo). The tail risk is a " +
+      "power user maxing the cap on a frontier model — which is why margin depends on two levers, not luck.",
+    levers: [
+      "Efficient default routing — frontier (Opus/GPT-4o) on request or on higher tiers, cheap models by default.",
+      "Enforce the per-tier monthly token cap (metered today; enforcement is a pre-launch fast-follow).",
+      "Overage billing + bring-your-own-key for heavy users — offloads COGS toward zero.",
+    ],
+    honesty:
+      "Today the caps are metered but not fully enforced on paid tiers, and the Anthropic provider still " +
+      "defaults to an expensive model. Both are cheap fixes, but until they ship the ~85–95% margin is a " +
+      "target, not a measured number. Stated plainly so diligence doesn't have to discover it.",
+  },
+  // Funnel inputs — every one is an assumption, not a claim.
+  assumptions: [
+    "Distribution: a launch with Anthropic reaches ~1.5M Claude users over year 1 (a small slice of their base) — the single biggest assumption, and unproven until a deal is signed.",
+    "Reach → free signup: 4% (conservative for a cross-promo CTA).",
+    "Free → paid seat: ramps 0.4% (M1) → 1.0% (M6) → 1.3% (M12) — premium price + early-MVP depth means cold conversion is deliberately low.",
+    "Seat ARPU: ~$1,500/yr (annual-leaning, conservative vs the $149.99/mo list).",
+    "Reach front-loads: 20% lands by M1, 60% by M6, 100% by M12.",
+  ],
+  // Growth dynamics at the base scenario (1.5M reach).
+  rows: [
+    { month: "Month 1", reached: "300K", free: "12K", paid: "~50", arr: "≈$0.08M run-rate" },
+    { month: "Month 6", reached: "900K", free: "36K", paid: "~350", arr: "≈$0.53M run-rate" },
+    { month: "Month 12", reached: "1.5M", free: "60K", paid: "~780", arr: "≈$1.2M" },
+  ],
+  scenarios: [
+    { label: "Conservative — 250K reach", arr: "≈$0.2M ARR" },
+    { label: "Base — 1.5M reach", arr: "≈$1.2M ARR" },
+    { label: "Aggressive — 8M reach (featured/bundled)", arr: "≈$6.2M ARR" },
+  ],
+  note:
+    "This is a scenario, not a forecast — it stands or falls on the distribution assumption, and no " +
+    "Anthropic deal is signed. Fewer paid seats than a cheaper tier would win, but a higher premium ARPU; " +
+    "the base case (≈$1.2M ARR by month 12) still lands on the ≈$0.8M beachhead of the bottom-up model above, " +
+    "so the two independent methods agree — the honest signal for diligence.",
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Network effects — the 4 forces                                              */
 /* ────────────────────────────────────────────────────────────────────────── */
 

@@ -1,186 +1,69 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
-
-// ─── Types (mirror backend engine.ts) ────────────────────────────────────────
-
-type Verdict = "invest" | "watch" | "pass";
-
-interface ScoreFactor {
-  key: string;
-  label: string;
-  weight: number;
-  score: number;
-  rationale: string;
-}
-
-interface Lens {
-  lens: string;
-  role: string;
-  headline: string;
-  points: string[];
-  risks: string[];
-}
-
-interface Strategy {
-  verdict: Verdict;
-  conviction: "high" | "medium" | "low";
-  ticketUsd: { min: number; target: number; max: number };
-  valuationBandUsd: { low: number; base: number; high: number };
-  ownershipTargetPct: number;
-  tranches: Array<{ label: string; pct: number; trigger: string }>;
-  returns: { baseMoic: number; lossProbability: number; expectedMoic: number; targetIrrPct: number; horizonYears: number };
-  portfolioNote: string;
-  reasoning: string[];
-}
-
-interface AnalysisResult {
-  id: string;
-  name: string;
-  composite: number;
-  verdict: Verdict;
-  result: {
-    factors: ScoreFactor[];
-    strategy: Strategy;
-    assumptions: string[];
-    sector: { label: string };
-    stage: string;
-    council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
-  };
-}
+import {
+  ResultView, ScoreGauge, STAGES, VERDICT_COLOR, VERDICT_LABEL,
+  SECTION, H2, type AnalysisResult, type Verdict,
+} from "./_result";
 
 interface SectorOption { id: string; label: string; }
 
-const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
+// One-click showcase: a realistic seed-stage opportunity so a first-time
+// visitor sees a full memo without typing anything.
+const SAMPLE = {
+  name: "NeuroDx",
+  sector: "healthtech",
+  stage: "seed" as (typeof STAGES)[number],
+  geography: "US",
+  askUsd: "6,000,000",
+  description:
+    "FDA-pathway diagnostic that detects early-stage Alzheimer's from a standard retinal scan using a self-supervised vision model, turning any optometrist's chair into a screening point years before symptom onset.",
+  tractionNotes:
+    "$55k MRR across 14 clinics growing 22% MoM, breakthrough-device designation filed, 89% sensitivity vs PET baseline in a 1,200-patient cohort, LTV/CAC 5.1x.",
+};
 
-const VERDICT_COLOR: Record<Verdict, string> = { invest: "#16a34a", watch: "#d97706", pass: "#dc2626" };
-const VERDICT_LABEL: Record<Verdict, string> = { invest: "INVEST", watch: "WATCH", pass: "PASS" };
-const LENS_ICON: Record<string, string> = { scientist: "🔬", data_analyst: "📊", economist: "📈", lawyer: "⚖️" };
+type FormShape = {
+  name: string; sector: string; stage: (typeof STAGES)[number];
+  geography: string; askUsd: string; description: string; tractionNotes: string;
+};
+const emptyForm = (): FormShape => ({
+  name: "", sector: "ai_app", stage: "seed", geography: "US", askUsd: "", description: "", tractionNotes: "",
+});
 
-const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
-const mm = (n: number) => "$" + (n / 1e6).toFixed(1) + "M";
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ScoreGauge({ score, verdict }: { score: number; verdict: Verdict }) {
-  const color = VERDICT_COLOR[verdict];
-  const pct = Math.max(0, Math.min(100, score));
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-      <div style={{
-        width: 120, height: 120, borderRadius: "50%",
-        background: `conic-gradient(${color} ${pct * 3.6}deg, #e2e8f0 0deg)`,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      }}>
-        <div style={{
-          width: 92, height: 92, borderRadius: "50%", background: "#fff",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        }}>
-          <span style={{ fontSize: 30, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{score}</span>
-          <span style={{ fontSize: 11, color: "#64748b" }}>/ 100</span>
-        </div>
-      </div>
-      <div>
-        <span style={{
-          display: "inline-block", padding: "6px 16px", borderRadius: 999, background: color,
-          color: "#fff", fontWeight: 800, fontSize: 15, letterSpacing: 0.5,
-        }}>{VERDICT_LABEL[verdict]}</span>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>QVenture composite score</div>
-      </div>
-    </div>
-  );
-}
-
-function FactorBar({ f }: { f: ScoreFactor }) {
-  const color = f.score >= 70 ? "#16a34a" : f.score >= 50 ? "#d97706" : "#dc2626";
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-        <span style={{ color: "#0f172a", fontWeight: 600 }}>{f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span></span>
-        <span style={{ fontWeight: 700, color }}>{f.score}</span>
-      </div>
-      <div style={{ height: 7, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ width: `${f.score}%`, height: "100%", background: color }} />
-      </div>
-      <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{f.rationale}</div>
-    </div>
-  );
-}
-
-function LensCard({ lens }: { lens: Lens }) {
-  return (
-    <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
-      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
-        {LENS_ICON[lens.lens] || "•"} {lens.role}
-      </div>
-      <div style={{ fontSize: 13.5, color: "#334155", fontStyle: "italic", marginBottom: 10 }}>{lens.headline}</div>
-      <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 13, color: "#334155" }}>
-        {lens.points.map((p, i) => <li key={i} style={{ marginBottom: 4 }}>{p}</li>)}
-      </ul>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#dc2626", marginBottom: 3 }}>Risks</div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#7f1d1d" }}>
-        {lens.risks.map((r, i) => <li key={i} style={{ marginBottom: 3 }}>{r}</li>)}
-      </ul>
-    </div>
-  );
-}
-
-function StrategyPanel({ s }: { s: Strategy }) {
-  const r = s.returns;
-  const cell = (label: string, value: string, sub?: string) => (
-    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px" }}>
-      <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 1 }}>{sub}</div>}
-    </div>
-  );
-  return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
-        {cell("Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
-        {cell("Target ownership", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
-        {cell("Valuation (pre)", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
-        {cell("Expected return", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
-        {cell("Target IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Deployment schedule</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {s.tranches.map((t, i) => (
-            <div key={i} style={{ flex: "1 1 180px", border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>{t.pct}% <span style={{ fontWeight: 600, fontSize: 13 }}>· {t.label}</span></div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{t.trigger}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ fontSize: 13, color: "#334155", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px" }}>
-        <strong>Portfolio:</strong> {s.portfolioNote}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
-
-const SECTION: React.CSSProperties = { border: "1px solid #e2e8f0", borderRadius: 14, padding: 20, background: "#fff", marginBottom: 18 };
-const H2: React.CSSProperties = { margin: "0 0 14px", fontSize: 18, fontWeight: 800, color: "#0f172a" };
 const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" };
 const LABEL: React.CSSProperties = { display: "block", fontSize: 12.5, fontWeight: 600, color: "#475569", marginBottom: 4 };
 
+// Pure request helper — returns the analysis or an error string, no state.
+async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string }> {
+  if (!data.name.trim()) return { ok: false, error: "Company / product name is required." };
+  if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
+  try {
+    const payload: Record<string, unknown> = {
+      name: data.name.trim(), sector: data.sector, stage: data.stage,
+      geography: data.geography.trim() || "US", description: data.description.trim(),
+      tractionNotes: data.tractionNotes.trim() || undefined,
+    };
+    const ask = parseFloat(data.askUsd.replace(/[^0-9.]/g, ""));
+    if (isFinite(ask) && ask > 0) payload.askUsd = ask;
+    const res = await fetch(apiUrl("/api/qventure/analyze"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const j = await res.json();
+    if (!res.ok || !j?.ok) return { ok: false, error: j?.error || "Analysis failed." };
+    return { ok: true, data: j.data as AnalysisResult };
+  } catch {
+    return { ok: false, error: "Network error — is the backend running?" };
+  }
+}
+
 export default function QVenturePage() {
   const [sectors, setSectors] = useState<SectorOption[]>([]);
-  const [form, setForm] = useState({
-    name: "", sector: "ai_app", stage: "seed" as (typeof STAGES)[number],
-    geography: "US", askUsd: "", description: "", tractionNotes: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [mode, setMode] = useState<"single" | "compare">("single");
 
   useEffect(() => {
     fetch(apiUrl("/api/qventure/sectors"))
@@ -188,37 +71,6 @@ export default function QVenturePage() {
       .then((j) => { if (Array.isArray(j?.data)) setSectors(j.data); })
       .catch(() => { /* non-fatal — dropdown falls back to empty */ });
   }, []);
-
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const submit = useCallback(async () => {
-    setError(null);
-    if (!form.name.trim()) { setError("Company / product name is required."); return; }
-    if (form.description.trim().length < 12) { setError("Add a longer description (min 12 characters)."); return; }
-    setLoading(true);
-    setResult(null);
-    try {
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(), sector: form.sector, stage: form.stage,
-        geography: form.geography.trim() || "US", description: form.description.trim(),
-        tractionNotes: form.tractionNotes.trim() || undefined,
-      };
-      const ask = parseFloat(form.askUsd.replace(/[^0-9.]/g, ""));
-      if (isFinite(ask) && ask > 0) payload.askUsd = ask;
-
-      const res = await fetch(apiUrl("/api/qventure/analyze"), {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-      });
-      const j = await res.json();
-      if (!res.ok || !j?.ok) { setError(j?.error || "Analysis failed."); return; }
-      setResult(j.data as AnalysisResult);
-    } catch {
-      setError("Network error — is the backend running?");
-    } finally {
-      setLoading(false);
-    }
-  }, [form]);
 
   return (
     <>
@@ -238,29 +90,338 @@ export default function QVenturePage() {
             (scientist · data analyst · economist · lawyer), and a concrete entry strategy — how much to
             invest, at what valuation, staged over which milestones, for what risk-adjusted return.
           </p>
+          <Link href="/qventure/a/demo-neurodx" style={{
+            display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
+            fontSize: 14, fontWeight: 700, color: "#7c3aed", textDecoration: "none",
+          }}>
+            See a live example → <span style={{ fontWeight: 400, color: "#94a3b8" }}>(NeuroDx report)</span>
+          </Link>
         </div>
 
-        {/* Input form */}
-        <div style={SECTION}>
-          <h2 style={H2}>Analyze an opportunity</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 14 }}>
-            <div>
-              <label style={LABEL}>Company / product name *</label>
-              <input style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+        {/* Mode switch + watchlist link */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ display: "inline-flex", gap: 2, padding: 3, background: "#f1f5f9", borderRadius: 10 }}>
+            {(["single", "compare"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setMode(m)} style={{
+                padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 13.5, fontWeight: 700,
+                background: mode === m ? "#fff" : "transparent",
+                color: mode === m ? "#7c3aed" : "#64748b",
+                boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
+              }}>
+                {m === "single" ? "Analyze one" : "⚖ Compare two"}
+              </button>
+            ))}
+          </div>
+          <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+            ★ Watchlist →
+          </Link>
+        </div>
+
+        {mode === "single"
+          ? <SinglePanel sectors={sectors} />
+          : <ComparePanel sectors={sectors} />}
+
+        <MarketingSections />
+      </ProductPageShell>
+    </>
+  );
+}
+
+// ─── Marketing block ──────────────────────────────────────────────────────────
+
+function MarketingSections() {
+  const steps = [
+    { icon: "📝", title: "Describe the deal", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
+    { icon: "🧠", title: "AI runs the analysis", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
+    { icon: "📊", title: "Act on the memo", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
+  ];
+  const audience = [
+    { icon: "👼", label: "Angel investors", body: "Screen inbound in seconds; write with conviction, not vibes." },
+    { icon: "🏦", label: "Micro-VCs & solo GPs", body: "A repeatable rubric across every deal in the pipeline." },
+    { icon: "🔭", label: "Scouts", body: "Turn a founder chat into a shareable, fund-grade memo." },
+    { icon: "🤝", label: "Syndicates", body: "Align the group with one transparent score and strategy." },
+  ];
+  const trust = [
+    ["Deterministic", "The score is reproducible math, not a black box."],
+    ["18 sectors", "Grounded in a curated market knowledge base."],
+    ["4 experts", "Scientist · data analyst · economist · lawyer."],
+    ["Transparent", "Every factor shows its weight and rationale."],
+  ];
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={SECTION}>
+        <h2 style={H2}>How it works</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ padding: "4px 4px" }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed" }}>STEP {i + 1}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "2px 0 6px" }}>{s.title}</div>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>{s.body}</p>
             </div>
-            <div>
-              <label style={LABEL}>Sector</label>
-              <select style={INPUT} value={form.sector} onChange={set("sector")}>
-                {sectors.length === 0 && <option value="ai_app">AI Applications</option>}
-                {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
+          ))}
+        </div>
+      </div>
+
+      <div style={SECTION}>
+        <h2 style={H2}>Who it&apos;s for</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+          {audience.map((a, i) => (
+            <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
+              <div style={{ fontSize: 22, marginBottom: 6 }}>{a.icon}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: "#0f172a" }}>{a.label}</div>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>{a.body}</p>
             </div>
-            <div>
-              <label style={LABEL}>Stage</label>
-              <select style={INPUT} value={form.stage} onChange={set("stage")}>
-                {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...SECTION, background: "linear-gradient(135deg, #0f172a, #1e293b)", borderColor: "transparent" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+          {trust.map(([k, v], i) => (
+            <div key={i}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#a78bfa" }}>{k}</div>
+              <div style={{ fontSize: 12.5, color: "#cbd5e1", marginTop: 3, lineHeight: 1.4 }}>{v}</div>
             </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)", fontSize: 11.5, color: "#94a3b8" }}>
+          QVenture is an AI screening tool for research purposes — not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Single analysis ──────────────────────────────────────────────────────────
+
+function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
+  const [form, setForm] = useState<FormShape>(emptyForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+
+  const set = (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const run = useCallback(async (data: FormShape) => {
+    setError(null); setLoading(true); setResult(null);
+    const r = await analyzeReq(data);
+    if (r.ok) setResult(r.data); else setError(r.error);
+    setLoading(false);
+  }, []);
+
+  const runSample = useCallback(() => {
+    setForm(SAMPLE);
+    run(SAMPLE);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [run]);
+
+  return (
+    <>
+      <div style={SECTION}>
+        <h2 style={H2}>Analyze an opportunity</h2>
+        <FormFields form={form} set={set} sectors={sectors} full />
+        {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => run(form)} disabled={loading} style={primaryBtn(loading)}>
+            {loading ? "Analyzing…" : "Run analysis"}
+          </button>
+          <button onClick={runSample} disabled={loading} type="button" style={ghostBtn(loading)}>
+            ✨ See a sample analysis
+          </button>
+          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>No input needed — loads a real seed-stage case.</span>
+        </div>
+      </div>
+      {result && <ResultView result={result} />}
+    </>
+  );
+}
+
+// ─── Compare two ──────────────────────────────────────────────────────────────
+
+function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
+  const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company A" }));
+  const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pair, setPair] = useState<[AnalysisResult, AnalysisResult] | null>(null);
+
+  const setter = (which: "a" | "b") => (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const upd = (f: FormShape) => ({ ...f, [k]: e.target.value });
+    if (which === "a") setA(upd); else setB(upd);
+  };
+
+  const run = useCallback(async () => {
+    setError(null); setLoading(true); setPair(null);
+    const [ra, rb] = await Promise.all([analyzeReq(a), analyzeReq(b)]);
+    if (!ra.ok) { setError(`Company A: ${ra.error}`); setLoading(false); return; }
+    if (!rb.ok) { setError(`Company B: ${rb.error}`); setLoading(false); return; }
+    setPair([ra.data, rb.data]);
+    setLoading(false);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [a, b]);
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+        {([["a", a], ["b", b]] as const).map(([which, f]) => (
+          <div key={which} style={SECTION}>
+            <h2 style={H2}>{which === "a" ? "Company A" : "Company B"}</h2>
+            <FormFields form={f} set={setter(which)} sectors={sectors} />
+          </div>
+        ))}
+      </div>
+      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
+        {loading ? "Analyzing both…" : "⚖ Compare"}
+      </button>
+      {pair && <CompareResult a={pair[0]} b={pair[1]} />}
+    </>
+  );
+}
+
+function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
+  const winner = a.composite === b.composite ? null : a.composite > b.composite ? "a" : "b";
+  const head = (r: AnalysisResult, side: "a" | "b") => (
+    <div style={{
+      ...SECTION, flex: "1 1 300px", marginBottom: 0,
+      borderColor: winner === side ? "#7c3aed" : "#e2e8f0",
+      borderWidth: winner === side ? 2 : 1,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div>
+          <h2 style={{ ...H2, marginBottom: 4 }}>{r.name}</h2>
+          <div style={{ fontSize: 13, color: "#64748b" }}>{r.result.sector.label} · {r.result.stage}</div>
+          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed", marginTop: 6 }}>◆ Higher score</div>}
+        </div>
+      </div>
+      <div style={{ marginTop: 12 }}><ScoreGauge score={r.composite} verdict={r.verdict} size={104} /></div>
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+        {head(a, "a")}
+        {head(b, "b")}
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <a
+          href={apiUrl(`/api/qventure/compare/pdf?a=${encodeURIComponent(a.id)}&b=${encodeURIComponent(b.id)}`)}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "9px 18px", background: "#fff", color: "#7c3aed",
+            border: "1px solid #ddd6fe", borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: "none",
+          }}
+        >
+          ⬇ Export comparison to PDF
+        </a>
+      </div>
+
+      <div style={SECTION}>
+        <h2 style={H2}>Factor-by-factor delta</h2>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
+                <th style={{ padding: "6px 8px" }}>Factor</th>
+                <th style={{ padding: "6px 8px", textAlign: "center" }}>{a.name}</th>
+                <th style={{ padding: "6px 8px", textAlign: "center" }}>{b.name}</th>
+                <th style={{ padding: "6px 8px", textAlign: "center" }}>Δ (B−A)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {a.result.factors.map((fa) => {
+                const fb = b.result.factors.find((x) => x.key === fa.key);
+                const bs = fb ? fb.score : 0;
+                const delta = bs - fa.score;
+                const dColor = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#94a3b8";
+                return (
+                  <tr key={fa.key} style={{ borderTop: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "8px", color: "#0f172a", fontWeight: 600 }}>{fa.label}
+                      <span style={{ color: "#94a3b8", fontWeight: 400 }}> · {Math.round(fa.weight * 100)}%</span></td>
+                    <td style={{ padding: "8px", textAlign: "center", color: "#334155" }}>{fa.score}</td>
+                    <td style={{ padding: "8px", textAlign: "center", color: "#334155" }}>{bs}</td>
+                    <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: dColor }}>
+                      {delta > 0 ? "+" : ""}{delta}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr style={{ borderTop: "2px solid #e2e8f0" }}>
+                <td style={{ padding: "8px", fontWeight: 800, color: "#0f172a" }}>Composite</td>
+                <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{a.composite}</td>
+                <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{b.composite}</td>
+                <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: b.composite - a.composite >= 0 ? "#16a34a" : "#dc2626" }}>
+                  {b.composite - a.composite > 0 ? "+" : ""}{Math.round((b.composite - a.composite) * 10) / 10}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Verdict + one-line memo per side */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+        {([a, b] as const).map((r) => (
+          <div key={r.id} style={SECTION}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ padding: "4px 12px", borderRadius: 999, background: VERDICT_COLOR[r.verdict], color: "#fff", fontWeight: 800, fontSize: 13 }}>
+                {VERDICT_LABEL[r.verdict as Verdict]}
+              </span>
+              <strong style={{ color: "#0f172a" }}>{r.name}</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: "#334155", lineHeight: 1.5 }}>{firstSentences(r.result.council.memo)}</p>
+            <a href={apiUrl(`/api/qventure/analyses/${r.id}/pdf`)} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+              ⬇ PDF memo
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function firstSentences(text: string, max = 2): string {
+  const parts = text.split(/(?<=[.!?])\s+/).slice(0, max);
+  return parts.join(" ");
+}
+
+// ─── Shared form fields ───────────────────────────────────────────────────────
+
+function FormFields({ form, set, sectors, full = false }: {
+  form: FormShape;
+  set: (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  sectors: SectorOption[];
+  full?: boolean;
+}) {
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
+        <div>
+          <label style={LABEL}>Company / product name *</label>
+          <input style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+        </div>
+        <div>
+          <label style={LABEL}>Sector</label>
+          <select style={INPUT} value={form.sector} onChange={set("sector")}>
+            {sectors.length === 0 && <option value="ai_app">AI Applications</option>}
+            {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={LABEL}>Stage</label>
+          <select style={INPUT} value={form.stage} onChange={set("stage")}>
+            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        {full && (
+          <>
             <div>
               <label style={LABEL}>Target market</label>
               <input style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
@@ -269,73 +430,30 @@ export default function QVenturePage() {
               <label style={LABEL}>Raising (USD, optional)</label>
               <input style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
             </div>
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={LABEL}>What does it do? *</label>
-            <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
-              placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={LABEL}>Traction / metrics (optional — improves the execution score)</label>
-            <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
-              placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
-          </div>
-          {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
-          <button onClick={submit} disabled={loading} style={{
-            padding: "12px 28px", background: loading ? "#94a3b8" : "#7c3aed", color: "#fff", border: "none",
-            borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
-          }}>
-            {loading ? "Analyzing…" : "Run analysis"}
-          </button>
-        </div>
-
-        {/* Result */}
-        {result && (
-          <>
-            <div style={SECTION}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
-                <div>
-                  <h2 style={{ ...H2, marginBottom: 4 }}>{result.name}</h2>
-                  <div style={{ fontSize: 13, color: "#64748b" }}>{result.result.sector.label} · {result.result.stage}</div>
-                </div>
-                <ScoreGauge score={result.composite} verdict={result.verdict} />
-              </div>
-            </div>
-
-            <div style={SECTION}>
-              <h2 style={H2}>Investment memo</h2>
-              <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "#1e293b", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
-              <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>
-                Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
-              </div>
-            </div>
-
-            <div style={SECTION}>
-              <h2 style={H2}>Entry strategy</h2>
-              <StrategyPanel s={result.result.strategy} />
-            </div>
-
-            <div style={SECTION}>
-              <h2 style={H2}>Score breakdown</h2>
-              {result.result.factors.map((f) => <FactorBar key={f.key} f={f} />)}
-            </div>
-
-            <div style={SECTION}>
-              <h2 style={H2}>Analyst council</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-                {result.result.council.lenses.map((l) => <LensCard key={l.lens} lens={l} />)}
-              </div>
-            </div>
-
-            <div style={{ ...SECTION, background: "#fffbeb", borderColor: "#fde68a" }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 6 }}>Assumptions & limitations</div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#78350f" }}>
-                {result.result.assumptions.map((a, i) => <li key={i} style={{ marginBottom: 3 }}>{a}</li>)}
-              </ul>
-            </div>
           </>
         )}
-      </ProductPageShell>
+      </div>
+      <div style={{ marginBottom: full ? 14 : 0 }}>
+        <label style={LABEL}>What does it do? *</label>
+        <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
+          placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
+      </div>
+      {full && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={LABEL}>Traction / metrics (optional — improves the execution score)</label>
+          <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
+            placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
+        </div>
+      )}
     </>
   );
 }
+
+const primaryBtn = (loading: boolean): React.CSSProperties => ({
+  padding: "12px 28px", background: loading ? "#94a3b8" : "#7c3aed", color: "#fff", border: "none",
+  borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
+});
+const ghostBtn = (loading: boolean): React.CSSProperties => ({
+  padding: "12px 22px", background: "#fff", color: "#7c3aed", border: "1px solid #ddd6fe",
+  borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer",
+});

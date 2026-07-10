@@ -117,6 +117,7 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from 
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
+import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP";
@@ -1343,16 +1344,16 @@ export default function CyberChessPage(){
   // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
   // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
   const firstRunRef=useRef(false);
-  // Закрытие приветствия-награды: на первом визите далее запускаем тур (если не виден).
+  // Закрытие приветствия-награды. Тур больше НЕ авто-открывается сразу после мастера
+  // настройки (меньше стопки на первом визите) — доступен вручную через палитру команд
+  // (см. "Обзорный тур"). Ref сбрасываем, чтобы не удерживать «первый запуск».
   const closeDailyReward=useCallback(()=>{
-    const wasWelcome=dailyReward?.isWelcome;
     sDailyReward(null);
-    if(wasWelcome&&firstRunRef.current){
-      firstRunRef.current=false;
-      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
-      if(!tourSeen)setTimeout(()=>sTourStep(0),300);
-    }
-  },[dailyReward]);
+    firstRunRef.current=false;
+  },[]);
+  // Любой первично-визитный оверлей открыт? Пока да — не наслаиваем баннеры
+  // (AEVION-плашка, стрим-подсказка), чтобы на экране был только один интеррапт.
+  const anyOnboardingModal=showOnboarding||tourStep>=0||!!dailyReward;
   const[dueReminders,sDueReminders]=useState<Array<{entryId:string;milestone:1|3|7;daysSinceStudy:number}>>([]);
   const[hotseat,sHotseat]=useState(false);
   const[showEndgames,sShowEndgames]=useState(false);
@@ -1785,7 +1786,7 @@ export default function CyberChessPage(){
   const[acResult,sAcResult]=useState<AntiCheatResult|null>(null);
   const[showAcPanel,sShowAcPanel]=useState(false);
   // Right-panel sub-tab during play — splits long scroll into focused views
-  const[rpTab,sRpTab]=useState<"moves"|"info"|"coach">("moves");
+  const[rpTab,sRpTab]=useState<"moves"|"info"|"coach"|"explorer">("moves");
   useEffect(()=>{
     if(showFidePanel&&fideOpened===0){
       sFideOpened(1);
@@ -2023,7 +2024,7 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
     const pz=fPz[0];if(!pz)return;
-    const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
   // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
@@ -2149,7 +2150,19 @@ export default function CyberChessPage(){
     // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
     // Cloud API extension убрана из mount — зовём lazy только когда пользователь
     // открывает Puzzle tab (см. отдельный useEffect ниже).
-    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    // Puzzle pool: сперва пробуем серверный эндпоинт (фильтрация + shuffle на бэке),
+    // при любой проблеме — падаем на bundled /puzzles.json. Zero-regression: если
+    // эндпоинт отсутствует/пуст/ошибка — поведение ровно как раньше.
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
+        if(r.ok){
+          const d=await r.json();
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+        }
+      }catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{sPuzzles([]);}
+    })();
     // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
     const loadOpenings=()=>{
       fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
@@ -2353,7 +2366,7 @@ export default function CyberChessPage(){
         let lastCp=0,lastMate=0;
         let done=false;
         const timeout=setTimeout(()=>{if(!done){done=true;res({cp:lastCp,mate:lastMate})}},8000);
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>{if(!done){done=true;clearTimeout(timeout);res({cp:lastCp,mate:lastMate})}});
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastMate=m*sign;lastCp=lastMate!==0?(lastMate>0?10000-lastMate:-10000-lastMate):c*sign},()=>{if(!done){done=true;clearTimeout(timeout);res({cp:lastCp,mate:lastMate})}});
       });
     };
 
@@ -2552,18 +2565,16 @@ export default function CyberChessPage(){
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-                  sPzTimeLeft(v=>Math.min(180,v+bonus));
+                  sPzTimeLeft(v=>Math.min(rushDuration,v+bonus));
                   sRushScore(s=>s+1);
                   sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
-                  // Rush auto-advance on correct — Lichess Puzzle Streak feel
-                  setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},650);
+                  // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
                   sPzTimeLeft(v=>v+bonus);
                   showToast(`✓ +${bonus}с`,"success");
-                  // Auto-advance in timed modes (chess.com 3min/5min behaviour)
-                  setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},900);
+                  // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else{
                   showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 }
@@ -2587,16 +2598,16 @@ export default function CyberChessPage(){
           if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-            sPzTimeLeft(v=>Math.min(180,v+bonus));
+            sPzTimeLeft(v=>Math.min(rushDuration,v+bonus));
             sRushScore(s=>s+1);
             sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
             showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
-            setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},650);
+            // Auto-advance handled by the single pzAttempt==="correct" effect
           }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
             sPzTimeLeft(v=>v+bonus);
             showToast(`✓ +${bonus}с`,"success");
-            setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},900);
+            // Auto-advance handled by the single pzAttempt==="correct" effect
           }else{
             showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           }
@@ -2631,7 +2642,7 @@ export default function CyberChessPage(){
             if(!fPz.length)return;
             const nextIdx=(pzI+1)%fPz.length;
             const pz=fPz[nextIdx];if(!pz)return;
-            const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+            let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
             sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
             sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
           },700);
@@ -2641,7 +2652,7 @@ export default function CyberChessPage(){
             if(!fPz.length)return;
             const nextIdx=(pzI+1)%fPz.length;
             const pz=fPz[nextIdx];if(!pz)return;
-            const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+            let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
             sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
             sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
           },1500);
@@ -2664,7 +2675,10 @@ export default function CyberChessPage(){
     if(!mv)return false;
     // P2P: send move to peer
     if(p2pRef.current.mode&&p2pRef.current.send){p2pRef.current.send({t:"mv",uci:`${from}${to}${pr||""}`,san:mv.san,at:Date.now()})}
-    if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
+    {const isChk=game.isCheck();const playSnd=()=>{if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(isChk)snd("check");else snd("move");};
+    // Own move (drag/click) is instant → sound синхронно. Opponent/AI/ghost move slides
+    // ~130ms → задержим звук, чтобы он совпал с приземлением фигуры.
+    if(fromUser)playSnd();else window.setTimeout(playSnd,130);}
     if(mv.captured){
       const cc=pc(mv.captured,mv.color==="w"?"b":"w");
       if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc]);
@@ -3375,20 +3389,23 @@ export default function CyberChessPage(){
       const last=verbose[verbose.length-1];
       if(!last||!last.captured)return;
       const{fen:explodedFen,whiteKingDead,blackKingDead}=applyExplosion(game.fen(),last.to);
-      try{
-        const ng=new Chess(explodedFen);setGame(ng);sBk(k=>k+1);
-        sFenHist(h=>[...h.slice(0,-1),explodedFen]);
+      if(whiteKingDead||blackKingDead){
+        // King removed → exploded FEN is invalid for new Chess(); declare the result directly.
+        const youDied=(whiteKingDead&&pCol==="w")||(blackKingDead&&pCol==="b");
         showToast(`💥 Взрыв на ${last.to}`,"info");
-        if(whiteKingDead||blackKingDead){
-          const youDied=(whiteKingDead&&pCol==="w")||(blackKingDead&&pCol==="b");
-          setTimeout(()=>{
-            sOver(youDied?"💥 Твой король взорван — поражение":"💥 Король соперника взорван — победа!");
-            sOn(false);snd("x");
-            if(!youDied){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(15,"💥 Atomic")}
-            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
-          },100);
-        }
-      }catch{}
+        setTimeout(()=>{
+          sOver(youDied?"💥 Твой король взорван — поражение":"💥 Король соперника взорван — победа!");
+          sOn(false);snd("x");
+          if(!youDied){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(15,"💥 Atomic")}
+          else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+        },100);
+      }else{
+        try{
+          const ng=new Chess(explodedFen);setGame(ng);sBk(k=>k+1);
+          sFenHist(h=>[...h.slice(0,-1),explodedFen]);
+          showToast(`💥 Взрыв на ${last.to}`,"info");
+        }catch{}
+      }
     }catch{}
   },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast]);
 
@@ -3935,7 +3952,7 @@ export default function CyberChessPage(){
           if(allowed.length===0){
             // No legal piece-of-type moves → pass turn (toggle FEN side)
             try{
-              const parts=fenAtTrigger.split(" ");parts[1]=parts[1]==="w"?"b":"w";
+              const parts=fenAtTrigger.split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
               const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
               showToast(`🎲 AI пропускает ход (${diceLabel})`,"info");
             }catch{}
@@ -4153,12 +4170,15 @@ export default function CyberChessPage(){
   /* ── Pointer-events drag — fully isolated in useBoardInput hook.
      Hook is called below, after virtualGame is declared (it depends on it). */
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;
+  const newG=(c?:ChessColor,vOverride?:string)=>{const cl=c||pCol;
+    // vOverride lets a caller (e.g. variant switch) start with a variant that
+    // was just set via sVariant() but not yet flushed into `variant` state.
+    const V=(vOverride??variant) as typeof variant;
     // Determine starting FEN based on variant
     let startFen="";
     let armies:{white:ArmySlot[];black:ArmySlot[]}|null=null;
-    if(variant==="fischer960"){startFen=fischer960Fen()}
-    else if(variant==="asymmetric"){
+    if(V==="fischer960"){startFen=fischer960Fen()}
+    else if(V==="asymmetric"){
       if(manualArmyFen){
         const built=buildArmyFen(builderWhite,builderBlack);
         if(built){startFen=built.fen;armies={white:built.whiteArmy,black:built.blackArmy}}
@@ -4167,14 +4187,14 @@ export default function CyberChessPage(){
         const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy};
       }
     }
-    else if(variant==="twinkings"){startFen=twinKingsFen()}
-    else if(variant==="atomic"){startFen=atomicFen()}
-    else if(variant==="kingofthehill"){startFen=kothFen()}
-    else if(variant==="threecheck"){startFen=threeCheckFen()}
-    else if(variant==="knightriders"){startFen=knightRidersFen()}
-    else if(variant==="pawnapocalypse"){startFen=pawnApocalypseFen()}
+    else if(V==="twinkings"){startFen=twinKingsFen()}
+    else if(V==="atomic"){startFen=atomicFen()}
+    else if(V==="kingofthehill"){startFen=kothFen()}
+    else if(V==="threecheck"){startFen=threeCheckFen()}
+    else if(V==="knightriders"){startFen=knightRidersFen()}
+    else if(V==="pawnapocalypse"){startFen=pawnApocalypseFen()}
     sVariantStartFen(startFen);sVariantArmies(armies);
-    const ng=startFen?new Chess(startFen):new Chess();
+    let ng;try{ng=startFen?new Chess(startFen):new Chess()}catch{ng=new Chess()}
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();behaviorRef.current.reset();behaviorRef.current.attach();
     // Reset time-per-move tracker and annotations for new game
     moveTimesRef.current=[];sMoveTimes([]);lastMoveStartRef.current=Date.now();
@@ -4189,17 +4209,17 @@ export default function CyberChessPage(){
     sChecksByWhite(0);sChecksByBlack(0);lastCheckBkRef.current=-1;
     sDropPool(EMPTY_POOL);sDropPickerOpen(false);sSelectedDropPiece(null);lastCaptureBkRef.current=-1;
     // Roll initial die for diceblade
-    if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
-    const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
+    if(V==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
+    const variantLabel=V==="standard"?"":` · ${VARIANTS.find(v=>v.id===V)?.name||""}`;
     showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
     // Tutorial overlay for non-standard variants — once per variant. After dismissed, the
     // smaller toast tip kicks in for the next 3 plays as a refresher.
-    if(variant!=="standard"&&!seenVariantTutorials.has(variant)){
-      sVariantTutorialFor(variant);
+    if(V!=="standard"&&!seenVariantTutorials.has(V)){
+      sVariantTutorialFor(V);
     }else{
-      const tip=VARIANT_TUTORIAL[variant];
+      const tip=VARIANT_TUTORIAL[V];
       if(tip){
-        const stats=variantStats[variant]||{w:0,l:0,d:0};
+        const stats=variantStats[V]||{w:0,l:0,d:0};
         const totalPlays=stats.w+stats.l+stats.d;
         if(totalPlays<3)setTimeout(()=>showToast(tip,"info"),1500);
       }
@@ -4260,10 +4280,10 @@ export default function CyberChessPage(){
     if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
     const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
     sTab("puzzles");
-    const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();sPzTimeLeft(0);
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();sPzTimeLeft(0);
     showToast(`☀ Пазл дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
@@ -4500,12 +4520,15 @@ export default function CyberChessPage(){
       if(!fPz.length)return;
       const n=fPz.length;let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n; // СЛУЧАЙНЫЙ следующий
       const pz=fPz[nextIdx];if(!pz)return;
-      const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+      let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
       sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
       sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
     },delay);
     return()=>clearTimeout(t);
   },[pzAttempt,pzMode,pzI,fPz]);
+
+  // Clear per-puzzle stopwatch interval on unmount
+  useEffect(()=>()=>{if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current)},[]);
 
   // Auto-load first puzzle when filters change
   useEffect(()=>{
@@ -4515,7 +4538,7 @@ export default function CyberChessPage(){
     // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
     const idx=Math.floor(Math.random()*fPz.length);
     const pz=fPz[idx];
-    const g=new Chess(pz.fen);
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
@@ -5541,7 +5564,7 @@ export default function CyberChessPage(){
                       goal:"Best move",
                       mateIn:0,
                       fen:ch.fen(),
-                      sol:[mv.san],
+                      sol:[first],
                     };
                     sTab("puzzles");
                     setGame(new Chess(fakePz.fen));sBk(k=>k+1);
@@ -6211,8 +6234,8 @@ export default function CyberChessPage(){
         // only stops it from covering the panel when there's room for both.
         // paddingRight = резерв под правый WorkspaceDock (56, всегда) + баннер «Проекты» (244,
         // когда показан). Инлайн (надёжнее CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -7230,6 +7253,7 @@ export default function CyberChessPage(){
             {([
               {id:"moves" as const,label:"Ходы"},
               {id:"info"  as const,label:"Инфо"},
+              {id:"explorer" as const,label:"Дебют"},
               {id:"coach" as const,label:"Коуч"},
             ]).map(t=>(
               <button key={t.id} onClick={()=>sRpTab(t.id)} style={{
@@ -7239,6 +7263,18 @@ export default function CyberChessPage(){
               }}>{t.label}</button>
             ))}
           </div>}
+          {/* ── Opening Explorer (Lichess Masters) — мастер-статистика по текущей позиции ── */}
+          {on&&!setup&&tab==="play"&&rpTab==="explorer"&&<OpeningExplorerPanel
+            fen={game.fen()}
+            onPlayMove={(uci)=>{
+              // Кликом по ходу мастеров играем его на доске, но только когда это
+              // ход игрока в активной партии — иначе exec может рассинхронить бота.
+              if(!on||over||game.turn()!==pCol)return;
+              const from=uci.slice(0,2) as Square;const to=uci.slice(2,4) as Square;
+              const pr=uci.length>4?(uci[4] as "q"|"r"|"b"|"n"):undefined;
+              try{exec(from,to,pr)}catch{}
+            }}
+          />}
           {/* ── Live Stats Card — показываем только в Info (не в Coach — там eval дублируется) ── */}
           {on&&!setup&&(tab==="play"&&rpTab==="info")&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
@@ -7711,7 +7747,7 @@ export default function CyberChessPage(){
                   {noDiceOptions&&<button title="Нет ходов выбранной фигурой — пропустить ход"
                     onClick={()=>{
                       try{
-                        const parts=game.fen().split(" ");parts[1]=parts[1]==="w"?"b":"w";
+                        const parts=game.fen().split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
                         const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
                         showToast(`🎲 Пропускаю ход (нет ${diceLabel})`,"info");
                       }catch{}
@@ -10898,7 +10934,7 @@ ${question.trim()}`;
           1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
           2) "×" → dismiss for the rest of the day (localStorage-keyed by date)
         Не показываем во время активной партии (!on) — чтобы не перекрывать доску. */}
-    {showPipSuggest&&!on&&<div
+    {showPipSuggest&&!on&&!anyOnboardingModal&&<div
       role="alert"
       style={{
         position:"fixed",right:20,bottom:20,zIndex:7900,
@@ -11801,7 +11837,10 @@ ${question.trim()}`;
             const tagColor=v.tag==="Theory-free"?CC.brand:v.tag==="Asymmetric"?CC.accent:v.tag==="Chaos"?CC.danger:CC.textDim;
             return <button key={v.id} onClick={()=>{
               sVariant(v.id);sShowVariants(false);
-              if(v.id!=="standard")showToast(`🎲 Режим: ${v.name}. Запусти новую партию.`,"info");
+              // Force a fresh game so variant rule-effects never run on a stale board.
+              // Pass v.id explicitly — sVariant() hasn't flushed into `variant` state yet.
+              newG(undefined,v.id);
+              if(v.id!=="standard")showToast(`🎲 Режим: ${v.name}`,"info");
               else showToast(`Стандартный режим включён`,"info");
             }} className="cc-focus-ring"
               style={{textAlign:"left",padding:SPACE[3],borderRadius:RADIUS.md,
@@ -13524,7 +13563,7 @@ ${question.trim()}`;
                   try{
                     const myBlunders=analysis.filter((a,i)=>(pCol==="w"?i%2===0:i%2===1)&&(a.quality==="blunder"||a.quality==="mistake"));
                     const moves=hist.slice(0,30).join(" ");
-                    const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((_,k)=>Math.floor(k/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
+                    const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((a)=>Math.floor((a.move-1)/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
                     const res=await fetch("/api-backend/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
                     const d=await res.json().catch(()=>null);
                     sAiReview({text:d?.reply||"Тренер не отвечает — попробуй позже.",loading:false});
@@ -13816,7 +13855,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with
@@ -13887,7 +13926,7 @@ ${question.trim()}`;
             const first=sols[0];const probe=new Chess(ch.fen());
             const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
             if(!mv)throw new Error("solution invalid");
-            const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[mv.san]};
+            const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
             sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
             showToast(`🌐 Lichess Daily · rating ${fakePz.r}`,"success");
           }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}
@@ -13946,6 +13985,7 @@ ${question.trim()}`;
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
         {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
         {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
+        {id:"help-tour",    icon:"🧭",group:"Settings", label:"Обзорный тур",         hint:"4 шага — как всё устроено",    run:()=>sTourStep(0)},
 
         // ── РАЗДЕЛЫ — навигация на маршруты, которые раньше были доступны только по URL ──
         {id:"nav-sections", icon:"☰", group:"Разделы", label:"Все разделы",          hint:"Навигационный хаб — все режимы и киллер-фичи", run:()=>sShowSections(true)},

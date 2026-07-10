@@ -187,9 +187,14 @@ const broadcastLastAt = new Map<string, number>();
 const BROADCAST_MIN_GAP_MS = 4_000;
 const BROADCAST_GC_INTERVAL_MS = 5 * 60 * 1_000;
 const broadcastGc = setInterval(() => {
-  const now = Date.now();
-  for (const [gid, t] of broadcastLastAt) {
-    if (now - t > 10 * 60 * 1_000) broadcastLastAt.delete(gid);
+  try {
+    const now = Date.now();
+    for (const [gid, t] of broadcastLastAt) {
+      if (now - t > 10 * 60 * 1_000) broadcastLastAt.delete(gid);
+    }
+  } catch (e) {
+    // A throw here bypasses Express and would crash the whole backend.
+    console.error("[cyberchess voiceCoach] broadcastGc tick failed", e);
   }
 }, BROADCAST_GC_INTERVAL_MS);
 if (typeof broadcastGc.unref === 'function') broadcastGc.unref();

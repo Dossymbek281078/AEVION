@@ -132,11 +132,16 @@ function tryWriteToDisk(): void {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+    // Atomic write: serialize to a temp file then rename over the target, so a
+    // crash/redeploy mid-write can never leave a truncated JSON that silently
+    // falls back to seed fixtures (losing every registration/result).
+    const tmp = `${DATA_FILE}.tmp`;
     fs.writeFileSync(
-      DATA_FILE,
+      tmp,
       JSON.stringify({ tournaments: TOURNAMENTS }, null, 2),
       "utf-8",
     );
+    fs.renameSync(tmp, DATA_FILE);
   } catch (e) {
     console.warn(
       "[cyberchess-tournaments] persistence disabled (write failed):",
@@ -1384,6 +1389,123 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
 // the mapping if needed (purely informational)
 router.get("/__meta/time-controls", (_req: Request, res: Response): void => {
   res.json({ ok: true, matchmaking: ALLOWED_TIME_CONTROLS });
+});
+
+// ── user-created tournaments ───────────────────────────────────────
+// Lets any player spin up their own joinable event instead of only
+// registering into seed fixtures. Created as realPlayers:true so
+// registration wires into live matchmaking pairing (the [id] page flow).
+
+function clampInt(v: unknown, lo: number, hi: number, dflt: number): number {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
+}
+
+function slugify(s: string): string {
+  return (
+    s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "tournament"
+  );
+}
+
+// per-IP create throttle: 5 creations / 10 min (blocks spam-creation)
+const CREATE_WINDOW_MS = 10 * 60 * 1000;
+const CREATE_MAX = 5;
+const createHits = new Map<string, number[]>();
+function createRateOk(ip: string): boolean {
+  const now = Date.now();
+  const fresh = (createHits.get(ip) ?? []).filter((t) => now - t < CREATE_WINDOW_MS);
+  if (fresh.length >= CREATE_MAX) {
+    createHits.set(ip, fresh);
+    return false;
+  }
+  fresh.push(now);
+  createHits.set(ip, fresh);
+  return true;
+}
+
+// POST / — create a tournament
+router.post("/", (req: Request, res: Response): void => {
+  const ip =
+    (typeof req.headers["x-forwarded-for"] === "string"
+      ? (req.headers["x-forwarded-for"] as string).split(",")[0].trim()
+      : "") ||
+    req.ip ||
+    "unknown";
+  if (!createRateOk(ip)) {
+    res.status(429).json({ ok: false, error: "rate_limited", hint: "too many tournaments created; try later" });
+    return;
+  }
+
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const title = String(b.title ?? "").trim();
+  if (title.length < 3 || title.length > 80) {
+    res.status(400).json({ ok: false, error: "title_required", hint: "title must be 3-80 chars" });
+    return;
+  }
+  const format: Format =
+    b.format === "swiss" || b.format === "round_robin" ? b.format : "single_elimination";
+  const timeControl: TimeControl =
+    b.timeControl === "rapid" || b.timeControl === "classic" ? b.timeControl : "blitz";
+  const eloMin = clampInt(b.eloMin, 0, 3000, 0);
+  const eloMax = Math.max(eloMin, clampInt(b.eloMax, 0, 3000, 3000));
+  const maxPlayers = clampInt(b.maxPlayers, 2, 128, 8);
+  const prizeChessy = clampInt(b.prizeChessy, 0, 10_000_000, 0);
+
+  let startsAt = typeof b.startsAt === "string" ? b.startsAt : "";
+  if (!startsAt || Number.isNaN(Date.parse(startsAt))) {
+    startsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // default: +1h
+  }
+  const description =
+    typeof b.description === "string" && b.description.trim()
+      ? b.description.trim().slice(0, 300)
+      : undefined;
+
+  const t: Tournament = {
+    id: `usr-${slugify(title)}-${randomUUID().slice(0, 6)}`,
+    title,
+    format,
+    timeControl,
+    eloMin,
+    eloMax,
+    players: 0,
+    maxPlayers,
+    prizeChessy,
+    status: "upcoming",
+    startsAt,
+    description,
+    swissRounds:
+      format === "swiss" ? Math.max(3, Math.ceil(Math.log2(Math.max(2, maxPlayers)))) : undefined,
+    currentRound: 0,
+    registeredUserIds: [],
+    roster: [],
+    rounds: [],
+    realPlayers: true, // user-created events are joinable, not cosmetic seeds
+  };
+
+  // Auto-register the creator as the first participant when identified.
+  const creatorId = typeof b.userId === "string" && b.userId.trim() ? b.userId.trim() : "";
+  if (creatorId) {
+    const creatorName =
+      (typeof b.displayName === "string" && b.displayName.trim()) || `Player_${creatorId.slice(-4)}`;
+    t.registeredUserIds.push(creatorId);
+    t.players = 1;
+    t.roster.push({
+      id: `pl_dyn_000_${creatorId.slice(-6)}`,
+      name: creatorName,
+      rating: 1500,
+      score: 0,
+      buchholz: 0,
+      whiteCount: 0,
+      blackCount: 0,
+      opponentIds: [],
+      userId: creatorId,
+    });
+  }
+
+  TOURNAMENTS.unshift(t);
+  tryWriteToDisk();
+  res.status(201).json({ ok: true, tournament: t });
 });
 
 export default router;

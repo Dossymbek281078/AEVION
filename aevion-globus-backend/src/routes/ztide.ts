@@ -195,25 +195,23 @@ ztideRouter.post("/events", writeLimit, async (req, res) => {
     // Upsert rolling score. NOTE: this is a raw cumulative sum — the decayed-EMA
     // described in the module header is NOT yet implemented (no decay is applied
     // on read or write). Deferred: scoring-algorithm change pending product sign-off.
-    // Score and rank are written in a single statement so a concurrent event
-    // can't leave "rank" desynced from "score" — we derive the rank id from the
-    // post-upsert score inline rather than in a separate UPDATE.
+    // Score and rank are written in a single INSERT ... ON CONFLICT so a
+    // concurrent event can't leave "rank" desynced from "score" — the rank id
+    // is derived inline from the post-upsert score in the same statement.
+    // NB: an earlier version wrapped this in a data-modifying CTE with a second
+    // outer UPDATE ... RETURNING; that outer UPDATE reads the pre-statement
+    // snapshot, so on a freshly inserted row it returned 0 rows and the handler
+    // threw on rows[0] (→ 500 on first claim). One statement avoids that.
     const upR = await pool.query(
-      `WITH upserted AS (
-         INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
-         VALUES ($1, $2, 1, NOW(), 'seedling')
-         ON CONFLICT ("userId") DO UPDATE SET
-           "score" = "ZTideScore"."score" + EXCLUDED."score",
-           "eventCount" = "ZTideScore"."eventCount" + 1,
-           "lastEventAt" = NOW()
-         RETURNING "userId","score","eventCount"
-       )
-       UPDATE "ZTideScore" s
-         SET "rank" = ${rankCaseSql("u.score")}
-         FROM upserted u
-         WHERE s."userId" = u."userId"
-         RETURNING u."score" AS score, u."eventCount" AS "eventCount"`,
-      [userId, weight],
+      `INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
+       VALUES ($1, $2, 1, NOW(), $3)
+       ON CONFLICT ("userId") DO UPDATE SET
+         "score" = "ZTideScore"."score" + EXCLUDED."score",
+         "eventCount" = "ZTideScore"."eventCount" + 1,
+         "lastEventAt" = NOW(),
+         "rank" = ${rankCaseSql(`"ZTideScore"."score" + EXCLUDED."score"`)}
+       RETURNING "score", "eventCount"`,
+      [userId, weight, rankFor(weight).id],
     );
     const newScore = Number((upR.rows[0] as { score: string | number | null }).score ?? 0);
     const newRank = rankFor(newScore);
@@ -291,24 +289,20 @@ ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
       [id, auth.sub, "login-streak", "auth", weight, JSON.stringify({})],
     );
 
-    // Atomic score+rank upsert (see /events): rank is derived inline so it can
-    // never desync from score under concurrent claims.
+    // Atomic score+rank upsert (see /events): rank is derived inline in a single
+    // INSERT ... ON CONFLICT so it can never desync from score, and the row is
+    // always returned — even on the very first claim (a prior CTE + outer UPDATE
+    // form returned 0 rows on a fresh insert and 500'd here).
     const upR = await pool.query(
-      `WITH upserted AS (
-         INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
-         VALUES ($1, $2, 1, NOW(), 'seedling')
-         ON CONFLICT ("userId") DO UPDATE SET
-           "score" = "ZTideScore"."score" + EXCLUDED."score",
-           "eventCount" = "ZTideScore"."eventCount" + 1,
-           "lastEventAt" = NOW()
-         RETURNING "userId","score","eventCount"
-       )
-       UPDATE "ZTideScore" s
-         SET "rank" = ${rankCaseSql("u.score")}
-         FROM upserted u
-         WHERE s."userId" = u."userId"
-         RETURNING u."score" AS score, u."eventCount" AS "eventCount"`,
-      [auth.sub, weight],
+      `INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
+       VALUES ($1, $2, 1, NOW(), $3)
+       ON CONFLICT ("userId") DO UPDATE SET
+         "score" = "ZTideScore"."score" + EXCLUDED."score",
+         "eventCount" = "ZTideScore"."eventCount" + 1,
+         "lastEventAt" = NOW(),
+         "rank" = ${rankCaseSql(`"ZTideScore"."score" + EXCLUDED."score"`)}
+       RETURNING "score", "eventCount"`,
+      [auth.sub, weight, rankFor(weight).id],
     );
     const newScore = Number((upR.rows[0] as { score: string | number | null }).score ?? 0);
     const newRank = rankFor(newScore);

@@ -113,9 +113,14 @@ export default function QVenturePage() {
               </button>
             ))}
           </div>
-          <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
-            ★ Watchlist →
-          </Link>
+          <div style={{ display: "flex", gap: 16 }}>
+            <Link href="/qventure/gallery" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+              ▦ Examples →
+            </Link>
+            <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+              ★ Watchlist →
+            </Link>
+          </div>
         </div>
 
         {mode === "single"

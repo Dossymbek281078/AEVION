@@ -1,0 +1,133 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { getApiBase } from "@/lib/apiBase";
+import { Wave1Nav } from "@/components/Wave1Nav";
+import { ProductPageShell } from "@/components/ProductPageShell";
+import { VERDICT_COLOR, VERDICT_LABEL, type Verdict } from "../_result";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Example analyses — QVenture",
+  description:
+    "See how QVenture scores companies across sectors: fund-grade screening memos with a 0–100 quant score, a 4-expert council, and an entry strategy. Real engine outputs, no signup.",
+  alternates: { canonical: "/qventure/gallery" },
+  openGraph: {
+    title: "QVenture — example analyses across sectors",
+    description: "Fund-grade screening memos across fintech, healthtech, biotech, climate, AI and more.",
+    type: "website",
+  },
+};
+
+interface ExampleSummary {
+  id: string;
+  name: string;
+  sector: string;
+  stage: string;
+  geography: string | null;
+  composite: number;
+  verdict: Verdict;
+}
+
+const SECTOR_LABEL: Record<string, string> = {
+  fintech: "Fintech", healthtech: "Healthtech", biotech: "Biotech", climate: "Climate",
+  ai_infra: "AI Infra", ai_app: "AI App", saas: "SaaS", marketplace: "Marketplace",
+};
+const sectorLabel = (id: string) => SECTOR_LABEL[id] ?? id;
+const stageLabel = (s: string) => s.replace(/-/g, " ");
+
+async function loadExamples(): Promise<ExampleSummary[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/qventure/examples`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const j = await res.json();
+    return j?.ok ? (j.data as ExampleSummary[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export default async function GalleryPage() {
+  const examples = await loadExamples();
+
+  return (
+    <>
+      <Wave1Nav />
+      <ProductPageShell>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>
+            AEVION · QVenture
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Example analyses</h1>
+          <p style={{ fontSize: 15, color: "#475569", margin: 0, maxWidth: 640, lineHeight: 1.6 }}>
+            Real QVenture outputs across sectors and stages — each is a full fund-grade memo:
+            a transparent 0–100 quant score, a four-role expert council, and an entry strategy.
+            Open any one, or run your own in ~30 seconds.
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+            <Link href="/qventure" style={{ padding: "10px 20px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+              Run your own analysis →
+            </Link>
+            <a href="/api-backend/api/qventure/examples.csv" style={{ padding: "10px 20px", background: "#fff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+              ⬇ Download as CSV
+            </a>
+          </div>
+        </div>
+
+        {examples.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "50px 20px", color: "#64748b" }}>
+            Examples are warming up — check back in a moment, or{" "}
+            <Link href="/qventure" style={{ color: "#7c3aed", fontWeight: 700 }}>run your own analysis</Link>.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+            {examples.map((e) => {
+              const color = VERDICT_COLOR[e.verdict] ?? "#64748b";
+              return (
+                <Link
+                  key={e.id}
+                  href={`/qventure/a/${e.id}`}
+                  style={{
+                    display: "block", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16,
+                    background: "#fff", textDecoration: "none", color: "inherit",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{e.name}</div>
+                    <div style={{
+                      flexShrink: 0, width: 46, height: 46, borderRadius: "50%",
+                      background: `conic-gradient(${color} ${Math.max(0, Math.min(100, e.composite)) * 3.6}deg, #e2e8f0 0deg)`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: "#0f172a" }}>
+                        {Math.round(e.composite)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 6 }}>
+                    {sectorLabel(e.sector)} · {stageLabel(e.stage)}{e.geography ? ` · ${e.geography}` : ""}
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: 999, background: color, color: "#fff", fontWeight: 800, fontSize: 12, letterSpacing: 0.4 }}>
+                      {VERDICT_LABEL[e.verdict] ?? e.verdict}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ marginTop: 22, padding: "18px 20px", borderRadius: 14, background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "#fff", textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Have a company in mind?</div>
+          <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
+            Get a fund-grade memo →
+          </Link>
+        </div>
+      </ProductPageShell>
+    </>
+  );
+}

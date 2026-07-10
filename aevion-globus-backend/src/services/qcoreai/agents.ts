@@ -373,6 +373,16 @@ const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
   },
 ];
 
+// Every council member MUST answer in the user's language. Without this, a crowd
+// of free/local models each replies in its own default language (usually English),
+// which the user sees as "the agents answered in different languages". The
+// aggregator and synthesizer already match the user's language; this keeps the
+// layer-0 drafts consistent too. Applied to every persona prompt.
+const COUNCIL_LANGUAGE_RULE =
+  " Always write your ENTIRE answer in the SAME language as the user's message " +
+  "(e.g. if the user writes in Russian, answer in Russian).";
+for (const persona of COUNCIL_PERSONAS) persona.prompt += COUNCIL_LANGUAGE_RULE;
+
 /**
  * Aggregator prompt for intermediate MoA layers. Unlike the final Synthesizer
  * (which produces the user-facing answer), an aggregator REFINES: it reads the

@@ -26,6 +26,7 @@ import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 import { fetchComparables } from "../lib/qventure/comparables";
 import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
+import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX } from "../lib/qventure/examples";
 
 const captureQVentureError = makeServiceCapture("qventure");
 
@@ -71,10 +72,36 @@ async function ensureDemoAnalysis(): Promise<void> {
   } catch { /* best-effort — demo link degrades gracefully to not_found */ }
 }
 
+// Seed the curated example analyses (real engine + council runs), idempotently
+// per id. Powers /qventure/gallery so a first-time visitor sees the tool's range
+// across sectors. Best-effort — a failed seed just omits that example.
+async function ensureExampleAnalyses(): Promise<void> {
+  for (const seed of EXAMPLE_SEEDS) {
+    const id = `${EXAMPLE_ID_PREFIX}${seed.slug}`;
+    try {
+      if (await getById(id)) continue;
+      const input: AnalysisInput = {
+        name: seed.name, description: seed.description, sector: seed.sector, stage: seed.stage,
+        geography: seed.geography, askUsd: seed.askUsd, tractionNotes: seed.tractionNotes,
+      };
+      const engineResult = analyze(input);
+      const council = await runCouncil(input, engineResult);
+      await persist({
+        id, name: seed.name, sector: engineResult.sector.id, stage: seed.stage,
+        geography: seed.geography ?? "US", askUsd: seed.askUsd ?? null,
+        composite: engineResult.composite, verdict: engineResult.verdict,
+        result: { ...engineResult, council }, contentHash: contentHash(input),
+        visibility: "public", createdAt: nowIso(),
+      });
+    } catch { /* best-effort per seed */ }
+  }
+}
+
 (async () => {
   try { await ensureQVentureTables(pool); }
   catch { /* silent — in-memory fallback active */ }
-  void ensureDemoAnalysis();
+  await ensureDemoAnalysis();
+  void ensureExampleAnalyses();
 })();
 
 // ── Limiters ────────────────────────────────────────────────────────────────
@@ -172,6 +199,47 @@ qventureRouter.get("/benchmark", analyzeLimiter, async (req: Request, res: Respo
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "benchmark_failed" });
+  }
+});
+
+// GET /examples — curated example analyses (real engine outputs), highest score
+// first. Powers /qventure/gallery. Summary shape only; full report via /a/:id.
+qventureRouter.get("/examples", async (_req: Request, res: Response) => {
+  try {
+    const rows = await listExamples();
+    const data = rows.map((r) => ({
+      id: r.id, name: r.name, sector: r.sector, stage: r.stage,
+      geography: r.geography, composite: r.composite, verdict: r.verdict,
+    }));
+    res.json({ ok: true, data, count: data.length });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "examples_failed" });
+  }
+});
+
+// GET /examples.csv — the same curated set as a spreadsheet (scout utility).
+qventureRouter.get("/examples.csv", async (_req: Request, res: Response) => {
+  try {
+    const rows = await listExamples();
+    const esc = (v: unknown) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["name", "sector", "stage", "geography", "score", "verdict", "report_url"];
+    const lines = [header.join(",")];
+    for (const r of rows) {
+      lines.push([
+        esc(r.name), esc(r.sector), esc(r.stage), esc(r.geography ?? ""),
+        esc(r.composite), esc(r.verdict), esc(`https://aevion.vercel.app/qventure/a/${r.id}`),
+      ].join(","));
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="qventure-examples.csv"');
+    res.send(lines.join("\n"));
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "examples_csv_failed" });
   }
 });
 
@@ -612,6 +680,23 @@ async function fetchBenchmarkSamples(): Promise<BenchmarkSample[]> {
     }
   }
   return memStore.map((r) => ({ composite: r.composite, stage: r.stage, sector: r.sector }));
+}
+
+// Curated examples only (id prefixed EXAMPLE_ID_PREFIX), best score first.
+async function listExamples(): Promise<StoredAnalysis[]> {
+  if (isQVentureDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, created_at
+         FROM qventure_analyses WHERE visibility = 'public' AND id LIKE $1 ORDER BY composite DESC`,
+        [`${EXAMPLE_ID_PREFIX}%`]
+      );
+      return rows.map(rowToRecord);
+    } catch (e: unknown) {
+      captureQVentureError(e);
+    }
+  }
+  return memStore.filter((r) => r.id.startsWith(EXAMPLE_ID_PREFIX)).sort((a, b) => b.composite - a.composite);
 }
 
 async function getById(id: string): Promise<StoredAnalysis | null> {

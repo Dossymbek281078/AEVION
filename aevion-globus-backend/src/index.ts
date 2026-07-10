@@ -19,6 +19,7 @@ import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
+import { agentRuntimeRouter } from "./routes/agentRuntime";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { attachConstitutionCollab } from "./services/constitution/collab";
 import { quantumShieldRouter } from "./routes/quantum-shield";
@@ -250,6 +251,9 @@ app.use("/api/status", statusRouter);
 // (see lib/planGate.ts). qcoreai is the flagship gated module (AI compute =
 // real OPEX); enforcement stays off until PAYWALL_MODULES is set on Railway.
 app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
+// Our own agent runtime — a real provider tool-use loop, kept separate from
+// qcoreai (owned by another work stream). Ungated: no module id in the registry.
+app.use("/api/agent-runtime", agentRuntimeRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);

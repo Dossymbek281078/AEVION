@@ -11,7 +11,7 @@
  * endpoint is fully functional in local dev / preview with no DB and no AI key.
  */
 
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
@@ -23,6 +23,7 @@ import {
 import { analyze, STAGES, type AnalysisInput, type Stage } from "../lib/qventure/engine";
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
+import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 
 const captureQVentureError = makeServiceCapture("qventure");
 
@@ -135,6 +136,39 @@ qventureRouter.get("/health", (_req: Request, res: Response) => {
 qventureRouter.get("/sectors", (_req: Request, res: Response) => {
   res.json({ ok: true, data: listSectors(), stages: STAGES });
 });
+
+// POST /extract — upload a pitch-deck PDF (raw application/pdf body), get back
+// the analyzer fields (name, sector, stage, description, traction, ask). The
+// frontend autofills the form so the investor reviews and runs the analysis.
+qventureRouter.post(
+  "/extract",
+  analyzeLimiter,
+  express.raw({ type: "application/pdf", limit: "15mb" }),
+  async (req: Request, res: Response) => {
+    try {
+      const buf = req.body as unknown;
+      if (!Buffer.isBuffer(buf) || buf.length === 0) {
+        return badRequest(res, "send the PDF as the raw request body with Content-Type: application/pdf");
+      }
+      if (buf.length > 15_000_000) return badRequest(res, "PDF too large (max ~15MB)");
+      if (buf.subarray(0, 5).toString("latin1") !== "%PDF-") return badRequest(res, "not a valid PDF file");
+
+      const text = await extractPdfText(buf);
+      if (!text || text.length < 30) {
+        return res.status(422).json({
+          ok: false,
+          error: "no_text_extracted",
+          hint: "This looks like a scanned/image-only deck — paste the details manually.",
+        });
+      }
+      const fields = await extractDeckFields(text);
+      res.json({ ok: true, data: fields });
+    } catch (e: unknown) {
+      captureQVentureError(e);
+      res.status(500).json({ ok: false, error: "extract_failed" });
+    }
+  }
+);
 
 qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Response) => {
   try {

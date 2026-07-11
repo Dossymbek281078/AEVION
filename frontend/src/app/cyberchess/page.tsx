@@ -1973,8 +1973,14 @@ export default function CyberChessPage(){
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
-  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
-  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+  // Партия против ЧЕЛОВЕКА (P2P-друг или hotseat — двое за одним экраном): уходить
+  // с партии нельзя (это была бы движковая подсказка против живого соперника), и часы
+  // никогда не встают на паузу. Против КОМПЬЮТЕРА — можно свободно уйти в анализ/коуч/
+  // стрим и вернуться в любой момент; пока игрок не на вкладке «play», часы ЗАМИРАЮТ.
+  const isHumanGame=p2pMode||hotseat;
+  const clockActive=tab==="play"||isHumanGame;
+  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");snd("x")});
+  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");snd("x")});
 
   // Shop v2: consume time_boost on game start — applies +Ns to user's clock
   // once per purchase. Triggered at game start when ach.time_boost > 0.
@@ -6264,16 +6270,23 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* In-game quick bar — compact 1 row, 5 key actions. Everything else via Ctrl+K. */}
+      {/* In-game quick bar — compact 1 row, key actions. Everything else via Ctrl+K.
+          В партии с ЧЕЛОВЕКОМ (P2P/hotseat) движковые «уходы» (Анализ/Коуч/Пазлы/Ещё)
+          скрыты — иначе игрок подсматривал бы оценку движка против живого соперника.
+          Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
           {([
-            {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     accent:"#6366f1", act:()=>sTab("analysis")},
-            {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            accent:"#a855f7", act:()=>sTab("coach")},
-            {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     accent:"#06b6d4", act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            ...(isHumanGame?[]:[
+              {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     accent:"#6366f1", act:()=>sTab("analysis")},
+              {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            accent:"#a855f7", act:()=>sTab("coach")},
+              {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     accent:"#06b6d4", act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
             {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
-            {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
+            ...(isHumanGame?[]:[
+              {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
+            ]),
           ] as {icon:string;label:string;hint:string;accent:string;act:()=>void}[]).map((c,i)=>(
             <button key={i} onClick={c.act} title={c.hint} style={{
               display:"inline-flex",alignItems:"center",gap:5,
@@ -6287,6 +6300,12 @@ export default function CyberChessPage(){
               <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
             </button>
           ))}
+          {isHumanGame&&<span title="В партии с человеком нельзя открыть анализ/коуча — это была бы подсказка движком против соперника" style={{
+            display:"inline-flex",alignItems:"center",gap:5,
+            padding:"7px 12px",borderRadius:9,
+            border:`1px solid ${CC.border}`,background:CC.surface2,color:CC.textMute,
+            fontSize:12,fontWeight:800,whiteSpace:"nowrap",
+          }}><span style={{fontSize:13}}>🔒</span><span>Партия с человеком</span></span>}
         </div>
       )}
 
@@ -11331,6 +11350,26 @@ ${question.trim()}`;
         </div>;
       })()}
     </Modal>
+
+    {/* «Вернуться к партии» — плавающая пилюля, видна с ЛЮБОЙ вкладки, когда идёт живая
+        партия против компьютера, а игрок ушёл в анализ/коуч/пазлы. Часы стоят на паузе —
+        можно вернуться в любой момент (по просьбе основателя). В партии с человеком не
+        показываем: оттуда уходить нельзя, поэтому tab всегда «play». */}
+    {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")}
+      title="Вернуться к партии — часы на паузе, пока ты здесь"
+      style={{
+        position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        display:"inline-flex",alignItems:"center",gap:9,
+        padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
+        background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",
+        fontSize:14,fontWeight:900,letterSpacing:0.2,cursor:"pointer",
+        boxShadow:"0 8px 28px rgba(5,150,105,0.45)",
+        animation:"cc-evdelta-in 0.3s ease-out",
+      }}>
+      <span style={{fontSize:16,lineHeight:1}}>▶</span>
+      <span>Вернуться к партии</span>
+      <span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
+    </button>}
 
     {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
     {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"

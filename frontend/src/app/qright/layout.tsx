@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { getApiBase } from "@/lib/apiBase";
+import { AutoTranslate } from "@/components/AutoTranslate";
 
 const SITE = getSiteUrl();
 const OG_IMAGE = `${getApiBase()}/api/qright/og.svg`;
@@ -59,7 +60,11 @@ export default function QRightLayout({ children }: { children: React.ReactNode }
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {children}
+      {/* QRight is an app-shell (global AutoTranslate runs observe=false), so
+          re-enable a live observer scoped here — async-loaded registry records,
+          verification results and error toasts translate into all 11 languages
+          when the user switches via the app-shell pill. Mirrors build/layout. */}
+      <AutoTranslate observe>{children}</AutoTranslate>
     </>
   );
 }

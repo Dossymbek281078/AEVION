@@ -426,9 +426,19 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // from the script heuristic + caching identity results in flush() below.
     const translatedValues = new Set<string>();
     const pending = new Set<string>();
+    // Per-string retry counter. A transient backend failure (502 gateway
+    // timeout, 500, offline) used to DROP the whole batch permanently, leaving
+    // part of the page untranslated until a full reload. We now re-queue failed
+    // strings up to MAX_ATTEMPTS so transient errors self-heal.
+    const attempts = new Map<string, number>();
+    // Serialize network flushes: only one /translate request in flight at a
+    // time. Concurrent batches (observer + timer firing together) were
+    // overwhelming the backend and causing the 502s in the first place.
+    let inFlight = false;
     let obs: MutationObserver | null = null;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let destroyed = false;
+    const MAX_ATTEMPTS = 3;
 
     const applyText = (node: Text) => {
       const orig = node.textContent || "";
@@ -478,8 +488,27 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       flushTimer = setTimeout(flush, 250);
     };
 
+    // Re-queue a failed batch for another attempt (bounded), so a transient
+    // 502/500/network error doesn't leave those strings permanently in the
+    // source language. Strings past MAX_ATTEMPTS are given up on (kept as
+    // source) to avoid an infinite retry loop against a persistently-down API.
+    const requeue = (batch: string[], reason: unknown) => {
+      for (const s of batch) {
+        const n = (attempts.get(s) ?? 0) + 1;
+        if (n < MAX_ATTEMPTS && !translatedValues.has(s)) {
+          attempts.set(s, n);
+          pending.add(s);
+        }
+      }
+      warnI18nOnce(reason);
+    };
+
     const flush = async () => {
-      if (destroyed || pending.size === 0) return;
+      // inFlight guard: never run two /translate requests at once. Prevents the
+      // observer and the debounce timer from firing overlapping batches that
+      // overload the backend (the original cause of the 502s).
+      if (destroyed || inFlight || pending.size === 0) return;
+      inFlight = true;
       const batch = Array.from(pending).slice(0, 100);
       batch.forEach((b) => pending.delete(b));
       try {
@@ -505,11 +534,14 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
           }
           if (!destroyed) { saveCache(lang, cache); if (changed) apply(root); }
         } else {
-          warnI18nOnce(`HTTP ${r.status}`);
+          // Transient server error — put the batch back for a bounded retry.
+          requeue(batch, `HTTP ${r.status}`);
         }
       } catch (e) {
-        // offline / 5xx — leave source text, don't hammer; surface once.
-        warnI18nOnce(e);
+        // offline / network — retry (bounded) instead of dropping permanently.
+        requeue(batch, e);
+      } finally {
+        inFlight = false;
       }
       if (!destroyed && pending.size > 0) scheduleFlush();
     };

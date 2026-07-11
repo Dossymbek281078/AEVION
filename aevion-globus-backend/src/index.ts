@@ -12,6 +12,7 @@ import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
+import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
@@ -1009,6 +1010,7 @@ app.use("/api/paypal", paypalWebhookRouter);
 // ==========================
 app.use("/api/auth", authRouter);
 app.use("/api/auth/oauth", authOauthRouter);
+app.use("/api/tiktok", tiktokRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate

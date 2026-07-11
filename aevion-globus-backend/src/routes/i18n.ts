@@ -49,6 +49,46 @@ const LANG_NAME: Record<string, string> = {
   tr: "Turkish (Türkçe)",
 };
 
+// Brand / product / technical tokens that must survive translation verbatim.
+// DeepL has no notion of this on its own (it turned "QVenture benchmark" into
+// "Тестирование QVenture"), so we wrap these in ignore tags for DeepL and list
+// them in the Claude prompt. Case-sensitive, whole-token match only.
+const BRAND_TOKENS = [
+  "AEVION", "QVenture", "QVentures", "QCoreAI", "QFusionAI", "QRight", "QSign",
+  "QShield", "QTrade", "QPayNet", "QMaskCard", "QContract", "QChainGov",
+  "Quantum Shield", "Planet", "Bureau", "NeuroDx", "Globus",
+  "MOIC", "IRR", "MRR", "ARR", "NRR", "CAC", "LTV", "GMV", "HMAC", "JWT",
+  "API", "SDK", "AEC", "AEV", "SaaS", "VC",
+];
+// Longest first so multi-word / superset tokens win before their substrings
+// (e.g. "Quantum Shield" before "Shield").
+const BRAND_SORTED = [...BRAND_TOKENS].sort((a, b) => b.length - a.length);
+const BRAND_PROMPT_LIST = BRAND_TOKENS.join(", ");
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function xmlEscape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function xmlUnescape(s: string): string {
+  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+// Wrap brand tokens in <x>…</x> so DeepL (tag_handling=xml, ignore_tags=x)
+// leaves them untranslated. Boundaries are non-alphanumeric, so "API" inside a
+// larger word is never matched.
+function protectBrands(text: string): string {
+  let out = xmlEscape(text);
+  for (const b of BRAND_SORTED) {
+    const re = new RegExp(`(^|[^A-Za-z0-9])(${escapeRegExp(b)})(?=[^A-Za-z0-9]|$)`, "g");
+    out = out.replace(re, (_m, pre: string, tok: string) => `${pre}<x>${tok}</x>`);
+  }
+  return out;
+}
+function unprotectBrands(text: string): string {
+  return xmlUnescape(text.replace(/<\/?x>/g, ""));
+}
+
 // Server-side translation cache: `${target}${text}` -> translation.
 // Bounded; survives within a deploy. Client localStorage covers cross-deploy.
 const cache = new Map<string, string>();
@@ -65,8 +105,12 @@ async function deeplBatch(texts: string[], deeplTarget: string): Promise<string[
     ? "https://api-free.deepl.com/v2/translate"
     : "https://api.deepl.com/v2/translate";
   const params = new URLSearchParams();
-  for (const t of texts) params.append("text", t);
+  // Wrap brand tokens in <x>…</x> and tell DeepL to ignore that tag, so brand /
+  // product / technical names survive untranslated instead of being mangled.
+  for (const t of texts) params.append("text", protectBrands(t));
   params.set("target_lang", deeplTarget);
+  params.set("tag_handling", "xml");
+  params.set("ignore_tags", "x");
   const r = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -77,7 +121,7 @@ async function deeplBatch(texts: string[], deeplTarget: string): Promise<string[
   });
   const data = (await r.json()) as { translations?: { text: string }[]; message?: string };
   if (!r.ok) throw new Error(`DeepL ${r.status}: ${(data?.message || JSON.stringify(data)).slice(0, 200)}`);
-  const out = (data.translations || []).map((t) => t.text);
+  const out = (data.translations || []).map((t) => unprotectBrands(t.text));
   if (out.length !== texts.length) throw new Error("DeepL length mismatch");
   return out;
 }
@@ -86,7 +130,7 @@ async function claudeBatch(texts: string[], langName: string): Promise<string[]>
   const sys =
     `You are a precise UI string translator. Translate each input string to ${langName}. ` +
     `Rules: keep placeholders ({x}, %s, :id), numbers, URLs, and brand/product names ` +
-    `(AEVION, Planet, QSign, QRight, QShield, QCoreAI, Bureau, API, SDK, AEC, AEV, HMAC, JWT) ` +
+    `(${BRAND_PROMPT_LIST}) ` +
     `untranslated. Preserve leading/trailing punctuation and arrows (→, ·). ` +
     `Return ONLY a JSON array of strings — exactly the same length and order as the input, no prose.`;
   const messages: ChatMessage[] = [

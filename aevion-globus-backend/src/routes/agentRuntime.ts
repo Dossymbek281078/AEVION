@@ -28,6 +28,17 @@ const SYSTEM_PROMPT =
 
 agentRuntimeRouter.get("/health", async (_req, res) => {
   const mcpConfigured = parseMcpConfig(process.env.AGENT_RUNTIME_MCP_SERVERS);
+  // Mirror /run: surface our first-party demo MCP server when it is enabled, so
+  // the dock's tool indicator reflects exactly what /run would expose.
+  if (/^(1|true|yes)$/i.test(process.env.AGENT_RUNTIME_MCP_DEMO || "")) {
+    const port = process.env.PORT || "4001";
+    const baseUrl = process.env.SELF_BASE_URL || `http://127.0.0.1:${port}`;
+    mcpConfigured.push({
+      name: "aevion",
+      url: `${baseUrl}/api/mcp-demo`,
+      ...(process.env.MCP_DEMO_TOKEN ? { token: process.env.MCP_DEMO_TOKEN } : {}),
+    });
+  }
   // List remote MCP tools too, but never let a slow/broken server fail /health.
   let mcpServers: Array<{ name: string; url: string; toolCount: number; error?: string }> = [];
   let mcpTools: string[] = [];

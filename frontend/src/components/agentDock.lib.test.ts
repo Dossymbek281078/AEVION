@@ -5,10 +5,40 @@ import {
   canSend,
   describeToolActivity,
   summarizeRun,
+  summarizeHealth,
+  prettyToolName,
   buildAgentEvent,
   AGENT_EVENT_NAME,
   type DockTranscriptMsg,
 } from "./agentDock.lib";
+
+describe("summarizeHealth", () => {
+  test("splits native vs MCP tools and counts total", () => {
+    const s = summarizeHealth({
+      keyConfigured: true,
+      model: "claude-sonnet-5",
+      nativeTools: ["generate_image", "send_email"],
+      tools: ["generate_image", "send_email", "mcp_aevion_list_modules"],
+    });
+    expect(s.native).toEqual(["generate_image", "send_email"]);
+    expect(s.mcp).toEqual(["mcp_aevion_list_modules"]);
+    expect(s.total).toBe(3);
+    expect(s.keyConfigured).toBe(true);
+    expect(s.model).toBe("claude-sonnet-5");
+  });
+
+  test("handles missing/empty payloads", () => {
+    expect(summarizeHealth(null).total).toBe(0);
+    expect(summarizeHealth({ nativeTools: ["a"] }).mcp).toEqual([]);
+  });
+});
+
+describe("prettyToolName", () => {
+  test("strips mcp_<server>_ prefix and underscores", () => {
+    expect(prettyToolName("mcp_aevion_list_modules")).toBe("list modules");
+    expect(prettyToolName("generate_image")).toBe("generate image");
+  });
+});
 
 describe("buildAgentEvent", () => {
   test("trims prompt, defaults autoSend false, uses the shared event name", () => {

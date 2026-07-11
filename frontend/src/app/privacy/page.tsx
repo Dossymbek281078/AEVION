@@ -62,6 +62,13 @@ export default function PrivacyPage() {
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>8. Data Retention</h2>
           <p>Account data is retained while your account is active. IP registration records and compliance certificates are retained permanently as part of the evidence trail — this is the core value proposition. Note that even outside our retention, a Verification Bundle you downloaded remains independently checkable: SHA-256, Ed25519, and the Bitcoin-anchored timestamp are the trust anchors, not our database. Financial records are retained as required by applicable law.</p>
 
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>8a. TikTok Integration &amp; Content Posting</h2>
+          <p>AEVION integrates with TikTok through the TikTok Login Kit and the TikTok Content Posting API. This section describes exactly what TikTok data we access and how we use it.</p>
+          <p><strong>What we access.</strong> Only after you explicitly authorize the connection through TikTok&rsquo;s official OAuth screen, we access your basic TikTok profile via the <code>user.info.basic</code> scope &mdash; your open ID, display name (username) and avatar &mdash; which we display in our publishing interface so you always see which account a video will be posted to. We use the <code>video.publish</code> scope solely to upload videos to your own TikTok account, and only when you initiate or schedule a specific post.</p>
+          <p><strong>What we do not access.</strong> We do not read your private messages, your followers, your watch history, or any content you did not ask us to publish. We never post to any account other than the one you authorized.</p>
+          <p><strong>Storage and retention.</strong> Your TikTok access and refresh tokens are stored encrypted and used only to publish content on your instruction. They are never sold or shared with third parties. You can revoke AEVION&rsquo;s access at any time from within TikTok (Settings &rarr; Security &amp; permissions &rarr; Apps and services), which immediately invalidates our tokens; you may also email us to have your tokens and associated data deleted.</p>
+          <p><strong>Your content.</strong> Videos you choose to publish are transmitted to TikTok on your behalf; once on TikTok, your content and its visibility are governed by TikTok&rsquo;s own Terms and Privacy Policy. You are responsible for ensuring content you publish complies with TikTok&rsquo;s Community Guidelines.</p>
+
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9. Contact</h2>
           <p>Data Protection Officer: yahiin1978@gmail.com. AEVION, Astana, Kazakhstan.</p>
         </div>

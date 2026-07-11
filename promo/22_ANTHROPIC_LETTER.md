@@ -98,13 +98,15 @@ provenance — who made this, when, and can it be proven afterward. AEVION's att
 floods the world, someone becomes the notary of record. I built the first consumer-grade one
 — on Claude.
 
-And the clock just became literal. OpenAI's "Education for Countries" is already live in
-Kazakhstan: 165,000 free ChatGPT Edu licences nationwide, privately funded, no state budget —
-the Microsoft-OEM playbook applied to AI: give it away to own a nation's next generation.
-I'll be honest — no one wins a country's classrooms head-to-head against free, and that lane
-is taken. But a chatbot licence is not a sovereign enclave. The lane still open is the one
-OpenAI is not building: the trust, sovereignty and attestation layer. Whoever sets that
-standard first anchors nations for a generation, and the window is months, not years.
+And the market just validated itself. OpenAI's "Education for Countries" is already live in
+Kazakhstan — 165,000 free ChatGPT Edu licences nationwide, privately funded, no state budget.
+To me that's the clearest proof yet that nation-scale AI is real and moving fast. But it works
+one layer down from where AEVION sits: a model-and-access rollout, not a trust-and-attestation
+layer. A chatbot licence puts capability in every classroom; it doesn't answer who made a
+thing, when, and whether it can be proven afterward. That adjacent layer — provenance,
+sovereignty, attestation — is still unbuilt, and it composes on top of any provider, Claude
+included. A validated market with its defining layer still open is the opening, and the window
+is months, not years.
 
 Now the honest part about me. What comes next on the path — idea, goal, team, realization —
 is the one stage no individual can be: execution. Ideas are made by people; products are made
@@ -227,12 +229,14 @@ AI-шлюз, dev-платформа — и связную «планету», п
 умолчанию. Когда мир заливает AI-контент, кто-то становится нотариусом записи. Я построил первый
 потребительский — на Claude.
 
-И часы стали буквальными. «Education for Countries» от OpenAI уже работает в Казахстане: 165 000
-бесплатных лицензий ChatGPT Edu по всей стране, частное финансирование, без госбюджета — майкрософтовский
-приём, применённый к ИИ: раздать бесплатно, чтобы владеть следующим поколением страны. Скажу честно —
-против бесплатного в классах страны лоб-в-лоб не выиграть, и эта полоса занята. Но лицензия на чат-бот —
-не суверенный анклав. Открыта полоса, которую OpenAI не строит: слой доверия, суверенитета и аттестации.
-Кто первым задаст этот стандарт — заякорит страны на поколение, и окно — месяцы, не годы.
+И рынок только что подтвердил сам себя. «Education for Countries» от OpenAI уже работает в Казахстане —
+165 000 бесплатных лицензий ChatGPT Edu по всей стране, частное финансирование, без госбюджета. Для меня
+это яснейшее доказательство, что ИИ национального масштаба реален и движется быстро. Но это слой ниже
+того, где стоит AEVION: раскатка модели и доступа, а не слой доверия и аттестации. Лицензия на чат-бот
+даёт возможности в каждом классе; она не отвечает, кто создал вещь, когда и можно ли это доказать потом.
+Этот соседний слой — provenance, суверенитет, аттестация — ещё не построен, и он ложится поверх любого
+провайдера, включая Claude. Подтверждённый рынок, чей определяющий слой ещё открыт, — это возможность,
+и окно — месяцы, не годы.
 
 Теперь честно обо мне. Что идёт дальше по пути — идея, цель, команда, реализация — это стадия, которой
 ни один человек быть не может: исполнение. Идеи создают люди, продукты — команды. Поэтому когда я говорю,

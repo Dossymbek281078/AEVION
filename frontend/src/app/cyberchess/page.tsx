@@ -11059,6 +11059,7 @@ ${question.trim()}`;
 
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay
+      mode={themeMode}
       onComplete={(choice:OnboardingChoice)=>{
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();

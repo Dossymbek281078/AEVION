@@ -371,6 +371,28 @@ const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
       "You are the domain-expert council member. Bring specialist depth, correct terminology, and the " +
       "one detail a non-expert would get wrong. Cite the reasoning, not just the conclusion.",
   },
+  // Personas 6-8 keep larger councils (councilSize 6-8) genuinely diverse
+  // instead of repeating the first five. Each is a distinct lens, not a
+  // re-skin of an earlier one.
+  {
+    key: "Contrarian",
+    prompt:
+      "You are the contrarian council member. Steelman the view the others are LEAST likely to take; " +
+      "argue the strongest case against the emerging consensus. Not contrarian for its own sake — " +
+      "surface the real reason the popular answer could be wrong.",
+  },
+  {
+    key: "Systems",
+    prompt:
+      "You are the systems-thinking council member. Focus on second-order effects, incentives, feedback " +
+      "loops, and what happens at scale or over time — the consequences a first-order answer misses.",
+  },
+  {
+    key: "User",
+    prompt:
+      "You are the end-user advocate on the council. Answer from the perspective of the person who will " +
+      "actually live with the outcome: what they experience, what they truly need, where the plan meets reality.",
+  },
 ];
 
 // Two hard rules appended to every council persona. They matter most for the
@@ -482,7 +504,7 @@ export function buildCouncil(
   override?: AgentOverride,
   opts?: { localOnly?: boolean; localModels?: Record<string, string[]> }
 ): CouncilMember[] {
-  const n = Math.max(2, Math.min(6, Math.floor(maxMembers) || 3));
+  const n = Math.max(2, Math.min(8, Math.floor(maxMembers) || 3));
   const localOnly = opts?.localOnly === true;
   const localModels = opts?.localModels;
 
@@ -510,7 +532,7 @@ export function buildCouncil(
   }
 
   const members: CouncilMember[] = [];
-  const tempCycle = [0.4, 0.75, 0.9, 0.55, 1.0, 0.65];
+  const tempCycle = [0.4, 0.75, 0.9, 0.55, 1.0, 0.65, 0.85, 0.5];
   for (let i = 0; i < slots.length && members.length < n; i++) {
     const persona = COUNCIL_PERSONAS[members.length % COUNCIL_PERSONAS.length];
     members.push({

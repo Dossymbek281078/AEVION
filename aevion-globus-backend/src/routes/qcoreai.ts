@@ -2142,7 +2142,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // council mode: number of crowd members to convene (2–6, default 3).
   const councilSize =
-    typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(6, Math.floor(req.body.councilSize))) : 3;
+    typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(8, Math.floor(req.body.councilSize))) : 3;
   // council mode: Mixture-of-Agents refinement layers (1–3, default 1).
   const councilLayers =
     typeof req.body?.councilLayers === "number" ? Math.max(1, Math.min(3, Math.floor(req.body.councilLayers))) : 1;

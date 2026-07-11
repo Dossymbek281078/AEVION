@@ -1992,7 +1992,7 @@ export default function QCoreMultiAgentPage() {
                   >−</button>
                   <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
                   <button
-                    onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
+                    onClick={() => setCouncilSize((n) => Math.min(8, n + 1))}
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>

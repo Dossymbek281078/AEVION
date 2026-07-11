@@ -1174,6 +1174,15 @@ export default function CyberChessPage(){
   // component still see CC_LIGHT via the import alias (kept for backwards compat
   // of any module-scoped colors, though currently none use CC.* outside the fn).
   const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // Фон-«слой» по активной вкладке — каждая фича своим лёгким оттенком (запрос основателя
+  // «слои по фичам разные цвет»): пазлы→cyan, анализ→синий, коуч→фиолет, играть→нейтраль.
+  const TAB_BG_TINT:Record<string,{light:string;dark:string}>={
+    play:    {light:"#e7e5df", dark:"#161512"},
+    puzzles: {light:"#dde6e7", dark:"#121717"},
+    analysis:{light:"#dfe4ed", dark:"#12151b"},
+    coach:   {light:"#e7e1ec", dark:"#17131a"},
+  };
+  const tabBg=(TAB_BG_TINT[tab]||TAB_BG_TINT.play)[themeMode==="dark"?"dark":"light"];
   // T — dynamic alias к текущей теме (CC). Заменяет статичный module-level T={} чтобы
   // переключение dark/light автоматически применялось к moves list, eval strip и т.д.
   // ВАЖНО: должен быть после объявления CC (TDZ)
@@ -1184,13 +1193,16 @@ export default function CyberChessPage(){
     chk:CC.sqCheck,pm:CC.sqPremove,pmS:CC.sqPremoveStrong,
   };
   // Apply theme globally: body background + data-cc-theme attribute (triggers CSS vars in globals.css)
+  // Фон СЛЕГКА сдвигается по активной вкладке — каждая фича «своим слоем/цветом» (запрос
+  // основателя): пазлы→cyan, анализ→синий, коуч→фиолет, играть→нейтральный paper. Оттенок
+  // тонкий (чуть тонирован базовый фон), чтобы не пестрить, но глаз ловил смену раздела.
   useEffect(()=>{
     if(typeof document==="undefined")return;
     const prev=document.body.style.background;
-    document.body.style.background=themeMode==="dark"?CC_DARK.bg:CC_LIGHT.bg;
+    document.body.style.background=tabBg;
     document.documentElement.setAttribute("data-cc-theme",themeMode);
     return()=>{document.body.style.background=prev;document.documentElement.removeAttribute("data-cc-theme")};
-  },[themeMode]);
+  },[tabBg,themeMode]);
   // Текущий звуковой пресет (60 пресетов + молчание). Сохраняется в localStorage.
   const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
   useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
@@ -3845,14 +3857,18 @@ export default function CyberChessPage(){
     const premovesNow=pmsRef.current.length;
     const isBullet=tc.ini>0&&tc.ini<=60;
     const isBlitz=tc.ini>60&&tc.ini<=300;
-    const baseFloor=isBullet?250:isBlitz?320:400;
-    const perPremoveSlot=isBullet?80:isBlitz?100:120;
+    // Окно для премува расширено (было 250/320/400 базы) — на быстрых контролях ИИ
+    // отвечал слишком быстро, и премув не успевал показаться/поставиться (жалоба).
+    // Пока не поставлен ни один премув — даём заметное окно; каждый уже стоящий
+    // премув окно сокращает (хочешь быстрее — ставь премувы заранее).
+    const baseFloor=isBullet?420:isBlitz?560:680;
+    const perPremoveSlot=isBullet?90:isBlitz?110:120;
     const targetSlots=5;
     const slotsLeft=Math.max(0,targetSlots-premovesNow);
     const premoveFloor=baseFloor+slotsLeft*perPremoveSlot;
-    // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
-    // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
-    // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
+    // Bullet 0pm: 420+5×90  =  870ms · 5pm: 420ms
+    // Blitz  0pm: 560+5×110 = 1110ms · 5pm: 560ms
+    // Rapid  0pm: 680+5×120 = 1280ms · 5pm: 680ms
     // AI think delay: natural pace (rawDelay) floored to a premove-friendly
     // window so the user always has time to queue premoves before the reply.
     // (Previously hard-pinned to 20000ms as a temporary mechanics-debug hack —
@@ -4905,7 +4921,7 @@ export default function CyberChessPage(){
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
   const hasBg=bgPreset!=="none"&&!!bgPreset;
-  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}

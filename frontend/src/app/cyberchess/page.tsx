@@ -4969,23 +4969,24 @@ export default function CyberChessPage(){
             sSetup(false); sTab(k);
             if(k==="puzzles"&&PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length));
           };
-          return <div style={{display:"inline-flex",alignItems:"center",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`,flex:"0 0 auto"}}>
+          return <div style={{display:"inline-flex",alignItems:"center",gap:3,padding:3,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`,boxShadow:SHADOW.sm,flex:"0 0 auto"}}>
             {TABS.map(t=>{
               const active=tab===t.k;
               const locked=t.k!=="play"&&navLocked;
               return <button key={t.k} onClick={()=>goTab(t.k)} disabled={locked} className="cc-focus-ring"
                 title={locked?"Заблокировано во время партии с человеком":t.label}
                 style={{
-                  display:"inline-flex",alignItems:"center",gap:6,
-                  padding:"6px 14px",borderRadius:RADIUS.full,border:"none",
+                  display:"inline-flex",alignItems:"center",gap:7,
+                  padding:"9px 18px",borderRadius:RADIUS.full,
+                  border:active?`1px solid ${t.hue}55`:"1px solid transparent",
                   background:active?`${t.hue}1f`:"transparent",
                   color:locked?CC.textMute:active?t.hue:CC.textDim,
-                  fontSize:12.5,fontWeight:active?900:700,
+                  fontSize:14,fontWeight:active?900:750,
                   cursor:locked?"not-allowed":"pointer",whiteSpace:"nowrap",
                   opacity:locked?0.5:1,
                   transition:`background 120ms, color 120ms`,
                 }}>
-                <span style={{fontSize:14,lineHeight:1}}>{locked?"🔒":t.icon}</span>
+                <span style={{fontSize:16,lineHeight:1}}>{locked?"🔒":t.icon}</span>
                 <span>{t.label}</span>
               </button>;
             })}
@@ -5011,11 +5012,11 @@ export default function CyberChessPage(){
         <button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
-            padding:"5px 10px 5px 8px",borderRadius:RADIUS.full,
-            border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
-            fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+            padding:"7px 12px 7px 10px",borderRadius:RADIUS.full,
+            border:`1px solid ${CC.borderStrong}`,background:CC.surface1,color:CC.textDim,
+            fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
           }}>
-          <span style={{fontSize:13}}>⌕</span>
+          <span style={{fontSize:14}}>⌕</span>
           <span>Команды</span>
           <kbd style={{
             fontFamily:"ui-monospace, SFMono-Regular, monospace",fontSize:9.5,fontWeight:800,
@@ -5029,11 +5030,11 @@ export default function CyberChessPage(){
         <button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
-            padding:"5px 11px",borderRadius:RADIUS.full,
-            border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
-            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+            padding:"7px 14px",borderRadius:RADIUS.full,
+            border:`1.5px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
+            fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
           }}>
-          <span style={{fontSize:13}}>☰</span>
+          <span style={{fontSize:14}}>☰</span>
           <span>Все разделы</span>
         </button>
         {/* «?» — постоянный видимый гайд «что куда нажимать». Открывает обзорный тур
@@ -5042,11 +5043,11 @@ export default function CyberChessPage(){
         <button onClick={()=>sTourStep(0)} title="Как пользоваться — краткий гайд по интерфейсу" aria-label="Гайд: как пользоваться" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:5,
-            padding:"5px 10px",borderRadius:RADIUS.full,
-            border:`1px solid #3b82f6`,background:"rgba(59,130,246,0.10)",color:"#2563eb",
-            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+            padding:"7px 13px",borderRadius:RADIUS.full,
+            border:`1.5px solid #3b82f6`,background:"rgba(59,130,246,0.12)",color:"#2563eb",
+            fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
           }}>
-          <span style={{fontSize:13,lineHeight:1}}>?</span>
+          <span style={{fontSize:14,lineHeight:1}}>?</span>
           <span>Как тут</span>
         </button>
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the

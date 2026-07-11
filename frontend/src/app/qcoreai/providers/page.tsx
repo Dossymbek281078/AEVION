@@ -62,7 +62,7 @@ const PROVIDER_ICONS: Record<string, string> = {
 
 const prettyModel = (m: string) => {
   const map: Record<string, string> = {
-    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-sonnet-4-6": "Claude Sonnet 4",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
     "claude-opus-4-7": "Claude Opus 4.7",
     "gpt-4o": "GPT-4o",

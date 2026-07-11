@@ -170,7 +170,6 @@ export function getProviders(): Provider[] {
         "claude-opus-4-8",
         "claude-fable-5",
         "claude-sonnet-4-6",
-        "claude-sonnet-4-20250514",
         "claude-haiku-4-5-20251001",
       ],
       defaultModel: process.env.QCOREAI_ANTHROPIC_MODEL || "claude-opus-4-8",

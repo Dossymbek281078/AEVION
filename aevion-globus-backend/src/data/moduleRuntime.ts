@@ -29,8 +29,10 @@ export interface ModuleRuntimeMeta {
  *                   402 paywall / 401 auth) + фронт-страница. 34 модуля.
  *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
  *                   (veilnetx/kids-ai-content/startup-exchange/z-tide). 4 модуля.
- *   • portal_only — реально не построен (нет роутера и страницы): qpaynet. 1.
- * Итог: mvp_live 34 · platform_api 4 · portal_only 1.  (catch-all нет: fake-id=404)
+ *   • portal_only — 0. Не построенных модулей НЕТ: qpaynet-embedded построен под
+ *                   путём /api/qpaynet (id≠путь), первый пробник дал ложный 404.
+ * Итог: mvp_live 35 · platform_api 4 · portal_only 0.  ВСЕ 39 модулей построены;
+ * 35 работают, 4 сами на self-declared waitlist. (catch-all нет: fake-id=404)
  */
 export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // ── mvp_live: рабочий продукт (verified prod API/страница) ──────────────────
@@ -270,12 +272,15 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "Концепт · 8 endpoints · self-declared idea/waitlist",
   },
 
-  // ── portal_only (1): реально не построен — нет роутера и нет страницы ──────────
+  // ── qpaynet-embedded: ПОСТРОЕН (id≠путь — реестр qpaynet-embedded, API /api/qpaynet)
+  // Первый пробник дёрнул /api/qpaynet-embedded (реестровый id) → ложный 404.
+  // Реально: /api/qpaynet — 67 endpoints, страница /qpaynet, 27 кошельков /
+  // 54 транзакции / шифрование / Stripe-вебхуки + retry-worker.
   "qpaynet-embedded": {
-    tier: "portal_only",
-    primaryPath: null,
-    apiHints: [],
-    hint: "НЕ построен: своего API и страницы нет (нужен платёжный core)",
+    tier: "mvp_live",
+    primaryPath: "/qpaynet",
+    apiHints: ["/api/qpaynet/health", "/api/qpaynet/stats", "/api/qpaynet/*"],
+    hint: "Встраиваемые платежи · 67 endpoints · Postgres (27 кошельков, шифрование, Stripe webhooks)",
   },
 };
 

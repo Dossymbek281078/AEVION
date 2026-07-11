@@ -246,30 +246,34 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "Приватность · 12 endpoints · живые threat-models (фронт слабо wired)",
   },
 
-  // ── platform_api (4): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
+  // ── platform_api (2): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
   veilnetx: {
     tier: "platform_api",
     primaryPath: "/veilnetx",
     apiHints: ["/api/veilnetx/status", "/api/veilnetx/*"],
-    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026",
+    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026 (реально pre-product)",
   },
   "kids-ai-content": {
     tier: "platform_api",
     primaryPath: "/kids-ai-content",
     apiHints: ["/api/kids-ai-content/*"],
-    hint: "Детский контент · 8 endpoints · self-declared planning/waitlist, ETA Q4 2026",
+    hint: "Детский контент · 8 endpoints · функц. готов, но нужен child-safety ревью до launch",
   },
+  // ── startup-exchange + z-tide: страницы ЖИВЫЕ и рабочие (реальные бэкенды
+  //    /api/startupx, /api/ztide), «waitlist» был устаревший ярлык → mvp_live.
+  //    Planning-vision (эскроу/smart-NDA у startupx; currency-research у z-tide)
+  //    остаётся в planningStubs.ts как осознанный roadmap — не product-статус.
   "startup-exchange": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/startup-exchange",
-    apiHints: ["/api/startup-exchange/*"],
-    hint: "Биржа стартапов · 14 endpoints · self-declared planning/waitlist, ETA Q2 2027",
+    apiHints: ["/api/startupx/ideas", "/api/startupx/stats", "/api/startupx/*"],
+    hint: "Биржа стартапов/идей · /ideas+/stats живые · страница подключена к реальному API",
   },
   "z-tide": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/z-tide",
-    apiHints: ["/api/z-tide/*"],
-    hint: "Концепт · 8 endpoints · self-declared idea/waitlist",
+    apiHints: ["/api/ztide/leaderboard", "/api/ztide/stats", "/api/ztide/*"],
+    hint: "Стрики/leaderboard/очки · /api/ztide живой (юзеры+события) · страница рабочая",
   },
 
   // ── qpaynet-embedded: ПОСТРОЕН (id≠путь — реестр qpaynet-embedded, API /api/qpaynet)

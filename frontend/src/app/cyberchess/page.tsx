@@ -1209,6 +1209,11 @@ export default function CyberChessPage(){
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
+  // Мин. пауза ИИ перед ходом (мс) — комфорт для премувов. Действует как абсолютный
+  // пол задержки ответа ИИ: чем больше, тем спокойнее ставить/видеть премувы (в т.ч.
+  // цепочки из многих премувов). 0 = обычная скорость. Настраивается в Settings.
+  const[aiPaceMs,sAiPaceMs]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_ai_pace_v1")||"0");return isNaN(v)?0:Math.max(0,Math.min(5000,v))}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_ai_pace_v1",String(aiPaceMs))}catch{}},[aiPaceMs]);
   // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
   // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
   // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.
@@ -3873,7 +3878,9 @@ export default function CyberChessPage(){
     // window so the user always has time to queue premoves before the reply.
     // (Previously hard-pinned to 20000ms as a temporary mechanics-debug hack —
     //  that froze the board ~20s per move and made play feel broken.)
-    const delay=Math.max(rawDelay,premoveFloor);
+    // aiPaceMs — пользовательский пол (Settings): до 5с, чтобы спокойно ставить/видеть
+    // премувы, в т.ч. длинные цепочки. Не сокращается по мере накопления премувов.
+    const delay=Math.max(rawDelay,premoveFloor,aiPaceMs);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece
@@ -13001,6 +13008,22 @@ ${question.trim()}`;
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
             <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+            {/* Скорость ответа ИИ — комфорт для премувов. Больше пауза = спокойнее ставить
+                и видеть премувы (в т.ч. длинные цепочки). Прямой ответ на фидбек про премувы. */}
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>⏱ Пауза ИИ перед ходом</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
+                Насколько ИИ «думает» перед ответом. Больше пауза — удобнее ставить и видеть премувы (можно выстроить цепочку). Не влияет на силу игры.
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {[{ms:0,l:"Мгновенно"},{ms:800,l:"Быстро"},{ms:1500,l:"Спокойно"},{ms:3000,l:"Медленно · 3с"},{ms:5000,l:"Макс · 5с"}].map(o=>{
+                  const sel=aiPaceMs===o.ms;
+                  return <button key={o.ms} onClick={()=>{sAiPaceMs(o.ms);showToast(`Пауза ИИ: ${o.l}`,"info")}}
+                    style={{padding:"7px 13px",borderRadius:RADIUS.full,cursor:"pointer",fontSize:12.5,fontWeight:800,whiteSpace:"nowrap",
+                      border:`1.5px solid ${sel?CC.brand:CC.border}`,background:sel?CC.brandSoft:CC.surface1,color:sel?CC.brand:CC.textDim}}>{o.l}</button>;
+                })}
+              </div>
+            </div>
             {/* Фоновое изображение */}
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>🖼 Фон приложения</div>

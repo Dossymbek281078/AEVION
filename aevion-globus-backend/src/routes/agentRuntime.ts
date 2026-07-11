@@ -65,9 +65,11 @@ agentRuntimeRouter.post("/run", async (req, res) => {
     // Optionally fold in remote MCP tools (Higgsfield & co.). Native tools always
     // win a name clash; MCP tools are dispatched to their owning server.
     const mcpConfig = parseMcpConfig(process.env.AGENT_RUNTIME_MCP_SERVERS);
-    // AGENT_RUNTIME_MCP_DEMO=1 wires our own first-party MCP server (AEVION
-    // registry) so the dock can exercise the runtime→bridge→MCP path live.
-    if (/^(1|true|yes)$/i.test(process.env.AGENT_RUNTIME_MCP_DEMO || "")) {
+    // Wire our own first-party MCP server (AEVION registry) when enabled by env
+    // (AGENT_RUNTIME_MCP_DEMO=1, for the live dock) or opted-in per request
+    // (includeDemoMcp:true, e.g. for a prod proof) — proves runtime→bridge→MCP.
+    const demoOn = /^(1|true|yes)$/i.test(process.env.AGENT_RUNTIME_MCP_DEMO || "") || req.body?.includeDemoMcp === true;
+    if (demoOn) {
       mcpConfig.push({
         name: "aevion",
         url: `${baseUrl}/api/mcp-demo`,

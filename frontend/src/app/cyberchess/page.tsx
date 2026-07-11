@@ -1345,12 +1345,18 @@ export default function CyberChessPage(){
   // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
   // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
   const firstRunRef=useRef(false);
-  // Закрытие приветствия-награды. Тур больше НЕ авто-открывается сразу после мастера
-  // настройки (меньше стопки на первом визите) — доступен вручную через палитру команд
-  // (см. "Обзорный тур"). Ref сбрасываем, чтобы не удерживать «первый запуск».
+  // Закрытие приветствия-награды. На ПЕРВОМ визите, когда юзер закрывает приветствие,
+  // ОДИН раз авто-открываем обзорный тур («что куда нажимать») — не стопкой, а следом
+  // за наградой, так первый посетитель гарантированно видит гайд, а не ищет его в Ctrl+K.
+  // Дальше тур доступен вручную кнопкой «?» в шапке и командой «Обзорный тур».
   const closeDailyReward=useCallback(()=>{
     sDailyReward(null);
+    const wasFirstRun=firstRunRef.current;
     firstRunRef.current=false;
+    if(wasFirstRun){
+      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+      if(!tourSeen)setTimeout(()=>sTourStep(0),350);
+    }
   },[]);
   // Любой первично-визитный оверлей открыт? Пока да — не наслаиваем баннеры
   // (AEVION-плашка, стрим-подсказка), чтобы на экране был только один интеррапт.
@@ -4969,6 +4975,19 @@ export default function CyberChessPage(){
           }}>
           <span style={{fontSize:13}}>☰</span>
           <span>Все разделы</span>
+        </button>
+        {/* «?» — постоянный видимый гайд «что куда нажимать». Открывает обзорный тур
+            в любой момент. Синий info-акцент = вспомогательная навигация. Раньше тур
+            был только в Ctrl+K и первый посетитель его не находил (частая жалоба). */}
+        <button onClick={()=>sTourStep(0)} title="Как пользоваться — краткий гайд по интерфейсу" aria-label="Гайд: как пользоваться" className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:5,
+            padding:"5px 10px",borderRadius:RADIUS.full,
+            border:`1px solid #3b82f6`,background:"rgba(59,130,246,0.10)",color:"#2563eb",
+            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+          }}>
+          <span style={{fontSize:13,lineHeight:1}}>?</span>
+          <span>Как тут</span>
         </button>
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}

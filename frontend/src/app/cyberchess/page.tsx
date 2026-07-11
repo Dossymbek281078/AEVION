@@ -6003,14 +6003,17 @@ export default function CyberChessPage(){
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
                 {killer.map(t=><button key={t.title} onClick={t.onClick} style={{
                   padding:SPACE[3],borderRadius:RADIUS.md,
-                  background:CC.surface2,border:`1px solid ${CC.border}`,
+                  // Цвет-код: каждая фича узнаётся по своему акценту с первого взгляда —
+                  // цветной тинт фона + акцентная рамка слева, а не одинаково-тёмные плитки.
+                  background:`linear-gradient(135deg, ${t.accent}22, ${CC.surface2} 70%)`,
+                  border:`1px solid ${t.accent}44`,borderLeft:`3px solid ${t.accent}`,
                   textAlign:"left" as const,cursor:"pointer",
                   display:"flex",flexDirection:"column",gap:SPACE[1],
-                  transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.fast} ${MOTION.ease}`,
+                  transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.fast} ${MOTION.ease}`,
                 }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=t.accent;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
-                  <div style={{fontSize:28,lineHeight:1}}>{t.emoji}</div>
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.boxShadow=`0 6px 20px ${t.accent}33`;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.boxShadow="none";(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
+                  <div style={{width:44,height:44,borderRadius:11,background:`${t.accent}26`,border:`1px solid ${t.accent}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,lineHeight:1}}>{t.emoji}</div>
                   <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
                   <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
                   <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>

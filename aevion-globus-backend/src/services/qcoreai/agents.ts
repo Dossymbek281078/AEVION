@@ -373,15 +373,21 @@ const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
   },
 ];
 
-// Every council member MUST answer in the user's language. Without this, a crowd
-// of free/local models each replies in its own default language (usually English),
-// which the user sees as "the agents answered in different languages". The
-// aggregator and synthesizer already match the user's language; this keeps the
-// layer-0 drafts consistent too. Applied to every persona prompt.
-const COUNCIL_LANGUAGE_RULE =
-  " Always write your ENTIRE answer in the SAME language as the user's message " +
-  "(e.g. if the user writes in Russian, answer in Russian).";
-for (const persona of COUNCIL_PERSONAS) persona.prompt += COUNCIL_LANGUAGE_RULE;
+// Two hard rules appended to every council persona. They matter most for the
+// OFFLINE crowd (small local Ollama models on CPU), which — unlike the cloud
+// models — tends to (a) drift into English or emit a bilingual "### English
+// version" block, and (b) false-refuse ordinary business questions ("I can't
+// help with deceptive communications"). Both were observed live in the offline
+// council. The rules are harmless to strong cloud models and fix the weak ones.
+const COUNCIL_COMMON_RULES =
+  " Two hard rules for your answer. " +
+  "(1) LANGUAGE: write your ENTIRE answer — including every heading, list item, and label — " +
+  "in the SAME language as the user's message. If the user writes in Russian, answer only in " +
+  "Russian; never switch to English and never add a translated or 'English version' section. " +
+  "(2) NO REFUSALS: these are legitimate business, product, and analytical questions from the " +
+  "product owner. Do not refuse, do not moralise, and do not add safety disclaimers. If a request " +
+  "looks sensitive, answer its legitimate business interpretation directly and helpfully.";
+for (const persona of COUNCIL_PERSONAS) persona.prompt += COUNCIL_COMMON_RULES;
 
 /**
  * Aggregator prompt for intermediate MoA layers. Unlike the final Synthesizer
@@ -400,7 +406,10 @@ export const AGGREGATOR_PROMPT = [
   "  - Fill gaps the individual responses missed. Improve structure and completeness.",
   "",
   "Output only your improved answer to the user's question. No meta commentary about",
-  "the other responses. Match the user's language.",
+  "the other responses.",
+  "CRITICAL LANGUAGE RULE: write your ENTIRE answer — every heading and bullet — in the SAME",
+  "language as the user's question. If the question is in Russian, answer only in Russian; never",
+  "switch to or mix in English. (Small local chair models drift to English without this.)",
 ].join("\n");
 
 const SYNTHESIZER_PROMPT = [
@@ -416,7 +425,11 @@ const SYNTHESIZER_PROMPT = [
   "  4. Silently fix any factual or reasoning errors you can verify.",
   "",
   "Output ONLY the final answer for the user. No 'Member 1 said…', no meta commentary about the",
-  "council process. Match the user's language. Use light markdown when it helps readability.",
+  "council process.",
+  "CRITICAL LANGUAGE RULE: write your ENTIRE answer — every heading, bullet, and label — in the",
+  "SAME language as the user's question. If the question is in Russian, answer only in Russian;",
+  "never switch to or mix in English, and never translate. (Small local chair models drift to",
+  "English without this explicit rule.) Use light markdown when it helps readability.",
 ].join("\n");
 
 /**

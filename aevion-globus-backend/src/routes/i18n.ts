@@ -195,3 +195,32 @@ i18nRouter.get("/health", (_req, res) => {
     cacheSize: cache.size,
   });
 });
+
+// Diagnostic: report DeepL quota state WITHOUT exposing the key. Answers
+// "is DeepL over quota?" — the exact prod condition that used to 500 site-wide
+// translation before the Claude fallback landed. keyType is inferred from the
+// ":fx" free-key suffix; usage comes from DeepL's /v2/usage endpoint.
+i18nRouter.get("/deepl-usage", async (_req, res) => {
+  const apiKey = process.env.DEEPL_API_KEY?.trim();
+  if (!apiKey) return res.json({ configured: false, note: "DEEPL_API_KEY not set; all languages route to Claude" });
+  const free = apiKey.endsWith(":fx");
+  const endpoint = free ? "https://api-free.deepl.com/v2/usage" : "https://api.deepl.com/v2/usage";
+  try {
+    const r = await fetch(endpoint, { headers: { Authorization: `DeepL-Auth-Key ${apiKey}` } });
+    const data = (await r.json()) as { character_count?: number; character_limit?: number; message?: string };
+    if (!r.ok) throw new Error(`DeepL ${r.status}: ${data?.message || JSON.stringify(data)}`);
+    const used = data.character_count ?? 0;
+    const limit = data.character_limit ?? 0;
+    res.json({
+      configured: true,
+      keyType: free ? "free" : "pro",
+      characterCount: used,
+      characterLimit: limit,
+      percentUsed: limit ? Math.round((used / limit) * 1000) / 10 : null,
+      overQuota: limit > 0 && used >= limit,
+      note: "over quota → translation transparently falls back to Claude (no user-facing break)",
+    });
+  } catch (e) {
+    res.status(502).json({ configured: true, keyType: free ? "free" : "pro", error: e instanceof Error ? e.message : "usage check failed" });
+  }
+});

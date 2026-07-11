@@ -7266,6 +7266,7 @@ export default function CyberChessPage(){
           {/* ── Opening Explorer (Lichess Masters) — мастер-статистика по текущей позиции ── */}
           {on&&!setup&&tab==="play"&&rpTab==="explorer"&&<OpeningExplorerPanel
             fen={game.fen()}
+            sanPath={hist}
             onPlayMove={(uci)=>{
               // Кликом по ходу мастеров играем его на доске, но только когда это
               // ход игрока в активной партии — иначе exec может рассинхронить бота.

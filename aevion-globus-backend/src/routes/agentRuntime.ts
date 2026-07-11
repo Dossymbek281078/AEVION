@@ -65,6 +65,15 @@ agentRuntimeRouter.post("/run", async (req, res) => {
     // Optionally fold in remote MCP tools (Higgsfield & co.). Native tools always
     // win a name clash; MCP tools are dispatched to their owning server.
     const mcpConfig = parseMcpConfig(process.env.AGENT_RUNTIME_MCP_SERVERS);
+    // AGENT_RUNTIME_MCP_DEMO=1 wires our own first-party MCP server (AEVION
+    // registry) so the dock can exercise the runtime→bridge→MCP path live.
+    if (/^(1|true|yes)$/i.test(process.env.AGENT_RUNTIME_MCP_DEMO || "")) {
+      mcpConfig.push({
+        name: "aevion",
+        url: `${baseUrl}/api/mcp-demo`,
+        ...(process.env.MCP_DEMO_TOKEN ? { token: process.env.MCP_DEMO_TOKEN } : {}),
+      });
+    }
     const bridge = mcpConfig.length ? await loadMcpBridge({ config: mcpConfig }) : null;
     const tools = bridge ? [...TOOL_SPECS, ...bridge.specs] : TOOL_SPECS;
 
@@ -86,6 +95,41 @@ agentRuntimeRouter.post("/run", async (req, res) => {
       hitMaxSteps: result.hitMaxSteps,
       transcript: result.transcript,
       mcpServers: bridge ? bridge.servers : [],
+    });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+/**
+ * GET /mcp-selftest — proves the runtime→MCP-bridge→MCP-server→tool path end to
+ * end against our own first-party MCP server, with NO env config and NO secrets.
+ * It connects the bridge to /api/mcp-demo, lists its tools, and actually calls
+ * one (list_modules), returning both. Curl-able on prod to verify the mechanism.
+ */
+agentRuntimeRouter.get("/mcp-selftest", async (_req, res) => {
+  const port = process.env.PORT || "4001";
+  const baseUrl = process.env.SELF_BASE_URL || `http://127.0.0.1:${port}`;
+  try {
+    const bridge = await loadMcpBridge({
+      config: [
+        {
+          name: "aevion",
+          url: `${baseUrl}/api/mcp-demo`,
+          ...(process.env.MCP_DEMO_TOKEN ? { token: process.env.MCP_DEMO_TOKEN } : {}),
+        },
+      ],
+    });
+    const toolName = bridge.specs[0]?.name;
+    const sample = toolName
+      ? await bridge.exec({ id: "selftest", name: toolName, input: { status: "live" } })
+      : null;
+    res.json({
+      ok: bridge.servers.every((s) => !s.error) && Boolean(sample?.ok),
+      servers: bridge.servers,
+      tools: bridge.specs.map((t) => t.name),
+      sampleTool: toolName,
+      sampleResult: sample,
     });
   } catch (e) {
     res.status(502).json({ ok: false, error: (e as Error).message });

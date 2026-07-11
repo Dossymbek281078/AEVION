@@ -99,7 +99,11 @@ export function ensureTreeLoaded(): Promise<void> {
     } catch (e) {
       console.warn("[cyberchess-tree] url load failed:", e instanceof Error ? e.message : e);
     }
-  })();
+  })().then(() => {
+    // If we ended up empty (e.g. the static asset wasn't deployed yet), clear
+    // the cached promise so a later request retries instead of being stuck.
+    if (size === 0) loadPromise = null;
+  });
   return loadPromise;
 }
 

@@ -4951,6 +4951,47 @@ export default function CyberChessPage(){
           </div>
         </div>
 
+        {/* ═══ Постоянный верхний таб-бар (десктоп) ═══ Играть · Пазлы · Анализ · Коуч —
+            всегда на виду, как на lichess/chess.com. Цвет-кодирован общей палитрой (цвет =
+            указатель). На мобиле скрыт — там нижний BottomNav. В ЖИВОЙ партии с человеком
+            не-play вкладки заблокированы (замок): уход к движку = подсказка против соперника. */}
+        {!streamerMode&&vwPx>=769&&(()=>{
+          const navLocked=on&&!over&&isHumanGame;
+          const TABS:{k:"play"|"puzzles"|"analysis"|"coach";label:string;icon:string;hue:string}[]=[
+            {k:"play",    label:"Играть", icon:"♟", hue:"#059669"},
+            {k:"puzzles", label:"Пазлы",  icon:"🧩",hue:"#0891b2"},
+            {k:"analysis",label:"Анализ", icon:"📊",hue:"#2563eb"},
+            {k:"coach",   label:"Коуч",   icon:"🎓",hue:"#7c3aed"},
+          ];
+          const goTab=(k:"play"|"puzzles"|"analysis"|"coach")=>{
+            if(k==="play"){ sTab("play"); if(!on&&!over)sSetup(true); return; }
+            if(navLocked){ showToast("🔒 Нельзя во время партии с человеком","info"); return; }
+            sSetup(false); sTab(k);
+            if(k==="puzzles"&&PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length));
+          };
+          return <div style={{display:"inline-flex",alignItems:"center",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`,flex:"0 0 auto"}}>
+            {TABS.map(t=>{
+              const active=tab===t.k;
+              const locked=t.k!=="play"&&navLocked;
+              return <button key={t.k} onClick={()=>goTab(t.k)} disabled={locked} className="cc-focus-ring"
+                title={locked?"Заблокировано во время партии с человеком":t.label}
+                style={{
+                  display:"inline-flex",alignItems:"center",gap:6,
+                  padding:"6px 14px",borderRadius:RADIUS.full,border:"none",
+                  background:active?`${t.hue}1f`:"transparent",
+                  color:locked?CC.textMute:active?t.hue:CC.textDim,
+                  fontSize:12.5,fontWeight:active?900:700,
+                  cursor:locked?"not-allowed":"pointer",whiteSpace:"nowrap",
+                  opacity:locked?0.5:1,
+                  transition:`background 120ms, color 120ms`,
+                }}>
+                <span style={{fontSize:14,lineHeight:1}}>{locked?"🔒":t.icon}</span>
+                <span>{t.label}</span>
+              </button>;
+            })}
+          </div>;
+        })()}
+
         {/* Active variant indicator (sticky, visible always) */}
         {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
           style={{

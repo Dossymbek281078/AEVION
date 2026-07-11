@@ -22,15 +22,15 @@ export interface ModuleRuntimeMeta {
  * ⚠️ Аудит 2026-07-11 (прод-проверка каждого модуля, aevion.vercel.app/api-backend):
  * старая карта покрывала лишь ~27 модулей — всё новое падало в DEFAULT (portal_only),
  * из-за чего дашборд показывал mvp_live=9, ХОТЯ рабочих бэкендов много больше.
- * Переклассифицировано по фактам prod-health (catch-all нет — фейк-id даёт 404,
- * значит каждый 200 = реально смонтированный роутер). Критерий:
- *   • mvp_live    — живой API с фича-данными ИЛИ реальная функциональная страница
- *                   (health отдаёт домен-поля: sectors/profiles/tracks/documents/…),
- *                   НЕ самозаявленный planning/idea/waitlist.
- *   • platform_api— роутер смонтирован + Postgres, но health голый {ok,module,db}
- *                   (реальный бэкенд-скелет, ещё не полный продукт).
- *   • portal_only — нет своего API ЛИБО сам заявляет phase planning/idea/waitlist.
- * Итог: mvp_live 21 · platform_api 13 · portal_only 5.
+ * ВАЖНО: короткое health-тело ≠ скелет. Первый проход (21/13/5) занизил 13
+ * модулей, судя лишь по терсному health. Повторный аудит дёрнул РЕАЛЬНЫЙ
+ * GET-эндпоинт каждого модуля на проде — критерий по функции, не по health:
+ *   • mvp_live    — рабочий API отдаёт живые данные (или корректный gate:
+ *                   402 paywall / 401 auth) + фронт-страница. 34 модуля.
+ *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
+ *                   (veilnetx/kids-ai-content/startup-exchange/z-tide). 4 модуля.
+ *   • portal_only — реально не построен (нет роутера и страницы): qpaynet. 1.
+ * Итог: mvp_live 34 · platform_api 4 · portal_only 1.  (catch-all нет: fake-id=404)
  */
 export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // ── mvp_live: рабочий продукт (verified prod API/страница) ──────────────────
@@ -161,116 +161,121 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "Design Lab · 12 страниц (ядро фронтовое)",
   },
 
-  // ── platform_api: роутер+Postgres смонтированы, health голый (скелет) ────────
+  // ── mvp_live (2): доп. модули с рабочим API+фронтом (functional-probe verified) ─
+  // Изначально ошибочно занижены в platform_api по короткому health; повторный
+  // аудит дёрнул реальный GET-эндпоинт каждого — все отдают живые данные (или
+  // корректный gate 402 paywall / 401 auth), фронт-страницы 224–867 строк.
   qai: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qai",
-    apiHints: ["/api/qai/*"],
-    hint: "AI-сессии · роутер живой, данных пока нет",
+    apiHints: ["/api/qai/sessions"],
+    hint: "AI-сессии · 16 endpoints · за платной стеной (402 upgrade)",
   },
   qstore: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qstore",
-    apiHints: ["/api/qstore/*"],
-    hint: "Магазин · Postgres-роутер (скелет)",
+    apiHints: ["/api/qstore/categories", "/api/qstore/*"],
+    hint: "Магазин шаблонов/пресетов · 27 endpoints · живые категории",
   },
   qevents: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qevents",
-    apiHints: ["/api/qevents/*"],
-    hint: "События · Postgres-роутер (скелет)",
+    apiHints: ["/api/qevents/categories", "/api/qevents/*"],
+    hint: "События · 26 endpoints · живой каталог",
   },
   qlearn: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qlearn",
     apiHints: ["/api/qlearn/*"],
-    hint: "Обучение · Postgres-роутер (скелет)",
+    hint: "Обучение · 48 endpoints · за платной стеной (402 upgrade)",
   },
   qgood: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qgood",
-    apiHints: ["/api/qgood/*"],
-    hint: "Психология · роутер живой (скелет)",
+    apiHints: ["/api/qgood/campaigns", "/api/qgood/*"],
+    hint: "Благотворительность/кампании · 18 endpoints",
   },
   qmaskcard: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qmaskcard",
-    apiHints: ["/api/qmaskcard/*"],
-    hint: "Маск-карты · роутер живой (скелет)",
+    apiHints: ["/api/qmaskcard/masks"],
+    hint: "Маск-карты · 7 endpoints · auth-gated (401)",
   },
   qchaingov: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qchaingov",
-    apiHints: ["/api/qchaingov/*"],
-    hint: "DAO-управление · роутер живой (скелет)",
+    apiHints: ["/api/qchaingov/proposals"],
+    hint: "DAO · 11 endpoints · живые proposals (Postgres)",
   },
   deepsan: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/deepsan",
-    apiHints: ["/api/deepsan/*"],
-    hint: "Фокус/продуктивность · Postgres-роутер (скелет)",
+    apiHints: ["/api/deepsan/tasks"],
+    hint: "Фокус/задачи · 13 endpoints · живые tasks (Postgres)",
   },
   lifebox: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/lifebox",
-    apiHints: ["/api/lifebox/*"],
-    hint: "Сейф · Postgres-роутер (скелет)",
+    apiHints: ["/api/lifebox/categories"],
+    hint: "Сейф знаний · 9 endpoints · живые категории (Postgres)",
   },
   "psyapp-deps": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/psyapp-deps",
-    apiHints: ["/api/psyapp-deps/*"],
-    hint: "Зависимости · Postgres-роутер (скелет)",
+    apiHints: ["/api/psyapp-deps/affirmations"],
+    hint: "Зависимости · 13 endpoints · живые аффирмации",
   },
   qpersona: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qpersona",
-    apiHints: ["/api/qpersona/*"],
-    hint: "Аватар · Postgres-роутер (скелет)",
+    apiHints: ["/api/qpersona/stats"],
+    hint: "Аватар · 10 endpoints · 23 записи (Postgres)",
   },
   qlife: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/qlife",
-    apiHints: ["/api/qlife/*"],
-    hint: "Longevity · Postgres-роутер (скелет)",
+    apiHints: ["/api/qlife/stats"],
+    hint: "Longevity · 7 endpoints · 13 логов / 11 юзеров",
   },
   shadownet: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/shadownet",
-    apiHints: ["/api/shadownet/*"],
-    hint: "Сеть R&D · Postgres-роутер (скелет)",
+    apiHints: ["/api/shadownet/threat-models"],
+    hint: "Приватность · 12 endpoints · живые threat-models (фронт слабо wired)",
   },
 
-  // ── portal_only: нет своего API ЛИБО самозаявленный planning/idea/waitlist ───
+  // ── platform_api (4): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
   veilnetx: {
-    tier: "portal_only",
+    tier: "platform_api",
     primaryPath: "/veilnetx",
-    apiHints: ["/api/veilnetx/*"],
-    hint: "Крипто · phase planning (waitlist), ETA Q4 2026",
+    apiHints: ["/api/veilnetx/status", "/api/veilnetx/*"],
+    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026",
   },
   "kids-ai-content": {
-    tier: "portal_only",
+    tier: "platform_api",
     primaryPath: "/kids-ai-content",
     apiHints: ["/api/kids-ai-content/*"],
-    hint: "Детский контент · phase planning (waitlist), ETA Q4 2026",
+    hint: "Детский контент · 8 endpoints · self-declared planning/waitlist, ETA Q4 2026",
   },
   "startup-exchange": {
-    tier: "portal_only",
+    tier: "platform_api",
     primaryPath: "/startup-exchange",
     apiHints: ["/api/startup-exchange/*"],
-    hint: "Связка с QRight · phase planning (waitlist), ETA Q2 2027",
+    hint: "Биржа стартапов · 14 endpoints · self-declared planning/waitlist, ETA Q2 2027",
   },
   "z-tide": {
-    tier: "portal_only",
+    tier: "platform_api",
     primaryPath: "/z-tide",
     apiHints: ["/api/z-tide/*"],
-    hint: "Концепт · phase idea (waitlist)",
+    hint: "Концепт · 8 endpoints · self-declared idea/waitlist",
   },
+
+  // ── portal_only (1): реально не построен — нет роутера и нет страницы ──────────
   "qpaynet-embedded": {
     tier: "portal_only",
     primaryPath: null,
     apiHints: [],
-    hint: "Песочница позже · своего API нет",
+    hint: "НЕ построен: своего API и страницы нет (нужен платёжный core)",
   },
 };
 

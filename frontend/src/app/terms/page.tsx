@@ -70,6 +70,10 @@ export default function TermsPage() {
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9. Changes to Terms</h2>
           <p>We may update these terms at any time. Continued use after changes constitutes acceptance of the new terms.</p>
 
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9a. TikTok Integration</h2>
+          <p>AEVION offers an optional feature that lets you publish videos to your own TikTok account through TikTok&rsquo;s official Content Posting API. By connecting your TikTok account, you authorize AEVION to upload and publish content to that account only on your instruction, and you may disconnect at any time from your TikTok settings.</p>
+          <p>You are solely responsible for the content you publish and represent that you own or have the necessary rights to it. You agree to comply with TikTok&rsquo;s Community Guidelines, Terms of Service and Content Sharing Guidelines when using this feature. AEVION is an independent service, is not affiliated with, sponsored by or endorsed by TikTok, and TikTok is a trademark of its respective owner. AEVION is not liable for any action TikTok takes with respect to your account or your content.</p>
+
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>10. Contact</h2>
           <p>For questions about these terms, contact us at yahiin1978@gmail.com or through the Help Center.</p>
         </div>

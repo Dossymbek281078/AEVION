@@ -83,6 +83,43 @@ export function describeToolActivity(transcript?: DockTranscriptMsg[]): ToolActi
   return out;
 }
 
+/** Shape of GET /api/agent-runtime/health (the bits the dock cares about). */
+export interface DockHealth {
+  keyConfigured?: boolean;
+  model?: string;
+  tools?: string[];
+  nativeTools?: string[];
+  mcpServers?: Array<{ name: string; toolCount: number; error?: string }>;
+}
+
+export interface DockToolSummary {
+  native: string[];
+  mcp: string[];
+  total: number;
+  model: string;
+  keyConfigured: boolean;
+}
+
+/** Normalise a /health response into native vs MCP tool lists for display. */
+export function summarizeHealth(h: DockHealth | null | undefined): DockToolSummary {
+  const native = Array.isArray(h?.nativeTools) ? h!.nativeTools! : [];
+  const all = Array.isArray(h?.tools) ? h!.tools! : native;
+  const mcp = all.filter((t) => !native.includes(t));
+  return {
+    native,
+    mcp,
+    total: native.length + mcp.length,
+    model: h?.model || "",
+    keyConfigured: Boolean(h?.keyConfigured),
+  };
+}
+
+/** Pretty label for a tool name (drops the mcp_<server>_ prefix for MCP tools). */
+export function prettyToolName(name: string): string {
+  const m = /^mcp_[^_]+_(.+)$/.exec(name);
+  return (m ? m[1] : name).replace(/_/g, " ");
+}
+
 /** Human-friendly summary text for a completed run (for the header/status line). */
 export function summarizeRun(res: DockRunResponse): string {
   if (res.ok === false || res.error) return res.error || "The agent hit an error.";

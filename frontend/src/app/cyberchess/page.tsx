@@ -716,9 +716,9 @@ const CPIBadge=React.memo(function CPIBadge({cpi,col,delta,pts,W3,H3,xi,yi,last,
 });
 
 /* ─── BottomNav ─── */
-function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
+function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,brand,textMute,surface1,border}:{
   setup:boolean; tab:string;
-  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void;
+  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void; onProfile:()=>void;
   brand:string; textMute:string; surface1:string; border:string;
 }){
   const activeTab = setup ? "play"
@@ -731,7 +731,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute
     {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
     {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
     {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
-    {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
+    {id:"profile", icon:"👤",label:"Профиль", action:onProfile},
   ];
   return(
     <div className="cc-bottom-nav" style={{
@@ -1148,8 +1148,10 @@ export default function CyberChessPage(){
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
-  // Default: dark (как lichess). Пользователь переключает в Settings.
-  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="light"?"light":"dark"}catch{return"dark"}});
+  // Default: light — новый посетитель видит светлую тему (как lichess/chess.com,
+  // и по фидбеку основателя «чёрная тема слишком вычурна»). Кто раньше выбрал dark —
+  // сохранённое значение остаётся. Переключение в Settings.
+  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="dark"?"dark":"light"}catch{return"light"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
   // Фоновое изображение для приложения — preset id или data: URL пользовательского
   const[bgPreset,sBgPreset]=useState<string>(()=>{try{return localStorage.getItem("cc_bg_preset_v1")||"none"}catch{return"none"}});
@@ -13421,6 +13423,7 @@ ${question.trim()}`;
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}
       onCoach={()=>{sTab("coach");sSetup(false)}}
+      onProfile={()=>sShowStatsDashboard(true)}
       brand={CC.brand} textMute={CC.textMute} surface1={CC.surface1} border={CC.border}
     />}
     {/* ─── Post-game overlay ─── */}

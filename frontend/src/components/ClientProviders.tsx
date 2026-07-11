@@ -16,7 +16,7 @@ import { AgentDock } from "@/components/AgentDock";
 // These pages are full apps (game, dashboards, trading) — the global product nav
 // distracts from the in-app workflow, so we hide it.
 const APP_PREFIXES = [
-  "/build", "/qright", "/qsign", "/qcoreai", "/multichat-engine", "/aevion-bank",
+  "/build", "/qright", "/qsign", "/qcoreai", "/multichat-engine",
   "/cyberchess",
 ];
 

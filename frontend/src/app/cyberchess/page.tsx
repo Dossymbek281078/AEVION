@@ -6003,14 +6003,17 @@ export default function CyberChessPage(){
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
                 {killer.map(t=><button key={t.title} onClick={t.onClick} style={{
                   padding:SPACE[3],borderRadius:RADIUS.md,
-                  background:CC.surface2,border:`1px solid ${CC.border}`,
+                  // Цвет-код: каждая фича узнаётся по своему акценту с первого взгляда —
+                  // цветной тинт фона + акцентная рамка слева, а не одинаково-тёмные плитки.
+                  background:`linear-gradient(135deg, ${t.accent}22, ${CC.surface2} 70%)`,
+                  border:`1px solid ${t.accent}44`,borderLeft:`3px solid ${t.accent}`,
                   textAlign:"left" as const,cursor:"pointer",
                   display:"flex",flexDirection:"column",gap:SPACE[1],
-                  transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.fast} ${MOTION.ease}`,
+                  transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.fast} ${MOTION.ease}`,
                 }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=t.accent;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
-                  <div style={{fontSize:28,lineHeight:1}}>{t.emoji}</div>
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.boxShadow=`0 6px 20px ${t.accent}33`;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.boxShadow="none";(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
+                  <div style={{width:44,height:44,borderRadius:11,background:`${t.accent}26`,border:`1px solid ${t.accent}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,lineHeight:1}}>{t.emoji}</div>
                   <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
                   <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
                   <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>
@@ -6204,23 +6207,23 @@ export default function CyberChessPage(){
       {!streamerMode&&!setup&&on&&tab==="play"&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
           {([
-            {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     act:()=>sTab("analysis")},
-            {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            act:()=>sTab("coach")},
-            {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-            {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
-            {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
-            {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", act:()=>sPalOpen(true)},
-          ] as {icon:string;label:string;hint:string;act:()=>void}[]).map((c,i)=>(
+            {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     accent:"#6366f1", act:()=>sTab("analysis")},
+            {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            accent:"#a855f7", act:()=>sTab("coach")},
+            {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     accent:"#06b6d4", act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
+            {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
+            {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
+          ] as {icon:string;label:string;hint:string;accent:string;act:()=>void}[]).map((c,i)=>(
             <button key={i} onClick={c.act} title={c.hint} style={{
-              display:"inline-flex",alignItems:"center",gap:4,
-              padding:"4px 10px",borderRadius:7,
-              border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
-              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
-              transition:`background 80ms`,
+              display:"inline-flex",alignItems:"center",gap:5,
+              padding:"7px 14px",borderRadius:9,
+              border:`1px solid ${c.accent}66`,background:`${c.accent}1a`,color:c.accent,
+              fontSize:12.5,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+              transition:`background 100ms, transform 100ms`,
             }}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface2}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
-              <span>{c.icon}</span><span>{c.label}</span>
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=`${c.accent}30`;(e.currentTarget as HTMLElement).style.transform="translateY(-1px)"}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=`${c.accent}1a`;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
+              <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
             </button>
           ))}
         </div>
@@ -6883,6 +6886,14 @@ export default function CyberChessPage(){
                       </div>;
                       return null;
                     })()}
+                    {/* Разбор партии — самое частое действие после партии; ведёт прямо
+                        в режим анализа с прокруткой ходов и оценкой движка. */}
+                    <button onClick={()=>{sTab("analysis");sBrowseIdx(0);}}
+                      style={{width:"100%",padding:"11px 16px",borderRadius:10,border:"none",
+                        background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontSize:14.5,fontWeight:900,cursor:"pointer",
+                        boxShadow:"0 4px 18px rgba(99,102,241,0.42)",display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:-0.2}}>
+                      📊 Разобрать партию
+                    </button>
                     <div style={{display:"flex",gap:7,marginTop:2,flexWrap:"wrap" as const,justifyContent:"center"}}>
                       <button onClick={()=>{const swapped=pCol==="w"?"b" as ChessColor:"w" as ChessColor;newG(swapped);}}
                         style={{padding:"8px 15px",borderRadius:8,border:"1px solid rgba(117,153,0,0.5)",

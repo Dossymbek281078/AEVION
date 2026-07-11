@@ -162,6 +162,19 @@ const ALS: AL[] = [
 const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
+// Семантический цвет-код категорий фич: одна категория = один оттенок, консистентно
+// на всех навигационных поверхностях (хаб «Все разделы», стрип на setup-экране, палитра).
+// Цвет сам работает указателем «куда жать» — по просьбе основателя «разными цветами
+// разные фичи, стиль как демо». Оттенки читаемы и в light, и в dark (используем как
+// акцент-бордюр/чип, не как фон текста).
+const CAT: Record<"play"|"learn"|"compete"|"watch"|"economy", {c:string; label:string; icon:string}> = {
+  play:    {c:"#059669", label:"Играть",        icon:"♟"},  // зелёный — игра
+  learn:   {c:"#7c3aed", label:"Учиться",        icon:"🎓"}, // фиолетовый — обучение/коуч
+  compete: {c:"#2563eb", label:"Соревноваться",  icon:"🏆"}, // синий — соревнования/рейтинг
+  watch:   {c:"#db2777", label:"Смотреть",       icon:"👁"},  // розовый — трансляции/реплеи
+  economy: {c:"#d97706", label:"Экономика",      icon:"🪙"}, // золото/янтарь — деньги/награды
+};
+
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish with MultiPV ═══ */
@@ -11259,14 +11272,14 @@ ${question.trim()}`;
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Все режимы, обучение, соревнования, трансляции и экономика — в одном месте.</div>
       {(()=>{
         const go=(fn:()=>void)=>{sShowSections(false);fn();};
-        const GROUPS:{title:string;items:{e:string;t:string;d:string;to?:string;act?:()=>void;hot?:boolean}[]}[]=[
-          {title:"Играть",items:[
+        const GROUPS:{title:string;cat:keyof typeof CAT;items:{e:string;t:string;d:string;to?:string;act?:()=>void;hot?:boolean}[]}[]=[
+          {title:"Играть",cat:"play",items:[
             {e:"♟",t:"Быстрая игра",d:"Партия против ИИ или человека",act:()=>{sTab("play");sSetup(true);}},
             {e:"🎲",t:"12 вариантов",d:"Atomic · Fischer960 · KotH · Crazyhouse…",act:()=>sShowVariants(true),hot:true},
             {e:"🏆",t:"Турнир-нокаут",d:"8 игроков · bracket · трофеи Chessy",act:()=>sShowTournament(true)},
             {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
           ]},
-          {title:"Учиться",items:[
+          {title:"Учиться",cat:"learn",items:[
             {e:"🎓",t:"AI-Коуч",d:"Разбор уровня супер-GM (Opus 4.8)",act:()=>sTab("coach"),hot:true},
             {e:"🧩",t:"Пазлы",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
             {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
@@ -11274,42 +11287,46 @@ ${question.trim()}`;
             {e:"🎯",t:"Тренинг",d:"Ежедневный хаб упражнений",to:"/cyberchess/training"},
             {e:"📅",t:"Задача дня",d:"Один пазл в день, серия",to:"/cyberchess/daily"},
           ]},
-          {title:"Соревноваться",items:[
+          {title:"Соревноваться",cat:"compete",items:[
             {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
             {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · лидерборд",to:"/cyberchess/tournament"},
             {e:"📈",t:"CPI рейтинг",d:"Композитный рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
             {e:"🏅",t:"CPI лидерборд",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
           ]},
-          {title:"Смотреть",items:[
+          {title:"Смотреть",cat:"watch",items:[
             {e:"👁",t:"Спектатор",d:"Смотреть живые партии",to:"/cyberchess/spectator"},
             {e:"🎬",t:"Реплеи",d:"Записи партий с разбором",to:"/cyberchess/replays"},
             {e:"🎥",t:"Студия",d:"Стрим-оверлеи и продакшн",to:"/cyberchess/studio"},
           ]},
-          {title:"Экономика",items:[
+          {title:"Экономика",cat:"economy",items:[
             {e:"🪙",t:"Chessy Экономика",d:"Аукцион · аренда коуча · подписки",to:"/cyberchess/economy",hot:true},
             {e:"🛒",t:"Магазин",d:"Буст-пазлы · щит серии · темы",act:()=>sShowShop(true)},
           ]},
         ];
-        const cardStyle={display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,textDecoration:"none",cursor:"pointer",textAlign:"left" as const,width:"100%",position:"relative" as const};
-        const inner=(it:{e:string;t:string;d:string;hot?:boolean})=><>
-          <span style={{fontSize:22,flexShrink:0,width:26,textAlign:"center" as const}}>{it.e}</span>
+        // Цвет категории задаёт левый бордюр карточки + чип иконки → цвет = навигационный сигнал.
+        const cardStyle=(accent:string)=>({display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,borderLeft:`3px solid ${accent}`,background:CC.surface1,textDecoration:"none",cursor:"pointer",textAlign:"left" as const,width:"100%",position:"relative" as const});
+        const inner=(it:{e:string;t:string;d:string;hot?:boolean},accent:string)=><>
+          <span style={{fontSize:20,flexShrink:0,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:RADIUS.md,background:`${accent}1a`}}>{it.e}</span>
           <span style={{lineHeight:1.25,minWidth:0}}>
             <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:CC.text}}>
-              {it.t}{it.hot&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.6,textTransform:"uppercase" as const,color:CC.brand,background:CC.brandSoft,padding:"1px 5px",borderRadius:RADIUS.full}}>топ</span>}
+              {it.t}{it.hot&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.6,textTransform:"uppercase" as const,color:accent,background:`${accent}1f`,padding:"1px 5px",borderRadius:RADIUS.full}}>топ</span>}
             </span>
             <span style={{display:"block",fontSize:11,color:CC.textDim,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.d}</span>
           </span>
         </>;
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[4]}}>
-          {GROUPS.map(g=><div key={g.title}>
-            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:8}}>{g.title}</div>
+          {GROUPS.map(g=>{const accent=CAT[g.cat].c;return <div key={g.title}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+              <span style={{width:8,height:8,borderRadius:2,background:accent,flexShrink:0}}/>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:accent}}>{g.title}</span>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,230px),1fr))",gap:8}}>
               {g.items.map(it=>it.to
-                ? <Link key={it.t} href={it.to} onClick={()=>sShowSections(false)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</Link>
-                : <button key={it.t} onClick={()=>go(it.act!)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</button>
+                ? <Link key={it.t} href={it.to} onClick={()=>sShowSections(false)} className="cc-focus-ring" style={cardStyle(accent)}>{inner(it,accent)}</Link>
+                : <button key={it.t} onClick={()=>go(it.act!)} className="cc-focus-ring" style={cardStyle(accent)}>{inner(it,accent)}</button>
               )}
             </div>
-          </div>)}
+          </div>;})}
         </div>;
       })()}
     </Modal>

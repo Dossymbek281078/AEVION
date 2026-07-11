@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 
 // QMelanin — anti-graying protocol. Enter routine labs → the deterministic
 // backend engine flags deficiencies that gate melanin synthesis and returns a
@@ -116,6 +117,7 @@ export default function QMelaninClient() {
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · QMelanin</div>
         <h1 style={styles.h1}>Протокол против седины</h1>
+        <HealthDisclaimer />
         <p style={styles.lede}>
           Седину нельзя измерить анализом напрямую — поэтому мы измеряем биомаркеры, которые управляют
           синтезом меланина, и строим питание на доступных продуктах с учётом взаимодействия нутриентов.

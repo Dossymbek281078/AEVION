@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 
 // QRenew — cellular-renewal program. Two live tools over the deterministic
 // backend: a biological-age calculator (PhenoAge / Levine 2018) and the
@@ -93,6 +94,7 @@ export default function QRenewClient() {
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · QRenew</div>
         <h1 style={styles.h1}>Программа клеточного обновления</h1>
+        <HealthDisclaimer />
         <p style={styles.lede}>
           Седина — видимый маркер старения стволовых клеток и митохондрий. Здесь два инструмента:
           рассчитать биологический возраст по обычным анализам и увидеть стек вмешательств,

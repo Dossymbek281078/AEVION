@@ -444,7 +444,7 @@ const DEMO_REPLIES: Record<Role, string> = {
 /* Shorter pretty model names — same map as /qcoreai */
 const prettyModel = (m: string) => {
   const map: Record<string, string> = {
-    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-sonnet-4-6": "Claude Sonnet 4",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
@@ -645,7 +645,7 @@ function buildDemoAgents(): Agent[] {
       id: idFor(1),
       role: "General",
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       title: "General · TAM for AEVION",
       busy: false,
       messages: [
@@ -664,7 +664,7 @@ function buildDemoAgents(): Agent[] {
       id: idFor(2),
       role: "Finance",
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       title: "Finance · Bull-case Year 3 ARR",
       busy: false,
       messages: [
@@ -683,7 +683,7 @@ function buildDemoAgents(): Agent[] {
       id: idFor(3),
       role: "IP/Legal",
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       title: "IP/Legal · Cross-border enforcement",
       busy: false,
       messages: [
@@ -750,7 +750,7 @@ const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
   id: newId(),
   role: "General",
   provider: "anthropic",
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-4-6",
   title: "General",
   messages: [],
   busy: false,

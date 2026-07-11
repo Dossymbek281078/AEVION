@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { AutoTranslate } from "@/components/AutoTranslate";
 
 const SITE = getSiteUrl();
 
@@ -61,7 +62,11 @@ export default function QSignLayout({ children }: { children: React.ReactNode })
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {children}
+      {/* QSign is an app-shell (global AutoTranslate runs observe=false), so
+          re-enable a live observer scoped here — sign/verify result messages
+          and key-rotation prose translate into all 11 languages on switch.
+          Mirrors build/layout. */}
+      <AutoTranslate observe>{children}</AutoTranslate>
     </>
   );
 }

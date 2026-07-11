@@ -792,8 +792,7 @@ export default function CyberChessPage(){
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
-  const[hoverSq,sHoverSq]=useState<Square|null>(null);
-  const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
+  // hover-hints теперь императивны (hoverLayerRef/paintHoverHints) — state больше не нужен
   // Hover-sync: наведение на сегмент хода в analysis replay-bar подсвечивает
   // from/to этого хода на доске (sky-blue ring, отличается от amber last-move).
   const[hoverStripMove,sHoverStripMove]=useState<{from:string;to:string}|null>(null);
@@ -4817,6 +4816,34 @@ export default function CyberChessPage(){
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
 
+  // Hover-hints (lichess-style точки/кольца при наведении) рисуются ИМПЕРАТИВНО
+  // в отдельный overlay-слой — БЕЗ setState. Раньше onMouseMove гонял hoverVm через
+  // корневой state, и каждое движение мыши перестраивало весь 14k-компонент (главный
+  // источник лагов доски). Теперь мышь трогает только DOM этого слоя.
+  const hoverLayerRef=useRef<HTMLDivElement|null>(null);
+  const hoverSqRef=useRef<Square|null>(null);
+  const paintHoverHints=useCallback((squares:string[])=>{
+    const el=hoverLayerRef.current;if(!el)return;
+    if(!squares.length){if(el.childElementCount)el.textContent="";return;}
+    const g=scratchOn&&scratchGame?scratchGame:virtualGame;
+    let html="";
+    for(const to of squares){
+      const f=FILES.indexOf(to[0]);const rank=parseInt(to[1]);const row=8-rank;
+      if(f<0||isNaN(rank))continue;
+      const cc=flip?7-f:f;const rr=flip?7-row:row;
+      const lt=((row)+f)%2===0;
+      const onDark=sqLuma(lt?bT.light:bT.dark)<140;
+      const hasPiece=!!g.get(to as Square);
+      const pos=`position:absolute;left:${cc*12.5}%;top:${rr*12.5}%;width:12.5%;height:12.5%;pointer-events:none;`;
+      if(hasPiece){
+        html+=`<div style="${pos}"><div style="position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 clamp(3px,9%,9px) ${onDark?"rgba(255,255,255,0.45)":"rgba(15,23,42,0.28)"}"></div></div>`;
+      }else{
+        html+=`<div style="${pos}display:flex;align-items:center;justify-content:center;"><div style="width:30%;height:30%;border-radius:50%;background:${onDark?"rgba(255,255,255,0.55)":"rgba(15,23,42,0.22)"}"></div></div>`;
+      }
+    }
+    el.innerHTML=html;
+  },[flip,bT,scratchOn,scratchGame,virtualGame]);
+
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
   const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
@@ -6436,20 +6463,21 @@ export default function CyberChessPage(){
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onMouseMove={e=>{
-                // Hover-dots: вычисляем возможные ходы фигуры под курсором синхронно.
+                // Hover-dots ИМПЕРАТИВНО (без setState — иначе весь корневой компонент
+                // перестраивается на каждый пиксель движения мыши → лаги доски).
                 // Показываем только если нет активного sel (иначе sel-vm приоритетнее).
-                if(sel)return;
+                if(sel){if(hoverSqRef.current){hoverSqRef.current=null;paintHoverHints([]);}return;}
                 const sq=sqFromPoint(e.clientX,e.clientY);
-                if(sq===hoverSq)return;
-                sHoverSq(sq);
-                if(!sq||over||!on&&tab==="play"){sHoverVm(new Set());return;}
+                if(sq===hoverSqRef.current)return;
+                hoverSqRef.current=sq;
+                if(!sq||over||!on&&tab==="play"){paintHoverHints([]);return;}
                 const pc=game.get(sq);
                 // Показываем ходы только для своих фигур (или в анализе — для любых)
-                if(!pc||(tab==="play"&&pc.color!==pCol)){sHoverVm(new Set());return;}
+                if(!pc||(tab==="play"&&pc.color!==pCol)){paintHoverHints([]);return;}
                 const moves=game.moves({verbose:true,square:sq});
-                sHoverVm(new Set(moves.map(m=>m.to)));
+                paintHoverHints(moves.map(m=>m.to));
               }}
-              onMouseLeave={()=>{sHoverSq(null);sHoverVm(new Set());}}
+              onMouseLeave={()=>{hoverSqRef.current=null;paintHoverHints([]);}}
               onClick={e=>{
                 // Pointerdown arms the gesture; window-pointerup decides drop vs tap
                 // and delegates taps to click(). onClick here only clears annotations
@@ -6653,9 +6681,10 @@ export default function CyberChessPage(){
                 const isShadow=!scratchOn&&!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
                 const turnRef=scratchOn&&scratchGame?scratchGame.turn():game.turn();
                 const iS=effSel===sq,iV=effVm.has(sq),iCp=iV&&!!p,iL=!!(effLm&&(effLm.from===sq||effLm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===turnRef),iPM=!scratchOn&&pmSet.has(sq),iPS=!scratchOn&&pmSel===sq;
-                // Hover preview — показываем когда нет active sel
-                const iHover=!sel&&hoverVm.has(sq);
-                const iHoverCap=iHover&&!!p;
+                // Hover preview рисуется императивным overlay-слоем (paintHoverHints),
+                // не через props — чтобы наведение не перестраивало корневой компонент.
+                const iHover=false;
+                const iHoverCap=false;
                 const iSH=tab==="analysis"&&!!(hoverStripMove&&(hoverStripMove.from===sq||hoverStripMove.to===sq));
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
@@ -6678,6 +6707,9 @@ export default function CyberChessPage(){
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
                   coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
+              {/* Hover-hints слой — точки/кольца при наведении, рисуются императивно
+                  (paintHoverHints) БЕЗ ре-рендера. Ниже drag-preview (zIndex 7). */}
+              <div ref={hoverLayerRef} style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5}}/>
               {/* Premove cancel flash — красный pulse на FROM-клетке отменённого премува */}
               {cancelFlash&&(()=>{
                 const cf=FILES.indexOf(cancelFlash.sq[0]);

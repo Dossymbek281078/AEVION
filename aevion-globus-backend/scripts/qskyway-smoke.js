@@ -61,6 +61,41 @@ async function main() {
     assert(violations === 0, `[${cid}] corridor clears obstacles + margin`, `violations=${violations}`);
   }
 
+  // ── Phase 4: no-fly, wind, signature, vertiport suitability ──────────────
+  const cityP4 = await jget("/api/qskyway/city?city=astana");
+  const nofly = cityP4.json?.nofly ?? [];
+  assert(Array.isArray(nofly) && nofly.length >= 1, "no-fly zones exposed", `n=${nofly.length}`);
+  assert(cityP4.json?._signature?.alg === "Ed25519" && !!cityP4.json?._signature?.contentHash, "twin carries Ed25519 signature");
+  assert(cityP4.json?.wind?.groundMs > 0 && cityP4.json?.wind?.topMs >= cityP4.json?.wind?.groundMs, "layered wind (grows with altitude)", `g=${cityP4.json?.wind?.groundMs} t=${cityP4.json?.wind?.topMs}`);
+
+  // no-fly avoidance: no path cell may fall inside a zone
+  const cell = cityP4.json?.grid?.cell ?? 20;
+  let insideCount = 0, checked = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    if (i === j) continue; checked++;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "astana" });
+    if (r.status !== 200) continue;
+    for (const p of r.json.path) {
+      const x = (p.c + 0.5) * cell, y = (p.r + 0.5) * cell;
+      for (const z of nofly) if (Math.hypot(x - z.x, y - z.y) <= z.radiusM) insideCount++;
+    }
+  }
+  assert(insideCount === 0, "routes avoid no-fly zones", `violations=${insideCount} over ${checked} routes`);
+
+  // wind affects ETA (still vs wind differ) + fields present
+  const wr = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "astana" });
+  assert(typeof wr.json?.etaMinWind === "number" && typeof wr.json?.etaMinStill === "number", "route reports still + wind ETA");
+  assert(wr.json?.avgWindMs >= 0, "route reports avg wind", `w=${wr.json?.avgWindMs}m/s`);
+
+  // Ed25519 verify
+  const ver = await jget("/api/qskyway/verify?city=nyc");
+  assert(ver.status === 200 && ver.json?.valid === true && ver.json?.alg === "Ed25519", "Ed25519 twin signature verifies");
+
+  // vertiport suitability scoring
+  const vps = await jget("/api/qskyway/vertiports?city=nyc");
+  assert(vps.status === 200 && Array.isArray(vps.json?.vertiports) && vps.json.vertiports.length > 0, "vertiport scoring endpoint");
+  assert(vps.json.vertiports.every((v) => typeof v.suitability === "number" && typeof v.class === "string"), "each pad has suitability + class");
+
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
   assert(bad.status === 422, "same-vertiport route rejected", `status=${bad.status}`);

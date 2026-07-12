@@ -9,12 +9,17 @@ import { apiUrl } from "@/lib/apiBase";
 // раскладкой по высотным полосам) и бронирует 4D-слот прав через /api/qskyway/slots.
 // Честно: движок и доказательство концепции, не сертифицированное авиационное ПО.
 
+interface NoFly { id: string; name: string; kind: string; x: number; y: number; radiusM: number; }
 interface CityData {
   city: string;
   meters: { w: number; h: number };
   grid: { cols: number; rows: number; cell: number; heights: number[] };
   buildings: { h: number; r: number[][] }[];
   vertiports: { c: number; r: number; x: number; y: number }[];
+  nofly?: NoFly[];
+  wind?: { fromDeg: number; groundMs: number; topMs: number };
+  vertiportScores?: { c: number; r: number; suitability: number; class: string }[];
+  _signature?: { alg: string; contentHash: string };
 }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
@@ -50,6 +55,7 @@ export default function QSkywayClient() {
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [cityId, setCityId] = useState<string>("astana");
+  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number } | null>(null);
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -70,6 +76,9 @@ export default function QSkywayClient() {
     const city = cityRef.current;
     if (!city) return null;
     const { cols, rows } = city.grid;
+    const nofly = city.nofly ?? [];
+    const cellM = city.grid.cell;
+    const inNoFly = (c: number, r: number) => { const x = (c + 0.5) * cellM, y = (r + 0.5) * cellM; for (const z of nofly) if (Math.hypot(x - z.x, y - z.y) <= z.radiusM) return true; return false; };
     const idx = (c: number, r: number) => r * cols + c;
     const gsc = new Float64Array(cols * rows).fill(Infinity);
     const came = new Int32Array(cols * rows).fill(-1);
@@ -91,6 +100,7 @@ export default function QSkywayClient() {
       for (const [dc, dr] of D) {
         const nc = cur.c + dc, nr = cur.r + dr;
         if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        if (inNoFly(nc, nr) && !(nc === g.c && nr === g.r) && !(nc === s.c && nr === s.r)) continue;
         const alt = edgeAlt(cur.c, cur.r, nc, nr);
         const step = 1 + (alt - FLOOR) / 90;
         const t = gsc[ci] + step, ni = idx(nc, nr);
@@ -144,6 +154,11 @@ export default function QSkywayClient() {
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       const cols = Math.floor(city.grid.cols / 3), rows = Math.floor(city.grid.rows / 3);
       setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2 });
+      setMeta({
+        wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
+        signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
+        nofly: city.nofly?.length ?? 0,
+      });
       setLoaded(true);
       newHero();
       for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
@@ -232,6 +247,12 @@ export default function QSkywayClient() {
       for (let i = 1; i < rr.length; i++) ctx.lineTo(rr[i][0] * SC, rr[i][1] * SC);
       ctx.closePath(); ctx.fill();
     }
+    // no-fly zones
+    if (city.nofly) for (const z of city.nofly) {
+      ctx.beginPath(); ctx.arc(z.x * SC, z.y * SC, z.radiusM * SC, 0, 7);
+      ctx.fillStyle = "rgba(251,113,133,0.14)"; ctx.fill();
+      ctx.strokeStyle = "rgba(251,113,133,0.8)"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+    }
     // hero corridor
     const hero = heroRef.current;
     if (hero) {
@@ -241,12 +262,16 @@ export default function QSkywayClient() {
         ctx.beginPath(); ctx.moveTo(cX(hero.path[k].c), cY(hero.path[k].r)); ctx.lineTo(cX(hero.path[k + 1].c), cY(hero.path[k + 1].r)); ctx.stroke();
       }
     }
-    // vertiports
+    // vertiports (coloured by landing-suitability)
+    const scoreOf = new Map<string, string>();
+    if (city.vertiportScores) for (const s of city.vertiportScores) scoreOf.set(s.c + "," + s.r, s.class);
     for (const v of city.vertiports) {
+      const cls = scoreOf.get(v.c + "," + v.r);
+      const col = cls === "candidate-pad" ? "#2dd4bf" : cls === "needs-infrastructure" ? "#fbbf24" : cls === "unsuitable" ? "#fb7185" : "#22d3ee";
       const r = Math.max(5, CELL * SC * 0.9);
-      ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 2;
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(cX(v.c), cY(v.r), r, 0, 7); ctx.stroke();
-      ctx.fillStyle = "#22d3ee"; ctx.font = `700 ${r}px monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = col; ctx.font = `700 ${r}px monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("H", cX(v.c), cY(v.r) + 0.5);
     }
     // taxis
@@ -361,6 +386,14 @@ export default function QSkywayClient() {
                 <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>＋ Трафик</button>
                 <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>Высотная раскраска</button>
               </div>
+              {meta && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
+                  <span>🌬 ветер {meta.wind}</span>
+                  <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
+                  <span style={{ color: "#2dd4bf" }}>🔏 Ed25519 · {meta.signed}…</span>
+                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна</span>
+                </div>
+              )}
             </section>
 
             <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>

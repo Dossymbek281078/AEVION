@@ -14,7 +14,9 @@
 |---|---|---|---|---|
 | Airbnb (2009, "AirBed & Breakfast") | 69/100 | WATCH | 90 | City-by-city short-term-rental regulation can gut supply overnight |
 | Uber (2010, "UberCab") | 66.9/100 | WATCH | 90 | "The name itself provokes transit authorities" — one C&D halts a city |
+| DoorDash (2013, "PaloAltoDelivery") | 68.3/100 | WATCH | 90 | Structural margin fragility + AB5 driver-reclassification; deepest-funded wins, not first mover |
 | Stripe (2010, "/dev/payments") | 59.4/100 | WATCH (low) | 82 | Aggregator counterparty fragility — rides sponsor banks & card rules, no fraud data yet |
+| Coinbase (2012) | 59.4/100 | WATCH (low) | 82 | Pure BTC-price beta, no recurring buffer — crypto winter or one custodial breach is existential |
 
 **The hook that makes it work:** all three came back WATCH, not a screaming INVEST — because at seed, with only era-information, the risks were real. WATCH ≠ pass; the memo sizes a *small, staged* entry. History proved the upside. Credible + debatable = shareable.
 
@@ -108,6 +110,36 @@ What I want from people who run diligence:
 - Is "watch, enter staged" the right call on a 90-moat / high-regulatory-risk seed, or would you pass?
 
 It's free with a no-signup demo; happy to get roasted on methodology: https://aevion.vercel.app/qventure
+
+---
+
+## Drip — single-company threads (Batch 2, ready to post)
+
+### DoorDash (2013) — X thread
+**1/** DoorDash, 2013 — back when it was "PaloAltoDelivery.com" and the founders personally delivered every order. The 4th mover in a crowded field.
+
+My AI investment analyst, seed stage: 68/100, WATCH. The nuance is the interesting part 👇
+
+**2/** The draw: a network-effect moat of 90/100 on an already-validated local-delivery loop. Founders hand-delivering orders proves demand; repeat usage was real; the category has winner-take-most economics — so the eventual prize is enormous.
+
+**3/** The flag it caught: brutal, structural margins. Take-rate compression from restaurant disintermediation + AB5-style driver-reclassification risk. And "the deepest-funded player, not the first mover, tends to win."
+
+**4/** Verdict: a conviction-scaled starter, not a full swing. The model sized ~10% ownership on a $1.9M ticket, 7.1x MOIC — rewarding a *staged* entry on a 90-moat despite thin margins.
+
+Would you have backed the fourth delivery startup? https://aevion.vercel.app/qventure
+
+### Coinbase (2012) — X thread
+**1/** Coinbase, 2012 seed: a hosted wallet to buy Bitcoin with your bank account — back when "crypto exchange" mostly meant a sketchy overseas site.
+
+My AI analyst: 59/100, WATCH (low conviction). Here's the split it saw 👇
+
+**2/** What it liked: the regulatory moat (82/100). The MTL/BSA licensing burden that looks like pure drag is exactly what walls out fast-moving fintechs. Getting licensed early converts friction into a durable trust premium as Bitcoin goes mainstream.
+
+**3/** What it flagged: revenue is pure BTC-price beta with no recurring buffer, so a crypto winter or a single custodial breach is simultaneously existential — and "tens of thousands of wallets" may be a bull-market artifact.
+
+**4/** Verdict: invest, but small and staged — a WATCH you lean into cheaply, not a pass. Sized: ~6% on a $987K ticket, 6.4x MOIC, 60% loss probability.
+
+Would you have taken the crypto-cycle risk at seed? https://aevion.vercel.app/qventure
 
 ---
 

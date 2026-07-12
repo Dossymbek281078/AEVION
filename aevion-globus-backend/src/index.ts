@@ -103,6 +103,7 @@ import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
+import { venturesRouter } from "./routes/ventures";
 import { qventureRouter } from "./routes/qventure";
 import { qskywayRouter } from "./routes/qskyway";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
@@ -938,6 +939,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/kids-ai", "kids-ai-content"],
   ["/api/voice-of-earth", "voice-of-earth"],
   ["/api/startupx", "startup-exchange"],
+  ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
@@ -1109,6 +1111,7 @@ app.use("/api/qnews", qnewsRouter);
 app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
+app.use("/api/ventures", venturesRouter);
 // QVenture — AI investment analyst: quant score + 4-role council + entry strategy
 app.use("/api/qventure", qventureRouter);
 // QSkyway — 3D-аэрокоридоры для аэротакси (движок A* по полю высот + рынок слотов QRight)

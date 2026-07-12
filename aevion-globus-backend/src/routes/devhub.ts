@@ -90,8 +90,8 @@ type StudioTier = "free" | "pro" | "enterprise";
 
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
-  pro:        { video: 50,  image: 200, tts: 1000000, music: 100, deploy: -1 },
-  enterprise: { video: -1,  image: -1,  tts: -1,      music: -1,  deploy: -1 },
+  pro:        { video: 50,  image: 200, tts: 30000, music: 100, deploy: -1 },
+  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -4455,8 +4455,8 @@ devhubRouter.get("/studio/credits", async (req, res) => {
       ...result,
       tierInfo: {
         free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
-        pro:        { video: 50,  image: 200, tts: 1000000, music: 100, deploy: -1 },
-        enterprise: { video: -1,  image: -1,  tts: -1,      music: -1,  deploy: -1 },
+        pro:        { video: 50,  image: 200, tts: 30000,  music: 100, deploy: -1 },
+        enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
       },
       upgradeUrl: "https://aevion.vercel.app/studio#upgrade",
     });

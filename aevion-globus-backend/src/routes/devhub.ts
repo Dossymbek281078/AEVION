@@ -3914,3 +3914,215 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     skipped,
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Video generation via Replicate API
+// POST /api/devhub/media/video  { prompt, model?, width?, height?, duration? }
+// GET  /api/devhub/media/video/status/:predictionId
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/media/video", async (req, res) => {
+  const { prompt, model = "minimax/video-01", width = 1280, height = 720, duration = 5, imageUrl } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt is required" });
+  }
+
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) {
+    return res.status(503).json({
+      error: "Video generation not configured — set REPLICATE_API_TOKEN in Railway",
+      setupUrl: "https://replicate.com/account/api-tokens",
+    });
+  }
+
+  const MODEL_VERSIONS: Record<string, string> = {
+    "minimax/video-01": "minimax/video-01",
+    "stability-ai/stable-video-diffusion": "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3aa966e1e89b5c27be9702aff8",
+    "lucataco/animate-diff-v2": "lucataco/animate-diff-v2:47b39c5b24fab06e5ec0a3aa5e63daf17e92ab3f8edc27f7da7fa9f0be28cad5",
+    "tencent/hunyuan-video": "tencent/hunyuan-video:847dfa8b01e739d5c05b04cc4c64a2a9ef56fba41783ba11c0e24ce1a36cbf30",
+  };
+  const resolvedModel = MODEL_VERSIONS[model] || model;
+
+  try {
+    const input: Record<string, any> = { prompt: prompt.trim() };
+    if (imageUrl) input.image = imageUrl;
+    if (width) input.width = width;
+    if (height) input.height = height;
+    if (duration) input.num_frames = Math.round(duration * 24);
+
+    const resp = await fetch(`https://api.replicate.com/v1/models/${resolvedModel}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        Prefer: "respond-async",
+      },
+      body: JSON.stringify({ input }),
+    }).catch(() => fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        Prefer: "respond-async",
+      },
+      body: JSON.stringify({ version: resolvedModel, input }),
+    }));
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
+    }
+
+    const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
+    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Video generation failed" });
+  }
+});
+
+devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) return res.status(503).json({ error: "REPLICATE_API_TOKEN not set" });
+
+  try {
+    const r = await fetch(`https://api.replicate.com/v1/predictions/${req.params.predictionId}`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    if (!r.ok) return res.status(r.status).json({ error: "Replicate fetch failed" });
+    const pred = await r.json() as {
+      id: string; status: string;
+      output?: string | string[];
+      error?: string;
+      metrics?: { predict_time?: number };
+    };
+    const outputUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+    return res.json({
+      status: pred.status,
+      videoUrl: outputUrl ?? null,
+      error: pred.error ?? null,
+      predictionId: pred.id,
+      seconds: pred.metrics?.predict_time ?? null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Status check failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Domain provision: <slug>.aevion.build via Cloudflare DNS
+// POST /api/devhub/projects/:id/domain/setup  { subdomain? }
+// GET  /api/devhub/projects/:id/domain/status
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!cfToken || !cfZoneId) {
+    return res.status(503).json({
+      error: "Domain provision not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in Railway",
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  const deployTarget = project.deployUrl?.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!deployTarget) {
+    return res.status(400).json({ error: "Project must be deployed first before adding a domain" });
+  }
+
+  const requestedSub = (req.body?.subdomain as string | undefined) || slugify(project.name);
+  const subdomain = (requestedSub + "-" + project.id.slice(0, 6)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const fullDomain = `${subdomain}.aevion.build`;
+
+  try {
+    // Create or update CNAME record
+    const listResp = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${fullDomain}`,
+      { headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" } }
+    );
+    const existing = await listResp.json() as { result: Array<{ id: string }> };
+    const existingId = existing.result?.[0]?.id;
+
+    const payload = { type: "CNAME", name: fullDomain, content: deployTarget, proxied: true, ttl: 1 };
+
+    let cfResp: Response;
+    if (existingId) {
+      cfResp = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existingId}`,
+        { method: "PUT", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      );
+    } else {
+      cfResp = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
+        { method: "POST", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      );
+    }
+
+    const cfData = await cfResp.json() as { success: boolean; errors?: Array<{ message: string }> };
+    if (!cfData.success) {
+      const msg = cfData.errors?.[0]?.message ?? "Cloudflare DNS error";
+      return res.json({ ok: false, error: msg });
+    }
+
+    // Save custom domain to project
+    project.customDomain = fullDomain;
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+
+    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Domain provision failed" });
+  }
+});
+
+devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  return res.json({
+    customDomain: project.customDomain ?? null,
+    deployUrl: project.deployUrl ?? null,
+    url: project.customDomain ? `https://${project.customDomain}` : project.deployUrl,
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio overview: aggregates platform capabilities status
+// GET /api/devhub/studio/capabilities
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.get("/studio/capabilities", (_req, res) => {
+  const caps = [
+    { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
+    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
+    { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
+    { id: "domain", name: "Domain (aevion.build)", description: "Provision <slug>.aevion.build subdomain", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    { id: "image", name: "Image Generation", description: "DALL-E 3 image generation", status: process.env.OPENAI_API_KEY ? "live" : "needs_token", token: "OPENAI_API_KEY" },
+    { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "audio_music", name: "Music & SFX", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "email", name: "Email", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "sms", name: "SMS", description: "Brevo SMS", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+  ];
+
+  const live = caps.filter((c) => c.status === "live").length;
+  return res.json({ capabilities: caps, summary: { total: caps.length, live, needsToken: caps.length - live } });
+});

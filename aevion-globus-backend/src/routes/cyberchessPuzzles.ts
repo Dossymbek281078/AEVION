@@ -12,6 +12,7 @@
 
 import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
+import { getPool } from "../lib/dbPool";
 
 const router = Router();
 
@@ -78,7 +79,46 @@ function ensureLoaded(): Promise<void> {
         console.warn("[cyberchess-puzzles] local file load failed:", e instanceof Error ? e.message : e);
       }
     }
-    // 2) public URL (default source of truth)
+    // 2) Postgres ChessPuzzle table — масштабируемый источник истины, как только
+    //    он засеян (scripts/seed-puzzles.mjs → POST /api/puzzles/seed из CC0-дампа
+    //    Lichess). Это недостающее звено: DB-пайплайн (модель+/api/puzzles+seed)
+    //    уже был, но фронт зовёт ЭТОТ роут — теперь при непустой таблице игроки
+    //    получают расширенный пул. Zero-regression: нет DB/таблица пуста/ошибка →
+    //    проваливаемся на публичный URL (bundled 10.8k) ниже.
+    if (process.env.DATABASE_URL) {
+      try {
+        const cap = Math.max(1, Math.min(2_000_000, Number(process.env.CYBERCHESS_PUZZLES_DB_CAP) || 500_000));
+        const pool = getPool();
+        const q = await pool.query(
+          `SELECT "fen","sol","name","rating","theme","phase","side","goal","mateIn" FROM "ChessPuzzle" LIMIT $1`,
+          [cap],
+        );
+        if (q.rows && q.rows.length > 0) {
+          const mapped = q.rows.map((row: Record<string, unknown>) => {
+            let sol: string[];
+            const raw = String(row.sol ?? "");
+            try { const a = JSON.parse(raw); sol = Array.isArray(a) ? a.map(String) : raw.split(/\s+/).filter(Boolean); }
+            catch { sol = raw.split(/\s+/).filter(Boolean); }
+            return {
+              fen: String(row.fen ?? ""),
+              sol,
+              name: String(row.name ?? "Тактика"),
+              r: Number(row.rating ?? 1200),
+              theme: String(row.theme ?? "Тактика"),
+              phase: row.phase != null ? String(row.phase) : undefined,
+              side: row.side != null ? String(row.side) : undefined,
+              goal: row.goal != null ? String(row.goal) : undefined,
+              mateIn: row.mateIn != null ? Number(row.mateIn) : undefined,
+            } as Puzzle;
+          });
+          ingest(mapped, `db ChessPuzzle (${q.rows.length})`);
+          if (POOL.length > 0) return;
+        }
+      } catch (e) {
+        console.warn("[cyberchess-puzzles] DB load failed (falling back to URL):", e instanceof Error ? e.message : e);
+      }
+    }
+    // 3) public URL (default source of truth — bundled 10.8k)
     try {
       const r = await fetch(POOL_URL);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);

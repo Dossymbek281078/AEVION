@@ -502,10 +502,13 @@ export default function VoiceCoach({
     writeLocal(LS_SESSION, sessionIdRef.current);
   }
 
+  // NOTE: every hook must run BEFORE the early `!enabled` return, otherwise
+  // toggling `enabled` (e.g. switching to the puzzles tab) changes the hook
+  // count between renders → React error #300. Keep this call above the guard.
+  const selectedVoice = useMemoSelectedVoice(voices, voiceId);
+
   // ─── Don't render if feature globally disabled ───────────────────
   if (!enabled) return null;
-
-  const selectedVoice = useMemoSelectedVoice(voices, voiceId);
 
   // ─── Styles ─────────────────────────────────────────────────────
   const panelStyle: React.CSSProperties = {

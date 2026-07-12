@@ -9,6 +9,12 @@
    merged result. A "Skip" button calls onSkip if provided, otherwise
    completes with sensible defaults (random / 1200 / 10+0).
 
+   THEME-AWARE: the palette is derived from the app's colour theme (light|dark)
+   passed via `mode`, and uses the brand green→emerald accent (matching the rest
+   of CyberChess and the demo style) rather than an off-brand violet. The whole
+   palette is threaded through `p` so it stays consistent under React concurrent
+   rendering (no module-level mutation during render).
+
    Inline-styled to match the rest of the cyberchess surface (no Tailwind).
 */
 
@@ -21,9 +27,26 @@ export type OnboardingChoice = {
   timeControl: "1+0" | "3+0" | "10+0" | "unlimited";
 };
 
+type Palette = {
+  backdrop: string;
+  modalBg: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  accent: string;
+  accent2: string;
+  accentGrad: string;
+  selected: string;
+  selectedSoft: string;
+  tileBg: string;
+};
+
 type Props = {
   onComplete: (choice: OnboardingChoice) => void;
   onSkip?: () => void;
+  /** App colour theme — the overlay adapts so the very first screen a visitor
+      sees is consistent with the app behind it. Defaults to dark. */
+  mode?: "light" | "dark";
 };
 
 export const ONBOARDING_KEY = "aevion_cyberchess_onboarding_done_v1";
@@ -44,17 +67,41 @@ export function markOnboardingDone() {
   }
 }
 
-const PALETTE = {
-  backdrop: "rgba(2, 6, 23, 0.85)",
-  modalBg: "#0f172a",
-  border: "#334155",
-  text: "#f1f5f9",
-  textMuted: "#94a3b8",
-  accent: "#a78bfa",
-  selected: "#34d399",
-  tileBg: "#1e293b",
-  tileHover: "#283449",
-};
+/* Brand accent is the CyberChess green→emerald; violet is a secondary touch,
+   mirroring the demo. Both palettes keep contrast legible on their ground. */
+function makePalette(mode: "light" | "dark"): Palette {
+  const accent = "#059669"; // brand green
+  const accent2 = "#7c3aed"; // secondary violet
+  const accentGrad = "linear-gradient(135deg, #059669, #10b981 55%, #7c3aed 140%)";
+  if (mode === "light") {
+    return {
+      backdrop: "rgba(15, 23, 42, 0.42)",
+      modalBg: "#ffffff",
+      border: "#e2e8f0",
+      text: "#0f172a",
+      textMuted: "#64748b",
+      accent,
+      accent2,
+      accentGrad,
+      selected: accent,
+      selectedSoft: "rgba(5,150,105,0.10)",
+      tileBg: "#f8fafc",
+    };
+  }
+  return {
+    backdrop: "rgba(2, 6, 23, 0.82)",
+    modalBg: "#1b1d27",
+    border: "#2d3140",
+    text: "#f1f5f9",
+    textMuted: "#9aa0b4",
+    accent: "#34d399",
+    accent2: "#a78bfa",
+    accentGrad: "linear-gradient(135deg, #059669, #34d399 55%, #a78bfa 140%)",
+    selected: "#34d399",
+    selectedSoft: "rgba(52,211,153,0.12)",
+    tileBg: "#232633",
+  };
+}
 
 const FONT = "system-ui, sans-serif";
 
@@ -81,7 +128,8 @@ const TIME_OPTIONS: Array<{
   { value: "unlimited", title: "Без часов", hint: "Думайте сколько надо" },
 ];
 
-export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
+export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }: Props) {
+  const p = makePalette(mode);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [color, setColor] = useState<"w" | "b" | "random" | null>(null);
   const [aiLevel, setAiLevel] = useState<
@@ -144,7 +192,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        background: PALETTE.backdrop,
+        background: p.backdrop,
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         display: "flex",
@@ -152,7 +200,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
         justifyContent: "center",
         padding: 16,
         fontFamily: FONT,
-        color: PALETTE.text,
+        color: p.text,
       }}
     >
       <div
@@ -160,15 +208,32 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
           position: "relative",
           maxWidth: 520,
           width: "100%",
-          background: PALETTE.modalBg,
-          border: `1px solid ${PALETTE.border}`,
+          background: p.modalBg,
+          border: `1px solid ${p.border}`,
           borderRadius: 16,
           padding: 32,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          boxShadow:
+            mode === "light"
+              ? "0 24px 60px -18px rgba(15,23,42,0.35)"
+              : "0 20px 60px rgba(0,0,0,0.55)",
           opacity: fading ? 0 : 1,
           transition: "opacity 180ms ease",
         }}
       >
+        {/* Brand accent hairline at the top edge — ties the first screen to the
+            green→violet demo palette. */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 24,
+            right: 24,
+            height: 3,
+            borderRadius: 999,
+            background: p.accentGrad,
+          }}
+        />
         <button
           type="button"
           onClick={handleSkip}
@@ -179,7 +244,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
             right: 12,
             background: "transparent",
             border: "none",
-            color: PALETTE.textMuted,
+            color: p.textMuted,
             fontSize: 22,
             lineHeight: 1,
             cursor: "pointer",
@@ -190,17 +255,11 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
           ×
         </button>
 
-        <ProgressDots step={step} />
+        <ProgressDots step={step} p={p} />
 
-        {step === 1 && (
-          <ColorStep selected={color} onPick={pickColor} />
-        )}
-        {step === 2 && (
-          <AiStep selected={aiLevel} onPick={pickAi} />
-        )}
-        {step === 3 && (
-          <TimeStep selected={timeControl} onPick={pickTime} />
-        )}
+        {step === 1 && <ColorStep selected={color} onPick={pickColor} p={p} />}
+        {step === 2 && <AiStep selected={aiLevel} onPick={pickAi} p={p} />}
+        {step === 3 && <TimeStep selected={timeControl} onPick={pickTime} p={p} />}
 
         <div
           style={{
@@ -215,7 +274,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
             <button
               type="button"
               onClick={() => advanceTo((step - 1) as 1 | 2 | 3)}
-              style={ghostBtnStyle()}
+              style={ghostBtnStyle(p)}
             >
               ← Назад
             </button>
@@ -225,10 +284,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
           <button
             type="button"
             onClick={handleSkip}
-            style={{
-              ...ghostBtnStyle(),
-              color: PALETTE.textMuted,
-            }}
+            style={{ ...ghostBtnStyle(p), color: p.textMuted }}
           >
             Пропустить
           </button>
@@ -240,7 +296,7 @@ export default function OnboardingOverlay({ onComplete, onSkip }: Props) {
 
 /* ---------------- step components ---------------- */
 
-function ProgressDots({ step }: { step: 1 | 2 | 3 }) {
+function ProgressDots({ step, p }: { step: 1 | 2 | 3; p: Palette }) {
   return (
     <div
       style={{
@@ -259,7 +315,7 @@ function ProgressDots({ step }: { step: 1 | 2 | 3 }) {
             width: n === step ? 24 : 10,
             height: 10,
             borderRadius: 999,
-            background: n <= step ? PALETTE.accent : PALETTE.border,
+            background: n <= step ? p.accent : p.border,
             transition: "all 200ms ease",
           }}
         />
@@ -271,36 +327,20 @@ function ProgressDots({ step }: { step: 1 | 2 | 3 }) {
 function ColorStep({
   selected,
   onPick,
+  p,
 }: {
   selected: "w" | "b" | "random" | null;
   onPick: (c: "w" | "b" | "random") => void;
+  p: Palette;
 }) {
   return (
     <div>
-      <h2 style={headingStyle()}>Выбери цвет</h2>
-      <p style={subStyle()}>Каким цветом хочешь сыграть первую партию?</p>
+      <h2 style={headingStyle(p)}>Выбери цвет</h2>
+      <p style={subStyle(p)}>Каким цветом хочешь сыграть первую партию?</p>
       <div style={gridStyle()}>
-        <Tile
-          icon="♔"
-          title="Белые"
-          hint="Ходишь первым"
-          active={selected === "w"}
-          onClick={() => onPick("w")}
-        />
-        <Tile
-          icon="♚"
-          title="Чёрные"
-          hint="Отвечаешь на 1-й ход"
-          active={selected === "b"}
-          onClick={() => onPick("b")}
-        />
-        <Tile
-          icon="🎲"
-          title="Случайный"
-          hint="Пусть решит судьба"
-          active={selected === "random"}
-          onClick={() => onPick("random")}
-        />
+        <Tile icon="♔" title="Белые" hint="Ходишь первым" active={selected === "w"} onClick={() => onPick("w")} p={p} />
+        <Tile icon="♚" title="Чёрные" hint="Отвечаешь на 1-й ход" active={selected === "b"} onClick={() => onPick("b")} p={p} />
+        <Tile icon="🎲" title="Случайный" hint="Пусть решит судьба" active={selected === "random"} onClick={() => onPick("random")} p={p} />
       </div>
     </div>
   );
@@ -309,14 +349,16 @@ function ColorStep({
 function AiStep({
   selected,
   onPick,
+  p,
 }: {
   selected: 800 | 1200 | 1600 | 2000 | 2400 | null;
   onPick: (lvl: 800 | 1200 | 1600 | 2000 | 2400) => void;
+  p: Palette;
 }) {
   return (
     <div>
-      <h2 style={headingStyle()}>Выбери AI-соперника</h2>
-      <p style={subStyle()}>Сила движка под твой уровень.</p>
+      <h2 style={headingStyle(p)}>Выбери AI-соперника</h2>
+      <p style={subStyle(p)}>Сила движка под твой уровень.</p>
       <div style={gridStyle()}>
         {AI_LEVELS.map((opt) => (
           <Tile
@@ -326,6 +368,7 @@ function AiStep({
             hint={opt.hint}
             active={selected === opt.level}
             onClick={() => onPick(opt.level)}
+            p={p}
           />
         ))}
       </div>
@@ -336,14 +379,16 @@ function AiStep({
 function TimeStep({
   selected,
   onPick,
+  p,
 }: {
   selected: "1+0" | "3+0" | "10+0" | "unlimited" | null;
   onPick: (tc: "1+0" | "3+0" | "10+0" | "unlimited") => void;
+  p: Palette;
 }) {
   return (
     <div>
-      <h2 style={headingStyle()}>Контроль времени</h2>
-      <p style={subStyle()}>Сколько минут на партию?</p>
+      <h2 style={headingStyle(p)}>Контроль времени</h2>
+      <p style={subStyle(p)}>Сколько минут на партию?</p>
       <div style={gridStyle()}>
         {TIME_OPTIONS.map((opt) => (
           <Tile
@@ -353,6 +398,7 @@ function TimeStep({
             hint={opt.hint}
             active={selected === opt.value}
             onClick={() => onPick(opt.value)}
+            p={p}
           />
         ))}
       </div>
@@ -368,12 +414,14 @@ function Tile({
   hint,
   active,
   onClick,
+  p,
 }: {
   icon: string;
   title: string;
   hint: string;
   active: boolean;
   onClick: () => void;
+  p: Palette;
 }) {
   return (
     <button
@@ -383,10 +431,10 @@ function Tile({
       style={{
         minHeight: 96,
         padding: "14px 12px",
-        background: PALETTE.tileBg,
-        border: `2px solid ${active ? PALETTE.selected : PALETTE.border}`,
+        background: active ? p.selectedSoft : p.tileBg,
+        border: `2px solid ${active ? p.selected : p.border}`,
         borderRadius: 12,
-        color: PALETTE.text,
+        color: p.text,
         cursor: "pointer",
         textAlign: "center",
         display: "flex",
@@ -394,35 +442,24 @@ function Tile({
         alignItems: "center",
         justifyContent: "center",
         gap: 4,
-        transition: "border-color 160ms ease, transform 160ms ease",
+        transition: "border-color 160ms ease, transform 160ms ease, background 160ms ease",
         fontFamily: FONT,
         transform: active ? "scale(1.02)" : "scale(1)",
       }}
     >
       <span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span>
       <span style={{ fontSize: 15, fontWeight: 600 }}>{title}</span>
-      <span style={{ fontSize: 12, color: PALETTE.textMuted }}>{hint}</span>
+      <span style={{ fontSize: 12, color: p.textMuted }}>{hint}</span>
     </button>
   );
 }
 
-function headingStyle(): React.CSSProperties {
-  return {
-    margin: 0,
-    fontSize: 22,
-    fontWeight: 700,
-    color: PALETTE.text,
-    textAlign: "center",
-  };
+function headingStyle(p: Palette): React.CSSProperties {
+  return { margin: 0, fontSize: 22, fontWeight: 700, color: p.text, textAlign: "center" };
 }
 
-function subStyle(): React.CSSProperties {
-  return {
-    margin: "6px 0 18px 0",
-    fontSize: 14,
-    color: PALETTE.textMuted,
-    textAlign: "center",
-  };
+function subStyle(p: Palette): React.CSSProperties {
+  return { margin: "6px 0 18px 0", fontSize: 14, color: p.textMuted, textAlign: "center" };
 }
 
 function gridStyle(): React.CSSProperties {
@@ -433,11 +470,11 @@ function gridStyle(): React.CSSProperties {
   };
 }
 
-function ghostBtnStyle(): React.CSSProperties {
+function ghostBtnStyle(p: Palette): React.CSSProperties {
   return {
     background: "transparent",
-    border: `1px solid ${PALETTE.border}`,
-    color: PALETTE.text,
+    border: `1px solid ${p.border}`,
+    color: p.text,
     borderRadius: 8,
     padding: "8px 14px",
     fontSize: 14,

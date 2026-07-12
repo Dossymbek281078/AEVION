@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -76,98 +79,38 @@ const LANG_BG_TINTS: Record<string, string> = {
   python: "rgba(16,185,129,0.03)",
 };
 
-// ─── Monaco-lite syntax highlighting editor ────────────────────────────────────
+const MONACO_LANG_MAP: Record<string, string> = {
+  typescript: "typescript", javascript: "javascript", python: "python",
+  html: "html", css: "css", json: "json", markdown: "markdown",
+  yaml: "yaml", bash: "shell", plaintext: "plaintext",
+};
+
 function CodeEditor({ value, onChange, language }: { value: string; onChange: (v: string) => void; language: string }) {
-  const HIGHLIGHTS: Record<string, RegExp> = {
-    typescript: /\b(const|let|var|function|return|import|export|type|interface|async|await|class|extends|implements|new|this|null|undefined|true|false|void|string|number|boolean|any)\b/g,
-    javascript: /\b(const|let|var|function|return|import|export|async|await|class|new|this|null|undefined|true|false)\b/g,
-    css: /([a-z-]+)(?=\s*:)/g,
-    html: /<\/?[a-z][a-z0-9]*\b[^>]*>/gi,
-    python: /\b(def|class|import|from|return|if|elif|else|for|while|with|as|try|except|finally|lambda|yield|pass|break|continue|and|or|not|in|is|None|True|False)\b/g,
-  };
-
-  const highlighted = (text: string): string => {
-    let result = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-
-    // Apply keyword highlighting (purple/bold)
-    const kwRe = HIGHLIGHTS[language];
-    if (kwRe) {
-      result = result.replace(kwRe, (match) =>
-        `<span style="color:#7c3aed;font-weight:600">${match}</span>`
-      );
-    }
-
-    // String literals (green)
-    result = result.replace(
-      /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
-      (m) => `<span style="color:#059669">${m}</span>`
-    );
-
-    // Single-line comments (gray italic)
-    result = result.replace(
-      /(\/\/[^\n]*)/g,
-      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
-    );
-
-    // Python / shell comments
-    result = result.replace(
-      /(#[^\n]*)/g,
-      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
-    );
-
-    return result;
-  };
-
   return (
-    <div style={{ position: "relative", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 13, lineHeight: 1.7, background: "#fafafa", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
-      <pre
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          margin: 0,
-          padding: "16px 20px",
-          pointerEvents: "none",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          color: "#0f172a",
-          background: "transparent",
-          zIndex: 1,
-          overflow: "hidden",
-        }}
-        dangerouslySetInnerHTML={{ __html: highlighted(value) + " " }}
-      />
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          position: "relative",
-          zIndex: 2,
-          width: "100%",
-          minHeight: 400,
-          padding: "16px 20px",
-          background: "rgba(0,0,0,0)",
-          color: "transparent",
-          caretColor: "#0f172a",
-          border: "none",
-          outline: "none",
-          resize: "vertical",
-          fontFamily: "inherit",
-          fontSize: "inherit",
-          lineHeight: "inherit",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          boxSizing: "border-box",
-        }}
-        spellCheck={false}
-      />
-    </div>
+    <MonacoEditor
+      height={520}
+      language={MONACO_LANG_MAP[language] ?? "plaintext"}
+      value={value}
+      onChange={(v) => onChange(v ?? "")}
+      theme="vs"
+      options={{
+        minimap: { enabled: false },
+        fontSize: 13,
+        fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+        lineNumbers: "on",
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        padding: { top: 12, bottom: 12 },
+        wordWrap: "on",
+        overviewRulerLanes: 0,
+        overviewRulerBorder: false,
+        renderLineHighlight: "line",
+        contextmenu: true,
+        folding: true,
+        glyphMargin: false,
+        lineDecorationsWidth: 0,
+      }}
+    />
   );
 }
 
@@ -288,7 +231,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("tts");
+  const [mediaTab, setMediaTab] = useState<"video" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
+
+  // Video generation state (Replicate)
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoModel, setVideoModel] = useState("minimax/video-01");
+  const [videoDuration, setVideoDuration] = useState("5");
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoStatus, setVideoStatus] = useState<string | null>(null);
+
+  // Domain provision state
+  const [domainStatus, setDomainStatus] = useState<{ customDomain?: string; url?: string } | null>(null);
 
   // DeepL bulk translate state (N files × M langs)
   const BULK_LANG_OPTIONS = [
@@ -459,10 +415,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [settingsCollab, setSettingsCollab] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Line number gutter
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const gutterRef = useRef<HTMLDivElement | null>(null);
-
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
@@ -556,13 +508,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
     if (selectedFile) {
       saveCurrentFile(selectedFile.path, editorContent, selectedFile.language);
-    }
-  };
-
-  // Sync gutter scroll with textarea scroll
-  const handleTextareaScroll = () => {
-    if (textareaRef.current && gutterRef.current) {
-      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
     }
   };
 
@@ -1115,13 +1060,13 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setDomainSetupLoading(true);
     setDomainSetupMsg(null);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/auto-setup`), { method: "POST" });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        const fallback = d?.manualInstruction ? `${d.error}. ${d.manualInstruction}` : (d.error || "Setup failed");
-        setDomainSetupMsg({ ok: false, text: fallback });
+        setDomainSetupMsg({ ok: false, text: d.error || "Setup failed" });
       } else {
-        setDomainSetupMsg({ ok: true, text: `DNS ${d.action}: ${d.domain} → ${d.cname}` });
+        setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
+        setProject((p) => p ? { ...p, customDomain: d.domain } : p);
       }
     } catch (e: any) {
       setDomainSetupMsg({ ok: false, text: e?.message || "Setup failed" });
@@ -2143,8 +2088,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     {selectedFile.language}
                   </span>
                 </div>
-                {/* Monaco-lite editor with syntax highlighting */}
-                <div style={{ flex: 1, overflow: "auto", padding: "0 4px 4px" }}>
+                {/* Monaco Editor (VS Code engine) */}
+                <div style={{ flex: 1, overflow: "hidden" }}>
                   <CodeEditor
                     value={editorContent}
                     onChange={(v) => handleEditorChange(v)}
@@ -2405,7 +2350,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                    {(["video", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -2418,7 +2363,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           boxShadow: mediaTab === sub ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                         }}
                       >
-                        {sub === "tts" ? "TTS"
+                        {sub === "video" ? "Video AI"
+                        : sub === "tts" ? "TTS"
                         : sub === "image" ? "DALL-E"
                         : sub === "sfx" ? "SFX"
                         : sub === "music" ? "Music"
@@ -2436,6 +2382,95 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </button>
                     ))}
                   </div>
+
+                  {/* Video AI (Replicate) */}
+                  {mediaTab === "video" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>AI Model</label>
+                        <select
+                          value={videoModel}
+                          onChange={(e) => setVideoModel(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                        >
+                          <option value="minimax/video-01">MiniMax Video-01 (text-to-video)</option>
+                          <option value="tencent/hunyuan-video">Tencent HunyuanVideo (high quality)</option>
+                          <option value="lucataco/animate-diff-v2">AnimateDiff v2 (fast)</option>
+                          <option value="stability-ai/stable-video-diffusion">Stable Video Diffusion</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <textarea
+                          value={videoPrompt}
+                          onChange={(e) => setVideoPrompt(e.target.value)}
+                          placeholder="A futuristic city skyline at sunset, cinematic, 4K..."
+                          rows={3}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Duration (sec)</label>
+                          <select value={videoDuration} onChange={(e) => setVideoDuration(e.target.value)} style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
+                            <option value="3">3s</option>
+                            <option value="5">5s</option>
+                            <option value="8">8s</option>
+                            <option value="10">10s</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
+                            try {
+                              const r = await fetch(apiUrl("/api/devhub/media/video"), {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
+                              });
+                              const d = await r.json();
+                              if (!d.ok) { setVideoError(d.error || "Video generation failed"); setVideoLoading(false); return; }
+                              setVideoPredictionId(d.predictionId);
+                              setVideoStatus("generating...");
+                              // Poll for completion
+                              const pollFn = async (id: string, attempts = 0) => {
+                                if (attempts > 120) { setVideoError("Timeout after 2 min"); setVideoLoading(false); return; }
+                                const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
+                                const sd = await sr.json();
+                                setVideoStatus(sd.status);
+                                if (sd.status === "succeeded" && sd.videoUrl) {
+                                  setVideoUrl(sd.videoUrl); setVideoLoading(false);
+                                } else if (sd.status === "failed") {
+                                  setVideoError(sd.error || "Generation failed"); setVideoLoading(false);
+                                } else {
+                                  setTimeout(() => pollFn(id, attempts + 1), 3000);
+                                }
+                              };
+                              setTimeout(() => pollFn(d.predictionId), 4000);
+                            } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
+                          }}
+                          disabled={videoLoading || !videoPrompt.trim()}
+                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap" }}
+                        >
+                          {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
+                        </button>
+                      </div>
+                      {videoError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>{videoError}</div>}
+                      {videoUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
+                            <button onClick={() => { setEditorContent(videoUrl); if (selectedFile) saveCurrentFile(selectedFile.path, videoUrl, selectedFile.language); showToast("Video URL saved to current file", "success"); }} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save URL to File</button>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 10px", background: "#f8fafc", borderRadius: 6 }}>
+                        Powered by Replicate API. Requires REPLICATE_API_TOKEN in Railway. Generation takes 30–120s.
+                      </div>
+                    </div>
+                  )}
 
                   {/* TTS */}
                   {mediaTab === "tts" && (

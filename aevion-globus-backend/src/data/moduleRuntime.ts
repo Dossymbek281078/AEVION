@@ -26,13 +26,15 @@ export interface ModuleRuntimeMeta {
  * модулей, судя лишь по терсному health. Повторный аудит дёрнул РЕАЛЬНЫЙ
  * GET-эндпоинт каждого модуля на проде — критерий по функции, не по health:
  *   • mvp_live    — рабочий API отдаёт живые данные (или корректный gate:
- *                   402 paywall / 401 auth) + фронт-страница. 34 модуля.
- *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
- *                   (veilnetx/kids-ai-content/startup-exchange/z-tide). 4 модуля.
+ *                   402 paywall / 401 auth) + фронт-страница. 39 модулей.
+ *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist.
+ *                   Остался только veilnetx (реально pre-product). 1 модуль.
  *   • portal_only — 0. Не построенных модулей НЕТ: qpaynet-embedded построен под
  *                   путём /api/qpaynet (id≠путь), первый пробник дал ложный 404.
- * Итог: mvp_live 35 · platform_api 4 · portal_only 0.  ВСЕ 39 модулей построены;
- * 35 работают, 4 сами на self-declared waitlist. (catch-all нет: fake-id=404)
+ * Итог 2026-07-12: mvp_live 39 · platform_api 1 · portal_only 0 (40 модулей).
+ * Запущены startup-exchange+z-tide (#562), kids-ai-content (#564 safety-hardened,
+ * verified), +добавлен qskyway (#563, планета #40). ВСЕ 40 построены; 39 работают,
+ * 1 (veilnetx) на self-declared waitlist.
  */
 export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // ── mvp_live: рабочий продукт (verified prod API/страница) ──────────────────
@@ -246,30 +248,46 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "Приватность · 12 endpoints · живые threat-models (фронт слабо wired)",
   },
 
-  // ── platform_api (4): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
+  // ── platform_api (1): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
   veilnetx: {
     tier: "platform_api",
     primaryPath: "/veilnetx",
     apiHints: ["/api/veilnetx/status", "/api/veilnetx/*"],
-    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026",
+    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026 (реально pre-product)",
   },
+  // kids-ai-content: ЗАПУЩЕН 2026-07-12 — safety-hardened (input+output модерация
+  // /ask, temp 0.4) и проверен вживую на проде (RU/EN/KZ вредное→safety-редирект,
+  // обычное→ai). Тир platform_api→mvp_live по решению основателя.
   "kids-ai-content": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/kids-ai-content",
-    apiHints: ["/api/kids-ai-content/*"],
-    hint: "Детский контент · 8 endpoints · self-declared planning/waitlist, ETA Q4 2026",
+    apiHints: ["/api/kids-ai/lessons", "/api/kids-ai/ask", "/api/kids-ai/*"],
+    hint: "Детский контент (5-8) · уроки+прогресс+safe /ask · child-safety модерация ru/en/kz · LIVE",
   },
+  // ── startup-exchange + z-tide: страницы ЖИВЫЕ и рабочие (реальные бэкенды
+  //    /api/startupx, /api/ztide), «waitlist» был устаревший ярлык → mvp_live.
+  //    Planning-vision (эскроу/smart-NDA у startupx; currency-research у z-tide)
+  //    остаётся в planningStubs.ts как осознанный roadmap — не product-статус.
   "startup-exchange": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/startup-exchange",
-    apiHints: ["/api/startup-exchange/*"],
-    hint: "Биржа стартапов · 14 endpoints · self-declared planning/waitlist, ETA Q2 2027",
+    apiHints: ["/api/startupx/ideas", "/api/startupx/stats", "/api/startupx/*"],
+    hint: "Биржа стартапов/идей · /ideas+/stats живые · страница подключена к реальному API",
   },
   "z-tide": {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/z-tide",
-    apiHints: ["/api/z-tide/*"],
-    hint: "Концепт · 8 endpoints · self-declared idea/waitlist",
+    apiHints: ["/api/ztide/leaderboard", "/api/ztide/stats", "/api/ztide/*"],
+    hint: "Стрики/leaderboard/очки · /api/ztide живой (юзеры+события) · страница рабочая",
+  },
+  // qskyway (планета #40, PR #563 параллельной сессии) — без записи падал в
+  // default portal_only. По факту рабочий: /api/qskyway/{health,cities,city,
+  // route(A*),slots} живые, страница /qskyway 200. Классифицирую mvp_live.
+  qskyway: {
+    tier: "mvp_live",
+    primaryPath: "/qskyway",
+    apiHints: ["/api/qskyway/cities", "/api/qskyway/route", "/api/qskyway/*"],
+    hint: "3D-аэрокоридоры для аэротакси · A* по высотным полосам + рынок 4D-слотов · /api/qskyway живой",
   },
 
   // ── qpaynet-embedded: ПОСТРОЕН (id≠путь — реестр qpaynet-embedded, API /api/qpaynet)

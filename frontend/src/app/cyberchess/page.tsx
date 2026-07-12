@@ -1241,6 +1241,59 @@ export default function CyberChessPage(){
     })();
     return()=>{cancelled=true};
   },[]);
+  // ── Облачная синхра прогресса CyberChess между устройствами (только для вошедших) ──
+  // КОНСЕРВАТИВНО, без потери данных: всегда БЭКАПИМ локальный снапшот наверх
+  // (last-writer по clientTs); авто-ВОССТАНАВЛИВАЕМ с сервера ТОЛЬКО когда это
+  // устройство «чистое» (нет cyberchess.rating и снапшот крошечный = свежий
+  // браузер/новое устройство) — так девайс с реальным прогрессом никогда не
+  // затирается. Восстановление = один reload за сессию (guard от циклов).
+  // Ключуется на сервере по JWT (не по client-userId) → не спуфится.
+  useEffect(()=>{
+    if(!ccAuth.checked||!ccAuth.user)return;
+    let cancelled=false;
+    const PREFIX=["cyberchess","aevion_chess"];
+    const EXCLUDE=new Set(["cyberchess.userId"]);
+    const tok=()=>{try{return localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{return""}};
+    const snap=()=>{const o:Record<string,string>={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||EXCLUDE.has(k))continue;if(PREFIX.some(p=>k.startsWith(p)))o[k]=localStorage.getItem(k)||"";}}catch{}return o;};
+    const seenTs=()=>{try{return parseInt(localStorage.getItem("cc_cloud_seen_ts")||"0")||0}catch{return 0}};
+    const pristine=(s:Record<string,string>)=>{try{return !localStorage.getItem("cyberchess.rating")&&JSON.stringify(s).length<1200}catch{return false}};
+    const push=async()=>{
+      const t=tok();if(!t)return;
+      const s=snap();let ser="";try{ser=JSON.stringify(s)}catch{return}
+      if(ser.length>250000)return; // ~256KB бэкенд-лимит — гигантские не шлём
+      const ts=Date.now();
+      try{const r=await fetch("/api-backend/api/cyberchess/state",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({state:s,clientTs:ts})});if(r.ok){try{localStorage.setItem("cc_cloud_seen_ts",String(ts))}catch{}}}catch{}
+    };
+    (async()=>{
+      const t=tok();if(!t)return;
+      try{
+        const r=await fetch("/api-backend/api/cyberchess/state",{headers:{Authorization:`Bearer ${t}`}});
+        if(r.ok){
+          const d=await r.json() as {state?:Record<string,string>|null;clientTs?:number};
+          if(cancelled)return;
+          const srvState=d?.state&&typeof d.state==="object"?d.state:null;
+          const srvTs=Number(d?.clientTs)||0;
+          const restored=(()=>{try{return sessionStorage.getItem("cc_cloud_restored_v1")==="1"}catch{return false}})();
+          if(srvState&&Object.keys(srvState).length>0&&srvTs>seenTs()&&pristine(snap())&&!restored){
+            // Чистое устройство + сервер новее → восстановить и один раз перезагрузить.
+            try{
+              for(const[k,v]of Object.entries(srvState)){if(EXCLUDE.has(k))continue;try{localStorage.setItem(k,String(v))}catch{}}
+              localStorage.setItem("cc_cloud_seen_ts",String(srvTs));
+              sessionStorage.setItem("cc_cloud_restored_v1","1");
+            }catch{}
+            try{window.location.reload()}catch{}
+            return;
+          }
+        }
+      }catch{}
+      if(cancelled)return;
+      await push(); // иначе — бэкапим локальное наверх
+    })();
+    const iv=window.setInterval(()=>{void push()},90000);
+    const onHide=()=>{if(document.visibilityState==="hidden")void push()};
+    document.addEventListener("visibilitychange",onHide);
+    return()=>{cancelled=true;window.clearInterval(iv);document.removeEventListener("visibilitychange",onHide)};
+  },[ccAuth.checked,ccAuth.user]);
   // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
   // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
   // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.

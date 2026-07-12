@@ -26,15 +26,14 @@ export interface ModuleRuntimeMeta {
  * модулей, судя лишь по терсному health. Повторный аудит дёрнул РЕАЛЬНЫЙ
  * GET-эндпоинт каждого модуля на проде — критерий по функции, не по health:
  *   • mvp_live    — рабочий API отдаёт живые данные (или корректный gate:
- *                   402 paywall / 401 auth) + фронт-страница. 39 модулей.
- *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist.
- *                   Остался только veilnetx (реально pre-product). 1 модуль.
+ *                   402 paywall / 401 auth) + фронт-страница. 40 модулей.
+ *   • platform_api— 0. Раньше veilnetx (self-declared waitlist), но с v0.2.0 он
+ *                   ships live privacy-сканер (/inspect+/fingerprint) — mvp_live.
  *   • portal_only — 0. Не построенных модулей НЕТ: qpaynet-embedded построен под
  *                   путём /api/qpaynet (id≠путь), первый пробник дал ложный 404.
- * Итог 2026-07-12: mvp_live 39 · platform_api 1 · portal_only 0 (40 модулей).
- * Запущены startup-exchange+z-tide (#562), kids-ai-content (#564 safety-hardened,
- * verified), +добавлен qskyway (#563, планета #40). ВСЕ 40 построены; 39 работают,
- * 1 (veilnetx) на self-declared waitlist.
+ * Итог 2026-07-12: mvp_live 40 · platform_api 0 · portal_only 0 (40 модулей).
+ * ВСЕ 40 модулей рабочие. Запущены startup-exchange+z-tide (#562), kids-ai
+ * (#564 safety-hardened), qskyway (#563 классиф.), veilnetx (v0.2.0 сканер).
  */
 export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // ── mvp_live: рабочий продукт (verified prod API/страница) ──────────────────
@@ -248,12 +247,15 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "Приватность · 12 endpoints · живые threat-models (фронт слабо wired)",
   },
 
-  // ── platform_api (1): API+фронт есть, но модуль САМ заявляет pre-launch/waitlist
+  // veilnetx: ЗАПУЩЕН 2026-07-12 (v0.2.0) — privacy exposure scanner live:
+  // /inspect (IP/geo/UA/Client-Hints/referer/cookie → категории+grade) +
+  // /fingerprint (энтропия отпечатка: биты/uniqueness/WebRTC-leak). Фронт —
+  // интерактивный сканер. Tor-прокси остаётся roadmap Q4'26 (waitlist). mvp_live.
   veilnetx: {
-    tier: "platform_api",
+    tier: "mvp_live",
     primaryPath: "/veilnetx",
-    apiHints: ["/api/veilnetx/status", "/api/veilnetx/*"],
-    hint: "Крипто · 6 endpoints · self-declared planning/waitlist, ETA Q4 2026 (реально pre-product)",
+    apiHints: ["/api/veilnetx/inspect", "/api/veilnetx/fingerprint", "/api/veilnetx/*"],
+    hint: "Privacy-сканер · /inspect+/fingerprint (энтропия отпечатка, WebRTC-leak) live · Tor-прокси roadmap Q4'26",
   },
   // kids-ai-content: ЗАПУЩЕН 2026-07-12 — safety-hardened (input+output модерация
   // /ask, temp 0.4) и проверен вживую на проде (RU/EN/KZ вредное→safety-редирект,

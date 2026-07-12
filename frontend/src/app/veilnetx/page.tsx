@@ -190,6 +190,66 @@ function canvasHash(): string | null {
   }
 }
 
+// Unmasked WebGL renderer string (GPU model) — a strong fingerprint signal.
+function getWebGL(): string | null {
+  try {
+    const c = document.createElement("canvas");
+    const gl = (c.getContext("webgl") || c.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+    if (!gl) return null;
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    if (dbg) {
+      const r = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+      if (typeof r === "string" && r) return r;
+    }
+    const r2 = gl.getParameter(gl.RENDERER);
+    return typeof r2 === "string" ? r2 : null;
+  } catch {
+    return null;
+  }
+}
+
+// Cheap installed-font probe: measure text width against a fallback baseline for
+// a small candidate list. Distinct widths ⇒ font is installed. Returns a count.
+function countFonts(): number {
+  try {
+    const base = ["monospace", "sans-serif", "serif"];
+    const candidates = [
+      "Arial", "Verdana", "Times New Roman", "Courier New", "Georgia", "Garamond",
+      "Comic Sans MS", "Trebuchet MS", "Impact", "Tahoma", "Segoe UI", "Calibri",
+      "Cambria", "Consolas", "Menlo", "Roboto", "Ubuntu", "Helvetica Neue",
+    ];
+    const span = document.createElement("span");
+    span.style.cssText = "position:absolute;left:-9999px;font-size:72px";
+    span.textContent = "mmmmmmmmmmlli";
+    document.body.appendChild(span);
+    const baseW: Record<string, number> = {};
+    for (const b of base) { span.style.fontFamily = b; baseW[b] = span.offsetWidth; }
+    let n = 0;
+    for (const f of candidates) {
+      let detected = false;
+      for (const b of base) {
+        span.style.fontFamily = `'${f}',${b}`;
+        if (span.offsetWidth !== baseW[b]) { detected = true; break; }
+      }
+      if (detected) n++;
+    }
+    document.body.removeChild(span);
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+type FpAttr = { id: string; label: string; bits: number; present: boolean; advice: string };
+type FpReport = {
+  totalBits: number;
+  surface: { score: number; grade: string; level: string };
+  uniquenessOneIn: number;
+  verdict: string;
+  webrtc: { leak: boolean; localIps: string[]; severity: string; advice: string };
+  attributes: FpAttr[];
+};
+
 function levelColor(level: string) {
   if (level === "green") return { ring: "border-emerald-700", text: "text-emerald-400", bg: "bg-emerald-950/30", bar: "bg-emerald-500" };
   if (level === "yellow") return { ring: "border-amber-700", text: "text-amber-400", bg: "bg-amber-950/30", bar: "bg-amber-500" };
@@ -199,6 +259,7 @@ function levelColor(level: string) {
 function PrivacyCheck() {
   const [server, setServer] = useState<Inspect | null>(null);
   const [client, setClient] = useState<ClientCheck[] | null>(null);
+  const [fp, setFp] = useState<FpReport | null>(null);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -256,6 +317,7 @@ function PrivacyCheck() {
     setErr(null);
     setServer(null);
     setClient(null);
+    setFp(null);
     try {
       const [inspectRes, webrtcIps] = await Promise.all([
         fetch("/api-backend/api/veilnetx/inspect").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
@@ -266,6 +328,32 @@ function PrivacyCheck() {
       const nav = navigator as Navigator & { deviceMemory?: number };
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
       const cHash = canvasHash();
+      const webgl = getWebGL();
+      const fonts = countFonts();
+
+      // Send the collected fingerprint to the backend for an entropy /
+      // uniqueness analysis (bits per attribute, "1 in N", surface grade).
+      fetch("/api-backend/api/veilnetx/fingerprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userAgent: navigator.userAgent,
+          platform: (navigator as Navigator & { platform?: string }).platform ?? null,
+          timezone: tz,
+          language: navigator.language,
+          screen: { width: screen.width, height: screen.height, colorDepth: screen.colorDepth, pixelRatio: window.devicePixelRatio },
+          hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+          deviceMemory: nav.deviceMemory ?? null,
+          touchPoints: navigator.maxTouchPoints ?? 0,
+          canvasHash: cHash,
+          webglRenderer: webgl,
+          fonts,
+          webrtcLocalIps: webrtcIps,
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((data) => setFp(data as FpReport))
+        .catch(() => { /* fingerprint panel is best-effort — main scan still shows */ });
       const checks: ClientCheck[] = [
         {
           id: "webrtc",
@@ -388,6 +476,62 @@ function PrivacyCheck() {
               <b>{client?.find((c) => c.id === "timezone")?.value}</b> — несоответствие выдаёт VPN без подмены пояса.
             </div>
           )}
+
+          {fp && (() => {
+            const c = levelColor(fp.surface.level);
+            const topAttrs = [...fp.attributes].filter((a) => a.present && a.bits > 0).sort((a, b) => b.bits - a.bits);
+            const oneIn = fp.uniquenessOneIn >= 1_000_000
+              ? `${(fp.uniquenessOneIn / 1_000_000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} млн`
+              : fp.uniquenessOneIn.toLocaleString("ru-RU");
+            return (
+              <div className={`${c.bg} border ${c.ring} rounded-xl p-5 space-y-4`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-sm font-black">🧬 Уникальность браузерного отпечатка</span>
+                  <span className={`text-lg font-black ${c.text}`}>{fp.surface.grade} · {fp.surface.score}/100</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-lg py-3">
+                    <div className={`text-xl font-black ${c.text}`}>{fp.totalBits}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">бит энтропии</div>
+                  </div>
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-lg py-3">
+                    <div className={`text-xl font-black ${c.text}`}>1 : {oneIn}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">оценка уникальности</div>
+                  </div>
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-lg py-3">
+                    <div className={`text-xl font-black ${c.text}`}>{topAttrs.length}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">активных сигналов</div>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-400">{fp.verdict}</div>
+
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Вклад в узнаваемость (биты)</div>
+                  {topAttrs.slice(0, 6).map((a) => {
+                    const pct = Math.min(100, Math.round((a.bits / 10) * 100));
+                    return (
+                      <div key={a.id} className="flex items-center gap-2" title={a.advice}>
+                        <span className="text-[11px] text-slate-300 w-40 shrink-0 truncate">{a.label}</span>
+                        <div className="flex-1 h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                          <div className={`h-full ${c.bar}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400 w-10 text-right">{a.bits.toFixed(1)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {fp.webrtc.leak && (
+                  <div className="text-xs text-red-300 bg-red-950/30 border border-red-800 rounded-lg px-3 py-2">
+                    🩸 WebRTC раскрывает локальный IP: <b className="break-all">{fp.webrtc.localIps.join(", ")}</b>. {fp.webrtc.advice}
+                  </div>
+                )}
+                <div className="text-[10px] text-slate-600">
+                  Оценка энтропии образовательная — приоры из публичных исследований fingerprinting, не замер по живой популяции.
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button onClick={() => copyReport(total)} className="px-3 py-1.5 border border-slate-700 hover:bg-slate-800 rounded-lg text-xs font-semibold">

@@ -162,6 +162,19 @@ const ALS: AL[] = [
 const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
+// Семантический цвет-код категорий фич: одна категория = один оттенок, консистентно
+// на всех навигационных поверхностях (хаб «Все разделы», стрип на setup-экране, палитра).
+// Цвет сам работает указателем «куда жать» — по просьбе основателя «разными цветами
+// разные фичи, стиль как демо». Оттенки читаемы и в light, и в dark (используем как
+// акцент-бордюр/чип, не как фон текста).
+const CAT: Record<"play"|"learn"|"compete"|"watch"|"economy", {c:string; label:string; icon:string}> = {
+  play:    {c:"#059669", label:"Играть",        icon:"♟"},  // зелёный — игра
+  learn:   {c:"#7c3aed", label:"Учиться",        icon:"🎓"}, // фиолетовый — обучение/коуч
+  compete: {c:"#2563eb", label:"Соревноваться",  icon:"🏆"}, // синий — соревнования/рейтинг
+  watch:   {c:"#db2777", label:"Смотреть",       icon:"👁"},  // розовый — трансляции/реплеи
+  economy: {c:"#d97706", label:"Экономика",      icon:"🪙"}, // золото/янтарь — деньги/награды
+};
+
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish with MultiPV ═══ */
@@ -716,9 +729,9 @@ const CPIBadge=React.memo(function CPIBadge({cpi,col,delta,pts,W3,H3,xi,yi,last,
 });
 
 /* ─── BottomNav ─── */
-function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
+function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,brand,textMute,surface1,border}:{
   setup:boolean; tab:string;
-  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void;
+  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void; onProfile:()=>void;
   brand:string; textMute:string; surface1:string; border:string;
 }){
   const activeTab = setup ? "play"
@@ -731,7 +744,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute
     {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
     {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
     {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
-    {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
+    {id:"profile", icon:"👤",label:"Профиль", action:onProfile},
   ];
   return(
     <div className="cc-bottom-nav" style={{
@@ -792,8 +805,7 @@ export default function CyberChessPage(){
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
-  const[hoverSq,sHoverSq]=useState<Square|null>(null);
-  const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
+  // hover-hints теперь императивны (hoverLayerRef/paintHoverHints) — state больше не нужен
   // Hover-sync: наведение на сегмент хода в analysis replay-bar подсвечивает
   // from/to этого хода на доске (sky-blue ring, отличается от amber last-move).
   const[hoverStripMove,sHoverStripMove]=useState<{from:string;to:string}|null>(null);
@@ -1149,8 +1161,10 @@ export default function CyberChessPage(){
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
-  // Default: dark (как lichess). Пользователь переключает в Settings.
-  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="light"?"light":"dark"}catch{return"dark"}});
+  // Default: light — новый посетитель видит светлую тему (как lichess/chess.com,
+  // и по фидбеку основателя «чёрная тема слишком вычурна»). Кто раньше выбрал dark —
+  // сохранённое значение остаётся. Переключение в Settings.
+  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="dark"?"dark":"light"}catch{return"light"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
   // Фоновое изображение для приложения — preset id или data: URL пользовательского
   const[bgPreset,sBgPreset]=useState<string>(()=>{try{return localStorage.getItem("cc_bg_preset_v1")||"none"}catch{return"none"}});
@@ -1160,6 +1174,15 @@ export default function CyberChessPage(){
   // component still see CC_LIGHT via the import alias (kept for backwards compat
   // of any module-scoped colors, though currently none use CC.* outside the fn).
   const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // Фон-«слой» по активной вкладке — каждая фича своим лёгким оттенком (запрос основателя
+  // «слои по фичам разные цвет»): пазлы→cyan, анализ→синий, коуч→фиолет, играть→нейтраль.
+  const TAB_BG_TINT:Record<string,{light:string;dark:string}>={
+    play:    {light:"#e7e5df", dark:"#161512"},
+    puzzles: {light:"#dde6e7", dark:"#121717"},
+    analysis:{light:"#dfe4ed", dark:"#12151b"},
+    coach:   {light:"#e7e1ec", dark:"#17131a"},
+  };
+  const tabBg=(TAB_BG_TINT[tab]||TAB_BG_TINT.play)[themeMode==="dark"?"dark":"light"];
   // T — dynamic alias к текущей теме (CC). Заменяет статичный module-level T={} чтобы
   // переключение dark/light автоматически применялось к moves list, eval strip и т.д.
   // ВАЖНО: должен быть после объявления CC (TDZ)
@@ -1170,19 +1193,27 @@ export default function CyberChessPage(){
     chk:CC.sqCheck,pm:CC.sqPremove,pmS:CC.sqPremoveStrong,
   };
   // Apply theme globally: body background + data-cc-theme attribute (triggers CSS vars in globals.css)
+  // Фон СЛЕГКА сдвигается по активной вкладке — каждая фича «своим слоем/цветом» (запрос
+  // основателя): пазлы→cyan, анализ→синий, коуч→фиолет, играть→нейтральный paper. Оттенок
+  // тонкий (чуть тонирован базовый фон), чтобы не пестрить, но глаз ловил смену раздела.
   useEffect(()=>{
     if(typeof document==="undefined")return;
     const prev=document.body.style.background;
-    document.body.style.background=themeMode==="dark"?CC_DARK.bg:CC_LIGHT.bg;
+    document.body.style.background=tabBg;
     document.documentElement.setAttribute("data-cc-theme",themeMode);
     return()=>{document.body.style.background=prev;document.documentElement.removeAttribute("data-cc-theme")};
-  },[themeMode]);
+  },[tabBg,themeMode]);
   // Текущий звуковой пресет (60 пресетов + молчание). Сохраняется в localStorage.
   const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
   useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
+  // Мин. пауза ИИ перед ходом (мс) — комфорт для премувов. Действует как абсолютный
+  // пол задержки ответа ИИ: чем больше, тем спокойнее ставить/видеть премувы (в т.ч.
+  // цепочки из многих премувов). 0 = обычная скорость. Настраивается в Settings.
+  const[aiPaceMs,sAiPaceMs]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_ai_pace_v1")||"0");return isNaN(v)?0:Math.max(0,Math.min(5000,v))}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_ai_pace_v1",String(aiPaceMs))}catch{}},[aiPaceMs]);
   // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
   // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
   // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.
@@ -1344,12 +1375,18 @@ export default function CyberChessPage(){
   // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
   // Ref несёт намерение «это первый запуск» между mount-эффектом и хендлерами закрытия.
   const firstRunRef=useRef(false);
-  // Закрытие приветствия-награды. Тур больше НЕ авто-открывается сразу после мастера
-  // настройки (меньше стопки на первом визите) — доступен вручную через палитру команд
-  // (см. "Обзорный тур"). Ref сбрасываем, чтобы не удерживать «первый запуск».
+  // Закрытие приветствия-награды. На ПЕРВОМ визите, когда юзер закрывает приветствие,
+  // ОДИН раз авто-открываем обзорный тур («что куда нажимать») — не стопкой, а следом
+  // за наградой, так первый посетитель гарантированно видит гайд, а не ищет его в Ctrl+K.
+  // Дальше тур доступен вручную кнопкой «?» в шапке и командой «Обзорный тур».
   const closeDailyReward=useCallback(()=>{
     sDailyReward(null);
+    const wasFirstRun=firstRunRef.current;
     firstRunRef.current=false;
+    if(wasFirstRun){
+      let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+      if(!tourSeen)setTimeout(()=>sTourStep(0),350);
+    }
   },[]);
   // Любой первично-визитный оверлей открыт? Пока да — не наслаиваем баннеры
   // (AEVION-плашка, стрим-подсказка), чтобы на экране был только один интеррапт.
@@ -1953,8 +1990,14 @@ export default function CyberChessPage(){
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
-  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
-  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+  // Партия против ЧЕЛОВЕКА (P2P-друг или hotseat — двое за одним экраном): уходить
+  // с партии нельзя (это была бы движковая подсказка против живого соперника), и часы
+  // никогда не встают на паузу. Против КОМПЬЮТЕРА — можно свободно уйти в анализ/коуч/
+  // стрим и вернуться в любой момент; пока игрок не на вкладке «play», часы ЗАМИРАЮТ.
+  const isHumanGame=p2pMode||hotseat;
+  const clockActive=tab==="play"||isHumanGame;
+  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");snd("x")});
+  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");snd("x")});
 
   // Shop v2: consume time_boost on game start — applies +Ns to user's clock
   // once per purchase. Triggered at game start when ach.time_boost > 0.
@@ -3603,9 +3646,16 @@ export default function CyberChessPage(){
     prevAnalysisLenRef.current=analysis.length;
   },[analysis.length]);
 
-  /* ── Live Voice Commentary — Coach speaks after every move when enabled. ── */
+  /* ── Live Voice Commentary — устаревший браузерный путь (SpeechSynthesis).
+     ВЫКЛЮЧЕН: озвучивал шаблонные фразы («Позиция складывается в твою пользу»),
+     которые основатель справедливо забраковал как «ИИ не соображает в шахматах».
+     Теперь озвучкой заведует VoiceCoach (LLM + ElevenLabs, гроссмейстерский разбор),
+     тоже под флагом liveCommentary. Держим два голоса нельзя — иначе двойная речь.
+     Код оставлен как аварийный запасной путь, но по умолчанию не срабатывает. ── */
+  const USE_BROWSER_TTS_FALLBACK=false;
   const lastCommentaryBkRef=useRef<number>(-1);
   useEffect(()=>{
+    if(!USE_BROWSER_TTS_FALLBACK)return;
     if(!liveCommentary)return;
     if(tab!=="play"&&tab!=="coach")return;
     if(!on||over||setup)return;
@@ -3819,19 +3869,25 @@ export default function CyberChessPage(){
     const premovesNow=pmsRef.current.length;
     const isBullet=tc.ini>0&&tc.ini<=60;
     const isBlitz=tc.ini>60&&tc.ini<=300;
-    const baseFloor=isBullet?250:isBlitz?320:400;
-    const perPremoveSlot=isBullet?80:isBlitz?100:120;
+    // Окно для премува расширено (было 250/320/400 базы) — на быстрых контролях ИИ
+    // отвечал слишком быстро, и премув не успевал показаться/поставиться (жалоба).
+    // Пока не поставлен ни один премув — даём заметное окно; каждый уже стоящий
+    // премув окно сокращает (хочешь быстрее — ставь премувы заранее).
+    const baseFloor=isBullet?420:isBlitz?560:680;
+    const perPremoveSlot=isBullet?90:isBlitz?110:120;
     const targetSlots=5;
     const slotsLeft=Math.max(0,targetSlots-premovesNow);
     const premoveFloor=baseFloor+slotsLeft*perPremoveSlot;
-    // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
-    // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
-    // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
+    // Bullet 0pm: 420+5×90  =  870ms · 5pm: 420ms
+    // Blitz  0pm: 560+5×110 = 1110ms · 5pm: 560ms
+    // Rapid  0pm: 680+5×120 = 1280ms · 5pm: 680ms
     // AI think delay: natural pace (rawDelay) floored to a premove-friendly
     // window so the user always has time to queue premoves before the reply.
     // (Previously hard-pinned to 20000ms as a temporary mechanics-debug hack —
     //  that froze the board ~20s per move and made play feel broken.)
-    const delay=Math.max(rawDelay,premoveFloor);
+    // aiPaceMs — пользовательский пол (Settings): до 5с, чтобы спокойно ставить/видеть
+    // премувы, в т.ч. длинные цепочки. Не сокращается по мере накопления премувов.
+    const delay=Math.max(rawDelay,premoveFloor,aiPaceMs);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece
@@ -4817,6 +4873,34 @@ export default function CyberChessPage(){
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
 
+  // Hover-hints (lichess-style точки/кольца при наведении) рисуются ИМПЕРАТИВНО
+  // в отдельный overlay-слой — БЕЗ setState. Раньше onMouseMove гонял hoverVm через
+  // корневой state, и каждое движение мыши перестраивало весь 14k-компонент (главный
+  // источник лагов доски). Теперь мышь трогает только DOM этого слоя.
+  const hoverLayerRef=useRef<HTMLDivElement|null>(null);
+  const hoverSqRef=useRef<Square|null>(null);
+  const paintHoverHints=useCallback((squares:string[])=>{
+    const el=hoverLayerRef.current;if(!el)return;
+    if(!squares.length){if(el.childElementCount)el.textContent="";return;}
+    const g=scratchOn&&scratchGame?scratchGame:virtualGame;
+    let html="";
+    for(const to of squares){
+      const f=FILES.indexOf(to[0]);const rank=parseInt(to[1]);const row=8-rank;
+      if(f<0||isNaN(rank))continue;
+      const cc=flip?7-f:f;const rr=flip?7-row:row;
+      const lt=((row)+f)%2===0;
+      const onDark=sqLuma(lt?bT.light:bT.dark)<140;
+      const hasPiece=!!g.get(to as Square);
+      const pos=`position:absolute;left:${cc*12.5}%;top:${rr*12.5}%;width:12.5%;height:12.5%;pointer-events:none;`;
+      if(hasPiece){
+        html+=`<div style="${pos}"><div style="position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 clamp(3px,9%,9px) ${onDark?"rgba(255,255,255,0.45)":"rgba(15,23,42,0.28)"}"></div></div>`;
+      }else{
+        html+=`<div style="${pos}display:flex;align-items:center;justify-content:center;"><div style="width:30%;height:30%;border-radius:50%;background:${onDark?"rgba(255,255,255,0.55)":"rgba(15,23,42,0.22)"}"></div></div>`;
+      }
+    }
+    el.innerHTML=html;
+  },[flip,bT,scratchOn,scratchGame,virtualGame]);
+
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
   const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
@@ -4851,7 +4935,7 @@ export default function CyberChessPage(){
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
   const hasBg=bgPreset!=="none"&&!!bgPreset;
-  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
@@ -4897,6 +4981,48 @@ export default function CyberChessPage(){
           </div>
         </div>
 
+        {/* ═══ Постоянный верхний таб-бар (десктоп) ═══ Играть · Пазлы · Анализ · Коуч —
+            всегда на виду, как на lichess/chess.com. Цвет-кодирован общей палитрой (цвет =
+            указатель). На мобиле скрыт — там нижний BottomNav. В ЖИВОЙ партии с человеком
+            не-play вкладки заблокированы (замок): уход к движку = подсказка против соперника. */}
+        {!streamerMode&&vwPx>=769&&(()=>{
+          const navLocked=on&&!over&&isHumanGame;
+          const TABS:{k:"play"|"puzzles"|"analysis"|"coach";label:string;icon:string;hue:string}[]=[
+            {k:"play",    label:"Играть", icon:"♟", hue:"#059669"},
+            {k:"puzzles", label:"Пазлы",  icon:"🧩",hue:"#0891b2"},
+            {k:"analysis",label:"Анализ", icon:"📊",hue:"#2563eb"},
+            {k:"coach",   label:"Коуч",   icon:"🎓",hue:"#7c3aed"},
+          ];
+          const goTab=(k:"play"|"puzzles"|"analysis"|"coach")=>{
+            if(k==="play"){ sTab("play"); if(!on&&!over)sSetup(true); return; }
+            if(navLocked){ showToast("🔒 Нельзя во время партии с человеком","info"); return; }
+            sSetup(false); sTab(k);
+            if(k==="puzzles"&&PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length));
+          };
+          return <div style={{display:"inline-flex",alignItems:"center",gap:3,padding:3,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`,boxShadow:SHADOW.sm,flex:"0 0 auto"}}>
+            {TABS.map(t=>{
+              const active=tab===t.k;
+              const locked=t.k!=="play"&&navLocked;
+              return <button key={t.k} onClick={()=>goTab(t.k)} disabled={locked} className="cc-focus-ring"
+                title={locked?"Заблокировано во время партии с человеком":t.label}
+                style={{
+                  display:"inline-flex",alignItems:"center",gap:7,
+                  padding:"9px 18px",borderRadius:RADIUS.full,
+                  border:active?`1px solid ${t.hue}55`:"1px solid transparent",
+                  background:active?`${t.hue}1f`:"transparent",
+                  color:locked?CC.textMute:active?t.hue:CC.textDim,
+                  fontSize:14,fontWeight:active?900:750,
+                  cursor:locked?"not-allowed":"pointer",whiteSpace:"nowrap",
+                  opacity:locked?0.5:1,
+                  transition:`background 120ms, color 120ms`,
+                }}>
+                <span style={{fontSize:16,lineHeight:1}}>{locked?"🔒":t.icon}</span>
+                <span>{t.label}</span>
+              </button>;
+            })}
+          </div>;
+        })()}
+
         {/* Active variant indicator (sticky, visible always) */}
         {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
           style={{
@@ -4916,11 +5042,11 @@ export default function CyberChessPage(){
         <button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
-            padding:"5px 10px 5px 8px",borderRadius:RADIUS.full,
-            border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
-            fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+            padding:"7px 12px 7px 10px",borderRadius:RADIUS.full,
+            border:`1px solid ${CC.borderStrong}`,background:CC.surface1,color:CC.textDim,
+            fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
           }}>
-          <span style={{fontSize:13}}>⌕</span>
+          <span style={{fontSize:14}}>⌕</span>
           <span>Команды</span>
           <kbd style={{
             fontFamily:"ui-monospace, SFMono-Regular, monospace",fontSize:9.5,fontWeight:800,
@@ -4934,12 +5060,25 @@ export default function CyberChessPage(){
         <button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
-            padding:"5px 11px",borderRadius:RADIUS.full,
-            border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
-            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+            padding:"7px 14px",borderRadius:RADIUS.full,
+            border:`1.5px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
+            fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
           }}>
-          <span style={{fontSize:13}}>☰</span>
+          <span style={{fontSize:14}}>☰</span>
           <span>Все разделы</span>
+        </button>
+        {/* «?» — постоянный видимый гайд «что куда нажимать». Открывает обзорный тур
+            в любой момент. Синий info-акцент = вспомогательная навигация. Раньше тур
+            был только в Ctrl+K и первый посетитель его не находил (частая жалоба). */}
+        <button onClick={()=>sTourStep(0)} title="Как пользоваться — краткий гайд по интерфейсу" aria-label="Гайд: как пользоваться" className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:5,
+            padding:"7px 13px",borderRadius:RADIUS.full,
+            border:`1.5px solid #3b82f6`,background:"rgba(59,130,246,0.12)",color:"#2563eb",
+            fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+          }}>
+          <span style={{fontSize:14,lineHeight:1}}>?</span>
+          <span>Как тут</span>
         </button>
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
@@ -5829,9 +5968,9 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📺</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Streamer Mode</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:streamerMode?"#7c3aed":"#e5e7eb",color:streamerMode?"#fff":CC.textDim}}>{streamerMode?"ON":"OFF"}</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>OBS-ready: тёмный фон, чистый интерфейс.</div>
                   </button>
-                  <button onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл — Coach говорит вслух","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${liveCommentary?"#7c3aed":CC.border}`,background:liveCommentary?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎙</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Live Commentary</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:liveCommentary?"#7c3aed":"#e5e7eb",color:liveCommentary?"#fff":CC.textDim}}>{liveCommentary?"ON":"OFF"}</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Coach читает каждый ход вслух — для зрителей.</div>
+                  <button onClick={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч вкл — гроссмейстерский разбор вслух":"Голос-коуч выкл","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${liveCommentary?"#7c3aed":CC.border}`,background:liveCommentary?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎙</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Голос-коуч (GM)</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:liveCommentary?"#7c3aed":"#e5e7eb",color:liveCommentary?"#fff":CC.textDim}}>{liveCommentary?"ON":"OFF"}</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>ИИ вслух разбирает ходы на уровне гроссмейстера — анализ, обучение, стрим.</div>
                   </button>
                 </div>
               </Card>}
@@ -6203,16 +6342,23 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* In-game quick bar — compact 1 row, 5 key actions. Everything else via Ctrl+K. */}
+      {/* In-game quick bar — compact 1 row, key actions. Everything else via Ctrl+K.
+          В партии с ЧЕЛОВЕКОМ (P2P/hotseat) движковые «уходы» (Анализ/Коуч/Пазлы/Ещё)
+          скрыты — иначе игрок подсматривал бы оценку движка против живого соперника.
+          Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
           {([
-            {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     accent:"#6366f1", act:()=>sTab("analysis")},
-            {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            accent:"#a855f7", act:()=>sTab("coach")},
-            {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     accent:"#06b6d4", act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            ...(isHumanGame?[]:[
+              {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     accent:"#6366f1", act:()=>sTab("analysis")},
+              {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            accent:"#a855f7", act:()=>sTab("coach")},
+              {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     accent:"#06b6d4", act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
             {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
-            {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
+            ...(isHumanGame?[]:[
+              {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
+            ]),
           ] as {icon:string;label:string;hint:string;accent:string;act:()=>void}[]).map((c,i)=>(
             <button key={i} onClick={c.act} title={c.hint} style={{
               display:"inline-flex",alignItems:"center",gap:5,
@@ -6226,6 +6372,12 @@ export default function CyberChessPage(){
               <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
             </button>
           ))}
+          {isHumanGame&&<span title="В партии с человеком нельзя открыть анализ/коуча — это была бы подсказка движком против соперника" style={{
+            display:"inline-flex",alignItems:"center",gap:5,
+            padding:"7px 12px",borderRadius:9,
+            border:`1px solid ${CC.border}`,background:CC.surface2,color:CC.textMute,
+            fontSize:12,fontWeight:800,whiteSpace:"nowrap",
+          }}><span style={{fontSize:13}}>🔒</span><span>Партия с человеком</span></span>}
         </div>
       )}
 
@@ -6436,20 +6588,21 @@ export default function CyberChessPage(){
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onMouseMove={e=>{
-                // Hover-dots: вычисляем возможные ходы фигуры под курсором синхронно.
+                // Hover-dots ИМПЕРАТИВНО (без setState — иначе весь корневой компонент
+                // перестраивается на каждый пиксель движения мыши → лаги доски).
                 // Показываем только если нет активного sel (иначе sel-vm приоритетнее).
-                if(sel)return;
+                if(sel){if(hoverSqRef.current){hoverSqRef.current=null;paintHoverHints([]);}return;}
                 const sq=sqFromPoint(e.clientX,e.clientY);
-                if(sq===hoverSq)return;
-                sHoverSq(sq);
-                if(!sq||over||!on&&tab==="play"){sHoverVm(new Set());return;}
+                if(sq===hoverSqRef.current)return;
+                hoverSqRef.current=sq;
+                if(!sq||over||!on&&tab==="play"){paintHoverHints([]);return;}
                 const pc=game.get(sq);
                 // Показываем ходы только для своих фигур (или в анализе — для любых)
-                if(!pc||(tab==="play"&&pc.color!==pCol)){sHoverVm(new Set());return;}
+                if(!pc||(tab==="play"&&pc.color!==pCol)){paintHoverHints([]);return;}
                 const moves=game.moves({verbose:true,square:sq});
-                sHoverVm(new Set(moves.map(m=>m.to)));
+                paintHoverHints(moves.map(m=>m.to));
               }}
-              onMouseLeave={()=>{sHoverSq(null);sHoverVm(new Set());}}
+              onMouseLeave={()=>{hoverSqRef.current=null;paintHoverHints([]);}}
               onClick={e=>{
                 // Pointerdown arms the gesture; window-pointerup decides drop vs tap
                 // and delegates taps to click(). onClick here only clears annotations
@@ -6653,9 +6806,10 @@ export default function CyberChessPage(){
                 const isShadow=!scratchOn&&!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
                 const turnRef=scratchOn&&scratchGame?scratchGame.turn():game.turn();
                 const iS=effSel===sq,iV=effVm.has(sq),iCp=iV&&!!p,iL=!!(effLm&&(effLm.from===sq||effLm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===turnRef),iPM=!scratchOn&&pmSet.has(sq),iPS=!scratchOn&&pmSel===sq;
-                // Hover preview — показываем когда нет active sel
-                const iHover=!sel&&hoverVm.has(sq);
-                const iHoverCap=iHover&&!!p;
+                // Hover preview рисуется императивным overlay-слоем (paintHoverHints),
+                // не через props — чтобы наведение не перестраивало корневой компонент.
+                const iHover=false;
+                const iHoverCap=false;
                 const iSH=tab==="analysis"&&!!(hoverStripMove&&(hoverStripMove.from===sq||hoverStripMove.to===sq));
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
@@ -6678,6 +6832,9 @@ export default function CyberChessPage(){
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
                   coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
+              {/* Hover-hints слой — точки/кольца при наведении, рисуются императивно
+                  (paintHoverHints) БЕЗ ре-рендера. Ниже drag-preview (zIndex 7). */}
+              <div ref={hoverLayerRef} style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5}}/>
               {/* Premove cancel flash — красный pulse на FROM-клетке отменённого премува */}
               {cancelFlash&&(()=>{
                 const cf=FILES.indexOf(cancelFlash.sq[0]);
@@ -10993,6 +11150,7 @@ ${question.trim()}`;
 
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay
+      mode={themeMode}
       onComplete={(choice:OnboardingChoice)=>{
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
@@ -11206,14 +11364,14 @@ ${question.trim()}`;
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Все режимы, обучение, соревнования, трансляции и экономика — в одном месте.</div>
       {(()=>{
         const go=(fn:()=>void)=>{sShowSections(false);fn();};
-        const GROUPS:{title:string;items:{e:string;t:string;d:string;to?:string;act?:()=>void;hot?:boolean}[]}[]=[
-          {title:"Играть",items:[
+        const GROUPS:{title:string;cat:keyof typeof CAT;items:{e:string;t:string;d:string;to?:string;act?:()=>void;hot?:boolean}[]}[]=[
+          {title:"Играть",cat:"play",items:[
             {e:"♟",t:"Быстрая игра",d:"Партия против ИИ или человека",act:()=>{sTab("play");sSetup(true);}},
             {e:"🎲",t:"12 вариантов",d:"Atomic · Fischer960 · KotH · Crazyhouse…",act:()=>sShowVariants(true),hot:true},
             {e:"🏆",t:"Турнир-нокаут",d:"8 игроков · bracket · трофеи Chessy",act:()=>sShowTournament(true)},
             {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
           ]},
-          {title:"Учиться",items:[
+          {title:"Учиться",cat:"learn",items:[
             {e:"🎓",t:"AI-Коуч",d:"Разбор уровня супер-GM (Opus 4.8)",act:()=>sTab("coach"),hot:true},
             {e:"🧩",t:"Пазлы",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
             {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
@@ -11221,45 +11379,69 @@ ${question.trim()}`;
             {e:"🎯",t:"Тренинг",d:"Ежедневный хаб упражнений",to:"/cyberchess/training"},
             {e:"📅",t:"Задача дня",d:"Один пазл в день, серия",to:"/cyberchess/daily"},
           ]},
-          {title:"Соревноваться",items:[
+          {title:"Соревноваться",cat:"compete",items:[
             {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
             {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · лидерборд",to:"/cyberchess/tournament"},
             {e:"📈",t:"CPI рейтинг",d:"Композитный рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
             {e:"🏅",t:"CPI лидерборд",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
           ]},
-          {title:"Смотреть",items:[
+          {title:"Смотреть",cat:"watch",items:[
             {e:"👁",t:"Спектатор",d:"Смотреть живые партии",to:"/cyberchess/spectator"},
             {e:"🎬",t:"Реплеи",d:"Записи партий с разбором",to:"/cyberchess/replays"},
             {e:"🎥",t:"Студия",d:"Стрим-оверлеи и продакшн",to:"/cyberchess/studio"},
           ]},
-          {title:"Экономика",items:[
+          {title:"Экономика",cat:"economy",items:[
             {e:"🪙",t:"Chessy Экономика",d:"Аукцион · аренда коуча · подписки",to:"/cyberchess/economy",hot:true},
             {e:"🛒",t:"Магазин",d:"Буст-пазлы · щит серии · темы",act:()=>sShowShop(true)},
           ]},
         ];
-        const cardStyle={display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,textDecoration:"none",cursor:"pointer",textAlign:"left" as const,width:"100%",position:"relative" as const};
-        const inner=(it:{e:string;t:string;d:string;hot?:boolean})=><>
-          <span style={{fontSize:22,flexShrink:0,width:26,textAlign:"center" as const}}>{it.e}</span>
+        // Цвет категории задаёт левый бордюр карточки + чип иконки → цвет = навигационный сигнал.
+        const cardStyle=(accent:string)=>({display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,borderLeft:`3px solid ${accent}`,background:CC.surface1,textDecoration:"none",cursor:"pointer",textAlign:"left" as const,width:"100%",position:"relative" as const});
+        const inner=(it:{e:string;t:string;d:string;hot?:boolean},accent:string)=><>
+          <span style={{fontSize:20,flexShrink:0,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:RADIUS.md,background:`${accent}1a`}}>{it.e}</span>
           <span style={{lineHeight:1.25,minWidth:0}}>
             <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:CC.text}}>
-              {it.t}{it.hot&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.6,textTransform:"uppercase" as const,color:CC.brand,background:CC.brandSoft,padding:"1px 5px",borderRadius:RADIUS.full}}>топ</span>}
+              {it.t}{it.hot&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.6,textTransform:"uppercase" as const,color:accent,background:`${accent}1f`,padding:"1px 5px",borderRadius:RADIUS.full}}>топ</span>}
             </span>
             <span style={{display:"block",fontSize:11,color:CC.textDim,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.d}</span>
           </span>
         </>;
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[4]}}>
-          {GROUPS.map(g=><div key={g.title}>
-            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:8}}>{g.title}</div>
+          {GROUPS.map(g=>{const accent=CAT[g.cat].c;return <div key={g.title}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+              <span style={{width:8,height:8,borderRadius:2,background:accent,flexShrink:0}}/>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:accent}}>{g.title}</span>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,230px),1fr))",gap:8}}>
               {g.items.map(it=>it.to
-                ? <Link key={it.t} href={it.to} onClick={()=>sShowSections(false)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</Link>
-                : <button key={it.t} onClick={()=>go(it.act!)} className="cc-focus-ring" style={cardStyle}>{inner(it)}</button>
+                ? <Link key={it.t} href={it.to} onClick={()=>sShowSections(false)} className="cc-focus-ring" style={cardStyle(accent)}>{inner(it,accent)}</Link>
+                : <button key={it.t} onClick={()=>go(it.act!)} className="cc-focus-ring" style={cardStyle(accent)}>{inner(it,accent)}</button>
               )}
             </div>
-          </div>)}
+          </div>;})}
         </div>;
       })()}
     </Modal>
+
+    {/* «Вернуться к партии» — плавающая пилюля, видна с ЛЮБОЙ вкладки, когда идёт живая
+        партия против компьютера, а игрок ушёл в анализ/коуч/пазлы. Часы стоят на паузе —
+        можно вернуться в любой момент (по просьбе основателя). В партии с человеком не
+        показываем: оттуда уходить нельзя, поэтому tab всегда «play». */}
+    {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")}
+      title="Вернуться к партии — часы на паузе, пока ты здесь"
+      style={{
+        position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        display:"inline-flex",alignItems:"center",gap:9,
+        padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
+        background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",
+        fontSize:14,fontWeight:900,letterSpacing:0.2,cursor:"pointer",
+        boxShadow:"0 8px 28px rgba(5,150,105,0.45)",
+        animation:"cc-evdelta-in 0.3s ease-out",
+      }}>
+      <span style={{fontSize:16,lineHeight:1}}>▶</span>
+      <span>Вернуться к партии</span>
+      <span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
+    </button>}
 
     {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
     {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
@@ -12833,6 +13015,22 @@ ${question.trim()}`;
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
             <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+            {/* Скорость ответа ИИ — комфорт для премувов. Больше пауза = спокойнее ставить
+                и видеть премувы (в т.ч. длинные цепочки). Прямой ответ на фидбек про премувы. */}
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>⏱ Пауза ИИ перед ходом</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
+                Насколько ИИ «думает» перед ответом. Больше пауза — удобнее ставить и видеть премувы (можно выстроить цепочку). Не влияет на силу игры.
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {[{ms:0,l:"Мгновенно"},{ms:800,l:"Быстро"},{ms:1500,l:"Спокойно"},{ms:3000,l:"Медленно · 3с"},{ms:5000,l:"Макс · 5с"}].map(o=>{
+                  const sel=aiPaceMs===o.ms;
+                  return <button key={o.ms} onClick={()=>{sAiPaceMs(o.ms);showToast(`Пауза ИИ: ${o.l}`,"info")}}
+                    style={{padding:"7px 13px",borderRadius:RADIUS.full,cursor:"pointer",fontSize:12.5,fontWeight:800,whiteSpace:"nowrap",
+                      border:`1.5px solid ${sel?CC.brand:CC.border}`,background:sel?CC.brandSoft:CC.surface1,color:sel?CC.brand:CC.textDim}}>{o.l}</button>;
+                })}
+              </div>
+            </div>
             {/* Фоновое изображение */}
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>🖼 Фон приложения</div>
@@ -12899,7 +13097,7 @@ ${question.trim()}`;
               <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
               <Row label="↳ UI-события" desc="Уведомления, ачивки, toast-звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
             </div>}
-            <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
+            <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Опт-ин: в анализе и обучении, в партии — по желанию. В пазлах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
             <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
@@ -13389,6 +13587,7 @@ ${question.trim()}`;
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}
       onCoach={()=>{sTab("coach");sSetup(false)}}
+      onProfile={()=>sShowStatsDashboard(true)}
       brand={CC.brand} textMute={CC.textMute} surface1={CC.surface1} border={CC.border}
     />}
     {/* ─── Post-game overlay ─── */}
@@ -13859,11 +14058,19 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
     />
+    {/* AI Voice Coach (LLM + ElevenLabs, гроссмейстерский разбор).
+        ОПТ-ИН: включается ТОЛЬКО когда пользователь сам активировал «Голос-коуч»
+        (liveCommentary) — раньше висел на `!muted` и самопроизвольно озвучивал любую
+        партию (фидбэк основателя). Основное применение — анализ и обучение (Coach),
+        в партии — по желанию; в пазлах не показываем («особо не нужен»). */}
     <VoiceCoach
-      enabled={!muted}
+      enabled={liveCommentary && tab!=="puzzles"}
       fen={game.fen()}
       lastMove={lm ? {san: hist[hist.length-1] || "", from: lm.from, to: lm.to} : null}
       eval={typeof evalCp === "number" ? {cp: evalCp, mate: evalMate || 0} : null}
+      phase={hist.length<=16?"opening":(game.board().flat().filter(Boolean).length<=12?"endgame":"middlegame")}
+      history={hist}
+      userSide={pCol}
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}

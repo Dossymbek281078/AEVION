@@ -35,6 +35,21 @@ type Props = {
   commands: Command[];
 };
 
+/* Per-group hue — mirrors the app-wide feature colour-code so the group badge
+   is a consistent wayfinding signal (green=play, cyan=puzzles, violet=coach,
+   blue=analysis, slate=workspace, amber=settings). Falls back to indigo. */
+const GROUP_HUE: Record<string, string> = {
+  Play: "#059669",
+  Puzzles: "#0891b2",
+  Coach: "#7c3aed",
+  Analysis: "#2563eb",
+  Workspace: "#64748b",
+  Settings: "#d97706",
+};
+function groupHue(g: string): string {
+  return GROUP_HUE[g] || "#4338ca";
+}
+
 /**
  * Lightweight subsequence fuzzy match — returns a score (lower = better) or -1.
  * Bonuses: prefix match, word-boundary match, consecutive chars.
@@ -232,12 +247,12 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0f172a", lineHeight: 1.25 }}>{c.label}</div>
                   {c.hint && <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.3, marginTop: 1 }}>{c.hint}</div>}
                 </div>
-                {c.group && <span style={{
+                {c.group && (() => { const hue = groupHue(c.group); return <span style={{
                   fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
                   textTransform: "uppercase",
                   padding: "2px 7px", borderRadius: 4,
-                  background: "#eef2ff", color: "#4338ca",
-                }}>{c.group}</span>}
+                  background: `${hue}16`, color: hue,
+                }}>{c.group}</span>; })()}
                 {c.hotkey && <kbd style={{
                   fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 10,
                   padding: "2px 7px", borderRadius: 4, background: "#f1f5f9",

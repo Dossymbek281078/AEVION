@@ -41,6 +41,7 @@ import {
   type KidsAiLanguage,
   type KidsAiSeedLesson,
 } from "../data/kidsAiSeed";
+import { containsUnsafe, gentleRedirect } from "../lib/kidsSafety";
 
 export const kidsAiContentRouter = Router();
 
@@ -370,6 +371,18 @@ kidsAiContentRouter.post(
       return;
     }
 
+    // SAFETY LAYER 1 (input): clear-harm topics never reach the LLM. Return a
+    // gentle "ask a grown-up" reply — guaranteed-safe and saves the LLM spend.
+    if (containsUnsafe(question)) {
+      res.json({
+        answer: gentleRedirect(lang),
+        provider: "safety",
+        source: "safety",
+        model: null,
+      });
+      return;
+    }
+
     // Pull lesson context (best-effort — answer is still useful without it).
     let lessonContext: KidsLesson | null = null;
     if (Number.isFinite(lessonId) && lessonId > 0) {
@@ -427,11 +440,27 @@ kidsAiContentRouter.post(
         provider.id,
         messages,
         provider.defaultModel,
-        0.7,
+        // Lower temperature than the default 0.7 — for a kids product we want
+        // more deterministic, on-guardrail answers with less creative drift.
+        0.4,
       );
       // An empty reply means we served the canned fallback text, so the
       // client should treat it as a fallback, not a real AI answer.
       const usedReply = Boolean(result.reply);
+
+      // SAFETY LAYER 2 (output): if a model reply slips a blocked term past the
+      // system prompt, swap it for the gentle redirect before it reaches the kid.
+      if (usedReply && containsUnsafe(result.reply)) {
+        console.warn("[KidsAI] output screen tripped — replacing AI reply");
+        res.json({
+          answer: gentleRedirect(lang),
+          provider: "safety",
+          source: "safety",
+          model: null,
+        });
+        return;
+      }
+
       res.json({
         answer: result.reply || fallbackAnswer(lang),
         provider: usedReply ? provider.id : "fallback",

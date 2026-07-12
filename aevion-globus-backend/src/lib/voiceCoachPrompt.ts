@@ -373,12 +373,15 @@ async function callQCoreAIChat(
       throw new Error(`qcoreai ${r.status}: ${detail.slice(0, 200)}`);
     }
     const data = (await r.json()) as {
+      // AEVION QCoreAI /chat returns { ..., reply }. Tolerate OpenAI-style and
+      // { text } / { content } shapes too.
+      reply?: string;
       choices?: Array<{ message?: { content?: string } }>;
-      // tolerate alt shape: { text } or { content }
       text?: string;
       content?: string;
     };
     const content =
+      data?.reply ??
       data?.choices?.[0]?.message?.content ??
       data?.text ??
       data?.content ??

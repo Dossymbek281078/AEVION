@@ -250,7 +250,7 @@ function roleSlotStyle(id: ConfigRoleId, strategy: Strategy): RoleVisual {
 
 const prettyModel = (m: string) => {
   const map: Record<string, string> = {
-    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-sonnet-4-6": "Claude Sonnet 4",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
@@ -1992,7 +1992,7 @@ export default function QCoreMultiAgentPage() {
                   >−</button>
                   <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
                   <button
-                    onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
+                    onClick={() => setCouncilSize((n) => Math.min(8, n + 1))}
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>

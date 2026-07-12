@@ -2142,7 +2142,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // council mode: number of crowd members to convene (2–6, default 3).
   const councilSize =
-    typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(6, Math.floor(req.body.councilSize))) : 3;
+    typeof req.body?.councilSize === "number" ? Math.max(2, Math.min(8, Math.floor(req.body.councilSize))) : 3;
   // council mode: Mixture-of-Agents refinement layers (1–3, default 1).
   const councilLayers =
     typeof req.body?.councilLayers === "number" ? Math.max(1, Math.min(3, Math.floor(req.body.councilLayers))) : 1;
@@ -4164,7 +4164,7 @@ qcoreaiRouter.get("/agents", (_req, res) => {
     const any = providers.find((p) => p.configured);
     return any ? { provider: any.id, model: any.defaultModel } : null;
   };
-  const primaryWriter = resolveDefault("anthropic", "claude-sonnet-4-20250514");
+  const primaryWriter = resolveDefault("anthropic", "claude-sonnet-4-6");
   let writerBDefault: { provider: string; model: string } | null = null;
   if (primaryWriter) {
     const other = providers.find((p) => p.configured && p.id !== primaryWriter.provider);
@@ -4215,7 +4215,7 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         id: "analyst",
         label: "Analyst",
         description: "Decomposes your request, extracts facts, lists risks, builds a plan.",
-        default: resolveDefault("anthropic", "claude-sonnet-4-20250514"),
+        default: resolveDefault("anthropic", "claude-sonnet-4-6"),
         temperature: 0.3,
       },
       {
@@ -5483,7 +5483,7 @@ qcoreaiRouter.get("/me/audit-log", async (req, res) => {
 
 const BENCHMARK_DATA = {
   models: [
-    { provider: "anthropic", model: "claude-sonnet-4-20250514", speedScore: 88, qualityScore: 95, costScore: 72, contextWindow: 200000 },
+    { provider: "anthropic", model: "claude-sonnet-4-6", speedScore: 88, qualityScore: 95, costScore: 72, contextWindow: 200000 },
     { provider: "openai", model: "gpt-4o", speedScore: 85, qualityScore: 92, costScore: 70, contextWindow: 128000 },
     { provider: "gemini", model: "gemini-2.5-flash", speedScore: 92, qualityScore: 88, costScore: 95, contextWindow: 1000000 },
     { provider: "deepseek", model: "deepseek-chat", speedScore: 80, qualityScore: 85, costScore: 98, contextWindow: 64000 },

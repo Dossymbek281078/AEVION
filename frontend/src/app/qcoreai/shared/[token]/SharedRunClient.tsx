@@ -79,7 +79,7 @@ function styleFor(m: SharedMessage, strategy: string | null) {
 const prettyModel = (m: string | null) => {
   if (!m) return "";
   const map: Record<string, string> = {
-    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-sonnet-4-6": "Claude Sonnet 4",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",

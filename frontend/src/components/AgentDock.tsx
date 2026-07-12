@@ -19,9 +19,13 @@ import {
   canSend,
   describeToolActivity,
   summarizeRun,
+  summarizeHealth,
+  prettyToolName,
   AGENT_EVENT_NAME,
   type AgentEventDetail,
   type DockRunResponse,
+  type DockHealth,
+  type DockToolSummary,
   type ToolActivity,
 } from "./agentDock.lib";
 
@@ -35,11 +39,35 @@ interface ChatEntry {
 const DARK = "#0f172a";
 const PANEL_BG = "linear-gradient(160deg, #0f172a 0%, #131f38 100%)";
 
+function ToolChips({ title, names, tone }: { title: string; names: string[]; tone: "native" | "mcp" }) {
+  if (names.length === 0) return null;
+  const color = tone === "mcp" ? "#bbf7d0" : "#c7d2fe";
+  const border = tone === "mcp" ? "#166534" : "#3a4a6b";
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 9, color: "#64748b", fontWeight: 800, letterSpacing: 0.4, marginBottom: 4 }}>{title.toUpperCase()}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {names.map((n) => (
+          <span
+            key={n}
+            title={n}
+            style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, color, background: "rgba(255,255,255,0.04)", border: `1px solid ${border}` }}
+          >
+            {prettyToolName(n)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AgentDock() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<ChatEntry[]>([]);
+  const [health, setHealth] = useState<DockToolSummary | null>(null);
+  const [showTools, setShowTools] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToEnd = () => {
@@ -101,6 +129,22 @@ export function AgentDock() {
     window.addEventListener(AGENT_EVENT_NAME, handler as EventListener);
     return () => window.removeEventListener(AGENT_EVENT_NAME, handler as EventListener);
   }, []);
+
+  // Fetch the runtime's capabilities the first time the dock is opened, so the
+  // user can see exactly what the agent can do (native + connected MCP tools).
+  useEffect(() => {
+    if (!open || health) return;
+    let alive = true;
+    fetch(apiUrl("/api/agent-runtime/health"))
+      .then((r) => (r.ok ? (r.json() as Promise<DockHealth>) : null))
+      .then((h) => {
+        if (alive && h) setHealth(summarizeHealth(h));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open, health]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -177,6 +221,26 @@ export function AgentDock() {
           <div style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>AEVION Agent</div>
           <div style={{ fontSize: 10, color: "#8aa0c6" }}>image · voice · music · pay · email · SMS · translate</div>
         </div>
+        {health && (
+          <button
+            onClick={() => setShowTools((v) => !v)}
+            aria-label="Show available tools"
+            title="Available tools"
+            style={{
+              padding: "4px 9px",
+              borderRadius: 999,
+              border: "1px solid #3a4a6b",
+              background: showTools ? "rgba(99,102,241,0.25)" : "transparent",
+              color: "#c7d2fe",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🧰 {health.total}{health.mcp.length ? ` · ${health.mcp.length} MCP` : ""}
+          </button>
+        )}
         <button
           onClick={() => setOpen(false)}
           aria-label="Minimise agent"
@@ -194,6 +258,23 @@ export function AgentDock() {
           ▾
         </button>
       </div>
+
+      {/* available-tools panel */}
+      {showTools && health && (
+        <div style={{ padding: "10px 12px", borderBottom: "1px solid #24314d", background: "rgba(99,102,241,0.06)", maxHeight: 180, overflowY: "auto" }}>
+          <div style={{ fontSize: 10, color: "#8aa0c6", marginBottom: 6 }}>
+            {health.model ? `Model ${health.model}` : "Agent"} · {health.keyConfigured ? "connected" : "no key"} · {health.total} tools
+          </div>
+          <ToolChips title="Native" names={health.native} tone="native" />
+          {health.mcp.length > 0 ? (
+            <ToolChips title="MCP" names={health.mcp} tone="mcp" />
+          ) : (
+            <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
+              No MCP tools connected. Enable the AEVION registry MCP with AGENT_RUNTIME_MCP_DEMO=1.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>

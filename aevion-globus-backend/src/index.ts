@@ -12,6 +12,7 @@ import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
+import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
@@ -103,6 +104,7 @@ import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
 import { qventureRouter } from "./routes/qventure";
+import { qskywayRouter } from "./routes/qskyway";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
@@ -1009,6 +1011,7 @@ app.use("/api/paypal", paypalWebhookRouter);
 // ==========================
 app.use("/api/auth", authRouter);
 app.use("/api/auth/oauth", authOauthRouter);
+app.use("/api/tiktok", tiktokRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate
@@ -1108,6 +1111,8 @@ app.use("/api/mapreality", mapRealityRouter);
 app.use("/api/startupx", startupExchangeRouter);
 // QVenture — AI investment analyst: quant score + 4-role council + entry strategy
 app.use("/api/qventure", qventureRouter);
+// QSkyway — 3D-аэрокоридоры для аэротакси (движок A* по полю высот + рынок слотов QRight)
+app.use("/api/qskyway", qskywayRouter);
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
 // Voice of Earth — multilang music tracks + voting

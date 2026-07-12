@@ -9,6 +9,7 @@
     "build": "prisma generate && tsc && node scripts/copy-cjs-shims.js",
     "start": "node dist/index.js",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
+    "smoke:qskyway": "node scripts/qskyway-smoke.js",
     "smoke:build": "node scripts/build-smoke.js",
     "smoke:qcore-fleet": "node scripts/qcore-fleet-smoke.js",
     "eval:qcore": "node scripts/qcore-eval.js",

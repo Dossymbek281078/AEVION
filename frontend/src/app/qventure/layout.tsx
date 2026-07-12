@@ -34,5 +34,17 @@ export const metadata: Metadata = {
 };
 
 export default function QVentureLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // QVenture is a fund-grade English tool: memos, factor rationales, and the
+  // financial vocabulary it speaks (MRR, IRR, LTV/CAC, MoIC, pre-money) are
+  // generated in English and only read as a coherent whole in English. The
+  // site-wide live DOM translator (AutoTranslate) would translate this dense,
+  // jargon-heavy prose asynchronously and only partially — producing the
+  // EN/RU "Runglish" mix a first-time investor sees. Opt the entire QVenture
+  // surface out of DOM translation (AutoTranslate honors translate="no") so the
+  // visitor gets one clean language. display:contents keeps layout untouched.
+  return (
+    <div translate="no" className="notranslate" style={{ display: "contents" }}>
+      {children}
+    </div>
+  );
 }

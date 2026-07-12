@@ -519,6 +519,16 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "AI due-diligence: quant-скоринг + совет 4 ролей + стратегия входа",
   },
   {
+    // Явная строка = поведение как у fallthrough planGate (full+enterprise),
+    // ничего не меняет в доступе. addonMonthly:null (sales-only, PoC — не à-la-carte),
+    // как у соседей veilnetx/qchaingov/z-tide. Закрывает audit:projects-pricing.
+    id: "qskyway",
+    addonMonthly: null,
+    includedIn: ["full", "enterprise"],
+    availability: "beta",
+    oneLiner: "Провайдер-независимые 3D-аэрокоридоры для аэротакси над цифровым двойником города",
+  },
+  {
     id: "deepsan",
     addonMonthly: 9,
     includedIn: ["full", "enterprise"],

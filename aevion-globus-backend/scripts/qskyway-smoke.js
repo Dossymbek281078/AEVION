@@ -37,19 +37,29 @@ async function main() {
   assert(r01.status === 200 && Array.isArray(r01.json?.path) && r01.json.path.length > 1, "route vp0→vp1", `status=${r01.status}`);
   assert(r01.json?.cruiseAltM >= 50 && r01.json?.distanceKm > 0, "route has altitude + distance", `alt=${r01.json?.cruiseAltM} d=${r01.json?.distanceKm}`);
 
-  // clearance invariant across all vertiport pairs
-  let pairs = 0, reachable = 0, violations = 0;
-  for (let i = 0; i < vpN; i++) for (let j = 0; j < vpN; j++) {
-    if (i === j) continue; pairs++;
-    const r = await jpost("/api/qskyway/route", { from: i, to: j });
-    if (r.status === 200 && r.json?.path) {
-      reachable++;
-      const { alts, obstacles } = r.json;
-      for (let k = 0; k < alts.length; k++) if (alts[k] < obstacles[k] + 15) violations++;
+  // multi-city registry
+  const cs = await jget("/api/qskyway/cities");
+  assert(cs.status === 200 && Array.isArray(cs.json?.cities), "/cities lists registry", `status=${cs.status}`);
+  const cityIds = (cs.json?.cities ?? []).map((c) => c.id);
+  assert(cityIds.includes("astana") && cityIds.includes("nyc"), "registry has astana + nyc", cityIds.join(","));
+
+  // clearance invariant across all vertiport pairs, per city
+  for (const cid of cityIds) {
+    const ch = await jget(`/api/qskyway/city?city=${cid}`);
+    const nvp = ch.json?.vertiports?.length ?? 0;
+    let pairs = 0, reachable = 0, violations = 0;
+    for (let i = 0; i < nvp; i++) for (let j = 0; j < nvp; j++) {
+      if (i === j) continue; pairs++;
+      const r = await jpost("/api/qskyway/route", { from: i, to: j, city: cid });
+      if (r.status === 200 && r.json?.path) {
+        reachable++;
+        const { alts, obstacles } = r.json;
+        for (let k = 0; k < alts.length; k++) if (alts[k] < obstacles[k] + 15) violations++;
+      }
     }
+    assert(reachable === pairs, `[${cid}] all vertiport pairs routable`, `${reachable}/${pairs}`);
+    assert(violations === 0, `[${cid}] corridor clears obstacles + margin`, `violations=${violations}`);
   }
-  assert(reachable === pairs, "all vertiport pairs routable", `${reachable}/${pairs}`);
-  assert(violations === 0, "corridor always clears obstacles + margin", `violations=${violations}`);
 
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });

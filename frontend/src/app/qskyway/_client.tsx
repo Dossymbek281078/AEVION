@@ -48,6 +48,8 @@ export default function QSkywayClient() {
   const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, corridors: 0 });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
+  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [cityId, setCityId] = useState<string>("astana");
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -129,29 +131,36 @@ export default function QSkywayClient() {
     setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1) }));
   }, [makeTaxi]);
 
-  // ── rendering ────────────────────────────────────────────────────────────────
+  // ── city loading (switchable) ─────────────────────────────────────────────────
+  const loadCity = useCallback(async (id: string) => {
+    setLoaded(false); setErr(null);
+    try {
+      const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
+      if (!res.ok) throw new Error("city " + res.status);
+      const city: CityData = await res.json();
+      cityRef.current = city;
+      taxisRef.current = []; heroRef.current = null; conflictsRef.current = 0;
+      let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
+      altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
+      const cols = Math.floor(city.grid.cols / 3), rows = Math.floor(city.grid.rows / 3);
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2 });
+      setLoaded(true);
+      newHero();
+      for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
+    } catch (e) { setErr(String(e)); }
+  }, [newHero, makeTaxi]);
+
+  // ── rendering / bootstrap ──────────────────────────────────────────────────────
   useEffect(() => {
-    let cancelled = false;
+    startLoop();
     (async () => {
       try {
-        const res = await fetch(apiUrl("/api/qskyway/city"));
-        if (!res.ok) throw new Error("city " + res.status);
-        const city: CityData = await res.json();
-        if (cancelled) return;
-        cityRef.current = city;
-        let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
-        altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
-        const cols = Math.floor(city.grid.cols / 3), rows = Math.floor(city.grid.rows / 3);
-        setStats((s) => ({ ...s, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2 }));
-        setLoaded(true);
-        newHero();
-        for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
-        startLoop();
-      } catch (e) {
-        if (!cancelled) setErr(String(e));
-      }
+        const r = await fetch(apiUrl("/api/qskyway/cities"));
+        if (r.ok) { const j = await r.json(); setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))); }
+      } catch { /* selector optional */ }
+      loadCity("astana");
     })();
-    return () => { cancelled = true; cancelAnimationFrame(rafRef.current); };
+    return () => { cancelAnimationFrame(rafRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -297,7 +306,7 @@ export default function QSkywayClient() {
   const bookSlot = useCallback(async () => {
     const hero = heroRef.current;
     if (!hero) return;
-    const routeId = `vp-route-${hero.path[0].c}_${hero.path[0].r}`;
+    const routeId = `${cityId}-vp-${hero.path[0].c}_${hero.path[0].r}`;
     const t0 = "2026-07-11T09:00:00Z", t1 = "2026-07-11T09:03:00Z";
     try {
       const res = await fetch(apiUrl("/api/qskyway/slots"), {
@@ -307,7 +316,7 @@ export default function QSkywayClient() {
       const j = await res.json();
       setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
     } catch (e) { setBooking("ошибка сети: " + String(e)); }
-  }, []);
+  }, [cityId]);
 
   const wrap: React.CSSProperties = { maxWidth: 1180, margin: "0 auto", padding: "24px 18px 48px", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", color: "#e8eef7" };
   const card: React.CSSProperties = { background: "#0e141f", border: "1px solid #1e2836", borderRadius: 12, overflow: "hidden" };
@@ -324,8 +333,20 @@ export default function QSkywayClient() {
           3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города. Данные зданий — OpenStreetMap.
         </p>
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
-          Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC).
+          Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC). Данные зданий — OpenStreetMap (открытые, ODbL).
         </p>
+
+        {cities.length > 1 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 16px" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>ГОРОД:</span>
+            {cities.map((c) => (
+              <button key={c.id} onClick={() => { setCityId(c.id); loadCity(c.id); }}
+                style={{ fontSize: 13, borderRadius: 8, padding: "7px 13px", cursor: "pointer", ...(cityId === c.id ? { background: "#22d3ee", color: "#04212a", border: "none", fontWeight: 600 } : { background: "transparent", color: "#9fb0c4", border: "1px solid #1e2836" }) }}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
 

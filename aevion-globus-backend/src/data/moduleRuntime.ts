@@ -26,14 +26,15 @@ export interface ModuleRuntimeMeta {
  * модулей, судя лишь по терсному health. Повторный аудит дёрнул РЕАЛЬНЫЙ
  * GET-эндпоинт каждого модуля на проде — критерий по функции, не по health:
  *   • mvp_live    — рабочий API отдаёт живые данные (или корректный gate:
- *                   402 paywall / 401 auth) + фронт-страница. 38 модулей.
+ *                   402 paywall / 401 auth) + фронт-страница. 39 модулей.
  *   • platform_api— API+фронт есть, но модуль САМ заявляет pre-launch/waitlist.
  *                   Остался только veilnetx (реально pre-product). 1 модуль.
  *   • portal_only — 0. Не построенных модулей НЕТ: qpaynet-embedded построен под
  *                   путём /api/qpaynet (id≠путь), первый пробник дал ложный 404.
- * Итог 2026-07-12: mvp_live 38 · platform_api 1 · portal_only 0. Запущены
- * startup-exchange+z-tide (#562, страницы были живы) и kids-ai-content (#564+
- * safety-hardened, verified). ВСЕ 39 построены; 38 работают, 1 на waitlist.
+ * Итог 2026-07-12: mvp_live 39 · platform_api 1 · portal_only 0 (40 модулей).
+ * Запущены startup-exchange+z-tide (#562), kids-ai-content (#564 safety-hardened,
+ * verified), +добавлен qskyway (#563, планета #40). ВСЕ 40 построены; 39 работают,
+ * 1 (veilnetx) на self-declared waitlist.
  */
 export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // ── mvp_live: рабочий продукт (verified prod API/страница) ──────────────────
@@ -278,6 +279,15 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     primaryPath: "/z-tide",
     apiHints: ["/api/ztide/leaderboard", "/api/ztide/stats", "/api/ztide/*"],
     hint: "Стрики/leaderboard/очки · /api/ztide живой (юзеры+события) · страница рабочая",
+  },
+  // qskyway (планета #40, PR #563 параллельной сессии) — без записи падал в
+  // default portal_only. По факту рабочий: /api/qskyway/{health,cities,city,
+  // route(A*),slots} живые, страница /qskyway 200. Классифицирую mvp_live.
+  qskyway: {
+    tier: "mvp_live",
+    primaryPath: "/qskyway",
+    apiHints: ["/api/qskyway/cities", "/api/qskyway/route", "/api/qskyway/*"],
+    hint: "3D-аэрокоридоры для аэротакси · A* по высотным полосам + рынок 4D-слотов · /api/qskyway живой",
   },
 
   // ── qpaynet-embedded: ПОСТРОЕН (id≠путь — реестр qpaynet-embedded, API /api/qpaynet)

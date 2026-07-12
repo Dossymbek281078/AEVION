@@ -866,8 +866,9 @@ export default function CyberChessPage(){
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
   const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
   // Правый WorkspaceDock (fixed ~46px у края) — резервируем 56px по ширине, чтобы 3 колонки
-  // не уходили под него (баг: док наезжал на панель ходов).
-  const dockReserve=56;
+  // не уходили под него (баг: док наезжал на панель ходов). На мобайле (<769) док скрыт
+  // (его функции есть в BottomNav/«Все разделы»/Профиле) → 0, доска забирает эти 56px.
+  const dockReserve=vwPx>=769?56:0;
   // Кап 1600 (было 1400) — больше места для доски на высоких/больших экранах.
   const baseBoardPx=Math.max(320,Math.min(1600,vhPx-vReserve,vwPx-(railShown?660:400)-dockReserve));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
@@ -6479,10 +6480,11 @@ export default function CyberChessPage(){
         // inline paddingRight) so globals.css can zero it on narrow desktops and the
         // right panel never gets pushed off-screen. Banner is a fixed overlay; this
         // only stops it from covering the panel when there's room for both.
-        // paddingRight = резерв под правый WorkspaceDock (56, всегда) + баннер «Проекты» (244,
-        // когда показан). Инлайн (надёжнее CSS-var: правый док больше не наезжает на панель ходов).
+        // paddingRight = резерв под правый WorkspaceDock (dockReserve: 56 на десктопе, 0 на
+        // мобайле где док скрыт) + баннер «Проекты» (244, когда показан). Инлайн (надёжнее
+        // CSS-var: правый док больше не наезжает на панель ходов).
         ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -14229,7 +14231,7 @@ ${question.trim()}`;
         zero render lag (lichess / chess.com architecture). The source-cell hide
         is still driven by the ghostFrom React state below. */}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
-    <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
+    {vwPx>=769&&<WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>}
 
     {/* ─── Move annotation picker (right-click on move in Analysis) ─── */}
     {annotPicker&&<>

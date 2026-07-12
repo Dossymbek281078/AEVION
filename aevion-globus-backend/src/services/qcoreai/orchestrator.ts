@@ -20,7 +20,15 @@
  * route handler forwards them as-is and persists key milestones to Postgres.
  */
 
-import { streamProviderResilient, ChatMessage, getProviders, discoverLocalModels } from "./providers";
+import {
+  streamProviderResilient,
+  callProviderResilient,
+  ChatMessage,
+  getProviders,
+  getFreeProviders,
+  getLocalProviders,
+  discoverLocalModels,
+} from "./providers";
 import {
   AGGREGATOR_PROMPT,
   AgentConfig,
@@ -42,10 +50,19 @@ import { costUsd } from "./pricing";
 
 export type AgentStage = "draft" | "revision" | "judge";
 export type PipelineStrategy = "sequential" | "parallel" | "debate" | "council";
+/**
+ * What a caller may ASK for. "auto" is a meta-strategy: a cheap classifier
+ * decides, per query, between a full Council (open-ended reasoning / analysis /
+ * writing / advice / coding / multi-step math) and a single flagship call
+ * (a plain factual lookup, where a 40-Q benchmark showed the crowd only ties —
+ * so Council overhead isn't worth it). It always resolves to a concrete
+ * strategy before any `plan`/`final` event is emitted.
+ */
+export type RequestedStrategy = PipelineStrategy | "auto";
 
 export type OrchestratorInput = {
   userInput: string;
-  strategy?: PipelineStrategy;
+  strategy?: RequestedStrategy;
   overrides?: {
     analyst?: AgentOverride;
     writer?: AgentOverride;
@@ -93,6 +110,19 @@ export type OrchestratorInput = {
 };
 
 export type OrchestratorEvent =
+  /**
+   * Emitted first in "auto" mode, before `plan`, to record the classifier's
+   * decision so the UI/audit trail can show WHY this query went to Council vs a
+   * single call. `classification` is the query type the router saw; `resolved`
+   * is the strategy it dispatched to.
+   */
+  | {
+      type: "route";
+      classification: "open" | "fact";
+      resolved: "council" | "single";
+      classifier: { provider: string; model: string };
+      note: string;
+    }
   | {
       type: "plan";
       strategy: PipelineStrategy;
@@ -822,6 +852,201 @@ async function* mergeStreamsTally<R>(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Strategy: auto — classify the query, then route Council vs single flagship
+
+   Benchmark finding (N=40, 2026-07-12): the Council beats a single flagship on
+   reasoning/writing/advice/analysis (100%), math (80%) and coding (67%), but on
+   PURE FACTUAL RECALL it only ties (50%) — so paying the ~2.8× Council premium
+   there is waste. "auto" runs a cheap one-token classifier (a free model online,
+   a local model offline) that sends open-ended prompts to the Council and plain
+   factual lookups to a single flagship call. Uncertain → Council (quality-safe).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const CLASSIFIER_SYSTEM =
+  "You are a routing classifier for an AI system. Decide whether a user query is " +
+  "OPEN — needing multi-perspective work: reasoning, analysis, writing, advice, " +
+  "coding, or multi-step math — or FACT — a simple factual lookup, definition, " +
+  "conversion, or trivia that has one correct answer a single strong model already " +
+  "knows. When unsure, answer OPEN. Reply with EXACTLY one token: OPEN or FACT. " +
+  "No other text.";
+
+const DIRECT_ANSWER_PROMPT =
+  "You are a precise, helpful assistant. Answer the user's question directly and " +
+  "correctly. Be concise — include only what is needed to be accurate and useful. " +
+  "No preamble, no meta commentary.";
+
+/** Pick the cheapest reliable model to run the router classification on. */
+function pickClassifier(
+  localOnly: boolean,
+  localModels?: Record<string, string[]>
+): { provider: string; model: string } | null {
+  if (localOnly) {
+    const p = getLocalProviders()[0];
+    if (!p) return null;
+    return { provider: p.id, model: localModels?.[p.id]?.[0] ?? p.defaultModel };
+  }
+  // Prefer a free gateway (zero marginal cost); else the cheapest premium chair
+  // model (Haiku), else anything configured.
+  const free = getFreeProviders()[0];
+  if (free) return { provider: free.id, model: free.defaultModel };
+  const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured);
+  if (anthropic) {
+    // Cheapest capable chair model for a one-token classification — prefer any
+    // Haiku snapshot (id may be versioned, e.g. claude-haiku-4-5-20251001).
+    const haiku = anthropic.models.find((m) => m.startsWith("claude-haiku"));
+    return { provider: "anthropic", model: haiku ?? anthropic.defaultModel };
+  }
+  const any = getProviders().find((p) => p.configured);
+  return any ? { provider: any.id, model: any.defaultModel } : null;
+}
+
+/**
+ * Parse the classifier's reply into a routing decision. Pure + exported so the
+ * decision rule is unit-testable without a network call. Only an explicit FACT
+ * token routes to the single-model path; everything else (including garbage or
+ * an OPEN token) is quality-safe OPEN → council.
+ */
+export function parseRouteToken(reply: string): "open" | "fact" {
+  const t = (reply || "").trim().toUpperCase();
+  if (t.startsWith("FACT")) return "fact";
+  return "open";
+}
+
+/**
+ * Classify a query as OPEN (→ council) or FACT (→ single). Returns null if the
+ * classifier call fails, so the caller can default to Council (never under-serve
+ * on a quality question).
+ */
+async function classifyRoute(
+  userInput: string,
+  clf: { provider: string; model: string }
+): Promise<"open" | "fact" | null> {
+  try {
+    const res = await callProviderResilient(
+      clf.provider,
+      [
+        { role: "system", content: CLASSIFIER_SYSTEM },
+        { role: "user", content: `Query:\n${userInput.slice(0, 2000)}\n\nOPEN or FACT?` },
+      ],
+      clf.model,
+      0
+    );
+    return parseRouteToken(res.reply);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Single-model path for FACT queries: one direct call to the best available
+ * model (the same chair the Council would use, minus the crowd). Streams its
+ * output as the final answer. Emits a `plan` (strategy: sequential, one slot)
+ * so existing consumers stay happy, then agent + final + done.
+ */
+async function* runSingle(
+  input: OrchestratorInput,
+  answerer: AgentConfig,
+  t0: number
+): AsyncGenerator<OrchestratorEvent> {
+  const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  let totalCost = 0;
+  const tally = (e: OrchestratorEvent) => {
+    if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
+  };
+
+  yield {
+    type: "plan",
+    strategy: "sequential",
+    analyst: { provider: answerer.provider, model: answerer.model },
+    writer: { provider: answerer.provider, model: answerer.model },
+    critic: { provider: answerer.provider, model: answerer.model },
+    maxRevisions: 0,
+  };
+
+  const userPrompt = yield* applyGuidance(input, input.userInput, "writer", "draft");
+  const messages: ChatMessage[] = [
+    { role: "system", content: answerer.systemPrompt },
+    ...history,
+    { role: "user", content: userPrompt },
+  ];
+  let finalContent: string;
+  try {
+    finalContent = yield* forwardTally(streamAgent(answerer, "draft", messages), tally);
+  } catch (e) {
+    yield { type: "error", role: "writer", message: `Single-model answer failed: ${errMsg(e)}` };
+    return;
+  }
+
+  yield { type: "final", content: finalContent };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
+}
+
+/**
+ * Resolve "auto" into a concrete run. Classifies the query, emits a `route`
+ * event, then delegates to the Council (open) or a single flagship call (fact).
+ * Provider selection mirrors the council path so offline/online both work.
+ */
+async function* runAuto(
+  input: OrchestratorInput,
+  t0: number
+): AsyncGenerator<OrchestratorEvent> {
+  const localOnly = input.localOnly === true;
+  const localModels = localOnly ? await discoverLocalModels() : undefined;
+
+  const clf = pickClassifier(localOnly, localModels);
+  const decision = clf ? await classifyRoute(input.userInput, clf) : null;
+  // No classifier, or classifier errored → default to Council (quality-safe).
+  const classification: "open" | "fact" = decision ?? "open";
+  const clfMeta = clf ?? { provider: "none", model: "heuristic-default" };
+
+  if (classification === "fact") {
+    // FACT → single strong model, no crowd. Reuse the chair's provider/model but
+    // with a plain direct-answer prompt (not the synthesis prompt).
+    const chair = buildSynthesizer(input.overrides?.critic, { localOnly, localModels });
+    if (!chair) {
+      yield { type: "error", message: localOnly ? noLocalProviderMsg() : noProviderMsg() };
+      return;
+    }
+    const answerer: AgentConfig = {
+      role: "writer",
+      provider: chair.provider,
+      model: chair.model,
+      systemPrompt: input.overrides?.critic?.systemPrompt?.trim() || DIRECT_ANSWER_PROMPT,
+      temperature: 0.3,
+    };
+    yield {
+      type: "route",
+      classification,
+      resolved: "single",
+      classifier: clfMeta,
+      note: decision
+        ? "Factual lookup — a single flagship call answers this as well as the council, at 1× cost."
+        : "Classifier unavailable — defaulted, but treated as a single call.",
+    };
+    yield* runSingle(input, answerer, t0);
+    return;
+  }
+
+  // OPEN → full Council.
+  const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer, { localOnly, localModels });
+  const synthesizer = buildSynthesizer(input.overrides?.critic, { localOnly, localModels });
+  if (members.length < 2 || !synthesizer) {
+    yield { type: "error", message: localOnly ? noLocalProviderMsg() : noProviderMsg() };
+    return;
+  }
+  yield {
+    type: "route",
+    classification,
+    resolved: "council",
+    classifier: clfMeta,
+    note: decision
+      ? "Open-ended query — routed to the multi-model council for breadth + cross-checking."
+      : "Classifier unavailable — defaulted to the council (quality-safe).",
+  };
+  yield* runCouncil(input, { members, synthesizer }, t0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Public entry point
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -829,6 +1054,12 @@ export async function* runMultiAgent(
   input: OrchestratorInput
 ): AsyncGenerator<OrchestratorEvent> {
   const t0 = Date.now();
+
+  if (input.strategy === "auto") {
+    yield* runAuto(input, t0);
+    return;
+  }
+
   const strategy: PipelineStrategy =
     input.strategy === "parallel" ? "parallel" :
     input.strategy === "debate" ? "debate" :

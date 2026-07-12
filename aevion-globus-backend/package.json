@@ -12,6 +12,7 @@
     "smoke:qskyway": "node scripts/qskyway-smoke.js",
     "smoke:build": "node scripts/build-smoke.js",
     "smoke:qcore-fleet": "node scripts/qcore-fleet-smoke.js",
+    "smoke:qcore-autoroute": "node scripts/qcore-autoroute-smoke.js",
     "eval:qcore": "node scripts/qcore-eval.js",
     "smoke:tier3": "node scripts/tier3-smoke.js",
     "smoke:bank-prod": "node scripts/bank-prod-smoke.js",

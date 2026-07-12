@@ -56,6 +56,8 @@ const SMOKES = [
   { name: "build", script: "build-smoke.js", readOnly: false, env: { BUILD_PAYMENT_WEBHOOK_SECRET: process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "4wSqkQHVbttaDO02zDJiPZcmyRVU3gO9fhSY6nicb9kIYxFI" } },
   // Offline: exercises the QCoreAI free fleet + council assembly against dist (no server/DB/keys).
   { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true },
+  // Offline: exercises the QCoreAI "auto" router (classify → council vs single) via the stub.
+  { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.

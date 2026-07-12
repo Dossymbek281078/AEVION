@@ -334,6 +334,17 @@ const SK_MOVES="aevion_snd_moves_v1",SK_CLOCK="aevion_snd_clock_v1",SK_UI="aevio
 let _muted:boolean|null=null;
 function isMuted(){if(_muted===null){try{_muted=typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{_muted=false}}return !!_muted}
 function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}catch{}}
+
+// ── Облачная синхра CyberChess — общие хелперы (эффект + кнопки Settings) ──
+// Один способ снять/залить/применить снапшот — без дублирования. Работают в
+// браузере (localStorage/fetch), вызываются только в рантайме. Сервер ключует
+// по JWT (не по client-userId), snapshot исключает userId и auth-токен.
+const CC_CLOUD_PREFIX=["cyberchess","aevion_chess"];
+function ccCloudToken():string{try{return localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{return""}}
+function ccCloudSnapshot():Record<string,string>{const o:Record<string,string>={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k==="cyberchess.userId")continue;if(CC_CLOUD_PREFIX.some(p=>k.startsWith(p)))o[k]=localStorage.getItem(k)||"";}}catch{}return o;}
+async function ccCloudPush():Promise<boolean>{const t=ccCloudToken();if(!t)return false;const s=ccCloudSnapshot();let ser="";try{ser=JSON.stringify(s)}catch{return false}if(ser.length>250000)return false;const ts=Date.now();try{const r=await fetch("/api-backend/api/cyberchess/state",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({state:s,clientTs:ts})});if(r.ok){try{localStorage.setItem("cc_cloud_seen_ts",String(ts))}catch{}return true}}catch{}return false;}
+async function ccCloudFetch():Promise<{state:Record<string,string>|null;clientTs:number}|null>{const t=ccCloudToken();if(!t)return null;try{const r=await fetch("/api-backend/api/cyberchess/state",{headers:{Authorization:`Bearer ${t}`}});if(!r.ok)return null;const d=await r.json() as {state?:Record<string,string>|null;clientTs?:number};return{state:d?.state&&typeof d.state==="object"?d.state:null,clientTs:Number(d?.clientTs)||0};}catch{return null}}
+function ccCloudApply(state:Record<string,string>,clientTs:number):void{try{for(const[k,v]of Object.entries(state)){if(k==="cyberchess.userId")continue;try{localStorage.setItem(k,String(v))}catch{}}localStorage.setItem("cc_cloud_seen_ts",String(clientTs||Date.now()))}catch{}}
 function isSndMoves(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_MOVES):null;return v===null||v==="1"}catch{return true}}
 function isSndClock(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_CLOCK):null;return v===null||v==="1"}catch{return true}}
 function isSndUi(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_UI):null;return v===null||v==="1"}catch{return true}}
@@ -1251,46 +1262,28 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(!ccAuth.checked||!ccAuth.user)return;
     let cancelled=false;
-    const PREFIX=["cyberchess","aevion_chess"];
-    const EXCLUDE=new Set(["cyberchess.userId"]);
-    const tok=()=>{try{return localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{return""}};
-    const snap=()=>{const o:Record<string,string>={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||EXCLUDE.has(k))continue;if(PREFIX.some(p=>k.startsWith(p)))o[k]=localStorage.getItem(k)||"";}}catch{}return o;};
     const seenTs=()=>{try{return parseInt(localStorage.getItem("cc_cloud_seen_ts")||"0")||0}catch{return 0}};
-    const pristine=(s:Record<string,string>)=>{try{return !localStorage.getItem("cyberchess.rating")&&JSON.stringify(s).length<1200}catch{return false}};
-    const push=async()=>{
-      const t=tok();if(!t)return;
-      const s=snap();let ser="";try{ser=JSON.stringify(s)}catch{return}
-      if(ser.length>250000)return; // ~256KB бэкенд-лимит — гигантские не шлём
-      const ts=Date.now();
-      try{const r=await fetch("/api-backend/api/cyberchess/state",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({state:s,clientTs:ts})});if(r.ok){try{localStorage.setItem("cc_cloud_seen_ts",String(ts))}catch{}}}catch{}
-    };
+    const pristine=()=>{try{return !localStorage.getItem("cyberchess.rating")&&JSON.stringify(ccCloudSnapshot()).length<1200}catch{return false}};
     (async()=>{
-      const t=tok();if(!t)return;
-      try{
-        const r=await fetch("/api-backend/api/cyberchess/state",{headers:{Authorization:`Bearer ${t}`}});
-        if(r.ok){
-          const d=await r.json() as {state?:Record<string,string>|null;clientTs?:number};
-          if(cancelled)return;
-          const srvState=d?.state&&typeof d.state==="object"?d.state:null;
-          const srvTs=Number(d?.clientTs)||0;
-          const restored=(()=>{try{return sessionStorage.getItem("cc_cloud_restored_v1")==="1"}catch{return false}})();
-          if(srvState&&Object.keys(srvState).length>0&&srvTs>seenTs()&&pristine(snap())&&!restored){
-            // Чистое устройство + сервер новее → восстановить и один раз перезагрузить.
-            try{
-              for(const[k,v]of Object.entries(srvState)){if(EXCLUDE.has(k))continue;try{localStorage.setItem(k,String(v))}catch{}}
-              localStorage.setItem("cc_cloud_seen_ts",String(srvTs));
-              sessionStorage.setItem("cc_cloud_restored_v1","1");
-            }catch{}
-            try{window.location.reload()}catch{}
-            return;
-          }
-        }
-      }catch{}
+      const got=await ccCloudFetch();
       if(cancelled)return;
-      await push(); // иначе — бэкапим локальное наверх
+      if(got){
+        const srvState=got.state;
+        const srvTs=got.clientTs;
+        const restored=(()=>{try{return sessionStorage.getItem("cc_cloud_restored_v1")==="1"}catch{return false}})();
+        if(srvState&&Object.keys(srvState).length>0&&srvTs>seenTs()&&pristine()&&!restored){
+          // Чистое устройство + сервер новее → восстановить и один раз перезагрузить.
+          ccCloudApply(srvState,srvTs);
+          try{sessionStorage.setItem("cc_cloud_restored_v1","1")}catch{}
+          try{window.location.reload()}catch{}
+          return;
+        }
+      }
+      if(cancelled)return;
+      await ccCloudPush(); // иначе — бэкапим локальное наверх
     })();
-    const iv=window.setInterval(()=>{void push()},90000);
-    const onHide=()=>{if(document.visibilityState==="hidden")void push()};
+    const iv=window.setInterval(()=>{void ccCloudPush()},90000);
+    const onHide=()=>{if(document.visibilityState==="hidden")void ccCloudPush()};
     document.addEventListener("visibilitychange",onHide);
     return()=>{cancelled=true;window.clearInterval(iv);document.removeEventListener("visibilitychange",onHide)};
   },[ccAuth.checked,ccAuth.user]);
@@ -13217,6 +13210,32 @@ ${question.trim()}`;
                 <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>JPG/PNG/WebP · фон применяется только в CyberChess</div>
               </div>
             </div>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>☁ Аккаунт и синхронизация</div>
+            {ccAuth.user ? (
+              <div style={{display:"flex",flexDirection:"column",gap:8,padding:"4px 0"}}>
+                <div style={{fontSize:12,color:CC.textDim}}>Вошёл как <b style={{color:CC.text}}>{ccAuth.user.email||ccAuth.user.name}</b>. Рейтинг, история и Chessy сохраняются в аккаунт.</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button onClick={async()=>{const ok=await ccCloudPush();showToast(ok?"☁ Сохранено в облако":"Не удалось сохранить","info")}} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,cursor:"pointer"}}>☁ Сохранить в облако</button>
+                  <button onClick={async()=>{
+                    const got=await ccCloudFetch();
+                    if(!got||!got.state||Object.keys(got.state).length===0){showToast("В облаке пока нет сохранённого прогресса","info");return}
+                    if(!window.confirm("Восстановить прогресс из облака? Текущие локальные данные CyberChess будут заменены облачными (необратимо)."))return;
+                    ccCloudApply(got.state,got.clientTs||Date.now());
+                    showToast("⬇ Восстановлено — обновляю…","success");
+                    setTimeout(()=>{try{window.location.reload()}catch{}},700);
+                  }} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.info}`,background:CC.infoSoft,color:CC.info,fontSize:12,fontWeight:800,cursor:"pointer"}}>⬇ Восстановить из облака</button>
+                  <a href="/account" style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,fontSize:12,fontWeight:800,textDecoration:"none"}}>Аккаунт →</a>
+                </div>
+                <div style={{fontSize:10,color:CC.textMute}}>Авто-бэкап каждые 90с и при сворачивании вкладки. «Восстановить» подтянет прогресс с другого устройства (last-writer-wins).</div>
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:8,padding:"4px 0"}}>
+                <div style={{fontSize:12,color:CC.textDim}}>Войди в аккаунт AEVION — рейтинг, история и Chessy будут синхронизироваться между устройствами.</div>
+                <a href="/auth?next=/cyberchess" style={{alignSelf:"flex-start",padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,textDecoration:"none"}}>👤 Войти</a>
+              </div>
+            )}
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>

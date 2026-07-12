@@ -6481,8 +6481,8 @@ export default function CyberChessPage(){
         // only stops it from covering the panel when there's room for both.
         // paddingRight = резерв под правый WorkspaceDock (56, всегда) + баннер «Проекты» (244,
         // когда показан). Инлайн (надёжнее CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -14222,7 +14222,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

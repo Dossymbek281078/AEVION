@@ -457,3 +457,15 @@ model HealthDailyLog {
   @@unique([profileId, date])
   @@index([profileId, date])
 }
+
+// ── CyberChess cloud state (аккаунт-синхра между устройствами) ──────────
+// Снапшот игрового состояния (рейтинг/история/Chessy/прогресс/настройки) как
+// JSON, КЛЮЧУЕТСЯ ПО JWT-аккаунту (userId = auth.sub), не по client-userId →
+// не спуфится. Пишется/читается через /api/cyberchess/state (requireAuth).
+// clientTs — метка версии на устройстве для разрешения конфликтов (last-writer).
+model CyberchessUserState {
+  userId    String   @id
+  state     Json     @default("{}")
+  clientTs  BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+}

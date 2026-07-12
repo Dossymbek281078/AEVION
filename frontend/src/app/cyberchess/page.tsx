@@ -900,6 +900,7 @@ export default function CyberChessPage(){
     sScratchOn(false);sScratchGame(null);sScratchHist([]);sScratchSel(null);sScratchVm(new Set());sScratchLm(null);
   },[]);
   const pmsRef=useRef<Pre[]>([]);
+  const gmBusyRef=useRef(false); // in-flight guard для «🧠 GM-разбор» (LLM), чтобы не спамить
   const pmSelRef=useRef<Square|null>(null);
   useEffect(()=>{pmsRef.current=pms},[pms]);
   useEffect(()=>{pmSelRef.current=pmSel},[pmSel]);
@@ -7635,8 +7636,38 @@ export default function CyberChessPage(){
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
             display:"flex",flexDirection:"column",gap:6
           }}>
-            {/* Компактный грид 2-строки × 3 кнопки — меньше вертикального пространства */}
+            {/* Компактный грид × 3 кнопки — меньше вертикального пространства */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
+              {/* 🧠 GM-разбор — реальный гроссмейстерский разбор через QCoreAI (LLM).
+                  В отличие от «🔍 Объясни» (эвристика+движок) даёт человеческий разбор
+                  уровня 2600+: идеи, планы за обе стороны, что играть и почему. Текст,
+                  без голоса — для анализа и обучения. */}
+              <Btn size="sm" variant="primary" onClick={async()=>{
+                if(gmBusyRef.current)return;
+                gmBusyRef.current=true;
+                sCoachRemark({kind:"position",title:"🧠 Гроссмейстер думает…",body:"Разбираю позицию…"});
+                try{
+                  const r=await fetch(`/api-backend/api/cyberchess-voice-coach/ask`,{
+                    method:"POST",headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({
+                      question:"Разбери текущую позицию как гроссмейстер: краткая оценка, главные идеи и планы за обе стороны, и что мне играть дальше и почему. По делу, конкретными ходами в нотации.",
+                      fen:game.fen(),
+                      lastMove:hist[hist.length-1]??null,
+                      history:hist.slice(-24),
+                      userSide:pCol,
+                      eval:typeof evalCp==="number"?{cp:evalCp,mate:evalMate||0}:null,
+                    }),
+                    signal:AbortSignal.timeout(15000),
+                  });
+                  if(!r.ok)throw new Error(`ask ${r.status}`);
+                  const j=await r.json() as {text?:string};
+                  const text=(j?.text||"").trim();
+                  if(text)sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:text,hint:"AI-тренер уровня 2600+ · на основе позиции и оценки движка"});
+                  else sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:"Не удалось получить разбор — попробуй ещё раз.",hint:"Или используй 🔍 Объясни (движок+эвристика)"});
+                }catch{
+                  sCoachRemark({kind:"position",title:"🧠 GM-разбор недоступен",body:"AI-тренер сейчас не отвечает. Используй 🔍 Объясни, 📋 Найди план или 🎯 Тактика — они работают на движке.",hint:"GM-разбор требует связи с QCoreAI"});
+                }finally{gmBusyRef.current=false;}
+              }}>🧠 GM-разбор</Btn>
               <Btn size="sm" variant="primary" onClick={()=>{
                 const fen=game.fen();
                 // 1) Мат в 1 — мгновенно, без движка. Коуч обязан это видеть.

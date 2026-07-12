@@ -3646,9 +3646,16 @@ export default function CyberChessPage(){
     prevAnalysisLenRef.current=analysis.length;
   },[analysis.length]);
 
-  /* ── Live Voice Commentary — Coach speaks after every move when enabled. ── */
+  /* ── Live Voice Commentary — устаревший браузерный путь (SpeechSynthesis).
+     ВЫКЛЮЧЕН: озвучивал шаблонные фразы («Позиция складывается в твою пользу»),
+     которые основатель справедливо забраковал как «ИИ не соображает в шахматах».
+     Теперь озвучкой заведует VoiceCoach (LLM + ElevenLabs, гроссмейстерский разбор),
+     тоже под флагом liveCommentary. Держим два голоса нельзя — иначе двойная речь.
+     Код оставлен как аварийный запасной путь, но по умолчанию не срабатывает. ── */
+  const USE_BROWSER_TTS_FALLBACK=false;
   const lastCommentaryBkRef=useRef<number>(-1);
   useEffect(()=>{
+    if(!USE_BROWSER_TTS_FALLBACK)return;
     if(!liveCommentary)return;
     if(tab!=="play"&&tab!=="coach")return;
     if(!on||over||setup)return;
@@ -5961,9 +5968,9 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📺</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Streamer Mode</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:streamerMode?"#7c3aed":"#e5e7eb",color:streamerMode?"#fff":CC.textDim}}>{streamerMode?"ON":"OFF"}</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>OBS-ready: тёмный фон, чистый интерфейс.</div>
                   </button>
-                  <button onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл — Coach говорит вслух","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${liveCommentary?"#7c3aed":CC.border}`,background:liveCommentary?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎙</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Live Commentary</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:liveCommentary?"#7c3aed":"#e5e7eb",color:liveCommentary?"#fff":CC.textDim}}>{liveCommentary?"ON":"OFF"}</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Coach читает каждый ход вслух — для зрителей.</div>
+                  <button onClick={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч вкл — гроссмейстерский разбор вслух":"Голос-коуч выкл","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${liveCommentary?"#7c3aed":CC.border}`,background:liveCommentary?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎙</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Голос-коуч (GM)</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:liveCommentary?"#7c3aed":"#e5e7eb",color:liveCommentary?"#fff":CC.textDim}}>{liveCommentary?"ON":"OFF"}</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>ИИ вслух разбирает ходы на уровне гроссмейстера — анализ, обучение, стрим.</div>
                   </button>
                 </div>
               </Card>}
@@ -13090,7 +13097,7 @@ ${question.trim()}`;
               <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
               <Row label="↳ UI-события" desc="Уведомления, ачивки, toast-звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
             </div>}
-            <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
+            <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Опт-ин: в анализе и обучении, в партии — по желанию. В пазлах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
             <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
@@ -14051,11 +14058,19 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
     />
+    {/* AI Voice Coach (LLM + ElevenLabs, гроссмейстерский разбор).
+        ОПТ-ИН: включается ТОЛЬКО когда пользователь сам активировал «Голос-коуч»
+        (liveCommentary) — раньше висел на `!muted` и самопроизвольно озвучивал любую
+        партию (фидбэк основателя). Основное применение — анализ и обучение (Coach),
+        в партии — по желанию; в пазлах не показываем («особо не нужен»). */}
     <VoiceCoach
-      enabled={!muted}
+      enabled={liveCommentary && tab!=="puzzles"}
       fen={game.fen()}
       lastMove={lm ? {san: hist[hist.length-1] || "", from: lm.from, to: lm.to} : null}
       eval={typeof evalCp === "number" ? {cp: evalCp, mate: evalMate || 0} : null}
+      phase={hist.length<=16?"opening":(game.board().flat().filter(Boolean).length<=12?"endgame":"middlegame")}
+      history={hist}
+      userSide={pCol}
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}

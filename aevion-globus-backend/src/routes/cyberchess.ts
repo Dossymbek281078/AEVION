@@ -414,3 +414,95 @@ cyberchessRouter.get("/cpi/me", async (req: Request, res: Response) => {
     res.status(500).json({ error: "cpi_me_failed" });
   }
 });
+
+// ─── CyberChess cloud state — аккаунт-синхра между устройствами ──────────
+// Снапшот игрового состояния (рейтинг/история/Chessy/прогресс) как JSON.
+// БЕЗОПАСНОСТЬ: userId берётся из JWT (req.auth.sub через requireAuth), НЕ из
+// тела/квери → нельзя подменить чужой аккаунт. Zero-regression: без DATABASE_URL
+// эндпоинты отвечают offline/503, фронт продолжает жить на localStorage.
+let statePool: any = null;
+let stateDbTried = false;
+async function ensureStateDb(): Promise<any> {
+  if (stateDbTried) return statePool;
+  stateDbTried = true;
+  if (!process.env.DATABASE_URL) {
+    console.log("[CyberchessState] No DATABASE_URL — offline mode");
+    return null;
+  }
+  try {
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberchessUserState" (
+        "userId"    TEXT PRIMARY KEY,
+        "state"     JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "clientTs"  BIGINT NOT NULL DEFAULT 0,
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
+      );
+    `);
+    statePool = pool;
+    console.log("[CyberchessState] pg ready — cloud state store active");
+    return pool;
+  } catch (e) {
+    console.warn("[CyberchessState] pg init failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+const STATE_MAX_BYTES = 262_144; // 256 KB защита от абьюза
+
+// GET /api/cyberchess/state — снапшот текущего пользователя (из JWT).
+cyberchessRouter.get("/state", requireAuth, async (req: Request, res: Response) => {
+  const userId = String((req as { auth?: { sub?: string } }).auth?.sub || "");
+  if (!userId) { res.status(401).json({ error: "unauthorized" }); return; }
+  const pool = await ensureStateDb();
+  if (!pool) { res.json({ ok: true, state: null, clientTs: 0, offline: true }); return; }
+  try {
+    const r = await pool.query(
+      `SELECT "state","clientTs","updatedAt" FROM "CyberchessUserState" WHERE "userId"=$1`,
+      [userId],
+    );
+    if (!r.rows[0]) { res.json({ ok: true, state: null, clientTs: 0 }); return; }
+    res.json({
+      ok: true,
+      state: r.rows[0].state ?? null,
+      clientTs: Number(r.rows[0].clientTs) || 0,
+      updatedAt: r.rows[0].updatedAt,
+    });
+  } catch (err) {
+    captureCyberChessError(err, { route: "state/get" });
+    res.status(500).json({ error: "state_get_failed" });
+  }
+});
+
+// PUT /api/cyberchess/state — upsert снапшота (last-writer по clientTs на клиенте).
+// Body: { state: object, clientTs?: number }
+cyberchessRouter.put("/state", requireAuth, async (req: Request, res: Response) => {
+  const userId = String((req as { auth?: { sub?: string } }).auth?.sub || "");
+  if (!userId) { res.status(401).json({ error: "unauthorized" }); return; }
+  const body = (req.body ?? {}) as { state?: unknown; clientTs?: unknown };
+  if (body.state == null || typeof body.state !== "object") {
+    res.status(400).json({ error: "state (object) required" }); return;
+  }
+  let serialized: string;
+  try { serialized = JSON.stringify(body.state); }
+  catch { res.status(400).json({ error: "state not serializable" }); return; }
+  if (serialized.length > STATE_MAX_BYTES) {
+    res.status(413).json({ error: "state too large (max 256KB)" }); return;
+  }
+  const clientTs = Number(body.clientTs);
+  const ts = Number.isFinite(clientTs) && clientTs > 0 ? Math.floor(clientTs) : 0;
+  const pool = await ensureStateDb();
+  if (!pool) { res.status(503).json({ error: "state store offline" }); return; }
+  try {
+    await pool.query(
+      `INSERT INTO "CyberchessUserState" ("userId","state","clientTs","updatedAt")
+       VALUES ($1,$2::jsonb,$3,now())
+       ON CONFLICT ("userId") DO UPDATE SET "state"=$2::jsonb, "clientTs"=$3, "updatedAt"=now()`,
+      [userId, serialized, ts],
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    captureCyberChessError(err, { route: "state/put" });
+    res.status(500).json({ error: "state_put_failed" });
+  }
+});

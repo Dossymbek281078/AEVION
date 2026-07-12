@@ -1215,6 +1215,32 @@ export default function CyberChessPage(){
   // цепочки из многих премувов). 0 = обычная скорость. Настраивается в Settings.
   const[aiPaceMs,sAiPaceMs]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_ai_pace_v1")||"0");return isNaN(v)?0:Math.max(0,Math.min(5000,v))}catch{return 0}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_ai_pace_v1",String(aiPaceMs))}catch{}},[aiPaceMs]);
+  // ── Аккаунт: CyberChess узнаёт вход в общий AEVION-аккаунт (JWT платформы) ──
+  // Раньше личность была локальной («cyberchess.userId» = "anon"), рейтинг/история
+  // жили только в этом браузере. Теперь, если пользователь вошёл на /auth,
+  // привязываем cyberchess.userId к реальному id аккаунта → серверные данные
+  // (CPI/лидерборд/рейтинг, которые ключуются по userId) следуют за игроком между
+  // устройствами. Переиспользуем существующий auth платформы, без новых таблиц.
+  const[ccAuth,sCcAuth]=useState<{user:{id:string;email?:string;name?:string}|null;checked:boolean}>({user:null,checked:false});
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      let t="";
+      try{t=localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{}
+      if(!t){if(!cancelled)sCcAuth({user:null,checked:true});return;}
+      try{
+        const r=await fetch("/api-backend/api/auth/me",{headers:{Authorization:`Bearer ${t}`}});
+        if(r.ok){
+          const d=await r.json() as {user?:{id:string;email?:string;name?:string}};
+          const u=d?.user||null;
+          if(!cancelled)sCcAuth({user:u,checked:true});
+          // Привязка личности CyberChess к реальному аккаунту (серверные стата/рейтинг за юзером).
+          try{if(u?.id)localStorage.setItem("cyberchess.userId",String(u.id))}catch{}
+        }else if(!cancelled)sCcAuth({user:null,checked:true});
+      }catch{if(!cancelled)sCcAuth({user:null,checked:true})}
+    })();
+    return()=>{cancelled=true};
+  },[]);
   // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
   // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
   // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.
@@ -5081,6 +5107,25 @@ export default function CyberChessPage(){
           <span style={{fontSize:14,lineHeight:1}}>?</span>
           <span>Как тут</span>
         </button>
+        {/* Аккаунт — вход в общий AEVION-аккаунт. Вошёл → рейтинг/история следуют за
+            игроком между устройствами (не только этот браузер). Ссылки на общий
+            /auth и /account платформы, свой UI не плодим. */}
+        {ccAuth.checked&&(ccAuth.user
+          ? <a href="/account" title={`Аккаунт: ${ccAuth.user.email||ccAuth.user.name||"вошёл"} — рейтинг и история синхронизируются между устройствами`} className="cc-focus-ring"
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:RADIUS.full,
+                border:`1.5px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
+                fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",textDecoration:"none",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis"}}>
+              <span style={{fontSize:13,lineHeight:1}}>✓</span>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{(ccAuth.user.name||ccAuth.user.email||"Аккаунт").split("@")[0]}</span>
+            </a>
+          : <a href="/auth?next=/cyberchess" title="Войти в аккаунт AEVION — рейтинг, история и Chessy будут синхронизироваться между устройствами" className="cc-focus-ring"
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 13px",borderRadius:RADIUS.full,
+                border:`1.5px solid ${CC.borderStrong}`,background:CC.surface1,color:CC.textDim,
+                fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",textDecoration:"none"}}>
+              <span style={{fontSize:13,lineHeight:1}}>👤</span>
+              <span>Войти</span>
+            </a>
+        )}
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
         {bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"

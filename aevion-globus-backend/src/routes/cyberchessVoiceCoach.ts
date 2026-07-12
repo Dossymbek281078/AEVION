@@ -318,7 +318,11 @@ router.post('/ask', async (req: Request, res: Response) => {
           qcoreaiBase: qcoreaiBase(),
           model: body.model,
           temperature: body.temperature,
-          timeoutMs: 8000,
+          // opus-4-8 отдаёт полноценный разбор (2-4 предложения + контекст) за
+          // ~8-13с; 8000мс резал его на полуслове (abort) → GM-разбор/чат тренера
+          // почти всегда падали в fallback на проде. 14с укладывается в клиентский
+          // бюджет кнопки (15с).
+          timeoutMs: 14000,
         },
       );
     } catch (err) {

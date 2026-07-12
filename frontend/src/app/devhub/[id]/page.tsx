@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, use } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -163,8 +163,8 @@ function FileContextMenu({
   );
 }
 
-export default function DevHubProjectPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+  const { id } = params instanceof Promise ? use(params) : params;
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);

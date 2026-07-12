@@ -84,12 +84,105 @@ const memFiles = new Map<string, DevHubFile>();
 const memDeployments = new Map<string, DevHubDeployment>();
 const memSnippets = new Map<string, DevHubSnippet>();
 
+// ── Credit metering ───────────────────────────────────────────────────────────
+type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
+type StudioTier = "free" | "pro" | "enterprise";
+
+const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
+  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+  pro:        { video: 50,  image: 200, tts: 1000000, music: 100, deploy: -1 },
+  enterprise: { video: -1,  image: -1,  tts: -1,      music: -1,  deploy: -1 },
+};
+
+// In-memory fallback: "userId:month:capability" → count
+const memUsage = new Map<string, number>();
+const memTiers = new Map<string, StudioTier>();
+
+function creditMonth(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+async function getUserTier(userId: string): Promise<StudioTier> {
+  if (!isDevHubDbReady()) return memTiers.get(userId) ?? "free";
+  try {
+    const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
+    return (r.rows[0]?.tier ?? "free") as StudioTier;
+  } catch { return "free"; }
+}
+
+async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
+  if (!isDevHubDbReady()) { memTiers.set(userId, tier); return; }
+  try {
+    await pool.query(`
+      INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [userId, tier]);
+  } catch { memTiers.set(userId, tier); }
+}
+
+async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
+  if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
+  try {
+    const r = await pool.query(
+      `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
+      [userId, month, capability]
+    );
+    return r.rows[0]?.used ?? 0;
+  } catch { return 0; }
+}
+
+async function checkCredit(userId: string, capability: CapabilityKey): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+  const tier = await getUserTier(userId);
+  const limit = TIER_LIMITS[tier][capability];
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  const month = creditMonth();
+  const used = await getMonthUsage(userId, month, capability);
+  return { allowed: used < limit, used, limit, tier };
+}
+
+async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  const month = creditMonth();
+  const tier = await getUserTier(userId);
+  if (!isDevHubDbReady()) {
+    const key = `${userId}:${month}:${capability}`;
+    memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+    return;
+  }
+  try {
+    const id = `${userId}-${month}-${capability}`;
+    await pool.query(`
+      INSERT INTO "DevHubUsage" ("id","userId","month","capability","used","tier","updatedAt")
+      VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      ON CONFLICT ("userId","month","capability")
+      DO UPDATE SET "used"="DevHubUsage"."used"+$5, "tier"=$6, "updatedAt"=NOW()
+    `, [id, userId, month, capability, amount, tier]);
+  } catch {
+    const key = `${userId}:${month}:${capability}`;
+    memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+  }
+}
+
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
+  const tier = await getUserTier(userId);
+  const month = creditMonth();
+  const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
+  const usage: Record<string, { used: number; limit: number }> = {};
+  for (const cap of caps) {
+    const used = await getMonthUsage(userId, month, cap);
+    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+  }
+  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+}
+
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
   memDeployments.clear();
   memSnippets.clear();
+  memUsage.clear();
+  memTiers.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1871,6 +1964,8 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
 // POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
 devhubRouter.post("/media/image", async (req, res) => {
+  const imgAuth = verifyBearerOptional(req);
+  const imgUserId = imgAuth?.sub ?? "anonymous";
   const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt required" });
@@ -1881,6 +1976,15 @@ devhubRouter.post("/media/image", async (req, res) => {
   const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
   if (!validSizes.includes(size)) {
     return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
+  }
+
+  const imgCredit = await checkCredit(imgUserId, "image");
+  if (!imgCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly image limit reached",
+      tier: imgCredit.tier, used: imgCredit.used, limit: imgCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -1916,7 +2020,8 @@ devhubRouter.post("/media/image", async (req, res) => {
     if (!first) return res.status(500).json({ error: "no image returned" });
     const imageUrl = first.url ?? (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null);
     if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
-    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null });
+    await debitCredit(imgUserId, "image").catch(() => {});
+    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null, creditsUsed: 1, creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1 });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image generation failed" });
   }
@@ -3922,9 +4027,20 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 devhubRouter.post("/media/video", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
   const { prompt, model = "minimax/video-01", width = 1280, height = 720, duration = 5, imageUrl } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
+  }
+
+  const credit = await checkCredit(userId, "video");
+  if (!credit.allowed) {
+    return res.status(402).json({
+      error: "Monthly video limit reached",
+      tier: credit.tier, used: credit.used, limit: credit.limit,
+      upgrade: "/studio#upgrade",
+    });
   }
 
   const apiToken = process.env.REPLICATE_API_TOKEN;
@@ -3974,7 +4090,8 @@ devhubRouter.post("/media/video", async (req, res) => {
     }
 
     const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
-    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status });
+    await debitCredit(userId, "video").catch(() => {});
+    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status, creditsUsed: 1, creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1 });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Video generation failed" });
   }
@@ -4125,4 +4242,47 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
 
   const live = caps.filter((c) => c.status === "live").length;
   return res.json({ capabilities: caps, summary: { total: caps.length, live, needsToken: caps.length - live } });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio Credits — usage metering per user per month
+// GET  /api/devhub/studio/credits
+// POST /api/devhub/studio/tier  { tier: "pro" | "free" | "enterprise" }  (admin)
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.get("/studio/credits", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  try {
+    const result = await getAllMonthUsage(userId);
+    return res.json({
+      ...result,
+      tierInfo: {
+        free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+        pro:        { video: 50,  image: 200, tts: 1000000, music: 100, deploy: -1 },
+        enterprise: { video: -1,  image: -1,  tts: -1,      music: -1,  deploy: -1 },
+      },
+      upgradeUrl: "https://aevion.vercel.app/studio#upgrade",
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Credits fetch failed" });
+  }
+});
+
+devhubRouter.post("/studio/tier", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "authentication required" });
+  const userId = auth.sub;
+  const { tier, targetUserId } = req.body || {};
+  const validTiers: StudioTier[] = ["free", "pro", "enterprise"];
+  if (!tier || !validTiers.includes(tier)) {
+    return res.status(400).json({ error: `tier must be one of: ${validTiers.join(", ")}` });
+  }
+  const target = targetUserId ?? userId;
+  try {
+    await setUserTier(target, tier as StudioTier);
+    return res.json({ ok: true, userId: target, tier });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Tier update failed" });
+  }
 });

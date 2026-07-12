@@ -19,6 +19,34 @@ interface CapabilitiesData {
   summary: { total: number; live: number; needsToken: number };
 }
 
+interface CapUsage { used: number; limit: number; }
+interface CreditsData {
+  tier: "free" | "pro" | "enterprise";
+  month: string;
+  usage: { video: CapUsage; image: CapUsage; tts: CapUsage; music: CapUsage; deploy: CapUsage };
+}
+
+function UsageBar({ label, icon, used, limit, color }: { label: string; icon: string; used: number; limit: number; color: string }) {
+  const pct = limit === -1 ? 0 : Math.min(100, (used / limit) * 100);
+  const warn = pct >= 80 && limit !== -1;
+  const limitLabel = limit === -1 ? "∞" : String(limit);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{icon} {label}</span>
+        <span style={{ fontSize: 11, color: warn ? "#b45309" : "#64748b", fontWeight: warn ? 700 : 400 }}>
+          {limit === -1 ? `${used} used (∞)` : `${used} / ${limitLabel}`}
+        </span>
+      </div>
+      {limit !== -1 && (
+        <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, borderRadius: 99, background: warn ? "#f59e0b" : color, transition: "width 0.4s" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CAP_ICONS: Record<string, string> = {
   code: "⌨️",
   github: "🐙",
@@ -89,6 +117,7 @@ const FEATURE_CATEGORIES = [
 export default function StudioPage() {
   const [caps, setCaps] = useState<CapabilitiesData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [credits, setCredits] = useState<CreditsData | null>(null);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
@@ -96,6 +125,10 @@ export default function StudioPage() {
       .then((d) => setCaps(d))
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: CreditsData) => setCredits(d))
+      .catch(() => {});
   }, []);
 
   const liveCount = caps?.summary.live ?? 0;
@@ -149,6 +182,39 @@ export default function StudioPage() {
           </div>
         </div>
       </div>
+
+      {/* Credits widget */}
+      {credits && (
+        <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "20px 24px" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>This month's usage</span>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, letterSpacing: 0.5,
+                  background: credits.tier === "pro" ? "#dbeafe" : credits.tier === "enterprise" ? "#d1fae5" : "#f1f5f9",
+                  color: credits.tier === "pro" ? "#1e40af" : credits.tier === "enterprise" ? "#065f46" : "#475569",
+                }}>
+                  {credits.tier.toUpperCase()}
+                </span>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>{credits.month}</span>
+              </div>
+              {credits.tier === "free" && (
+                <a href="#upgrade" style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none", padding: "4px 12px", border: "1px solid #0d9488", borderRadius: 6 }}>
+                  Upgrade to Pro $29 →
+                </a>
+              )}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 20 }}>
+              <UsageBar label="Videos" icon="🎬" used={credits.usage.video.used} limit={credits.usage.video.limit} color="#7c3aed" />
+              <UsageBar label="Images" icon="🖼️" used={credits.usage.image.used} limit={credits.usage.image.limit} color="#0d9488" />
+              <UsageBar label="Music" icon="🎵" used={credits.usage.music.used} limit={credits.usage.music.limit} color="#b45309" />
+              <UsageBar label="TTS chars" icon="🎙️" used={credits.usage.tts.used} limit={credits.usage.tts.limit} color="#0369a1" />
+              <UsageBar label="Deploys" icon="🚀" used={credits.usage.deploy.used} limit={credits.usage.deploy.limit} color="#64748b" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Setup banner if tokens missing */}
       {!loading && caps && caps.summary.needsToken > 0 && (
@@ -206,8 +272,53 @@ export default function StudioPage() {
           ))}
         </div>
 
+        {/* Upgrade section */}
+        <div id="upgrade" style={{ marginTop: 64, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 20 }}>
+          {[
+            {
+              tier: "Free", price: "$0", color: "#64748b",
+              features: ["3 videos / month", "10 images / month", "100k TTS chars", "5 music tracks", "10 deploys", "Monaco IDE", "GitHub push"],
+              cta: "Current plan", ctaHref: "#", disabled: true,
+            },
+            {
+              tier: "Pro", price: "$29", color: "#0d9488",
+              features: ["50 videos / month", "200 images / month", "1M TTS chars", "100 music tracks", "Unlimited deploys", "Everything in Free", "Priority support"],
+              cta: "Upgrade to Pro", ctaHref: "https://aevion.gumroad.com/l/studio-pro", disabled: false,
+            },
+            {
+              tier: "Enterprise", price: "Custom", color: "#7c3aed",
+              features: ["Unlimited everything", "Dedicated compute", "Custom domains pool", "Team collaboration", "SLA + support", "White-label option", "API access"],
+              cta: "Contact us", ctaHref: "mailto:yahiin1978@gmail.com?subject=AEVION+Studio+Enterprise", disabled: false,
+            },
+          ].map((plan) => (
+            <div key={plan.tier} style={{ border: `2px solid ${plan.color}`, borderRadius: 16, padding: "28px 24px", background: "#fff", display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: plan.color, letterSpacing: 1, marginBottom: 8 }}>{plan.tier.toUpperCase()}</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: "#0f172a", marginBottom: 16 }}>{plan.price}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 400 }}>{plan.price.startsWith("$") && plan.price !== "$0" ? "/mo" : ""}</span></div>
+              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px", flex: 1 }}>
+                {plan.features.map((f) => (
+                  <li key={f} style={{ fontSize: 13, color: "#334155", padding: "4px 0", display: "flex", gap: 8 }}>
+                    <span style={{ color: plan.color }}>✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={plan.ctaHref}
+                style={{
+                  display: "block", textAlign: "center", padding: "10px", borderRadius: 8,
+                  background: plan.disabled ? "#f1f5f9" : plan.color,
+                  color: plan.disabled ? "#94a3b8" : "#fff",
+                  fontWeight: 700, fontSize: 14, textDecoration: "none",
+                  pointerEvents: plan.disabled ? "none" : "auto",
+                }}
+              >
+                {plan.cta}
+              </a>
+            </div>
+          ))}
+        </div>
+
         {/* Token setup guide */}
-        <div style={{ marginTop: 64, background: "#0f172a", borderRadius: 16, padding: "32px 36px", color: "#e2e8f0" }}>
+        <div style={{ marginTop: 48, background: "#0f172a", borderRadius: 16, padding: "32px 36px", color: "#e2e8f0" }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: "#fff" }}>Activate all capabilities</h2>
           <p style={{ fontSize: 14, color: "#94a3b8", margin: "0 0 24px" }}>Add these env vars to Railway → AEVION backend service → Variables:</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>

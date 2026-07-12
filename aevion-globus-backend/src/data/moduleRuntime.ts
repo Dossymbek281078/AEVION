@@ -256,8 +256,8 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   "kids-ai-content": {
     tier: "platform_api",
     primaryPath: "/kids-ai-content",
-    apiHints: ["/api/kids-ai-content/*"],
-    hint: "Детский контент · 8 endpoints · функц. готов, но нужен child-safety ревью до launch",
+    apiHints: ["/api/kids-ai/lessons", "/api/kids-ai/ask", "/api/kids-ai/*"],
+    hint: "Детский контент · safety-hardened (input+output модерация /ask, temp 0.4) · ждёт решения о launch",
   },
   // ── startup-exchange + z-tide: страницы ЖИВЫЕ и рабочие (реальные бэкенды
   //    /api/startupx, /api/ztide), «waitlist» был устаревший ярлык → mvp_live.

@@ -3736,6 +3736,201 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Cloudflare Pages deploy — static sites / Next.js exported / React SPA
+// POST /api/devhub/projects/:id/deploy/pages
+//
+// Flow:
+//   1. Create CF Pages project (idempotent — ignores "already exists")
+//   2. Upload all project files as multipart direct-upload deployment
+//   3. Add <slug>.aevion.build custom domain to Pages project
+//   4. Provision CNAME DNS record in aevion.build zone
+//   5. Return live URL + domain
+// ═════════════════════════════════════════════════════════════════════════════
+
+function mimeForPath(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    html: "text/html", css: "text/css", js: "application/javascript",
+    ts: "application/javascript", tsx: "application/javascript",
+    jsx: "application/javascript", json: "application/json",
+    svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg",
+    jpeg: "image/jpeg", webp: "image/webp", ico: "image/x-icon",
+    txt: "text/plain", md: "text/markdown", xml: "application/xml",
+    wasm: "application/wasm",
+  };
+  return map[ext] || "application/octet-stream";
+}
+
+devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!accountId || !apiToken) {
+    return res.status(503).json({
+      error: "Cloudflare Pages not configured",
+      needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  const cfBase = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+  const cfHeaders = { Authorization: `Bearer ${apiToken}` };
+
+  // Record deployment
+  const deploymentId = crypto.randomUUID();
+  const deployment: DevHubDeployment = {
+    id: deploymentId, projectId: project.id, userId,
+    status: "pending", deployUrl: null, buildLog: null,
+    triggeredAt: now(), completedAt: null,
+  };
+  try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+  try {
+    const files = await dbListFiles(project.id);
+    if (!files.length) {
+      deployment.status = "failed"; deployment.buildLog = "no files in project";
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(400).json({ error: "project has no files to deploy — add at least index.html" });
+    }
+
+    // Stable CF Pages project name: aevion-<slug>-<id6>
+    const pageName = `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
+
+    // 1. Create Pages project (ignore 8000000 = already exists)
+    const createResp = await fetch(`${cfBase}/pages/projects`, {
+      method: "POST",
+      headers: { ...cfHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: pageName, production_branch: "main" }),
+    });
+    const createData = await createResp.json() as { success: boolean; errors?: Array<{ code: number; message: string }> };
+    const alreadyExists = createData.errors?.some((e) => e.code === 8000000);
+    if (!createResp.ok && !alreadyExists) {
+      const errMsg = createData.errors?.map((e) => e.message).join("; ") || "CF Pages project creation failed";
+      return res.status(500).json({ error: errMsg });
+    }
+
+    // 2. Build multipart form: manifest + files keyed by SHA-256 hash
+    const form = new FormData();
+    const manifest: Record<string, string> = {};
+    const seenHashes = new Set<string>();
+
+    for (const file of files) {
+      const hash = crypto.createHash("sha256").update(file.content, "utf8").digest("hex");
+      const cleanPath = "/" + file.path.replace(/^\/+/, "");
+      manifest[cleanPath] = hash;
+      if (!seenHashes.has(hash)) {
+        seenHashes.add(hash);
+        form.set(hash, new Blob([file.content], { type: mimeForPath(file.path) }), hash);
+      }
+    }
+    form.set("manifest", JSON.stringify(manifest));
+
+    // 3. Upload deployment
+    const deployResp = await fetch(`${cfBase}/pages/projects/${pageName}/deployments`, {
+      method: "POST",
+      headers: cfHeaders, // NO Content-Type — let FormData set boundary automatically
+      body: form,
+    });
+    const deployData = await deployResp.json() as { success: boolean; result?: { id: string; url: string; latest_stage?: { name: string } }; errors?: Array<{ code: number; message: string }> };
+    if (!deployResp.ok) {
+      const errMsg = deployData.errors?.map((e) => e.message).join("; ") || "CF Pages deployment upload failed";
+      deployment.status = "failed"; deployment.buildLog = errMsg; deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(500).json({ error: errMsg });
+    }
+
+    const pagesUrl = deployData.result?.url
+      ? `https://${deployData.result.url}`
+      : `https://${pageName}.pages.dev`;
+
+    deployment.status = "building";
+    deployment.deployUrl = pagesUrl;
+    deployment.buildLog = `CF Pages deployment ${deployData.result?.id ?? "?"} queued`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
+    let customDomain: string | null = null;
+    let domainUrl: string | null = null;
+
+    if (zoneId) {
+      try {
+        const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
+        const fullDomain = `${domainSlug}.aevion.build`;
+
+        // 4a. Add custom domain to CF Pages project
+        await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
+          method: "POST",
+          headers: { ...cfHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: fullDomain }),
+        });
+
+        // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
+        const dnsTarget = `${pageName}.pages.dev`;
+        const zoneBase = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`;
+        const listResp = await fetch(`${zoneBase}?type=CNAME&name=${fullDomain}`, { headers: cfHeaders });
+        const listData = await listResp.json() as { result: Array<{ id: string }> };
+        const existingId = listData.result?.[0]?.id;
+
+        const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
+        if (existingId) {
+          await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        } else {
+          await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        }
+
+        customDomain = fullDomain;
+        domainUrl = `https://${fullDomain}`;
+      } catch (domainErr: any) {
+        deployment.buildLog += ` | domain: ${domainErr?.message || "error"}`;
+      }
+    }
+
+    // 5. Mark live + update project record
+    setTimeout(async () => {
+      const d = memDeployments.get(deployment.id) ?? deployment;
+      d.status = "live"; d.completedAt = now();
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      if (project) {
+        project.status = "live";
+        project.deployUrl = pagesUrl;
+        if (customDomain) project.customDomain = customDomain;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    }, 4000);
+
+    return res.json({
+      ok: true,
+      provider: "cloudflare-pages",
+      deploymentId,
+      pagesUrl,
+      domain: customDomain,
+      domainUrl,
+      liveUrl: domainUrl ?? pagesUrl,
+      message: customDomain
+        ? `Live at ${domainUrl} (and ${pagesUrl})`
+        : `Live at ${pagesUrl} — add CLOUDFLARE_ZONE_ID to enable aevion.build domain`,
+    });
+  } catch (e: any) {
+    deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(500).json({ ok: false, error: e?.message || "Cloudflare Pages deploy failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Cloudflare R2 audio upload (S3-compatible, AWS SigV4)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -4230,7 +4425,8 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
     { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
-    { id: "domain", name: "Domain (aevion.build)", description: "Provision <slug>.aevion.build subdomain", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     { id: "image", name: "Image Generation", description: "DALL-E 3 image generation", status: process.env.OPENAI_API_KEY ? "live" : "needs_token", token: "OPENAI_API_KEY" },
     { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },

@@ -851,6 +851,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── Cloudflare Pages deploy ──────────────────────────────────────────────────
+  const [pagesDeploying, setPagesDeploying] = useState(false);
+  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string } | null>(null);
+
+  const deployToPages = async () => {
+    if (!project) return;
+    setPagesDeploying(true);
+    setPagesResult(null);
+    showToast("Deploying to Cloudflare Pages...", "info");
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Pages deploy failed");
+      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl });
+      showToast(d.domain ? `Live: https://${d.domain}` : `Live: ${d.pagesUrl}`, "success");
+      setTimeout(async () => {
+        const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+        const pd = await pr.json();
+        setProject(pd.project);
+        fetchDeployments();
+      }, 5000);
+    } catch (e: any) {
+      showToast(e?.message || "Cloudflare Pages deploy failed", "error");
+    } finally {
+      setPagesDeploying(false);
+    }
+  };
+
   // ── Vercel deploy ────────────────────────────────────────────────────────────
 
   const deployToVercel = async () => {
@@ -864,7 +892,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
         throw new Error(d.error || "Vercel deploy failed");
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
-      // Refresh project after 6s
       setTimeout(async () => {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const pd = await pr.json();
@@ -2234,23 +2261,108 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
               {/* Deployments Tab */}
               {activeTab === "deployments" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {deployments.length === 0 ? (
-                    <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 20 }}>No deployments yet</div>
-                  ) : deployments.map((d) => {
-                    const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
-                    return (
-                      <div key={d.id} style={{ padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ padding: "2px 8px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 12, fontWeight: 600 }}>{d.status}</span>
-                          <span style={{ fontSize: 12, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
-                        </div>
-                        {d.deployUrl && (
-                          <a href={d.deployUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 6 }}>{d.deployUrl}</a>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                  {/* Cloudflare Pages — primary deploy */}
+                  <div style={{ padding: "16px", border: "2px solid #f97316", borderRadius: 12, background: "#fff7ed" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 18 }}>☁️</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN · aevion.build domain included</div>
+                      </div>
+                    </div>
+
+                    {/* Live URL display */}
+                    {(pagesResult || project?.customDomain || project?.deployUrl?.includes("pages.dev")) && (
+                      <div style={{ marginBottom: 10, padding: "8px 12px", background: "#d1fae5", borderRadius: 8 }}>
+                        {project?.customDomain && (
+                          <div style={{ marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>🌐 Domain: </span>
+                            <a href={`https://${project.customDomain}`} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: "#065f46", fontWeight: 700, wordBreak: "break-all" }}>
+                              https://{project.customDomain}
+                            </a>
+                          </div>
+                        )}
+                        {(pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) && (
+                          <div>
+                            <span style={{ fontSize: 11, color: "#047857" }}>pages.dev: </span>
+                            <a href={pagesResult?.pagesUrl ?? project?.deployUrl ?? ""} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 11, color: "#047857", wordBreak: "break-all" }}>
+                              {pagesResult?.pagesUrl ?? project?.deployUrl}
+                            </a>
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
+                    )}
+
+                    <button
+                      onClick={deployToPages}
+                      disabled={pagesDeploying}
+                      style={{
+                        width: "100%", padding: "10px", borderRadius: 8, border: "none",
+                        background: pagesDeploying ? "#fed7aa" : "#f97316",
+                        color: "#fff", fontWeight: 800, fontSize: 14,
+                        cursor: pagesDeploying ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Deploy to Cloudflare Pages + get aevion.build domain"}
+                    </button>
+                    <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
+                      Requires <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ACCOUNT_ID</code> + <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_API_TOKEN</code> in Railway.
+                      Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.
+                    </div>
+                  </div>
+
+                  {/* Vercel deploy — secondary */}
+                  <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>▲ Vercel</div>
+                      <span style={{ fontSize: 10, color: "#64748b" }}>Next.js / React</span>
+                    </div>
+                    {project?.deployUrl && !project.deployUrl.includes("pages.dev") && (
+                      <a href={project.deployUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: "#0d9488", display: "block", marginBottom: 6, wordBreak: "break-all" }}>
+                        {project.deployUrl}
+                      </a>
+                    )}
+                    <button
+                      onClick={deployToVercel}
+                      disabled={vercelDeploying}
+                      style={{
+                        padding: "7px 16px", background: vercelDeploying ? "#e2e8f0" : "#0f172a",
+                        color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 12,
+                        cursor: vercelDeploying ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {vercelDeploying ? "Deploying..." : "Deploy to Vercel"}
+                    </button>
+                  </div>
+
+                  {/* Deploy history */}
+                  {deployments.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>
+                      {deployments.map((d) => {
+                        const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
+                        return (
+                          <div key={d.id} style={{ padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 6 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status}</span>
+                              <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
+                            </div>
+                            {d.deployUrl && (
+                              <a href={d.deployUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 11, color: "#0d9488", display: "block", marginTop: 4, wordBreak: "break-all" }}>
+                                {d.deployUrl}
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -21,6 +21,7 @@ import {
   runMultiAgent,
   OrchestratorEvent,
   PipelineStrategy,
+  RequestedStrategy,
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
@@ -2131,10 +2132,13 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     } catch { /* non-critical — allow the run if limit check fails */ }
   }
 
-  const strategy: PipelineStrategy =
+  // "auto" is a meta-strategy: a cheap classifier routes each query to the
+  // Council (open-ended) or a single flagship call (plain factual lookup).
+  const strategy: RequestedStrategy =
     req.body?.strategy === "parallel" ? "parallel" :
     req.body?.strategy === "debate" ? "debate" :
     req.body?.strategy === "council" ? "council" :
+    req.body?.strategy === "auto" ? "auto" :
     "sequential";
 
   const maxRevisions =
@@ -2175,7 +2179,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   // (unset) uses Opus 4.8 (best quality/cost chair). Only applies when the
   // caller didn't already pin the critic slot. Handy for the Fable-vs-Opus
   // cost/quality trade-off, or a local chair under offline mode.
-  if (strategy === "council" && !overrides.critic && typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {
+  if ((strategy === "council" || strategy === "auto") && !overrides.critic && typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {
     overrides.critic = {
       provider: typeof req.body?.synthProvider === "string" && req.body.synthProvider.trim()
         ? req.body.synthProvider.trim()
@@ -4208,6 +4212,13 @@ qcoreaiRouter.get("/agents", (_req, res) => {
         description:
           "A crowd of 3–6 mostly-FREE models each answer under a different persona in parallel, optionally refined across 1–3 Mixture-of-Agents layers, then a premium Synthesizer (Opus 4.8 by default) cross-checks and fuses them into one verified answer. Free breadth + premium depth at near-zero crowd cost. Set offline:true to run the whole council on local runtimes (Ollama / LM Studio / Jan / LocalAI / llama.cpp) with the internet off.",
         agents: ["council", "aggregators", "synthesizer"],
+      },
+      {
+        id: "auto",
+        label: "Auto (smart route)",
+        description:
+          "A cheap one-token classifier routes each query: open-ended work (reasoning, analysis, writing, advice, coding, multi-step math) goes to the Council, while a plain factual lookup goes to a single flagship call. Grounded in a 40-question benchmark where the Council wins 100% on reasoning/writing/advice/analysis but only ties (50%) on pure factual recall — so you never pay the ~2.8× council premium for trivia. Emits a `route` event explaining each decision. Honours offline:true (classifies + answers on local runtimes).",
+        agents: ["router", "council-or-single"],
       },
     ],
     roles: [

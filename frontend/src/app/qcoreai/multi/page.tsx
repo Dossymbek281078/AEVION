@@ -124,6 +124,11 @@ type AgentPreset = {
 
 const PRESETS_KEY = "qcore_presets_v1";
 
+/** Typical Council cost per answer from the N=40 benchmark (2026-07-12). Used to
+    show the user roughly how much the auto-router saved by sending a factual
+    query to a single flagship call instead of the full Council. */
+const EST_COUNCIL_COST_USD = 0.077;
+
 type SSEPayload =
   | { type: "session"; sessionId: string; runId: string }
   | {
@@ -354,7 +359,10 @@ export default function QCoreMultiAgentPage() {
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
-  const [strategy, setStrategy] = useState<Strategy>("sequential");
+  // Default to "auto": the router sends open-ended prompts to the Council and
+  // plain factual lookups to a single flagship call, so users don't overpay for
+  // trivia. They can still pin a specific strategy via the pills.
+  const [strategy, setStrategy] = useState<Strategy>("auto");
   // council mode: how many crowd members to convene (2–6).
   const [councilSize, setCouncilSize] = useState<number>(3);
   // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
@@ -4961,6 +4969,20 @@ function RunCard({
               {run.routeNote.classification === "fact" ? "factual lookup" : "open-ended"} →{" "}
               {run.routeNote.resolved === "council" ? "Council ✦" : "single flagship call"}
             </span>
+            {run.routeNote.resolved === "single" &&
+              typeof run.totalCostUsd === "number" &&
+              EST_COUNCIL_COST_USD - run.totalCostUsd > 0.005 && (
+                <span
+                  title={`This run cost $${run.totalCostUsd.toFixed(4)}. A forced Council averages ~$${EST_COUNCIL_COST_USD.toFixed(3)}/answer (N=40 benchmark).`}
+                  style={{
+                    padding: "1px 7px", borderRadius: 999,
+                    background: "rgba(16,185,129,0.22)", border: "1px solid rgba(16,185,129,0.5)",
+                    color: "#6ee7b7", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                  }}
+                >
+                  saved ~${(EST_COUNCIL_COST_USD - run.totalCostUsd).toFixed(2)} vs Council
+                </span>
+              )}
           </div>
         </div>
       )}

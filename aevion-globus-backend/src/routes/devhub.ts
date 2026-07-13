@@ -107,7 +107,23 @@ async function getUserTier(userId: string): Promise<StudioTier> {
   if (!isDevHubDbReady()) return memTiers.get(userId) ?? "free";
   try {
     const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
-    return (r.rows[0]?.tier ?? "free") as StudioTier;
+    if (r.rows[0]?.tier) return r.rows[0].tier as StudioTier;
+    // Check email-based tier (set by payment webhook before user registered)
+    const er = await pool.query(`
+      SELECT det."tier" FROM "AEVIONUser" au
+      JOIN "DevHubEmailTier" det ON det."email" = LOWER(au."email")
+      WHERE au."id" = $1 LIMIT 1
+    `, [userId]);
+    if (er.rows[0]?.tier && er.rows[0].tier !== "free") {
+      const promoted = er.rows[0].tier as StudioTier;
+      // Promote to userId-keyed row so future lookups are single-table
+      await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [userId, promoted]).catch(() => {});
+      return promoted;
+    }
+    return "free";
   } catch { return "free"; }
 }
 

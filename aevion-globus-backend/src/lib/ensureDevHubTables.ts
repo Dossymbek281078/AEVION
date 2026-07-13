@@ -134,6 +134,15 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+    // Email-keyed tier: stores tier granted via payment webhook before user registers
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubEmailTier" (
+        "email"     TEXT PRIMARY KEY,
+        "tier"      TEXT NOT NULL DEFAULT 'free',
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

@@ -38,6 +38,26 @@ import {
 } from "../data/lemonSqueezyVariants";
 import { MEDIUM_BUNDLE } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { getPool } from "../lib/dbPool";
+
+async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
+  const pool = getPool();
+  try {
+    await pool.query(`
+      INSERT INTO "DevHubEmailTier" ("email","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("email") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [email, tier]);
+    const ur = await pool.query(`SELECT "id" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`, [email]);
+    if (ur.rows[0]?.id) {
+      await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [ur.rows[0].id, tier]);
+    }
+  } catch (err) {
+    console.error("[ls/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+  }
+}
 
 const capture = makeServiceCapture("lemonSqueezyWebhook");
 
@@ -128,8 +148,19 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   const attrs = payload.data?.attributes ?? {};
   const email = (attrs.user_email ?? payload.meta?.custom_data?.email ?? "").trim().toLowerCase();
 
+  if (event === "order_created") {
+    // DevHub Studio Pro one-time purchase (not a subscription)
+    const studioVariant = process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO?.trim();
+    const variantId = String(attrs.variant_id ?? "");
+    if (studioVariant && variantId === studioVariant && email) {
+      await upgradeDevHubByEmail(email, "pro");
+      console.log(`[ls/webhook] order_created devhub-studio-pro → pro for ${email}`);
+      return res.json({ ok: true, action: "devhub_studio_pro_activated", email });
+    }
+    return res.json({ ok: true, ignored: event });
+  }
+
   if (!event.startsWith("subscription_")) {
-    // Not a subscription event (e.g. order_created) — out of scope here.
     return res.json({ ok: true, ignored: event || "unknown" });
   }
   if (!email) {

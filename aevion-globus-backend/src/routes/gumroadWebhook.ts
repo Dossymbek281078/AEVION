@@ -29,6 +29,26 @@ import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
+// DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
+async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
+  const pool = getPool();
+  try {
+    await pool.query(`
+      INSERT INTO "DevHubEmailTier" ("email","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("email") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [email, tier]);
+    const ur = await pool.query(`SELECT "id" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`, [email]);
+    if (ur.rows[0]?.id) {
+      await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [ur.rows[0].id, tier]);
+    }
+  } catch (err) {
+    console.error("[gumroad/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+  }
+}
+
 const capture = makeServiceCapture("gumroadWebhook");
 
 export const gumroadWebhookRouter = Router();
@@ -84,7 +104,11 @@ function resolveReference(raw: Record<string, string>): string {
     if (mapped) return mapped;
   }
 
-  // 3. Legacy catch-all — keep Constitution Pro working without explicit mapping.
+  // 3. DevHub Studio Pro — matched by env or default slug "studio-pro"
+  const studioPro = permalinkSlug(process.env.GUMROAD_PERMALINK_DEVHUB_STUDIO_PRO ?? "studio-pro");
+  if (pingSlug && pingSlug === studioPro) return "devhub-studio-pro";
+
+  // 4. Legacy catch-all — keep Constitution Pro working without explicit mapping.
   return "constitution-pro";
 }
 
@@ -172,6 +196,17 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "external") {
     console.log(`[gumroad/webhook] external product ${productId} — skipping`);
     return res.json({ ok: true, ignored: "external_product" });
+  }
+
+  // DevHub Studio Pro — upgrades DevHubTier, not the main subscription tier.
+  if (reference === "devhub-studio-pro") {
+    const devhubTier = (refunded || failed) ? "free" : result.status === "paid" ? "pro" : null;
+    if (devhubTier) {
+      await upgradeDevHubByEmail(email, devhubTier);
+      console.log(`[gumroad/webhook] devhub-studio-pro → tier=${devhubTier} for ${email}`);
+      return res.json({ ok: true, action: "devhub_tier_set", tier: devhubTier, email });
+    }
+    return res.json({ ok: true, ignored: result.status });
   }
 
   // Bureau Verified one-time upgrade: match by email to the latest pending

@@ -40,6 +40,7 @@ type Props = {
   quickEval?: (fen: string, depth: number) => Promise<{ cp: number; mate: number }>;
   phaseLabel?: string;       // "Дебют" / "Миттельшпиль" / "Эндшпиль" — если знаем стадию
   coachLevel?: "beginner" | "intermediate" | "advanced"; // уровень ученика — калибрует глубину объяснений
+  weaknesses?: string;       // компактная сводка повторяющихся слабостей из истории партий (Game DNA)
 };
 
 const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Думаешь и оцениваешь позицию на уровне супергроссмейстера (2800+ Эло), сверяясь с движком — симбиоз понимания топ-игрока и точности Stockfish. При этом разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства. Глубина анализа — максимальная: называй конкретные варианты на 3-5 полуходов вперёд, типовые приёмы и стратегические мотивы по именам (карлсбадская структура, висячие пешки, принцип двух слабостей, цугцванг, перевод коня на форпост). Никогда не упрощай до уровня «развивай фигуры» — это уровень новичка, ты выше него.
@@ -221,7 +222,7 @@ function buildMovesStr(moves: string[]): string {
 
 export default function AiCoach({
   fen, moves, fenHist, evalCp, evalMate, opening, playerColor, visible, onClose,
-  runEngine, quickEval, phaseLabel, coachLevel,
+  runEngine, quickEval, phaseLabel, coachLevel, weaknesses,
 }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
@@ -430,6 +431,7 @@ export default function AiCoach({
             if (opening) ctx.push(`Opening: ${opening.eco} ${opening.name} (${opening.desc})`);
             if (phaseLabel) ctx.push(`Текущая стадия партии: ${phaseLabel}. Формулируй ответ в терминах этой стадии — для дебюта про развитие/центр/рокировку, для миттельшпиля про слабости/планы/инициативу, для эндшпиля про активность короля/проходные/типовые позиции.`);
             if (coachLevel) ctx.push(`Уровень ученика: ${coachLevel === "beginner" ? "новичок — объясняй приёмы простыми словами, но НЕ упрощай саму суть анализа (мысль остаётся супергроссмейстерской, меняется только язык)" : coachLevel === "advanced" ? "продвинутый/кандидат в мастера — можно глубокие варианты, терминологию и тонкие нюансы без разжёвывания" : "средний клубный игрок — баланс конкретики и пояснений"}.`);
+            if (weaknesses) ctx.push(`Повторяющиеся слабости ученика (из истории его партий): ${weaknesses}. Если текущая позиция иллюстрирует одну из этих слабостей — прямо укажи на связь и дай адресный совет; не притягивай за уши, когда позиция не про это.`);
             ctx.push(`You are coaching ${playerColor === "w" ? "White" : "Black"}.`);
             ctx.push("");
             ctx.push("User question:");
@@ -557,6 +559,9 @@ export default function AiCoach({
       blockLines.push("═══ END ENGINE REPORT ═══");
       const engineBlock = blockLines.join("\n");
 
+      const weaknessLine = weaknesses && (quality === "blunder" || quality === "mistake")
+        ? `\nПовторяющиеся слабости этого ученика: ${weaknesses}. Если этот промах — проявление одной из них, коротко отметь связь.`
+        : "";
       const prompt = `${engineBlock}
 
 Comment briefly on ${mover}'s move ${lastSan}.
@@ -564,7 +569,7 @@ ${quality === "blunder" || quality === "mistake"
     ? `This was a ${qualityLabelRu(quality)}. State what was better (cite engine's best move) and why ${lastSan} was bad.`
     : quality === "great"
     ? `This was an excellent move. Explain the concrete idea: tactic, material gain, positional win.`
-    : `Comment briefly in opening-theory context.`}`;
+    : `Comment briefly in opening-theory context.`}${weaknessLine}`;
 
       try {
         const res = await fetch(`${BACKEND}/api/coach/chat`, {

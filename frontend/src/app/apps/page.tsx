@@ -507,66 +507,6 @@ export default function AppsPage() {
           );
         })}
 
-        {/* ── Comparison table ──────────────────────────────────────────────── */}
-        <div
-          style={{
-            marginTop: 56,
-            background: "#111827",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 16,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ padding: "22px 26px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-            <h2 style={{ fontSize: 17, fontWeight: 800, color: "#f1f5f9", margin: 0 }}>
-              Planet vs. Individual
-            </h2>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead>
-                <tr style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <th style={{ padding: "12px 20px", textAlign: "left", color: "#64748b", fontWeight: 600 }}>App</th>
-                  <th style={{ padding: "12px 20px", textAlign: "right", color: "#64748b", fontWeight: 600 }}>Individual</th>
-                  <th style={{ padding: "12px 20px", textAlign: "right", color: "#0d9488", fontWeight: 700 }}>
-                    Planet $250/mo
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {APPS.map((app, i) => (
-                  <tr
-                    key={app.id}
-                    style={{
-                      borderTop: "1px solid rgba(255,255,255,0.05)",
-                      background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
-                    }}
-                  >
-                    <td style={{ padding: "12px 20px", color: "#e2e8f0" }}>
-                      {app.icon} {app.name}
-                    </td>
-                    <td style={{ padding: "12px 20px", textAlign: "right", color: "#94a3b8" }}>
-                      {app.price === 0 ? "Free" : `$${app.price}/mo`}
-                    </td>
-                    <td style={{ padding: "12px 20px", textAlign: "right" }}>
-                      <span style={{ color: "#0d9488", fontWeight: 700 }}>✓ Included</span>
-                    </td>
-                  </tr>
-                ))}
-                <tr style={{ borderTop: "2px solid rgba(255,255,255,0.1)", background: "rgba(13,148,136,0.08)" }}>
-                  <td style={{ padding: "14px 20px", fontWeight: 700, color: "#fff" }}>Total paid apps</td>
-                  <td style={{ padding: "14px 20px", textAlign: "right", fontWeight: 700 }}>
-                    <span style={{ color: "#ef4444", textDecoration: "line-through" }}>${RACK_RATE}/mo</span>
-                  </td>
-                  <td style={{ padding: "14px 20px", textAlign: "right" }}>
-                    <span style={{ color: "#0d9488", fontWeight: 900, fontSize: 18 }}>$250/mo</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         {/* ── FAQ ───────────────────────────────────────────────────────────── */}
         <div style={{ marginTop: 56 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 22 }}>FAQ</h2>

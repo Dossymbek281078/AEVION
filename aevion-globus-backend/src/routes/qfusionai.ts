@@ -5,10 +5,13 @@
  *   POST /api/qfusionai/route     — main routing endpoint (strategy-based)
  *   GET  /api/qfusionai/providers — list providers + live status
  *   GET  /api/qfusionai/stats     — request stats (Postgres + in-memory fallback)
+ *   GET  /api/qfusionai/runs      — recent fusion runs for the caller (prompt+reply history)
+ *   GET  /api/qfusionai/runs/:id  — single run detail (owner-scoped)
  *   GET  /api/qfusionai/health    — health check
  *   GET  /api/qfusionai/openapi.json — OpenAPI spec
  */
 
+import crypto from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
@@ -19,6 +22,7 @@ import {
 } from "../services/qcoreai/providers";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
+import { verifyBearerOptional } from "../lib/authJwt";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const qfusionaiRouter = Router();
@@ -181,6 +185,88 @@ async function insertStat(entry: StatEntry): Promise<void> {
     );
   } catch {
     // silently degrade — in-memory fallback already captured the stat
+  }
+}
+
+// ── Fusion runs (persisted prompt+reply history) ─────────────────────────────
+//
+// The stats table above only keeps telemetry (strategy/provider/latency). A run
+// keeps the actual content — prompt, chosen provider, and the reply — so the
+// caller can review their fusion history. Runs are scoped to an owner key
+// (auth sub, or an anonymous client id) and never returned across owners, so
+// one user's prompts are never exposed to another (the Vercel→Railway proxy
+// masks the real IP, so IP-scoping is unreliable — we scope by client id).
+
+let runsTableReady = false;
+async function ensureRunsTable(): Promise<boolean> {
+  if (runsTableReady) return true;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qfusionai_runs (
+        id              TEXT PRIMARY KEY,
+        owner_key       TEXT NOT NULL,
+        prompt          TEXT NOT NULL,
+        strategy        TEXT,
+        provider        TEXT,
+        provider_name   TEXT,
+        model           TEXT,
+        reply           TEXT,
+        latency_ms      INTEGER,
+        tokens_estimate INTEGER,
+        decision_reason TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS qfusionai_runs_owner_idx ON qfusionai_runs (owner_key, created_at DESC);`);
+    runsTableReady = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Owner scope for a run: authenticated user if a valid Bearer is present,
+ *  otherwise a client-provided anonymous id. Returns null when neither exists —
+ *  in that case the run isn't persisted (nothing to scope reads to). */
+function ownerKey(req: Request, clientId?: unknown): string | null {
+  const auth = verifyBearerOptional(req);
+  if (auth?.sub) return `u:${auth.sub}`;
+  const cid = typeof clientId === "string" ? clientId.trim().slice(0, 80) : "";
+  if (cid) return `c:${cid}`;
+  const q = typeof req.query.clientId === "string" ? req.query.clientId.trim().slice(0, 80) : "";
+  return q ? `c:${q}` : null;
+}
+
+interface RunInsert {
+  owner: string;
+  prompt: string;
+  strategy: string;
+  provider: string;
+  providerName: string;
+  model: string;
+  reply: string;
+  latencyMs: number;
+  tokensEstimate: number;
+  decisionReason: string | null;
+}
+async function insertRun(r: RunInsert): Promise<void> {
+  const ready = await ensureRunsTable();
+  if (!ready) return;
+  try {
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO qfusionai_runs
+        (id, owner_key, prompt, strategy, provider, provider_name, model, reply, latency_ms, tokens_estimate, decision_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        crypto.randomUUID(), r.owner,
+        r.prompt.slice(0, 8000), r.strategy, r.provider, r.providerName, r.model,
+        r.reply.slice(0, 16000), r.latencyMs, r.tokensEstimate, r.decisionReason,
+      ],
+    );
+  } catch {
+    // history is best-effort — a persistence failure never breaks the response
   }
 }
 
@@ -415,6 +501,22 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
     pushMemStat(stat);
     insertStat(stat).catch(() => void 0); // fire-and-forget
 
+    const owner = ownerKey(req, body.clientId);
+    if (owner) {
+      insertRun({
+        owner,
+        prompt,
+        strategy,
+        provider: providerId,
+        providerName: providerMeta.name,
+        model: result.model,
+        reply: result.reply,
+        latencyMs,
+        tokensEstimate,
+        decisionReason: decisionReason ?? null,
+      }).catch(() => void 0); // fire-and-forget
+    }
+
     return res.json({
       result: result.reply,
       provider: providerId,
@@ -436,6 +538,56 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
       latencyMs,
       message: err instanceof Error ? err.message : String(err),
     });
+  }
+});
+
+// ── GET /runs — the caller's fusion history (owner-scoped) ───────────────────
+qfusionaiRouter.get("/runs", routeLimiter, async (req: Request, res: Response) => {
+  const owner = ownerKey(req);
+  if (!owner) {
+    return res.status(400).json({ error: "owner-required", hint: "Pass ?clientId=<your-anon-id> or a Bearer token." });
+  }
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const ready = await ensureRunsTable();
+  if (!ready) return res.json({ runs: [], total: 0, backend: "unavailable" });
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT id, prompt, strategy, provider, provider_name, model,
+              LEFT(reply, 280) AS reply_preview, LENGTH(reply) AS reply_len,
+              latency_ms, tokens_estimate, decision_reason, created_at
+       FROM qfusionai_runs WHERE owner_key = $1
+       ORDER BY created_at DESC LIMIT $2`,
+      [owner, limit],
+    );
+    res.json({ runs: rows, total: rows.length, backend: "postgres" });
+  } catch (e) {
+    captureQFusionAIError(e, { route: "GET /runs" });
+    res.status(500).json({ error: "runs-list-failed" });
+  }
+});
+
+// ── GET /runs/:id — a single run in full (owner-scoped) ──────────────────────
+qfusionaiRouter.get("/runs/:id", routeLimiter, async (req: Request, res: Response) => {
+  const owner = ownerKey(req);
+  if (!owner) {
+    return res.status(400).json({ error: "owner-required", hint: "Pass ?clientId=<your-anon-id> or a Bearer token." });
+  }
+  const ready = await ensureRunsTable();
+  if (!ready) return res.status(503).json({ error: "runs-unavailable" });
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT id, prompt, strategy, provider, provider_name, model, reply,
+              latency_ms, tokens_estimate, decision_reason, created_at
+       FROM qfusionai_runs WHERE id = $1 AND owner_key = $2 LIMIT 1`,
+      [String(req.params.id), owner],
+    );
+    if (!rows[0]) return res.status(404).json({ error: "run-not-found" });
+    res.json({ run: rows[0] });
+  } catch (e) {
+    captureQFusionAIError(e, { route: "GET /runs/:id" });
+    res.status(500).json({ error: "run-detail-failed" });
   }
 });
 
@@ -586,6 +738,26 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
             "429": { description: "rate limit exceeded" },
             "503": { description: "no configured provider" },
           },
+        },
+      },
+      "/runs": {
+        get: {
+          summary: "Owner-scoped fusion run history (prompt + reply preview)",
+          parameters: [
+            { name: "clientId", in: "query", schema: { type: "string" }, description: "Anonymous client id (or send a Bearer token)" },
+            { name: "limit", in: "query", schema: { type: "integer", default: 20, maximum: 50 } },
+          ],
+          responses: { "200": { description: "run list" }, "400": { description: "owner (clientId/Bearer) required" } },
+        },
+      },
+      "/runs/{id}": {
+        get: {
+          summary: "Single fusion run in full (owner-scoped)",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "clientId", in: "query", schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "run detail" }, "404": { description: "not found for this owner" } },
         },
       },
     },

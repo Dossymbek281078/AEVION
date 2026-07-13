@@ -7790,8 +7790,17 @@ export default function CyberChessPage(){
                 const tactics=spotTactics(fen);
                 const tacticsHint=tactics.length>0?"\n\n"+tactics.join("\n"):"";
                 const opening=identifyOpening(hist.join(" "));
-                // Дебют-блок и общие принципы — только в дебюте, иначе это «безразрядник».
-                const openingHint=(opening&&hist.length<20)?`\n\n📚 Дебют: ${opening.name} (${opening.eco})\n${opening.character}\n💡 ${opening.whiteIdea}`:"";
+                // Дебют-блок — только в дебюте, иначе это «безразрядник». Раскрываем ПОЛНУЮ
+                // теорию (план за обе стороны + ключевые поля + типовые планы), а не одну строку:
+                // раньше blackIdea/commonPlans/keySquares были написаны, но не доходили до игрока.
+                const openingHint=(opening&&hist.length<20)?(()=>{
+                  const iAmWhite=pCol==="w";
+                  const myIdea=iAmWhite?opening.whiteIdea:opening.blackIdea;
+                  const oppIdea=iAmWhite?opening.blackIdea:opening.whiteIdea;
+                  const keys=opening.keySquares?.length?`\n🔑 Ключевые поля: ${opening.keySquares.join(", ")}`:"";
+                  const plans=opening.commonPlans?.length?`\n📋 Типовые планы:\n${opening.commonPlans.map(p=>`• ${p}`).join("\n")}`:"";
+                  return `\n\n📚 Дебют: ${opening.name} (${opening.eco}) — ${opening.character}\n💡 Твой план (${iAmWhite?"белые":"чёрные"}): ${myIdea}\n♟ План соперника: ${oppIdea}${keys}${plans}`;
+                })():"";
                 const buildBody=(cp:number,mate:number)=>{
                   const engineBody=generatePositionExplanation(fen,hist.length,cp,mate);
                   let principlesHint="";

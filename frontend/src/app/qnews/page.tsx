@@ -281,6 +281,24 @@ function authHeaders(): HeadersInit {
   } catch { return { "Content-Type": "application/json" }; }
 }
 
+function isAuthed(): boolean {
+  try { return Boolean(localStorage.getItem("aevion_auth_token_v1")); } catch { return false; }
+}
+
+// Anonymous bookmarks live in localStorage so a reader can save articles without
+// logging in (the server bookmark endpoint requires auth). Logged-in users still
+// sync to the server; localStorage mirrors it for instant, offline-friendly UX.
+const LS_BOOKMARKS = "aevion_qnews_bookmarks";
+function loadLocalBookmarks(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_BOOKMARKS);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch { return new Set(); }
+}
+function saveLocalBookmarks(ids: Set<string>): void {
+  try { localStorage.setItem(LS_BOOKMARKS, JSON.stringify([...ids])); } catch { /* ignore */ }
+}
+
 export default function QNewsPage() {
   const [articles, setArticles] = useState<NewsItem[]>([]);
   const [trending, setTrending] = useState<NewsItem[]>([]);
@@ -298,6 +316,10 @@ export default function QNewsPage() {
 
   // Bookmarks
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+
+  // Search
+  const [search, setSearch] = useState("");
 
   // AI Digest
   const [digest, setDigest] = useState<{ digest: string; highlights: string[] } | null>(null);
@@ -306,10 +328,14 @@ export default function QNewsPage() {
   // Stats
   const [stats, setStats] = useState<{ total: number; byCategory: Record<string, number> } | null>(null);
 
-  async function fetchArticles(cat: string) {
+  async function fetchArticles(cat: string, q: string) {
     setLoading(true);
     try {
-      const url = apiUrl("/api/qnews/articles") + (cat ? `?category=${cat}` : "");
+      const params = new URLSearchParams();
+      if (cat) params.set("category", cat);
+      if (q.trim()) params.set("q", q.trim());
+      params.set("limit", "100");
+      const url = apiUrl("/api/qnews/articles") + `?${params.toString()}`;
       const resp = await fetch(url);
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
@@ -338,18 +364,21 @@ export default function QNewsPage() {
   }
 
   async function toggleBookmark(articleId: string) {
-    try {
-      const resp = await fetch(apiUrl(`/api/qnews/articles/${articleId}/bookmark`), {
-        method: "POST", headers: authHeaders(),
-      });
-      if (resp.ok) {
-        setBookmarked((prev) => {
-          const next = new Set(prev);
-          if (next.has(articleId)) next.delete(articleId); else next.add(articleId);
-          return next;
+    // Optimistic local toggle (works for anon via localStorage).
+    setBookmarked((prev) => {
+      const next = new Set(prev);
+      if (next.has(articleId)) next.delete(articleId); else next.add(articleId);
+      saveLocalBookmarks(next);
+      return next;
+    });
+    // Sync to server only if logged in (endpoint is auth-gated; anon 401 is fine).
+    if (isAuthed()) {
+      try {
+        await fetch(apiUrl(`/api/qnews/articles/${articleId}/bookmark`), {
+          method: "POST", headers: authHeaders(),
         });
-      }
-    } catch { /* ignore */ }
+      } catch { /* local state already updated */ }
+    }
   }
 
   async function fetchDigest() {
@@ -372,26 +401,39 @@ export default function QNewsPage() {
       if (resp.ok) {
         setSubmitMsg("Статья опубликована!"); setShowSubmit(false);
         setSubmitForm({ title: "", summary: "", url: "", source: "", category: "tech" });
-        fetchArticles(category);
+        fetchArticles(category, search);
       } else { setSubmitMsg("Ошибка публикации"); }
     } finally { setSubmitBusy(false); }
   }
 
+  // Refetch on category or search change (search debounced to avoid a fetch per keystroke).
   useEffect(() => {
-    fetchArticles(category);
+    const t = setTimeout(() => fetchArticles(category, search), search ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [category, search]);
+
+  // Trending + stats only need to load once.
+  useEffect(() => {
     fetchTrending();
     fetchStats();
-  }, [category]);
+  }, []);
 
-  // Load bookmarks once on mount (auth-gated, silently no-op if anon)
+  // Bookmarks: start from localStorage (works for anon), then merge server-side
+  // bookmarks for logged-in users so both sources are reflected.
   useEffect(() => {
     let cancelled = false;
+    const local = loadLocalBookmarks();
+    setBookmarked(local);
+    if (!isAuthed()) return;
     (async () => {
       try {
         const resp = await fetch(apiUrl("/api/qnews/me/bookmarks"), { headers: authHeaders() });
         if (!resp.ok || cancelled) return;
         const data = await resp.json() as { articles: NewsItem[] };
-        setBookmarked(new Set((data.articles ?? []).map((a) => a.id)));
+        const merged = new Set(local);
+        for (const a of data.articles ?? []) merged.add(a.id);
+        setBookmarked(merged);
+        saveLocalBookmarks(merged);
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
@@ -425,6 +467,10 @@ export default function QNewsPage() {
     color: active ? "#fff" : "#64748b",
     transition: "all 0.15s",
   });
+
+  const displayedArticles = showBookmarksOnly
+    ? articles.filter((a) => bookmarked.has(a.id))
+    : articles;
 
   return (
     <>
@@ -494,6 +540,23 @@ export default function QNewsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
           {/* Main column */}
           <div>
+            {/* Search + bookmarks filter */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Поиск по заголовкам и описаниям…"
+                style={{ flex: 1, minWidth: 220, padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 14, background: "#fff", color: "#0f172a", boxSizing: "border-box" }}
+              />
+              <button
+                onClick={() => setShowBookmarksOnly((v) => !v)}
+                title="Показать только закладки"
+                style={{ padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: showBookmarksOnly ? "#7c3aed" : "#f1f5f9", color: showBookmarksOnly ? "#fff" : "#64748b", whiteSpace: "nowrap" }}
+              >
+                🔖 Закладки{bookmarked.size > 0 ? ` (${bookmarked.size})` : ""}
+              </button>
+            </div>
+
             {/* Category tabs */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
               {CATEGORIES.map((cat) => (
@@ -513,7 +576,7 @@ export default function QNewsPage() {
                 Loading articles...
               </p>
             )}
-            {!loading && articles.length === 0 && (
+            {!loading && displayedArticles.length === 0 && (
               <div
                 style={{
                   background: "#fff",
@@ -524,11 +587,11 @@ export default function QNewsPage() {
                   color: "#94a3b8",
                 }}
               >
-                <div style={{ fontSize: 40, marginBottom: 12 }}>📰</div>
-                <div>No articles found</div>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>{showBookmarksOnly ? "🔖" : "📰"}</div>
+                <div>{showBookmarksOnly ? "Пока нет закладок — нажми 📎 на статье." : "Статьи не найдены"}</div>
               </div>
             )}
-            {articles.map((article) => (
+            {displayedArticles.map((article) => (
               <div key={article.id} style={{ position: "relative" }}>
                 <ArticleCard
                   article={article}

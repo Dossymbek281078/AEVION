@@ -190,6 +190,29 @@ const TAB_META: Record<"play"|"puzzles"|"analysis"|"coach", {hue:string; icon:st
 const WS_LABEL: Record<string,string> = {focus:"Фокус",standard:"Стандарт",stream:"Стрим",study:"Обучение",coach:"Коуч"};
 const wsToast=(p:string)=>`Раскладка: ${WS_LABEL[p]||p}`;
 
+// Русское ОТОБРАЖЕНИЕ строки результата партии. ВАЖНО: сама строка `over` служит
+// семантическим ключом (over.includes("You win")/"AI wins"/"Stalemate"/… в 20+ местах
+// управляют логикой), поэтому её НЕ переименовываем — переводим только для показа
+// пользователю (StatusBar, модалка конца партии, значок на доске, шэр-текст). Уже
+// русские варианты (варианты игры: «⚡ Три шаха — победа!») проходят без изменений.
+function ruResult(o: string | null): string {
+  if (!o) return o || "";
+  return o
+    .replace("Checkmate! You win! 🏆", "Мат — вы победили! 🏆")
+    .replace("Checkmate — AI wins", "Мат — победил ИИ")
+    .replace("Checkmate — соперник выиграл", "Мат — соперник выиграл")
+    .replace("Checkmate — цель достигнута! 🏆", "Мат — цель достигнута! 🏆")
+    .replace(/^Checkmate —/, "Мат —")
+    .replace("AI timed out — you win!", "У ИИ вышло время — вы победили!")
+    .replace("Time out", "Время вышло")
+    .replace("You resigned", "Вы сдались")
+    .replace("Draw agreed", "Ничья по соглашению")
+    .replace("Stalemate", "Пат")
+    .replace("Threefold repetition", "Троекратное повторение")
+    .replace("Insufficient material", "Недостаточно материала")
+    .replace("50-move draw", "Ничья по правилу 50 ходов");
+}
+
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish with MultiPV ═══ */
@@ -569,7 +592,7 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
   const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
   const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
   const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
-  const label=isOver?over:chk?"Шах!":think?(useSF?"Stockfish думает…":"ИИ думает…"):myT?"Ваш ход":"Ход ИИ";
+  const label=isOver?ruResult(over):chk?"Шах!":think?(useSF?"Stockfish думает…":"ИИ думает…"):myT?"Ваш ход":"Ход ИИ";
   const icon=isOver?(isWin
       ? <svg viewBox="0 0 24 24" fill={col} style={sz}><path d="M7 3h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V3zm-3 1h3v2a3 3 0 0 1-3-3V4zm13 0h3v1a3 3 0 0 1-3 3V4zM9 13h6v2l2 5H7l2-5v-2z"/></svg>
       : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={sz}><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
@@ -784,6 +807,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
         const active=activeTab===item.id;
         return(
           <button key={item.id} onClick={item.action}
+            aria-label={item.label} aria-current={active?"page":undefined}
             style={{
               display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
               padding:"10px 16px 8px",border:"none",background:"transparent",
@@ -793,7 +817,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
             }}
             onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
             onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
-            <span style={{fontSize:20}}>{item.icon}</span>
+            <span style={{fontSize:20}} aria-hidden>{item.icon}</span>
             <span>{item.label}</span>
           </button>
         );
@@ -3113,6 +3137,12 @@ export default function CyberChessPage(){
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{
       if(e.key==="Escape"){
+        // Ручные модалки (без общего ui.Modal) — закрываем по Escape сверху вниз, как и
+        // остальные оверлеи приложения. Раньше эти четыре игнорировали Esc → непредсказуемо.
+        if(qrDataUrl){sQrDataUrl(null);return}
+        if(showQuickSetupModal){sShowQuickSetupModal(false);return}
+        if(showGameOver){sShowGameOver(false);return}
+        if(showFlashcards){sShowFlashcards(false);return}
         if(promo){sPromo(null);return}
         if(pms.length>0||pmSel){sPms([]);sPmSel(null)}
       }
@@ -3221,7 +3251,7 @@ export default function CyberChessPage(){
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
-  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec]);
+  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec,qrDataUrl,showQuickSetupModal,showGameOver,showFlashcards]);
 
   /* ── Keyboard SAN input — печатай ход прямо с клавиатуры (lichess-стиль)
      Поддержка: e4, Nf3, Bxf7+, O-O, O-O-O, e8=Q, Nbd7, Rae1, etc.
@@ -7132,7 +7162,7 @@ export default function CyberChessPage(){
                       <span style={{fontSize:28,lineHeight:1}}>{resultIcon}</span>
                       <span style={{fontSize:17,fontWeight:900,color:accentCol,letterSpacing:-0.3}}>{resultLabel}</span>
                     </div>
-                    <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{over}</div>
+                    <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{ruResult(over)}</div>
                     {/* CPI статус — «считается…» пока анализ идёт, потом реальный рейтинг */}
                     {(()=>{
                       const cs=ldCPIState();const last=cs.history[cs.history.length-1];
@@ -7205,11 +7235,11 @@ export default function CyberChessPage(){
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
-              {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} onClick={()=>sBoardTheme(i)} style={{width:14,height:14,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:"2px solid transparent",background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.25)":"scale(1)"}}/>)}
+              {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
-              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:22,height:22,borderRadius:4,border:"none",background:CC.surface1,color:CC.text,fontSize:14,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+              <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
               <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
-              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:22,height:22,borderRadius:4,border:"none",background:CC.surface1,color:CC.text,fontSize:14,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+              <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
             </div>
           </div>
 
@@ -7461,7 +7491,7 @@ export default function CyberChessPage(){
             }}>⌨️ Ход текстом</Btn>}
             {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
             {over&&<Btn size="md" variant="secondary" title="Скопировать итог партии" onClick={()=>{
-              const summary=`AEVION CyberChess · ${over} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
+              const summary=`AEVION CyberChess · ${ruResult(over)} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
               try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Clipboard недоступен","error")}
             }}>📤 Поделиться</Btn>}
             {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого AI-уровня" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
@@ -8297,7 +8327,7 @@ export default function CyberChessPage(){
                 {insights.slice(0,3).map((ins,i)=><div key={i} style={{fontSize:12,color:isWin?"#166534":isLoss?"#991b1b":"#1e3a8a",lineHeight:1.5}}>{ins}</div>)}
               </div>
               <button onClick={()=>{
-                const q=`Партия завершена: ${over}. Было ${blunders} блундеров и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
+                const q=`Партия завершена: ${ruResult(over)}. Было ${blunders} блундеров и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
                 sCoachPrefillQ(q);sTab("coach");
               }} style={{marginTop:8,padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(0,0,0,0.08)",color:"inherit",fontSize:11,fontWeight:800,cursor:"pointer"}}>
                 🎓 Подробный разбор с Coach →
@@ -8669,7 +8699,7 @@ export default function CyberChessPage(){
                 {openingData.moves.slice(0,8).map((m,i)=>{
                   const total=m.white+m.draws+m.black;
                   const wp=oeWhitePct(m),dp=oeDrawPct(m),bp=oeBlackPct(m);
-                  return <div key={i} onClick={()=>{
+                  const playOe=()=>{
                     try{
                       const ch=new Chess(game.fen());
                       const mv=ch.move({from:m.uci.slice(0,2) as Square,to:m.uci.slice(2,4) as Square,promotion:(m.uci[4]||"q") as any});
@@ -8680,7 +8710,8 @@ export default function CyberChessPage(){
                       sLm({from:mv.from as Square,to:mv.to as Square});
                       sSel(null);sVm(new Set());
                     }catch{}
-                  }} style={{padding:"5px 12px",borderBottom:i<openingData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                  };
+                  return <div key={i} role="button" tabIndex={0} aria-label={`Сыграть ${m.san} — ${oeShortNum(total)} партий`} className="cc-focus-ring" onClick={playOe} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playOe()}}} style={{padding:"5px 12px",borderBottom:i<openingData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background="#fef9c3"}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
                     <span style={{minWidth:50,fontSize:13,fontWeight:800,fontFamily:"monospace",color:T.text}}>{m.san}</span>
@@ -8713,7 +8744,7 @@ export default function CyberChessPage(){
               </div>
               {tbData.moves.length>0&&<div style={{maxHeight:160,overflowY:"auto"}}>
                 {tbData.moves.slice(0,6).map((m,i)=>{
-                  return <div key={i} onClick={()=>{
+                  const playTb=()=>{
                     try{
                       const ch=new Chess(game.fen());
                       const mv=ch.move({from:m.uci.slice(0,2) as Square,to:m.uci.slice(2,4) as Square,promotion:(m.uci[4]||"q") as any});
@@ -8724,7 +8755,8 @@ export default function CyberChessPage(){
                       sLm({from:mv.from as Square,to:mv.to as Square});
                       sSel(null);sVm(new Set());
                     }catch{}
-                  }} style={{padding:"5px 12px",borderBottom:i<5&&i<tbData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                  };
+                  return <div key={i} role="button" tabIndex={0} aria-label={`Сыграть ${m.san} — ${tbLabel(m.category,game.turn())}`} className="cc-focus-ring" onClick={playTb} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playTb()}}} style={{padding:"5px 12px",borderBottom:i<5&&i<tbData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background="#dbeafe"}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
                     <span style={{minWidth:54,fontSize:13,fontWeight:i===0?900:700,fontFamily:"monospace",color:T.text}}>{m.san}</span>
@@ -9606,7 +9638,7 @@ export default function CyberChessPage(){
                 const isUserCaused=((pCol==="w")===(swingIdx%2===0));
                 const moveSan=hist[swingIdx]||`ход ${Math.floor(swingIdx/2)+1}`;
                 const cpChange=((p.cp-prev.cp)/100).toFixed(1);
-                return <div onClick={()=>goToPly(swingIdx)} style={{
+                return <div role="button" tabIndex={0} aria-label="Перейти к переломному моменту партии" className="cc-focus-ring" onClick={()=>goToPly(swingIdx)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();goToPly(swingIdx)}}} style={{
                   marginTop:4,padding:"7px 10px",borderRadius:8,cursor:"pointer",
                   background:isUserCaused?"rgba(220,38,38,0.06)":"rgba(5,150,105,0.06)",
                   border:`1px solid ${isUserCaused?"#fca5a5":"#a7f3d0"}`,
@@ -13822,7 +13854,7 @@ ${question.trim()}`;
               <div style={{fontSize:48,lineHeight:1,flexShrink:0}}>{isWin?"🏆":isDraw?"🤝":"💀"}</div>
               <div>
                 <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:0.3}}>{isWin?"Победа!":isDraw?"Ничья":"Поражение"}</div>
-                <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{over}</div>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{ruResult(over)}</div>
                 {ratDelta&&<div style={{marginTop:5,display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:6,
                   background:ratDelta.d>0?"rgba(16,185,129,0.2)":"rgba(239,68,68,0.2)",
                   border:`1px solid ${ratDelta.d>0?"rgba(16,185,129,0.4)":"rgba(239,68,68,0.4)"}`}}>

@@ -120,7 +120,7 @@ import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
-import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP";
+import WorkspacePiP, { useWorkspacePiP } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
 import { MetricsCollector, computeCPL, type MoveMetric, type PVLine as MetricsPVLine } from "./stockfishMetrics";
@@ -6489,7 +6489,7 @@ export default function CyberChessPage(){
               {icon:TAB_META.puzzles.icon, label:TAB_META.puzzles.label, hint:"Случайный пазл", accent:TAB_META.puzzles.hue,  act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
             ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
-            {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
+            {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}openStreamSource(def);}},
             ...(isHumanGame?[]:[
               {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", accent:"#94a3b8", act:()=>sPalOpen(true)},
             ]),
@@ -14030,9 +14030,9 @@ ${question.trim()}`;
                 padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
                 background:"transparent",color:"rgba(255,255,255,0.45)",fontSize:13,cursor:"pointer",fontWeight:700,
               }}>QR</button>
-              <button onClick={()=>sShowGameOver(false)} style={{
-                padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
-                background:"transparent",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",
+              <button onClick={()=>sShowGameOver(false)} aria-label="Закрыть" style={{
+                padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)",
+                background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:13,cursor:"pointer",
               }}>✕</button>
             </div>
           </div>
@@ -14125,7 +14125,7 @@ ${question.trim()}`;
         <img src={qrDataUrl} alt="QR code" style={{width:220,height:220,borderRadius:8,imageRendering:"pixelated"}}/>
         <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center"}}>Отсканируй чтобы открыть партию</div>
         <button onClick={()=>{const a=document.createElement("a");a.href=qrDataUrl;a.download="chess-qr.png";a.click();}} style={{padding:"8px 18px",borderRadius:8,border:"1px solid rgba(117,153,0,0.4)",background:"rgba(117,153,0,0.1)",color:"#a3c832",fontSize:12,fontWeight:800,cursor:"pointer"}}>⬇ Скачать PNG</button>
-        <button onClick={()=>sQrDataUrl(null)} style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#5d5b59",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+        <button onClick={()=>sQrDataUrl(null)} aria-label="Закрыть" style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#b0aeac",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
       </div>
     </div>}
     {/* Move tooltip — rich hover popup showing quality + cpLoss */}

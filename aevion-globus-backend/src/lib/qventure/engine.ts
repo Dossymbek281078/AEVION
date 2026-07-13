@@ -91,6 +91,32 @@ const MOAT_STRENGTH: Record<MoatArchetype, number> = {
   "none": 35,
 };
 
+// A sector's dominant moat archetype is a *category potential*, not a company
+// fact: at seed, with no users, a "network-effects" business has no network yet,
+// and a premium/proprietary product (Quibi, Juicero) is not defensible just
+// because its category can be. So MOAT_STRENGTH is treated as the moat's *mature
+// ceiling*, credited only in proportion to how far it is plausibly realized —
+// from stage maturity, nudged by disclosed traction — with the remainder blended
+// toward a "no demonstrated defensibility" floor. This stops the deterministic
+// score from awarding a full 90 moat to an unproven pitch.
+const MOAT_FLOOR = MOAT_STRENGTH.none; // 35 = unproven / no demonstrated moat
+
+const STAGE_MOAT_REALIZATION: Record<Stage, number> = {
+  "idea": 0.30,
+  "pre-seed": 0.42,
+  "seed": 0.55,
+  "series-a": 0.75,
+  "growth": 0.90,
+};
+
+/** Fraction of a moat archetype's mature ceiling a company has plausibly earned,
+ *  from stage maturity ± disclosed traction evidence. */
+function moatRealization(stage: Stage, tractionScore: number): number {
+  const base = STAGE_MOAT_REALIZATION[stage];
+  const tractionAdj = ((tractionScore - 50) / 50) * 0.2; // ±0.2 around a neutral 50
+  return clamp01(base + tractionAdj);
+}
+
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
 }
@@ -130,9 +156,13 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
   // ── Factor scores (each 0–100) ──────────────────────────────────────────
   const marketScore = clamp(35 + Math.log10(Math.max(1, sector.tamUsdBn)) * 12);
   const timing = timingScore(sector);
-  const moatScore = MOAT_STRENGTH[moat];
-  const econScore = clamp(sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30);
   const traction = tractionSignal(rawInput);
+  const econScore = clamp(sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30);
+  // Moat = the archetype's mature ceiling, credited only as far as it is realized
+  // at this stage/traction (see MOAT_FLOOR / moatRealization above).
+  const moatCeiling = MOAT_STRENGTH[moat];
+  const moatRealized = moatRealization(stage, traction.score);
+  const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
   const scienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
   const legalScore = clamp(100 - sector.regulatoryIntensity * 65); // higher = less legal drag
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
@@ -143,7 +173,7 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
     { key: "timing", label: "Timing / tailwinds", weight: 0.10, score: round(timing),
       rationale: `Sector growth ${round(sector.cagr * 100)}% vs. 12% neutral baseline.` },
     { key: "moat", label: "Moat / defensibility", weight: 0.15, score: round(moatScore),
-      rationale: `Dominant defensibility here: ${moat.replace(/-/g, " ")}.` },
+      rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${(rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
     { key: "economics", label: "Unit economics potential", weight: 0.15, score: round(econScore),
       rationale: `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}%.` },
     { key: "execution", label: "Team / execution signal", weight: 0.12, score: round(traction.score),

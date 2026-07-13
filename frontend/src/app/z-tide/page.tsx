@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import TideCharts from "./TideCharts";
 
 /**
  * Z-Tide — adaptive reputation / contribution layer.
@@ -180,6 +181,9 @@ export default function ZTidePage() {
           </div>
         </section>
       )}
+
+      {/* Dashboard charts — rank distribution, top-tide bars, user lookup */}
+      <TideCharts />
 
       {/* My Tide + Rank ladder */}
       <section className="mx-auto max-w-6xl px-5 pb-8 grid grid-cols-1 lg:grid-cols-2 gap-4">

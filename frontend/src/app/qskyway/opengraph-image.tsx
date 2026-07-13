@@ -5,7 +5,7 @@ export const alt = "QSkyway — navigation layer for the urban sky (3D air corri
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const CHIPS = ["3D corridors", "4D routing", "no-fly zones", "layered wind", "QRight slots", "Ed25519-signed"];
+const CHIPS = ["3D corridors", "4D routing", "no-fly zones", "layered wind", "height confidence", "QRight slots", "Ed25519-signed"];
 
 export default function QSkywayOg() {
   return new ImageResponse(
@@ -44,7 +44,7 @@ export default function QSkywayOg() {
             <span style={{ color: "#22d3ee" }}>for the urban sky</span>
           </div>
           <div style={{ fontSize: 26, color: "#c3d0e2", maxWidth: 1000, lineHeight: 1.4, display: "flex" }}>
-            3D air corridors + rules for air taxis — live on real buildings in Astana &amp; NYC.
+            3D air corridors + rules for air taxis — live on real buildings in Astana, NYC &amp; Tokyo.
             &ldquo;Google Maps + traffic rules for the sky.&rdquo;
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

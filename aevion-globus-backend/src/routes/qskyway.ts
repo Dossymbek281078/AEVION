@@ -48,6 +48,12 @@ const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
 const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
+// Phase 5: extra safety clearance by height-data confidence (metres), indexed by
+// height source: 0=measured (explicit height tag), 1=derived (levels×3.2),
+// 2=guessed (blind 12m default). A guessed height can badly understate the real
+// building, so the corridor is flown higher until better data (LiDAR / CityGML
+// LOD2 / Google 3D Tiles) raises confidence and lets it descend.
+const SRC_CLEARANCE = [0, 6, 16];
 const AVG_SPEED_MS = 25; // ~90 km/h
 const MIN_SPEED_MS = 8;
 const MAX_SPEED_MS = 42;
@@ -70,10 +76,19 @@ function zonesMeters(cityId: string, city: CityData): ZoneXY[] {
 const obstOf = (g: CityData["grid"]) => (c: number, r: number): number =>
   c < 0 || r < 0 || c >= g.cols || r >= g.rows ? 999 : g.heights[r * g.cols + c];
 
+// per-cell height-data source (0 measured / 1 derived / 2 guessed); out-of-grid = 0 (known open)
+const srcOf = (g: CityData["grid"]) => (c: number, r: number): number =>
+  c < 0 || r < 0 || c >= g.cols || r >= g.rows ? 0 : (g.src?.[r * g.cols + c] ?? 0);
+const confClear = (s: number): number => SRC_CLEARANCE[s] ?? 0;
+
 function edgeAltOf(g: CityData["grid"]) {
   const obst = obstOf(g);
+  const src = srcOf(g);
   return (fc: number, fr: number, tc: number, tr: number): number => {
-    const required = Math.max(obst(fc, fr), obst(tc, tr)) + CLEAR;
+    const maxObst = Math.max(obst(fc, fr), obst(tc, tr));
+    // confidence penalty from the least-trusted cell touched by this edge
+    const conf = Math.max(confClear(src(fc, fr)), confClear(src(tc, tr)));
+    const required = maxObst + CLEAR + conf;
     const band = Math.max(0, Math.ceil((required - FLOOR) / BAND));
     const eastOrNorth = tc - fc > 0 || tr - fr < 0;
     return FLOOR + band * BAND + (eastOrNorth ? 0 : BAND / 2);
@@ -167,6 +182,7 @@ interface RouteResult {
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
   avoidsNoFly: boolean;
+  avgConfClearM: number; heightConfidencePct: number;
 }
 
 function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number): RouteResult | null {
@@ -179,14 +195,18 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
   if (!path) return null;
   const edgeAlt = edgeAltOf(city.grid);
   const obst = obstOf(city.grid);
+  const src = srcOf(city.grid);
   const cell = city.grid.cell;
   const alts: number[] = [];
   const obstacles: number[] = [];
-  let timeStill = 0, timeWind = 0, windSum = 0;
+  let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
   for (let k = 0; k < path.length - 1; k++) {
     const alt = edgeAlt(path[k].c, path[k].r, path[k + 1].c, path[k + 1].r);
     alts.push(alt);
     obstacles.push(Math.max(obst(path[k].c, path[k].r), obst(path[k + 1].c, path[k + 1].r)));
+    const worstSrc = Math.max(src(path[k].c, path[k].r), src(path[k + 1].c, path[k + 1].r));
+    confSum += confClear(worstSrc);
+    if (worstSrc === 0) measuredEdges++;
     const segLen = Math.hypot(path[k + 1].c - path[k].c, path[k + 1].r - path[k].r) * cell;
     const tw = tailwind(cityId, path[k].c, path[k].r, path[k + 1].c, path[k + 1].r, alt);
     const eff = Math.max(MIN_SPEED_MS, Math.min(MAX_SPEED_MS, AVG_SPEED_MS + tw));
@@ -205,6 +225,8 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
     avgWindMs: +(windSum / Math.max(1, alts.length)).toFixed(2),
     windFromDeg: w0.fromDeg,
     avoidsNoFly: zones.length > 0,
+    avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
+    heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
   };
 }
 
@@ -394,13 +416,14 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     module: "qskyway",
-    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length })),
+    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct })),
     city: CITY.city,
     buildings: CITY.buildings.length,
     vertiports: CITY.vertiports.length,
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
-    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability"],
+    clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
+    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance"],
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     disclaimer: DISCLAIMER,
@@ -414,6 +437,7 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length,
       bbox: c.bbox, meters: c.meters, maxHeightM: c.grid.heights.reduce((m, v) => Math.max(m, v), 0),
       noFlyZones: (NOFLY[id] ?? []).length,
+      dataQuality: c.dataQuality,
       signature: { alg: "Ed25519", contentHash: signCity(id, c).contentHash },
     })),
   });

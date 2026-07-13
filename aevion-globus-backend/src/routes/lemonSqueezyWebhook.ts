@@ -34,11 +34,33 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import {
   referenceForVariantId,
   tierForLemonSqueezyReference,
+  isAppReference,
+  appSlugForReference,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
 import { MEDIUM_BUNDLE } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+
+async function upsertAppSubscription(
+  email: string,
+  appSlug: string,
+  status: "active" | "cancelled",
+  lsSubId?: string,
+): Promise<void> {
+  const pool = getPool();
+  try {
+    await pool.query(
+      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
+       VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())
+       ON CONFLICT ("email","appSlug") DO UPDATE
+         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"), "updatedAt"=NOW()`,
+      [email, appSlug, lsSubId ?? null, status],
+    );
+  } catch (err) {
+    console.error("[ls/app-sub] upsertAppSubscription error:", err instanceof Error ? err.message : err);
+  }
+}
 
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
   const pool = getPool();
@@ -175,8 +197,27 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   SEEN.add(dedupKey);
 
   try {
+    const ref = referenceForVariantId(attrs.variant_id);
+    const lsSubId = payload.data?.id ?? undefined;
+
+    // ── Individual app subscription (app_* variants) ──────────────────
+    if (isAppReference(ref)) {
+      const appSlug = appSlugForReference(ref)!;
+      if (ACTIVATE_EVENTS.has(event)) {
+        await upsertAppSubscription(email, appSlug, "active", lsSubId);
+        console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
+        return res.json({ ok: true, action: "app_activated", appSlug, email });
+      }
+      if (DEACTIVATE_EVENTS.has(event)) {
+        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
+        console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
+        return res.json({ ok: true, action: "app_cancelled", appSlug, email });
+      }
+      return res.json({ ok: true, ignored: event });
+    }
+
+    // ── Platform tier subscription (tier_* variants) ─────────────────
     if (ACTIVATE_EVENTS.has(event)) {
-      const ref = referenceForVariantId(attrs.variant_id);
       const tierId = tierForLemonSqueezyReference(ref);
       // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
       const customModule = payload.meta?.custom_data?.module;

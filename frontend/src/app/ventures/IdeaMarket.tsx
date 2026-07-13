@@ -59,6 +59,21 @@ function Dots({ n }: { n: number }) {
   );
 }
 
+// Stable anonymous voter id (per browser) so the backend can dedup votes
+// reliably even behind the Vercel->Railway proxy where client IP isn't visible.
+function anonVoterId(): string {
+  try {
+    let id = localStorage.getItem("aevion_ventures_voter");
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `v-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem("aevion_ventures_voter", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 export default function IdeaMarket() {
   const [interest, setInterest] = useState<Record<string, number>>({});
   const [voted, setVoted] = useState<Record<string, boolean>>({});
@@ -89,7 +104,7 @@ export default function IdeaMarket() {
       const r = await fetch(`/api-backend/api/ventures/ideas/${id}/interest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "build" }),
+        body: JSON.stringify({ kind: "build", voterId: anonVoterId() }),
       });
       const d = (await r.json()) as { interest?: number };
       if (r.ok && typeof d.interest === "number") {

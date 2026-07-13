@@ -10,21 +10,25 @@ import { apiUrl } from "@/lib/apiBase";
 // Честно: движок и доказательство концепции, не сертифицированное авиационное ПО.
 
 interface NoFly { id: string; name: string; kind: string; x: number; y: number; radiusM: number; }
+interface DataQuality { total: number; measured: number; derived: number; guessed: number; measuredPct: number; realPct: number; }
 interface CityData {
   city: string;
   meters: { w: number; h: number };
-  grid: { cols: number; rows: number; cell: number; heights: number[] };
-  buildings: { h: number; r: number[][] }[];
+  grid: { cols: number; rows: number; cell: number; heights: number[]; src?: number[] };
+  buildings: { h: number; hs?: number; r: number[][] }[];
   vertiports: { c: number; r: number; x: number; y: number }[];
   nofly?: NoFly[];
   wind?: { fromDeg: number; groundMs: number; topMs: number };
   vertiportScores?: { c: number; r: number; suitability: number; class: string }[];
+  dataQuality?: DataQuality;
   _signature?: { alg: string; contentHash: string };
 }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
 
 const FLOOR = 50, CLEAR = 15, BAND = 25, ALT_MIN = 50;
+// Phase 5: extra safety clearance by height-data confidence (measured/derived/guessed).
+const SRC_CLEARANCE = [0, 6, 16];
 
 const STOPS: number[][] = [[56, 189, 248], [34, 211, 238], [129, 140, 248], [167, 139, 250]];
 function altColor(alt: number, altMax: number, a = 1): string {
@@ -55,7 +59,7 @@ export default function QSkywayClient() {
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number } | null>(null);
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -65,12 +69,19 @@ export default function QSkywayClient() {
     return c < 0 || r < 0 || c >= cols || r >= rows ? 999 : heights[r * cols + c];
   }, []);
 
+  const srcAt = useCallback((c: number, r: number): number => {
+    const g = cityRef.current?.grid;
+    if (!g || !g.src) return 0;
+    return c < 0 || r < 0 || c >= g.cols || r >= g.rows ? 0 : (g.src[r * g.cols + c] ?? 0);
+  }, []);
+
   const edgeAlt = useCallback((fc: number, fr: number, tc: number, tr: number): number => {
-    const required = Math.max(obst(fc, fr), obst(tc, tr)) + CLEAR;
+    const conf = Math.max(SRC_CLEARANCE[srcAt(fc, fr)] ?? 0, SRC_CLEARANCE[srcAt(tc, tr)] ?? 0);
+    const required = Math.max(obst(fc, fr), obst(tc, tr)) + CLEAR + conf;
     const band = Math.max(0, Math.ceil((required - FLOOR) / BAND));
     const eastOrNorth = tc - fc > 0 || tr - fr < 0;
     return FLOOR + band * BAND + (eastOrNorth ? 0 : BAND / 2);
-  }, [obst]);
+  }, [obst, srcAt]);
 
   const astar = useCallback((s: Cell, g: Cell): Cell[] | null => {
     const city = cityRef.current;
@@ -158,6 +169,8 @@ export default function QSkywayClient() {
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
         nofly: city.nofly?.length ?? 0,
+        heightPct: city.dataQuality?.measuredPct ?? 0,
+        realPct: city.dataQuality?.realPct ?? 0,
       });
       setLoaded(true);
       newHero();
@@ -241,7 +254,11 @@ export default function QSkywayClient() {
     for (const b of city.buildings) {
       const t = Math.min(1, b.h / maxH);
       const g = Math.round(24 + t * 90);
-      ctx.fillStyle = `rgb(${g},${g + 12},${g + 26})`;
+      // guessed height (blind default) → warm/amber tint so data uncertainty is visible;
+      // measured/derived → cool blue-grey. Brightness still encodes height.
+      ctx.fillStyle = b.hs === 2
+        ? `rgb(${g + 42},${g + 22},${Math.round(16 + t * 26)})`
+        : `rgb(${g},${g + 12},${g + 26})`;
       ctx.beginPath();
       const rr = b.r; ctx.moveTo(rr[0][0] * SC, rr[0][1] * SC);
       for (let i = 1; i < rr.length; i++) ctx.lineTo(rr[i][0] * SC, rr[i][1] * SC);
@@ -391,7 +408,10 @@ export default function QSkywayClient() {
                   <span>🌬 ветер {meta.wind}</span>
                   <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
                   <span style={{ color: "#2dd4bf" }}>🔏 Ed25519 · {meta.signed}…</span>
-                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна</span>
+                  <span title="Доля зданий с измеренной высотой (OSM height tag). Остальное выведено из этажности или угадано дефолтом 12 м; над такими борт летит с повышенным просветом. Апгрейд LiDAR/LOD2/3D Tiles снижает крейсер.">
+                    📐 высоты: <span style={{ color: meta.heightPct >= 60 ? "#2dd4bf" : meta.heightPct >= 25 ? "#fbbf24" : "#fb7185" }}>{meta.heightPct}% измерено</span>, {meta.realPct}% реальных
+                  </span>
+                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
                 </div>
               )}
             </section>

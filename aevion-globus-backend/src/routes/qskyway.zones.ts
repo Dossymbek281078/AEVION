@@ -30,6 +30,10 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     { id: "nfz-crowd", name: "Плотная толпа — Таймс-сквер", kind: "temporary", center: [-73.9839, 40.7591], radiusM: 210, until: "2026-07-13T06:00:00Z" },
     { id: "nfz-sensitive", name: "Чувствительный объект", kind: "permanent", center: [-73.9800, 40.7520], radiusM: 200 },
   ],
+  tokyo: [
+    { id: "nfz-cluster", name: "Кластер небоскрёбов Ниси-Синдзюку — ограничение", kind: "permanent", center: [139.69569, 35.69335], radiusM: 220 },
+    { id: "nfz-crowd", name: "Плотная толпа — станция Синдзюку", kind: "temporary", center: [139.70000, 35.68883], radiusM: 200, until: "2026-07-20T12:00:00Z" },
+  ],
 };
 
 export const WIND: Record<string, WindConfig> = {
@@ -37,4 +41,6 @@ export const WIND: Record<string, WindConfig> = {
   astana: { fromDeg: 210, baseMs: 4, perBandMs: 1.6 },
   // Нью-Йорк — преобладающий западный/северо-западный.
   nyc: { fromDeg: 290, baseMs: 3, perBandMs: 1.3 },
+  // Токио — летний тихоокеанский муссон, преобладающий южный ветер, умеренный.
+  tokyo: { fromDeg: 180, baseMs: 3, perBandMs: 1.2 },
 };

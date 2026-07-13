@@ -41,7 +41,7 @@ async function main() {
   const cs = await jget("/api/qskyway/cities");
   assert(cs.status === 200 && Array.isArray(cs.json?.cities), "/cities lists registry", `status=${cs.status}`);
   const cityIds = (cs.json?.cities ?? []).map((c) => c.id);
-  assert(cityIds.includes("astana") && cityIds.includes("nyc"), "registry has astana + nyc", cityIds.join(","));
+  assert(cityIds.includes("astana") && cityIds.includes("nyc") && cityIds.includes("tokyo"), "registry has astana + nyc + tokyo", cityIds.join(","));
 
   // clearance invariant across all vertiport pairs, per city
   for (const cid of cityIds) {
@@ -91,10 +91,52 @@ async function main() {
   const ver = await jget("/api/qskyway/verify?city=nyc");
   assert(ver.status === 200 && ver.json?.valid === true && ver.json?.alg === "Ed25519", "Ed25519 twin signature verifies");
 
+  // ── Tokyo (third city): no-fly exposed, avoided, twin signs + verifies ────
+  const tk = await jget("/api/qskyway/city?city=tokyo");
+  const tkNofly = tk.json?.nofly ?? [];
+  assert(tk.status === 200 && (tk.json?.buildings?.length ?? 0) >= 300, "[tokyo] twin has buildings", `n=${tk.json?.buildings?.length}`);
+  assert(Array.isArray(tkNofly) && tkNofly.length >= 2, "[tokyo] no-fly zones exposed", `n=${tkNofly.length}`);
+  const tkCell = tk.json?.grid?.cell ?? 20;
+  let tkInside = 0;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    if (i === j) continue;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "tokyo" });
+    if (r.status !== 200) continue;
+    for (const p of r.json.path) {
+      const x = (p.c + 0.5) * tkCell, y = (p.r + 0.5) * tkCell;
+      for (const z of tkNofly) if (Math.hypot(x - z.x, y - z.y) <= z.radiusM) tkInside++;
+    }
+  }
+  assert(tkInside === 0, "[tokyo] routes avoid no-fly zones", `violations=${tkInside}`);
+  const tkVer = await jget("/api/qskyway/verify?city=tokyo");
+  assert(tkVer.status === 200 && tkVer.json?.valid === true, "[tokyo] Ed25519 twin signature verifies");
+
   // vertiport suitability scoring
   const vps = await jget("/api/qskyway/vertiports?city=nyc");
   assert(vps.status === 200 && Array.isArray(vps.json?.vertiports) && vps.json.vertiports.length > 0, "vertiport scoring endpoint");
   assert(vps.json.vertiports.every((v) => typeof v.suitability === "number" && typeof v.class === "string"), "each pad has suitability + class");
+
+  // ── Phase 5: height-data provenance + confidence-adjusted clearance ─────────
+  const cs2 = await jget("/api/qskyway/cities");
+  assert((cs2.json?.cities ?? []).every((c) => c.dataQuality && typeof c.dataQuality.measuredPct === "number" && typeof c.dataQuality.realPct === "number"), "each city reports height dataQuality");
+  const hm = await jget("/api/qskyway/health");
+  const bm = hm.json?.clearanceModel?.byHeightSourceM ?? {};
+  assert(bm.guessed > bm.derived && bm.derived >= bm.measured, "confidence-clearance model configured (guessed > derived >= measured)", `m=${bm.measured} d=${bm.derived} g=${bm.guessed}`);
+  const tkq = await jget("/api/qskyway/city?city=tokyo");
+  assert(tkq.json?.dataQuality?.total > 0 && Array.isArray(tkq.json?.grid?.src) && tkq.json.grid.src.length === tkq.json.grid.heights.length, "twin carries height-source grid + dataQuality");
+  const p5r = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "tokyo" });
+  assert(typeof p5r.json?.avgConfClearM === "number" && typeof p5r.json?.heightConfidencePct === "number", "route reports confidence-clearance metrics");
+  // confidence clearance is exercised where corridors must cross uncertain buildings.
+  // A* prefers open street canyons, so not every pair is padded — scan all pairs.
+  let maxPad = 0, padded = 0;
+  const tvp = tkq.json?.vertiports?.length ?? 0;
+  for (let i = 0; i < tvp; i++) for (let j = 0; j < tvp; j++) {
+    if (i === j) continue;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "tokyo" });
+    if (r.json?.avgConfClearM > 0) { padded++; if (r.json.avgConfClearM > maxPad) maxPad = r.json.avgConfClearM; }
+  }
+  assert(padded > 0 && maxPad > 0, "[tokyo] confidence-clearance raises corridors over uncertain buildings", `${padded} routes padded, max=${maxPad}m`);
+  // clearance invariant already holds base+conf, so the per-city loop still shows 0 violations
 
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });

@@ -5677,22 +5677,24 @@ export default function CyberChessPage(){
             </div>
 
             {/* ─── Section 1: QUICK PLAY ─── */}
-            <div style={{marginTop:SPACE[3]}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:SPACE[2]}}>
+            <div style={{marginTop:SPACE[3],display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+              {/* Primary CTA «ИГРАТЬ» — доминирует: полная ширина, крупнее вторичных режимов.
+                  (Раньше был одной ячейкой grid 2fr/1fr/1fr — не выигрывал по вниманию.) */}
                 <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
-                  style={{padding:"16px 22px",borderRadius:RADIUS.lg,border:"none",
+                  style={{width:"100%",padding:"22px 26px",borderRadius:RADIUS.lg,border:"none",
                     background:`linear-gradient(135deg,${CC.brand},#10b981 55%,#14b8a6)`,color:"#fff",
-                    fontWeight:900,fontSize:16,cursor:"pointer",
-                    boxShadow:"0 10px 24px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.25)",
+                    fontWeight:900,fontSize:20,cursor:"pointer",
+                    boxShadow:"0 12px 28px rgba(5,150,105,0.42), inset 0 1px 0 rgba(255,255,255,0.25)",
                     display:"inline-flex",alignItems:"center",justifyContent:"center",gap:SPACE[2],
-                    letterSpacing:0.4,transition:`all ${MOTION.fast} ${MOTION.ease}`}}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 14px 28px rgba(5,150,105,0.45), inset 0 1px 0 rgba(255,255,255,0.3)"}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform="";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 10px 24px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.25)"}}
-                  onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
+                    letterSpacing:0.6,transition:`all ${MOTION.fast} ${MOTION.ease}`}}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 16px 34px rgba(5,150,105,0.5), inset 0 1px 0 rgba(255,255,255,0.3)"}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform="";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 12px 28px rgba(5,150,105,0.42), inset 0 1px 0 rgba(255,255,255,0.25)"}}
+                  onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.99)"}}
                   onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}
                   aria-label="Начать новую партию">
-                  <Icon.Play width={18} height={18}/> QUICK START
+                  <Icon.Play width={24} height={24}/> ИГРАТЬ
                 </button>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:SPACE[2]}}>
                 <Btn size="lg" variant="secondary" onClick={()=>{
                   const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
                   const capped=(chessy.owned.master_ai||isPro)?targetIdx:Math.min(targetIdx,4);
@@ -5700,7 +5702,7 @@ export default function CyberChessPage(){
                   setTimeout(()=>newG(),50);
                 }}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>⚡ Match Me</span>
+                    <span>⚡ Быстрый матч</span>
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat}</span>
                   </div>
                 </Btn>

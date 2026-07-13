@@ -3850,9 +3850,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       return res.status(500).json({ error: errMsg });
     }
 
-    const pagesUrl = deployData.result?.url
-      ? `https://${deployData.result.url}`
-      : `https://${pageName}.pages.dev`;
+    const rawUrl = deployData.result?.url ?? `${pageName}.pages.dev`;
+    const pagesUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;

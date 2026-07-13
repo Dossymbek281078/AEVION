@@ -11408,11 +11408,17 @@ ${question.trim()}`;
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
         sShowOnboarding(false);
-        // Очередь первого визита: следом — приветствие (+50), затем тур (см. closeDailyReward).
-        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
+        // Единый онбординг: сразу в выбранный режим. Больше НЕ стопка (welcome-модалка
+        // и 4-слайдовый тур убраны из первого визита — тур доступен в меню помощи).
+        const wasFirst=firstRunRef.current;firstRunRef.current=false;
+        if(choice.intent==="play"){sTab("play");sSetup(true);}
+        else if(choice.intent==="learn"){sTab("coach");sSetup(false);}
+        else if(choice.intent==="puzzles"){sTab("puzzles");sSetup(false);}
+        if(wasFirst)showToast("Добро пожаловать! +50 Chessy на счёте 🎉","success");
       }}
       onSkip={()=>{markOnboardingDone();sShowOnboarding(false);
-        if(firstRunRef.current)setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),300);
+        const wasFirst=firstRunRef.current;firstRunRef.current=false;
+        if(wasFirst)showToast("Добро пожаловать! +50 Chessy на счёте 🎉","success");
       }}
     />}
 

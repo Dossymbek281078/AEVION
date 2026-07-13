@@ -117,7 +117,18 @@ async function ensureTables(): Promise<void> {
 }
 
 const IP_SALT = process.env.VENTURES_IP_SALT ?? "aevion-ventures-v1";
-function voterHash(req: Request): string {
+
+// Per-voter dedup key. Behind the Vercel->Railway double proxy the backend can't
+// see a stable real client IP (it sees rotating edge IPs), so an IP-only hash
+// dedupes unreliably. Prefer a client-provided anonymous voterId (a random UUID
+// the frontend stores in localStorage) — stable per browser, proxy-independent.
+// It's spoofable by a determined caller, but combined with the per-IP rate limit
+// it's honest anti-double-counting for a vanity interest signal, not a security
+// control. Falls back to the IP-hash when no voterId is supplied.
+function voterHash(req: Request, voterId: string): string {
+  if (voterId) {
+    return createHash("sha256").update(IP_SALT + "vid:" + voterId).digest("hex").slice(0, 32);
+  }
   const ip =
     (Array.isArray(req.headers["x-forwarded-for"])
       ? req.headers["x-forwarded-for"][0]
@@ -126,7 +137,7 @@ function voterHash(req: Request): string {
     req.socket?.remoteAddress ||
     req.ip ||
     "unknown";
-  return createHash("sha256").update(IP_SALT + ip).digest("hex").slice(0, 32);
+  return createHash("sha256").update(IP_SALT + "ip:" + ip).digest("hex").slice(0, 32);
 }
 
 function str(v: unknown, max: number): string {
@@ -228,7 +239,9 @@ venturesRouter.post("/ideas/:id/interest", interestLimiter, async (req: Request,
   }
   const kindRaw = str((req.body || {}).kind, 8) || "build";
   const kind = KINDS.has(kindRaw) ? kindRaw : "build";
-  const hash = voterHash(req);
+  // Accept a client anon id (UUID-ish, alnum+dashes) for reliable per-browser dedup.
+  const voterId = str((req.body || {}).voterId, 64).replace(/[^a-zA-Z0-9-]/g, "");
+  const hash = voterHash(req, voterId);
   await ensureTables();
 
   if (dbAvailable) {

@@ -1379,6 +1379,22 @@ export default function CyberChessPage(){
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
+  // Компактная сводка постоянных слабостей из истории партий — скармливается коуч-LLM,
+  // чтобы совет привязывался к реальным повторяющимся ошибкам ученика, а не только к позиции.
+  // Раньше в коуч уходил лишь статичный coachLevel (3 корзины) — данные CPI/DNA не доходили.
+  const coachWeaknessSummary=useMemo<string>(()=>{
+    if(savedGames.length<5) return "";
+    const d=gameDna; const pts:string[]=[];
+    if(d.tacticalPhaseLoss==="opening") pts.push("чаще всего проигрывает в дебюте — репертуар и принципы развития");
+    else if(d.tacticalPhaseLoss==="middlegame") pts.push("основные потери в миттельшпиле — планы, слабости, тактический счёт");
+    else if(d.tacticalPhaseLoss==="endgame") pts.push("слаб в эндшпиле — техника реализации и пешечные окончания");
+    if(d.avgLengthLoss>0&&d.avgLengthLoss<25) pts.push(`ранние зевки (средняя длина поражения ${d.avgLengthLoss} ходов) — нужен blunder-check`);
+    if(d.blackGames>=3&&d.whiteWinPct-d.blackWinPct>20) pts.push(`заметно слабее за чёрных (${d.blackWinPct}% vs ${d.whiteWinPct}% за белых) — защита/контригра`);
+    if(d.whiteGames>=3&&d.blackWinPct-d.whiteWinPct>20) pts.push(`заметно слабее за белых (${d.whiteWinPct}% vs ${d.blackWinPct}% за чёрных) — инициатива`);
+    if(d.worstOpening&&d.worstOpening.total>=3) pts.push(`провальный дебют «${d.worstOpening.opening}» (${d.worstOpening.winPct}% в ${d.worstOpening.total} партиях)`);
+    if(d.recentTrend==="down"&&d.recentWinPctDelta<=-10) pts.push(`спад формы за последние партии (${d.recentWinPctDelta}% WR)`);
+    return pts.slice(0,3).join("; ");
+  },[gameDna,savedGames.length]);
   // Auto-persist FIDE estimate so matchmaking can read it from localStorage
   useEffect(()=>{
     if(savedGames.length<3)return;
@@ -10538,6 +10554,7 @@ ${question.trim()}`;
             playerColor={pCol}
             phaseLabel={detectPhase(game.fen(),hist.length).label}
             coachLevel={coachLevel}
+            weaknesses={coachWeaknessSummary}
             visible={true}
             onClose={()=>sTab("play")}
             runEngine={runEnginePromise}

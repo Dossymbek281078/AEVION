@@ -224,6 +224,20 @@ function detectLanguage(path: string): string {
   return map[ext] || "plaintext";
 }
 
+// ── Collaborator access helpers ───────────────────────────────────────────────
+function isCollaborator(project: DevHubProject, userId: string, minRole?: "editor"): boolean {
+  const entry = project.collaborators.find((c) => c.userId === userId);
+  if (!entry) return false;
+  if (!minRole) return true;
+  return entry.role === "editor";
+}
+function canAccess(project: DevHubProject, userId: string): boolean {
+  return project.userId === userId || isCollaborator(project, userId);
+}
+function canEdit(project: DevHubProject, userId: string): boolean {
+  return project.userId === userId || isCollaborator(project, userId, "editor");
+}
+
 // ── Project helpers (DB or memory) ────────────────────────────────────────────
 async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   if (!isDevHubDbReady()) {
@@ -600,11 +614,12 @@ devhubRouter.get("/projects/:id", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   try {
     const project = await dbGetProject(req.params.id);
-    if (!project || project.userId !== userId) {
+    if (!project || !canAccess(project, userId)) {
       return res.status(404).json({ error: "project not found" });
     }
     const files = await dbListFiles(project.id);
-    res.json({ project, files });
+    const role = project.userId === userId ? "owner" : (project.collaborators.find(c => c.userId === userId)?.role ?? "viewer");
+    res.json({ project, files, role });
   } catch (e: any) {
     return res.status(500).json({ error: "internal_error" });
   }
@@ -679,7 +694,7 @@ devhubRouter.get("/projects/:id/files", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -702,7 +717,7 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -726,7 +741,7 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -750,7 +765,7 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   const { content = "", language } = req.body || {};
@@ -790,7 +805,7 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   const { content = "", language } = req.body || {};
@@ -1125,7 +1140,7 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   res.json({ collaborators: project.collaborators });
@@ -1141,20 +1156,42 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
+  // Only project owner can manage collaborators
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
-  const { userId: collabUserId, role } = req.body || {};
-  if (!collabUserId || typeof collabUserId !== "string") {
-    return res.status(400).json({ error: "userId is required" });
+  // Studio Pro required to add collaborators
+  const tier = await getUserTier(userId);
+  if (tier === "free") {
+    return res.status(403).json({ error: "Studio Pro required to add collaborators", upgrade: true });
+  }
+  const { userId: rawInput, role } = req.body || {};
+  if (!rawInput || typeof rawInput !== "string") {
+    return res.status(400).json({ error: "userId or email is required" });
   }
   const validRoles = ["editor", "viewer"];
-  const resolvedRole = validRoles.includes(role) ? role : "viewer";
-  // Prevent adding owner as collaborator
+  const resolvedRole = validRoles.includes(role) ? role : "editor";
+
+  // Resolve email → userId via AEVIONUser if input looks like an email
+  let collabUserId = rawInput.trim();
+  let displayEmail = "";
+  if (collabUserId.includes("@") && isDevHubDbReady()) {
+    try {
+      const ur = await pool.query(
+        `SELECT "id","email" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`,
+        [collabUserId.toLowerCase()]
+      );
+      if (ur.rows[0]?.id) {
+        displayEmail = ur.rows[0].email;
+        collabUserId = ur.rows[0].id;
+      }
+      // If not found, store the email as a placeholder so the invite persists
+    } catch { /* keep rawInput as userId */ }
+  }
+
   if (collabUserId === userId) {
     return res.status(400).json({ error: "cannot add project owner as collaborator" });
   }
-  // Remove existing entry for this user then add fresh
   project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
   project.collaborators.push({ userId: collabUserId, role: resolvedRole });
   project.updatedAt = now();
@@ -1164,7 +1201,7 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
     captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
-  res.status(201).json({ collaborators: project.collaborators });
+  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId });
 });
 
 // DELETE /api/devhub/projects/:id/collaborators/:userId

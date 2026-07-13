@@ -413,6 +413,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [settingsDesc, setSettingsDesc] = useState("");
   const [settingsDomain, setSettingsDomain] = useState("");
   const [settingsCollab, setSettingsCollab] = useState("");
+  const [collabRole, setCollabRole] = useState<"editor" | "viewer">("editor");
   const [savingSettings, setSavingSettings] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -756,16 +757,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const addCollaborator = async () => {
     if (!project || !settingsCollab.trim()) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), {
+      const resp = await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: settingsCollab.trim(), role: "editor" }),
+        body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), { cache: "no-store" });
-      const data = await r.json();
+      if (resp.status === 403) {
+        showToast("Studio Pro required — upgrade to add collaborators", "error");
+        return;
+      }
+      const data = await resp.json();
       setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
       setSettingsCollab("");
-      showToast("Collaborator added", "success");
+      showToast(`Collaborator added (${collabRole})`, "success");
     } catch {
       showToast("Failed to add collaborator", "error");
     }
@@ -3855,34 +3859,55 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     {savingSettings ? "Saving..." : "Save Settings"}
                   </button>
 
-                  {/* Collaborators */}
+                  {/* Collaborators — Studio Pro */}
                   <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Collaborators</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Collaborators</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>Studio Pro</span>
+                    </div>
+                    {(project.collaborators || []).length === 0 && (
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>No collaborators yet. Add by email or user ID.</div>
+                    )}
                     {(project.collaborators || []).map((c) => (
                       <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
-                        <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: "#0f172a" }}>{c.userId}</span>
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, background: "#f1f5f9", color: "#64748b" }}>{c.role}</span>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#e0f2fe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>
+                          {c.userId.charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ flex: 1, fontSize: 12, fontFamily: "monospace", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.userId}>{c.userId}</span>
+                        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700 }}
-                        >x</button>
+                          title="Remove collaborator"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
+                        >×</button>
                       </div>
                     ))}
-                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                       <input
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="user-id or email"
-                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        placeholder="email or user-id"
+                        style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />
+                      <select
+                        value={collabRole}
+                        onChange={(e) => setCollabRole(e.target.value as "editor" | "viewer")}
+                        style={{ padding: "7px 8px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, background: "#fff", cursor: "pointer", flexShrink: 0 }}
+                      >
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
                       <button
                         onClick={addCollaborator}
-                        style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                        style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}
                       >
-                        Add
+                        Invite
                       </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Editors can write files · Viewers are read-only · Studio Pro required
                     </div>
                   </div>
                 </div>

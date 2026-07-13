@@ -475,6 +475,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/revenue/gumroad/recent": { get: { summary: "Recent Gumroad sales grouped by AEVION app" } },
       "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
       "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
+      "/api/revenue/snapshot": { post: { summary: "Freeze current combined live totals into a RevenueSnapshot (history/trend). Optional x-revenue-token guard." } },
+      "/api/revenue/snapshots": { get: { summary: "Revenue snapshot time-series, newest first (?limit=&sinceDays=)" } },
+      "/api/revenue/trend": { get: { summary: "Revenue trend — latest vs oldest in window + % growth + sparkline series (?windowDays=)" } },
       "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
       // QLearn — courses + quizzes + progress
       "/api/qlearn/health": { get: { summary: "QLearn health probe", security: [] } },

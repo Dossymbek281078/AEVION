@@ -469,3 +469,22 @@ model CyberchessUserState {
   clientTs  BigInt   @default(0)
   updatedAt DateTime @updatedAt
 }
+
+// ── Individual app subscriptions (LS per-app products) ───────────────
+// Tracks which users have active subscriptions to individual AEVION apps
+// (QVenture, QPayNet, QContract, etc.). Managed by LS webhook on
+// subscription_created / subscription_cancelled events for app_* variants.
+// Upserted by email (LS doesn't require auth at checkout).
+model AppSubscription {
+  id        String   @id @default(uuid())
+  email     String
+  appSlug   String   // "qventure" | "qpaynet" | "qcontract" | etc.
+  lsSubId   String?  // LS subscription ID (data.id from webhook)
+  status    String   @default("active") // "active" | "cancelled"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([email, appSlug])
+  @@index([email])
+  @@index([appSlug, status])
+}

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { CITY, CityData } from "./qskyway.city";
 import { CITY_NYC } from "./qskyway.city.nyc";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
+import { getPool } from "../lib/dbPool";
 
 /**
  * AEVION QSkyway — навигационный слой городского неба для аэротакси.
@@ -277,13 +278,118 @@ function verifyCity(city: CityData, sig: Signature): boolean {
   catch { return false; }
 }
 
-// ── QRight slot market (in-memory) ────────────────────────────────────────────
+// ── QRight slot market (Postgres-persisted, in-memory fallback) ────────────────
+// Slots are the one piece of qskyway state that must survive a restart (the
+// engine/routes are deterministic). Persist to Postgres when available; keep the
+// in-memory array as a fallback so the market still works if the DB is offline.
 interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
-const slots: Slot[] = [];
+const memSlots: Slot[] = [];
+let slotsTablesReady = false;
+let slotsDbAvailable = false;
 const overlaps = (a0: number, a1: number, b0: number, b1: number): boolean => a0 < b1 && b0 < a1;
 
+async function ensureSlotTable(): Promise<void> {
+  if (slotsTablesReady) return;
+  try {
+    await getPool().query(`
+      CREATE TABLE IF NOT EXISTS qskyway_slots (
+        id          TEXT PRIMARY KEY,
+        route_id    TEXT NOT NULL,
+        t0          TEXT NOT NULL,
+        t1          TEXT NOT NULL,
+        holder      TEXT NOT NULL,
+        issued      TEXT NOT NULL,
+        receipt     TEXT NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qskyway_slots_route ON qskyway_slots (route_id);
+    `);
+    slotsTablesReady = true;
+    slotsDbAvailable = true;
+  } catch (err) {
+    slotsTablesReady = true;
+    slotsDbAvailable = false;
+    console.warn("[qskyway] slot table init skipped — using in-memory market:", err instanceof Error ? err.message : err);
+  }
+}
+
+const rowToSlot = (r: Record<string, unknown>): Slot => ({
+  id: String(r.id), routeId: String(r.route_id), t0: String(r.t0), t1: String(r.t1),
+  holder: String(r.holder), issued: String(r.issued), receipt: String(r.receipt),
+});
+
+async function listSlots(): Promise<Slot[]> {
+  await ensureSlotTable();
+  if (slotsDbAvailable) {
+    try {
+      const r = await getPool().query(
+        `SELECT id, route_id, t0, t1, holder, issued, receipt FROM qskyway_slots ORDER BY created_at ASC LIMIT 500`,
+      );
+      return r.rows.map(rowToSlot);
+    } catch { /* fall through */ }
+  }
+  return memSlots;
+}
+
+async function countSlots(): Promise<number> {
+  await ensureSlotTable();
+  if (slotsDbAvailable) {
+    try {
+      const r = await getPool().query(`SELECT COUNT(*)::int AS c FROM qskyway_slots`);
+      return (r.rows[0] as { c: number }).c;
+    } catch { /* fall through */ }
+  }
+  return memSlots.length;
+}
+
+// Book a slot with a capacity/overlap check. Serialized per-route via a Postgres
+// advisory lock so concurrent bookings can't both slip past the capacity gate.
+async function bookSlot(
+  routeId: string, t0: string, t1: string, holder: string,
+): Promise<{ ok: true; slot: Slot } | { ok: false; concurrent: number }> {
+  const a0 = Date.parse(t0), a1 = Date.parse(t1);
+  await ensureSlotTable();
+  if (slotsDbAvailable) {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Advisory lock keyed on routeId so the read-check-insert is atomic per route.
+      const lockKey = parseInt(crypto.createHash("sha256").update("qskyway:" + routeId).digest("hex").slice(0, 15), 16);
+      await client.query("SELECT pg_advisory_xact_lock($1)", [String(lockKey)]);
+      const existing = await client.query(`SELECT t0, t1 FROM qskyway_slots WHERE route_id = $1`, [routeId]);
+      const concurrent = existing.rows.filter((s: { t0: unknown; t1: unknown }) => overlaps(a0, a1, Date.parse(String(s.t0)), Date.parse(String(s.t1)))).length;
+      if (concurrent >= SLOT_CAPACITY) {
+        await client.query("ROLLBACK");
+        return { ok: false, concurrent };
+      }
+      const rec: Slot = { id: "slot-" + crypto.randomUUID().slice(0, 8), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
+      rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
+      await client.query(
+        `INSERT INTO qskyway_slots (id, route_id, t0, t1, holder, issued, receipt) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [rec.id, rec.routeId, rec.t0, rec.t1, rec.holder, rec.issued, rec.receipt],
+      );
+      await client.query("COMMIT");
+      return { ok: true, slot: rec };
+    } catch (e) {
+      try { await client.query("ROLLBACK"); } catch { /* ignore */ }
+      console.warn("[qskyway] bookSlot DB error — falling back to memory:", e instanceof Error ? e.message : e);
+      // fall through to memory path below
+    } finally {
+      client.release();
+    }
+  }
+  const concurrent = memSlots.filter((s) => s.routeId === routeId && overlaps(a0, a1, Date.parse(s.t0), Date.parse(s.t1))).length;
+  if (concurrent >= SLOT_CAPACITY) return { ok: false, concurrent };
+  const rec: Slot = { id: "slot-" + (memSlots.length + 1), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
+  rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
+  memSlots.push(rec);
+  return { ok: true, slot: rec };
+}
+
 // ── routes ────────────────────────────────────────────────────────────────────
-qskywayRouter.get("/health", (_req: Request, res: Response) => {
+qskywayRouter.get("/health", async (_req: Request, res: Response) => {
+  const slotsBooked = await countSlots();
   res.json({
     status: "ok",
     module: "qskyway",
@@ -294,7 +400,8 @@ qskywayRouter.get("/health", (_req: Request, res: Response) => {
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability"],
-    slotsBooked: slots.length,
+    slotsStore: slotsDbAvailable ? "postgres" : "memory",
+    slotsBooked,
     disclaimer: DISCLAIMER,
   });
 });
@@ -353,19 +460,17 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
   res.json({ city: resolved.id, valid: verifyCity(resolved.city, sig), alg: "Ed25519", contentHash: sig.contentHash, publicKey: sig.publicKey });
 });
 
-qskywayRouter.get("/slots", (_req: Request, res: Response) => {
-  res.json({ count: slots.length, capacityPerRoute: SLOT_CAPACITY, slots });
+qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
+  const slots = await listSlots();
+  res.json({ count: slots.length, capacityPerRoute: SLOT_CAPACITY, store: slotsDbAvailable ? "postgres" : "memory", slots });
 });
 
-qskywayRouter.post("/slots", (req: Request, res: Response) => {
+qskywayRouter.post("/slots", async (req: Request, res: Response) => {
   const { routeId, t0, t1, holder } = req.body ?? {};
   if (!routeId || !t0 || !t1 || !holder) return res.status(400).json({ error: "нужны routeId, t0, t1, holder" });
   const a0 = Date.parse(t0), a1 = Date.parse(t1);
   if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)" });
-  const concurrent = slots.filter((s) => s.routeId === routeId && overlaps(a0, a1, Date.parse(s.t0), Date.parse(s.t1))).length;
-  if (concurrent >= SLOT_CAPACITY) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent });
-  const rec: Slot = { id: "slot-" + (slots.length + 1), routeId, t0, t1, holder: String(holder), issued: new Date().toISOString().slice(0, 10), receipt: "" };
-  rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
-  slots.push(rec);
-  res.status(201).json({ ok: true, slot: rec, note: "Право на 4D-слот зафиксировано (QRight). receipt = SHA-256-якорь." });
+  const result = await bookSlot(String(routeId), String(t0), String(t1), String(holder));
+  if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
+  res.status(201).json({ ok: true, slot: result.slot, note: "Право на 4D-слот зафиксировано (QRight). receipt = SHA-256-якорь." });
 });

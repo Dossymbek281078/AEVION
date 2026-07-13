@@ -2110,6 +2110,15 @@ export default function CyberChessPage(){
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
+  // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
+  // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
+  const boardA11y=(()=>{
+    const side=game.turn()==="w"?"белые":"чёрные";
+    const state=over?ruResult(over):(myT?"ваш ход":"ход соперника");
+    const last=hist.length>0?`, последний ход ${hist[hist.length-1]}`:", партия ещё не начата";
+    const check=chk&&!over?", шах":"";
+    return `Шахматная доска. ${state}, ${side}${last}${check}. Ходы вводятся с клавиатуры в нотации, например e4 или Кf3.`;
+  })();
   // Партия против ЧЕЛОВЕКА (P2P-друг или hotseat — двое за одним экраном): уходить
   // с партии нельзя (это была бы движковая подсказка против живого соперника), и часы
   // никогда не встают на паузу. Против КОМПЬЮТЕРА — можно свободно уйти в анализ/коуч/
@@ -6680,7 +6689,11 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
+            {/* Screen-reader live-регион: озвучивает ход/состояние партии по мере изменений
+                (сама доска пиксельная). Визуально скрыт, но читается ассистивными технологиями. */}
+            <div aria-live="polite" aria-atomic="true" style={{position:"absolute",width:1,height:1,padding:0,margin:-1,overflow:"hidden",clip:"rect(0,0,0,0)",whiteSpace:"nowrap",border:0}}>{boardA11y}</div>
             <div ref={boardRef}
+              role="img" aria-label={boardA11y}
               onPointerDown={onBoardDown}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
@@ -10545,7 +10558,7 @@ ${question.trim()}`;
             }}
           />
 
-          {showFlashcards&&(()=>{const cards=COACH_KNOWLEDGE.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
+          {showFlashcards&&(()=>{const cards=COACH_KNOWLEDGE.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
             <div style={{textAlign:"center",marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>{card.t}</div><div style={{fontSize:11,color:"#a78bfa",padding:"1px 8px",borderRadius:999,background:"rgba(124,58,237,0.15)",display:"inline-block"}}>{card.cat}</div></div>
             <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?`✓ Ход: ${card.b}`:"👁 Показать ответ"}</button>
@@ -13811,7 +13824,7 @@ ${question.trim()}`;
           backdropFilter:"blur(8px)",
           animation:"cc-board-enter 350ms ease-out both",
         }} onClick={()=>sShowGameOver(false)}>
-          <div onClick={e=>e.stopPropagation()} style={{
+          <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Итог партии" style={{
             width:420,maxWidth:"calc(100vw - 32px)",
             background:"#141210",border:`1px solid ${accentClr}55`,
             borderRadius:20,overflow:"hidden",
@@ -14020,7 +14033,7 @@ ${question.trim()}`;
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
       }} onClick={()=>sShowQuickSetupModal(false)}>
-        <div onClick={e=>e.stopPropagation()} style={{
+        <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Быстрая настройка партии" style={{
           background:"#1e1c19", border:"1px solid #3d3b39",
           borderRadius:16, padding:24, width:"100%", maxWidth:440,
           boxShadow:"0 24px 64px rgba(0,0,0,0.7)",
@@ -14094,7 +14107,7 @@ ${question.trim()}`;
     />
     {/* QR modal */}
     {qrDataUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sQrDataUrl(null)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="QR-код партии" style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
         <div style={{fontSize:13,fontWeight:900,color:"#bababa",letterSpacing:-0.2}}>📱 QR-код партии</div>
         <img src={qrDataUrl} alt="QR code" style={{width:220,height:220,borderRadius:8,imageRendering:"pixelated"}}/>
         <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center"}}>Отсканируй чтобы открыть партию</div>

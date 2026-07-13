@@ -65,6 +65,7 @@ const APPS: App[] = [
     href: "/qventure",
     cat: "Finance",
     highlights: ["4-role advice panel", "Market sizing & risk matrix", "PDF export"],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/79ca3e07-6c75-4de7-8052-0f3bb99277a2",
   },
   {
     id: "qpaynet",
@@ -75,6 +76,7 @@ const APPS: App[] = [
     href: "/qpaynet",
     cat: "Finance",
     highlights: ["KZT · USD · multi-currency", "Virtual cards", "API + webhooks"],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/f0966b9a-6c3c-41ee-9b36-e2fd1a0a82a3",
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
@@ -90,6 +92,7 @@ const APPS: App[] = [
       "Password & e-signature gates",
       "QRight IP timestamping",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/8175a6b2-f3fa-4b51-bed6-da993267701d",
   },
   {
     id: "constitution",
@@ -104,6 +107,7 @@ const APPS: App[] = [
       "27+ filing endpoints",
       "QSign cryptographic proof",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/a3175f68-f454-4657-8714-65d93ef95b63",
   },
   {
     id: "bureau",
@@ -118,6 +122,7 @@ const APPS: App[] = [
       "OpenTimestamps blockchain anchoring",
       "Tamper-evident certificates",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/be5cf241-159f-4f1c-9818-1e9634ba5fab",
   },
   /* ── Health ─────────────────────────────────────────────────────────── */
   {
@@ -133,6 +138,7 @@ const APPS: App[] = [
       "12-week protocol with biomarker tracking",
       "Zn:Cu 8–15:1 melanin support guide",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/e3ed4f3f-7653-4e68-bdfb-ebb8ed0dbc7f",
   },
   /* ── Education ──────────────────────────────────────────────────────── */
   {
@@ -148,6 +154,7 @@ const APPS: App[] = [
       "AI error detection on student estimates",
       "Form 1–3 · КС-2 · КС-3 output",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/91c430c8-74f8-46f2-9499-816c93533ef4",
   },
   {
     id: "cyberchess",
@@ -162,6 +169,7 @@ const APPS: App[] = [
       "Real-time AI coaching during games",
       "Club & tournament management",
     ],
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/11a4bb2a-2549-4352-a87f-80a8bdad64bd",
   },
 ];
 

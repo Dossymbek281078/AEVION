@@ -263,18 +263,26 @@ export default function DevHubPage() {
                 50 AI videos · 200 images · unlimited deploys · team collaborators
               </p>
             </div>
-            <a
-              href="https://aevion.lemonsqueezy.com/checkout/buy/1902349"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                padding: "9px 20px", background: "#fff", color: "#0d9488",
-                borderRadius: 8, fontWeight: 700, fontSize: 14, textDecoration: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Upgrade — $29
-            </a>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+              <a
+                href="https://aevion.lemonsqueezy.com/checkout/buy/1902349"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: "9px 20px", background: "#fff", color: "#0d9488",
+                  borderRadius: 8, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Upgrade — $149/mo
+              </a>
+              <a
+                href="/apps"
+                style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", textDecoration: "underline", whiteSpace: "nowrap" }}
+              >
+                See all plans →
+              </a>
+            </div>
           </div>
         )}
 

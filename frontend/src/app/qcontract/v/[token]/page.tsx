@@ -2,6 +2,32 @@
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState, useCallback } from "react";
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script, style, link, meta, iframe, object, embed, form").forEach((el) => el.remove());
+  doc.querySelectorAll("*").forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (attr.name.startsWith("on") || /^javascript:/i.test(attr.value.trim())) {
+        el.removeAttribute(attr.name);
+      }
+    }
+    if (el.tagName === "A") {
+      const href = el.getAttribute("href") ?? "";
+      if (href && !/^(https?:|#|\/)/i.test(href)) el.removeAttribute("href");
+    }
+  });
+  return doc.body.innerHTML;
+}
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
@@ -98,6 +124,7 @@ export default function ViewDocument() {
 
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [content, setContent] = useState<DocContent | null>(null);
+  const [cleanHtml, setCleanHtml] = useState<string>("");
   const [password, setPassword] = useState("");
   const [viewerEmail, setViewerEmail] = useState("");
   const [stage, setStage] = useState<"loading" | "password" | "signature" | "both" | "content" | "expired" | "error">("loading");
@@ -144,6 +171,12 @@ export default function ViewDocument() {
       .catch(() => { setError(t("qcontract.viewer.error.load")); setStage("error"); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    if (content?.contentType === "html" && content.content) {
+      setCleanHtml(sanitizeHtml(content.content));
+    }
+  }, [content]);
 
   // ── Loading ──
   if (stage === "loading") {
@@ -282,14 +315,18 @@ export default function ViewDocument() {
                 {content.contentType === "url" ? (
                   <div className="text-center py-8">
                     <p className="text-slate-400 text-sm mb-4">{t("qcontract.viewer.doc.is_link")}</p>
-                    <a href={content.content} target="_blank" rel="noopener noreferrer"
-                      className="text-emerald-400 hover:text-emerald-300 underline break-all">
-                      {content.content}
-                    </a>
+                    {isSafeUrl(content.content) ? (
+                      <a href={content.content} target="_blank" rel="noopener noreferrer"
+                        className="text-emerald-400 hover:text-emerald-300 underline break-all">
+                        {content.content}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500 break-all">{content.content}</span>
+                    )}
                   </div>
                 ) : content.contentType === "html" ? (
                   <div className="prose prose-invert max-w-none prose-sm"
-                    dangerouslySetInnerHTML={{ __html: content.content }} />
+                    dangerouslySetInnerHTML={{ __html: cleanHtml }} />
                 ) : (
                   <pre className="whitespace-pre-wrap font-sans text-slate-200 text-sm leading-relaxed">
                     {content.content}

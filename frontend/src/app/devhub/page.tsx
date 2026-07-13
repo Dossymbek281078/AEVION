@@ -71,6 +71,7 @@ function formatDate(iso: string) {
 export default function DevHubPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", stack: "next" as Stack });
@@ -90,6 +91,13 @@ export default function DevHubPage() {
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.tier) setUserTier(d.tier); })
+      .catch(() => {});
+  }, []);
 
   const createProject = async () => {
     if (!form.name.trim()) return;
@@ -238,6 +246,37 @@ export default function DevHubPage() {
             + New Project
           </button>
         </div>
+
+        {/* Studio Pro upgrade banner */}
+        {userTier === "free" && (
+          <div style={{
+            background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
+            borderRadius: 12, padding: "16px 20px", marginBottom: 20,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            flexWrap: "wrap", gap: 12,
+          }}>
+            <div>
+              <p style={{ color: "#fff", fontWeight: 700, fontSize: 15, margin: 0 }}>
+                Studio Pro — unlock the full IDE
+              </p>
+              <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "4px 0 0" }}>
+                50 AI videos · 200 images · unlimited deploys · team collaborators
+              </p>
+            </div>
+            <a
+              href="https://aevion.lemonsqueezy.com/checkout/buy/1902349"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "9px 20px", background: "#fff", color: "#0d9488",
+                borderRadius: 8, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Upgrade — $29
+            </a>
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (

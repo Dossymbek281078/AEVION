@@ -25,6 +25,7 @@ type Mask = {
   spendLimitCents: string | number;
   remainingCents: string | number;
   expiresAt: string | null;
+  frozenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
 };
@@ -169,6 +170,35 @@ export default function QMaskCardPage() {
       });
       if (r.ok) { setMsg("✓ Маска отозвана"); await loadMasks(); await loadStats(); }
       else setMsg("✗ Revoke failed");
+    } catch { setMsg("✗ Network error"); }
+  };
+
+  const setFrozen = async (id: string, freeze: boolean) => {
+    try {
+      const r = await fetch(apiUrl(`/api/qmaskcard/masks/${id}/${freeze ? "freeze" : "unfreeze"}`), {
+        method: "POST", headers: bearer(),
+      });
+      if (r.ok) { setMsg(freeze ? "❄️ Маска заморожена" : "✓ Маска разморожена"); await loadMasks(); }
+      else { const j = await r.json().catch(() => ({})); setMsg(`✗ ${j.error ?? (freeze ? "freeze" : "unfreeze") + "_failed"}`); }
+    } catch { setMsg("✗ Network error"); }
+  };
+
+  const editLimit = async (m: Mask) => {
+    const cur = (Number(m.spendLimitCents) / 100).toString();
+    const input = typeof window !== "undefined" ? window.prompt(`Новый лимит для «${m.label}» (${m.currency}). Уже потрачено сохраняется.`, cur) : null;
+    if (input === null) return;
+    const val = parseFloat(input);
+    if (!Number.isFinite(val) || val <= 0) { setMsg("✗ Неверная сумма"); return; }
+    try {
+      const r = await fetch(apiUrl(`/api/qmaskcard/masks/${m.id}/limit`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearer() },
+        body: JSON.stringify({ spendLimitCents: Math.round(val * 100) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) { setMsg(`✓ Лимит обновлён: ${fmtMoney(j.spendLimitCents, m.currency)}`); await loadMasks(); await loadStats(); }
+      else if (j.error === "limit_below_spent") setMsg(`✗ Лимит ниже потраченного (${fmtMoney(j.spentCents, m.currency)})`);
+      else setMsg(`✗ ${j.error ?? "limit_update_failed"}`);
     } catch { setMsg("✗ Network error"); }
   };
 
@@ -336,7 +366,7 @@ export default function QMaskCardPage() {
                   <select value={chargeMaskId} onChange={(e) => setChargeMaskId(e.target.value)} required
                     className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none">
                     <option value="">— выбери маску —</option>
-                    {masks.filter(m => !m.revokedAt).map(m => (
+                    {masks.filter(m => !m.revokedAt && !m.frozenAt).map(m => (
                       <option key={m.id} value={m.id}>{m.label} · {fmtMoney(m.remainingCents, m.currency)} left</option>
                     ))}
                   </select>
@@ -376,28 +406,29 @@ export default function QMaskCardPage() {
                     const limit = Number(m.spendLimitCents);
                     const pct = limit > 0 ? (remaining / limit) * 100 : 0;
                     const isRevoked = !!m.revokedAt;
+                    const isFrozen = !isRevoked && !!m.frozenAt;
                     return (
-                      <div key={m.id} className={`rounded-lg border ${isRevoked ? "border-slate-800 opacity-50" : "border-amber-500/30"} bg-slate-950/40 p-4`}>
+                      <div key={m.id} className={`rounded-lg border ${isRevoked ? "border-slate-800 opacity-50" : isFrozen ? "border-sky-500/40" : "border-amber-500/30"} bg-slate-950/40 p-4`}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div>
-                            <div className="font-semibold text-amber-200">{m.label}</div>
+                            <div className="font-semibold text-amber-200 flex items-center gap-1.5">
+                              {isFrozen && <span title="frozen">❄️</span>}{m.label}
+                            </div>
                             <div className="text-xs text-slate-500 mt-0.5">{KIND_LABEL[m.kind]}</div>
                           </div>
                           {isRevoked ? (
                             <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">revoked</span>
-                          ) : (
-                            <button onClick={() => revokeMask(m.id)} className="text-[10px] bg-rose-500/15 border border-rose-500/30 text-rose-300 px-2 py-0.5 rounded hover:bg-rose-500/30">
-                              revoke
-                            </button>
-                          )}
+                          ) : isFrozen ? (
+                            <span className="text-[10px] bg-sky-500/15 border border-sky-500/30 text-sky-300 px-2 py-0.5 rounded">frozen</span>
+                          ) : null}
                         </div>
                         <div className="font-mono text-xs text-slate-400 mb-3">{shortPan(m.virtualPan)}</div>
                         <div className="flex justify-between text-xs mb-1">
-                          <span className="text-emerald-300 font-mono">{fmtMoney(remaining, m.currency)}</span>
+                          <span className={`font-mono ${isFrozen ? "text-sky-300" : "text-emerald-300"}`}>{fmtMoney(remaining, m.currency)}</span>
                           <span className="text-slate-500">из {fmtMoney(limit, m.currency)}</span>
                         </div>
                         <div className="h-1.5 bg-white/5 rounded overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-emerald-400 to-amber-400" style={{ width: `${pct}%` }} />
+                          <div className={`h-full ${isFrozen ? "bg-gradient-to-r from-sky-400 to-sky-500" : "bg-gradient-to-r from-emerald-400 to-amber-400"}`} style={{ width: `${pct}%` }} />
                         </div>
                         {(m.lockedToMerchant || m.lockedToCategory) && (
                           <div className="text-xs text-slate-500 mt-2">
@@ -407,6 +438,29 @@ export default function QMaskCardPage() {
                         {m.expiresAt && (
                           <div className="text-xs text-slate-500 mt-1">
                             истекает {new Date(m.expiresAt).toLocaleString()}
+                          </div>
+                        )}
+                        {!isRevoked && (
+                          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                            {isFrozen ? (
+                              <button onClick={() => setFrozen(m.id, false)}
+                                className="text-[11px] bg-sky-500/15 border border-sky-500/30 text-sky-300 px-2.5 py-1 rounded hover:bg-sky-500/30">
+                                ▶ Разморозить
+                              </button>
+                            ) : (
+                              <button onClick={() => setFrozen(m.id, true)}
+                                className="text-[11px] bg-slate-800 border border-sky-500/30 text-sky-300 px-2.5 py-1 rounded hover:bg-sky-500/20">
+                                ❄️ Заморозить
+                              </button>
+                            )}
+                            <button onClick={() => editLimit(m)}
+                              className="text-[11px] bg-slate-800 border border-amber-500/30 text-amber-300 px-2.5 py-1 rounded hover:bg-amber-500/20">
+                              ✎ Лимит
+                            </button>
+                            <button onClick={() => revokeMask(m.id)}
+                              className="text-[11px] bg-rose-500/15 border border-rose-500/30 text-rose-300 px-2.5 py-1 rounded hover:bg-rose-500/30 ml-auto">
+                              🗑 Отозвать
+                            </button>
                           </div>
                         )}
                       </div>

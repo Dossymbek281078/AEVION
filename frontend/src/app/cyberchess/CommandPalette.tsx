@@ -156,6 +156,9 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
       const cmd = filtered[idx];
       if (cmd) exec(cmd);
     } else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    // Focus-trap: навигация по списку — стрелками, DOM-фокус остаётся на инпуте.
+    // Гасим Tab, чтобы фокус не «убегал» на скрытую под бэкдропом страницу.
+    else if (e.key === "Tab") { e.preventDefault(); inputRef.current?.focus(); }
   };
 
   return (
@@ -168,6 +171,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
       animation: "fadeInUp 0.18s ease-out",
     }}>
       <div onClick={e => e.stopPropagation()} onKeyDown={onKey}
+        role="dialog" aria-modal="true" aria-label="Палитра команд"
         style={{
           width: "min(620px, 92vw)",
           background: "#fff",
@@ -183,8 +187,9 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
           padding: "14px 18px",
           borderBottom: "1px solid rgba(15,23,42,0.08)",
         }}>
-          <span style={{ fontSize: 18, color: "#94a3b8" }}>⌕</span>
+          <span style={{ fontSize: 18, color: "#94a3b8" }} aria-hidden>⌕</span>
           <input ref={inputRef} value={q} onChange={e => { sQ(e.target.value); sIdx(0); }}
+            aria-label="Поиск команды"
             placeholder="Поиск команды… (e.g. quick start, premove, stream, puzzle)"
             style={{
               flex: 1, border: "none", outline: "none",

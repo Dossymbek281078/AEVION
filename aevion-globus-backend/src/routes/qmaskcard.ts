@@ -22,7 +22,10 @@
  *   GET  /api/qmaskcard/health
  *   POST /api/qmaskcard/masks                       — issue a new virtual card
  *   GET  /api/qmaskcard/masks                       — list user's masks
- *   POST /api/qmaskcard/masks/:id/revoke            — soft-revoke
+ *   POST /api/qmaskcard/masks/:id/revoke            — permanent kill (soft-revoke)
+ *   POST /api/qmaskcard/masks/:id/freeze            — reversible pause
+ *   POST /api/qmaskcard/masks/:id/unfreeze          — lift a freeze
+ *   PATCH /api/qmaskcard/masks/:id/limit            — adjust spend limit post-issuance
  *   POST /api/qmaskcard/charges                     — authorize a charge against mask
  *   GET  /api/qmaskcard/charges?maskId=             — list charges
  *   GET  /api/qmaskcard/stats                       — system roll-up
@@ -71,6 +74,8 @@ async function ensureTables(): Promise<void> {
       "createdAt"          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Reversible freeze (pause) — distinct from the permanent `revokedAt` kill.
+  await pool.query(`ALTER TABLE "QMaskCardMask" ADD COLUMN IF NOT EXISTS "frozenAt" TIMESTAMPTZ;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QMaskCardMask_user_idx" ON "QMaskCardMask" ("userId", "revokedAt");`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QMaskCardCharge" (
@@ -189,7 +194,7 @@ qmaskcardRouter.get("/masks", readLimit, async (req, res) => {
     const includeRevoked = req.query.includeRevoked === "1";
     const sql = `
       SELECT "id","label","virtualPan","kind","lockedToMerchant","lockedToCategory","currency",
-             "spendLimitCents","remainingCents","expiresAt","revokedAt","createdAt"
+             "spendLimitCents","remainingCents","expiresAt","frozenAt","revokedAt","createdAt"
       FROM "QMaskCardMask"
       WHERE "userId" = $1 ${includeRevoked ? "" : "AND \"revokedAt\" IS NULL"}
       ORDER BY "createdAt" DESC LIMIT 50
@@ -227,6 +232,95 @@ qmaskcardRouter.post("/masks/:id/revoke", writeLimit, async (req, res) => {
   }
 });
 
+// ── POST /masks/:id/freeze — reversible pause (charges decline while frozen)
+qmaskcardRouter.post("/masks/:id/freeze", writeLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const pool = getPool();
+    const r = await pool.query(
+      `UPDATE "QMaskCardMask" SET "frozenAt" = NOW()
+       WHERE "id" = $1 AND "userId" = $2 AND "revokedAt" IS NULL AND "frozenAt" IS NULL
+       RETURNING "id"`,
+      [String(req.params.id || ""), auth.sub],
+    );
+    if ((r.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "mask_not_found_or_not_freezable" });
+    }
+    res.json({ ok: true, frozenId: req.params.id, frozen: true });
+  } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "POST /masks/:id/freeze" });
+    console.error("[qmaskcard] freeze_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "freeze_failed" });
+  }
+});
+
+// ── POST /masks/:id/unfreeze — lift a freeze
+qmaskcardRouter.post("/masks/:id/unfreeze", writeLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const pool = getPool();
+    const r = await pool.query(
+      `UPDATE "QMaskCardMask" SET "frozenAt" = NULL
+       WHERE "id" = $1 AND "userId" = $2 AND "revokedAt" IS NULL AND "frozenAt" IS NOT NULL
+       RETURNING "id"`,
+      [String(req.params.id || ""), auth.sub],
+    );
+    if ((r.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "mask_not_found_or_not_frozen" });
+    }
+    res.json({ ok: true, unfrozenId: req.params.id, frozen: false });
+  } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "POST /masks/:id/unfreeze" });
+    console.error("[qmaskcard] unfreeze_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "unfreeze_failed" });
+  }
+});
+
+// ── PATCH /masks/:id/limit — adjust the spend limit after issuance.
+// Preserves already-spent amount: remaining shifts by the same delta as the
+// limit, so you can raise a card's ceiling (unlocks more balance) or lower it
+// (claws back unspent balance) without ever letting spent exceed the new cap.
+qmaskcardRouter.patch("/masks/:id/limit", writeLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const newLimit = parseInt(String((req.body || {}).spendLimitCents), 10);
+    if (!Number.isFinite(newLimit) || newLimit < 100 || newLimit > 100_000_000) {
+      return res.status(400).json({ error: "spendLimitCents must be 100..100000000" });
+    }
+    const pool = getPool();
+    const m = await pool.query(
+      `SELECT "spendLimitCents","remainingCents","revokedAt"
+       FROM "QMaskCardMask" WHERE "id" = $1 AND "userId" = $2 LIMIT 1`,
+      [String(req.params.id || ""), auth.sub],
+    );
+    if (m.rowCount === 0) return res.status(404).json({ error: "mask_not_found" });
+    const row = m.rows[0] as { spendLimitCents: string | number; remainingCents: string | number; revokedAt: Date | null };
+    if (row.revokedAt) return res.status(409).json({ error: "mask_revoked" });
+    const oldLimit = Number(row.spendLimitCents);
+    const oldRemaining = Number(row.remainingCents);
+    const spent = oldLimit - oldRemaining; // invariant we preserve
+    if (newLimit < spent) {
+      return res.status(400).json({ error: "limit_below_spent", spentCents: spent });
+    }
+    const newRemaining = newLimit - spent;
+    await pool.query(
+      `UPDATE "QMaskCardMask" SET "spendLimitCents" = $1, "remainingCents" = $2 WHERE "id" = $3`,
+      [newLimit, newRemaining, String(req.params.id || "")],
+    );
+    res.json({ ok: true, id: req.params.id, spendLimitCents: newLimit, remainingCents: newRemaining, spentCents: spent });
+  } catch (err: unknown) {
+    captureQMaskCardError(err, { route: "PATCH /masks/:id/limit" });
+    console.error("[qmaskcard] limit_update_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "limit_update_failed" });
+  }
+});
+
 // ── POST /charges — authorize a charge against a mask
 qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
   try {
@@ -241,7 +335,7 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
     }
     const pool = getPool();
     const m = await pool.query(
-      `SELECT "id","userId","kind","lockedToMerchant","lockedToCategory","currency","spendLimitCents","remainingCents","expiresAt","revokedAt"
+      `SELECT "id","userId","kind","lockedToMerchant","lockedToCategory","currency","spendLimitCents","remainingCents","expiresAt","frozenAt","revokedAt"
        FROM "QMaskCardMask" WHERE "id" = $1 LIMIT 1`,
       [maskId],
     );
@@ -255,10 +349,12 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
       spendLimitCents: string | number;
       remainingCents: string | number;
       expiresAt: Date | null;
+      frozenAt: Date | null;
       revokedAt: Date | null;
     };
     if (mask.userId !== auth.sub) return res.status(403).json({ error: "not_mask_owner" });
     if (mask.revokedAt) return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "mask_revoked");
+    if (mask.frozenAt) return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "mask_frozen");
     if (mask.expiresAt && mask.expiresAt < new Date()) return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "mask_expired");
     if (mask.currency !== String(currency).toUpperCase()) return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "currency_mismatch");
     if (mask.lockedToMerchant && mask.lockedToMerchant !== String(merchantName ?? "")) {

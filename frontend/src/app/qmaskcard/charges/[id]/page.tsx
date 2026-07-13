@@ -47,6 +47,7 @@ function humanizeDecline(reason: string | null): string {
   if (!reason) return "Charge was declined";
   const map: Record<string, string> = {
     mask_revoked: "Mask was revoked",
+    mask_frozen: "Mask is frozen (paused)",
     mask_expired: "Mask had expired",
     mask_not_found: "Mask could not be located",
     mask_inactive: "Mask is no longer active",
@@ -60,6 +61,7 @@ function humanizeDecline(reason: string | null): string {
     velocity_exceeded: "Too many charges in a short window",
     risk_too_high: "Risk score too high to authorize",
     currency_mismatch: "Currency does not match mask",
+    insufficient_balance: "Insufficient balance on mask",
     insufficient_funds: "Insufficient funds available",
     duplicate_charge: "Duplicate charge detected",
   };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { fusionClientId } from "./fusionClient";
 
 type Strategy = "speed" | "quality" | "cost" | "auto";
 
@@ -50,6 +51,8 @@ export default function FusionPlayground({ onResult }: Props) {
     try {
       const body: Record<string, unknown> = { prompt: prompt.trim(), strategy };
       if (context.trim()) body.context = context.trim();
+      const cid = fusionClientId();
+      if (cid) body.clientId = cid;
       const r = await fetch("/api-backend/api/qfusionai/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

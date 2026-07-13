@@ -7,6 +7,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import FusionPlayground, { type RouteResult } from "./components/FusionPlayground";
 import ProvidersPanel from "./components/ProvidersPanel";
 import RequestCard from "./components/RequestCard";
+import RunHistory from "./components/RunHistory";
 
 export default function QFusionAIPage() {
   const [refreshTick, setRefreshTick] = useState(0);
@@ -174,6 +175,9 @@ export default function QFusionAIPage() {
 
           {/* Stats mini-dashboard */}
           <RequestCard refreshTick={refreshTick} />
+
+          {/* Persisted run history (owner-scoped) */}
+          <RunHistory refreshTick={refreshTick} />
         </div>
 
         {/* Right column: Providers panel */}

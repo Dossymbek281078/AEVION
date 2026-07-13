@@ -37,7 +37,15 @@ export type LemonSqueezyReference =
   | "tier_full_monthly"
   | "tier_full_annual"
   | "tier_planet_monthly"
-  | "tier_planet_annual";
+  | "tier_planet_annual"
+  | "app_qventure"
+  | "app_qpaynet"
+  | "app_qcontract"
+  | "app_constitution"
+  | "app_ip_bureau"
+  | "app_qrenew"
+  | "app_smeta"
+  | "app_cyberchess";
 
 /** reference → env var holding the LS variant id. */
 const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
@@ -49,6 +57,14 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   tier_full_annual: "LEMON_SQUEEZY_VARIANT_FULL_ANNUAL",
   tier_planet_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY",
   tier_planet_annual: "LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL",
+  app_qventure:    "LEMON_SQUEEZY_VARIANT_QVENTURE",
+  app_qpaynet:     "LEMON_SQUEEZY_VARIANT_QPAYNET",
+  app_qcontract:   "LEMON_SQUEEZY_VARIANT_QCONTRACT",
+  app_constitution:"LEMON_SQUEEZY_VARIANT_CONSTITUTION",
+  app_ip_bureau:   "LEMON_SQUEEZY_VARIANT_IP_BUREAU",
+  app_qrenew:      "LEMON_SQUEEZY_VARIANT_QRENEW",
+  app_smeta:       "LEMON_SQUEEZY_VARIANT_SMETA",
+  app_cyberchess:  "LEMON_SQUEEZY_VARIANT_CYBERCHESS",
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
@@ -93,4 +109,15 @@ export function tierForLemonSqueezyReference(ref: LemonSqueezyReference | null):
   if (ref.includes("full")) return "full";
   if (ref.includes("planet")) return "full";
   return "lite";
+}
+
+/** True when the reference is for an individual app (not a platform tier). */
+export function isAppReference(ref: LemonSqueezyReference | null): boolean {
+  return ref?.startsWith("app_") ?? false;
+}
+
+/** Extract the app slug from an app reference ("app_qventure" → "qventure"). */
+export function appSlugForReference(ref: LemonSqueezyReference | null): string | null {
+  if (!ref?.startsWith("app_")) return null;
+  return ref.slice(4);
 }

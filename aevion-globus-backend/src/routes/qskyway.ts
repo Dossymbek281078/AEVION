@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { CITY, CityData } from "./qskyway.city";
 import { CITY_NYC } from "./qskyway.city.nyc";
+import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getPool } from "../lib/dbPool";
 
@@ -36,7 +37,7 @@ const DISCLAIMER =
   "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Запретные зоны и ветер иллюстративны; в проде — официальные фиды регулятора и METAR. Полёты требуют допуска (U-space/UTM/CAAC).";
 
 // ── city registry ──────────────────────────────────────────────────────────
-const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC };
+const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO };
 const DEFAULT_CITY = "astana";
 const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
   const key = typeof id === "string" && id in CITIES ? id : id == null ? DEFAULT_CITY : null;

@@ -1178,7 +1178,18 @@ export default function CyberChessPage(){
   const[rushStreak,sRushStreak]=useState(0);
   const[rushBestStreak,sRushBestStreak]=useState(0);
   const[rushBest,sRushBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_puzzle_rush_best_v1")||"0")||0}catch{return 0}});
-  const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean}>(null);
+  const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean;reason?:"time"|"lives"}>(null);
+  // Rush kind: Survival (3 ошибки, как lichess) или Timed (по таймеру). По умолчанию Survival.
+  const[rushKind,sRushKind]=useState<"survival"|"timed">(()=>{try{return localStorage.getItem("aevion_rush_kind_v1")==="timed"?"timed":"survival"}catch{return "survival"}});
+  useEffect(()=>{try{localStorage.setItem("aevion_rush_kind_v1",rushKind)}catch{}},[rushKind]);
+  const RUSH_LIVES=3;
+  const[rushLives,sRushLives]=useState(RUSH_LIVES);
+  const rushLivesRef=useRef(RUSH_LIVES); // синхронный доступ в обработчике хода
+  const rushEndReasonRef=useRef<"time"|"lives">("time"); // причина завершения раша
+  // Адаптивная сложность внутри сессии: цель поднимается при решении, падает при ошибке.
+  // loadNextPuzzle берёт пазл рядом с целью. Старт — от твоего ELO (rat).
+  const rushTargetRef=useRef<number>(1000);
+  const[rushTargetView,sRushTargetView]=useState(1000); // для отображения ярлыка разряда
   // Timed mode (3min/5min/custom) session result — separate from Rush
   const[timedResult,sTimedResult]=useState<null|{solved:number;failed:number;mode:string;totalSec:number}>(null);
   // Rush duration в секундах — юзер сам выбирает 1.5 / 3 / 5 / 10 / custom
@@ -1205,6 +1216,10 @@ export default function CyberChessPage(){
     pzDeadlineRef.current=d;
     sPzTimeLeft(Math.max(0,Math.round((d-Date.now())/1000)));
   };
+  // Ярлык разряда по рейтингу пазла (справочно для адаптивной сложности).
+  const puzzleRank=(r:number):string=>r<1600?"Разрядник":r<2000?"КМС":r<2300?"Мастер":"Гроссмейстер";
+  // Адаптивная цель: решил → сложнее, ошибся → легче. Клампим в разумный диапазон.
+  const adjustTarget=(delta:number)=>{const t=Math.max(600,Math.min(2800,rushTargetRef.current+delta));rushTargetRef.current=t;sRushTargetView(t);};
   // Multi-dimensional filters
   const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
   const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
@@ -1454,7 +1469,7 @@ export default function CyberChessPage(){
   // Автоподбор сложности пазлов под уровень при первом входе во вкладку (если фильтр дефолтный).
   const pzAutoTuned=useRef(false);
   useEffect(()=>{
-    if(tab!=="puzzles"||pzAutoTuned.current)return;
+    if(tab!=="puzzles"||pzAutoTuned.current||pzMode==="rush")return; // rush сам управляет сложностью
     if(pzFilterRating[0]===0&&pzFilterRating[1]===3000&&savedGames.length>=3){
       const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
       sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
@@ -2277,15 +2292,24 @@ export default function CyberChessPage(){
   fPzRef.current=fPz;pzIRef.current=pzI;
   // Единая точка загрузки следующего пазла: анти-повтор + устойчивость к смене фильтра.
   loadNextPuzzleRef.current=()=>{
-    const list=fPzRef.current;if(!list.length)return;
-    const seen=pzSeenRef.current;const n=list.length;
+    const full=fPzRef.current;if(!full.length)return;
+    const seen=pzSeenRef.current;
+    // Адаптивно (rush): сузить пул до пазлов рядом с целевым рейтингом. Окно расширяем,
+    // если рядом мало задач. В обычных режимах берём весь отфильтрованный пул.
+    let list=full;
+    if(pzMode==="rush"){
+      const t=rushTargetRef.current;
+      for(const w of [120,220,350,600]){const band=full.filter(p=>Math.abs(p.r-t)<=w);if(band.length>=8){list=band;break;}}
+    }
+    const n=list.length;
     let idx=Math.floor(Math.random()*n),tries=0;
     while(tries<15&&list[idx]&&seen.has(list[idx].fen)){idx=(idx+1)%n;tries++;}
     const pick=list[idx];if(!pick)return;
     seen.add(pick.fen);
-    if(seen.size>Math.min(300,Math.floor(n*0.7))){seen.clear();seen.add(pick.fen);} // не заперемся, когда пул мал
+    if(seen.size>Math.min(300,Math.floor(full.length*0.7))){seen.clear();seen.add(pick.fen);} // не заперемся, когда пул мал
+    const fIdx=list===full?idx:full.indexOf(pick); // pzI — индекс в полном fPz (подсветка списка)
     let g;try{g=new Chess(pick.fen)}catch{showToast("Битый пазл, пропускаю","error");return}
-    setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pick);sPzAttempt("idle");
+    setGame(g);sBk(k=>k+1);sPzI(fIdx>=0?fIdx:0);sPzCurrent(pick);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pick.fen]);
     sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
   };
@@ -2835,9 +2859,13 @@ export default function CyberChessPage(){
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-                  bumpClock(bonus,rushDuration);
+                  bumpClock(bonus,rushKind==="survival"?600:rushDuration);
                   sRushScore(s=>s+1);
-                  sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+                  adjustTarget(25); // решил — цель чуть выше
+                  sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));
+                    // 20 подряд восстанавливают жизнь (Survival). Сам факт восстановления очков не даёт.
+                    if(n%20===0&&rushKind==="survival"&&rushLivesRef.current<RUSH_LIVES){rushLivesRef.current+=1;sRushLives(rushLivesRef.current);showToast("💚 +1 жизнь за 20 подряд!","success");}
+                    return n;});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
@@ -2906,9 +2934,21 @@ export default function CyberChessPage(){
         if(pzMode==="rush"){
           bumpClock(-5);
           sRushStreak(0);
-          showToast(`✗ −5с · streak сброшен`,"error");
-          // Auto-advance in rush after miss (no retry) — ref-функция, анти-повтор
-          setTimeout(()=>{loadNextPuzzleRef.current();},700);
+          adjustTarget(-70); // ошибся — цель легче
+          if(rushKind==="survival"){
+            rushLivesRef.current=Math.max(0,rushLivesRef.current-1);
+            sRushLives(rushLivesRef.current);
+            if(rushLivesRef.current<=0){
+              // Жизни кончились → финал сессии (эффект rush-end сработает по обнулению часов).
+              rushEndReasonRef.current="lives";pzDeadlineRef.current=0;sPzTimeLeft(0);
+            }else{
+              showToast(`💔 ${rushLivesRef.current}/${RUSH_LIVES} · −5с`,"error");
+              setTimeout(()=>{loadNextPuzzleRef.current();},700);
+            }
+          }else{
+            showToast(`✗ −5с · streak сброшен`,"error");
+            setTimeout(()=>{loadNextPuzzleRef.current();},700);
+          }
         }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
           // In timed modes: auto-advance after 1.5s so user sees the wrong indicator then moves on
           setTimeout(()=>{loadNextPuzzleRef.current();},1500);
@@ -4759,9 +4799,19 @@ export default function CyberChessPage(){
     if(pzMode==="timed3"){startClock(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 3 минуты — решай как можно больше пазлов, +3с за каждый правильный","info")}
     else if(pzMode==="timed5"){startClock(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 5 минут — решай как можно больше пазлов, +3с за каждый правильный","info")}
     else if(pzMode==="custom"){startClock(pzCustomSec);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
-    else if(pzMode==="rush"){startClock(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null);pzSeenRef.current.clear()}
+    else if(pzMode==="rush"){
+      // Survival — таймер как длинная страховка (10 мин); Timed — выбранная длительность.
+      startClock(rushKind==="survival"?600:rushDuration);
+      sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null);pzSeenRef.current.clear();
+      sRushLives(RUSH_LIVES);rushLivesRef.current=RUSH_LIVES;rushEndReasonRef.current="time";
+      const start=Math.max(700,Math.min(2400,rat-100)); // старт чуть ниже ELO
+      rushTargetRef.current=start;sRushTargetView(start);
+      // Rush сам управляет сложностью (адаптивная цель) → снимаем ручной фильтр рейтинга,
+      // чтобы задачи могли расти до мастер/гросс-уровня.
+      sPzFilterRating([0,3000]);
+    }
     else {startClock(0);sRushActive(false)}
-  },[pzMode,tab,rushDuration,pzCustomSec]);
+  },[pzMode,tab,rushDuration,pzCustomSec,rushKind]);
 
   // Timed mode (3min/5min/custom) end-of-session — fires when timer hits 0
   useEffect(()=>{
@@ -4786,7 +4836,7 @@ export default function CyberChessPage(){
     const isNewBest=rushScore>rushBest;
     if(isNewBest){sRushBest(rushScore);try{localStorage.setItem("aevion_puzzle_rush_best_v1",String(rushScore))}catch{}}
     pzDeadlineRef.current=0;
-    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy:earned,isNewBest});
+    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy:earned,isNewBest,reason:rushEndReasonRef.current});
     sRushActive(false);
     if(earned>0)addChessy(earned,`Puzzle Rush${boostMult>1?" ⚡2x":""} · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
@@ -9185,7 +9235,7 @@ export default function CyberChessPage(){
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {/* ── Mode Selector — FIRST so Puzzle Rush is immediately visible ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
                 {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
@@ -9222,7 +9272,23 @@ export default function CyberChessPage(){
               </div>}
               {/* Rush duration selector — виден только когда выбран Rush */}
               {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
+                {/* Тип раша: Survival (3 ошибки) или Timed (по времени) */}
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Тип Rush</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[1],marginBottom:SPACE[2]}}>
+                  {([["survival","❤","Survival","3 ошибки"],["timed","⏱","Timed","по времени"]] as const).map(([k,ic,label,sub])=>{
+                    const active=rushKind===k;
+                    return <button key={k} onClick={()=>{sRushKind(k);if(rushActive)sPzMode("learn")}} title={`${label} — ${sub}`}
+                      style={{padding:"7px 6px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                      <span><span style={{fontSize:13}}>{ic}</span> {label}</span>
+                      <span style={{fontSize:9,fontWeight:700,opacity:0.8}}>{sub}</span>
+                    </button>;
+                  })}
+                </div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Сложность подстраивается под тебя · {puzzleRank(rushTargetView)} ~{rushTargetView}</div>
+                {rushKind==="timed"&&<><div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
                   {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
                     const active=rushDuration===sec;
@@ -9242,7 +9308,7 @@ export default function CyberChessPage(){
                       border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                       background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
                       width:"100%",outline:"none"}}/>
-                </div>
+                </div></>}
               </div>}
             </Card>
             {/* ── ScoreCard: session stats ── */}
@@ -9293,8 +9359,11 @@ export default function CyberChessPage(){
                       <div style={{fontSize:9,color:"#78716c",fontWeight:700}}>COMBO</div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                      {rushKind==="survival"&&<div style={{fontSize:15,letterSpacing:1}} title={`${rushLives} из ${RUSH_LIVES} жизней`}>
+                        {Array.from({length:RUSH_LIVES}).map((_,i)=><span key={i} style={{opacity:i<rushLives?1:0.25}}>{i<rushLives?"❤":"🖤"}</span>)}
+                      </div>}
+                      <div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>уровень <span style={{color:"#fcd34d",fontWeight:900}}>{puzzleRank(rushTargetView)}</span> ~{rushTargetView}</div>
                       {rushBest>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>рекорд <span style={{color:"#fcd34d",fontWeight:900}}>{rushBest}</span></div>}
-                      {rushBestStreak>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>серия <span style={{color:"#fb923c",fontWeight:900}}>{rushBestStreak}</span></div>}
                     </div>
                   </div>
                 </div>}
@@ -12932,7 +13001,8 @@ ${question.trim()}`;
     {/* Puzzle Rush — final result */}
     <Modal open={!!rushResult} onClose={()=>sRushResult(null)} size="sm" title={rushResult?.isNewBest?"🏆 Новый рекорд!":"⚡ Rush завершён"}>
       {rushResult&&<div style={{textAlign:"center"}}>
-        <div style={{fontSize:60,lineHeight:1,marginBottom:SPACE[3]}}>{rushResult.isNewBest?"🏆":"⚡"}</div>
+        <div style={{fontSize:60,lineHeight:1,marginBottom:SPACE[2]}}>{rushResult.isNewBest?"🏆":rushResult.reason==="lives"?"💔":"⏱"}</div>
+        <div style={{fontSize:12,color:CC.textDim,fontWeight:700,marginBottom:SPACE[3]}}>{rushResult.reason==="lives"?"3 ошибки — сессия окончена":"Время вышло"}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2],marginBottom:SPACE[4]}}>
           <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
             <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>

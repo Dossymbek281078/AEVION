@@ -8,8 +8,11 @@
 > Live posts: X 2076276027714920506 · Bluesky @aevion.bsky.social · Threads @zhakiyadosymbek (EN + PT) · LinkedIn Dosymbek Zhakiya · Reddit r/venturecapital (mod queue).
 
 ## 1. "Survivorship bias — you only tested winners."
-The single most likely objection. Concede it head-on:
-> Totally fair — three known winners is not a validation set, it's an illustration. The point I found interesting is the opposite of survivorship: even on the winners, with only seed-stage info, it said WATCH, not INVEST — because the risks were genuinely real then. I'm about to run the graveyard too (WeWork, Quibi, Juicero); if it doesn't flag those harder, the weights are wrong and I want to know.
+The single most likely objection. Concede it, then hit back with the graveyard run (real results):
+> Fair — so I ran the graveyard too, same rules (optimistic pitch, no hindsight): WeWork, Quibi, Juicero. Verdict on all three: PASS. It called WeWork "a rate-sensitive real-estate arbitrage dressed as SaaS," and on Juicero the scientist lens flagged that "the $700 press adds no measurable value over hand-squeezing the packs" — the exact thing that killed it. Winners got WATCH/enter-staged; flops got PASS with the fatal flaw named. Happy to run any deal you think should break it.
+
+**Honesty booster (use if pushed on rigor):**
+> Full transparency: on Quibi and Juicero the *deterministic* score actually over-rated the moat (90/100) — it over-credits "proprietary/premium" as defensibility. The 4-expert council is what caught the fiction and overrode to PASS. That gap is a real weakness I'm fixing, and I'd rather say it than pretend the quant is perfect.
 
 ## 2. "How are the 8 factors weighted? Why those weights?"
 > Every factor shows its weight and rationale in the output, so you can argue with each one. Rough starting rubric: market ~0.18, moat ~0.16, unit economics ~0.14, execution ~0.14, timing ~0.12, then science/tech, legal, competition. They're a defensible default, not gospel — which factor would you reweight for a pre-traction marketplace, and why? That's exactly the feedback I want.

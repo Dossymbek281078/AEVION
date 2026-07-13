@@ -96,7 +96,7 @@ import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import QRCode from "qrcode";
-import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
+import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, detectPawnStructure, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
@@ -7817,6 +7817,16 @@ export default function CyberChessPage(){
                   const plans=opening.commonPlans?.length?`\n📋 Типовые планы:\n${opening.commonPlans.map(p=>`• ${p}`).join("\n")}`:"";
                   return `\n\n📚 Дебют: ${opening.name} (${opening.eco}) — ${opening.character}\n💡 Твой план (${iAmWhite?"белые":"чёрные"}): ${myIdea}\n♟ План соперника: ${oppIdea}${keys}${plans}`;
                 })():"";
+                // Пешечная структура — называем по имени и даём типовой план за обе стороны.
+                // Актуально после дебюта (≥14 полуходов), когда каркас определился.
+                const struct=hist.length>=14?detectPawnStructure(fen):null;
+                const structHint=struct?(()=>{
+                  const mine=pCol===struct.owner;
+                  const myPlan=mine?struct.ownerPlan:struct.opponentPlan;
+                  const oppPlan=mine?struct.opponentPlan:struct.ownerPlan;
+                  const keys=struct.keySquares.length?`\n🔑 Ключевые поля: ${struct.keySquares.join(", ")}`:"";
+                  return `\n\n🏗 Структура: ${struct.name}\n${struct.description}\n🎯 Суть: ${struct.keyIdea}\n💡 Твой план: ${myPlan.slice(0,3).join("; ")}\n♟ План соперника: ${oppPlan.slice(0,2).join("; ")}${keys}`;
+                })():"";
                 const buildBody=(cp:number,mate:number)=>{
                   const engineBody=generatePositionExplanation(fen,hist.length,cp,mate);
                   let principlesHint="";
@@ -7825,7 +7835,7 @@ export default function CyberChessPage(){
                     const principles=getPhaseAdvice(phaseKey,2).map((p:string)=>`• ${p}`).join("\n");
                     principlesHint=`\n\n📖 Принципы ${phaseKey==="opening"?"дебюта":phaseKey==="middlegame"?"миттельшпиля":"эндшпиля"}:\n${principles}`;
                   }
-                  return engineBody+openingHint+tacticsHint+principlesHint;
+                  return engineBody+openingHint+structHint+tacticsHint+principlesHint;
                 };
                 // 2) Реальный eval движка (бело-относительный), иначе fallback на текущий стейт.
                 if(!sfR.current?.ready()){
@@ -10564,6 +10574,7 @@ ${question.trim()}`;
             phaseLabel={detectPhase(game.fen(),hist.length).label}
             coachLevel={coachLevel}
             weaknesses={coachWeaknessSummary}
+            structure={(()=>{const s=hist.length>=14?detectPawnStructure(game.fen()):null;return s?`${s.name} — ${s.keyIdea}`:"";})()}
             visible={true}
             onClose={()=>sTab("play")}
             runEngine={runEnginePromise}

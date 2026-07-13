@@ -98,6 +98,7 @@ import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
 import { qmelaninRouter } from "./routes/qmelanin";
 import { qrenewRouter } from "./routes/qrenew";
+import { longevityRouter } from "./routes/longevity";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
@@ -927,6 +928,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/veilnetx", "veilnetx"],
   ["/api/veilnetx-ledger", "veilnetx"],
   ["/api/healthai", "healthai"],
+  ["/api/longevity", "qrenew"],
   ["/api/qai", "qai"],
   ["/api/qlearn", "qlearn"],
   ["/api/qnews", "qnews"],
@@ -1105,6 +1107,8 @@ app.use("/api/qlearn", qlearnRouter);
 app.use("/api/qmelanin", qmelaninRouter);
 // QRenew — cellular-renewal program (biological age + tiered stack)
 app.use("/api/qrenew", qrenewRouter);
+// Longevity — measure→act→re-measure protocol engine (panel + graded stack + progress)
+app.use("/api/longevity", longevityRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
 // MapReality — civic signals map (MVP: signals + supports)

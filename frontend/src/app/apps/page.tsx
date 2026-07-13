@@ -42,7 +42,7 @@ const APPS: App[] = [
       "Team collaborators",
     ],
     badge: "Most popular",
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/1902349",
+    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57",
   },
   {
     id: "qcoreai",
@@ -323,7 +323,9 @@ export default function AppsPage() {
               )}
 
               <a
-                href="https://aevion.lemonsqueezy.com/checkout/buy/1902349"
+                href={billing === "annual"
+                  ? "https://aevion.lemonsqueezy.com/checkout/buy/a6a35e07-9942-4089-aec3-0faa0ea9b722"
+                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b"}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

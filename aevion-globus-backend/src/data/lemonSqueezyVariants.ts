@@ -8,6 +8,7 @@
  *   LEMON_SQUEEZY_VARIANT_LITE_MONTHLY     LEMON_SQUEEZY_VARIANT_LITE_ANNUAL
  *   LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY   LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL
  *   LEMON_SQUEEZY_VARIANT_FULL_MONTHLY     LEMON_SQUEEZY_VARIANT_FULL_ANNUAL
+ *   LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY   LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL
  *
  * Setup:
  *   1. LS dashboard → Store → Products → New product (subscription)
@@ -34,7 +35,9 @@ export type LemonSqueezyReference =
   | "tier_medium_monthly"
   | "tier_medium_annual"
   | "tier_full_monthly"
-  | "tier_full_annual";
+  | "tier_full_annual"
+  | "tier_planet_monthly"
+  | "tier_planet_annual";
 
 /** reference → env var holding the LS variant id. */
 const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
@@ -44,6 +47,8 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   tier_medium_annual: "LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL",
   tier_full_monthly: "LEMON_SQUEEZY_VARIANT_FULL_MONTHLY",
   tier_full_annual: "LEMON_SQUEEZY_VARIANT_FULL_ANNUAL",
+  tier_planet_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY",
+  tier_planet_annual: "LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL",
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
@@ -86,5 +91,6 @@ export function tierForLemonSqueezyReference(ref: LemonSqueezyReference | null):
   if (!ref) return "lite";
   if (ref.includes("medium")) return "medium";
   if (ref.includes("full")) return "full";
+  if (ref.includes("planet")) return "full";
   return "lite";
 }

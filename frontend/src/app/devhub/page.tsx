@@ -265,7 +265,7 @@ export default function DevHubPage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
               <a
-                href="https://aevion.lemonsqueezy.com/checkout/buy/1902349"
+                href="https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

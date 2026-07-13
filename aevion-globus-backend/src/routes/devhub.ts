@@ -84,12 +84,121 @@ const memFiles = new Map<string, DevHubFile>();
 const memDeployments = new Map<string, DevHubDeployment>();
 const memSnippets = new Map<string, DevHubSnippet>();
 
+// ── Credit metering ───────────────────────────────────────────────────────────
+type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
+type StudioTier = "free" | "pro" | "enterprise";
+
+const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
+  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+  pro:        { video: 50,  image: 200, tts: 30000, music: 100, deploy: -1 },
+  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1 },
+};
+
+// In-memory fallback: "userId:month:capability" → count
+const memUsage = new Map<string, number>();
+const memTiers = new Map<string, StudioTier>();
+
+function creditMonth(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+async function getUserTier(userId: string): Promise<StudioTier> {
+  if (!isDevHubDbReady()) return memTiers.get(userId) ?? "free";
+  try {
+    const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
+    if (r.rows[0]?.tier) return r.rows[0].tier as StudioTier;
+    // Check email-based tier (set by payment webhook before user registered)
+    const er = await pool.query(`
+      SELECT det."tier" FROM "AEVIONUser" au
+      JOIN "DevHubEmailTier" det ON det."email" = LOWER(au."email")
+      WHERE au."id" = $1 LIMIT 1
+    `, [userId]);
+    if (er.rows[0]?.tier && er.rows[0].tier !== "free") {
+      const promoted = er.rows[0].tier as StudioTier;
+      // Promote to userId-keyed row so future lookups are single-table
+      await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [userId, promoted]).catch(() => {});
+      return promoted;
+    }
+    return "free";
+  } catch { return "free"; }
+}
+
+async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
+  if (!isDevHubDbReady()) { memTiers.set(userId, tier); return; }
+  try {
+    await pool.query(`
+      INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [userId, tier]);
+  } catch { memTiers.set(userId, tier); }
+}
+
+async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
+  if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
+  try {
+    const r = await pool.query(
+      `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
+      [userId, month, capability]
+    );
+    return r.rows[0]?.used ?? 0;
+  } catch { return 0; }
+}
+
+async function checkCredit(userId: string, capability: CapabilityKey): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+  const tier = await getUserTier(userId);
+  const limit = TIER_LIMITS[tier][capability];
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  const month = creditMonth();
+  const used = await getMonthUsage(userId, month, capability);
+  return { allowed: used < limit, used, limit, tier };
+}
+
+async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  const month = creditMonth();
+  const tier = await getUserTier(userId);
+  if (!isDevHubDbReady()) {
+    const key = `${userId}:${month}:${capability}`;
+    memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+    return;
+  }
+  try {
+    const id = `${userId}-${month}-${capability}`;
+    await pool.query(`
+      INSERT INTO "DevHubUsage" ("id","userId","month","capability","used","tier","updatedAt")
+      VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      ON CONFLICT ("userId","month","capability")
+      DO UPDATE SET "used"="DevHubUsage"."used"+$5, "tier"=$6, "updatedAt"=NOW()
+    `, [id, userId, month, capability, amount, tier]);
+  } catch {
+    const key = `${userId}:${month}:${capability}`;
+    memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+  }
+}
+
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
+  const tier = await getUserTier(userId);
+  const month = creditMonth();
+  const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
+  const usage: Record<string, { used: number; limit: number }> = {};
+  for (const cap of caps) {
+    const used = await getMonthUsage(userId, month, cap);
+    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+  }
+  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+}
+
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
   memDeployments.clear();
   memSnippets.clear();
+  memUsage.clear();
+  memTiers.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +222,20 @@ function detectLanguage(path: string): string {
     yaml: "yaml", yml: "yaml", sh: "bash", env: "plaintext",
   };
   return map[ext] || "plaintext";
+}
+
+// ── Collaborator access helpers ───────────────────────────────────────────────
+function isCollaborator(project: DevHubProject, userId: string, minRole?: "editor"): boolean {
+  const entry = project.collaborators.find((c) => c.userId === userId);
+  if (!entry) return false;
+  if (!minRole) return true;
+  return entry.role === "editor";
+}
+function canAccess(project: DevHubProject, userId: string): boolean {
+  return project.userId === userId || isCollaborator(project, userId);
+}
+function canEdit(project: DevHubProject, userId: string): boolean {
+  return project.userId === userId || isCollaborator(project, userId, "editor");
 }
 
 // ── Project helpers (DB or memory) ────────────────────────────────────────────
@@ -491,11 +614,12 @@ devhubRouter.get("/projects/:id", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   try {
     const project = await dbGetProject(req.params.id);
-    if (!project || project.userId !== userId) {
+    if (!project || !canAccess(project, userId)) {
       return res.status(404).json({ error: "project not found" });
     }
     const files = await dbListFiles(project.id);
-    res.json({ project, files });
+    const role = project.userId === userId ? "owner" : (project.collaborators.find(c => c.userId === userId)?.role ?? "viewer");
+    res.json({ project, files, role });
   } catch (e: any) {
     return res.status(500).json({ error: "internal_error" });
   }
@@ -570,7 +694,7 @@ devhubRouter.get("/projects/:id/files", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -593,7 +717,7 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -617,7 +741,7 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   try {
@@ -641,7 +765,7 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   const { content = "", language } = req.body || {};
@@ -681,7 +805,7 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   const { content = "", language } = req.body || {};
@@ -1016,7 +1140,7 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
-  if (!project || project.userId !== userId) {
+  if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
   res.json({ collaborators: project.collaborators });
@@ -1032,20 +1156,42 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   } catch {
     project = memProjects.get(req.params.id) ?? null;
   }
+  // Only project owner can manage collaborators
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
-  const { userId: collabUserId, role } = req.body || {};
-  if (!collabUserId || typeof collabUserId !== "string") {
-    return res.status(400).json({ error: "userId is required" });
+  // Studio Pro required to add collaborators
+  const tier = await getUserTier(userId);
+  if (tier === "free") {
+    return res.status(403).json({ error: "Studio Pro required to add collaborators", upgrade: true });
+  }
+  const { userId: rawInput, role } = req.body || {};
+  if (!rawInput || typeof rawInput !== "string") {
+    return res.status(400).json({ error: "userId or email is required" });
   }
   const validRoles = ["editor", "viewer"];
-  const resolvedRole = validRoles.includes(role) ? role : "viewer";
-  // Prevent adding owner as collaborator
+  const resolvedRole = validRoles.includes(role) ? role : "editor";
+
+  // Resolve email → userId via AEVIONUser if input looks like an email
+  let collabUserId = rawInput.trim();
+  let displayEmail = "";
+  if (collabUserId.includes("@") && isDevHubDbReady()) {
+    try {
+      const ur = await pool.query(
+        `SELECT "id","email" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`,
+        [collabUserId.toLowerCase()]
+      );
+      if (ur.rows[0]?.id) {
+        displayEmail = ur.rows[0].email;
+        collabUserId = ur.rows[0].id;
+      }
+      // If not found, store the email as a placeholder so the invite persists
+    } catch { /* keep rawInput as userId */ }
+  }
+
   if (collabUserId === userId) {
     return res.status(400).json({ error: "cannot add project owner as collaborator" });
   }
-  // Remove existing entry for this user then add fresh
   project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
   project.collaborators.push({ userId: collabUserId, role: resolvedRole });
   project.updatedAt = now();
@@ -1055,7 +1201,7 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
     captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
     memProjects.set(project.id, project);
   }
-  res.status(201).json({ collaborators: project.collaborators });
+  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId });
 });
 
 // DELETE /api/devhub/projects/:id/collaborators/:userId
@@ -1871,6 +2017,8 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
 // POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
 devhubRouter.post("/media/image", async (req, res) => {
+  const imgAuth = verifyBearerOptional(req);
+  const imgUserId = imgAuth?.sub ?? "anonymous";
   const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt required" });
@@ -1881,6 +2029,15 @@ devhubRouter.post("/media/image", async (req, res) => {
   const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
   if (!validSizes.includes(size)) {
     return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
+  }
+
+  const imgCredit = await checkCredit(imgUserId, "image");
+  if (!imgCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly image limit reached",
+      tier: imgCredit.tier, used: imgCredit.used, limit: imgCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -1916,7 +2073,8 @@ devhubRouter.post("/media/image", async (req, res) => {
     if (!first) return res.status(500).json({ error: "no image returned" });
     const imageUrl = first.url ?? (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null);
     if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
-    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null });
+    await debitCredit(imgUserId, "image").catch(() => {});
+    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null, creditsUsed: 1, creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1 });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image generation failed" });
   }
@@ -3631,6 +3789,200 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Cloudflare Pages deploy — static sites / Next.js exported / React SPA
+// POST /api/devhub/projects/:id/deploy/pages
+//
+// Flow:
+//   1. Create CF Pages project (idempotent — ignores "already exists")
+//   2. Upload all project files as multipart direct-upload deployment
+//   3. Add <slug>.aevion.build custom domain to Pages project
+//   4. Provision CNAME DNS record in aevion.build zone
+//   5. Return live URL + domain
+// ═════════════════════════════════════════════════════════════════════════════
+
+function mimeForPath(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    html: "text/html", css: "text/css", js: "application/javascript",
+    ts: "application/javascript", tsx: "application/javascript",
+    jsx: "application/javascript", json: "application/json",
+    svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg",
+    jpeg: "image/jpeg", webp: "image/webp", ico: "image/x-icon",
+    txt: "text/plain", md: "text/markdown", xml: "application/xml",
+    wasm: "application/wasm",
+  };
+  return map[ext] || "application/octet-stream";
+}
+
+devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!accountId || !apiToken) {
+    return res.status(503).json({
+      error: "Cloudflare Pages not configured",
+      needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  const cfBase = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+  const cfHeaders = { Authorization: `Bearer ${apiToken}` };
+
+  // Record deployment
+  const deploymentId = crypto.randomUUID();
+  const deployment: DevHubDeployment = {
+    id: deploymentId, projectId: project.id, userId,
+    status: "pending", deployUrl: null, buildLog: null,
+    triggeredAt: now(), completedAt: null,
+  };
+  try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+  try {
+    const files = await dbListFiles(project.id);
+    if (!files.length) {
+      deployment.status = "failed"; deployment.buildLog = "no files in project";
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(400).json({ error: "project has no files to deploy — add at least index.html" });
+    }
+
+    // Stable CF Pages project name: aevion-<slug>-<id6>
+    const pageName = `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
+
+    // 1. Create Pages project (ignore 8000000 = already exists)
+    const createResp = await fetch(`${cfBase}/pages/projects`, {
+      method: "POST",
+      headers: { ...cfHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: pageName, production_branch: "main" }),
+    });
+    const createData = await createResp.json() as { success: boolean; errors?: Array<{ code: number; message: string }> };
+    const alreadyExists = createData.errors?.some((e) => e.code === 8000000);
+    if (!createResp.ok && !alreadyExists) {
+      const errMsg = createData.errors?.map((e) => e.message).join("; ") || "CF Pages project creation failed";
+      return res.status(500).json({ error: errMsg });
+    }
+
+    // 2. Build multipart form: manifest + files keyed by SHA-256 hash
+    const form = new FormData();
+    const manifest: Record<string, string> = {};
+    const seenHashes = new Set<string>();
+
+    for (const file of files) {
+      const hash = crypto.createHash("sha256").update(file.content, "utf8").digest("hex");
+      const cleanPath = "/" + file.path.replace(/^\/+/, "");
+      manifest[cleanPath] = hash;
+      if (!seenHashes.has(hash)) {
+        seenHashes.add(hash);
+        form.set(hash, new Blob([file.content], { type: mimeForPath(file.path) }), hash);
+      }
+    }
+    form.set("manifest", JSON.stringify(manifest));
+
+    // 3. Upload deployment
+    const deployResp = await fetch(`${cfBase}/pages/projects/${pageName}/deployments`, {
+      method: "POST",
+      headers: cfHeaders, // NO Content-Type — let FormData set boundary automatically
+      body: form,
+    });
+    const deployData = await deployResp.json() as { success: boolean; result?: { id: string; url: string; latest_stage?: { name: string } }; errors?: Array<{ code: number; message: string }> };
+    if (!deployResp.ok) {
+      const errMsg = deployData.errors?.map((e) => e.message).join("; ") || "CF Pages deployment upload failed";
+      deployment.status = "failed"; deployment.buildLog = errMsg; deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(500).json({ error: errMsg });
+    }
+
+    const rawUrl = deployData.result?.url ?? `${pageName}.pages.dev`;
+    const pagesUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+
+    deployment.status = "building";
+    deployment.deployUrl = pagesUrl;
+    deployment.buildLog = `CF Pages deployment ${deployData.result?.id ?? "?"} queued`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
+    let customDomain: string | null = null;
+    let domainUrl: string | null = null;
+
+    if (zoneId) {
+      try {
+        const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
+        const fullDomain = `${domainSlug}.aevion.build`;
+
+        // 4a. Add custom domain to CF Pages project
+        await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
+          method: "POST",
+          headers: { ...cfHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: fullDomain }),
+        });
+
+        // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
+        const dnsTarget = `${pageName}.pages.dev`;
+        const zoneBase = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`;
+        const listResp = await fetch(`${zoneBase}?type=CNAME&name=${fullDomain}`, { headers: cfHeaders });
+        const listData = await listResp.json() as { result: Array<{ id: string }> };
+        const existingId = listData.result?.[0]?.id;
+
+        const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
+        if (existingId) {
+          await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        } else {
+          await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        }
+
+        customDomain = fullDomain;
+        domainUrl = `https://${fullDomain}`;
+      } catch (domainErr: any) {
+        deployment.buildLog += ` | domain: ${domainErr?.message || "error"}`;
+      }
+    }
+
+    // 5. Mark live + update project record
+    setTimeout(async () => {
+      const d = memDeployments.get(deployment.id) ?? deployment;
+      d.status = "live"; d.completedAt = now();
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      if (project) {
+        project.status = "live";
+        project.deployUrl = pagesUrl;
+        if (customDomain) project.customDomain = customDomain;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    }, 4000);
+
+    return res.json({
+      ok: true,
+      provider: "cloudflare-pages",
+      deploymentId,
+      pagesUrl,
+      domain: customDomain,
+      domainUrl,
+      liveUrl: domainUrl ?? pagesUrl,
+      message: customDomain
+        ? `Live at ${domainUrl} (and ${pagesUrl})`
+        : `Live at ${pagesUrl} — add CLOUDFLARE_ZONE_ID to enable aevion.build domain`,
+    });
+  } catch (e: any) {
+    deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(500).json({ ok: false, error: e?.message || "Cloudflare Pages deploy failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Cloudflare R2 audio upload (S3-compatible, AWS SigV4)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -3913,4 +4265,272 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     imported,
     skipped,
   });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Video generation via Replicate API
+// POST /api/devhub/media/video  { prompt, model?, width?, height?, duration? }
+// GET  /api/devhub/media/video/status/:predictionId
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/media/video", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { prompt, model = "minimax/video-01", width = 1280, height = 720, duration = 5, imageUrl } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt is required" });
+  }
+
+  const credit = await checkCredit(userId, "video");
+  if (!credit.allowed) {
+    return res.status(402).json({
+      error: "Monthly video limit reached",
+      tier: credit.tier, used: credit.used, limit: credit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) {
+    return res.status(503).json({
+      error: "Video generation not configured — set REPLICATE_API_TOKEN in Railway",
+      setupUrl: "https://replicate.com/account/api-tokens",
+    });
+  }
+
+  const MODEL_VERSIONS: Record<string, string> = {
+    "minimax/video-01": "minimax/video-01",
+    "stability-ai/stable-video-diffusion": "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3aa966e1e89b5c27be9702aff8",
+    "lucataco/animate-diff-v2": "lucataco/animate-diff-v2:47b39c5b24fab06e5ec0a3aa5e63daf17e92ab3f8edc27f7da7fa9f0be28cad5",
+    "tencent/hunyuan-video": "tencent/hunyuan-video:847dfa8b01e739d5c05b04cc4c64a2a9ef56fba41783ba11c0e24ce1a36cbf30",
+  };
+  const resolvedModel = MODEL_VERSIONS[model] || model;
+
+  try {
+    const input: Record<string, any> = { prompt: prompt.trim() };
+    if (imageUrl) input.image = imageUrl;
+    if (width) input.width = width;
+    if (height) input.height = height;
+    if (duration) input.num_frames = Math.round(duration * 24);
+
+    const resp = await fetch(`https://api.replicate.com/v1/models/${resolvedModel}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        Prefer: "respond-async",
+      },
+      body: JSON.stringify({ input }),
+    }).catch(() => fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        Prefer: "respond-async",
+      },
+      body: JSON.stringify({ version: resolvedModel, input }),
+    }));
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
+    }
+
+    const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
+    await debitCredit(userId, "video").catch(() => {});
+    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status, creditsUsed: 1, creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1 });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Video generation failed" });
+  }
+});
+
+devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) return res.status(503).json({ error: "REPLICATE_API_TOKEN not set" });
+
+  try {
+    const r = await fetch(`https://api.replicate.com/v1/predictions/${req.params.predictionId}`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    if (!r.ok) return res.status(r.status).json({ error: "Replicate fetch failed" });
+    const pred = await r.json() as {
+      id: string; status: string;
+      output?: string | string[];
+      error?: string;
+      metrics?: { predict_time?: number };
+    };
+    const outputUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+    return res.json({
+      status: pred.status,
+      videoUrl: outputUrl ?? null,
+      error: pred.error ?? null,
+      predictionId: pred.id,
+      seconds: pred.metrics?.predict_time ?? null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Status check failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Domain provision: <slug>.aevion.build via Cloudflare DNS
+// POST /api/devhub/projects/:id/domain/setup  { subdomain? }
+// GET  /api/devhub/projects/:id/domain/status
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!cfToken || !cfZoneId) {
+    return res.status(503).json({
+      error: "Domain provision not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in Railway",
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  const deployTarget = project.deployUrl?.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!deployTarget) {
+    return res.status(400).json({ error: "Project must be deployed first before adding a domain" });
+  }
+
+  const requestedSub = (req.body?.subdomain as string | undefined) || slugify(project.name);
+  const subdomain = (requestedSub + "-" + project.id.slice(0, 6)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const fullDomain = `${subdomain}.aevion.build`;
+
+  try {
+    // Create or update CNAME record
+    const listResp = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${fullDomain}`,
+      { headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" } }
+    );
+    const existing = await listResp.json() as { result: Array<{ id: string }> };
+    const existingId = existing.result?.[0]?.id;
+
+    const payload = { type: "CNAME", name: fullDomain, content: deployTarget, proxied: true, ttl: 1 };
+
+    let cfResp: Response;
+    if (existingId) {
+      cfResp = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existingId}`,
+        { method: "PUT", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      );
+    } else {
+      cfResp = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
+        { method: "POST", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      );
+    }
+
+    const cfData = await cfResp.json() as { success: boolean; errors?: Array<{ message: string }> };
+    if (!cfData.success) {
+      const msg = cfData.errors?.[0]?.message ?? "Cloudflare DNS error";
+      return res.json({ ok: false, error: msg });
+    }
+
+    // Save custom domain to project
+    project.customDomain = fullDomain;
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+
+    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Domain provision failed" });
+  }
+});
+
+devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  return res.json({
+    customDomain: project.customDomain ?? null,
+    deployUrl: project.deployUrl ?? null,
+    url: project.customDomain ? `https://${project.customDomain}` : project.deployUrl,
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio overview: aggregates platform capabilities status
+// GET /api/devhub/studio/capabilities
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.get("/studio/capabilities", (_req, res) => {
+  const caps = [
+    { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
+    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
+    { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
+    { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    { id: "image", name: "Image Generation", description: "DALL-E 3 image generation", status: process.env.OPENAI_API_KEY ? "live" : "needs_token", token: "OPENAI_API_KEY" },
+    { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "audio_music", name: "Music & SFX", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "email", name: "Email", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "sms", name: "SMS", description: "Brevo SMS", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+  ];
+
+  const live = caps.filter((c) => c.status === "live").length;
+  return res.json({ capabilities: caps, summary: { total: caps.length, live, needsToken: caps.length - live } });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio Credits — usage metering per user per month
+// GET  /api/devhub/studio/credits
+// POST /api/devhub/studio/tier  { tier: "pro" | "free" | "enterprise" }  (admin)
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.get("/studio/credits", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  try {
+    const result = await getAllMonthUsage(userId);
+    return res.json({
+      ...result,
+      tierInfo: {
+        free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+        pro:        { video: 50,  image: 200, tts: 30000,  music: 100, deploy: -1 },
+        enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
+      },
+      upgradeUrl: "https://aevion.vercel.app/studio#upgrade",
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Credits fetch failed" });
+  }
+});
+
+devhubRouter.post("/studio/tier", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "authentication required" });
+  const userId = auth.sub;
+  const { tier, targetUserId } = req.body || {};
+  const validTiers: StudioTier[] = ["free", "pro", "enterprise"];
+  if (!tier || !validTiers.includes(tier)) {
+    return res.status(400).json({ error: `tier must be one of: ${validTiers.join(", ")}` });
+  }
+  const target = targetUserId ?? userId;
+  try {
+    await setUserTier(target, tier as StudioTier);
+    return res.json({ ok: true, userId: target, tier });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Tier update failed" });
+  }
 });

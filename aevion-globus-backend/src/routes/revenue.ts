@@ -15,13 +15,19 @@
  */
 
 import { Router } from "express";
+import crypto from "node:crypto";
+import rateLimit from "express-rate-limit";
 import { REVENUE_APPS, getLiveRevenueApps, getRevenueApp } from "../data/revenueApps";
 import { PADDLE_KEY, IS_PADDLE_SANDBOX, paddleGet } from "../lib/paddleClient";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { getPool } from "../lib/dbPool";
 
 const capture = makeServiceCapture("revenue");
 
 export const revenueRouter = Router();
+
+const snapshotWriteLimit = rateLimit({ windowMs: 60_000, max: 6, standardHeaders: true, legacyHeaders: false });
+const snapshotReadLimit = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false });
 
 // ─── ENV helpers ────────────────────────────────────────────────────────────
 
@@ -246,6 +252,136 @@ async function gumroadSales(force = false): Promise<GumroadSale[] | null> {
   const fresh = await gumroadSalesUncached();
   if (fresh) salesCache = { at: Date.now(), data: fresh };
   return fresh;
+}
+
+// ─── Revenue snapshots (Postgres time-series for history/trend) ────────────
+//
+// The rest of the hub is stateless — it re-aggregates live channels on every
+// read, so it can only show "now". A snapshot freezes the combined live totals
+// (Gumroad net + LemonSqueezy gross) into a row, giving the dashboard a trend
+// line and day-over-day growth. Capture on-demand (dashboard button) or from a
+// cron hitting POST /snapshot (send x-revenue-token if REVENUE_SNAPSHOT_TOKEN
+// is set).
+
+let snapshotTableReady = false;
+async function ensureSnapshotTable(): Promise<void> {
+  if (snapshotTableReady) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "RevenueSnapshot" (
+      "id"             TEXT PRIMARY KEY,
+      "capturedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "grossUsd"       NUMERIC(14,2) NOT NULL DEFAULT 0,
+      "netUsd"         NUMERIC(14,2) NOT NULL DEFAULT 0,
+      "feesUsd"        NUMERIC(14,2) NOT NULL DEFAULT 0,
+      "saleCount"      INT NOT NULL DEFAULT 0,
+      "refundedCount"  INT NOT NULL DEFAULT 0,
+      "byApp"          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "byChannel"      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "source"         TEXT NOT NULL DEFAULT 'combined'
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "RevenueSnapshot_time_idx" ON "RevenueSnapshot" ("capturedAt" DESC);`);
+  snapshotTableReady = true;
+}
+
+interface LiveTotals {
+  grossUsd: number;
+  netUsd: number;
+  feesUsd: number;
+  saleCount: number;
+  refundedCount: number;
+  byApp: Record<string, { count: number; grossUsd: number }>;
+  byChannel: Record<string, { grossUsd: number; netUsd: number; count: number }>;
+  channelsUsed: string[];
+}
+
+/** Aggregate the live channels that are configured into one combined total.
+ *  Gumroad contributes net (gross - fee) and per-app attribution; LemonSqueezy
+ *  contributes gross (LS doesn't expose per-order fees). Missing channels are
+ *  simply skipped — a snapshot with only one live channel is still valid. */
+async function computeLiveTotals(): Promise<LiveTotals> {
+  const t: LiveTotals = {
+    grossUsd: 0, netUsd: 0, feesUsd: 0, saleCount: 0, refundedCount: 0,
+    byApp: {}, byChannel: {}, channelsUsed: [],
+  };
+
+  if (GUMROAD_TOKEN()) {
+    const sales = await gumroadSales();
+    if (sales) {
+      const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+      const gross = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
+      const fees = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
+      t.grossUsd += gross;
+      t.feesUsd += fees;
+      t.netUsd += gross - fees;
+      t.saleCount += valid.length;
+      t.refundedCount += sales.length - valid.length;
+      t.byChannel.gumroad = { grossUsd: round2(gross), netUsd: round2(gross - fees), count: valid.length };
+      t.channelsUsed.push("gumroad");
+      for (const s of valid) {
+        const appId = appIdForPermalink(s.product_permalink);
+        if (!t.byApp[appId]) t.byApp[appId] = { count: 0, grossUsd: 0 };
+        t.byApp[appId].count++;
+        t.byApp[appId].grossUsd = round2(t.byApp[appId].grossUsd + (s.price ? s.price / 100 : 0));
+      }
+    }
+  }
+
+  if (LS_KEY()) {
+    const orders = await lsOrders();
+    if (orders) {
+      const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
+      const gross = valid.reduce((sum, o) => sum + o.total / 100, 0);
+      t.grossUsd += gross;
+      t.netUsd += gross; // LS net (after ~5%+pp) only known at payout time
+      t.saleCount += valid.length;
+      t.refundedCount += orders.length - valid.length;
+      t.byChannel.lemonsqueezy = { grossUsd: round2(gross), netUsd: round2(gross), count: valid.length };
+      t.channelsUsed.push("lemonsqueezy");
+      const cur = t.byApp.platform ?? { count: 0, grossUsd: 0 };
+      cur.count += valid.length;
+      cur.grossUsd = round2(cur.grossUsd + gross);
+      t.byApp.platform = cur;
+    }
+  }
+
+  t.grossUsd = round2(t.grossUsd);
+  t.netUsd = round2(t.netUsd);
+  t.feesUsd = round2(t.feesUsd);
+  return t;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+interface SnapshotRow {
+  id: string;
+  capturedAt: string;
+  grossUsd: string | number;
+  netUsd: string | number;
+  feesUsd: string | number;
+  saleCount: number;
+  refundedCount: number;
+  byApp: Record<string, unknown>;
+  byChannel: Record<string, unknown>;
+  source: string;
+}
+
+function serializeSnapshot(r: SnapshotRow) {
+  return {
+    id: r.id,
+    capturedAt: r.capturedAt,
+    grossUsd: Number(r.grossUsd),
+    netUsd: Number(r.netUsd),
+    feesUsd: Number(r.feesUsd),
+    saleCount: r.saleCount,
+    refundedCount: r.refundedCount,
+    byApp: r.byApp,
+    byChannel: r.byChannel,
+    source: r.source,
+  };
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────
@@ -560,6 +696,119 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
 revenueRouter.post("/gumroad/webhook", (_req, res) => {
   invalidateGumroadSales();
   res.json({ ok: true });
+});
+
+/**
+ * POST /api/revenue/snapshot
+ * Freeze the current combined live totals into a RevenueSnapshot row.
+ * If REVENUE_SNAPSHOT_TOKEN is set, require it in the x-revenue-token header
+ * (so a cron can write but the public can't spam the table). Otherwise open,
+ * matching the hub's public posture — but rate-limited to 6/min regardless.
+ */
+revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
+  try {
+    const guard = process.env.REVENUE_SNAPSHOT_TOKEN?.trim();
+    if (guard && String(req.header("x-revenue-token") ?? "") !== guard) {
+      return res.status(401).json({ error: "snapshot_token_required" });
+    }
+    await ensureSnapshotTable();
+    const totals = await computeLiveTotals();
+    if (totals.channelsUsed.length === 0) {
+      return res.status(503).json({ error: "no_live_channel", message: "Neither GUMROAD_ACCESS_TOKEN nor LEMON_SQUEEZY_API_KEY is configured — nothing to snapshot." });
+    }
+    const id = crypto.randomUUID();
+    const pool = getPool();
+    const r = await pool.query(
+      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined')
+       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"`,
+      [
+        id, totals.grossUsd, totals.netUsd, totals.feesUsd, totals.saleCount, totals.refundedCount,
+        JSON.stringify(totals.byApp), JSON.stringify(totals.byChannel),
+      ],
+    );
+    res.status(201).json({ snapshot: serializeSnapshot(r.rows[0] as SnapshotRow), channelsUsed: totals.channelsUsed });
+  } catch (err: unknown) {
+    capture(err, { route: "POST /snapshot" });
+    console.error("[revenue] snapshot_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "snapshot_failed" });
+  }
+});
+
+/**
+ * GET /api/revenue/snapshots?limit=&sinceDays=
+ * Time-series of snapshots, newest first, for the trend chart.
+ */
+revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
+  try {
+    await ensureSnapshotTable();
+    const limit = Math.min(365, Math.max(1, parseInt(String(req.query.limit ?? "90"), 10) || 90));
+    const sinceDays = parseInt(String(req.query.sinceDays ?? ""), 10);
+    const pool = getPool();
+    const params: unknown[] = [];
+    let where = "";
+    if (Number.isFinite(sinceDays) && sinceDays > 0) {
+      where = `WHERE "capturedAt" > NOW() - ($1 || ' days')::interval`;
+      params.push(String(sinceDays));
+    }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+       FROM "RevenueSnapshot" ${where}
+       ORDER BY "capturedAt" DESC LIMIT $${params.length}`,
+      params,
+    );
+    res.json({ snapshots: (r.rows as SnapshotRow[]).map(serializeSnapshot), total: r.rowCount });
+  } catch (err: unknown) {
+    capture(err, { route: "GET /snapshots" });
+    console.error("[revenue] snapshots_list_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "snapshots_list_failed" });
+  }
+});
+
+/**
+ * GET /api/revenue/trend
+ * Latest snapshot vs the oldest within the window → absolute + % growth.
+ * Also returns the ascending series so the dashboard can draw a sparkline.
+ */
+revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
+  try {
+    await ensureSnapshotTable();
+    const windowDays = Math.min(365, Math.max(1, parseInt(String(req.query.windowDays ?? "30"), 10) || 30));
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+       FROM "RevenueSnapshot"
+       WHERE "capturedAt" > NOW() - ($1 || ' days')::interval
+       ORDER BY "capturedAt" ASC`,
+      [String(windowDays)],
+    );
+    const series = (r.rows as SnapshotRow[]).map(serializeSnapshot);
+    if (series.length === 0) {
+      return res.json({ windowDays, points: 0, series: [], message: "No snapshots yet — POST /api/revenue/snapshot to capture the first." });
+    }
+    const first = series[0];
+    const last = series[series.length - 1];
+    const growth = (a: number, b: number) => (a === 0 ? (b > 0 ? 100 : 0) : round2(((b - a) / a) * 100));
+    res.json({
+      windowDays,
+      points: series.length,
+      first: { capturedAt: first.capturedAt, netUsd: first.netUsd, grossUsd: first.grossUsd, saleCount: first.saleCount },
+      latest: { capturedAt: last.capturedAt, netUsd: last.netUsd, grossUsd: last.grossUsd, saleCount: last.saleCount },
+      change: {
+        netUsd: round2(last.netUsd - first.netUsd),
+        grossUsd: round2(last.grossUsd - first.grossUsd),
+        saleCount: last.saleCount - first.saleCount,
+        netGrowthPct: growth(first.netUsd, last.netUsd),
+        saleGrowthPct: growth(first.saleCount, last.saleCount),
+      },
+      series: series.map((s) => ({ capturedAt: s.capturedAt, netUsd: s.netUsd, grossUsd: s.grossUsd, saleCount: s.saleCount })),
+    });
+  } catch (err: unknown) {
+    capture(err, { route: "GET /trend" });
+    console.error("[revenue] trend_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "trend_failed" });
+  }
 });
 
 /**

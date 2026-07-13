@@ -13,60 +13,13 @@
  * card, catalog tier) is a follow-up.
  */
 
+import IdeaMarket from "./IdeaMarket";
+
 export const metadata = {
   title: "AEVION Ventures — Идея-Маркет",
   description:
     "Внутри AEVION можно не только пользоваться AI, но и строить бизнесы. 20 моделей до $10M + живой венчур AEVIA.",
 };
-
-type Idea = {
-  n: string;
-  name: string;
-  desc: string;
-  model: string;
-  ceiling: string;
-  diff: number; // 1..5
-  status: "live" | "open" | "lab" | "pump";
-};
-
-const IDEAS: Idea[] = [
-  { n: "01", name: "AEVIA — longevity / anti-grey гамми", desc: "Красота и антиэйдж изнутри, подписка", model: "DTC + подписка", ceiling: "$1B", diff: 4, status: "live" },
-  { n: "02", name: "AI-ресепшн / голосовой агент", desc: "Для клиник, СТО, салонов", model: "SaaS", ceiling: "$10M", diff: 3, status: "open" },
-  { n: "03", name: "Collagen sticks — 口服美容", desc: "Beauty-дринк, рынок Китая $10B+", model: "DTC", ceiling: "$250M", diff: 4, status: "lab" },
-  { n: "04", name: "Longevity coffee / грибной латте", desc: "Ежедневный ритуал, высокий повтор", model: "DTC", ceiling: "$120M", diff: 3, status: "lab" },
-  { n: "05", name: "AI-лидоген как сервис", desc: "Замена Apollo/Clay для СНГ", model: "SaaS", ceiling: "$10M", diff: 3, status: "open" },
-  { n: "06", name: "AI-клон эксперта", desc: "Платный чат-двойник блогеров, rev-share", model: "Creator SaaS", ceiling: "$10M", diff: 4, status: "open" },
-  { n: "07", name: "DTC beauty / skincare hero-SKU", desc: "Один герой-продукт", model: "E-commerce", ceiling: "$80M", diff: 4, status: "open" },
-  { n: "08", name: "Высокочек-курс по AI", desc: "Денежный насос, реальная история", model: "Info product", ceiling: "$20M", diff: 2, status: "pump" },
-  { n: "09", name: "Pet-товар с подпиской", desc: "Корм / лакомство / гаджет", model: "DTC подписка", ceiling: "$60M", diff: 4, status: "open" },
-  { n: "10", name: "White-label AI-платформа", desc: "Перепродажа под брендом реселлера", model: "B2B2C SaaS", ceiling: "$10M", diff: 3, status: "open" },
-  { n: "11", name: "STEM-игрушка + unboxing-воронка", desc: "Дети, YouTube-дистрибуция", model: "DTC + media", ceiling: "$70M", diff: 4, status: "open" },
-  { n: "12", name: "Функциональный beauty-снек", desc: "Коллаген / протеин-бар, ритейл", model: "Food", ceiling: "$90M", diff: 4, status: "open" },
-  { n: "13", name: "Sleep / calm гамми", desc: "Мелатонин + адаптогены", model: "DTC подписка", ceiling: "$150M", diff: 3, status: "lab" },
-  { n: "14", name: "Gut / probiotic гамми", desc: "Огромная растущая категория", model: "DTC подписка", ceiling: "$140M", diff: 3, status: "lab" },
-  { n: "15", name: "Адаптоген-шот (энергия без сахара)", desc: "Prime-подобный вирус", model: "Напиток", ceiling: "$200M", diff: 4, status: "open" },
-  { n: "16", name: "Compliance / документооборот AI", desc: "ИИ проверяет договоры", model: "SaaS", ceiling: "$10M", diff: 3, status: "open" },
-  { n: "17", name: "Ниша-маркетплейс", desc: "Одна вертикаль, take-rate 15%", model: "Marketplace", ceiling: "$50M", diff: 5, status: "open" },
-  { n: "18", name: "Nootropic / focus гамми", desc: "Продуктивность, студенты", model: "DTC подписка", ceiling: "$110M", diff: 3, status: "lab" },
-  { n: "19", name: "Виральный health-гаджет", desc: "Умная бутылка / трекер", model: "Device", ceiling: "$100M", diff: 4, status: "open" },
-  { n: "20", name: "3D-визуализация недвижимости", desc: "Сервис → SaaS для застройщиков", model: "Service → SaaS", ceiling: "$10M", diff: 3, status: "open" },
-];
-
-const STATUS_LABEL: Record<Idea["status"], string> = {
-  live: "▲ LIVE",
-  open: "open",
-  lab: "в лаб.",
-  pump: "насос",
-};
-
-function Dots({ n }: { n: number }) {
-  return (
-    <span className="vtx-dots" aria-label={`сложность ${n} из 5`}>
-      {"●".repeat(n)}
-      <span className="vtx-off">{"●".repeat(5 - n)}</span>
-    </span>
-  );
-}
 
 export default function VenturesPage() {
   return (
@@ -122,29 +75,10 @@ export default function VenturesPage() {
           <p className="vtx-sub">
             «Ceiling» — реалистичный глобальный потолок выручки, не обещание.
             Base rate низкий: побеждает 1–3 из 20, поэтому маркет — конвейер
-            дешёвых ставок, а не одна догадка.
+            дешёвых ставок, а не одна догадка. Отметь «👍 интересно» — сообщество
+            двигает лучшие идеи вверх; или предложи свою внизу.
           </p>
-          <div className="vtx-board">
-            <table className="vtx-table">
-              <thead>
-                <tr>
-                  <th>#</th><th>Идея</th><th>Модель</th><th>Ceiling</th><th>Сложн.</th><th>Статус</th>
-                </tr>
-              </thead>
-              <tbody>
-                {IDEAS.map((i) => (
-                  <tr key={i.n}>
-                    <td className="vtx-num">{i.n}</td>
-                    <td><span className="vtx-name">{i.name}</span><br /><span className="vtx-desc">{i.desc}</span></td>
-                    <td>{i.model}</td>
-                    <td className="vtx-num vtx-cap">{i.ceiling}</td>
-                    <td><Dots n={i.diff} /></td>
-                    <td><span className={`vtx-pill vtx-${i.status}`}>{STATUS_LABEL[i.status]}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <IdeaMarket />
           <div className="vtx-note">
             <b>Как читать потолок.</b> «$1B» — опцион, а не прогноз: так
             масштабируется 1 из сотен товаров, попавших в Китай/глобал. Мы платим

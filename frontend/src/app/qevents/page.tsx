@@ -440,11 +440,150 @@ const CATEGORIES = [
 
 type WhenFilter = "upcoming" | "past";
 
+// ─── Month calendar view ────────────────────────────────────────────────────
+// Uses the previously-unused GET /api/qevents/calendar?year=&month= endpoint,
+// which returns { year, month, days: { "YYYY-MM-DD": QEvent[] } }. Renders a
+// month grid; clicking a day reveals that day's events as full EventCards
+// (RSVP / ICS reused). Monday-first week.
+
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
+function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1); // 1-12
+  const [days, setDays] = useState<Record<string, QEvent[]>>({});
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qevents/calendar?year=${year}&month=${month}`), { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        setDays(j.days ?? {});
+      } else {
+        setDays({});
+      }
+    } catch {
+      setDays({});
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
+  useEffect(() => { void load(); }, [load]);
+
+  function shift(delta: number) {
+    let m = month + delta;
+    let y = year;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setMonth(m); setYear(y); setSelected(null);
+  }
+
+  function handleRSVP(eventId: string, _status: string, attendeeCount: number) {
+    setDays((prev) => {
+      const next: Record<string, QEvent[]> = {};
+      for (const [d, evs] of Object.entries(prev)) {
+        next[d] = evs.map((e) => (e.id === eventId ? { ...e, attendeeCount } : e));
+      }
+      return next;
+    });
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Mon=0
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const cells: (number | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  const dayKey = (d: number) => `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const selectedEvents = selected ? days[selected] ?? [] : [];
+
+  return (
+    <div>
+      {/* Month nav */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <button onClick={() => shift(-1)} style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700, color: "#475569" }}>‹</button>
+        <div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a" }}>{MONTHS_RU[month - 1]} {year}</div>
+        <button onClick={() => shift(1)} style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700, color: "#475569" }}>›</button>
+      </div>
+
+      {/* Weekday header */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
+        {WEEKDAYS.map((w) => (
+          <div key={w} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>{w}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, opacity: loading ? 0.5 : 1 }}>
+        {cells.map((d, i) => {
+          if (d === null) return <div key={`b${i}`} />;
+          const key = dayKey(d);
+          const evs = days[key] ?? [];
+          const isToday = key === todayKey;
+          const isSelected = key === selected;
+          return (
+            <button
+              key={key}
+              onClick={() => setSelected(isSelected ? null : key)}
+              style={{
+                minHeight: 76,
+                textAlign: "left",
+                padding: 7,
+                borderRadius: 10,
+                border: isSelected ? "2px solid #6366f1" : isToday ? "2px solid #c7d2fe" : "1px solid #e2e8f0",
+                background: evs.length ? "#eef2ff" : "#fff",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, color: isToday ? "#6366f1" : "#0f172a" }}>{d}</span>
+              {evs.slice(0, 2).map((e) => (
+                <span key={e.id} style={{ fontSize: 10, fontWeight: 600, color: (CATEGORY_COLORS[e.category] ?? { fg: "#475569" }).fg, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {CATEGORY_ICONS[e.category] ?? "🎉"} {e.title}
+                </span>
+              ))}
+              {evs.length > 2 && <span style={{ fontSize: 10, color: "#6366f1", fontWeight: 700 }}>+{evs.length - 2} ещё</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected day events */}
+      {selected && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", marginBottom: 12 }}>
+            {new Date(selected + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+            {selectedEvents.length > 0 && <span style={{ color: "#94a3b8", fontWeight: 600 }}> · {selectedEvents.length} событий</span>}
+          </div>
+          {selectedEvents.length === 0 ? (
+            <div style={{ color: "#94a3b8", fontSize: 14, padding: 20, textAlign: "center", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12 }}>Событий в этот день нет.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 20 }}>
+              {selectedEvents.map((event) => (
+                <EventCard key={event.id} event={event} currentUserId={currentUserId} onRSVP={handleRSVP} isPast={new Date(event.startAt) < new Date()} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function QEventsPage() {
   const [events, setEvents] = useState<QEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("");
   const [when, setWhen] = useState<WhenFilter>("upcoming");
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const currentUserId = getAuthSub();
 
@@ -531,6 +670,26 @@ export default function QEventsPage() {
           )}
         </div>
 
+        {/* View toggle: List ⇄ Calendar */}
+        <div style={{ display: "inline-flex", background: "#f1f5f9", borderRadius: 10, padding: 4, marginBottom: 16, gap: 4, marginRight: 12 }}>
+          {(["list", "calendar"] as const).map((v) => {
+            const active = viewMode === v;
+            return (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                style={{ padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: active ? "#6366f1" : "transparent", color: active ? "#fff" : "#64748b", transition: "all 0.15s" }}
+              >
+                {v === "list" ? "☰ Список" : "🗓 Календарь"}
+              </button>
+            );
+          })}
+        </div>
+
+        {viewMode === "calendar" ? (
+          <EventCalendar currentUserId={currentUserId} />
+        ) : (
+        <>
         {/* Time tabs (Upcoming / Past) */}
         <div
           style={{
@@ -630,6 +789,8 @@ export default function QEventsPage() {
             />
           ))}
         </div>
+        </>
+        )}
       </ProductPageShell>
     </>
   );

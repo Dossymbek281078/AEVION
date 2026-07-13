@@ -321,6 +321,19 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "qskyway",
+    code: "QSKYWAY",
+    name: "QSkyway — Urban Air-Corridor Navigation",
+    description:
+      "Навигационный слой городского неба для аэротакси: провайдер-независимые 3D-аэрокоридоры поверх реального цифрового двойника города (318 зданий центра Астаны из OpenStreetMap → поле высот 20 м). Движок A* с раскладкой по высотным полосам (нижняя кромка выше застройки + запас; курс задаёт полосу = одностороннее движение в 3D) + рынок 4D-слотов прав QRight (capacity-гейт + SHA-256 receipt). Детерминированное DB-free ядро; честно: доказательство концепции, не сертифицированное авиационное ПО. MVP 2026-07-11 — /api/qskyway.",
+    kind: "product",
+    status: "mvp",
+    priority: 3,
+    tags: ["urban-air-mobility", "evtol", "navigation", "maps", "airspace"],
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ===== OTHER PROJECTS (IDEA STAGE) =====
   {

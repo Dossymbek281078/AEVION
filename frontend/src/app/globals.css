@@ -31,7 +31,7 @@
   --cc-surface3: #f1f2f7;
   --cc-text: #0f172a;
   --cc-text-dim: #5b6474;
-  --cc-text-mute: #8b94a3;
+  --cc-text-mute: #6b7280;
   --cc-text-inv: #ffffff;
   --cc-border: #e4e7ee;
   --cc-border-strong: #cbd0db;
@@ -292,7 +292,7 @@ code {
   /* Ink */
   --cc-text: #0f172a;
   --cc-text-dim: #5b6474;
-  --cc-text-mute: #8b94a3;
+  --cc-text-mute: #6b7280;
   --cc-text-inv: #ffffff;
 
   /* Borders */

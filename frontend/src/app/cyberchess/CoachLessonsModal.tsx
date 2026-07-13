@@ -23,6 +23,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onLoadPosition: (fen: string, hint?: string, meta?: LessonMeta) => void;
+  initialLessonId?: string | null; // если задан — модалка открывается сразу на этом уроке (адаптивная рекомендация)
 };
 
 const RATING_LABEL: Record<Lesson["rating"], { ru: string; col: string; bg: string }> = {
@@ -39,12 +40,19 @@ const CATEGORY_EMOJI: Record<Lesson["category"], string> = {
   strategy: "🧠",
 };
 
-export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Props) {
+export default function CoachLessonsModal({ open, onClose, onLoadPosition, initialLessonId }: Props) {
   const [state, setState] = useState<LessonsState>(() => loadLessons());
   const [activeLesson, setActiveLesson] = useState<string | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
 
   useEffect(() => { saveLessons(state); }, [state]);
+  // Открытие по адаптивной рекомендации: перейти сразу к нужному уроку на его текущем шаге.
+  useEffect(() => {
+    if (open && initialLessonId && LESSONS.some(l => l.id === initialLessonId)) {
+      setActiveLesson(initialLessonId);
+      setStepIdx(state.byId[initialLessonId]?.stepsCompleted || 0);
+    }
+  }, [open, initialLessonId]);
 
   const lesson = useMemo(() => LESSONS.find(l => l.id === activeLesson) || null, [activeLesson]);
   const completed = totalCompleted(state);
@@ -198,20 +206,27 @@ export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Pro
             const done = isLessonComplete(state, l.id);
             const progress = lessonProgress(state, l.id);
             const ratingMeta = RATING_LABEL[l.rating];
+            // Гейтинг по prerequisite: урок заперт, пока не пройден предыдущий.
+            // Поле prerequisite было объявлено для 13 уроков, но раньше нигде не читалось.
+            const prereq = l.prerequisite ? LESSONS.find(p => p.id === l.prerequisite) : null;
+            const locked = !!prereq && !isLessonComplete(state, prereq.id);
             return (
-              <button key={l.id} onClick={() => { setActiveLesson(l.id); setStepIdx(state.byId[l.id]?.stepsCompleted || 0); }}
+              <button key={l.id} disabled={locked}
+                onClick={() => { if (!locked) { setActiveLesson(l.id); setStepIdx(state.byId[l.id]?.stepsCompleted || 0); } }}
+                title={locked ? `Сначала пройди Урок ${prereq!.num}: ${prereq!.title}` : undefined}
                 style={{
                   textAlign: "left", padding: "12px 14px", borderRadius: 10,
                   border: done ? "2px solid #10b981" : `1px solid ${ratingMeta.col}33`,
-                  background: done ? "linear-gradient(135deg,#ecfdf5,#d1fae5)" : ratingMeta.bg,
-                  cursor: "pointer", display: "flex", flexDirection: "column", gap: 5,
-                  position: "relative", transition: "all 0.15s ease",
+                  background: locked ? "#f1f5f9" : done ? "linear-gradient(135deg,#ecfdf5,#d1fae5)" : ratingMeta.bg,
+                  cursor: locked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", gap: 5,
+                  position: "relative", transition: "all 0.15s ease", opacity: locked ? 0.62 : 1,
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"}
+                onMouseEnter={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "none"}>
                 {done && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 12, fontWeight: 900, color: "#10b981" }}>✓</span>}
+                {locked && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 13 }} aria-label="Заблокировано">🔒</span>}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 22 }}>{l.emoji}</span>
+                  <span style={{ fontSize: 22, filter: locked ? "grayscale(1)" : "none" }}>{l.emoji}</span>
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 900, color: ratingMeta.col, letterSpacing: 0.5, textTransform: "uppercase" }}>
                       {CATEGORY_EMOJI[l.category]} Урок {l.num}
@@ -220,12 +235,18 @@ export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Pro
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.45, flex: 1 }}>{l.description}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#64748b", fontWeight: 700 }}>
-                  <span>⏱ {l.estMinutes} мин</span>
-                  <span>·</span>
-                  <span>{l.steps.length} шагов</span>
-                </div>
-                {progress > 0 && progress < 100 && (
+                {locked ? (
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>
+                    🔒 Сначала: Урок {prereq!.num} — {prereq!.title}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#64748b", fontWeight: 700 }}>
+                    <span>⏱ {l.estMinutes} мин</span>
+                    <span>·</span>
+                    <span>{l.steps.length} шагов</span>
+                  </div>
+                )}
+                {progress > 0 && progress < 100 && !locked && (
                   <div style={{ height: 4, background: "#e5e7eb", borderRadius: 2, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${progress}%`, background: ratingMeta.col, transition: "width 0.3s ease" }} />
                   </div>
@@ -237,7 +258,7 @@ export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Pro
 
         {/* Footer */}
         <div style={{ padding: "10px 16px", borderTop: "1px solid #e5e7eb", background: "#f9fafb", fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
-          💡 Уроки с Lichess-style теорией + позициями + упражнениями. Прогресс сохраняется в браузере. Шаги 1-3 (новичок) → 4-6 (тактика) → 7-12 (стратегия) → 13-14 (продвинутые).
+          💡 Уроки открываются последовательно 🔒 — заверши предыдущий, чтобы разблокировать следующий. Теория + позиция + упражнение в каждом; прогресс сохраняется в браузере. Новичок (1-3) → тактика (4-6) → стратегия (7-12) → продвинутые (13-14).
         </div>
       </div>
     </div>

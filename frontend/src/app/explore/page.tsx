@@ -43,6 +43,9 @@ const REGIONS: Region[] = [
     name: "Health & Life",
     code: "LIFE",
     items: [
+      { name: "Longevity", slug: "longevity", desc: "Measure → act → re-measure: a standard lab + functional panel, an evidence-graded 12-week stack, then a delta score.", status: "new" },
+      { name: "QRenew", slug: "qrenew", desc: "Cellular-renewal program: biological age (PhenoAge) and an evidence-tiered intervention stack.", status: "live" },
+      { name: "QMelanin", slug: "qmelanin", desc: "Anti-graying engine: Zn:Cu ratio, deficiency flags and a food protocol against pigment loss.", status: "live" },
       { name: "HealthAI", slug: "healthai", desc: "Symptom triage, wellness log and PHQ-9 / GAD-7 screening. Not medical advice.", status: "live" },
       { name: "QGood", slug: "qgood", desc: "AI support for psychological wellbeing. Wellness, not therapy.", status: "live" },
       { name: "QLife", slug: "qlife", desc: "A personal OS: finance, health and tasks in one interface.", status: "live" },

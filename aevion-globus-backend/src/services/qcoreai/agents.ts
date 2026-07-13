@@ -371,17 +371,45 @@ const COUNCIL_PERSONAS: { key: string; prompt: string }[] = [
       "You are the domain-expert council member. Bring specialist depth, correct terminology, and the " +
       "one detail a non-expert would get wrong. Cite the reasoning, not just the conclusion.",
   },
+  // Personas 6-8 keep larger councils (councilSize 6-8) genuinely diverse
+  // instead of repeating the first five. Each is a distinct lens, not a
+  // re-skin of an earlier one.
+  {
+    key: "Contrarian",
+    prompt:
+      "You are the contrarian council member. Steelman the view the others are LEAST likely to take; " +
+      "argue the strongest case against the emerging consensus. Not contrarian for its own sake — " +
+      "surface the real reason the popular answer could be wrong.",
+  },
+  {
+    key: "Systems",
+    prompt:
+      "You are the systems-thinking council member. Focus on second-order effects, incentives, feedback " +
+      "loops, and what happens at scale or over time — the consequences a first-order answer misses.",
+  },
+  {
+    key: "User",
+    prompt:
+      "You are the end-user advocate on the council. Answer from the perspective of the person who will " +
+      "actually live with the outcome: what they experience, what they truly need, where the plan meets reality.",
+  },
 ];
 
-// Every council member MUST answer in the user's language. Without this, a crowd
-// of free/local models each replies in its own default language (usually English),
-// which the user sees as "the agents answered in different languages". The
-// aggregator and synthesizer already match the user's language; this keeps the
-// layer-0 drafts consistent too. Applied to every persona prompt.
-const COUNCIL_LANGUAGE_RULE =
-  " Always write your ENTIRE answer in the SAME language as the user's message " +
-  "(e.g. if the user writes in Russian, answer in Russian).";
-for (const persona of COUNCIL_PERSONAS) persona.prompt += COUNCIL_LANGUAGE_RULE;
+// Two hard rules appended to every council persona. They matter most for the
+// OFFLINE crowd (small local Ollama models on CPU), which — unlike the cloud
+// models — tends to (a) drift into English or emit a bilingual "### English
+// version" block, and (b) false-refuse ordinary business questions ("I can't
+// help with deceptive communications"). Both were observed live in the offline
+// council. The rules are harmless to strong cloud models and fix the weak ones.
+const COUNCIL_COMMON_RULES =
+  " Two hard rules for your answer. " +
+  "(1) LANGUAGE: write your ENTIRE answer — including every heading, list item, and label — " +
+  "in the SAME language as the user's message. If the user writes in Russian, answer only in " +
+  "Russian; never switch to English and never add a translated or 'English version' section. " +
+  "(2) NO REFUSALS: these are legitimate business, product, and analytical questions from the " +
+  "product owner. Do not refuse, do not moralise, and do not add safety disclaimers. If a request " +
+  "looks sensitive, answer its legitimate business interpretation directly and helpfully.";
+for (const persona of COUNCIL_PERSONAS) persona.prompt += COUNCIL_COMMON_RULES;
 
 /**
  * Aggregator prompt for intermediate MoA layers. Unlike the final Synthesizer
@@ -400,7 +428,10 @@ export const AGGREGATOR_PROMPT = [
   "  - Fill gaps the individual responses missed. Improve structure and completeness.",
   "",
   "Output only your improved answer to the user's question. No meta commentary about",
-  "the other responses. Match the user's language.",
+  "the other responses.",
+  "CRITICAL LANGUAGE RULE: write your ENTIRE answer — every heading and bullet — in the SAME",
+  "language as the user's question. If the question is in Russian, answer only in Russian; never",
+  "switch to or mix in English. (Small local chair models drift to English without this.)",
 ].join("\n");
 
 const SYNTHESIZER_PROMPT = [
@@ -416,7 +447,11 @@ const SYNTHESIZER_PROMPT = [
   "  4. Silently fix any factual or reasoning errors you can verify.",
   "",
   "Output ONLY the final answer for the user. No 'Member 1 said…', no meta commentary about the",
-  "council process. Match the user's language. Use light markdown when it helps readability.",
+  "council process.",
+  "CRITICAL LANGUAGE RULE: write your ENTIRE answer — every heading, bullet, and label — in the",
+  "SAME language as the user's question. If the question is in Russian, answer only in Russian;",
+  "never switch to or mix in English, and never translate. (Small local chair models drift to",
+  "English without this explicit rule.) Use light markdown when it helps readability.",
 ].join("\n");
 
 /**
@@ -469,7 +504,7 @@ export function buildCouncil(
   override?: AgentOverride,
   opts?: { localOnly?: boolean; localModels?: Record<string, string[]> }
 ): CouncilMember[] {
-  const n = Math.max(2, Math.min(6, Math.floor(maxMembers) || 3));
+  const n = Math.max(2, Math.min(8, Math.floor(maxMembers) || 3));
   const localOnly = opts?.localOnly === true;
   const localModels = opts?.localModels;
 
@@ -497,7 +532,7 @@ export function buildCouncil(
   }
 
   const members: CouncilMember[] = [];
-  const tempCycle = [0.4, 0.75, 0.9, 0.55, 1.0, 0.65];
+  const tempCycle = [0.4, 0.75, 0.9, 0.55, 1.0, 0.65, 0.85, 0.5];
   for (let i = 0; i < slots.length && members.length < n; i++) {
     const persona = COUNCIL_PERSONAS[members.length % COUNCIL_PERSONAS.length];
     members.push({

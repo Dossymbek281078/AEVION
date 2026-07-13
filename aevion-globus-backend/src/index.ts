@@ -12,6 +12,7 @@ import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
+import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
@@ -97,12 +98,15 @@ import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
 import { qmelaninRouter } from "./routes/qmelanin";
 import { qrenewRouter } from "./routes/qrenew";
+import { longevityRouter } from "./routes/longevity";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
+import { venturesRouter } from "./routes/ventures";
 import { qventureRouter } from "./routes/qventure";
+import { qskywayRouter } from "./routes/qskyway";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
@@ -471,6 +475,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/revenue/gumroad/recent": { get: { summary: "Recent Gumroad sales grouped by AEVION app" } },
       "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
       "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
+      "/api/revenue/snapshot": { post: { summary: "Freeze current combined live totals into a RevenueSnapshot (history/trend). Optional x-revenue-token guard." } },
+      "/api/revenue/snapshots": { get: { summary: "Revenue snapshot time-series, newest first (?limit=&sinceDays=)" } },
+      "/api/revenue/trend": { get: { summary: "Revenue trend — latest vs oldest in window + % growth + sparkline series (?windowDays=)" } },
       "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
       // QLearn — courses + quizzes + progress
       "/api/qlearn/health": { get: { summary: "QLearn health probe", security: [] } },
@@ -924,6 +931,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/veilnetx", "veilnetx"],
   ["/api/veilnetx-ledger", "veilnetx"],
   ["/api/healthai", "healthai"],
+  ["/api/longevity", "qrenew"],
   ["/api/qai", "qai"],
   ["/api/qlearn", "qlearn"],
   ["/api/qnews", "qnews"],
@@ -936,6 +944,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/kids-ai", "kids-ai-content"],
   ["/api/voice-of-earth", "voice-of-earth"],
   ["/api/startupx", "startup-exchange"],
+  ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
@@ -1009,6 +1018,7 @@ app.use("/api/paypal", paypalWebhookRouter);
 // ==========================
 app.use("/api/auth", authRouter);
 app.use("/api/auth/oauth", authOauthRouter);
+app.use("/api/tiktok", tiktokRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate
@@ -1100,14 +1110,19 @@ app.use("/api/qlearn", qlearnRouter);
 app.use("/api/qmelanin", qmelaninRouter);
 // QRenew — cellular-renewal program (biological age + tiered stack)
 app.use("/api/qrenew", qrenewRouter);
+// Longevity — measure→act→re-measure protocol engine (panel + graded stack + progress)
+app.use("/api/longevity", longevityRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
 // MapReality — civic signals map (MVP: signals + supports)
 app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
+app.use("/api/ventures", venturesRouter);
 // QVenture — AI investment analyst: quant score + 4-role council + entry strategy
 app.use("/api/qventure", qventureRouter);
+// QSkyway — 3D-аэрокоридоры для аэротакси (движок A* по полю высот + рынок слотов QRight)
+app.use("/api/qskyway", qskywayRouter);
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
 // Voice of Earth — multilang music tracks + voting

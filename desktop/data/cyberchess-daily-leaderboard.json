@@ -1,0 +1,802 @@
+[
+  {
+    "name": "Magnus",
+    "country": "🇷🇺",
+    "streak": 365,
+    "score": 36700,
+    "userId": "seed_000",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Hikaru",
+    "country": "🇺🇸",
+    "streak": 362,
+    "score": 36399,
+    "userId": "seed_001",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Fabiano",
+    "country": "🇩🇪",
+    "streak": 359,
+    "score": 36098,
+    "userId": "seed_002",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ding",
+    "country": "🇫🇷",
+    "streak": 356,
+    "score": 35797,
+    "userId": "seed_003",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Anish",
+    "country": "🇪🇸",
+    "streak": 353,
+    "score": 35496,
+    "userId": "seed_004",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ian",
+    "country": "🇮🇹",
+    "streak": 350,
+    "score": 35195,
+    "userId": "seed_005",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Levon",
+    "country": "🇰🇿",
+    "streak": 347,
+    "score": 34894,
+    "userId": "seed_006",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Wesley",
+    "country": "🇺🇦",
+    "streak": 344,
+    "score": 34593,
+    "userId": "seed_007",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Maxime",
+    "country": "🇵🇱",
+    "streak": 341,
+    "score": 34292,
+    "userId": "seed_008",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Alireza",
+    "country": "🇧🇷",
+    "streak": 338,
+    "score": 33991,
+    "userId": "seed_009",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Praggnanandhaa",
+    "country": "🇨🇳",
+    "streak": 335,
+    "score": 33690,
+    "userId": "seed_010",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Gukesh",
+    "country": "🇯🇵",
+    "streak": 332,
+    "score": 33389,
+    "userId": "seed_011",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Erigaisi",
+    "country": "🇮🇳",
+    "streak": 329,
+    "score": 33088,
+    "userId": "seed_012",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Nakamura",
+    "country": "🇬🇧",
+    "streak": 326,
+    "score": 32787,
+    "userId": "seed_013",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Carlsen",
+    "country": "🇰🇷",
+    "streak": 323,
+    "score": 32486,
+    "userId": "seed_014",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Caruana",
+    "country": "🇳🇱",
+    "streak": 320,
+    "score": 32185,
+    "userId": "seed_015",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Liren",
+    "country": "🇸🇪",
+    "streak": 317,
+    "score": 31884,
+    "userId": "seed_016",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Giri",
+    "country": "🇳🇴",
+    "streak": 314,
+    "score": 31583,
+    "userId": "seed_017",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Vachier",
+    "country": "🇫🇮",
+    "streak": 311,
+    "score": 31282,
+    "userId": "seed_018",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Firouzja",
+    "country": "🇦🇷",
+    "streak": 308,
+    "score": 30981,
+    "userId": "seed_019",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Karjakin",
+    "country": "🇷🇺",
+    "streak": 305,
+    "score": 30680,
+    "userId": "seed_020",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Aronian",
+    "country": "🇺🇸",
+    "streak": 302,
+    "score": 30379,
+    "userId": "seed_021",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "So",
+    "country": "🇩🇪",
+    "streak": 299,
+    "score": 30078,
+    "userId": "seed_022",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "MVL",
+    "country": "🇫🇷",
+    "streak": 296,
+    "score": 29777,
+    "userId": "seed_023",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Pragg",
+    "country": "🇪🇸",
+    "streak": 293,
+    "score": 29476,
+    "userId": "seed_024",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Dommaraju",
+    "country": "🇮🇹",
+    "streak": 290,
+    "score": 29175,
+    "userId": "seed_025",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Niemann",
+    "country": "🇰🇿",
+    "streak": 287,
+    "score": 28874,
+    "userId": "seed_026",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Abdusattorov",
+    "country": "🇺🇦",
+    "streak": 284,
+    "score": 28573,
+    "userId": "seed_027",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Esipenko",
+    "country": "🇵🇱",
+    "streak": 281,
+    "score": 28272,
+    "userId": "seed_028",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Sarana",
+    "country": "🇧🇷",
+    "streak": 278,
+    "score": 27971,
+    "userId": "seed_029",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Magnus_1",
+    "country": "🇨🇳",
+    "streak": 275,
+    "score": 27670,
+    "userId": "seed_030",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Hikaru_1",
+    "country": "🇯🇵",
+    "streak": 272,
+    "score": 27369,
+    "userId": "seed_031",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Fabiano_1",
+    "country": "🇮🇳",
+    "streak": 269,
+    "score": 27068,
+    "userId": "seed_032",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ding_1",
+    "country": "🇬🇧",
+    "streak": 266,
+    "score": 26767,
+    "userId": "seed_033",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Anish_1",
+    "country": "🇰🇷",
+    "streak": 263,
+    "score": 26466,
+    "userId": "seed_034",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ian_1",
+    "country": "🇳🇱",
+    "streak": 260,
+    "score": 26165,
+    "userId": "seed_035",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Levon_1",
+    "country": "🇸🇪",
+    "streak": 257,
+    "score": 25864,
+    "userId": "seed_036",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Wesley_1",
+    "country": "🇳🇴",
+    "streak": 254,
+    "score": 25563,
+    "userId": "seed_037",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Maxime_1",
+    "country": "🇫🇮",
+    "streak": 251,
+    "score": 25262,
+    "userId": "seed_038",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Alireza_1",
+    "country": "🇦🇷",
+    "streak": 248,
+    "score": 24961,
+    "userId": "seed_039",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Praggnanandhaa_1",
+    "country": "🇷🇺",
+    "streak": 245,
+    "score": 24660,
+    "userId": "seed_040",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Gukesh_1",
+    "country": "🇺🇸",
+    "streak": 242,
+    "score": 24359,
+    "userId": "seed_041",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Erigaisi_1",
+    "country": "🇩🇪",
+    "streak": 239,
+    "score": 24058,
+    "userId": "seed_042",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Nakamura_1",
+    "country": "🇫🇷",
+    "streak": 236,
+    "score": 23757,
+    "userId": "seed_043",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Carlsen_1",
+    "country": "🇪🇸",
+    "streak": 233,
+    "score": 23456,
+    "userId": "seed_044",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Caruana_1",
+    "country": "🇮🇹",
+    "streak": 230,
+    "score": 23155,
+    "userId": "seed_045",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Liren_1",
+    "country": "🇰🇿",
+    "streak": 227,
+    "score": 22854,
+    "userId": "seed_046",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Giri_1",
+    "country": "🇺🇦",
+    "streak": 224,
+    "score": 22553,
+    "userId": "seed_047",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Vachier_1",
+    "country": "🇵🇱",
+    "streak": 221,
+    "score": 22252,
+    "userId": "seed_048",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Firouzja_1",
+    "country": "🇧🇷",
+    "streak": 218,
+    "score": 21951,
+    "userId": "seed_049",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Karjakin_1",
+    "country": "🇨🇳",
+    "streak": 215,
+    "score": 21650,
+    "userId": "seed_050",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Aronian_1",
+    "country": "🇯🇵",
+    "streak": 212,
+    "score": 21349,
+    "userId": "seed_051",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "So_1",
+    "country": "🇮🇳",
+    "streak": 209,
+    "score": 21048,
+    "userId": "seed_052",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "MVL_1",
+    "country": "🇬🇧",
+    "streak": 206,
+    "score": 20747,
+    "userId": "seed_053",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Pragg_1",
+    "country": "🇰🇷",
+    "streak": 203,
+    "score": 20446,
+    "userId": "seed_054",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Dommaraju_1",
+    "country": "🇳🇱",
+    "streak": 200,
+    "score": 20145,
+    "userId": "seed_055",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Niemann_1",
+    "country": "🇸🇪",
+    "streak": 197,
+    "score": 19844,
+    "userId": "seed_056",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Abdusattorov_1",
+    "country": "🇳🇴",
+    "streak": 194,
+    "score": 19543,
+    "userId": "seed_057",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Esipenko_1",
+    "country": "🇫🇮",
+    "streak": 191,
+    "score": 19242,
+    "userId": "seed_058",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Sarana_1",
+    "country": "🇦🇷",
+    "streak": 188,
+    "score": 18941,
+    "userId": "seed_059",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Magnus_2",
+    "country": "🇷🇺",
+    "streak": 185,
+    "score": 18640,
+    "userId": "seed_060",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Hikaru_2",
+    "country": "🇺🇸",
+    "streak": 182,
+    "score": 18339,
+    "userId": "seed_061",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Fabiano_2",
+    "country": "🇩🇪",
+    "streak": 179,
+    "score": 18038,
+    "userId": "seed_062",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ding_2",
+    "country": "🇫🇷",
+    "streak": 176,
+    "score": 17737,
+    "userId": "seed_063",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Anish_2",
+    "country": "🇪🇸",
+    "streak": 173,
+    "score": 17436,
+    "userId": "seed_064",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ian_2",
+    "country": "🇮🇹",
+    "streak": 170,
+    "score": 17135,
+    "userId": "seed_065",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Levon_2",
+    "country": "🇰🇿",
+    "streak": 167,
+    "score": 16834,
+    "userId": "seed_066",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Wesley_2",
+    "country": "🇺🇦",
+    "streak": 164,
+    "score": 16533,
+    "userId": "seed_067",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Maxime_2",
+    "country": "🇵🇱",
+    "streak": 161,
+    "score": 16232,
+    "userId": "seed_068",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Alireza_2",
+    "country": "🇧🇷",
+    "streak": 158,
+    "score": 15931,
+    "userId": "seed_069",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Praggnanandhaa_2",
+    "country": "🇨🇳",
+    "streak": 155,
+    "score": 15630,
+    "userId": "seed_070",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Gukesh_2",
+    "country": "🇯🇵",
+    "streak": 152,
+    "score": 15329,
+    "userId": "seed_071",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Erigaisi_2",
+    "country": "🇮🇳",
+    "streak": 149,
+    "score": 15028,
+    "userId": "seed_072",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Nakamura_2",
+    "country": "🇬🇧",
+    "streak": 146,
+    "score": 14727,
+    "userId": "seed_073",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Carlsen_2",
+    "country": "🇰🇷",
+    "streak": 143,
+    "score": 14426,
+    "userId": "seed_074",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Caruana_2",
+    "country": "🇳🇱",
+    "streak": 140,
+    "score": 14125,
+    "userId": "seed_075",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Liren_2",
+    "country": "🇸🇪",
+    "streak": 137,
+    "score": 13824,
+    "userId": "seed_076",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Giri_2",
+    "country": "🇳🇴",
+    "streak": 134,
+    "score": 13523,
+    "userId": "seed_077",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Vachier_2",
+    "country": "🇫🇮",
+    "streak": 131,
+    "score": 13222,
+    "userId": "seed_078",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Firouzja_2",
+    "country": "🇦🇷",
+    "streak": 128,
+    "score": 12921,
+    "userId": "seed_079",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Karjakin_2",
+    "country": "🇷🇺",
+    "streak": 125,
+    "score": 12620,
+    "userId": "seed_080",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Aronian_2",
+    "country": "🇺🇸",
+    "streak": 122,
+    "score": 12319,
+    "userId": "seed_081",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "So_2",
+    "country": "🇩🇪",
+    "streak": 119,
+    "score": 12018,
+    "userId": "seed_082",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "MVL_2",
+    "country": "🇫🇷",
+    "streak": 116,
+    "score": 11717,
+    "userId": "seed_083",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Pragg_2",
+    "country": "🇪🇸",
+    "streak": 113,
+    "score": 11416,
+    "userId": "seed_084",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Dommaraju_2",
+    "country": "🇮🇹",
+    "streak": 110,
+    "score": 11115,
+    "userId": "seed_085",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Niemann_2",
+    "country": "🇰🇿",
+    "streak": 107,
+    "score": 10814,
+    "userId": "seed_086",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Abdusattorov_2",
+    "country": "🇺🇦",
+    "streak": 104,
+    "score": 10513,
+    "userId": "seed_087",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Esipenko_2",
+    "country": "🇵🇱",
+    "streak": 101,
+    "score": 10212,
+    "userId": "seed_088",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Sarana_2",
+    "country": "🇧🇷",
+    "streak": 98,
+    "score": 9911,
+    "userId": "seed_089",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Magnus_3",
+    "country": "🇨🇳",
+    "streak": 95,
+    "score": 9610,
+    "userId": "seed_090",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Hikaru_3",
+    "country": "🇯🇵",
+    "streak": 92,
+    "score": 9309,
+    "userId": "seed_091",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Fabiano_3",
+    "country": "🇮🇳",
+    "streak": 89,
+    "score": 9008,
+    "userId": "seed_092",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ding_3",
+    "country": "🇬🇧",
+    "streak": 86,
+    "score": 8707,
+    "userId": "seed_093",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Anish_3",
+    "country": "🇰🇷",
+    "streak": 83,
+    "score": 8406,
+    "userId": "seed_094",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Ian_3",
+    "country": "🇳🇱",
+    "streak": 80,
+    "score": 8105,
+    "userId": "seed_095",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Levon_3",
+    "country": "🇸🇪",
+    "streak": 77,
+    "score": 7804,
+    "userId": "seed_096",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Wesley_3",
+    "country": "🇳🇴",
+    "streak": 74,
+    "score": 7503,
+    "userId": "seed_097",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Maxime_3",
+    "country": "🇫🇮",
+    "streak": 71,
+    "score": 7202,
+    "userId": "seed_098",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  },
+  {
+    "name": "Alireza_3",
+    "country": "🇦🇷",
+    "streak": 68,
+    "score": 6901,
+    "userId": "seed_099",
+    "updatedAt": "2026-07-10T07:15:30.310Z"
+  }
+]

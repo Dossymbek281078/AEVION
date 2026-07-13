@@ -300,6 +300,17 @@ qcontractRouter.post("/documents", async (req, res) => {
   if (!title?.trim()) return res.status(400).json({ error: "title_required" });
   if (!content?.trim()) return res.status(400).json({ error: "content_required" });
 
+  if (contentType === "url") {
+    try {
+      const u = new URL(content.trim());
+      if (u.protocol !== "http:" && u.protocol !== "https:") {
+        return res.status(400).json({ error: "url_scheme_not_allowed" });
+      }
+    } catch {
+      return res.status(400).json({ error: "invalid_url" });
+    }
+  }
+
   const id = randomUUID();
   const accessToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
   const passwordHash = password ? hashPassword(password) : null;

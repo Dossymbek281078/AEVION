@@ -13,7 +13,7 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 type AgentRole = "analyst" | "writer" | "critic";
 type ConfigRoleId = "analyst" | "writer" | "writerB" | "critic";
 type Stage = "draft" | "revision" | "judge";
-type Strategy = "sequential" | "parallel" | "debate" | "council";
+type Strategy = "sequential" | "parallel" | "debate" | "council" | "auto";
 
 type ProviderInfo = {
   id: string;
@@ -94,6 +94,8 @@ type RunState = {
   totalDurationMs?: number;
   totalCostUsd?: number;
   strategy?: Strategy;
+  /** auto mode: the router's decision for this run (shown as a chip). */
+  routeNote?: { classification: "open" | "fact"; resolved: "council" | "single"; note: string };
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
@@ -121,6 +123,11 @@ type AgentPreset = {
 };
 
 const PRESETS_KEY = "qcore_presets_v1";
+
+/** Typical Council cost per answer from the N=40 benchmark (2026-07-12). Used to
+    show the user roughly how much the auto-router saved by sending a factual
+    query to a single flagship call instead of the full Council. */
+const EST_COUNCIL_COST_USD = 0.077;
 
 type SSEPayload =
   | { type: "session"; sessionId: string; runId: string }
@@ -152,6 +159,13 @@ type SSEPayload =
   | { type: "guidance_applied"; stage: Stage; role: AgentRole; text: string; instance?: string }
   | { type: "qright_attached"; items: { id: string; title: string | null; kind: string | null }[] }
   | { type: "budget_exceeded"; spentUsd: number; budgetUsd: number }
+  | {
+      type: "route";
+      classification: "open" | "fact";
+      resolved: "council" | "single";
+      classifier: { provider: string; model: string };
+      note: string;
+    }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
 
@@ -250,7 +264,7 @@ function roleSlotStyle(id: ConfigRoleId, strategy: Strategy): RoleVisual {
 
 const prettyModel = (m: string) => {
   const map: Record<string, string> = {
-    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-sonnet-4-6": "Claude Sonnet 4",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
@@ -345,7 +359,10 @@ export default function QCoreMultiAgentPage() {
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
-  const [strategy, setStrategy] = useState<Strategy>("sequential");
+  // Default to "auto": the router sends open-ended prompts to the Council and
+  // plain factual lookups to a single flagship call, so users don't overpay for
+  // trivia. They can still pin a specific strategy via the pills.
+  const [strategy, setStrategy] = useState<Strategy>("auto");
   // council mode: how many crowd members to convene (2–6).
   const [councilSize, setCouncilSize] = useState<number>(3);
   // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
@@ -543,6 +560,7 @@ export default function QCoreMultiAgentPage() {
       if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
       if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
       if (e.key === "4") { e.preventDefault(); setStrategy("council"); return; }
+      if (e.key === "5") { e.preventDefault(); setStrategy("auto"); return; }
       // ? — show shortcuts modal
       if (e.key === "?") { e.preventDefault(); setShortcutModalOpen(true); return; }
     };
@@ -1348,7 +1366,9 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
-      if (useStrategy === "council") {
+      if (useStrategy === "council" || useStrategy === "auto") {
+        // auto may route to the council — carry the crowd size / depth / offline
+        // so the council leg honours them; harmless on the single-call leg.
         body.councilSize = councilSize;
         body.councilLayers = councilLayers;
         if (councilOffline) body.offline = true;
@@ -1395,6 +1415,28 @@ export default function QCoreMultiAgentPage() {
             if (!activeSessionId) setActiveSessionId(realSessionId);
             // Clear thread continuation after the run is confirmed started.
             setContinueFromRunId(null);
+            break;
+          case "route":
+            // auto mode: record the router's decision so the UI can show WHY
+            // this query went to the council vs a single flagship call.
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? { ...r, routeNote: { classification: payload.classification, resolved: payload.resolved, note: payload.note } }
+                  : r
+              )
+            );
+            break;
+          case "plan":
+            // When "auto" resolves, adopt the concrete executed strategy so the
+            // turn timeline styles correctly (council personas vs a single call).
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId && r.strategy === "auto"
+                  ? { ...r, strategy: payload.strategy }
+                  : r
+              )
+            );
             break;
           case "agent_start":
             setRuns((prev) =>
@@ -1905,7 +1947,34 @@ export default function QCoreMultiAgentPage() {
                   Analyst + Writer + Critic — inspectable AI pipeline with live streaming, cost tracking, and three strategies.
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {/* Session savings from auto-routing: sum of what each fact→single
+                    run saved vs a forced Council (EST_COUNCIL_COST_USD − run cost). */}
+                {(() => {
+                  const sav = runs.reduce(
+                    (a, r) => {
+                      if (r.routeNote?.resolved === "single" && typeof r.totalCostUsd === "number") {
+                        const s = EST_COUNCIL_COST_USD - r.totalCostUsd;
+                        if (s > 0.005) { a.total += s; a.count += 1; }
+                      }
+                      return a;
+                    },
+                    { total: 0, count: 0 }
+                  );
+                  return sav.count > 0 ? (
+                    <div
+                      title={`Auto-routing sent ${sav.count} factual quer${sav.count === 1 ? "y" : "ies"} to a single flagship call instead of the full Council this session, saving ~$${sav.total.toFixed(2)} (vs the $${EST_COUNCIL_COST_USD.toFixed(3)}/answer N=40 Council baseline).`}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        padding: "8px 12px", borderRadius: 10,
+                        background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.45)",
+                        color: "#6ee7b7", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap",
+                      }}
+                    >
+                      ⚡ auto saved ~${sav.total.toFixed(2)} · {sav.count}
+                    </div>
+                  ) : null;
+                })()}
                 <Link
                   href="/qcoreai/analytics"
                   style={{
@@ -1953,7 +2022,7 @@ export default function QCoreMultiAgentPage() {
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                {(["sequential", "parallel", "debate", "council"] as Strategy[]).map((s) => (
+                {(["sequential", "parallel", "debate", "council", "auto"] as Strategy[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => setStrategy(s)}
@@ -1962,20 +2031,20 @@ export default function QCoreMultiAgentPage() {
                       padding: "6px 12px",
                       borderRadius: 8,
                       border: "none",
-                      background: strategy === s ? (s === "council" ? "#a855f7" : "#fff") : "transparent",
-                      color: strategy === s ? (s === "council" ? "#fff" : "#0f172a") : "rgba(255,255,255,0.85)",
+                      background: strategy === s ? (s === "council" ? "#a855f7" : s === "auto" ? "#10b981" : "#fff") : "transparent",
+                      color: strategy === s ? (s === "council" || s === "auto" ? "#fff" : "#0f172a") : "rgba(255,255,255,0.85)",
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: "pointer",
                       transition: "background 0.15s",
                     }}
                   >
-                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : s === "debate" ? "Debate" : "Council ✦"}
+                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : s === "debate" ? "Debate" : s === "council" ? "Council ✦" : "Auto ⚡"}
                   </button>
                 ))}
               </div>
 
-              {strategy === "council" && (
+              {(strategy === "council" || strategy === "auto") && (
                 <div
                   title="How many crowd members to convene. Free models do the breadth; a premium chair (Opus 4.8) synthesizes."
                   style={{
@@ -1992,13 +2061,13 @@ export default function QCoreMultiAgentPage() {
                   >−</button>
                   <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
                   <button
-                    onClick={() => setCouncilSize((n) => Math.min(6, n + 1))}
+                    onClick={() => setCouncilSize((n) => Math.min(8, n + 1))}
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>
               )}
 
-              {strategy === "council" && (
+              {(strategy === "council" || strategy === "auto") && (
                 <div
                   title="Mixture-of-Agents depth. 1 = fast (proposers → premium synthesis). 2-3 = deeper: free models refine each other's answers layer by layer before the final synthesis. Higher quality, ~Nx slower."
                   style={{
@@ -2021,7 +2090,7 @@ export default function QCoreMultiAgentPage() {
                 </div>
               )}
 
-              {strategy === "council" && (
+              {(strategy === "council" || strategy === "auto") && (
                 <button
                   onClick={() => setCouncilOffline((v) => !v)}
                   title="Offline: run the whole council (crowd + chair) on local runtimes only — Ollama / LM Studio / Jan / LocalAI / llama.cpp. Works with the internet off. Requires a local runtime configured on the backend."
@@ -4906,6 +4975,44 @@ function RunCard({
           {run.userInput}
         </div>
       </div>
+
+      {/* Auto-router decision — shows WHY this query went to the council vs a
+          single flagship call (only present in "auto" mode). */}
+      {run.routeNote && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <div
+            title={run.routeNote.note}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              maxWidth: "85%", padding: "6px 11px", borderRadius: 10,
+              background: run.routeNote.resolved === "council" ? "rgba(168,85,247,0.12)" : "rgba(16,185,129,0.12)",
+              border: `1px solid ${run.routeNote.resolved === "council" ? "rgba(168,85,247,0.4)" : "rgba(16,185,129,0.4)"}`,
+              color: run.routeNote.resolved === "council" ? "#e9d5ff" : "#a7f3d0",
+              fontSize: 12, fontWeight: 700,
+            }}
+          >
+            <span>⚡ Auto</span>
+            <span style={{ opacity: 0.75, fontWeight: 500 }}>
+              {run.routeNote.classification === "fact" ? "factual lookup" : "open-ended"} →{" "}
+              {run.routeNote.resolved === "council" ? "Council ✦" : "single flagship call"}
+            </span>
+            {run.routeNote.resolved === "single" &&
+              typeof run.totalCostUsd === "number" &&
+              EST_COUNCIL_COST_USD - run.totalCostUsd > 0.005 && (
+                <span
+                  title={`This run cost $${run.totalCostUsd.toFixed(4)}. A forced Council averages ~$${EST_COUNCIL_COST_USD.toFixed(3)}/answer (N=40 benchmark).`}
+                  style={{
+                    padding: "1px 7px", borderRadius: 999,
+                    background: "rgba(16,185,129,0.22)", border: "1px solid rgba(16,185,129,0.5)",
+                    color: "#6ee7b7", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                  }}
+                >
+                  saved ~${(EST_COUNCIL_COST_USD - run.totalCostUsd).toFixed(2)} vs Council
+                </span>
+              )}
+          </div>
+        </div>
+      )}
 
       {/* Attached QRight objects — visible reminder of the factual context
           the agents are working from. */}

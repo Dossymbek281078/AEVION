@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, use } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -76,98 +79,38 @@ const LANG_BG_TINTS: Record<string, string> = {
   python: "rgba(16,185,129,0.03)",
 };
 
-// ─── Monaco-lite syntax highlighting editor ────────────────────────────────────
+const MONACO_LANG_MAP: Record<string, string> = {
+  typescript: "typescript", javascript: "javascript", python: "python",
+  html: "html", css: "css", json: "json", markdown: "markdown",
+  yaml: "yaml", bash: "shell", plaintext: "plaintext",
+};
+
 function CodeEditor({ value, onChange, language }: { value: string; onChange: (v: string) => void; language: string }) {
-  const HIGHLIGHTS: Record<string, RegExp> = {
-    typescript: /\b(const|let|var|function|return|import|export|type|interface|async|await|class|extends|implements|new|this|null|undefined|true|false|void|string|number|boolean|any)\b/g,
-    javascript: /\b(const|let|var|function|return|import|export|async|await|class|new|this|null|undefined|true|false)\b/g,
-    css: /([a-z-]+)(?=\s*:)/g,
-    html: /<\/?[a-z][a-z0-9]*\b[^>]*>/gi,
-    python: /\b(def|class|import|from|return|if|elif|else|for|while|with|as|try|except|finally|lambda|yield|pass|break|continue|and|or|not|in|is|None|True|False)\b/g,
-  };
-
-  const highlighted = (text: string): string => {
-    let result = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-
-    // Apply keyword highlighting (purple/bold)
-    const kwRe = HIGHLIGHTS[language];
-    if (kwRe) {
-      result = result.replace(kwRe, (match) =>
-        `<span style="color:#7c3aed;font-weight:600">${match}</span>`
-      );
-    }
-
-    // String literals (green)
-    result = result.replace(
-      /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
-      (m) => `<span style="color:#059669">${m}</span>`
-    );
-
-    // Single-line comments (gray italic)
-    result = result.replace(
-      /(\/\/[^\n]*)/g,
-      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
-    );
-
-    // Python / shell comments
-    result = result.replace(
-      /(#[^\n]*)/g,
-      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
-    );
-
-    return result;
-  };
-
   return (
-    <div style={{ position: "relative", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 13, lineHeight: 1.7, background: "#fafafa", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
-      <pre
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          margin: 0,
-          padding: "16px 20px",
-          pointerEvents: "none",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          color: "#0f172a",
-          background: "transparent",
-          zIndex: 1,
-          overflow: "hidden",
-        }}
-        dangerouslySetInnerHTML={{ __html: highlighted(value) + " " }}
-      />
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          position: "relative",
-          zIndex: 2,
-          width: "100%",
-          minHeight: 400,
-          padding: "16px 20px",
-          background: "rgba(0,0,0,0)",
-          color: "transparent",
-          caretColor: "#0f172a",
-          border: "none",
-          outline: "none",
-          resize: "vertical",
-          fontFamily: "inherit",
-          fontSize: "inherit",
-          lineHeight: "inherit",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          boxSizing: "border-box",
-        }}
-        spellCheck={false}
-      />
-    </div>
+    <MonacoEditor
+      height={520}
+      language={MONACO_LANG_MAP[language] ?? "plaintext"}
+      value={value}
+      onChange={(v) => onChange(v ?? "")}
+      theme="vs"
+      options={{
+        minimap: { enabled: false },
+        fontSize: 13,
+        fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+        lineNumbers: "on",
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        padding: { top: 12, bottom: 12 },
+        wordWrap: "on",
+        overviewRulerLanes: 0,
+        overviewRulerBorder: false,
+        renderLineHighlight: "line",
+        contextmenu: true,
+        folding: true,
+        glyphMargin: false,
+        lineDecorationsWidth: 0,
+      }}
+    />
   );
 }
 
@@ -220,8 +163,8 @@ function FileContextMenu({
   );
 }
 
-export default function DevHubProjectPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+  const { id } = params instanceof Promise ? use(params) : params;
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -288,7 +231,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("tts");
+  const [mediaTab, setMediaTab] = useState<"video" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
+
+  // Video generation state (Replicate)
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoModel, setVideoModel] = useState("minimax/video-01");
+  const [videoDuration, setVideoDuration] = useState("5");
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoStatus, setVideoStatus] = useState<string | null>(null);
+
+  // Domain provision state
+  const [domainStatus, setDomainStatus] = useState<{ customDomain?: string; url?: string } | null>(null);
 
   // DeepL bulk translate state (N files × M langs)
   const BULK_LANG_OPTIONS = [
@@ -457,11 +413,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [settingsDesc, setSettingsDesc] = useState("");
   const [settingsDomain, setSettingsDomain] = useState("");
   const [settingsCollab, setSettingsCollab] = useState("");
+  const [collabRole, setCollabRole] = useState<"editor" | "viewer">("editor");
   const [savingSettings, setSavingSettings] = useState(false);
-
-  // Line number gutter
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const gutterRef = useRef<HTMLDivElement | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -556,13 +509,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
     if (selectedFile) {
       saveCurrentFile(selectedFile.path, editorContent, selectedFile.language);
-    }
-  };
-
-  // Sync gutter scroll with textarea scroll
-  const handleTextareaScroll = () => {
-    if (textareaRef.current && gutterRef.current) {
-      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
     }
   };
 
@@ -811,16 +757,19 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const addCollaborator = async () => {
     if (!project || !settingsCollab.trim()) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), {
+      const resp = await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: settingsCollab.trim(), role: "editor" }),
+        body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), { cache: "no-store" });
-      const data = await r.json();
+      if (resp.status === 403) {
+        showToast("Studio Pro required — upgrade to add collaborators", "error");
+        return;
+      }
+      const data = await resp.json();
       setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
       setSettingsCollab("");
-      showToast("Collaborator added", "success");
+      showToast(`Collaborator added (${collabRole})`, "success");
     } catch {
       showToast("Failed to add collaborator", "error");
     }
@@ -906,6 +855,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── Cloudflare Pages deploy ──────────────────────────────────────────────────
+  const [pagesDeploying, setPagesDeploying] = useState(false);
+  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string } | null>(null);
+
+  const deployToPages = async () => {
+    if (!project) return;
+    setPagesDeploying(true);
+    setPagesResult(null);
+    showToast("Deploying to Cloudflare Pages...", "info");
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Pages deploy failed");
+      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl });
+      showToast(d.domain ? `Live: https://${d.domain}` : `Live: ${d.pagesUrl}`, "success");
+      setTimeout(async () => {
+        const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+        const pd = await pr.json();
+        setProject(pd.project);
+        fetchDeployments();
+      }, 5000);
+    } catch (e: any) {
+      showToast(e?.message || "Cloudflare Pages deploy failed", "error");
+    } finally {
+      setPagesDeploying(false);
+    }
+  };
+
   // ── Vercel deploy ────────────────────────────────────────────────────────────
 
   const deployToVercel = async () => {
@@ -919,7 +896,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
         throw new Error(d.error || "Vercel deploy failed");
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
-      // Refresh project after 6s
       setTimeout(async () => {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const pd = await pr.json();
@@ -1115,13 +1091,13 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setDomainSetupLoading(true);
     setDomainSetupMsg(null);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/auto-setup`), { method: "POST" });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        const fallback = d?.manualInstruction ? `${d.error}. ${d.manualInstruction}` : (d.error || "Setup failed");
-        setDomainSetupMsg({ ok: false, text: fallback });
+        setDomainSetupMsg({ ok: false, text: d.error || "Setup failed" });
       } else {
-        setDomainSetupMsg({ ok: true, text: `DNS ${d.action}: ${d.domain} → ${d.cname}` });
+        setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
+        setProject((p) => p ? { ...p, customDomain: d.domain } : p);
       }
     } catch (e: any) {
       setDomainSetupMsg({ ok: false, text: e?.message || "Setup failed" });
@@ -2143,8 +2119,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     {selectedFile.language}
                   </span>
                 </div>
-                {/* Monaco-lite editor with syntax highlighting */}
-                <div style={{ flex: 1, overflow: "auto", padding: "0 4px 4px" }}>
+                {/* Monaco Editor (VS Code engine) */}
+                <div style={{ flex: 1, overflow: "hidden" }}>
                   <CodeEditor
                     value={editorContent}
                     onChange={(v) => handleEditorChange(v)}
@@ -2289,23 +2265,108 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
               {/* Deployments Tab */}
               {activeTab === "deployments" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {deployments.length === 0 ? (
-                    <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 20 }}>No deployments yet</div>
-                  ) : deployments.map((d) => {
-                    const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
-                    return (
-                      <div key={d.id} style={{ padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ padding: "2px 8px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 12, fontWeight: 600 }}>{d.status}</span>
-                          <span style={{ fontSize: 12, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
-                        </div>
-                        {d.deployUrl && (
-                          <a href={d.deployUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 6 }}>{d.deployUrl}</a>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                  {/* Cloudflare Pages — primary deploy */}
+                  <div style={{ padding: "16px", border: "2px solid #f97316", borderRadius: 12, background: "#fff7ed" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 18 }}>☁️</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN · aevion.build domain included</div>
+                      </div>
+                    </div>
+
+                    {/* Live URL display */}
+                    {(pagesResult || project?.customDomain || project?.deployUrl?.includes("pages.dev")) && (
+                      <div style={{ marginBottom: 10, padding: "8px 12px", background: "#d1fae5", borderRadius: 8 }}>
+                        {project?.customDomain && (
+                          <div style={{ marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>🌐 Domain: </span>
+                            <a href={`https://${project.customDomain}`} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: "#065f46", fontWeight: 700, wordBreak: "break-all" }}>
+                              https://{project.customDomain}
+                            </a>
+                          </div>
+                        )}
+                        {(pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) && (
+                          <div>
+                            <span style={{ fontSize: 11, color: "#047857" }}>pages.dev: </span>
+                            <a href={pagesResult?.pagesUrl ?? project?.deployUrl ?? ""} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 11, color: "#047857", wordBreak: "break-all" }}>
+                              {pagesResult?.pagesUrl ?? project?.deployUrl}
+                            </a>
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
+                    )}
+
+                    <button
+                      onClick={deployToPages}
+                      disabled={pagesDeploying}
+                      style={{
+                        width: "100%", padding: "10px", borderRadius: 8, border: "none",
+                        background: pagesDeploying ? "#fed7aa" : "#f97316",
+                        color: "#fff", fontWeight: 800, fontSize: 14,
+                        cursor: pagesDeploying ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Deploy to Cloudflare Pages + get aevion.build domain"}
+                    </button>
+                    <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
+                      Requires <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ACCOUNT_ID</code> + <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_API_TOKEN</code> in Railway.
+                      Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.
+                    </div>
+                  </div>
+
+                  {/* Vercel deploy — secondary */}
+                  <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>▲ Vercel</div>
+                      <span style={{ fontSize: 10, color: "#64748b" }}>Next.js / React</span>
+                    </div>
+                    {project?.deployUrl && !project.deployUrl.includes("pages.dev") && (
+                      <a href={project.deployUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: "#0d9488", display: "block", marginBottom: 6, wordBreak: "break-all" }}>
+                        {project.deployUrl}
+                      </a>
+                    )}
+                    <button
+                      onClick={deployToVercel}
+                      disabled={vercelDeploying}
+                      style={{
+                        padding: "7px 16px", background: vercelDeploying ? "#e2e8f0" : "#0f172a",
+                        color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 12,
+                        cursor: vercelDeploying ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {vercelDeploying ? "Deploying..." : "Deploy to Vercel"}
+                    </button>
+                  </div>
+
+                  {/* Deploy history */}
+                  {deployments.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>
+                      {deployments.map((d) => {
+                        const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
+                        return (
+                          <div key={d.id} style={{ padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 6 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status}</span>
+                              <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
+                            </div>
+                            {d.deployUrl && (
+                              <a href={d.deployUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 11, color: "#0d9488", display: "block", marginTop: 4, wordBreak: "break-all" }}>
+                                {d.deployUrl}
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2405,7 +2466,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                    {(["video", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -2418,7 +2479,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           boxShadow: mediaTab === sub ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                         }}
                       >
-                        {sub === "tts" ? "TTS"
+                        {sub === "video" ? "Video AI"
+                        : sub === "tts" ? "TTS"
                         : sub === "image" ? "DALL-E"
                         : sub === "sfx" ? "SFX"
                         : sub === "music" ? "Music"
@@ -2436,6 +2498,95 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </button>
                     ))}
                   </div>
+
+                  {/* Video AI (Replicate) */}
+                  {mediaTab === "video" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>AI Model</label>
+                        <select
+                          value={videoModel}
+                          onChange={(e) => setVideoModel(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                        >
+                          <option value="minimax/video-01">MiniMax Video-01 (text-to-video)</option>
+                          <option value="tencent/hunyuan-video">Tencent HunyuanVideo (high quality)</option>
+                          <option value="lucataco/animate-diff-v2">AnimateDiff v2 (fast)</option>
+                          <option value="stability-ai/stable-video-diffusion">Stable Video Diffusion</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <textarea
+                          value={videoPrompt}
+                          onChange={(e) => setVideoPrompt(e.target.value)}
+                          placeholder="A futuristic city skyline at sunset, cinematic, 4K..."
+                          rows={3}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Duration (sec)</label>
+                          <select value={videoDuration} onChange={(e) => setVideoDuration(e.target.value)} style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
+                            <option value="3">3s</option>
+                            <option value="5">5s</option>
+                            <option value="8">8s</option>
+                            <option value="10">10s</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
+                            try {
+                              const r = await fetch(apiUrl("/api/devhub/media/video"), {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
+                              });
+                              const d = await r.json();
+                              if (!d.ok) { setVideoError(d.error || "Video generation failed"); setVideoLoading(false); return; }
+                              setVideoPredictionId(d.predictionId);
+                              setVideoStatus("generating...");
+                              // Poll for completion
+                              const pollFn = async (id: string, attempts = 0) => {
+                                if (attempts > 120) { setVideoError("Timeout after 2 min"); setVideoLoading(false); return; }
+                                const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
+                                const sd = await sr.json();
+                                setVideoStatus(sd.status);
+                                if (sd.status === "succeeded" && sd.videoUrl) {
+                                  setVideoUrl(sd.videoUrl); setVideoLoading(false);
+                                } else if (sd.status === "failed") {
+                                  setVideoError(sd.error || "Generation failed"); setVideoLoading(false);
+                                } else {
+                                  setTimeout(() => pollFn(id, attempts + 1), 3000);
+                                }
+                              };
+                              setTimeout(() => pollFn(d.predictionId), 4000);
+                            } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
+                          }}
+                          disabled={videoLoading || !videoPrompt.trim()}
+                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap" }}
+                        >
+                          {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
+                        </button>
+                      </div>
+                      {videoError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>{videoError}</div>}
+                      {videoUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
+                            <button onClick={() => { setEditorContent(videoUrl); if (selectedFile) saveCurrentFile(selectedFile.path, videoUrl, selectedFile.language); showToast("Video URL saved to current file", "success"); }} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save URL to File</button>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 10px", background: "#f8fafc", borderRadius: 6 }}>
+                        Powered by Replicate API. Requires REPLICATE_API_TOKEN in Railway. Generation takes 30–120s.
+                      </div>
+                    </div>
+                  )}
 
                   {/* TTS */}
                   {mediaTab === "tts" && (
@@ -3708,34 +3859,55 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     {savingSettings ? "Saving..." : "Save Settings"}
                   </button>
 
-                  {/* Collaborators */}
+                  {/* Collaborators — Studio Pro */}
                   <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Collaborators</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Collaborators</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>Studio Pro</span>
+                    </div>
+                    {(project.collaborators || []).length === 0 && (
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>No collaborators yet. Add by email or user ID.</div>
+                    )}
                     {(project.collaborators || []).map((c) => (
                       <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
-                        <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: "#0f172a" }}>{c.userId}</span>
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, background: "#f1f5f9", color: "#64748b" }}>{c.role}</span>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#e0f2fe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>
+                          {c.userId.charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ flex: 1, fontSize: 12, fontFamily: "monospace", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.userId}>{c.userId}</span>
+                        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700 }}
-                        >x</button>
+                          title="Remove collaborator"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
+                        >×</button>
                       </div>
                     ))}
-                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                       <input
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="user-id or email"
-                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        placeholder="email or user-id"
+                        style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />
+                      <select
+                        value={collabRole}
+                        onChange={(e) => setCollabRole(e.target.value as "editor" | "viewer")}
+                        style={{ padding: "7px 8px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, background: "#fff", cursor: "pointer", flexShrink: 0 }}
+                      >
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
                       <button
                         onClick={addCollaborator}
-                        style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                        style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}
                       >
-                        Add
+                        Invite
                       </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Editors can write files · Viewers are read-only · Studio Pro required
                     </div>
                   </div>
                 </div>

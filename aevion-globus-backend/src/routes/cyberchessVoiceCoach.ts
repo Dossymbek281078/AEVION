@@ -50,9 +50,16 @@ import { isLiveGame } from './cyberchessSpectator';
 const router = Router();
 
 // ─── QCoreAI base URL ────────────────────────────────────────────────────
-// Same-origin default. Override via env when running this service standalone.
+// The backend calls its OWN /api/qcoreai route in-process. Node's fetch cannot
+// resolve a relative URL ('/api/qcoreai'), so a relative default silently made
+// EVERY LLM call throw → the coach was always stuck on rule-based fallback.
+// Default to an absolute loopback URL (same pattern as /broadcast → spectator);
+// override via QCOREAI_BASE when this service runs standalone.
 function qcoreaiBase(): string {
-  return (process.env.QCOREAI_BASE ?? '/api/qcoreai').replace(/\/+$/, '');
+  const explicit = process.env.QCOREAI_BASE;
+  if (explicit && explicit.trim()) return explicit.replace(/\/+$/, '');
+  const port = process.env.PORT ?? '4001';
+  return `http://127.0.0.1:${port}/api/qcoreai`;
 }
 
 // ─── In-memory TTS cache ─────────────────────────────────────────────────
@@ -238,7 +245,7 @@ router.post('/comment', async (req: Request, res: Response) => {
         qcoreaiBase: qcoreaiBase(),
         model: body.model,
         temperature: body.temperature,
-        timeoutMs: 4000,
+        timeoutMs: 6500, // opus-4-8 isn't instant; give the GM разбор room before fallback
       });
       if (llmText && llmText !== fallback) {
         text = llmText;
@@ -311,7 +318,11 @@ router.post('/ask', async (req: Request, res: Response) => {
           qcoreaiBase: qcoreaiBase(),
           model: body.model,
           temperature: body.temperature,
-          timeoutMs: 8000,
+          // opus-4-8 отдаёт полноценный разбор (2-4 предложения + контекст) за
+          // ~8-13с; 8000мс резал его на полуслове (abort) → GM-разбор/чат тренера
+          // почти всегда падали в fallback на проде. 14с укладывается в клиентский
+          // бюджет кнопки (15с).
+          timeoutMs: 14000,
         },
       );
     } catch (err) {

@@ -1209,6 +1209,10 @@ export default function CyberChessPage(){
   const[showSections,sShowSections]=useState(false); // навигационный хаб «Все разделы»
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  // «⚙ Ещё» — overflow-меню шапки. Свернули микро-зоны Инструменты/Навигация (настройки,
+  // музыка, фулскрин, раскладка, язык, экосистема) в одно меню, чтобы в шапке остались
+  // только вкладки + рейтинг + Chessy + аккаунт + помощь. Заметно чище (запрос основателя).
+  const[moreMenuOpen,sMoreMenuOpen]=useState(false);
   const[showQuickSetupModal,sShowQuickSetupModal]=useState(false);
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
@@ -3139,6 +3143,7 @@ export default function CyberChessPage(){
       if(e.key==="Escape"){
         // Ручные модалки (без общего ui.Modal) — закрываем по Escape сверху вниз, как и
         // остальные оверлеи приложения. Раньше эти четыре игнорировали Esc → непредсказуемо.
+        if(moreMenuOpen){sMoreMenuOpen(false);return}
         if(qrDataUrl){sQrDataUrl(null);return}
         if(showQuickSetupModal){sShowQuickSetupModal(false);return}
         if(showGameOver){sShowGameOver(false);return}
@@ -3251,7 +3256,7 @@ export default function CyberChessPage(){
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
-  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec,qrDataUrl,showQuickSetupModal,showGameOver,showFlashcards]);
+  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec,qrDataUrl,showQuickSetupModal,showGameOver,showFlashcards,moreMenuOpen]);
 
   /* ── Keyboard SAN input — печатай ход прямо с клавиатуры (lichess-стиль)
      Поддержка: e4, Nf3, Bxf7+, O-O, O-O-O, e8=Q, Nbd7, Rae1, etc.
@@ -5228,9 +5233,8 @@ export default function CyberChessPage(){
         </button>}
         <div style={{flex:1}}/>
 
-        {/* ══ ЗОНА «ПРОФИЛЬ» — рейтинг + Chessy ══ */}
-        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
-          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Профиль</div>
+        {/* Профиль — рейтинг + Chessy (микро-лейбл убран: чистая шапка) */}
+        <div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
@@ -5296,105 +5300,36 @@ export default function CyberChessPage(){
           </div>
         </div>
 
-        {/* ══ ЗОНА «ИНСТРУМЕНТЫ» — настройки/медиа/музыка/звук/фулскрин ══ */}
-        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
-          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Инструменты</div>
-        <div style={{display:"inline-flex",alignItems:"center",gap:4,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
-        <Btn
-          variant="secondary"
-          size="sm"
-          icon={<Icon.Settings/>}
-          onClick={()=>sShowSettings(true)}
-          title="Настройки"
-          ariaLabel="Настройки"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
-        <Btn
-          variant="secondary"
-          size="sm"
-          icon={<Icon.Help/>}
-          onClick={()=>sShowHelp(true)}
-          title="Горячие клавиши (?)"
-          ariaLabel="Keyboard shortcuts"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
-        <Btn
-          variant={muted?"danger":"secondary"}
-          size="sm"
-          icon={muted?<Icon.Mute/>:<Icon.Sound/>}
-          onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}}
-          title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
-          ariaLabel={muted?"Unmute":"Mute"}
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
-        <PresenceIndicator/>
-        <button
-          onClick={()=>sShowMusicPlayer(true)}
-          title="Музыкальный плеер"
-          aria-label="Music player"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
-        >🎵</button>
-        {/* Единый вход «смотреть стрим» — медиа-панель / PiP / мульти-панель.
-            Заменил разрозненные header-кнопку 📺 + quick-bar (📺/PiP/Панели). */}
-        <StreamMenu
-          mediaActive={wsPreset==="stream"}
-          pipOpen={pip.open}
-          onToggleMedia={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
-          onClosePiP={()=>pip.hide()}
-          onOpenMulti={()=>sShowMultiPanel(true)}
-          onOpenPiP={()=>{
-            // Единый модал выбора источника (заменил window.prompt). Дефолт —
-            // сохранённый любимый Twitch-стример, если он есть.
-            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
-            openStreamSource(def);
-          }}
-        />
-        <button
-          onClick={()=>{
-            const el=document.documentElement;
-            if(!document.fullscreenElement){
-              el.requestFullscreen?.().catch(()=>{});
-            }else{
-              document.exitFullscreen?.().catch(()=>{});
-            }
-          }}
-          title="Полноэкранный режим (F11)"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,
-            borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:14}}
-        >⛶</button>
+        {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
+        <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
+        <Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
-        <button
-          onClick={()=>sMobileSidebarOpen(v=>!v)}
-          title="Открыть боковую панель"
-          aria-label="Свернуть боковую панель"
-          style={{
-            padding:"6px 10px",minHeight:36,minWidth:36,
-            border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
-            background:mobileSidebarOpen?CC.brandSoft:CC.surface1,
-            color:mobileSidebarOpen?CC.brand:"inherit",
-            cursor:"pointer",fontSize:18,fontWeight:700,
-            display:"none",alignItems:"center",justifyContent:"center",
-          }}
-          className="cc-mobile-sidebar-btn"
-        >☰</button>
-        </div>
+        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰</button>
         </div>
 
-        {/* ══ ЗОНА «НАВИГАЦИЯ» — layout / язык / экосистема ══ */}
-        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
-          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Навигация</div>
-          <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
-        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(wsToast(p),"info")}}/>
-        <LocaleSwitcher
-          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
-          text={CC.text} textDim={CC.textDim} brand={CC.brand}
-        />
-        <AevionMiniHub
-          onVisit={trackEcosystemVisit}
-          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
-          text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
-        />
-          </div>
+        {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/
+            онлайн) и «Навигацию» (раскладка/язык/экосистема) в одно меню → чистая шапка. */}
+        <div style={{position:"relative",flexShrink:0}}>
+          <button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <span style={{fontSize:14}} aria-hidden>⚙</span><span>Ещё</span><span style={{fontSize:9}} aria-hidden>▾</span>
+          </button>
+          {moreMenuOpen&&<>
+            <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
+            <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,minWidth:240,padding:10,borderRadius:RADIUS.lg,background:CC.surface1,border:`1px solid ${CC.borderStrong}`,boxShadow:SHADOW.lg,display:"flex",flexDirection:"column",gap:4}}>
+              {[
+                {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
+                {ic:<span style={{fontSize:15}} aria-hidden>🎵</span>,lbl:"Музыка",act:()=>sShowMusicPlayer(true)},
+                {ic:<span style={{fontSize:14}} aria-hidden>⛶</span>,lbl:"Полноэкранный режим",act:()=>{const el=document.documentElement;if(!document.fullscreenElement){el.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.().catch(()=>{})}}},
+              ].map((it,i)=><button key={i} role="menuitem" onClick={()=>{it.act();sMoreMenuOpen(false)}} className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:RADIUS.md,border:"none",background:"transparent",color:CC.text,fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",width:"100%"}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=CC.surface2}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent"}}>{it.ic}<span>{it.lbl}</span></button>)}
+              <div style={{height:1,background:CC.border,margin:"4px 0"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 6px"}}><span style={{fontSize:11,color:CC.textMute,fontWeight:800,minWidth:70}}>Стрим</span><StreamMenu mediaActive={wsPreset==="stream"} pipOpen={pip.open} onToggleMedia={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")} onClosePiP={()=>pip.hide()} onOpenMulti={()=>sShowMultiPanel(true)} onOpenPiP={()=>{let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}openStreamSource(def);}}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 6px"}}><span style={{fontSize:11,color:CC.textMute,fontWeight:800,minWidth:70}}>Раскладка</span><WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(wsToast(p),"info")}}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 6px"}}><span style={{fontSize:11,color:CC.textMute,fontWeight:800,minWidth:70}}>Язык</span><LocaleSwitcher surface1={CC.surface1} surface2={CC.surface2} border={CC.border} text={CC.text} textDim={CC.textDim} brand={CC.brand}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 6px"}}><span style={{fontSize:11,color:CC.textMute,fontWeight:800,minWidth:70}}>AEVION</span><AevionMiniHub onVisit={trackEcosystemVisit} surface1={CC.surface1} surface2={CC.surface2} border={CC.border} text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 6px"}}><span style={{fontSize:11,color:CC.textMute,fontWeight:800,minWidth:70}}>Онлайн</span><PresenceIndicator/></div>
+            </div>
+          </>}
         </div>
       </div>}
 

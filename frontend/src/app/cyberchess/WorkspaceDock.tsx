@@ -75,7 +75,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
         {SECTIONS.map(s => {
           const active = open === s.id;
           return (
-            <button key={s.id} onClick={() => toggle(s.id)} title={s.label}
+            <button key={s.id} onClick={() => toggle(s.id)} title={s.label} aria-label={s.label} aria-pressed={active}
               style={{
                 width: 38, height: 38, borderRadius: 8,
                 border: "none", cursor: "pointer",
@@ -106,7 +106,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
               {SECTIONS.find(s => s.id === open)?.icon} {SECTIONS.find(s => s.id === open)?.label}
             </span>
             <span style={{ flex: 1 }} />
-            <button onClick={() => setOpen(null)}
+            <button onClick={() => setOpen(null)} aria-label="Закрыть панель"
               style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: 0 }}>✕</button>
           </div>
 

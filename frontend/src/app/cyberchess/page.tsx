@@ -1184,6 +1184,27 @@ export default function CyberChessPage(){
   // Rush duration в секундах — юзер сам выбирает 1.5 / 3 / 5 / 10 / custom
   const[rushDuration,sRushDuration]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_rush_duration_v1")||"180");return v>=30&&v<=1800?v:180}catch{return 180}});
   useEffect(()=>{try{localStorage.setItem("aevion_rush_duration_v1",String(rushDuration))}catch{}},[rushDuration]);
+  // ─── Puzzle timer & advance internals (bugfix: wall-clock deadline + ref-based advance) ───
+  // Раньше таймер отсчитывался интервалом с pzTimeLeft в deps → интервал пересоздавался
+  // каждую секунду и под нагрузкой рендера «секунда» длилась дольше 1с (3 мин шли ~5 мин).
+  // Теперь считаем от абсолютного дедлайна (Date.now()+сек), опрос 250мс → точность без дрейфа.
+  const pzDeadlineRef=useRef<number>(0);
+  const[pzClockNonce,sPzClockNonce]=useState(0); // бамп при старте часов → перезапуск poll-эффекта
+  // Авто-переход зависел от fPz (меняет идентичность при смене фильтра рейтинга) → отложенная
+  // загрузка следующего пазла отменялась и «следующие не ставились». Теперь через ref-функцию.
+  const fPzRef=useRef<Puzzle[]>([]);
+  const pzIRef=useRef<number>(0);
+  const pzSeenRef=useRef<Set<string>>(new Set()); // недавно показанные FEN — анти-повтор
+  const loadNextPuzzleRef=useRef<()=>void>(()=>{});
+  const startClock=(sec:number)=>{pzDeadlineRef.current=sec>0?Date.now()+sec*1000:0;sPzTimeLeft(sec);sPzClockNonce(n=>n+1);};
+  const bumpClock=(delta:number,capSec?:number)=>{
+    if(pzDeadlineRef.current<=0)return;
+    let d=pzDeadlineRef.current+delta*1000;
+    if(capSec)d=Math.min(d,Date.now()+capSec*1000);
+    d=Math.max(Date.now(),d);
+    pzDeadlineRef.current=d;
+    sPzTimeLeft(Math.max(0,Math.round((d-Date.now())/1000)));
+  };
   // Multi-dimensional filters
   const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
   const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
@@ -2252,6 +2273,22 @@ export default function CyberChessPage(){
     return true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }),[pzCategory,pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,pzFilterRating[0],pzFilterRating[1],PUZZLES.length]);
+  // Держим refs синхронными с текущими fPz/pzI — авто-переход читает их, не завися от идентичности.
+  fPzRef.current=fPz;pzIRef.current=pzI;
+  // Единая точка загрузки следующего пазла: анти-повтор + устойчивость к смене фильтра.
+  loadNextPuzzleRef.current=()=>{
+    const list=fPzRef.current;if(!list.length)return;
+    const seen=pzSeenRef.current;const n=list.length;
+    let idx=Math.floor(Math.random()*n),tries=0;
+    while(tries<15&&list[idx]&&seen.has(list[idx].fen)){idx=(idx+1)%n;tries++;}
+    const pick=list[idx];if(!pick)return;
+    seen.add(pick.fen);
+    if(seen.size>Math.min(300,Math.floor(n*0.7))){seen.clear();seen.add(pick.fen);} // не заперемся, когда пул мал
+    let g;try{g=new Chess(pick.fen)}catch{showToast("Битый пазл, пропускаю","error");return}
+    setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pick);sPzAttempt("idle");
+    sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pick.fen]);
+    sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
+  };
 
   // Auto-load first puzzle when category changes and we're on Puzzles tab
   useEffect(()=>{
@@ -2798,14 +2835,14 @@ export default function CyberChessPage(){
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-                  sPzTimeLeft(v=>Math.min(rushDuration,v+bonus));
+                  bumpClock(bonus,rushDuration);
                   sRushScore(s=>s+1);
                   sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-                  sPzTimeLeft(v=>v+bonus);
+                  bumpClock(bonus);
                   showToast(`✓ +${bonus}с`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else{
@@ -2831,14 +2868,14 @@ export default function CyberChessPage(){
           if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-            sPzTimeLeft(v=>Math.min(rushDuration,v+bonus));
+            bumpClock(bonus,rushDuration);
             sRushScore(s=>s+1);
             sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
             showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
             // Auto-advance handled by the single pzAttempt==="correct" effect
           }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-            sPzTimeLeft(v=>v+bonus);
+            bumpClock(bonus);
             showToast(`✓ +${bonus}с`,"success");
             // Auto-advance handled by the single pzAttempt==="correct" effect
           }else{
@@ -2867,28 +2904,14 @@ export default function CyberChessPage(){
         if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
         if(pzCurrent?.theme)addThemeResult(pzCurrent.theme,false);
         if(pzMode==="rush"){
-          sPzTimeLeft(v=>Math.max(0,v-5));
+          bumpClock(-5);
           sRushStreak(0);
           showToast(`✗ −5с · streak сброшен`,"error");
-          // Auto-advance in rush after miss (no retry)
-          setTimeout(()=>{
-            if(!fPz.length)return;
-            const nextIdx=(pzI+1)%fPz.length;
-            const pz=fPz[nextIdx];if(!pz)return;
-            let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
-            sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
-            sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
-          },700);
+          // Auto-advance in rush after miss (no retry) — ref-функция, анти-повтор
+          setTimeout(()=>{loadNextPuzzleRef.current();},700);
         }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
           // In timed modes: auto-advance after 1.5s so user sees the wrong indicator then moves on
-          setTimeout(()=>{
-            if(!fPz.length)return;
-            const nextIdx=(pzI+1)%fPz.length;
-            const pz=fPz[nextIdx];if(!pz)return;
-            let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
-            sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
-            sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
-          },1500);
+          setTimeout(()=>{loadNextPuzzleRef.current();},1500);
         }else{
           // After 2 wrong tries on this puzzle, reveal the expected best move as a hint.
           if(pzWrongTriesRef.current.n>=2){
@@ -4534,15 +4557,17 @@ export default function CyberChessPage(){
     if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
     const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
     sTab("puzzles");
-    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();sPzTimeLeft(0);
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Пазл дня · ${pz.r}`,"info");
   };
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
-    // Set timer based on mode
-    if(pzMode==="timed3")sPzTimeLeft(180);
-    else if(pzMode==="timed5")sPzTimeLeft(300);
-    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
-    else sPzTimeLeft(0);
+    // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
+    // посреди раша не должен обнулять часы).
+    if(pzMode==="timed3")startClock(180);
+    else if(pzMode==="timed5")startClock(300);
+    else if(pzMode==="custom")startClock(pzCustomSec);
+    else if(pzMode==="rush"){/* keep running deadline */}
+    else startClock(0);
     showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
@@ -4664,7 +4689,7 @@ export default function CyberChessPage(){
       const g2=new Chess(fen);setGame(g2);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");
       sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([fen]);
       sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);
-      sPCol(g2.turn());sFlip(g2.turn()==="b");sEvalCp(0);sEvalMate(0);sPzTimeLeft(0);
+      sPCol(g2.turn());sFlip(g2.turn()==="b");sEvalCp(0);sEvalMate(0);startClock(0);
       showToast(`🎯 Переиграй ход ${idx+1}. Бонус +3 Chessy за правильный`,"info");
     });
   },[fenHist,showToast,pT,aT]);
@@ -4688,7 +4713,7 @@ export default function CyberChessPage(){
           const gp=new Chess(fen);setGame(gp);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");
           sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([fen]);
           sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);
-          sPCol(gp.turn());sFlip(gp.turn()==="b");sEvalCp(0);sEvalMate(0);sPzTimeLeft(0);
+          sPCol(gp.turn());sFlip(gp.turn()==="b");sEvalCp(0);sEvalMate(0);startClock(0);
           sTab("puzzles");
           showToast(`📂 PGN загружен: ${name}. Найди лучший ход!`,"success");
         }else{
@@ -4699,7 +4724,7 @@ export default function CyberChessPage(){
           setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");
           sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([fen]);
           sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);
-          sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);sPzTimeLeft(0);
+          sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);startClock(0);
           sTab("puzzles");
           showToast(`📂 FEN загружен: ${name}`,"success");
         }
@@ -4712,28 +4737,30 @@ export default function CyberChessPage(){
     reader.readAsText(file);
   };
 
-  // Puzzle timer — in rush, keep ticking even during brief 'correct' state before auto-advance
+  // Puzzle timer — wall-clock deadline (pzDeadlineRef), poll 250ms. Stable interval (no pzTimeLeft
+  // in deps) → не пересоздаётся каждую секунду, идёт в реальном времени без дрейфа.
   useEffect(()=>{
-    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzTimeLeft<=0)return;
+    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent)return;
     if(pzMode!=="rush"&&pzAttempt==="correct")return;
-    const t=setInterval(()=>sPzTimeLeft(v=>{
-      if(v<=1){
-        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak()}
-        return 0;
-      }
-      return v-1;
-    }),1000);
+    if(pzDeadlineRef.current<=0)return;
+    const tick=()=>{
+      const rem=Math.max(0,Math.round((pzDeadlineRef.current-Date.now())/1000));
+      sPzTimeLeft(rem);
+      if(rem<=0&&pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();}
+    };
+    tick();
+    const t=setInterval(tick,250);
     return()=>clearInterval(t);
-  },[tab,pzMode,pzCurrent,pzAttempt,pzTimeLeft]);
+  },[tab,pzMode,pzCurrent,pzAttempt,pzClockNonce]);
 
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast("⏱ 3 минуты — решай как можно больше пазлов, +3с за каждый правильный","info")}
-    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast("⏱ 5 минут — решай как можно больше пазлов, +3с за каждый правильный","info")}
-    else if(pzMode==="custom"){sPzTimeLeft(pzCustomSec);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
-    else if(pzMode==="rush"){sPzTimeLeft(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
-    else {sPzTimeLeft(0);sRushActive(false)}
+    if(pzMode==="timed3"){startClock(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 3 минуты — решай как можно больше пазлов, +3с за каждый правильный","info")}
+    else if(pzMode==="timed5"){startClock(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 5 минут — решай как можно больше пазлов, +3с за каждый правильный","info")}
+    else if(pzMode==="custom"){startClock(pzCustomSec);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
+    else if(pzMode==="rush"){startClock(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null);pzSeenRef.current.clear()}
+    else {startClock(0);sRushActive(false)}
   },[pzMode,tab,rushDuration,pzCustomSec]);
 
   // Timed mode (3min/5min/custom) end-of-session — fires when timer hits 0
@@ -4743,6 +4770,7 @@ export default function CyberChessPage(){
     if(pzSolvedCount===0&&pzFailedCount===0)return; // session hasn't started
     const totalSec=pzMode==="timed3"?180:pzMode==="timed5"?300:pzCustomSec;
     const modeName=pzMode==="timed3"?"3 мин":pzMode==="timed5"?"5 мин":`${Math.floor(totalSec/60)}:${String(totalSec%60).padStart(2,"0")}`;
+    pzDeadlineRef.current=0;
     sTimedResult({solved:pzSolvedCount,failed:pzFailedCount,mode:modeName,totalSec});
     const bonus=pzSolvedCount*2;
     if(bonus>0)addChessy(bonus,`Puzzle Timed · ${pzSolvedCount} решено`);
@@ -4757,6 +4785,7 @@ export default function CyberChessPage(){
     const earned=(rushScore*2+rushBestStreak)*boostMult; // 2 Chessy per solve + streak bonus; x2 with boost
     const isNewBest=rushScore>rushBest;
     if(isNewBest){sRushBest(rushScore);try{localStorage.setItem("aevion_puzzle_rush_best_v1",String(rushScore))}catch{}}
+    pzDeadlineRef.current=0;
     sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy:earned,isNewBest});
     sRushActive(false);
     if(earned>0)addChessy(earned,`Puzzle Rush${boostMult>1?" ⚡2x":""} · ${rushScore} решено`);
@@ -4766,20 +4795,14 @@ export default function CyberChessPage(){
     // (cyberchess больше не связан с AEV economy через этот path).
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
 
-  // Auto-advance to next puzzle in rush/timed modes after a correct solve
+  // Auto-advance после верного решения. Deps ТОЛЬКО [pzAttempt,pzMode] — не зависит от fPz/pzI,
+  // поэтому смена фильтра (адаптивная сложность) больше НЕ отменяет отложенную загрузку.
   useEffect(()=>{
-    if(pzAttempt!=="correct")return; // авто-переход во ВСЕХ режимах (поток как на lichess/chess.com)
-    const delay=pzMode==="rush"?600:pzMode==="learn"?1100:1200;
-    const t=setTimeout(()=>{
-      if(!fPz.length)return;
-      const n=fPz.length;let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n; // СЛУЧАЙНЫЙ следующий
-      const pz=fPz[nextIdx];if(!pz)return;
-      let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
-      sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
-      sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
-    },delay);
+    if(pzAttempt!=="correct")return; // поток как на lichess/chess.com
+    const delay=pzMode==="rush"?550:pzMode==="learn"?1100:1200;
+    const t=setTimeout(()=>{loadNextPuzzleRef.current();},delay);
     return()=>clearTimeout(t);
-  },[pzAttempt,pzMode,pzI,fPz]);
+  },[pzAttempt,pzMode]);
 
   // Clear per-puzzle stopwatch interval on unmount
   useEffect(()=>()=>{if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current)},[]);
@@ -4796,11 +4819,8 @@ export default function CyberChessPage(){
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
-    if(pzMode==="timed3")sPzTimeLeft(180);
-    else if(pzMode==="timed5")sPzTimeLeft(300);
-    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
-    else if(pzMode==="rush")sPzTimeLeft(rushDuration);
-    else sPzTimeLeft(0);
+    // Таймер здесь НЕ трогаем — дедлайн выставляет mode-sync effect. Иначе смена фильтра
+    // рейтинга (в т.ч. адаптивная) сбрасывала бы часы посреди сессии.
   },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab,pzMode,rushDuration,pzCustomSec]);
 
   /* ── Post-game analysis ── */
@@ -9187,7 +9207,7 @@ export default function CyberChessPage(){
                 <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
                   {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
                     const active=pzCustomSec===sec;
-                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);sPzTimeLeft(sec);showToast(`Custom ${label}`,"info")}}
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);startClock(sec);showToast(`Custom ${label}`,"info")}}
                       style={{padding:"5px 10px",borderRadius:RADIUS.sm,
                         border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                         background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
@@ -9206,7 +9226,7 @@ export default function CyberChessPage(){
                 <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
                   {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
                     const active=rushDuration===sec;
-                    return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){sPzTimeLeft(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
+                    return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){startClock(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
                       style={{padding:"6px 4px",borderRadius:RADIUS.sm,
                         border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                         background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
@@ -12902,7 +12922,7 @@ ${question.trim()}`;
           <Btn variant="primary" size="md" full onClick={()=>{
             sTimedResult(null);
             const sec=timedResult.mode==="3 мин"?180:timedResult.mode==="5 мин"?300:pzCustomSec;
-            sPzSolvedCount(0);sPzFailedCount(0);sPzTimeLeft(sec);
+            sPzSolvedCount(0);sPzFailedCount(0);pzSeenRef.current.clear();startClock(sec);
             if(fPz.length)ldPz(Math.floor(Math.random()*fPz.length));
           }}>▶ Ещё раз</Btn>
         </div>

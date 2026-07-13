@@ -1947,7 +1947,34 @@ export default function QCoreMultiAgentPage() {
                   Analyst + Writer + Critic — inspectable AI pipeline with live streaming, cost tracking, and three strategies.
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {/* Session savings from auto-routing: sum of what each fact→single
+                    run saved vs a forced Council (EST_COUNCIL_COST_USD − run cost). */}
+                {(() => {
+                  const sav = runs.reduce(
+                    (a, r) => {
+                      if (r.routeNote?.resolved === "single" && typeof r.totalCostUsd === "number") {
+                        const s = EST_COUNCIL_COST_USD - r.totalCostUsd;
+                        if (s > 0.005) { a.total += s; a.count += 1; }
+                      }
+                      return a;
+                    },
+                    { total: 0, count: 0 }
+                  );
+                  return sav.count > 0 ? (
+                    <div
+                      title={`Auto-routing sent ${sav.count} factual quer${sav.count === 1 ? "y" : "ies"} to a single flagship call instead of the full Council this session, saving ~$${sav.total.toFixed(2)} (vs the $${EST_COUNCIL_COST_USD.toFixed(3)}/answer N=40 Council baseline).`}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        padding: "8px 12px", borderRadius: 10,
+                        background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.45)",
+                        color: "#6ee7b7", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap",
+                      }}
+                    >
+                      ⚡ auto saved ~${sav.total.toFixed(2)} · {sav.count}
+                    </div>
+                  ) : null;
+                })()}
                 <Link
                   href="/qcoreai/analytics"
                   style={{

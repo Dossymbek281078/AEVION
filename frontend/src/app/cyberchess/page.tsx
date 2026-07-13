@@ -1213,6 +1213,9 @@ export default function CyberChessPage(){
   // музыка, фулскрин, раскладка, язык, экосистема) в одно меню, чтобы в шапке остались
   // только вкладки + рейтинг + Chessy + аккаунт + помощь. Заметно чище (запрос основателя).
   const[moreMenuOpen,sMoreMenuOpen]=useState(false);
+  // «? Помощь» — единое help-меню. Раньше было 4 разрозненных «?»-входа (Как тут=тур,
+  // ⚙-меню=клавиши, плавающая ?=клавиши, Chessy ?=что такое Chessy) → путаница какой куда.
+  const[helpMenuOpen,sHelpMenuOpen]=useState(false);
   const[showQuickSetupModal,sShowQuickSetupModal]=useState(false);
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
@@ -3143,6 +3146,7 @@ export default function CyberChessPage(){
       if(e.key==="Escape"){
         // Ручные модалки (без общего ui.Modal) — закрываем по Escape сверху вниз, как и
         // остальные оверлеи приложения. Раньше эти четыре игнорировали Esc → непредсказуемо.
+        if(helpMenuOpen){sHelpMenuOpen(false);return}
         if(moreMenuOpen){sMoreMenuOpen(false);return}
         if(qrDataUrl){sQrDataUrl(null);return}
         if(showQuickSetupModal){sShowQuickSetupModal(false);return}
@@ -3256,7 +3260,7 @@ export default function CyberChessPage(){
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
-  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec,qrDataUrl,showQuickSetupModal,showGameOver,showFlashcards,moreMenuOpen]);
+  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec,qrDataUrl,showQuickSetupModal,showGameOver,showFlashcards,moreMenuOpen,helpMenuOpen]);
 
   /* ── Keyboard SAN input — печатай ход прямо с клавиатуры (lichess-стиль)
      Поддержка: e4, Nf3, Bxf7+, O-O, O-O-O, e8=Q, Nbd7, Rae1, etc.
@@ -5136,12 +5140,19 @@ export default function CyberChessPage(){
                   opacity:locked?0.5:1,
                   transition:`background 120ms, color 120ms`,
                 }}>
-                <span style={{fontSize:16,lineHeight:1}}>{locked?"🔒":t.icon}</span>
+                <span style={{fontSize:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
                 <span>{t.label}</span>
               </button>;
             })}
           </div>;
         })()}
+
+        {/* Почему вкладки заблокированы — inline рядом с табами (а не только tooltip/toast).
+            В живой партии с человеком уход к движку/пазлам = подсказка против соперника. */}
+        {!streamerMode&&vwPx>=769&&on&&!over&&isHumanGame&&
+          <span role="note" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:RADIUS.full,background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",flexShrink:0}}>
+            <span aria-hidden>🔒</span><span>Вкладки закрыты в партии с человеком — античит</span>
+          </span>}
 
         {/* Active variant indicator (sticky, visible always) */}
         {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
@@ -5187,19 +5198,33 @@ export default function CyberChessPage(){
           <span style={{fontSize:14}}>☰</span>
           <span>Все разделы</span>
         </button>
-        {/* «?» — постоянный видимый гайд «что куда нажимать». Открывает обзорный тур
-            в любой момент. Синий info-акцент = вспомогательная навигация. Раньше тур
-            был только в Ctrl+K и первый посетитель его не находил (частая жалоба). */}
-        <button onClick={()=>sTourStep(0)} title="Как пользоваться — краткий гайд по интерфейсу" aria-label="Гайд: как пользоваться" className="cc-focus-ring"
-          style={{
-            display:"inline-flex",alignItems:"center",gap:5,
-            padding:"7px 13px",borderRadius:RADIUS.full,
-            border:`1.5px solid #3b82f6`,background:"rgba(59,130,246,0.12)",color:"#2563eb",
-            fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
-          }}>
-          <span style={{fontSize:14,lineHeight:1}}>?</span>
-          <span>Как тут</span>
-        </button>
+        {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
+            4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
+        <div style={{position:"relative",flexShrink:0}}>
+          <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
+              border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
+              fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <span style={{fontSize:14,lineHeight:1}} aria-hidden>?</span>
+            <span>Помощь</span>
+            <span style={{fontSize:9}} aria-hidden>▾</span>
+          </button>
+          {helpMenuOpen&&<>
+            <div onClick={()=>sHelpMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
+            <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:200,minWidth:230,padding:8,borderRadius:RADIUS.lg,background:CC.surface1,border:`1px solid ${CC.borderStrong}`,boxShadow:SHADOW.lg,display:"flex",flexDirection:"column",gap:2}}>
+              {[
+                {ic:"🧭",lbl:"Обзорный тур",sub:"Как устроен интерфейс",act:()=>sTourStep(0)},
+                {ic:"⌨",lbl:"Горячие клавиши",sub:"Список сочетаний",act:()=>sShowHelp(true)},
+                {ic:"🪙",lbl:"Что такое Chessy",sub:"Игровая валюта",act:()=>sShowChessyInfo(true)},
+              ].map((it,i)=><button key={i} role="menuitem" onClick={()=>{it.act();sHelpMenuOpen(false)}} className="cc-focus-ring"
+                style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:RADIUS.md,border:"none",background:"transparent",color:CC.text,cursor:"pointer",textAlign:"left",width:"100%"}}
+                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=CC.surface2}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent"}}>
+                <span aria-hidden style={{fontSize:16,width:20,textAlign:"center"}}>{it.ic}</span>
+                <span style={{display:"flex",flexDirection:"column",lineHeight:1.2}}><span style={{fontSize:13,fontWeight:800}}>{it.lbl}</span><span style={{fontSize:10.5,color:CC.textMute,fontWeight:600}}>{it.sub}</span></span>
+              </button>)}
+            </div>
+          </>}
+        </div>
         {/* Аккаунт — вход в общий AEVION-аккаунт. Вошёл → рейтинг/история следуют за
             игроком между устройствами (не только этот браузер). Ссылки на общий
             /auth и /account платформы, свой UI не плодим. */}
@@ -9798,6 +9823,18 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Persistent AI-coach on/off chip — раньше состояние коуча нигде не отражалось,
+                нельзя было понять «включён ли он». Теперь видно и переключается одним кликом. */}
+            {!editorMode&&<button onClick={()=>sCoachAIEnabled(v=>!v)} aria-pressed={coachAIEnabled}
+              title={coachAIEnabled?"AI-коуч включён — комментирует позицию. Нажми чтобы выключить.":"AI-коуч выключен — нажми чтобы включить."}
+              className="cc-focus-ring"
+              style={{alignSelf:"flex-start",display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:RADIUS.full,
+                border:`1px solid ${coachAIEnabled?CC.brand:CC.borderStrong}`,
+                background:coachAIEnabled?CC.brandSoft:CC.surface1,
+                color:coachAIEnabled?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer"}}>
+              <span aria-hidden style={{fontSize:9}}>{coachAIEnabled?"🟢":"⚪"}</span>
+              <span>AI-коуч: {coachAIEnabled?"вкл":"выкл"}</span>
+            </button>}
             {/* ─── Best 3 games card — shown when user has ≥3 games and is in setup view ─── */}
             {setup&&savedGames.length>=3&&(()=>{
               const isW=(g:SavedGame)=>g.result.includes("You win")||g.result.includes("win!");

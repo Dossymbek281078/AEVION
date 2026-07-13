@@ -13,7 +13,7 @@ export const COLOR = {
 
   text: "#26231e",         // тёплый тёмный (не резко-чёрный, как lichess #4d4d4d но контрастнее)
   textDim: "#5f5952",
-  textMute: "#8d867c",
+  textMute: "#6f6a61",     // затемнён с #8d867c: ~3.4:1 не проходил WCAG AA на белом/paper; #6f6a61 ≈ 5:1 (surface1/2), сохраняя иерархию text>textDim>textMute
   textInv: "#ffffff",
 
   border: "#cbc5ba",       // ЗАМЕТНАЯ тёпло-серая граница (было почти невидимо)

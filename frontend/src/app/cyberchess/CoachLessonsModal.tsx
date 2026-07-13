@@ -23,6 +23,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onLoadPosition: (fen: string, hint?: string, meta?: LessonMeta) => void;
+  initialLessonId?: string | null; // если задан — модалка открывается сразу на этом уроке (адаптивная рекомендация)
 };
 
 const RATING_LABEL: Record<Lesson["rating"], { ru: string; col: string; bg: string }> = {
@@ -39,12 +40,19 @@ const CATEGORY_EMOJI: Record<Lesson["category"], string> = {
   strategy: "🧠",
 };
 
-export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Props) {
+export default function CoachLessonsModal({ open, onClose, onLoadPosition, initialLessonId }: Props) {
   const [state, setState] = useState<LessonsState>(() => loadLessons());
   const [activeLesson, setActiveLesson] = useState<string | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
 
   useEffect(() => { saveLessons(state); }, [state]);
+  // Открытие по адаптивной рекомендации: перейти сразу к нужному уроку на его текущем шаге.
+  useEffect(() => {
+    if (open && initialLessonId && LESSONS.some(l => l.id === initialLessonId)) {
+      setActiveLesson(initialLessonId);
+      setStepIdx(state.byId[initialLessonId]?.stepsCompleted || 0);
+    }
+  }, [open, initialLessonId]);
 
   const lesson = useMemo(() => LESSONS.find(l => l.id === activeLesson) || null, [activeLesson]);
   const completed = totalCompleted(state);

@@ -11,6 +11,7 @@ import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { COACH_KNOWLEDGE } from "./coachKnowledge";
 import CoachLessonsModal from "./CoachLessonsModal";
+import { LESSONS, loadLessons, isLessonComplete, type Lesson } from "./coachLessons";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
@@ -1034,6 +1035,7 @@ export default function CyberChessPage(){
   const[flashcardFlipped,sFlashcardFlipped]=useState(false);
   const[dailyReward,sDailyReward]=useState<{bonus:number;streak:number;isWelcome:boolean}|null>(null);
   const[showLessons,sShowLessons]=useState(false);
+  const[recLessonId,sRecLessonId]=useState<string|null>(null); // урок, открываемый по рекомендации
   // Active lesson tracking — when user loads a position from a lesson step, show a sticky
   // "return to lesson" banner at the top of the board. Stores {lessonId, step, lessonTitle}.
   const[activeLesson,sActiveLesson]=useState<{id:string;step:number;title:string;emoji:string}|null>(null);
@@ -1395,6 +1397,49 @@ export default function CyberChessPage(){
     if(d.recentTrend==="down"&&d.recentWinPctDelta<=-10) pts.push(`спад формы за последние партии (${d.recentWinPctDelta}% WR)`);
     return pts.slice(0,3).join("; ");
   },[gameDna,savedGames.length]);
+  // ─── АДАПТИВНАЯ ПРОГРЕССИЯ ─────────────────────────────────────────────
+  // Сила игрока (rat/FIDE) → калибровка глубины коуча, сложности пазлов и выбора урока.
+  const ratingTier=(r:number):"beginner"|"intermediate"|"advanced"=>r<1200?"beginner":r<1800?"intermediate":"advanced";
+  // Адаптивная цель сложности пазлов: базовый рейтинг + бонус за текущую серию решений
+  // (каждое подряд решённое поднимает планку, cap +300) — «после серии побед уровень задач растёт».
+  const adaptivePzRating=useMemo(()=>Math.max(500,Math.min(2800,rat+Math.min(300,pzStreak.cur*40))),[rat,pzStreak.cur]);
+  // coachLevel по умолчанию следует за рейтингом, пока игрок не выбрал уровень вручную.
+  const coachLevelTouched=useRef(false);
+  useEffect(()=>{if(!coachLevelTouched.current)sCoachLevel(ratingTier(rat));},[rat]);
+  // Рекомендуемый следующий урок: слабость (Game DNA) → категория, рейтинг → уровень урока,
+  // фильтр по пройденным/разблокированным. «После провального дебюта — подсунуть нужный урок».
+  const recommendedLesson=useMemo<{lesson:Lesson;reason:string}|null>(()=>{
+    if(savedGames.length<3)return null;
+    const d=gameDna;const st=loadLessons();
+    const unlocked=(l:Lesson)=>!l.prerequisite||isLessonComplete(st,l.prerequisite);
+    const avail=(cat:Lesson["category"])=>LESSONS.filter(l=>l.category===cat&&!isLessonComplete(st,l.id)&&unlocked(l));
+    const tier=ratingTier(rat);
+    const cats:{cat:Lesson["category"];reason:string}[]=[];
+    if(d.avgLengthLoss>0&&d.avgLengthLoss<25)cats.push({cat:"tactics",reason:"ранние зевки — нужен счёт и blunder-check"});
+    if(d.tacticalPhaseLoss==="opening")cats.push({cat:"openings",reason:"чаще проигрываешь в дебюте"});
+    else if(d.tacticalPhaseLoss==="endgame")cats.push({cat:"endgames",reason:"теряешь очки в эндшпиле"});
+    else if(d.tacticalPhaseLoss==="middlegame")cats.push({cat:"strategy",reason:"провалы в миттельшпиле — планы и структура"});
+    if(d.worstOpening&&d.worstOpening.total>=3)cats.push({cat:"openings",reason:`провальный дебют «${d.worstOpening.opening}»`});
+    // fallback-порядок, если по слабостям ничего не подобралось
+    (["fundamentals","tactics","strategy","openings","endgames"] as Lesson["category"][]).forEach(c=>cats.push({cat:c,reason:"следующий шаг по программе"}));
+    for(const {cat,reason} of cats){
+      const pool=avail(cat);if(!pool.length)continue;
+      const pick=pool.find(l=>l.rating===tier)||pool[0];
+      if(pick)return{lesson:pick,reason};
+    }
+    const any=LESSONS.find(l=>!isLessonComplete(st,l.id)&&unlocked(l));
+    return any?{lesson:any,reason:"следующий шаг по программе"}:null;
+  },[gameDna,rat,savedGames.length,showLessons]);
+  // Автоподбор сложности пазлов под уровень при первом входе во вкладку (если фильтр дефолтный).
+  const pzAutoTuned=useRef(false);
+  useEffect(()=>{
+    if(tab!=="puzzles"||pzAutoTuned.current)return;
+    if(pzFilterRating[0]===0&&pzFilterRating[1]===3000&&savedGames.length>=3){
+      const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
+      sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
+      showToast(`Пазлы подобраны под твой уровень ${adaptivePzRating} (${lo}–${hi})`,"info");
+    }
+  },[tab]);
   // Auto-persist FIDE estimate so matchmaking can read it from localStorage
   useEffect(()=>{
     if(savedGames.length<3)return;
@@ -9526,12 +9571,12 @@ export default function CyberChessPage(){
                       }} style={{padding:"4px 9px",borderRadius:6,border:"none",background:active?activeBg2:inactiveBg2,color:active?"#fff":inactiveColor2,fontSize:11,fontWeight:700,cursor:"pointer"}}>{label}</button>;
                     })}
                     <button onClick={()=>{
-                      // Match ELO — puzzles ±200 of player rating
-                      const lo=Math.max(0,rat-200),hi=Math.min(3000,rat+200);
-                      sPzFilterRating([lo,hi]);sPzI(0);
-                      showToast(`Пазлы подобраны под ELO ${rat} (${lo}–${hi})`,"info");
-                    }} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,rat-200)))<50?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,rat-200)))<50?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
-                      ⚡ Матч ELO {rat}
+                      // Адаптивно — цель = рейтинг + бонус за серию решений (растёт с победами).
+                      const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
+                      sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
+                      showToast(`Пазлы под твой уровень ${adaptivePzRating} (${lo}–${hi})${pzStreak.cur>0?` · серия +${Math.min(300,pzStreak.cur*40)}`:""}`,"info");
+                    }} title={`Адаптивная цель: рейтинг ${rat}${pzStreak.cur>0?` + серия ${pzStreak.cur} (+${Math.min(300,pzStreak.cur*40)})`:""}`} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+                      ⚡ Мой уровень {adaptivePzRating}{pzStreak.cur>0?` 🔥${pzStreak.cur}`:""}
                     </button>
                   </div>
                 </div>
@@ -10263,6 +10308,22 @@ ${question.trim()}`;
               {blunderBook.length>5&&<div style={{fontSize:10,color:"#991b1b",marginTop:4,textAlign:"center"}}>+{blunderBook.length-5} ещё позиций</div>}
             </div>}
 
+            {/* ── Рекомендуемый урок — адаптивно по слабостям + рейтингу ── */}
+            {recommendedLesson&&(()=>{
+              const {lesson,reason}=recommendedLesson;
+              return <button onClick={()=>{sRecLessonId(lesson.id);sShowLessons(true)}} style={{
+                borderRadius:10,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",
+                padding:"10px 12px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",textAlign:"left",width:"100%"
+              }}>
+                <span style={{fontSize:26,flexShrink:0}}>{lesson.emoji}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,fontWeight:900,color:"#047857",letterSpacing:0.5,textTransform:"uppercase" as const}}>🎓 Рекомендуемый урок · уровень {ratingTier(rat)==="beginner"?"новичок":ratingTier(rat)==="intermediate"?"средний":"продвинутый"}</div>
+                  <div style={{fontSize:14,fontWeight:900,color:"#064e3b",lineHeight:1.2}}>Урок {lesson.num}: {lesson.title}</div>
+                  <div style={{fontSize:11,color:"#065f46",marginTop:1}}>Почему: {reason}</div>
+                </div>
+                <span style={{fontSize:12,color:"#047857",fontWeight:900,flexShrink:0}}>Начать →</span>
+              </button>;
+            })()}
             {/* ── Study Plan — weekly recommendation based on weaknesses + themePerf ── */}
             {savedGames.length>=3&&(()=>{
               const dna=gameDna;
@@ -10437,10 +10498,10 @@ ${question.trim()}`;
                 <button onClick={()=>sCoachAIEnabled(false)} title="Свободный чат без авто-разбора позиции — просто диалог с тренером." style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
               </div>
               {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
-              <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:</span>
+              <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:{!coachLevelTouched.current&&<span title={`Авто по рейтингу ${rat}`} style={{marginLeft:3,fontSize:9,color:T.accent,fontWeight:800}}>авто</span>}</span>
               <div style={{display:"flex",gap:3}}>
                 {([["beginner","🌱","до 1200"],["intermediate","📘","1200-1800"],["advanced","🏆","1800+"]] as const).map(([lv,ic,elo])=>
-                  <button key={lv} onClick={()=>sCoachLevel(lv)} title={elo} style={{padding:"6px 8px",borderRadius:5,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",fontSize:14,cursor:"pointer"}}>{ic}</button>)}
+                  <button key={lv} onClick={()=>{coachLevelTouched.current=true;sCoachLevel(lv)}} title={elo} style={{padding:"6px 8px",borderRadius:5,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",fontSize:14,cursor:"pointer"}}>{ic}</button>)}
               </div></>}
             </div>
 
@@ -10605,7 +10666,8 @@ ${question.trim()}`;
 
           <CoachLessonsModal
             open={showLessons}
-            onClose={()=>sShowLessons(false)}
+            initialLessonId={recLessonId}
+            onClose={()=>{sShowLessons(false);sRecLessonId(null)}}
             onLoadPosition={(fen:string,hint?:string,meta?:any)=>{
               try{
                 const g=new Chess(fen);

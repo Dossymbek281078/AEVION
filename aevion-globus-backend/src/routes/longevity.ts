@@ -1,5 +1,9 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { verifyBearerOptional } from "../lib/authJwt";
+import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 /**
  * AEVION Longevity — the measure → act → re-measure protocol engine.
@@ -9,7 +13,12 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
  * across four levers (nutrition, movement, hormesis, mental) is generated; then
  * the same markers are re-measured and the delta is scored.
  *
- * DB-free & deterministic. Honest evidence grading is the point:
+ * Deterministic engine, hybrid persistence: signed-in users get every /assess
+ * call saved as a LongevityMeasurement row (Postgres if DATABASE_URL is set,
+ * else in-memory for the life of the process — same hybrid-store pattern as
+ * healthai.ts) so /progress can auto-fill baseline/latest from history instead
+ * of requiring manual re-entry. Anonymous requests stay fully stateless.
+ * Honest evidence grading is the point:
  *   A — сильные доказательства (RCT / крупные когорты)
  *   B — умеренные / смешанные
  *   C — слабые / предварительные
@@ -18,14 +27,19 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
  * only; anything grade E or prescription is info-only.
  *
  * Endpoints:
- *   GET  /health    — status
- *   GET  /panel     — standard lab + functional panel (grouped, graded)
- *   POST /assess    — values + flags → flagged markers + personalized 12-week stack
- *   POST /ai-plan   — recommended stack → concrete weekly schedule (qcoreai, no doses)
- *   POST /progress  — baseline vs latest key metrics → direction-aware delta + score
+ *   GET  /health     — status
+ *   GET  /panel      — standard lab + functional panel (grouped, graded)
+ *   POST /assess     — values + flags → flagged markers + personalized 12-week stack
+ *                      (saved to history when signed in)
+ *   GET  /history    — signed-in user's past assessments, oldest first
+ *   POST /ai-plan    — recommended stack → concrete weekly schedule (qcoreai, no doses)
+ *   POST /progress   — baseline vs latest key metrics → direction-aware delta + score
+ *                      (auto-fills baseline/latest from history when signed in)
  */
 
 export const longevityRouter = Router();
+
+const captureLongevityError = makeServiceCapture("longevity");
 
 const DISCLAIMER =
   "Wellness/образование, не диагностика и не лечение. Целевые коридоры — ориентиры (зависят от пола, возраста, лаборатории). Рецептурные препараты и часть анализов — только через врача. Не отменяйте назначенное лечение.";
@@ -174,13 +188,98 @@ function markerFlagged(m: Marker, v: number): boolean {
   return false;
 }
 
+// ── History persistence (Step 1 → Step 3 bridge) ───────────────────────────────
+// Hybrid store: Postgres if DATABASE_URL is set, else per-process in-memory.
+// Only ever keyed by the authenticated user's sub — anonymous /assess calls are
+// never persisted, matching the module's original stateless behaviour for them.
+
+interface Measurement {
+  id: string;
+  userId: string;
+  values: Record<string, number>;
+  flags: Record<string, boolean>;
+  flaggedMarkers: { key: string; name: string; value: number; target: string; grade: Grade }[];
+  createdAt: string;
+}
+
+const measurementsMem = new Map<string, Measurement[]>(); // userId -> asc by createdAt
+
+let useDb = false;
+let dbInitTried = false;
+
+async function ensureDb() {
+  if (dbInitTried) return;
+  dbInitTried = true;
+  if (!process.env.DATABASE_URL) {
+    console.log("[Longevity] DATABASE_URL absent — in-memory history");
+    return;
+  }
+  try {
+    const pool = getPool();
+    await pool.query(`CREATE TABLE IF NOT EXISTS "LongevityMeasurement" (
+      "id"             TEXT PRIMARY KEY,
+      "userId"         TEXT NOT NULL,
+      "values"         JSONB NOT NULL DEFAULT '{}',
+      "flags"          JSONB NOT NULL DEFAULT '{}',
+      "flaggedMarkers" JSONB NOT NULL DEFAULT '[]',
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "LongevityMeasurement_userId_createdAt_idx" ON "LongevityMeasurement" ("userId", "createdAt")`);
+    await pool.query(`SELECT 1 FROM "LongevityMeasurement" LIMIT 1`);
+    useDb = true;
+    console.log("[Longevity] Postgres persistence enabled");
+  } catch (e) {
+    captureLongevityError(e, { route: "db-init" });
+    console.warn("[Longevity] DB init failed, fallback in-memory:", e instanceof Error ? e.message : e);
+  }
+}
+void ensureDb();
+
+function rowToMeasurement(r: any): Measurement {
+  return {
+    id: r.id,
+    userId: r.userId,
+    values: r.values || {},
+    flags: r.flags || {},
+    flaggedMarkers: r.flaggedMarkers || [],
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+const measurementStore = {
+  async save(m: Measurement): Promise<void> {
+    await ensureDb();
+    if (useDb) {
+      await getPool().query(
+        `INSERT INTO "LongevityMeasurement" ("id","userId","values","flags","flaggedMarkers","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [m.id, m.userId, JSON.stringify(m.values), JSON.stringify(m.flags), JSON.stringify(m.flaggedMarkers), m.createdAt],
+      );
+      return;
+    }
+    const list = measurementsMem.get(m.userId) || [];
+    list.push(m);
+    measurementsMem.set(m.userId, list);
+  },
+  /** Ascending by createdAt — [0] is the earliest (baseline), last is the latest. */
+  async listForUser(userId: string): Promise<Measurement[]> {
+    await ensureDb();
+    if (useDb) {
+      const r = await getPool().query(`SELECT * FROM "LongevityMeasurement" WHERE "userId"=$1 ORDER BY "createdAt" ASC`, [userId]);
+      return r.rows.map(rowToMeasurement);
+    }
+    return measurementsMem.get(userId) || [];
+  },
+};
+
 // ── Endpoints ───────────────────────────────────────────────────────────────────
 
-longevityRouter.get("/health", (_req: Request, res: Response) => {
+longevityRouter.get("/health", async (_req: Request, res: Response) => {
+  await ensureDb();
   res.json({
     status: "ok",
     service: "AEVION Longevity",
-    persistence: "stateless",
+    persistence: useDb ? "postgres" : "in-memory (signed-in only)",
     panelMarkers: PANEL.length,
     interventions: STACK.length,
     cycleWeeks: CYCLE.weeks,
@@ -213,7 +312,7 @@ longevityRouter.get("/panel", (_req: Request, res: Response) => {
  * body: { values?: {<markerKey>: number}, flags?: {diabetes,pregnant,underweight,hypertension,heartCondition} }
  * → flagged (out-of-range) markers + personalized, contraindication-gated 12-week stack.
  */
-longevityRouter.post("/assess", (req: Request, res: Response) => {
+longevityRouter.post("/assess", async (req: Request, res: Response) => {
   const b = req.body || {};
   const values = (b.values || {}) as Record<string, unknown>;
   const flags = (b.flags || {}) as Record<string, unknown>;
@@ -251,6 +350,33 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
     note: it.note,
   }));
 
+  // Save to history for signed-in users only — anonymous /assess stays stateless.
+  const auth = verifyBearerOptional(req);
+  let saved = false;
+  let measurementId: string | null = null;
+  if (auth?.sub && Object.keys(values).some((k) => num(values[k]) !== null)) {
+    try {
+      measurementId = crypto.randomUUID();
+      const numericValues: Record<string, number> = {};
+      for (const [k, v] of Object.entries(values)) {
+        const n = num(v);
+        if (n !== null) numericValues[k] = n;
+      }
+      await measurementStore.save({
+        id: measurementId,
+        userId: auth.sub,
+        values: numericValues,
+        flags: Object.fromEntries(activeFlags.map((f) => [f, true])),
+        flaggedMarkers: flagged,
+        createdAt: nowIso(),
+      });
+      saved = true;
+    } catch (e) {
+      captureLongevityError(e, { route: "assess-save", actorUserId: auth.sub });
+      measurementId = null;
+    }
+  }
+
   res.json({
     flaggedMarkers: flagged,
     flaggedCount: flagged.length,
@@ -268,7 +394,30 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
     cycle: CYCLE,
     priorityRule: "Сначала бесплатное и доказанное (сон, движение, коррекция дефицитов, связи), потом экзотика.",
     guardrail: "Движок компонует только образ жизни; дозы и рецептурные препараты не назначаем.",
+    saved,
+    measurementId,
     disclaimer: DISCLAIMER,
+    timestamp: nowIso(),
+  });
+});
+
+/**
+ * GET /history — signed-in user's past assessments, oldest first (so [0] is
+ * the natural baseline). 401 if not signed in — anonymous users have no history.
+ */
+longevityRouter.get("/history", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth-required" });
+  const list = await measurementStore.listForUser(auth.sub);
+  res.json({
+    measurements: list.map((m) => ({
+      id: m.id,
+      values: m.values,
+      flags: m.flags,
+      flaggedCount: m.flaggedMarkers.length,
+      createdAt: m.createdAt,
+    })),
+    count: list.length,
     timestamp: nowIso(),
   });
 });
@@ -358,10 +507,30 @@ longevityRouter.post("/ai-plan", async (req: Request, res: Response) => {
  * body: { baseline: {<metricKey>: number}, latest: {<metricKey>: number} }
  * → direction-aware per-metric improvement + overall progress score. Stateless.
  */
-longevityRouter.post("/progress", (req: Request, res: Response) => {
+longevityRouter.post("/progress", async (req: Request, res: Response) => {
   const b = req.body || {};
-  const base = (b.baseline || {}) as Record<string, unknown>;
-  const late = (b.latest || {}) as Record<string, unknown>;
+  let base = (b.baseline || {}) as Record<string, unknown>;
+  let late = (b.latest || {}) as Record<string, unknown>;
+  let baselineSource: "input" | "history" = "input";
+  let latestSource: "input" | "history" = "input";
+
+  // Auto-fill missing baseline/latest from a signed-in user's saved history:
+  // baseline ← earliest measurement, latest ← most recent measurement.
+  // Explicit body values always win — this only fills in what's missing.
+  const auth = verifyBearerOptional(req);
+  const baselineEmpty = Object.keys(base).length === 0;
+  const latestEmpty = Object.keys(late).length === 0;
+  if (auth?.sub && (baselineEmpty || latestEmpty)) {
+    const list = await measurementStore.listForUser(auth.sub);
+    if (baselineEmpty && list.length > 0) {
+      base = list[0].values;
+      baselineSource = "history";
+    }
+    if (latestEmpty && list.length > 1) {
+      late = list[list.length - 1].values;
+      latestSource = "history";
+    }
+  }
 
   const results: { key: string; name: string; baseline: number; latest: number; change: number; improved: boolean }[] = [];
   for (const m of PROGRESS_METRICS) {
@@ -376,7 +545,9 @@ longevityRouter.post("/progress", (req: Request, res: Response) => {
   if (results.length === 0) {
     return res.status(400).json({
       error: "no_comparable_metrics",
-      hint: "Передайте baseline и latest хотя бы по одной из метрик.",
+      hint: auth?.sub
+        ? "Нет сравнимых метрик. Передайте baseline и latest вручную, либо сначала сохрани минимум 2 оценки через «Собрать план»."
+        : "Передайте baseline и latest хотя бы по одной из метрик.",
       metrics: PROGRESS_METRICS.map((m) => m.key),
     });
   }
@@ -391,6 +562,8 @@ longevityRouter.post("/progress", (req: Request, res: Response) => {
     total: results.length,
     progressScore: score,
     trajectory,
+    baselineSource,
+    latestSource,
     interpretation:
       trajectory === "improving"
         ? "Большинство ключевых маркеров сдвинулись в нужную сторону — цикл рабочий, продолжаем и усиливаем сработавшее."

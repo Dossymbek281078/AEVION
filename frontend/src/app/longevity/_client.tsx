@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
+import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -52,14 +53,30 @@ interface AssessResp {
   contraindicationGated: { name: string; reason: string }[];
   informOnly: { name: string; grade: string; note: string }[];
   cycle: { weeks: number; phases: { week: string; title: string; detail: string }[] };
+  saved: boolean;
+  measurementId: string | null;
   disclaimer: string;
 }
 
 interface ProgMetric { key: string; name: string; baseline: number; latest: number; change: number; improved: boolean; }
-interface ProgResp { metrics: ProgMetric[]; improvedCount: number; total: number; progressScore: number; trajectory: string; interpretation: string; }
+interface ProgResp {
+  metrics: ProgMetric[];
+  improvedCount: number;
+  total: number;
+  progressScore: number;
+  trajectory: string;
+  baselineSource: "input" | "history";
+  latestSource: "input" | "history";
+  interpretation: string;
+}
+
+interface HistoryEntry { id: string; values: Record<string, number>; flaggedCount: number; createdAt: string; }
+interface HistoryResp { measurements: HistoryEntry[]; count: number; }
 
 export default function LongevityClient() {
   const [panel, setPanel] = useState<PanelResp | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
 
   const [vals, setVals] = useState<Record<string, string>>({});
   const [flags, setFlags] = useState<Record<string, boolean>>({});
@@ -73,11 +90,21 @@ export default function LongevityClient() {
   const [progErr, setProgErr] = useState<string | null>(null);
   const [progLoading, setProgLoading] = useState(false);
 
+  function loadHistory() {
+    if (!isAuthenticated()) return;
+    fetch(apiUrl("/api/longevity/history"), { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: HistoryResp | null) => d && setHistory(d.measurements))
+      .catch(() => {});
+  }
+
   useEffect(() => {
     fetch(apiUrl("/api/longevity/panel"))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setPanel(d as PanelResp))
       .catch(() => {});
+    setSignedIn(isAuthenticated());
+    loadHistory();
   }, []);
 
   function numBody(src: Record<string, string>): Record<string, number> {
@@ -97,11 +124,13 @@ export default function LongevityClient() {
       for (const [k, v] of Object.entries(flags)) if (v) activeFlags[k] = true;
       const res = await fetch(apiUrl("/api/longevity/assess"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ values: numBody(vals), flags: activeFlags }),
       });
       if (!res.ok) throw new Error(`Сервер вернул ${res.status}`);
-      setAssess((await res.json()) as AssessResp);
+      const data = (await res.json()) as AssessResp;
+      setAssess(data);
+      if (data.saved) loadHistory();
     } catch (e) {
       setAssessErr(e instanceof Error ? e.message : "Не удалось оценить");
     } finally {
@@ -115,11 +144,11 @@ export default function LongevityClient() {
     try {
       const res = await fetch(apiUrl("/api/longevity/progress"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ baseline: numBody(base), latest: numBody(late) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error === "no_comparable_metrics" ? "Заполни хотя бы одну метрику в обоих столбцах" : `Сервер вернул ${res.status}`);
+      if (!res.ok) throw new Error(data?.error === "no_comparable_metrics" ? (data?.hint || "Заполни хотя бы одну метрику в обоих столбцах") : `Сервер вернул ${res.status}`);
       setProg(data as ProgResp);
     } catch (e) {
       setProgErr(e instanceof Error ? e.message : "Не удалось посчитать");
@@ -174,6 +203,11 @@ export default function LongevityClient() {
 
           {assess && (
             <div style={styles.result}>
+              {assess.saved ? (
+                <p style={styles.savedNote}>✓ Сохранено в историю — учтётся как точка отсчёта в Шаге 3.</p>
+              ) : !signedIn ? (
+                <p style={styles.savedNote}>Войди в аккаунт, чтобы оценки сохранялись в историю для автосравнения в Шаге 3.</p>
+              ) : null}
               {assess.flaggedMarkers.length > 0 && (
                 <>
                   <div style={styles.blockTitle}>Вне коридора ({assess.flaggedMarkers.length})</div>
@@ -239,7 +273,11 @@ export default function LongevityClient() {
         {/* Step 3: progress */}
         <section style={styles.card}>
           <h2 style={styles.h2}>Шаг 3 · Перемер и прогресс</h2>
-          <p style={styles.sub}>Введи ключевые метрики до и после цикла — движок посчитает дельту в правильную сторону.</p>
+          <p style={styles.sub}>
+            {signedIn && history && history.length > 0
+              ? `Есть история: ${history.length} сохранённых оценок (первая — ${new Date(history[0].createdAt).toLocaleDateString("ru-RU")}). Оставь поля пустыми — заполним из истории; или введи вручную.`
+              : "Введи ключевые метрики до и после цикла — движок посчитает дельту в правильную сторону."}
+          </p>
           <div style={styles.progGrid}>
             <div style={styles.progHead}></div>
             <div style={styles.progHead}>Было (baseline)</div>
@@ -271,6 +309,15 @@ export default function LongevityClient() {
                 </div>
               </div>
               <p style={styles.bioInterp}>{prog.interpretation}</p>
+              {(prog.baselineSource === "history" || prog.latestSource === "history") && (
+                <p style={styles.savedNote}>
+                  {prog.baselineSource === "history" && prog.latestSource === "history"
+                    ? "baseline и latest подставлены из истории."
+                    : prog.baselineSource === "history"
+                    ? "baseline подставлен из истории, latest — введён вручную."
+                    : "latest подставлен из истории, baseline — введён вручную."}
+                </p>
+              )}
               <div style={styles.metrics}>
                 {prog.metrics.map((m) => (
                   <div key={m.key} style={styles.metricRow}>
@@ -333,6 +380,7 @@ const styles: Record<string, React.CSSProperties> = {
   flagChip: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#c3d0e0", background: "#0a101c", border: "1px solid #24344f", borderRadius: 8, padding: "6px 11px", cursor: "pointer" },
   btn: { marginTop: 20, background: "#35c9b3", color: "#04120f", border: "none", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   error: { color: "#e0787f", marginTop: 12 },
+  savedNote: { fontSize: 12.5, color: "#35c9b3", margin: "4px 0 0" },
   result: { marginTop: 20 },
   blockTitle: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6c7d92", margin: "18px 0 10px" },
   chips: { display: "flex", flexWrap: "wrap", gap: 8 },

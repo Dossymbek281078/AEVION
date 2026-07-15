@@ -458,6 +458,22 @@ model HealthDailyLog {
   @@index([profileId, date])
 }
 
+// ── Longevity assessment history (measure → act → re-measure) ───────────
+// Keyed directly by userId (JWT sub) — no anonymous rows, unlike HealthProfile.
+// Mirrors the hybrid-store pattern: bootstrapped via raw SQL in longevity.ts
+// (Railway build doesn't run `prisma db push`), this model exists for schema
+// parity/documentation. [0] ordered by createdAt is the natural baseline.
+model LongevityMeasurement {
+  id             String   @id
+  userId         String
+  values         Json     @default("{}")
+  flags          Json     @default("{}")
+  flaggedMarkers Json     @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
 // ── CyberChess cloud state (аккаунт-синхра между устройствами) ──────────
 // Снапшот игрового состояния (рейтинг/история/Chessy/прогресс/настройки) как
 // JSON, КЛЮЧУЕТСЯ ПО JWT-аккаунту (userId = auth.sub), не по client-userId →

@@ -55,6 +55,11 @@ async function main() {
   const firstTargeted = (assess.json?.recommendedStack || [])[0]?.targeted;
   assert(firstTargeted === true, "assess floats targeted interventions to the top");
   assert((assess.json?.informOnly || []).some((it) => /NMN|NR|Волновые/i.test(it.name)), "assess keeps NAD-boosters / wave-gadgets info-only");
+  assert(assess.json?.saved === false && assess.json?.measurementId === null, "assess stays stateless for anonymous callers (saved=false)");
+
+  // history — 401 without a token (no anonymous history)
+  const hist = await jget("/api/longevity/history");
+  assert(hist.status === 401, "history requires auth (401 anonymous)", `status=${hist.status}`);
 
   // assess — contraindication gating
   const gated = await jpost("/api/longevity/assess", { values: {}, flags: { diabetes: true, pregnant: true } });

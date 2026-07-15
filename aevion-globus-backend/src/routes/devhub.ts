@@ -4520,6 +4520,8 @@ devhubRouter.get("/studio/credits", async (req, res) => {
 devhubRouter.post("/studio/tier", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "authentication required" });
+  const role = (auth.role || "").toLowerCase();
+  if (role !== "admin") return res.status(403).json({ error: "admin_only" });
   const userId = auth.sub;
   const { tier, targetUserId } = req.body || {};
   const validTiers: StudioTier[] = ["free", "pro", "enterprise"];

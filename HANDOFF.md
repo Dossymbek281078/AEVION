@@ -1,105 +1,65 @@
 # AEVION CyberChess — HANDOFF (живой)
 
-> **Последнее обновление:** 2026-05-03 ~19:30 — drag/click/premove МЕХАНИКА всё ещё НЕ работает после полного переписывания дважды. Юзер останавливается, переходит на другой ноут чтобы попробовать продолжить с той сессии где механика работала.
+> **Последнее обновление:** 2026-07-15 — механика (drag/click/premove) работает и подтверждена. Puzzle Rush получил Survival-режим + адаптивную сложность. Открытых чесс-задач в очереди нет.
 
 ---
 
-## ТЕКУЩЕЕ СОСТОЯНИЕ (END-OF-SESSION 2026-05-03)
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-07-15)
 
-### ❌ ЧТО НЕ РАБОТАЕТ
-- **Drag фигур мышью** — фигура не следует за курсором (или мелькает на миг)
-- **Премувы** — не создаются драгом, премув-арроу показывают неверные ходы
-- **Touch/touchpad** — не тестировалось
+### ✅ Механика ввода — РАБОТАЕТ
+Баг с drag/click/premove из сессии 2026-05-03 (ниже, в разделе "история") оказался **не багом механики**: причина — временный debug-хак `const delay = 20000` в `page.tsx` (~L3758), намертво пинивший задержку хода AI и создававший впечатление "замороженной" доски. Найдено и исправлено в PR #447 (2026-06-28). Drag/click/premove верифицированы рабочими.
 
-### ✅ ЧТО РАБОТАЕТ
-- Click-to-move работает (юзер сделал ходы Nf3, Nc3 кликами)
-- Опции: streamer overlay (YouTube/Twitch), 4 piece sets, settings
-- v4 hook ЗАГРУЖЕН в браузер (зелёный баннер "INPUT v4 LOADED" виден)
-- showGhost ВЫЗЫВАЕТСЯ (HUD показал 4 calls)
-- showGhost-done логирует `vis:visible` — DOM правильно мутируется
-- НО юзер всё равно не видит ghost при drag
+**Если механика снова "падает"** — первым делом искать временные пины/debug-хаки (задержки, hardcoded flags) в `page.tsx`, а не переписывать hook заново.
 
-### 🔍 ДИАГНОСТИКА СДЕЛАНА
-- BoardDebugHud (Ctrl+Shift+D) — счётчики событий + DOM snapshot
-- Version banner (зелёная полоса наверху) — подтверждает v4 загружен
-- showGhost CustomEvent telemetry — подтверждает hook вызывается
+### ✅ Puzzle Rush — Survival + Adaptive (PR #611, #613, обе смёржены в main)
+- **⚡ Rush Survival** (по умолчанию): 3 ошибки = конец (❤❤❤), 10-мин таймер — только страховка от зависания. 20 решённых подряд возвращают 1 жизнь (без очков за восстановление).
+- **⏱ Rush Timed**: старый режим по таймеру (3/5/10 мин).
+- **Адаптивная сложность**: цель по рейтингу чуть ниже ELO игрока, +25/решение, −70/ошибку, следующий пазл — из окна у цели (окно расширяется при нехватке задач). Разрядный ярлык: Разрядник / КМС / Мастер / Гроссмейстер ~NNNN.
+- Timer drift, next-puzzle stall, повторы пазлов — исправлены в #611 до этого.
 
-### КОММИТЫ (chess-tournaments → main):
-- `9526c8b` → `98db5bd` — hook v4: imperative DOM ghost (createElement+appendChild на body)
-- `aec0ee8` — rainbow version banner
-- `98e5a6e` — fix banner rotation
-- `a0ce80e` → `9491f0f` — premove legality validation + dots для премувов
+### Другие крупные ветки, уже в main
+- Onboarding в один экран (#608), adaptive progression коуча (#605)
+- Opening theory + сквозные слабости из Game DNA → коуч (#599–#603)
+- A11y batch 1–5: локализация, screen-reader board, contrast, focus-trap (#587–#597)
+- UI thinning: overflow-меню, PiP, launchpad CTA (#592–#594)
 
 ---
 
-## ГИПОТЕЗЫ что осталось проверить
+## ГДЕ ЖИВЁТ КОД
 
-1. **Браузер всё-таки кэширует** — даже инкогнито может показывать что-то странное. На другом ноуте — проверить в Firefox.
-2. **CSS из globals.css** — есть много правил `[data-drag-from]` которые я добавил. Может что-то перекрывает ghost.
-3. **Pointer-events на ancestor** — может body или main имеет `pointer-events:none` где-то.
-4. **Z-index конфликт** — z-index 99999 ghost, но что-то может быть выше.
-5. **Может ghost создаётся, но innerHTML пустой** — getPieceHtml возвращает "" если piece не найден.
+```
+frontend/src/app/cyberchess/         ← основной UI (Next.js)
+  page.tsx                           ← главная страница игры (drag/click/premove/rush — тут)
+  cpi/dashboard/page.tsx
+  replays/page.tsx
+  billing.ts
+```
+Worktree: `aevion-cyberchess`. `node_modules` — junction из `aevion-core` (нужен для `tsc`).
 
-## ЧТО ДЕЛАТЬ НА СЛЕДУЮЩЕЙ СЕССИИ
+## ВЕТКИ
+- `main` — продакшн, актуальное состояние
+- Фичи по CyberChess: отдельная ветка на PR, мёржатся squash в main через `gh pr merge --squash --delete-branch`
+- ⚠️ **Готча:** если ветка называется вида `feat/cyberchess-polish-0613`, её может **хард-ресетить фоновый процесс** до дневного снапшот-коммита. Коммить+пушить быстро или работать на отдельной ветке от `origin/main`. (См. память `cyberchess_branch_reset_gotcha`.)
 
-### Если на другом ноуте есть рабочая версия 2026-04-30:
-1. Сравнить useBoardInput.ts из той сессии vs текущий v4
-2. Найти концептуальное различие
-3. Перенести рабочую механику
-
-### Если нет рабочей версии:
-1. Проверить getPieceHtml вручную в DevTools console: `document.getElementById('cc-ghost-v4').innerHTML`
-2. После клика на фигуру — должно быть SVG markup
-3. Если пусто — баг в getPieceHtml/lookup пути
-4. Если есть — баг в visibility/positioning
-
-### Альтернативный подход — использовать готовую библиотеку
-- `react-chessboard` (production-grade, drag из коробки)
-- `chessground` (Lichess engine, JS не TS, но работает гарантированно)
-
----
-
-## КАК ЗАПУСТИТЬ (на любом ноуте)
+## КАК ЗАПУСТИТЬ
 
 ```bash
-# Pull latest
-cd ~/aevion-core/frontend-chess && git pull --ff-only origin chess-tournaments
-
-# Or на main:
-cd ~/aevion-core && git pull --ff-only origin main
-
-# Dev server
-cd ~/aevion-core/frontend-chess/frontend && npm run dev
+cd ~/aevion-cyberchess/frontend && npm run dev
 # → http://localhost:3000/cyberchess
 ```
 
-Зелёный баннер вверху страницы = v4 загружен. Если баннера нет — пересобрать (`rm -rf .next; npm run dev`).
+---
+
+## СЛЕДУЮЩИЙ ШАГ — НЕ ОПРЕДЕЛЁН
+
+На 2026-07-15 нет открытого PR и нет явного TODO в коде CyberChess (только несвязанные `TODO` в `billing.ts`, `cpi/dashboard`, `replays`). Если продолжаем сессию — нужно направление от юзера: новая фича/баг/режим, или ручное тестирование Rush Survival в браузере.
 
 ---
 
-## ВЕТКИ
-- `chess-tournaments` (worktree `frontend-chess`) — основная для CyberChess работы
-- `main` — продакшн, синхронизирован с chess-tournaments
-- Worktrees: `git worktree list`
+## ИСТОРИЯ (для контекста, не актуально к действию)
 
----
+### 2026-05-03 — ложная тревога с drag/premove
+Тогда казалось, что drag/click/premove полностью не работают после переписывания hook'а v1→v4 (DOM-imperative ghost, version banner, BoardDebugHud). Часы диагностики ушли на CSS/z-index/pointer-events гипотезы. **Реальная причина нашлась только 2026-06-28 (PR #447): хардкоженная AI-задержка 20 сек в page.tsx**, не связанная с hook'ом вообще. Урок: при "замороженной" доске сначала грепать debug-пины, потом чинить input-механику.
 
-## ПРЕДЫДУЩИЕ ИТЕРАЦИИ (что пробовали)
-
-### 2026-05-03 (эта сессия)
-- v1 → v2 → v3 → v4 переписываний hook'а
-- v3: DOM-imperative ghost через React Portal (React reconciler перезаписывал style)
-- v4: ghost создаётся через document.createElement в useEffect, вне React дерева
-- Premove legality validation с premoveLegalMoves helper
-- Rainbow → green version banner
-- BoardDebugHud для диагностики
-
-### 2026-05-02 (попытка дня)
-- Множественные fixes drag/click/premove
-- 5 новых функций: streamer overlay, piece sets, click-deselect
-- Реальная проблема не была найдена
-
-### 2026-04-30 (последняя якобы работающая)
-- Юзер помнит что drag работал на другом ноуте
-- Та сессия не запушена → потеряна
-- Текущая попытка восстановить — не получилось
+### 2026-04-30 — "рабочая версия потеряна"
+Юзер помнил рабочий drag на другом ноуте, сессия не была запушена. Больше не актуально — текущий main работает.

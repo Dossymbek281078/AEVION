@@ -122,6 +122,14 @@ export type OrchestratorEvent =
       resolved: "council" | "single";
       classifier: { provider: string; model: string };
       note: string;
+      /**
+       * council mode only: how deep the crowd was run. "light" = 1 MoA layer
+       * (~1.6× a single call) for short single-ask prompts; "deep" = 2 layers
+       * (~2.8×) for long or multi-part prompts. Absent on the single-call path.
+       */
+      depth?: "light" | "deep";
+      /** council mode only: the resolved Mixture-of-Agents layer count (1–3). */
+      layers?: number;
     }
   | {
       type: "plan";
@@ -913,6 +921,47 @@ export function parseRouteToken(reply: string): "open" | "fact" {
 }
 
 /**
+ * Grade an OPEN query's depth to pick how many Mixture-of-Agents layers to run.
+ * Pure + exported so the rule is unit-testable without a network call.
+ *
+ * Rationale (eval, 2026-07): a second aggregation layer (L2, ~2.8× a single
+ * call) earns its keep on long or multi-part prompts, where cross-checking many
+ * angles pays off; a short single-ask open prompt is answered just as well by a
+ * single aggregation layer (L1, ~1.6×). So we spend the extra layer only where
+ * the prompt is genuinely heavy. Signals of "heavy": length, multiple explicit
+ * questions, enumerations/numbered sub-asks, "compare/contrast/step by step"
+ * style cues, or several sentences. When in doubt we stay LIGHT (L1) — the
+ * classifier already guaranteed this is open-ended, so even L1 beats a single
+ * flagship; the deep tier is a top-up, not a floor.
+ *
+ * @returns 1 (light) or 2 (deep) — the resolved MoA layer count.
+ */
+export function assessOpenDepth(query: string): 1 | 2 {
+  const q = (query || "").trim();
+  if (!q) return 1;
+  const words = q.split(/\s+/).filter(Boolean).length;
+  const questionMarks = (q.match(/\?/g) || []).length;
+  // Enumerated sub-asks: "1.", "2)", bullet dashes, or newlines separating asks.
+  const enumerated = /(^|\n)\s*(\d+[.)]|[-*•])\s+/m.test(q);
+  const lines = q.split(/\n/).filter((l) => l.trim()).length;
+  // Multi-part cues that signal several distinct angles in one prompt.
+  const multiPartCue =
+    /\b(compare|contrast|versus|vs\.?|pros and cons|trade-?offs?|step[-\s]?by[-\s]?step|as well as|and also|then explain|both|each of)\b/i.test(q);
+  // "and"-joined asks ("do X and explain Y and weigh Z") — 2+ "and" hints breadth.
+  const andJoins = (q.match(/\band\b/gi) || []).length;
+
+  const heavy =
+    words >= 60 ||
+    questionMarks >= 2 ||
+    enumerated ||
+    lines >= 3 ||
+    (multiPartCue && words >= 20) ||
+    (andJoins >= 2 && words >= 30);
+
+  return heavy ? 2 : 1;
+}
+
+/**
  * Classify a query as OPEN (→ council) or FACT (→ single). Returns null if the
  * classifier call fails, so the caller can default to Council (never under-serve
  * on a quality question).
@@ -1027,23 +1076,37 @@ async function* runAuto(
     return;
   }
 
-  // OPEN → full Council.
+  // OPEN → Council. Grade the query's depth to pick 1 vs 2 MoA layers: a short
+  // single-ask open prompt runs LIGHT (L1, ~1.6×), a long/multi-part one runs
+  // DEEP (L2, ~2.8×). An explicit councilLayers on the request always wins — the
+  // heuristic only fills the gap when the caller delegated the choice to auto.
   const members = buildCouncil(input.councilSize ?? 3, input.overrides?.writer, { localOnly, localModels });
   const synthesizer = buildSynthesizer(input.overrides?.critic, { localOnly, localModels });
   if (members.length < 2 || !synthesizer) {
     yield { type: "error", message: localOnly ? noLocalProviderMsg() : noProviderMsg() };
     return;
   }
+  const explicitLayers = typeof input.councilLayers === "number";
+  const layers = explicitLayers
+    ? Math.max(1, Math.min(3, Math.floor(input.councilLayers!)))
+    : assessOpenDepth(input.userInput);
+  const depth: "light" | "deep" = layers >= 2 ? "deep" : "light";
   yield {
     type: "route",
     classification,
     resolved: "council",
     classifier: clfMeta,
-    note: decision
-      ? "Open-ended query — routed to the multi-model council for breadth + cross-checking."
-      : "Classifier unavailable — defaulted to the council (quality-safe).",
+    depth,
+    layers,
+    note: !decision
+      ? "Classifier unavailable — defaulted to the council (quality-safe)."
+      : explicitLayers
+        ? `Open-ended query — routed to the council (${layers}-layer, as requested).`
+        : depth === "deep"
+          ? "Open-ended and heavy (long or multi-part) — routed to the deep council (2 layers) for full cross-checking."
+          : "Open-ended but focused — routed to the light council (1 layer); still beats a single flagship at lower cost.",
   };
-  yield* runCouncil(input, { members, synthesizer }, t0);
+  yield* runCouncil({ ...input, councilLayers: layers }, { members, synthesizer }, t0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

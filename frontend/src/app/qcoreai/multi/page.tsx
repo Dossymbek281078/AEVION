@@ -1953,22 +1953,30 @@ export default function QCoreMultiAgentPage() {
                 </p>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                {/* Session savings from auto-routing: sum of what each fact→single
-                    run saved vs a forced Council (EST_COUNCIL_COST_USD − run cost). */}
+                {/* Session savings from auto-routing: what each run saved vs a
+                    forced full (deep L2) Council — both fact→single AND
+                    open→light-council count (EST_COUNCIL_COST_USD − run cost). */}
                 {(() => {
                   const sav = runs.reduce(
                     (a, r) => {
-                      if (r.routeNote?.resolved === "single" && typeof r.totalCostUsd === "number") {
+                      const routedCheaper =
+                        r.routeNote?.resolved === "single" ||
+                        (r.routeNote?.resolved === "council" && r.routeNote?.depth === "light");
+                      if (routedCheaper && typeof r.totalCostUsd === "number") {
                         const s = EST_COUNCIL_COST_USD - r.totalCostUsd;
-                        if (s > 0.005) { a.total += s; a.count += 1; }
+                        if (s > 0.005) {
+                          a.total += s;
+                          a.count += 1;
+                          if (r.routeNote?.resolved === "single") a.facts += 1; else a.light += 1;
+                        }
                       }
                       return a;
                     },
-                    { total: 0, count: 0 }
+                    { total: 0, count: 0, facts: 0, light: 0 }
                   );
                   return sav.count > 0 ? (
                     <div
-                      title={`Auto-routing sent ${sav.count} factual quer${sav.count === 1 ? "y" : "ies"} to a single flagship call instead of the full Council this session, saving ~$${sav.total.toFixed(2)} (vs the $${EST_COUNCIL_COST_USD.toFixed(3)}/answer N=40 Council baseline).`}
+                      title={`Auto-routing ran ${sav.count} quer${sav.count === 1 ? "y" : "ies"} cheaper than a forced full Council this session (${sav.facts} factual → single flagship call, ${sav.light} focused → light 1-layer council), saving ~$${sav.total.toFixed(2)} vs the $${EST_COUNCIL_COST_USD.toFixed(3)}/answer N=40 deep-Council baseline.`}
                       style={{
                         display: "flex", alignItems: "center", gap: 6,
                         padding: "8px 12px", borderRadius: 10,

@@ -941,12 +941,23 @@ export function assessOpenDepth(query: string): 1 | 2 {
   if (!q) return 1;
   const words = q.split(/\s+/).filter(Boolean).length;
   const questionMarks = (q.match(/\?/g) || []).length;
-  // Enumerated sub-asks: "1.", "2)", bullet dashes, or newlines separating asks.
-  const enumerated = /(^|\n)\s*(\d+[.)]|[-*•])\s+/m.test(q);
+  // Enumerated sub-asks: 2+ numbered markers ("1. … 2. … 3.") ANYWHERE (inline
+  // "do three things: 1. x, 2. y" counts, not only line-start), or bullet lines.
+  const enumerated =
+    (q.match(/\b\d+[.)]\s+/g) || []).length >= 2 ||
+    /(^|\n)\s*[-*•]\s+/m.test(q);
   const lines = q.split(/\n/).filter((l) => l.trim()).length;
   // Multi-part cues that signal several distinct angles in one prompt.
   const multiPartCue =
     /\b(compare|contrast|versus|vs\.?|pros and cons|trade-?offs?|step[-\s]?by[-\s]?step|as well as|and also|then explain|both|each of)\b/i.test(q);
+  // Imperative task chain: 3+ distinct "do this" verbs in one prompt
+  // ("summarize …, identify …, and propose …") signals several sub-asks even
+  // without enumeration or an explicit compare cue.
+  const taskVerbs = new Set(
+    (q.match(/\b(summari[sz]e|identify|outline|list|propose|recommend\w*|compare|contrast|weigh|analy[sz]e|explain|describe|evaluate|design|assess|cover)\b/gi) || [])
+      .map((v) => v.toLowerCase())
+  );
+  const imperativeChain = taskVerbs.size >= 3;
   // "and"-joined asks ("do X and explain Y and weigh Z") — 2+ "and" hints breadth.
   const andJoins = (q.match(/\band\b/gi) || []).length;
 
@@ -955,8 +966,9 @@ export function assessOpenDepth(query: string): 1 | 2 {
     questionMarks >= 2 ||
     enumerated ||
     lines >= 3 ||
-    (multiPartCue && words >= 20) ||
-    (andJoins >= 2 && words >= 30);
+    imperativeChain ||
+    (multiPartCue && words >= 18) ||
+    (andJoins >= 2 && words >= 28);
 
   return heavy ? 2 : 1;
 }

@@ -95,7 +95,7 @@ type RunState = {
   totalCostUsd?: number;
   strategy?: Strategy;
   /** auto mode: the router's decision for this run (shown as a chip). */
-  routeNote?: { classification: "open" | "fact"; resolved: "council" | "single"; note: string };
+  routeNote?: { classification: "open" | "fact"; resolved: "council" | "single"; note: string; depth?: "light" | "deep"; layers?: number };
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
@@ -165,6 +165,8 @@ type SSEPayload =
       resolved: "council" | "single";
       classifier: { provider: string; model: string };
       note: string;
+      depth?: "light" | "deep";
+      layers?: number;
     }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
@@ -1367,10 +1369,13 @@ export default function QCoreMultiAgentPage() {
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
       if (useStrategy === "council" || useStrategy === "auto") {
-        // auto may route to the council — carry the crowd size / depth / offline
-        // so the council leg honours them; harmless on the single-call leg.
+        // auto may route to the council — carry the crowd size / offline so the
+        // council leg honours them; harmless on the single-call leg.
         body.councilSize = councilSize;
-        body.councilLayers = councilLayers;
+        // Depth: in "council" the user sets layers explicitly; in "auto" we omit
+        // it so the router grades the query and picks light (L1) vs deep (L2)
+        // itself. The stepper is disabled in auto to reflect that.
+        if (useStrategy === "council") body.councilLayers = councilLayers;
         if (councilOffline) body.offline = true;
       }
       if (continueFromRunId) body.continueFromRunId = continueFromRunId;
@@ -1422,7 +1427,7 @@ export default function QCoreMultiAgentPage() {
             setRuns((prev) =>
               prev.map((r) =>
                 r.id === realRunId
-                  ? { ...r, routeNote: { classification: payload.classification, resolved: payload.resolved, note: payload.note } }
+                  ? { ...r, routeNote: { classification: payload.classification, resolved: payload.resolved, note: payload.note, depth: payload.depth, layers: payload.layers } }
                   : r
               )
             );
@@ -2067,7 +2072,7 @@ export default function QCoreMultiAgentPage() {
                 </div>
               )}
 
-              {(strategy === "council" || strategy === "auto") && (
+              {strategy === "council" && (
                 <div
                   title="Mixture-of-Agents depth. 1 = fast (proposers → premium synthesis). 2-3 = deeper: free models refine each other's answers layer by layer before the final synthesis. Higher quality, ~Nx slower."
                   style={{
@@ -2087,6 +2092,21 @@ export default function QCoreMultiAgentPage() {
                     onClick={() => setCouncilLayers((n) => Math.min(3, n + 1))}
                     style={{ border: "none", background: "rgba(192,38,211,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
+                </div>
+              )}
+
+              {strategy === "auto" && (
+                <div
+                  title="In Auto mode the router grades each open-ended query and picks the Mixture-of-Agents depth itself: focused prompts run light (1 layer, ~1.6× a single call), long or multi-part prompts run deep (2 layers, ~2.8×). Factual lookups skip the council entirely."
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 8px", borderRadius: 8,
+                    background: "rgba(192,38,211,0.08)", border: "1px dashed rgba(192,38,211,0.4)",
+                    color: "#e9c7f5", fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <span>Depth (MoA)</span>
+                  <span style={{ opacity: 0.85, fontWeight: 600 }}>auto · L1↔L2 by query</span>
                 </div>
               )}
 
@@ -4994,8 +5014,22 @@ function RunCard({
             <span>⚡ Auto</span>
             <span style={{ opacity: 0.75, fontWeight: 500 }}>
               {run.routeNote.classification === "fact" ? "factual lookup" : "open-ended"} →{" "}
-              {run.routeNote.resolved === "council" ? "Council ✦" : "single flagship call"}
+              {run.routeNote.resolved === "council"
+                ? `Council ✦${run.routeNote.depth ? (run.routeNote.depth === "deep" ? " · deep L2" : " · light L1") : ""}`
+                : "single flagship call"}
             </span>
+            {run.routeNote.resolved === "council" && run.routeNote.depth === "light" && (
+              <span
+                title={`Focused open-ended query — ran the light council (1 MoA layer, ~1.6× a single call) instead of the deep 2-layer council (~2.8×). Still beats a single flagship, at lower cost.`}
+                style={{
+                  padding: "1px 7px", borderRadius: 999,
+                  background: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.45)",
+                  color: "#d8b4fe", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                }}
+              >
+                ~1.6× not 2.8×
+              </span>
+            )}
             {run.routeNote.resolved === "single" &&
               typeof run.totalCostUsd === "number" &&
               EST_COUNCIL_COST_USD - run.totalCostUsd > 0.005 && (

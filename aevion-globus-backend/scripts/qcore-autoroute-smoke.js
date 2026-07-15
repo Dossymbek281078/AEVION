@@ -60,6 +60,12 @@ ok("assessOpenDepth multi-part cue + length → 2 (deep)",
   assessOpenDepth("Compare a monolith versus microservices for a small team, weigh the trade-offs across cost, speed, and hiring, and then explain which you'd pick.") === 2);
 ok("assessOpenDepth focused reasoning ask → 1 (light)",
   assessOpenDepth("Should a solo founder ship a council or one flagship model?") === 1);
+ok("assessOpenDepth inline-enumerated sub-asks → 2 (deep)",
+  assessOpenDepth("Do three things: 1. outline a plan, 2. list the top risks, 3. suggest how to measure success.") === 2);
+ok("assessOpenDepth imperative task chain (3+ verbs) → 2 (deep)",
+  assessOpenDepth("Write a post-mortem: summarize what happened, identify three root causes, and propose concrete process changes.") === 2);
+ok("assessOpenDepth single task verb stays light",
+  assessOpenDepth("Summarize this article in three sentences.") === 1);
 ok("assessOpenDepth always returns 1 or 2",
   [1, 2].includes(assessOpenDepth("anything")) && [1, 2].includes(assessOpenDepth("")));
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
 type Status = "live" | "new" | "soon";
 type Item = { name: string; slug: string; desc: string; status: Status };
@@ -153,6 +154,7 @@ export default function ExplorePlanet() {
             <div className="aevx-stat"><b>0→100</b><span>QVenture quant score</span></div>
             <div className="aevx-stat"><b>Ed25519</b><span>Signed authorship</span></div>
           </div>
+          <TrustScoreBadge />
         </section>
 
         <section className="aevx-flag">

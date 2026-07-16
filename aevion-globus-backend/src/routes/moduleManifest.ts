@@ -2,6 +2,7 @@ import type { Router } from "express";
 import { qeventsRouter } from "./qevents";
 import { qventureRouter } from "./qventure";
 import { qskywayRouter } from "./qskyway";
+import { dataQualityRouter } from "./dataQuality";
 
 /**
  * A single module → route-prefix mount.
@@ -39,4 +40,6 @@ export const EXTRA_MOUNTS: ModuleMount[] = [
   { path: "/api/qventure", router: qventureRouter },
   { path: "/api/qskyway", router: qskywayRouter },
   { path: "/api/qevents", router: qeventsRouter },
+  // Platform-wide data-provenance / AEVION Trust Score (not a module gate).
+  { path: "/api/data-quality", router: dataQualityRouter },
 ];

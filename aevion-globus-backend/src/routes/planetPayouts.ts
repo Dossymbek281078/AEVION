@@ -11,6 +11,7 @@ import {
   scheduleEcosystemPersist,
   type PlanetCert,
 } from "./ecosystem";
+import { internalCreditAccount } from "./qtrade";
 
 function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -51,8 +52,8 @@ planetPayoutsRouter.get("/payouts.csv", requireAuth, async (req, res) => {
     .filter((x) => x.email === email)
     .sort((a, b) => (a.certifiedAt < b.certifiedAt ? 1 : -1));
   const rows: (string | number | null | undefined)[][] = [
-    ["id", "artifact_version_id", "amount_aec", "certified_at"],
-    ...items.map((x) => [x.id, x.artifactVersionId, x.amount, x.certifiedAt]),
+    ["id", "artifact_version_id", "amount_aec", "certified_at", "transfer_id"],
+    ...items.map((x) => [x.id, x.artifactVersionId, x.amount, x.certifiedAt, x.transferId]),
   ];
   sendCsv(res, "planet-payouts", rows);
 });
@@ -102,12 +103,21 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     });
   }
 
+  // Credit the certified artifact's owner, same pattern as the QRight
+  // royalty and CyberChess prize webhooks.
+  const credit = await internalCreditAccount({
+    owner: email,
+    amount: a,
+    memo: `Planet certification · ${artifactVersionId}`,
+  });
+
   const cert: PlanetCert = {
     id: `pcert_${randomUUID()}`,
     email: email.toLowerCase(),
     artifactVersionId,
     amount: a,
     certifiedAt: new Date().toISOString(),
+    transferId: credit.ok ? credit.operationId : null,
     source: "planet",
   };
   planetCerts.push(cert);
@@ -119,5 +129,8 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     id: cert.id,
     eventId,
     certifiedAt: cert.certifiedAt,
+    transferId: cert.transferId,
+    accountId: credit.ok ? credit.accountId : null,
+    creditError: credit.ok ? undefined : credit.error,
   });
 });

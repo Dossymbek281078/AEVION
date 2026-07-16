@@ -76,6 +76,11 @@ projectsRouter.get("/", async (req, res) => {
     // owner their own rows (including a test user viewing their own).
     const joinUser = mine ? "" : `JOIN "AEVIONUser" u ON u."id" = p."clientId"`;
     if (!mine) conds.push(excludeTestUsers("u"));
+    // Storefront shows only live inventory: a completed (DONE) project is not
+    // active work, so hide it from the public feed the same way the public
+    // vacancies feed hides CLOSED roles. Owners ("mine") still see their DONE
+    // projects, and an explicit ?status= filter is respected as requested.
+    if (!mine && !status) conds.push(`"status" <> 'DONE'`);
     params.push(limit);
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 

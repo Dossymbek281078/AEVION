@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS ecosystem_planet_certs (
   source TEXT NOT NULL DEFAULT 'planet',
   inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE ecosystem_planet_certs ADD COLUMN IF NOT EXISTS transfer_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_planet_email_certified_at
   ON ecosystem_planet_certs (email, certified_at DESC);
 
@@ -210,7 +211,8 @@ export async function loadSnapshot(): Promise<LedgerSnapshot> {
       ),
       pool.query(
         `SELECT id, email, artifact_version_id AS "artifactVersionId",
-                amount::float8 AS amount, certified_at AS "certifiedAt", source
+                amount::float8 AS amount, certified_at AS "certifiedAt",
+                transfer_id AS "transferId", source
          FROM ecosystem_planet_certs ORDER BY certified_at`,
       ),
     ]);
@@ -279,10 +281,10 @@ export async function persistSnapshot(snapshot: LedgerSnapshot): Promise<void> {
       for (const p of snapshot.planetCerts) {
         await client.query(
           `INSERT INTO ecosystem_planet_certs
-            (id, email, artifact_version_id, amount, certified_at, source)
-           VALUES ($1,$2,$3,$4,$5,$6)
+            (id, email, artifact_version_id, amount, certified_at, transfer_id, source)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
            ON CONFLICT (id) DO NOTHING`,
-          [p.id, p.email, p.artifactVersionId, p.amount, p.certifiedAt, p.source],
+          [p.id, p.email, p.artifactVersionId, p.amount, p.certifiedAt, p.transferId, p.source],
         );
       }
 

@@ -22,6 +22,7 @@ import {
   scheduleEcosystemPersist,
   type ChessPrize,
 } from "./ecosystem";
+import { internalCreditAccount } from "./qtrade";
 
 function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -141,7 +142,7 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
 
   type PodiumEntry = { email?: unknown; place?: unknown; amount?: unknown };
   const entries = podium as PodiumEntry[];
-  const recorded: Array<{ id: string; email: string; place: number; amount: number }> = [];
+  const recorded: Array<{ id: string; email: string; place: number; amount: number; transferId: string | null }> = [];
   const replayed: Array<{ id: string; email: string; place: number }> = [];
 
   for (const e of entries) {
@@ -160,6 +161,15 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
       continue;
     }
 
+    // Credit the winner's QTrade account, same pattern as the QRight royalty
+    // webhook (auto-provisions an account, not subject to the daily topup
+    // cap since this is a verified external payout).
+    const credit = await internalCreditAccount({
+      owner: e.email,
+      amount: amt,
+      memo: `Chess prize · ${tournamentId} · place ${e.place}`,
+    });
+
     const prize: ChessPrize = {
       id: `prize_${randomUUID()}`,
       email: (e.email as string).toLowerCase(),
@@ -167,11 +177,11 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
       place: e.place,
       amount: amt,
       finalizedAt: new Date().toISOString(),
-      transferId: null,
+      transferId: credit.ok ? credit.operationId : null,
       source: "cyberchess",
     };
     chessPrizes.push(prize);
-    recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount });
+    recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount, transferId: prize.transferId });
   }
 
   // Mark the tournament finalized in persistent storage so it stops

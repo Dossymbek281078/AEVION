@@ -111,8 +111,8 @@ async function main() {
     for (const c of certs) {
       const result = await client.query(
         `INSERT INTO ecosystem_planet_certs
-          (id, email, artifact_version_id, amount, certified_at, source)
-         VALUES ($1,$2,$3,$4,$5,$6)
+          (id, email, artifact_version_id, amount, certified_at, transfer_id, source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (id) DO NOTHING`,
         [
           c.id,
@@ -120,6 +120,7 @@ async function main() {
           c.artifactVersionId,
           c.amount,
           c.certifiedAt,
+          c.transferId ?? null,
           c.source ?? "planet",
         ],
       );

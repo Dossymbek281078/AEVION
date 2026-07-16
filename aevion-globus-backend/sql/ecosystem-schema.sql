@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS ecosystem_planet_certs (
   inserted_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Added after initial launch (planet certs didn't credit qtrade at first —
+-- see internalCreditAccount call in routes/planetPayouts.ts). CREATE TABLE
+-- IF NOT EXISTS above won't add this to an already-existing prod table.
+ALTER TABLE ecosystem_planet_certs ADD COLUMN IF NOT EXISTS transfer_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_planet_email_certified_at
   ON ecosystem_planet_certs (email, certified_at DESC);
 

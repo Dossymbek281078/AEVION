@@ -21,6 +21,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { validate, AiSuggestSchema } from "../lib/constitutionSchemas";
 import { aiRateGate } from "../lib/constitutionGate";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { smartComplete } from "../services/qcoreai/smartComplete";
 
 const capture = makeServiceCapture("constitutionAi");
 
@@ -177,6 +178,37 @@ const limiter = rateLimit({
   max: 20,
   keyPrefix: "constitution-ai",
 });
+
+// Additive: a non-streaming suggest that routes through the platform smart-call
+// layer (auto-router: FACT→single, OPEN→weight-graded Council) instead of the
+// hand-rolled loopback to /qcoreai/chat. Returns the domain answer plus the
+// `routing` record so the caller sees WHAT the router decided and its cost, and
+// the cross-module savings tally (GET /api/qcoreai/smart/savings) counts this
+// run too. The existing /ai-suggest-stream SSE path is untouched.
+constitutionAiRouter.post(
+  "/ai-suggest-smart",
+  limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  aiRateGate as unknown as (req: Request, res: Response, next: () => void) => void,
+  validate(AiSuggestSchema),
+  async (req: Request, res: Response) => {
+    const { description } = req.body as { description: string };
+    try {
+      const { answer, routing } = await smartComplete({
+        userInput: description.slice(0, 4000),
+        // Apply the Constitution domain framing to both the single-call and the
+        // Council chair paths.
+        overrides: {
+          writer: { systemPrompt: SYSTEM_PROMPT },
+          critic: { systemPrompt: SYSTEM_PROMPT },
+        },
+      });
+      return res.json({ answer, routing });
+    } catch (e: any) {
+      capture(e);
+      return res.status(502).json({ error: e?.message || "smart suggest failed" });
+    }
+  }
+);
 
 constitutionAiRouter.post(
   "/ai-suggest-stream",

@@ -1925,6 +1925,14 @@ export const translations = {
     "qpaynet.widget.amountLabel": "Amount ({currency})",
     "qpaynet.widget.pay": "Pay →",
     "qpaynet.widget.footer": "Secured by AEVION QPayNet ↗",
+    /* MapReality — form placeholders (AutoTranslate skips <input>/<textarea>, so these need an explicit t() key) */
+    "mapreality.alias.ph": "pick a pseudonym",
+    "mapreality.form.titlePh": "Title (e.g. Need 3 GPs for week of May 20)",
+    "mapreality.form.descPh": "Describe the need / event / request in detail (max 2000 chars)",
+    "mapreality.form.countryPh": "Country (KZ, RU, US...)",
+    "mapreality.form.cityPh": "City (optional)",
+    "mapreality.form.latPh": "lat (optional)",
+    "mapreality.form.lngPh": "lng (optional)",
   },
 
   ru: {
@@ -3650,6 +3658,14 @@ export const translations = {
     "qpaynet.widget.amountLabel": "Сумма ({currency})",
     "qpaynet.widget.pay": "Оплатить →",
     "qpaynet.widget.footer": "Безопасно через AEVION QPayNet ↗",
+    /* MapReality — плейсхолдеры форм (AutoTranslate не заходит в <input>/<textarea>, нужен явный t()) */
+    "mapreality.alias.ph": "укажите псевдоним",
+    "mapreality.form.titlePh": "Заголовок (напр.: нужны 3 терапевта на неделю 20 мая)",
+    "mapreality.form.descPh": "Опишите потребность / событие / запрос подробно (макс. 2000 символов)",
+    "mapreality.form.countryPh": "Страна (KZ, RU, US...)",
+    "mapreality.form.cityPh": "Город (необязательно)",
+    "mapreality.form.latPh": "широта (необязательно)",
+    "mapreality.form.lngPh": "долгота (необязательно)",
   },
 
   kk: {
@@ -5367,6 +5383,14 @@ export const translations = {
     "qpaynet.widget.amountLabel": "\u0421\u043e\u043c\u0430 ({currency})",
     "qpaynet.widget.pay": "\u0422\u04e9\u043b\u0435\u0443 \u2192",
     "qpaynet.widget.footer": "AEVION QPayNet \u0430\u0440\u049b\u044b\u043b\u044b \u049b\u0430\u0443\u0456\u043f\u0441\u0456\u0437 \u2197",
+    /* MapReality \u2014 \u0444\u043e\u0440\u043c\u0430 \u043e\u0440\u044b\u043d\u0431\u0430\u0441\u0430\u0440\u043b\u0430\u0440\u044b (AutoTranslate <input>/<textarea> \u0456\u0448\u0456\u043d\u0435 \u043a\u0456\u0440\u043c\u0435\u0439\u0434\u0456, \u0441\u043e\u043d\u0434\u044b\u049b\u0442\u0430\u043d t() \u043a\u0435\u0440\u0435\u043a) */
+    "mapreality.alias.ph": "\u043b\u0430\u049b\u0430\u043f \u0430\u0442 \u0442\u0430\u04a3\u0434\u0430\u04a3\u044b\u0437",
+    "mapreality.form.titlePh": "\u0422\u0430\u049b\u044b\u0440\u044b\u043f (\u043c\u044b\u0441.: 20 \u043c\u0430\u043c\u044b\u0440 \u0430\u043f\u0442\u0430\u0441\u044b\u043d\u0430 3 \u0434\u04d9\u0440\u0456\u0433\u0435\u0440 \u049b\u0430\u0436\u0435\u0442)",
+    "mapreality.form.descPh": "\u049a\u0430\u0436\u0435\u0442\u0442\u0456\u043b\u0456\u043a\u0442\u0456 / \u043e\u049b\u0438\u0493\u0430\u043d\u044b / \u0441\u04b1\u0440\u0430\u043d\u044b\u0441\u0442\u044b \u0442\u043e\u043b\u044b\u049b \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u04a3\u044b\u0437 (\u043c\u0430\u043a\u0441. 2000 \u0442\u0430\u04a3\u0431\u0430)",
+    "mapreality.form.countryPh": "\u0415\u043b (KZ, RU, US...)",
+    "mapreality.form.cityPh": "\u049a\u0430\u043b\u0430 (\u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u0435\u043c\u0435\u0441)",
+    "mapreality.form.latPh": "\u0435\u043d\u0434\u0456\u043a (\u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u0435\u043c\u0435\u0441)",
+    "mapreality.form.lngPh": "\u0431\u043e\u0439\u043b\u044b\u049b (\u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u0435\u043c\u0435\u0441)",
   },
 };
 

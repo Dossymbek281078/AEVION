@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type Category = "need" | "event" | "request";
 
@@ -26,6 +27,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
   const [lng, setLng] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const { t } = useI18n();
 
   function tryGeolocate() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -143,7 +145,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
 
       <input
         type="text"
-        placeholder="Title (e.g. Need 3 GPs for week of May 20)"
+        placeholder={t("mapreality.form.titlePh")}
         maxLength={200}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -152,7 +154,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       />
 
       <textarea
-        placeholder="Describe the need / event / request in detail (max 2000 chars)"
+        placeholder={t("mapreality.form.descPh")}
         maxLength={2000}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -164,7 +166,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <input
           type="text"
-          placeholder="Country (KZ, RU, US...)"
+          placeholder={t("mapreality.form.countryPh")}
           maxLength={64}
           value={country}
           onChange={(e) => setCountry(e.target.value)}
@@ -173,7 +175,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
         />
         <input
           type="text"
-          placeholder="City (optional)"
+          placeholder={t("mapreality.form.cityPh")}
           maxLength={80}
           value={city}
           onChange={(e) => setCity(e.target.value)}
@@ -184,14 +186,14 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "stretch" }}>
         <input
           type="text"
-          placeholder="lat (optional)"
+          placeholder={t("mapreality.form.latPh")}
           value={lat}
           onChange={(e) => setLat(e.target.value)}
           style={inputStyle}
         />
         <input
           type="text"
-          placeholder="lng (optional)"
+          placeholder={t("mapreality.form.lngPh")}
           value={lng}
           onChange={(e) => setLng(e.target.value)}
           style={inputStyle}

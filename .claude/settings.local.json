@@ -151,7 +151,27 @@
       "Read(//tmp/**)",
       "Bash(curl -s --max-time 6 http://127.0.0.1:4001/api/qright/embed/e02ac547-6a80-4a2f-b315-4f6b7536a488)",
       "Bash(tee /tmp/qr-be2.log)",
-      "Bash(echo \"exists on main: $?\")"
+      "Bash(echo \"exists on main: $?\")",
+      "Bash(\"/c/Users/user/aevion-core/aevion-globus-backend/node_modules/.bin/tsc\" --noEmit)",
+      "Bash(grep -rn \"signals/\\\\${\" .)",
+      "Bash(curl -s http://127.0.0.1:4001/api/qtrade/accounts -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s -X POST http://127.0.0.1:4001/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-smoke-1\",\"email\":\"__CMDSUB_OUTPUT__\",\"productKey\":\"song-123\",\"period\":\"2026-07\",\"amount\":42.5}')",
+      "Bash(curl -s http://127.0.0.1:4001/api/qtrade/accounts -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(curl -sv -X POST http://127.0.0.1:4001/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-smoke-2\",\"email\":\"__CMDSUB_OUTPUT__\",\"productKey\":\"song-999\",\"period\":\"2026-07\",\"amount\":10}')",
+      "Bash(wmic process *)",
+      "PowerShell(Get-CimInstance *)",
+      "Bash(curl -s -X POST http://127.0.0.1:4055/api/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"royalty-smoke3-__CMDSUB_OUTPUT__@example.com\",\"password\":\"TestPass123!\",\"name\":\"Royalty Smoke 3\"}')",
+      "Bash(python -c 'import json; print\\(json.loads\\('\\\\'''\\\\'''\\\\''__TRACKED_VAR__'\\\\'''\\\\'''\\\\''\\).get\\('\\\\''token'\\\\'','\\\\'''\\\\''\\)\\)')",
+      "Bash(curl -sv -X POST http://127.0.0.1:4055/api/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"debug-test-1@example.com\",\"password\":\"TestPass123!\",\"name\":\"Debug Test\"}')",
+      "Bash(echo \"exit: $?\")",
+      "Bash(tasklist //FI \"PID eq 35076\")",
+      "Bash(PORT=4077 npx ts-node-dev --respawn --transpile-only src/index.ts)",
+      "Bash(curl -s -X POST http://127.0.0.1:4077/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-final-1\",\"email\":\"royalty-final-1784187550@example.com\",\"productKey\":\"song-final\",\"period\":\"2026-07\",\"amount\":42.5}')",
+      "Bash(curl -s http://127.0.0.1:4077/api/qtrade/accounts -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://127.0.0.1:4077/api/qright/royalties -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://127.0.0.1:4077/api/qtrade/operations -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s -X POST http://127.0.0.1:4077/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-final-2\",\"email\":\"royalty-final-1784187550@example.com\",\"productKey\":\"song-final\",\"period\":\"2026-08\",\"amount\":10}')"
     ]
   }
 }

@@ -11,6 +11,7 @@ import {
   scheduleEcosystemPersist,
   type RoyaltyEvent,
 } from "./ecosystem";
+import { internalCreditAccount } from "./qtrade";
 
 function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -105,6 +106,19 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     });
   }
 
+  // Credit the recipient's QTrade account so the royalty actually lands as
+  // spendable balance, not just a ledger line. Auto-provisions an account if
+  // the recipient doesn't have one yet — a rights body can pay out before
+  // the creator has ever opened /qtrade. Failure here is effectively
+  // unreachable (amount/email are already validated above) but is treated
+  // as non-fatal: the RoyaltyEvent is still recorded with transferId null so
+  // /earnings reflects the payout, and it can be reconciled manually.
+  const credit = await internalCreditAccount({
+    owner: email,
+    amount: a,
+    memo: `Royalty · ${productKey} · ${period}`,
+  });
+
   const ev: RoyaltyEvent = {
     id: `roy_${randomUUID()}`,
     email: email.toLowerCase(),
@@ -112,8 +126,7 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     period,
     amount: a,
     paidAt: new Date().toISOString(),
-    transferId: null, // wiring to /api/qtrade/transfer is a follow-up; for
-                     // now the event is recorded so /earnings reflects it.
+    transferId: credit.ok ? credit.operationId : null,
     source: "qright",
   };
   royaltyEvents.push(ev);
@@ -125,5 +138,8 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     id: ev.id,
     eventId,
     paidAt: ev.paidAt,
+    transferId: ev.transferId,
+    accountId: credit.ok ? credit.accountId : null,
+    creditError: credit.ok ? undefined : credit.error,
   });
 });

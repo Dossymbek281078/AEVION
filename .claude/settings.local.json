@@ -158,7 +158,12 @@
       "Bash(chmod +x /c/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/audit.sh)",
       "Bash(bash /c/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/audit.sh)",
       "Bash(railway login *)",
-      "Bash(export RAILWAY_API_TOKEN=\"114b3b52-8c19-4fcd-80f9-0e8fc14b91e6\")"
+      "Bash(export RAILWAY_API_TOKEN=\"114b3b52-8c19-4fcd-80f9-0e8fc14b91e6\")",
+      "Bash(railway list *)",
+      "Bash(railway link *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(railway variables *)",
+      "Bash(EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait)"
     ]
   }
 }

@@ -846,6 +846,58 @@ qtradeRouter.post("/topup", (req, res) => {
 });
 
 // =======================
+// Internal credit (no HTTP, no ownership check — trusted in-process callers
+// only). Used by other backend routes that need to credit an owner's QTrade
+// account when money arrives from outside the ledger (e.g. the QRight
+// royalty webhook in qrightRoyalties.ts). Auto-provisions the owner's oldest
+// account if they don't have one yet, mirroring /accounts/lookup's "primary
+// account" semantics. Deliberately NOT subject to the user-facing daily
+// topup cap — that cap bounds self-funding abuse, not verified external
+// credits recorded by a signed webhook.
+// =======================
+export async function internalCreditAccount(opts: {
+  owner: string;
+  amount: number;
+  memo?: string;
+}): Promise<
+  | { ok: true; accountId: string; operationId: string; balance: number }
+  | { ok: false; error: string }
+> {
+  await ensureLoaded();
+  const owner = opts.owner.trim().toLowerCase();
+  if (!owner) return { ok: false, error: "owner required" };
+  const amount = Number(opts.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid amount" };
+
+  let acc = accounts
+    .filter((a) => a.owner.toLowerCase() === owner)
+    .reduce<Account | null>(
+      (oldest, a) => (!oldest || a.createdAt < oldest.createdAt ? a : oldest),
+      null,
+    );
+
+  if (!acc) {
+    acc = { id: nextId("acc"), owner, balance: 0, createdAt: new Date().toISOString() };
+    accounts.push(acc);
+  }
+
+  acc.balance += amount;
+  const operationId = nextId("op");
+  operations.push({
+    id: operationId,
+    kind: "topup",
+    amount,
+    from: null,
+    to: acc.id,
+    createdAt: new Date().toISOString(),
+    memo: sanitiseMemo(opts.memo),
+  });
+  schedulePersist();
+
+  return { ok: true, accountId: acc.id, operationId, balance: acc.balance };
+}
+
+// =======================
 // Перевод средств
 // =======================
 qtradeRouter.post("/transfer", (req, res) => {

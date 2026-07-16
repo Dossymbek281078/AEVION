@@ -22,9 +22,10 @@ export const agentRuntimeRouter = Router();
 
 const SYSTEM_PROMPT =
   "You are AEVION Agent. Answer briefly. When the user asks for an artifact — an image, a voice or music " +
-  "clip, a sound effect, a payment link, an email, an SMS, a translation, or anything a connected tool can " +
-  "do — call the matching tool instead of describing it. Prefer one tool call at a time, then summarise " +
-  "the result for the user.";
+  "clip, a sound effect, a payment link, an email, an SMS, a translation, a code file in their open DevHub " +
+  "project, or anything a connected tool can do — call the matching tool instead of describing it. Prefer " +
+  "one tool call at a time, then summarise the result for the user. If generate_code reports it has no open " +
+  "project, tell the user to open a DevHub project first instead of retrying.";
 
 agentRuntimeRouter.get("/health", async (_req, res) => {
   const mcpConfigured = parseMcpConfig(process.env.AGENT_RUNTIME_MCP_SERVERS);
@@ -69,9 +70,10 @@ agentRuntimeRouter.post("/run", async (req, res) => {
   const port = process.env.PORT || "4001";
   const baseUrl = process.env.SELF_BASE_URL || `http://127.0.0.1:${port}`;
   const maxSteps = Math.min(8, Math.max(1, Number(req.body?.maxSteps) || 5));
+  const projectId = typeof req.body?.projectId === "string" && req.body.projectId.trim() ? req.body.projectId.trim() : undefined;
 
   try {
-    const devhubExec = makeExecutor(baseUrl);
+    const devhubExec = makeExecutor(baseUrl, fetch, { projectId, authHeader: req.headers.authorization });
 
     // Optionally fold in remote MCP tools (Higgsfield & co.). Native tools always
     // win a name clash; MCP tools are dispatched to their owning server.

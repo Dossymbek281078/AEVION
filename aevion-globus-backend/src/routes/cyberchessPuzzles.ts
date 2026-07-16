@@ -209,4 +209,29 @@ router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
   res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH || POOL_URL });
 });
 
+/**
+ * POST /reload (admin)
+ * Header: X-Admin-Key must match process.env.CYBERCHESS_ADMIN_KEY
+ *
+ * ensureLoaded() caches its result for the lifetime of the process — after
+ * scripts/seed-puzzles.mjs grows the ChessPuzzle table, an already-running
+ * backend keeps serving the smaller pool it loaded at startup until it
+ * happens to redeploy. This forces a re-load without waiting on that.
+ */
+router.post("/reload", async (req: Request, res: Response): Promise<void> => {
+  const provided = (req.headers["x-admin-key"] || req.body?.adminKey || "") as string;
+  const expected = process.env.CYBERCHESS_ADMIN_KEY || "";
+  if (!expected) {
+    res.status(503).json({ ok: false, error: "admin reload disabled (CYBERCHESS_ADMIN_KEY not set)" });
+    return;
+  }
+  if (!provided || provided !== expected) {
+    res.status(403).json({ ok: false, error: "forbidden" });
+    return;
+  }
+  loadPromise = null;
+  await ensureLoaded();
+  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size });
+});
+
 export default router;

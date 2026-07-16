@@ -22,7 +22,7 @@ export default function TermsPage() {
 
         <div>
           <h2 className="text-lg font-semibold text-white mb-2">4. Subscriptions and Billing</h2>
-          <p>Paid subscriptions are billed on a recurring basis (monthly or annually) through Paddle, our authorized payment processor. Subscriptions automatically renew unless cancelled before the renewal date. A 14-day free trial is available on Pro and Business plans — no charge until the trial ends.</p>
+          <p>Payments and paid subscriptions are processed through Gumroad, our authorized payment processor and Merchant of Record. Recurring subscriptions automatically renew unless cancelled before the renewal date. Where a free trial is offered, no charge is made until the trial ends.</p>
         </div>
 
         <div>

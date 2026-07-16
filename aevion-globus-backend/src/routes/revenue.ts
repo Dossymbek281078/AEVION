@@ -393,8 +393,8 @@ revenueRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     providers: {
-      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: true, note: "живой канал подписок (Lite/Medium/Full)" },
-      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: false, note: "one-time продукты / fallback" },
+      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: false, note: "вторичный канал подписок (Lite/Medium/Full)" },
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true, note: "основной живой процессинг (подписки + one-time)" },
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),
@@ -501,8 +501,8 @@ revenueRouter.get("/overview", (_req, res) => {
     liveApps: live.length,
     channelCoverage: channelMap,
     providers: {
-      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: true },
-      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: false },
+      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: false },
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
       paddle: { configured: Boolean(PADDLE_KEY()), sandbox: PADDLE_SANDBOX() },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },

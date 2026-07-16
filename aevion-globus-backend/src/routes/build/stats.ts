@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
+import { buildPool as pool, ok, fail, requireBuildAuth, excludeTestUsers } from "../../lib/build";
 
 export const statsRouter = Router();
 
@@ -7,23 +7,27 @@ export const statsRouter = Router();
 statsRouter.get("/", async (_req, res) => {
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
   try {
+    // Exclude @aevion.test/@smoke.test fixtures so public storefront numbers
+    // (hero + stat cards) reflect real users, matching the filtered feeds.
+    const notTest = excludeTestUsers("u");
     const r = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" WHERE "status" = 'OPEN'`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" WHERE "status" = 'ACCEPTED'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile" bp JOIN "AEVIONUser" u ON u."id" = bp."userId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" a JOIN "AEVIONUser" u ON u."id" = a."userId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" a JOIN "AEVIONUser" u ON u."id" = a."userId" WHERE a."status" = 'ACCEPTED' AND ${notTest}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask"`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask" WHERE "status" = 'APPROVED'`),
       pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback"`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildCashback"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'IN_PROGRESS' AND ${notTest}`),
     ]);
     return ok(res, {
       vacancies: { open: Number(r[0].rows[0].n), total: Number(r[1].rows[0].n) },
       candidates: Number(r[2].rows[0].n),
-      projects: { total: Number(r[3].rows[0].n), open: Number(r[4].rows[0].n) },
+      projects: { total: Number(r[3].rows[0].n), open: Number(r[4].rows[0].n), inProgress: Number(r[11].rows[0].n) },
       applications: {
         total: Number(r[5].rows[0].n),
         accepted: Number(r[6].rows[0].n),
@@ -53,23 +57,27 @@ statsRouter.get("/activity", async (_req, res) => {
       pool.query(
         `SELECT v."id", v."title", v."createdAt", p."city" AS "projectCity"
          FROM "BuildVacancy" v
-         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
-         WHERE v."status" = 'OPEN'
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE v."status" = 'OPEN' AND ${excludeTestUsers("u")}
          ORDER BY v."createdAt" DESC LIMIT 10`,
       ),
       pool.query(
         `SELECT a."createdAt", v."title", p."city" AS "projectCity"
          FROM "BuildApplication" a
-         LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE ${excludeTestUsers("u")}
          ORDER BY a."createdAt" DESC LIMIT 10`,
       ),
       pool.query(
         `SELECT a."updatedAt" AS "at", v."title", p."city" AS "projectCity"
          FROM "BuildApplication" a
-         LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
-         WHERE a."status" = 'ACCEPTED'
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE a."status" = 'ACCEPTED' AND ${excludeTestUsers("u")}
          ORDER BY a."updatedAt" DESC LIMIT 5`,
       ),
     ]);
@@ -240,7 +248,7 @@ statsRouter.get("/featured-employers", async (_req, res) => {
        JOIN "AEVIONUser" u ON u."id" = pe."userId"
        LEFT JOIN "BuildProfile" p ON p."userId" = pe."userId"
        LEFT JOIN per_review pr ON pr."userId" = pe."userId"
-       WHERE pe."openVacancies" > 0 OR pe."hires" > 0
+       WHERE (pe."openVacancies" > 0 OR pe."hires" > 0) AND ${excludeTestUsers("u")}
        ORDER BY pe."hires" DESC, COALESCE(pr."avgRating",0) DESC, pe."openVacancies" DESC
        LIMIT 6`,
     );

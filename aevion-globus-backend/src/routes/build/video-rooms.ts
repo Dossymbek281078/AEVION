@@ -9,8 +9,15 @@ export const videoRoomsRouter = Router();
 async function createDailyRoom(roomName: string): Promise<{ url: string }> {
   const apiKey = process.env.DAILY_API_KEY?.trim();
   if (!apiKey) {
-    // Dev mode — return a stub that still works for testing
-    return { url: `https://aevion.daily.co/${roomName}` };
+    // Outside production, return a stub so local flows still work.
+    if ((process.env.NODE_ENV || "").toLowerCase() !== "production") {
+      return { url: `https://aevion.daily.co/${roomName}` };
+    }
+    // In production a missing key must not create a dead join URL that then
+    // gets stored and DM'd to a guest — surface it as not-configured instead.
+    const err = new Error("video_not_configured") as Error & { code?: string };
+    err.code = "video_not_configured";
+    throw err;
   }
   const res = await fetch("https://api.daily.co/v1/rooms", {
     method: "POST",
@@ -48,6 +55,11 @@ videoRoomsRouter.post("/", async (req, res) => {
       const room = await createDailyRoom(roomName);
       roomUrl = room.url;
     } catch (e) {
+      if ((e as { code?: string })?.code === "video_not_configured") {
+        return fail(res, 503, "video_not_configured", {
+          hint: "Video calls are not configured (DAILY_API_KEY missing).",
+        });
+      }
       return fail(res, 502, "video_room_creation_failed");
     }
 

@@ -16,6 +16,7 @@ import {
   isUnlimited,
   VACANCY_STATUSES,
   PROJECT_STATUSES,
+  excludeTestUsers,
 } from "../../lib/build";
 
 export const vacanciesRouter = Router();
@@ -145,6 +146,9 @@ vacanciesRouter.get("/", async (req, res) => {
       where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
     }
 
+    // Keep smoke/E2E throwaway vacancies (test-domain owners) off the public feed.
+    where.push(excludeTestUsers("u"));
+
     const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 100 }) : { ok: true as const, value: 50 };
     if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);
     params.push(limitRaw.value);
@@ -163,6 +167,7 @@ vacanciesRouter.get("/", async (req, res) => {
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       JOIN "AEVIONUser" u ON u."id" = p."clientId"
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY ${sortClause}
        LIMIT $${params.length}`,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -220,7 +221,7 @@ export default async function EmployerPage({
                     <h3 className="min-w-0 truncate text-sm font-semibold text-white">{v.title}</h3>
                     {v.salary > 0 && (
                       <div className="shrink-0 text-sm font-semibold text-emerald-300">
-                        {v.salary.toLocaleString()} {v.salaryCurrency || "USD"}
+                        {formatSalary(v.salary, v.salaryCurrency)}
                       </div>
                     )}
                   </div>

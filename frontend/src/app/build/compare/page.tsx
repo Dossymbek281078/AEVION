@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi, type BuildVacancy } from "@/lib/build/api";
+import { formatSalary } from "@/lib/build/format";
 
 export default function VacancyComparePage() {
   return (
@@ -136,7 +137,7 @@ function CompareCol({ vacancy: v }: { vacancy: BuildVacancy }) {
         </span>
       </div>
       <dl className="space-y-2 text-sm">
-        <Row label="Salary" value={v.salary > 0 ? `$${v.salary.toLocaleString()} ${v.salaryCurrency || ""}` : "—"} accent="emerald" />
+        <Row label="Salary" value={formatSalary(v.salary, v.salaryCurrency)} accent="emerald" />
         <Row label="City" value={v.city || "—"} />
         <Row label="Posted" value={new Date(v.createdAt).toLocaleDateString()} />
         <Row

@@ -16,6 +16,7 @@ import {
   type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { formatSalary } from "@/lib/build/format";
 import { emailError, isEmail } from "@/lib/build/validate";
 import { useToast } from "@/components/build/Toast";
 import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
@@ -274,7 +275,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           <div className="text-right">
             <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
             <div className="text-2xl font-semibold text-emerald-300">
-              {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+              {formatSalary(vacancy.salary, vacancy.salaryCurrency)}
             </div>
           </div>
           {isOwner && (
@@ -741,7 +742,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
                 )}
               </div>
               <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">
-                {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+                {formatSalary(v.salary, v.salaryCurrency)}
               </div>
             </div>
             {v.overlapSkills.length > 0 && (

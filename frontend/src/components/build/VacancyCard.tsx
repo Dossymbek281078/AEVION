@@ -12,10 +12,14 @@ export function VacancyCard({
   vacancy,
   showProject = false,
   hot = false,
+  footerAction,
 }: {
   vacancy: BuildVacancy;
   showProject?: boolean;
   hot?: boolean;
+  /** Optional control (e.g. compare toggle) laid out in the footer's right side
+   *  so it never overlaps the applicants counter the way an absolute overlay did. */
+  footerAction?: React.ReactNode;
 }) {
   const token = useBuildAuth((s) => s.token);
   const me = useBuildAuth((s) => s.user);
@@ -137,15 +141,18 @@ export function VacancyCard({
             </span>
           )}
         </span>
-        {typeof vacancy.applicationsCount === "number" && (
-          <span className="flex items-center gap-1">
-            <span>👥</span>
-            <span>{vacancy.applicationsCount} {
-              vacancy.applicationsCount === 1 ? "отклик" :
-              vacancy.applicationsCount < 5 ? "отклика" : "откликов"
-            }</span>
-          </span>
-        )}
+        <span className="flex items-center gap-2">
+          {typeof vacancy.applicationsCount === "number" && (
+            <span className="flex items-center gap-1">
+              <span>👥</span>
+              <span>{vacancy.applicationsCount} {
+                vacancy.applicationsCount === 1 ? "отклик" :
+                vacancy.applicationsCount < 5 ? "отклика" : "откликов"
+              }</span>
+            </span>
+          )}
+          {footerAction}
+        </span>
       </div>
 
       {token && !isOwner && !isClosed && (

@@ -51,6 +51,20 @@ aiRouter.use((_req, res, next) => {
   next();
 });
 
+// Map a caught AI error to a response. Upstream Anthropic failures (rate-limit /
+// overloaded / 5xx, tagged by callClaudeRaw) become a retryable 503 so the
+// frontend can say "AI is busy, try again"; everything else stays a 500 bug.
+function aiFail(res: import("express").Response, err: unknown, code: string) {
+  const e = err as { upstream?: boolean; upstreamStatus?: number };
+  if (e?.upstream) {
+    return fail(res, 503, "ai_upstream_unavailable", {
+      retryAfter: 20,
+      upstreamStatus: e.upstreamStatus,
+    });
+  }
+  return fail(res, 500, code);
+}
+
 // POST /api/build/ai/consult — chat turn with the QBuild career coach.
 aiRouter.post("/consult", aiRateLimiter, async (req, res) => {
   try {
@@ -148,7 +162,7 @@ ${vacQ.rows
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_consult_failed");
+    return aiFail(res, err, "ai_consult_failed");
   }
 });
 
@@ -219,7 +233,7 @@ aiRouter.post("/parse-resume", aiRateLimiter, async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_parse_failed");
+    return aiFail(res, err, "ai_parse_failed");
   }
 });
 
@@ -273,7 +287,7 @@ ${kindGuide[kind]}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_improve_failed");
+    return aiFail(res, err, "ai_improve_failed");
   }
 });
 
@@ -403,7 +417,7 @@ Pick up to 3 strongest candidates. Возвращай только JSON в фо�
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_shortlist_failed");
+    return aiFail(res, err, "ai_shortlist_failed");
   }
 });
 
@@ -504,7 +518,7 @@ Cover note: ${String(row.message ?? "").slice(0, 400) || "—"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_interview_prep_failed");
+    return aiFail(res, err, "ai_interview_prep_failed");
   }
 });
 
@@ -591,7 +605,7 @@ Hard rules:
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_translate_failed");
+    return aiFail(res, err, "ai_translate_failed");
   }
 });
 
@@ -680,7 +694,7 @@ ${p.summary || "—"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_cover_letter_failed");
+    return aiFail(res, err, "ai_cover_letter_failed");
   }
 });
 
@@ -778,7 +792,7 @@ Summary: ${String(row.summary || "").slice(0, 400) || "(none)"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_why_match_failed");
+    return aiFail(res, err, "ai_why_match_failed");
   }
 });
 
@@ -867,7 +881,7 @@ aiRouter.post("/vacancy-feedback", aiRateLimiter, async (req, res) => {
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_vacancy_feedback_failed");
+    return aiFail(res, err, "ai_vacancy_feedback_failed");
   }
 });
 
@@ -945,6 +959,6 @@ aiRouter.post("/dm-suggest", aiRateLimiter, async (req, res) => {
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_dm_suggest_failed");
+    return aiFail(res, err, "ai_dm_suggest_failed");
   }
 });

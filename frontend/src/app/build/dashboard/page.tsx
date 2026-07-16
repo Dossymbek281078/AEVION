@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
@@ -241,7 +242,7 @@ function Body() {
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
                       {r.salary > 0
-                        ? `$${r.salary.toLocaleString()}`
+                        ? formatSalary(r.salary, r.salaryCurrency)
                         : <span className="text-slate-500">—</span>}
                     </td>
                   </tr>

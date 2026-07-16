@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type HydratedBookmark } from "@/lib/build/api";
+import { formatSalary } from "@/lib/build/format";
 import { Skeleton } from "@/components/build/Skeleton";
 
 type Tab = "VACANCY" | "CANDIDATE";
@@ -161,7 +162,7 @@ function SavedRow({ bookmark }: { bookmark: HydratedBookmark }) {
             )}
           </div>
           <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">
-            {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+            {formatSalary(v.salary)}
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between text-xs text-slate-500">

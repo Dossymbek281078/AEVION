@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";
@@ -477,7 +478,7 @@ async function MatchingVacanciesBlock({ skill }: { skill: string }) {
             >
               <span className="text-white">{v.title}</span>
               <span className="text-emerald-300">
-                {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+                {formatSalary(v.salary)}
                 {v.city ? ` · ${v.city}` : ""}
               </span>
             </Link>

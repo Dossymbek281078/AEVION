@@ -202,8 +202,8 @@ function StoryCard({
   const ago = relativeTime(story.createdAt);
 
   // Prefer the userName field; fall back to authorName for older API responses
-  const displayName = story.userName || story.authorName || "Без имени";
-  const initials = displayName !== "Без имени" ? displayName[0].toUpperCase() : "?";
+  const displayName = story.userName || story.authorName || "No name";
+  const initials = displayName !== "No name" ? displayName[0].toUpperCase() : "?";
 
   async function handleLike() {
     if (liking) return;

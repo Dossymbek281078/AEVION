@@ -1347,7 +1347,7 @@ export const buildApi = {
     call<{
       vacancies: { open: number; total: number };
       candidates: number;
-      projects: { total: number; open: number };
+      projects: { total: number; open: number; inProgress: number };
       applications: { total: number; accepted: number; acceptRate: number };
       trials: { total: number; approved: number };
       cashback: { totalAev: number; entries: number };

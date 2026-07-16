@@ -18,6 +18,15 @@ import {
 
 export const billingRouter = Router();
 
+// Guards the "mark order paid without a real payment" code paths. Allowed only
+// outside production, or when BUILD_DEV_PAY=1 is explicitly set. In production
+// these paths must stay closed so no one can activate a subscription or mint
+// cashback without a genuine payment settled through the hosted channel.
+function devPayAllowed(): boolean {
+  if (process.env.BUILD_DEV_PAY === "1") return true;
+  return (process.env.NODE_ENV || "").toLowerCase() !== "production";
+}
+
 async function markOrderPaid(
   orderId: string,
 ): Promise<{ order: Record<string, unknown>; alreadyPaid: boolean }> {
@@ -192,10 +201,13 @@ billingRouter.get("/orders/me", async (req, res) => {
   }
 });
 
-// POST /api/build/orders/:id/checkout — create a Paddle transaction checkout.
-// Returns { url } — redirect the browser there to complete payment.
-// On success Paddle calls /api/build/webhooks/payment via build webhook route.
-// Falls back to dev-mode payOrder stub if PADDLE_API_KEY is not set.
+// POST /api/build/orders/:id/checkout — hand the order off to the configured
+// hosted payment channel and return { url } for the browser to complete payment.
+// We use hosted links (Gumroad is live today; LemonSqueezy once KYC clears)
+// rather than a server-side vendor API, so there is no payment-provider secret
+// to store or rotate here — only BUILD_CHECKOUT_URL. On success the channel
+// calls POST /api/build/webhooks/payment (generic HMAC), which marks the order
+// PAID and mints cashback.
 billingRouter.post("/orders/:id/checkout", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
@@ -209,52 +221,35 @@ billingRouter.post("/orders/:id/checkout", async (req, res) => {
     if (row.status === "PAID") return ok(res, { alreadyPaid: true });
     if (row.status !== "PENDING") return fail(res, 400, "order_not_payable", { currentStatus: row.status });
 
-    const paddleKey = process.env.PADDLE_API_KEY?.trim();
-    const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
-
-    if (!paddleKey) {
-      // Dev mode: immediately mark as paid
+    const checkoutBase = process.env.BUILD_CHECKOUT_URL?.trim();
+    if (!checkoutBase) {
+      if (!devPayAllowed()) {
+        return fail(res, 503, "billing_not_configured", {
+          hint: "Payment channel is not configured (set BUILD_CHECKOUT_URL to a Gumroad/LemonSqueezy link).",
+        });
+      }
+      // Dev mode only: immediately mark as paid
       const result = await markOrderPaid(id);
       return ok(res, { devMode: true, order: result.order });
     }
 
-    const isSandbox = process.env.PADDLE_SANDBOX !== "false";
-    const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
-    const amountCents = Math.round(Number(row.amount) * 100);
-    const currency = String(row.currency || "USD").toUpperCase().slice(0, 3);
-
-    const txBody = {
-      items: [{
-        quantity: 1,
-        price: {
-          name: `AEVION QBuild — ${String(row.kind).replace("_", " ")}`,
-          description: `Order #${id.slice(0, 8)}`,
-          unit_price: { amount: String(amountCents), currency_code: currency },
-          tax_mode: "exclusive",
-          custom_data: { buildOrderId: id, userId: auth.sub },
-        },
-      }],
-      custom_data: { buildOrderId: id, userId: auth.sub },
-      checkout: { url: `${frontendUrl}/build?payment=success&orderId=${id}` },
-    };
-
-    const r = await fetch(`${paddleBase}/transactions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(txBody),
+    const provider = process.env.BUILD_CHECKOUT_PROVIDER?.trim() || "hosted";
+    const amount = Number(row.amount) || 0;
+    const currency = String(row.currency || "RUB").toUpperCase().slice(0, 3);
+    // Thread the order id through the hosted link so both the thank-you redirect
+    // and the webhook can reconcile it. We surface it under every convention we
+    // support: a plain ?orderId= (Gumroad forwards unknown query params as
+    // url_params) and checkout[custom][orderId] (LemonSqueezy exposes it as
+    // meta.custom_data). Unknown params are ignored by whichever channel is live.
+    const params = new URLSearchParams({
+      orderId: id,
+      "checkout[custom][orderId]": id,
+      order_amount: String(amount),
+      order_currency: currency,
     });
-
-    if (!r.ok) {
-      console.error("[build-billing] Paddle error", r.status, await r.text().catch(() => ""));
-      return fail(res, 500, "checkout_session_failed");
-    }
-
-    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = data.data;
-    if (!tx?.id) return fail(res, 500, "checkout_session_failed");
-
-    const url = tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`;
-    return ok(res, { url, transactionId: tx.id, provider: "paddle" });
+    const sep = checkoutBase.includes("?") ? "&" : "?";
+    const url = `${checkoutBase}${sep}${params.toString()}`;
+    return ok(res, { url, provider, orderId: id });
   } catch (err: unknown) {
     return fail(res, 500, "checkout_session_failed");
   }
@@ -274,6 +269,14 @@ billingRouter.post("/orders/:id/pay", async (req, res) => {
     if (row.status === "PAID") return ok(res, { order: row, alreadyPaid: true });
     if (row.status !== "PENDING") return fail(res, 400, "order_not_payable", { currentStatus: row.status });
 
+    // Direct no-payment settlement is a dev helper only. In production, callers
+    // must pay via POST /orders/:id/checkout (hosted channel) + the webhook.
+    if (!devPayAllowed()) {
+      return fail(res, 403, "direct_pay_disabled", {
+        hint: "Use POST /api/build/orders/:id/checkout to pay via the payment provider.",
+      });
+    }
+
     const result = await markOrderPaid(id);
     return ok(res, { order: result.order });
   } catch (err: unknown) {
@@ -281,7 +284,12 @@ billingRouter.post("/orders/:id/pay", async (req, res) => {
   }
 });
 
-// POST /api/build/webhooks/payment — Paddle webhook handler
+// POST /api/build/webhooks/payment — hosted-channel payment webhook.
+// Verifies an HMAC-SHA256 signature (hex) of the raw body against
+// BUILD_PAYMENT_WEBHOOK_SECRET. Compatible with LemonSqueezy (X-Signature) and
+// our own signed relay / test events (x-aevion-signature). On a success event
+// the referenced order is marked PAID (→ cashback mint); on a failure event a
+// still-PENDING order is canceled.
 billingRouter.post("/webhooks/payment", async (req, res) => {
   try {
     const secret = (process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "").trim();
@@ -289,50 +297,56 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
     const isLocal = /^(127\.|::1|::ffff:127\.|localhost)/.test(remoteAddr);
 
     if (secret) {
-      // Paddle signature format: Paddle-Signature: ts=<unix>;h1=<hmac-sha256>
-      const paddleSig = (req.headers["paddle-signature"] || "").toString();
-      if (paddleSig) {
-        const parts = Object.fromEntries(paddleSig.split(";").map((p) => p.split("=")));
-        const ts = parts["ts"] || "";
-        const h1 = parts["h1"] || "";
-        const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
-        const body = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
-        const signed = `${ts}:${body}`;
-        const expected = crypto.createHmac("sha256", secret).update(signed).digest("hex");
-        if (!h1 || h1.length !== expected.length ||
-            !crypto.timingSafeEqual(Buffer.from(h1, "hex"), Buffer.from(expected, "hex"))) {
-          return fail(res, 401, "invalid_signature");
-        }
-        // Replay protection: reject events older than 5 minutes
-        const nowSec = Math.floor(Date.now() / 1000);
-        if (!ts || Math.abs(nowSec - Number(ts)) > 300) {
-          return fail(res, 401, "timestamp_outside_tolerance");
-        }
-      } else {
-        // Legacy x-aevion-signature (smoke tests)
-        const sigHeader = (req.headers["x-aevion-signature"] || "").toString();
-        const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
-        const canonical = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
-        const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
-        if (sigHeader.length !== expected.length ||
-            !crypto.timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expected, "hex"))) {
-          return fail(res, 401, "invalid_signature");
-        }
+      // Both LemonSqueezy (X-Signature) and our relay/test events (x-aevion-signature)
+      // send a hex HMAC-SHA256 of the raw request body keyed by the shared secret.
+      const sigHeader = (
+        req.headers["x-signature"] ||
+        req.headers["x-aevion-signature"] ||
+        ""
+      ).toString();
+      const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+      const canonical = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+      const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
+      if (sigHeader.length !== expected.length ||
+          !crypto.timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expected, "hex"))) {
+        return fail(res, 401, "invalid_signature");
       }
     } else if (!isLocal) {
       return fail(res, 503, "webhook_secret_not_configured");
     }
 
-    // Parse Paddle event
-    const eventType = String(req.body?.event_type || req.body?.event || "").trim();
-    const txData = req.body?.data as Record<string, unknown> | undefined;
-    const customData = (txData?.custom_data || {}) as Record<string, string>;
+    // Extract event name + order id across the shapes our channels emit:
+    //   - our relay / smoke: { event|event_type, orderId }
+    //   - LemonSqueezy:      { meta: { event_name, custom_data: { orderId } } }
+    //   - Gumroad:           form fields incl. url_params[orderId] (+ resource)
+    const body = (req.body || {}) as Record<string, unknown>;
+    const meta = (body.meta || {}) as Record<string, unknown>;
+    const metaCustom = (meta.custom_data || {}) as Record<string, string>;
+    const dataObj = (body.data as Record<string, unknown>) || {};
+    const dataCustom = (dataObj.custom_data || {}) as Record<string, string>;
+    const urlParams = (body.url_params || {}) as Record<string, string>;
 
-    // Support both Paddle (buildOrderId in custom_data) and legacy (orderId in body)
-    const orderId = customData["buildOrderId"] || String(req.body?.orderId || "").trim();
+    const eventType = String(
+      body.event_type || body.event || meta.event_name || "",
+    ).trim();
+    const orderId =
+      metaCustom["orderId"] ||
+      dataCustom["orderId"] ||
+      dataCustom["buildOrderId"] ||
+      urlParams["orderId"] ||
+      String(body.orderId || "").trim();
     if (!orderId) return fail(res, 400, "orderId_required");
 
-    if (eventType === "transaction.completed" || eventType === "payment.succeeded") {
+    const SUCCESS = new Set([
+      "payment.succeeded", "transaction.completed",
+      "order_created", "subscription_payment_success", "sale",
+    ]);
+    const FAILURE = new Set([
+      "payment.failed", "transaction.payment_failed",
+      "order_refunded", "subscription_payment_failed",
+    ]);
+
+    if (SUCCESS.has(eventType)) {
       try {
         const result = await markOrderPaid(orderId);
         return ok(res, { processed: true, orderId, alreadyPaid: result.alreadyPaid, order: result.order });
@@ -343,14 +357,14 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
         throw err;
       }
     }
-    if (eventType === "transaction.payment_failed" || eventType === "payment.failed") {
+    if (FAILURE.has(eventType)) {
       const upd = await pool.query(
         `UPDATE "BuildOrder" SET "status" = 'CANCELED' WHERE "id" = $1 AND "status" = 'PENDING' RETURNING "id","status"`,
         [orderId],
       );
       return ok(res, { processed: true, orderId, status: upd.rows[0]?.status || "noop" });
     }
-    // Unknown event — acknowledge to prevent Paddle retries
+    // Unknown event — acknowledge so the channel does not retry.
     return ok(res, { processed: false, ignored: true, event: eventType });
   } catch (err: unknown) {
     return fail(res, 500, "webhook_failed");

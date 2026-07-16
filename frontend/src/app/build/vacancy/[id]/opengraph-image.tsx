@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { formatSalary } from "@/lib/build/format";
 import { getApiBase } from "@/lib/apiBase";
 
 export const runtime = "nodejs";
@@ -33,7 +34,7 @@ export default async function VacancyOgImage({ params }: { params: Promise<{ id:
 
   const title = v?.title ?? "Vacancy";
   const salary = v?.salary && v.salary > 0
-    ? `$${v.salary.toLocaleString()} ${v.salaryCurrency ?? "USD"}`
+    ? formatSalary(v.salary, v.salaryCurrency)
     : "Salary TBD";
   const city = v?.city ?? "";
   const project = v?.projectTitle ?? "";

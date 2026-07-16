@@ -23,9 +23,11 @@ export const agentRuntimeRouter = Router();
 const SYSTEM_PROMPT =
   "You are AEVION Agent. Answer briefly. When the user asks for an artifact — an image, a voice or music " +
   "clip, a sound effect, a payment link, an email, an SMS, a translation, a code file in their open DevHub " +
-  "project, or anything a connected tool can do — call the matching tool instead of describing it. Prefer " +
-  "one tool call at a time, then summarise the result for the user. If generate_code reports it has no open " +
-  "project, tell the user to open a DevHub project first instead of retrying.";
+  "project, a GitHub pull request for their DevHub project, or anything a connected tool can do — call the " +
+  "matching tool instead of describing it. Prefer one tool call at a time, then summarise the result for the " +
+  "user. If generate_code or create_pull_request reports it has no open project, tell the user to open a " +
+  "DevHub project first instead of retrying. If create_pull_request reports no GitHub repo is linked yet, " +
+  "tell the user to push to GitHub from the project first instead of retrying.";
 
 agentRuntimeRouter.get("/health", async (_req, res) => {
   const mcpConfigured = parseMcpConfig(process.env.AGENT_RUNTIME_MCP_SERVERS);

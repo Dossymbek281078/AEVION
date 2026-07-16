@@ -127,6 +127,23 @@ export const TOOL_SPECS: ToolSpec[] = [
       required: ["prompt"],
     },
   },
+  {
+    name: "create_pull_request",
+    description:
+      "Open a GitHub pull request with the DevHub project's current files, on a new branch, targeting the repo's " +
+      "default branch. Only works when the project has already been pushed to GitHub at least once (has a linked " +
+      "repo) and carries project context (i.e. the user is on a DevHub project page). Use this instead of telling " +
+      "the user to open the PR themselves — you can actually do it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Pull request title." },
+        body: { type: "string", description: "Optional pull request description." },
+        branch: { type: "string", description: "Optional branch name for the PR head. Defaults to an auto-generated name if omitted." },
+      },
+      required: ["title"],
+    },
+  },
 ];
 
 /** Map a tool name → the DevHub endpoint path that performs it. */
@@ -158,8 +175,22 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
       ...(Array.isArray(input.targetFiles) ? { targetFiles: input.targetFiles } : {}),
     };
   }
+  if (name === "create_pull_request") {
+    return {
+      title: input.title,
+      ...(input.body ? { body: input.body } : {}),
+      ...(input.branch ? { branch: input.branch } : {}),
+    };
+  }
   return input;
 }
+
+/** Tools whose endpoint is scoped to the currently-open DevHub project rather
+ * than a fixed path — the project id comes from ExecutorContext, not model input. */
+const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string) => string> = {
+  generate_code: (projectId) => `/api/devhub/projects/${projectId}/generate`,
+  create_pull_request: (projectId) => `/api/devhub/projects/${projectId}/github/pull-request`,
+};
 
 /** Per-request context an executor may need beyond the model's tool input. */
 export interface ExecutorContext {
@@ -178,11 +209,12 @@ export interface ExecutorContext {
 export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch, context: ExecutorContext = {}): ExecTool {
   return async (call: ToolCall) => {
     let path = ENDPOINT_BY_TOOL[call.name];
-    if (call.name === "generate_code") {
+    const scopedPath = PROJECT_SCOPED_ENDPOINT[call.name];
+    if (scopedPath) {
       if (!context.projectId) {
-        return { ok: false, content: "No DevHub project is open — generate_code needs an open project to write into." };
+        return { ok: false, content: `No DevHub project is open — ${call.name} needs an open project.` };
       }
-      path = `/api/devhub/projects/${context.projectId}/generate`;
+      path = scopedPath(context.projectId);
     }
     if (!path) return { ok: false, content: `Unknown tool: ${call.name}` };
     try {

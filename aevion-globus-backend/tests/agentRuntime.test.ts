@@ -282,6 +282,55 @@ describe("makeExecutor", () => {
 
     expect("Authorization" in seenHeaders).toBe(false);
   });
+
+  // create_pull_request is the other project-scoped tool — same "no project
+  // context → clean error, not a fetch to a nonsensical path" contract as
+  // generate_code, plus its own endpoint + body shape.
+  test("create_pull_request with no projectId in context → ok:false without any fetch", async () => {
+    let called = false;
+    const fakeFetch = (async () => {
+      called = true;
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch); // no context
+    const r = await exec({ id: "t1", name: "create_pull_request", input: { title: "Add feature" } });
+
+    expect(called).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(String(r.content)).toMatch(/no devhub project is open/i);
+  });
+
+  test("create_pull_request with projectId routes to the project's github/pull-request endpoint", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true, prUrl: "https://github.com/o/r/pull/9", prNumber: 9 }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    const r = await exec({ id: "t1", name: "create_pull_request", input: { title: "Add feature", body: "desc", branch: "feat/x" } });
+
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/projects/proj-1/github/pull-request");
+    expect(seenBody).toEqual({ title: "Add feature", body: "desc", branch: "feat/x" });
+    expect(r.ok).toBe(true);
+    expect(r.content).toEqual({ ok: true, prUrl: "https://github.com/o/r/pull/9", prNumber: 9 });
+  });
+
+  test("create_pull_request omits optional body/branch fields when absent", async () => {
+    let seenBody: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: string, init?: { body?: string }) => {
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    await exec({ id: "t1", name: "create_pull_request", input: { title: "Add feature" } });
+
+    expect(seenBody).toEqual({ title: "Add feature" });
+  });
 });
 
 // ── makeAnthropicCallModel (wire-format conversion) ──────────────────

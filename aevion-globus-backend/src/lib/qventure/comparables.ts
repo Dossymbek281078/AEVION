@@ -31,6 +31,23 @@ export interface ComparablesResult {
   comps: Comparable[];
   disclaimer: string;
   query: string;
+  /** True when served from the live-results cache rather than a fresh search. */
+  cached?: boolean;
+}
+
+// ── Live-result cache ──────────────────────────────────────────────────────
+// A successful *live* (Serper-backed) result is cached per sector×stage for a
+// day. This (1) makes live mode consistent — an intermittent Serper timeout or
+// an empty LLM extraction no longer silently downgrades a sector to illustrative
+// on the next request — and (2) conserves paid Serper credits: funding-round
+// data changes on the order of days, not minutes, so one live fetch per
+// sector/stage/day is plenty. Only live results are cached; illustrative /
+// unavailable are not, so the next call retries live.
+const LIVE_TTL_MS = 24 * 60 * 60 * 1000;
+const liveCache = new Map<string, { at: number; result: ComparablesResult }>();
+
+function cacheKey(sectorLabel: string, stage: string): string {
+  return `${sectorLabel.toLowerCase()}|${stage.toLowerCase()}`;
 }
 
 function providerModel(provider: string): string {
@@ -68,7 +85,7 @@ async function serperSearch(query: string): Promise<Array<{ title: string; snipp
     method: "POST",
     headers: { "X-API-KEY": key, "Content-Type": "application/json" },
     body: JSON.stringify({ q: query, num: 10 }),
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(13000),
   });
   if (!res.ok) return [];
   const j = (await res.json()) as { organic?: Array<{ title?: string; snippet?: string; link?: string; date?: string }> };
@@ -81,6 +98,13 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
   const currentYear = new Date().getFullYear();
   const query = `recent ${sectorLabel} startup ${stage} funding round ${currentYear} ${currentYear - 1}`;
   const provider = pickConfiguredProvider(process.env.QVENTURE_PROVIDER);
+
+  // Serve a still-fresh cached live result before spending a Serper credit.
+  const key = cacheKey(sectorLabel, stage);
+  const hit = liveCache.get(key);
+  if (hit && Date.now() - hit.at < LIVE_TTL_MS) {
+    return { ...hit.result, cached: true };
+  }
 
   // ── Live mode: real search + LLM extraction from real snippets ──────────────
   try {
@@ -97,12 +121,14 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
       const { reply } = await callProvider(provider, messages, providerModel(provider), 0.1);
       const comps = parseJsonArray(reply).map((o) => toComp(o, true)).filter((c): c is Comparable => c !== null).slice(0, 5);
       if (comps.length > 0) {
-        return {
+        const result: ComparablesResult = {
           mode: "live",
           comps,
           disclaimer: "Live comparable rounds extracted from recent web search — verify each via its source link before relying on it.",
           query,
         };
+        liveCache.set(key, { at: Date.now(), result });
+        return result;
       }
     }
   } catch {

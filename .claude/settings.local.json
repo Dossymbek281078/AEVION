@@ -186,7 +186,8 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 650 --json state,mergedAt,mergeCommit)",
       "Bash(PORT=4123 npx ts-node-dev --respawn --transpile-only src/index.ts)",
       "Bash(psql \"postgresql://localhost:5432/aevion_dev\" -c \"SELECT count\\(*\\), state FROM pg_stat_activity GROUP BY state;\")",
-      "Bash(taskkill //F //PID 61880)"
+      "Bash(taskkill //F //PID 61880)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/cyberchess-planet-payouts-credit --title 'feat\\(cyberchess,planet\\): tournament prizes + certification payouts credit real QTrade accounts' --body ' *)"
     ]
   }
 }

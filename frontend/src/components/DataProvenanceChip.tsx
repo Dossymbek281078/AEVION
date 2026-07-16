@@ -69,14 +69,18 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
         <span style={dotStyle(PROVENANCE_COLORS.measured)}>●</span>
         <span style={{ color: PROVENANCE_COLORS.measured }}>{measuredPct}%</span> {L.measured}
       </span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        <span style={dotStyle(PROVENANCE_COLORS.derived)}>●</span>
-        {Math.round((1000 * derived) / total) / 10}% {L.derived}
-      </span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        <span style={dotStyle(PROVENANCE_COLORS.guessed)}>●</span>
-        {Math.round((1000 * guessed) / total) / 10}% {L.guessed}
-      </span>
+      {derived > 0 && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={dotStyle(PROVENANCE_COLORS.derived)}>●</span>
+          {Math.round((1000 * derived) / total) / 10}% {L.derived}
+        </span>
+      )}
+      {guessed > 0 && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={dotStyle(PROVENANCE_COLORS.guessed)}>●</span>
+          {Math.round((1000 * guessed) / total) / 10}% {L.guessed}
+        </span>
+      )}
       <InfoTip label="Провенанс данных" text={tip} size={13} />
     </span>
   );

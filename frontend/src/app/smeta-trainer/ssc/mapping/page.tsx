@@ -15,6 +15,8 @@ import {
 import { formatTenge } from "../../lib/ssc";
 import { SscPicker } from "../../components/SscPicker";
 import { fetchSharedOverrides } from "../../lib/progressApi";
+import { DataProvenanceChip } from "@/components/DataProvenanceChip";
+import { dataQualityFromCounts } from "@/lib/dataQuality";
 
 type Tab = "matched" | "unmatched" | "overrides";
 
@@ -108,6 +110,20 @@ export default function SscMappingPage() {
               )}{" "}
               · покрытие {coverage}% (auto {baseCoverage}%)
             </p>
+            <div className="mt-1">
+              <DataProvenanceChip
+                dataQuality={dataQualityFromCounts(
+                  materialMapMeta.matched,
+                  0,
+                  materialMapMeta.unmatched,
+                  {
+                    source: `ССЦ РК ${materialMapMeta.version} (${materialMapMeta.region})`,
+                    note: "реальная ССЦ — цена из сборника сметных цен РК; учебный fallback — упрощённая учебная цена. Расход материалов в тренажёре учебный.",
+                  },
+                )}
+                labels={{ measured: "реальная ССЦ", derived: "выведено", guessed: "учебный fallback", unit: "материалов" }}
+              />
+            </div>
           </div>
         </div>
       </header>

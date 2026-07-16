@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 
@@ -17,6 +18,29 @@ devhubRouter.get("/health", (_req, res) => {
     db: isDevHubDbReady() ? "postgres" : "in-memory",
     timestamp: new Date().toISOString(),
   });
+});
+
+// POST /api/devhub/ask — freeform dev assistant. Routes through the platform
+// smartComplete layer (auto-router: quick factual lookups → a single flagship,
+// open how-do-I / explain / design questions → the weight-graded Council), and
+// feeds the shared cross-module savings tally. Returns { answer, routing } so
+// the caller sees the cost/route. Distinct from /projects/:id/generate, which
+// emits structured code JSON; this answers questions in prose.
+devhubRouter.post("/ask", async (req, res) => {
+  const question = typeof req.body?.question === "string" ? req.body.question.trim().slice(0, 8000) : "";
+  const context = typeof req.body?.context === "string" ? req.body.context.trim().slice(0, 8000) : "";
+  if (!question) return res.status(400).json({ error: "question required" });
+
+  const userInput = context
+    ? `Context (a developer's project/code):\n${context}\n\nQuestion: ${question}`
+    : question;
+  try {
+    const { answer, routing } = await smartComplete({ userInput });
+    return res.json({ answer, routing });
+  } catch (e: any) {
+    captureException(e);
+    return res.status(502).json({ error: e?.message || "ask failed" });
+  }
 });
 
 const pool = getPool();

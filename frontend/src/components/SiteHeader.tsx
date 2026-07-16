@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import PlatformAiSavings from "@/components/PlatformAiSavings";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
@@ -61,6 +62,7 @@ export function SiteHeader() {
           <a href={`${origin}/api/openapi.json`} target="_blank" rel="noreferrer" style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#0d9488", fontSize: 12, fontWeight: 600, border: "1px solid rgba(13,148,136,0.3)" }}>
             API
           </a>
+          <PlatformAiSavings />
           <div style={{ marginLeft: 4 }}>
             <LanguageSwitcher />
           </div>

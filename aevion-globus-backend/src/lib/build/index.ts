@@ -33,12 +33,19 @@ export function fail(
 // throwaway projects + vacancies. Those must never surface on the public
 // storefront (home carousel, live activity, vacancy feed). Returns a SQL
 // predicate for a joined AEVIONUser alias that excludes such rows.
+//
+// Also excludes SOFT-DELETED accounts (deletedAt set): DELETE /account rotates
+// the email to a `@deleted.aevion.local` tombstone and NULLs the name, so their
+// orphaned projects/vacancies would otherwise leak onto the storefront as
+// "deleted user" cards — which is exactly what the daily PROD smoke leaves
+// behind once it cleans up its own @aevion.test accounts.
+//
 // BUILD_INCLUDE_TEST_DATA=1 disables the filter — used by local smoke, where
 // the only data that exists IS test data. `userAlias` is a code-controlled
 // table alias (never user input), so string interpolation here is safe.
 export function excludeTestUsers(userAlias: string): string {
   if (process.env.BUILD_INCLUDE_TEST_DATA === "1") return "TRUE";
-  return `("${userAlias}"."email" NOT LIKE '%@aevion.test' AND "${userAlias}"."email" NOT LIKE '%@smoke.test')`;
+  return `("${userAlias}"."email" NOT LIKE '%@aevion.test' AND "${userAlias}"."email" NOT LIKE '%@smoke.test' AND "${userAlias}"."deletedAt" IS NULL)`;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────

@@ -426,6 +426,7 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
         usage: data?.usage ?? null,
       };
     } catch (err: any) {
+      captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
       return {
         agentId,
         role,
@@ -686,6 +687,7 @@ multichatRouter.get("/provider-status", async (req, res) => {
     providerStatusCache = { at: now, data: providers };
     res.json({ providers, cachedAt: new Date(now).toISOString(), fresh: true });
   } catch (err: any) {
+    captureMultichatError(err, { route: "provider-status" });
     res.status(502).json({
       error: "provider_status_failed",
       message: err?.message || "upstream unreachable",

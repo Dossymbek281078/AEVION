@@ -24,6 +24,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
+import { Chess } from "chess.js";
 import {
   ensureDb as ensureMatchDb,
   recordMatchCreated,
@@ -87,6 +88,17 @@ export interface Match {
   createdAt: number;
   status: MatchStatus;
   moves: { uci: string; by: string; at: number }[];
+  // Set once by settleMatch — lets a second /end call (e.g. the other
+  // player's client independently reporting) echo the real outcome
+  // idempotently instead of re-running self-award validation against a
+  // board that's already final.
+  finalResult?: "white" | "black" | "draw";
+  // Authoritative server-side board — every /move is played through this
+  // before being accepted, so legality (turn order, pins, checks, castling
+  // rights, en passant, promotion) is enforced by the server, not trusted
+  // from the client. Also the source of truth for /end outcomes (see
+  // resolveEndResult). Transient, never serialized.
+  chess: Chess;
   // SSE response objects per-side (transient, never serialized)
   subscribers: Map<string, Response>;
   // Tournament linkage (optional)
@@ -169,6 +181,89 @@ function sweepMoveHits(): void {
   for (const [key, arr] of moveHits) {
     if (!arr.some((t) => now - t < MOVE_RATE_WINDOW_MS)) moveHits.delete(key);
   }
+}
+
+// ── authoritative result + clock ─────────────────────────────────────
+// Everything below closes the "curl the rating up" hole: previously /end
+// trusted whatever {result} the caller sent, with zero relation to the
+// actual board (m.chess is now the server's own played-through game, see
+// /move). A malicious authenticated participant could just POST
+// {result:"white"} on an untouched match and have the server hand them a
+// Glicko-2 win. Now a self-claimed win is only accepted if the server's
+// own board says so (checkmate) or the server's own clock math says the
+// opponent's flag actually fell — never on the caller's word alone.
+
+// side to move at ply `idx` (0-based, white moves first)
+function colorAtPly(idx: number): Color {
+  return idx % 2 === 0 ? "white" : "black";
+}
+
+// Checkmate/stalemate/draw as computed by the server's own board — the only
+// trustworthy source for "who won". Returns null while the game is still
+// legally undecided (resignation/timeout/agreement territory).
+function boardResult(chess: Chess): "white" | "black" | "draw" | null {
+  if (!chess.isGameOver()) return null;
+  if (chess.isCheckmate()) {
+    // the side TO MOVE is the one in checkmate, so they lose
+    return chess.turn() === "w" ? "black" : "white";
+  }
+  return "draw"; // stalemate, insufficient material, threefold, 50-move
+}
+
+// Remaining clock for `color`, derived purely from move timestamps already
+// recorded server-side (m.moves[].at) + the match's own time control — no
+// separate timer process needed, and nothing the client can spoof, since
+// every timestamp is stamped by this server at the moment /move accepted
+// the move, not supplied by the client.
+function remainingMs(m: Match, color: Color): number {
+  const [baseStr, incStr] = m.timeControl.split("+");
+  const baseMs = (Number(baseStr) || 0) * 1000;
+  const incMs = (Number(incStr) || 0) * 1000;
+  let remaining = baseMs;
+  let lastAt = m.createdAt;
+  m.moves.forEach((mv, idx) => {
+    if (colorAtPly(idx) === color) {
+      remaining -= mv.at - lastAt;
+      remaining += incMs;
+    }
+    lastAt = mv.at;
+  });
+  const sideToMove: Color = m.chess.turn() === "w" ? "white" : "black";
+  if (sideToMove === color) remaining -= Date.now() - lastAt;
+  return remaining;
+}
+
+// Broadcast + persist a match's end exactly once (idempotent on m.status),
+// shared by the auto-finalize path (server detects checkmate on its own
+// board right after a /move) and the manual /end route.
+async function settleMatch(
+  m: Match,
+  result: "white" | "black" | "draw",
+  reason: string,
+): Promise<Awaited<ReturnType<typeof finalizeMatch>>> {
+  const firstEnd = m.status !== "ended";
+  m.status = "ended";
+  m.finalResult = result;
+  const payload = JSON.stringify({ matchId: m.matchId, result, reason });
+  for (const sub of m.subscribers.values()) {
+    try {
+      sub.write(`event: end\ndata: ${payload}\n\n`);
+      sub.end();
+    } catch {
+      // ignore broken pipe
+    }
+  }
+  m.subscribers.clear();
+  if (!firstEnd) return null;
+  return finalizeMatch(m.matchId, {
+    whiteUserId: m.white.userId,
+    whiteName: m.white.displayName,
+    blackUserId: m.black.userId,
+    blackName: m.black.displayName,
+    timeControl: m.timeControl,
+    result,
+    termination: reason,
+  }).catch(() => null);
 }
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -272,6 +367,7 @@ function makeMatch(
     createdAt: Date.now(),
     status: "pending",
     moves: [],
+    chess: new Chess(),
     subscribers: new Map(),
     source: "queue",
   };
@@ -473,6 +569,7 @@ export function createPreMatchedMatch(
     createdAt: Date.now(),
     status: "pending",
     moves: [],
+    chess: new Chess(),
     subscribers: new Map(),
     tournamentId: input.tournamentId,
     tournamentRound: input.round,
@@ -865,11 +962,42 @@ router.post("/match/:matchId/move", (req: Request, res: Response): void => {
     res.status(429).json({ ok: false, error: "rate_limited" });
     return;
   }
-  const move = { uci: uci.toLowerCase(), by: userId, at: Date.now() };
+  // Turn order: a participant may only move their OWN side, and only when
+  // it's actually their turn — otherwise a client could script both sides
+  // of the same game (curl-vs-curl) and force any result it likes.
+  const movingColor: Color = userId === m.white.userId ? "white" : "black";
+  const sideToMove: Color = m.chess.turn() === "w" ? "white" : "black";
+  if (movingColor !== sideToMove) {
+    res.status(409).json({ ok: false, error: "not_your_turn" });
+    return;
+  }
+  // Authoritative legality check against the server's own board — this is
+  // what actually closes the exploit: pins, checks, castling rights, en
+  // passant, promotion piece all enforced here, not trusted from the
+  // client's local chess.js instance.
+  const from = uci.slice(0, 2);
+  const to = uci.slice(2, 4);
+  const promotion = uci.length > 4 ? uci[4].toLowerCase() : undefined;
+  let applied: ReturnType<Chess["move"]> | null;
+  try {
+    applied = m.chess.move({ from, to, promotion });
+  } catch {
+    applied = null;
+  }
+  if (!applied) {
+    res.status(400).json({ ok: false, error: "illegal_move" });
+    return;
+  }
+  // Canonical uci from what chess.js actually applied (not the raw client
+  // string) — e.g. a promotion always carries its piece letter even if the
+  // client somehow omitted one that chess.js still accepted.
+  const canonicalUci = `${applied.from}${applied.to}${applied.promotion || ""}`;
+  const move = { uci: canonicalUci, by: userId, at: Date.now() };
   m.moves.push(move);
   m.status = "active";
-  // append move to persisted game (non-blocking; stores UCI notation)
-  void appendMove(m.matchId, move.uci, m.moves.length).catch(() => {});
+  // append move to persisted game (non-blocking; stores real SAN now that
+  // we have chess.js applying every move server-side)
+  void appendMove(m.matchId, applied.san, m.moves.length).catch(() => {});
   // broadcast to all match subscribers (both players)
   const payload = JSON.stringify({
     matchId: m.matchId,
@@ -884,9 +1012,35 @@ router.post("/match/:matchId/move", (req: Request, res: Response): void => {
     }
   }
   res.json({ ok: true, matchId: m.matchId, moveIndex: m.moves.length - 1, move });
+
+  // A legal move that itself ends the game (checkmate/stalemate/draw) is
+  // settled by the server immediately — it never waits for either client to
+  // call /end and "admit" the result, which is exactly the gap that let a
+  // losing player just never report the loss.
+  const auto = boardResult(m.chess);
+  if (auto) {
+    void settleMatch(
+      m,
+      auto,
+      m.chess.isCheckmate() ? "checkmate" : "board_draw",
+    ).catch(() => {});
+  }
 });
 
 // POST /match/:matchId/end { userId, result: "white"|"black"|"draw", reason? }
+//
+// The server never takes {result} on faith. Two sources of truth, checked
+// in order:
+//  1. The server's own board (m.chess) — if it's objectively game-over
+//     (checkmate/stalemate/draw), that outcome wins, full stop, regardless
+//     of what the caller sent.
+//  2. If the board is still legally undecided, this must be a voluntary end
+//     (resign/timeout/agreement). A participant can always end the game in
+//     their OPPONENT's favor (resignation) or call it a draw, but can only
+//     award themselves the win if the server's own clock math shows the
+//     opponent's flag actually fell. Anything else claiming a self-win on
+//     an undecided board is rejected — that's the exact "curl /end
+//     {result:'white'}" rating-inflation hole this closes.
 router.post("/match/:matchId/end", async (req: Request, res: Response): Promise<void> => {
   const m = MATCHES.get(String(req.params.matchId ?? ""));
   if (!m) {
@@ -894,45 +1048,62 @@ router.post("/match/:matchId/end", async (req: Request, res: Response): Promise<
     return;
   }
   const userId = String(req.body?.userId || "").trim();
-  const result = String(req.body?.result || "") as "white" | "black" | "draw";
+  const claimed = String(req.body?.result || "") as "white" | "black" | "draw";
   const reason = String(req.body?.reason || "user_ended");
   if (userId !== m.white.userId && userId !== m.black.userId) {
     res.status(403).json({ ok: false, error: "not_a_participant" });
     return;
   }
-  if (!["white", "black", "draw"].includes(result)) {
+  if (!["white", "black", "draw"].includes(claimed)) {
     res.status(400).json({ ok: false, error: "invalid_result" });
     return;
   }
-  // Idempotency: only the first /end computes ratings (both clients may call it).
-  const firstEnd = m.status !== "ended";
-  m.status = "ended";
-  const payload = JSON.stringify({ matchId: m.matchId, result, reason });
-  for (const sub of m.subscribers.values()) {
-    try {
-      sub.write(`event: end\ndata: ${payload}\n\n`);
-      sub.end();
-    } catch {
-      // ignore
-    }
+
+  // Already settled (auto-finalized by /move, or the other client's /end
+  // beat us here) — echo the REAL outcome idempotently. Falling through to
+  // the self-award check below would be wrong: the board no longer reflects
+  // "in progress" once a match is ended, so a legitimate second report from
+  // the winner's own client would get incorrectly rejected as an exploit.
+  if (m.status === "ended") {
+    res.json({
+      ok: true,
+      matchId: m.matchId,
+      status: m.status,
+      result: m.finalResult ?? claimed,
+      ratingDelta: null,
+    });
+    return;
   }
-  m.subscribers.clear();
+
+  const authoritative = boardResult(m.chess);
+  let result: "white" | "black" | "draw";
+  let settleReason = reason;
+  if (authoritative) {
+    result = authoritative;
+    settleReason = m.chess.isCheckmate() ? "checkmate" : "board_draw";
+  } else {
+    const myColor: Color = userId === m.white.userId ? "white" : "black";
+    const oppColor: Color = myColor === "white" ? "black" : "white";
+    if (claimed === myColor) {
+      // Self-claimed win on an undecided board — only legitimate if the
+      // opponent's own clock has actually run out.
+      if (remainingMs(m, oppColor) > 0) {
+        res.status(409).json({
+          ok: false,
+          error: "cannot_self_award_win",
+          hint: "board is not over and opponent's clock hasn't expired — win on the board or have your opponent resign",
+        });
+        return;
+      }
+      settleReason = "timeout";
+    }
+    result = claimed;
+  }
 
   // Finalize + Glicko-2 rating update (awaited so we can return deltas to the
-  // UI; finalizeMatch is fully guarded — returns null offline/on error, never
-  // throws). Only on the first /end to avoid double-counting ratings.
-  let ratingDelta: Awaited<ReturnType<typeof finalizeMatch>> = null;
-  if (firstEnd) {
-    ratingDelta = await finalizeMatch(m.matchId, {
-      whiteUserId: m.white.userId,
-      whiteName: m.white.displayName,
-      blackUserId: m.black.userId,
-      blackName: m.black.displayName,
-      timeControl: m.timeControl,
-      result,
-      termination: reason,
-    }).catch(() => null);
-  }
+  // UI; finalizeMatch/settleMatch are fully guarded — never throw. Idempotent
+  // on m.status, so a duplicate /end from the other client is a no-op here.
+  const ratingDelta = await settleMatch(m, result, settleReason);
   res.json({ ok: true, matchId: m.matchId, status: m.status, result, ratingDelta });
 });
 

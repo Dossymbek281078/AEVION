@@ -1869,9 +1869,17 @@ export default function CyberChessPage(){
     if(!wasMyMove){lastSentMmHistLenRef.current=hist.length;return}
     lastSentMmHistLenRef.current=hist.length;
     const userId=(typeof window!=="undefined")?(localStorage.getItem("cyberchess.userId")||"anon"):"anon";
+    // Promotion piece lived nowhere in `lm` ({from,to} only) so it never
+    // reached the server — a real promotion move got sent as a bare 4-char
+    // uci, which the opponent's client then defaulted to queen (exec's
+    // pr||"q") and which a legality-checking server would reject outright.
+    // Pull it back out of the SAN chess.js already recorded for this move.
+    const lastSan=hist[hist.length-1]||"";
+    const promoMatch=/=([QRBN])/i.exec(lastSan);
+    const promo=promoMatch?promoMatch[1].toLowerCase():"";
     fetch(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/move`,{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({userId,uci:`${lm.from}${lm.to}`}),
+      body:JSON.stringify({userId,uci:`${lm.from}${lm.to}${promo}`}),
     }).catch(()=>{});
   },[hist.length,matchmakingId,lm,pCol]);
   /* ── Matchmaking → Spectator auto-publish + VoiceCoach ──────────────────

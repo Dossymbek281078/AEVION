@@ -2981,7 +2981,13 @@ export default function CyberChessPage(){
           if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
-            bumpClock(bonus,rushDuration);
+            // rushKind guard matters — without it a leftover rushDuration from a
+            // prior Rush-Timed session (persisted in localStorage) clamps a fresh
+            // Survival session's 10-min safety net down to that stale value the
+            // instant the first single-move puzzle is solved. The multi-move path
+            // above already guards this; this path was missed when Survival mode
+            // (PR #613) was added.
+            bumpClock(bonus,rushKind==="survival"?600:rushDuration);
             sRushScore(s=>s+1);
             sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
             showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");

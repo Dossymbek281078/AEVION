@@ -767,14 +767,14 @@ qcoreaiRouter.post("/notebook/collections", async (req, res) => {
   try {
     const c = await createCollection({ ownerUserId: auth.sub, name: String(name), description: description ?? null, color: color ?? null });
     res.status(201).json({ collection: c });
-  } catch (err: any) { res.status(500).json({ error: "create collection failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections" }); res.status(500).json({ error: "create collection failed" }); }
 });
 
 qcoreaiRouter.get("/notebook/collections", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try { res.json({ items: await listCollections(auth.sub) }); }
-  catch (err: any) { res.status(500).json({ error: "list collections failed" }); }
+  catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections" }); res.status(500).json({ error: "list collections failed" }); }
 });
 
 qcoreaiRouter.delete("/notebook/collections/:id", async (req, res) => {
@@ -784,7 +784,7 @@ qcoreaiRouter.delete("/notebook/collections/:id", async (req, res) => {
     const ok = await deleteCollection(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "not found" });
     res.json({ deleted: true });
-  } catch (err: any) { res.status(500).json({ error: "delete collection failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections" }); res.status(500).json({ error: "delete collection failed" }); }
 });
 
 qcoreaiRouter.patch("/notebook/:snippetId/collection", async (req, res) => {
@@ -795,7 +795,7 @@ qcoreaiRouter.patch("/notebook/:snippetId/collection", async (req, res) => {
     const ok = await assignSnippetToCollection(String(req.params.snippetId), collectionId || null, auth.sub);
     if (!ok) return res.status(404).json({ error: "snippet not found" });
     res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ error: "assign failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-collection" }); res.status(500).json({ error: "assign failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -876,7 +876,7 @@ qcoreaiRouter.post("/pipelines", async (req, res) => {
   try {
     const p = await createPipeline({ ownerUserId: auth.sub, name: String(name), description: description ?? null, steps, isPublic: Boolean(isPublic) });
     res.status(201).json({ pipeline: p });
-  } catch (err: any) { res.status(500).json({ error: "create pipeline failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "create-pipeline" }); res.status(500).json({ error: "create pipeline failed" }); }
 });
 
 qcoreaiRouter.get("/pipelines/public", async (req, res) => {
@@ -884,14 +884,14 @@ qcoreaiRouter.get("/pipelines/public", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
     res.json({ items: await listPublicPipelines(q, limit) });
-  } catch (err: any) { res.status(500).json({ error: "list public pipelines failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "pipelines-public" }); res.status(500).json({ error: "list public pipelines failed" }); }
 });
 
 qcoreaiRouter.get("/pipelines", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try { res.json({ items: await listPipelines(auth.sub) }); }
-  catch (err: any) { res.status(500).json({ error: "list pipelines failed" }); }
+  catch (err: any) { captureQCoreAIError(err, { route: "list-pipelines" }); res.status(500).json({ error: "list pipelines failed" }); }
 });
 
 qcoreaiRouter.get("/pipelines/:id", async (req, res) => {
@@ -901,7 +901,7 @@ qcoreaiRouter.get("/pipelines/:id", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!p.isPublic && p.ownerUserId !== auth?.sub) return res.status(403).json({ error: "forbidden" });
     res.json({ pipeline: p });
-  } catch (err: any) { res.status(500).json({ error: "get pipeline failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "get-pipeline" }); res.status(500).json({ error: "get pipeline failed" }); }
 });
 
 qcoreaiRouter.patch("/pipelines/:id", async (req, res) => {
@@ -917,7 +917,7 @@ qcoreaiRouter.patch("/pipelines/:id", async (req, res) => {
     });
     if (!p) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ pipeline: p });
-  } catch (err: any) { res.status(500).json({ error: "update pipeline failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "update-pipeline" }); res.status(500).json({ error: "update pipeline failed" }); }
 });
 
 qcoreaiRouter.delete("/pipelines/:id", async (req, res) => {
@@ -927,14 +927,14 @@ qcoreaiRouter.delete("/pipelines/:id", async (req, res) => {
     const ok = await deletePipeline(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
-  } catch (err: any) { res.status(500).json({ error: "delete pipeline failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-pipeline" }); res.status(500).json({ error: "delete pipeline failed" }); }
 });
 
 qcoreaiRouter.post("/pipelines/:id/use", async (req, res) => {
   try {
     const p = await usePipeline(String(req.params.id));
     res.json({ pipeline: p });
-  } catch (err: any) { res.status(500).json({ error: "use pipeline failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "pipelines-use" }); res.status(500).json({ error: "use pipeline failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -954,7 +954,7 @@ qcoreaiRouter.get("/me/personas", async (req, res) => {
     if (!isDbReady()) return res.json({ personas: [] });
     const r = await pool.query(`SELECT * FROM "QCoreAgentPersona" WHERE "userId"=$1`, [auth.sub]);
     res.json({ personas: r.rows });
-  } catch (err: any) { res.status(500).json({ error: "get personas failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-personas" }); res.status(500).json({ error: "get personas failed" }); }
 });
 
 qcoreaiRouter.put("/me/personas/:roleId", async (req, res) => {
@@ -979,7 +979,7 @@ qcoreaiRouter.put("/me/personas/:roleId", async (req, res) => {
        bio?.slice(0, 500) || null, systemPromptHint?.slice(0, 2000) || null]
     );
     res.json({ persona: r.rows[0] });
-  } catch (err: any) { res.status(500).json({ error: "set persona failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "update-persona" }); res.status(500).json({ error: "set persona failed" }); }
 });
 
 qcoreaiRouter.delete("/me/personas/:roleId", async (req, res) => {
@@ -990,7 +990,7 @@ qcoreaiRouter.delete("/me/personas/:roleId", async (req, res) => {
     if (!isDbReady()) return res.json({ ok: true });
     await pool.query(`DELETE FROM "QCoreAgentPersona" WHERE "userId"=$1 AND "roleId"=$2`, [auth.sub, req.params.roleId]);
     res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ error: "delete persona failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-persona" }); res.status(500).json({ error: "delete persona failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1008,6 +1008,7 @@ qcoreaiRouter.get("/me/analytics-goal", async (req, res) => {
     const r = await pool.query(`SELECT * FROM "QCoreAnalyticsGoal" WHERE "userId"=$1`, [auth.sub]);
     res.json({ goal: r.rows[0] || null });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-analytics-goal" });
     res.status(500).json({ error: "get goal failed" });
   }
 });
@@ -1029,6 +1030,7 @@ qcoreaiRouter.put("/me/analytics-goal", async (req, res) => {
     );
     res.json({ goal: r.rows[0] });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-analytics-goal" });
     res.status(500).json({ error: "set goal failed" });
   }
 });
@@ -1048,6 +1050,7 @@ qcoreaiRouter.get("/me/spend-limit", async (req, res) => {
     const limit = await getSpendLimit(auth.sub);
     res.json({ limit: limit || null });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-spend-limit" });
     res.status(500).json({ error: "get limit failed" });
   }
 });
@@ -1064,6 +1067,7 @@ qcoreaiRouter.put("/me/spend-limit", async (req, res) => {
     const limit = await setSpendLimit(auth.sub, limitUsd, alertAt);
     res.json({ limit });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-spend-limit" });
     res.status(500).json({ error: "set limit failed" });
   }
 });
@@ -1075,6 +1079,7 @@ qcoreaiRouter.delete("/me/spend-limit", async (req, res) => {
     const ok = await deleteSpendLimit(auth.sub);
     res.json({ ok });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-spend-limit" });
     res.status(500).json({ error: "delete limit failed" });
   }
 });
@@ -1099,6 +1104,7 @@ qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
       exceeded: pct !== null && pct >= 1,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-spend-summary" });
     res.status(500).json({ error: "spend summary failed" });
   }
 });
@@ -1125,6 +1131,7 @@ qcoreaiRouter.get("/me/token-quota", async (req, res) => {
       exceeded: metered ? used >= limit : false,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-token-quota" });
     res.status(500).json({ error: "token quota summary failed" });
   }
 });
@@ -1166,6 +1173,7 @@ qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
     if (!updated) return res.status(404).json({ error: "session not found" });
     res.json({ session: updated });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-session" });
     res.status(500).json({ error: "rename failed" });
   }
 });
@@ -1179,6 +1187,7 @@ qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "session not found" });
     res.json({ ok: true, pinned });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-pin" });
     res.status(500).json({ error: "pin failed" });
   }
 });
@@ -1192,7 +1201,7 @@ qcoreaiRouter.patch("/sessions/:id/tags", async (req, res) => {
     if (!isDbReady()) return res.json({ ok: true });
     await pool.query(`UPDATE "QCoreSession" SET "tags"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL)`, [normalized, req.params.id, auth?.sub ?? null]);
     res.json({ ok: true, tags: normalized });
-  } catch (err: any) { res.status(500).json({ error: "set session tags failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "sessions-tags" }); res.status(500).json({ error: "set session tags failed" }); }
 });
 
 /** PATCH /sessions/:id/archive — soft-delete a session (hidden from default list; recoverable). */
@@ -1206,6 +1215,7 @@ qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
     void notifyEvent({ event: "session.archived", sessionId: String(req.params.id), archived: archive, archivedAt: new Date().toISOString() }, null, auth?.sub);
     res.json({ ok: true, archived: archive });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-archive" });
     res.status(500).json({ error: "archive failed" });
   }
 });
@@ -1218,6 +1228,7 @@ qcoreaiRouter.get("/sessions/archived", async (req, res) => {
     const archived = rows.filter((s) => s.archivedAt);
     res.json({ items: archived, total: archived.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-archived" });
     res.status(500).json({ error: "list archived failed" });
   }
 });
@@ -1232,6 +1243,7 @@ qcoreaiRouter.post("/sessions/:id/merge", async (req, res) => {
     const result = await mergeSessions(String(req.params.id), String(sourceSessionId), auth?.sub ?? null);
     res.json({ ok: true, moved: result.moved });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-merge" });
     res.status(400).json({ error: err?.message || "merge failed" });
   }
 });
@@ -1274,6 +1286,7 @@ qcoreaiRouter.post("/runs/:id/share", async (req, res) => {
     if (!token) return res.status(404).json({ error: "run not found" });
     res.json({ token });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-share" });
     res.status(500).json({ error: "share failed" });
   }
 });
@@ -1285,6 +1298,7 @@ qcoreaiRouter.delete("/runs/:id/share", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "run not found or not shared" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-share" });
     res.status(500).json({ error: "unshare failed" });
   }
 });
@@ -1331,6 +1345,7 @@ qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
     };
     res.json({ session, run: safeRun, messages });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-shared" });
     res.status(500).json({ error: "shared lookup failed" });
   }
 });
@@ -1343,6 +1358,7 @@ qcoreaiRouter.get("/shared/:token/comments", sharedLimiter, async (req, res) => 
     const items = await listComments(run.id);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "shared-comments" });
     res.status(500).json({ error: "list comments failed" });
   }
 });
@@ -1357,6 +1373,7 @@ qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) =>
     const comment = await createComment(run.id, authorName || "Anonymous", content);
     res.status(201).json({ comment });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "shared-comments" });
     res.status(500).json({ error: "create comment failed" });
   }
 });
@@ -1371,6 +1388,7 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
     const summary = await getAnalytics(auth?.sub ?? null);
     res.json(summary);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-analytics" });
     res.status(500).json({ error: "analytics failed" });
   }
 });
@@ -1542,6 +1560,7 @@ qcoreaiRouter.get("/tags", async (req, res) => {
     const items = await getTopUserTags(auth?.sub ?? null, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-tags" });
     res.status(500).json({ error: "list tags failed" });
   }
 });
@@ -1562,6 +1581,7 @@ qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
     if (!updated) return res.status(404).json({ error: "run not found or forbidden" });
     res.json({ ok: true, tags: updated.tags ?? [] });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-tags" });
     res.status(500).json({ error: "set tags failed" });
   }
 });
@@ -1593,6 +1613,7 @@ qcoreaiRouter.post("/presets/share", async (req, res) => {
     });
     res.json({ ok: true, preset });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "presets-share" });
     res.status(500).json({ error: "share preset failed" });
   }
 });
@@ -1604,6 +1625,7 @@ qcoreaiRouter.get("/presets/public", async (req, res) => {
     const items = await listPublicSharedPresets(q, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "presets-public" });
     res.status(500).json({ error: "list public presets failed" });
   }
 });
@@ -1620,6 +1642,7 @@ qcoreaiRouter.get("/presets/:id", async (req, res) => {
     }
     res.json({ preset: p });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-preset" });
     res.status(500).json({ error: "get preset failed" });
   }
 });
@@ -1630,6 +1653,7 @@ qcoreaiRouter.post("/presets/:id/import", async (req, res) => {
     if (!p) return res.status(404).json({ error: "preset not found or not public" });
     res.json({ ok: true, preset: p });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "presets-import" });
     res.status(500).json({ error: "import preset failed" });
   }
 });
@@ -1642,6 +1666,7 @@ qcoreaiRouter.delete("/presets/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "preset not found or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-preset" });
     res.status(500).json({ error: "delete preset failed" });
   }
 });
@@ -1657,6 +1682,7 @@ qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
     const items = await getCostTimeseries(auth?.sub ?? null, days);
     res.json({ items, days });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-timeseries" });
     res.status(500).json({ error: "timeseries failed" });
   }
 });
@@ -1699,6 +1725,7 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
     }
     res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-cost-breakdown" });
     res.status(500).json({ error: "cost breakdown failed" });
   }
 });
@@ -1732,6 +1759,7 @@ qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
     );
     res.json({ items: r.rows });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-agent-performance" });
     res.status(500).json({ error: "agent-performance failed" });
   }
 });
@@ -1765,6 +1793,7 @@ qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
     );
     res.json({ items: r.rows });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-provider-latency" });
     res.status(500).json({ error: "provider-latency failed" });
   }
 });
@@ -1801,6 +1830,7 @@ qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
     );
     res.json({ items: r.rows });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-by-tag" });
     res.status(500).json({ error: "by-tag analytics failed" });
   }
 });
@@ -1817,6 +1847,7 @@ qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
     const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-sessions" });
     res.status(500).json({ error: "session analytics failed" });
   }
 });
@@ -1838,6 +1869,7 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="qcoreai-analytics-${days}d.csv"`);
     res.send(csv);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-export" });
     res.status(500).json({ error: "analytics export failed" });
   }
 });
@@ -1878,6 +1910,7 @@ qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
     }));
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-agent-length" });
     res.status(500).json({ error: "agent length failed" });
   }
 });
@@ -1916,6 +1949,7 @@ qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
     }));
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "analytics-provider-compare" });
     res.status(500).json({ error: "provider compare failed" });
   }
 });
@@ -1956,6 +1990,7 @@ qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(md);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-export" });
     res.status(500).json({ error: "session export failed" });
   }
 });
@@ -2001,6 +2036,7 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(md);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-export" });
     res.status(500).json({ error: "export failed" });
   }
 });
@@ -2022,6 +2058,7 @@ qcoreaiRouter.get("/runs/:id/thread", async (req, res) => {
     const runs = await getThread(threadId);
     res.json({ threadId, runs });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-thread" });
     res.status(500).json({ error: "thread fetch failed" });
   }
 });
@@ -2105,6 +2142,7 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
     if (!ok) return res.status(404).json({ error: "run is not live" });
     return res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-guidance" });
     return res.status(500).json({ error: "guidance push failed" });
   }
 });
@@ -2295,6 +2333,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     try {
       attachments = await fetchQRightAttachments(requestedAttachmentIds);
     } catch (err: any) {
+      captureQCoreAIError(err, { route: "create-multi-agent" });
       return res.status(500).json({ error: "qright attachment fetch failed" });
     }
   }
@@ -2314,6 +2353,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         return res.status(404).json({ error: "continueFromRunId not found" });
       }
     } catch (err: any) {
+      captureQCoreAIError(err, { route: "create-multi-agent" });
       return res.status(500).json({ error: "thread lookup failed" });
     }
   }
@@ -2351,6 +2391,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       ordering: 0,
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-multi-agent" });
     return res.status(500).json({ error: "session init failed" });
   }
 
@@ -2396,6 +2437,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         ordering: 1,
       });
     } catch (e: any) {
+      captureQCoreAIError(e, { route: "create-multi-agent" });
       // Logging the persistence failure but not blocking the run.
       console.warn("[QCoreAI] persist attachments failed:", e?.message);
     }
@@ -2487,6 +2529,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
               ordering: ordering++,
             });
           } catch (e: any) {
+            captureQCoreAIError(e, { route: "create-multi-agent" });
             console.warn("[QCoreAI] persist guidance failed:", e?.message);
           }
           break;
@@ -2554,6 +2597,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       }
     }
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-multi-agent" });
     hadError = err?.message || "orchestrator crashed";
     send({ type: "error", message: hadError });
   } finally {
@@ -2597,6 +2641,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     await renameSessionIfDefault(sessionId, userInput);
     await touchSession(sessionId);
   } catch (e: any) {
+    captureQCoreAIError(e, { route: "create-multi-agent" });
     console.error("[QCoreAI] finishRun error:", e?.message);
   }
 
@@ -2729,6 +2774,7 @@ qcoreaiRouter.post("/eval/suites", async (req, res) => {
     });
     res.json({ ok: true, suite });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites" });
     res.status(500).json({ error: "create eval suite failed" });
   }
 });
@@ -2741,6 +2787,7 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
     const items = await listEvalSuites(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites" });
     res.status(500).json({ error: "list eval suites failed" });
   }
 });
@@ -2752,6 +2799,7 @@ qcoreaiRouter.get("/eval/suites/public", async (req, res) => {
     const items = await listPublicEvalSuites(limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites-public" });
     res.status(500).json({ error: "list public eval suites failed" });
   }
 });
@@ -2765,6 +2813,7 @@ qcoreaiRouter.patch("/eval/suites/:id/visibility", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ isPublic });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites-visibility" });
     res.status(500).json({ error: "set eval suite visibility failed" });
   }
 });
@@ -2777,6 +2826,7 @@ qcoreaiRouter.get("/eval/suites/:id", async (req, res) => {
     if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
     res.json({ suite: s });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites" });
     res.status(500).json({ error: "get eval suite failed" });
   }
 });
@@ -2796,6 +2846,7 @@ qcoreaiRouter.patch("/eval/suites/:id", async (req, res) => {
     if (!s) return res.status(404).json({ error: "suite not found or forbidden" });
     res.json({ suite: s });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites" });
     res.status(500).json({ error: "update eval suite failed" });
   }
 });
@@ -2808,6 +2859,7 @@ qcoreaiRouter.delete("/eval/suites/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "suite not found or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites" });
     res.status(500).json({ error: "delete eval suite failed" });
   }
 });
@@ -2841,6 +2893,7 @@ qcoreaiRouter.post("/eval/suites/:id/run", evalRunLimiter, async (req, res) => {
     });
     res.json({ ok: true, run });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites-run" });
     res.status(500).json({ error: "start eval run failed" });
   }
 });
@@ -2853,6 +2906,7 @@ qcoreaiRouter.get("/eval/runs/:id", async (req, res) => {
     if (!r || r.ownerUserId !== auth.sub) return res.status(404).json({ error: "run not found" });
     res.json({ run: r });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-runs" });
     res.status(500).json({ error: "get eval run failed" });
   }
 });
@@ -2867,6 +2921,7 @@ qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
     const items = await listSuiteRuns(suite.id, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "eval-suites-runs" });
     res.status(500).json({ error: "list eval runs failed" });
   }
 });
@@ -2893,6 +2948,7 @@ qcoreaiRouter.post("/prompts", async (req, res) => {
     });
     res.json({ ok: true, prompt: p });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-prompt" });
     res.status(500).json({ error: "create prompt failed" });
   }
 });
@@ -2905,6 +2961,7 @@ qcoreaiRouter.get("/prompts", async (req, res) => {
     const items = await listPrompts(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-prompts" });
     res.status(500).json({ error: "list prompts failed" });
   }
 });
@@ -2916,6 +2973,7 @@ qcoreaiRouter.get("/prompts/public", async (req, res) => {
     const items = await listPublicPrompts(q, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-public" });
     res.status(500).json({ error: "list public prompts failed" });
   }
 });
@@ -2930,6 +2988,7 @@ qcoreaiRouter.get("/prompts/:id", async (req, res) => {
     }
     res.json({ prompt: p });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-prompt" });
     res.status(500).json({ error: "get prompt failed" });
   }
 });
@@ -2945,6 +3004,7 @@ qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
     const chain = await getPromptVersionChain(String(req.params.id));
     res.json({ items: chain });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-versions" });
     res.status(500).json({ error: "version chain failed" });
   }
 });
@@ -2979,6 +3039,7 @@ qcoreaiRouter.get("/prompts/:id/diff", async (req, res) => {
     const diff = computeWordDiff(fromText, target.content);
     res.json({ diff, fromLength: fromText.length, toLength: target.content.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-diff" });
     res.status(500).json({ error: "diff failed" });
   }
 });
@@ -3035,6 +3096,7 @@ qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
     if (!p) return res.status(404).json({ error: "prompt not found or forbidden" });
     res.json({ prompt: p });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-prompt" });
     res.status(500).json({ error: "update prompt failed" });
   }
 });
@@ -3047,6 +3109,7 @@ qcoreaiRouter.delete("/prompts/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "prompt not found or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-prompt" });
     res.status(500).json({ error: "delete prompt failed" });
   }
 });
@@ -3063,6 +3126,7 @@ qcoreaiRouter.post("/prompts/:id/fork", async (req, res) => {
     if (!forked) return res.status(404).json({ error: "prompt not found or not forkable" });
     res.json({ ok: true, prompt: forked });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-fork" });
     res.status(500).json({ error: "fork prompt failed" });
   }
 });
@@ -3096,6 +3160,7 @@ qcoreaiRouter.post("/templates", async (req, res) => {
     });
     res.status(201).json({ template: t });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-template" });
     res.status(500).json({ error: "create template failed" });
   }
 });
@@ -3107,6 +3172,7 @@ qcoreaiRouter.get("/templates/public", async (req, res) => {
     const items = await listPublicTemplates(q, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "templates-public" });
     res.status(500).json({ error: "list public templates failed" });
   }
 });
@@ -3118,6 +3184,7 @@ qcoreaiRouter.get("/templates", async (req, res) => {
     const items = await listTemplates(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-templates" });
     res.status(500).json({ error: "list templates failed" });
   }
 });
@@ -3132,6 +3199,7 @@ qcoreaiRouter.get("/templates/:id", async (req, res) => {
     }
     res.json({ template: t });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-template" });
     res.status(500).json({ error: "get template failed" });
   }
 });
@@ -3152,6 +3220,7 @@ qcoreaiRouter.patch("/templates/:id", async (req, res) => {
     if (!t) return res.status(404).json({ error: "template not found or forbidden" });
     res.json({ template: t });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-template" });
     res.status(500).json({ error: "update template failed" });
   }
 });
@@ -3164,6 +3233,7 @@ qcoreaiRouter.delete("/templates/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "template not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-template" });
     res.status(500).json({ error: "delete template failed" });
   }
 });
@@ -3179,6 +3249,7 @@ qcoreaiRouter.post("/templates/:id/use", async (req, res) => {
     const updated = await useTemplate(req.params.id);
     res.json({ template: updated || t });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "templates-use" });
     res.status(500).json({ error: "use template failed" });
   }
 });
@@ -3256,6 +3327,7 @@ async function runBatchItem(opts: {
       }
     }
   } catch (e: any) {
+    captureQCoreAIError(e, { route: "templates-use" });
     hadError = e?.message || "batch item crashed";
   }
 
@@ -3345,6 +3417,7 @@ qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
       });
     })();
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-batch" });
     if (!res.headersSent) res.status(500).json({ error: "batch create failed" });
   }
 });
@@ -3356,6 +3429,7 @@ qcoreaiRouter.get("/batches", async (req, res) => {
     const items = await listBatches(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-batches" });
     res.status(500).json({ error: "list batches failed" });
   }
 });
@@ -3377,6 +3451,7 @@ qcoreaiRouter.get("/batch/:id", async (req, res) => {
     }));
     res.json({ batch, runs: runSummaries });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-batch" });
     res.status(500).json({ error: "get batch failed" });
   }
 });
@@ -3394,6 +3469,7 @@ qcoreaiRouter.delete("/batch/:id", async (req, res) => {
     await updateBatchProgress(batch.id, { failedDelta: batch.totalRuns - batch.completedRuns - batch.failedRuns });
     res.json({ ok: true, cancelled: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-batch" });
     res.status(500).json({ error: "cancel batch failed" });
   }
 });
@@ -3426,6 +3502,7 @@ qcoreaiRouter.post("/schedules", async (req, res) => {
     });
     res.status(201).json({ schedule: s });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-schedule" });
     res.status(500).json({ error: "create schedule failed" });
   }
 });
@@ -3437,6 +3514,7 @@ qcoreaiRouter.get("/schedules", async (req, res) => {
     const items = await listScheduledBatches(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-schedules" });
     res.status(500).json({ error: "list schedules failed" });
   }
 });
@@ -3449,6 +3527,7 @@ qcoreaiRouter.get("/schedules/:id", async (req, res) => {
     if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
     res.json({ schedule: s });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-schedule" });
     res.status(500).json({ error: "get schedule failed" });
   }
 });
@@ -3470,6 +3549,7 @@ qcoreaiRouter.patch("/schedules/:id", async (req, res) => {
     if (!s) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ schedule: s });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-schedule" });
     res.status(500).json({ error: "update schedule failed" });
   }
 });
@@ -3482,6 +3562,7 @@ qcoreaiRouter.delete("/schedules/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-schedule" });
     res.status(500).json({ error: "delete schedule failed" });
   }
 });
@@ -3533,6 +3614,7 @@ qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
       });
     })();
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "schedules-run-now" });
     if (!res.headersSent) res.status(500).json({ error: "run-now failed" });
   }
 });
@@ -3583,6 +3665,7 @@ export function startScheduler(): void {
         })();
       }
     } catch (e) {
+      captureQCoreAIError(e, { route: "schedules-run-now" });
       console.error("[QCoreAI] scheduler tick error:", e);
     }
   };
@@ -3607,6 +3690,7 @@ qcoreaiRouter.delete("/runs/bulk", async (req, res) => {
     const deleted = await deleteRunsBulk(ids, auth.sub);
     res.json({ deleted });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-bulk" });
     res.status(500).json({ error: "bulk delete failed" });
   }
 });
@@ -3625,7 +3709,7 @@ qcoreaiRouter.post("/runs/:id/bookmark", async (req, res) => {
     const { label } = req.body || {};
     const bk = await bookmarkRun(String(req.params.id), auth.sub, label ?? null);
     res.status(201).json({ bookmark: bk });
-  } catch (err: any) { res.status(500).json({ error: "bookmark failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "runs-bookmark" }); res.status(500).json({ error: "bookmark failed" }); }
 });
 
 qcoreaiRouter.delete("/runs/:id/bookmark", async (req, res) => {
@@ -3634,7 +3718,7 @@ qcoreaiRouter.delete("/runs/:id/bookmark", async (req, res) => {
   try {
     const ok = await unbookmarkRun(String(req.params.id), auth.sub);
     res.json({ ok });
-  } catch (err: any) { res.status(500).json({ error: "unbookmark failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "runs-bookmark" }); res.status(500).json({ error: "unbookmark failed" }); }
 });
 
 qcoreaiRouter.get("/bookmarks", async (req, res) => {
@@ -3644,7 +3728,7 @@ qcoreaiRouter.get("/bookmarks", async (req, res) => {
     const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10) || 50);
     const items = await listBookmarks(auth.sub, limit);
     res.json({ items });
-  } catch (err: any) { res.status(500).json({ error: "list bookmarks failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-bookmarks" }); res.status(500).json({ error: "list bookmarks failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -3663,6 +3747,7 @@ qcoreaiRouter.post("/runs/:id/rate", async (req, res) => {
     const summary = await getRatingsSummary(String(req.params.id));
     res.json({ rating: row, summary });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-rate" });
     res.status(500).json({ error: "rate run failed" });
   }
 });
@@ -3676,6 +3761,7 @@ qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
     ]);
     res.json({ mine, summary });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-rating" });
     res.status(500).json({ error: "get rating failed" });
   }
 });
@@ -3687,6 +3773,7 @@ qcoreaiRouter.get("/ratings/top", async (req, res) => {
     const items = await listTopRatedRuns(auth?.sub ?? null, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "ratings-top" });
     res.status(500).json({ error: "top ratings failed" });
   }
 });
@@ -3704,6 +3791,7 @@ qcoreaiRouter.post("/runs/:id/comments", async (req, res) => {
     const comment = await createComment(req.params.id, authorName || "Anonymous", content);
     res.status(201).json({ comment });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-comments" });
     res.status(500).json({ error: "create comment failed" });
   }
 });
@@ -3713,6 +3801,7 @@ qcoreaiRouter.get("/runs/:id/comments", async (req, res) => {
     const comments = await listComments(req.params.id);
     res.json({ items: comments });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-comments" });
     res.status(500).json({ error: "list comments failed" });
   }
 });
@@ -3730,6 +3819,7 @@ qcoreaiRouter.get("/prompts/audit", async (req, res) => {
     const items = await listPromptAudit(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-audit" });
     res.status(500).json({ error: "list audit failed" });
   }
 });
@@ -3750,6 +3840,7 @@ qcoreaiRouter.post("/workspaces", async (req, res) => {
     const workspace = await createWorkspace({ name: String(name), description: description ?? null, ownerId: auth.sub });
     res.status(201).json({ workspace });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-workspace" });
     res.status(500).json({ error: "create workspace failed" });
   }
 });
@@ -3761,6 +3852,7 @@ qcoreaiRouter.get("/workspaces", async (req, res) => {
     const items = await listWorkspaces(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-workspaces" });
     res.status(500).json({ error: "list workspaces failed" });
   }
 });
@@ -3774,6 +3866,7 @@ qcoreaiRouter.get("/workspaces/:id", async (req, res) => {
     if (workspace.ownerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     res.json({ workspace });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-workspace" });
     res.status(500).json({ error: "get workspace failed" });
   }
 });
@@ -3790,6 +3883,7 @@ qcoreaiRouter.patch("/workspaces/:id", async (req, res) => {
     if (!ws) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ workspace: ws });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-workspace" });
     res.status(500).json({ error: "update workspace failed" });
   }
 });
@@ -3802,6 +3896,7 @@ qcoreaiRouter.delete("/workspaces/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-workspace" });
     res.status(500).json({ error: "delete workspace failed" });
   }
 });
@@ -3814,6 +3909,7 @@ qcoreaiRouter.get("/workspaces/:id/members", async (req, res) => {
     const items = await listWorkspaceMembers(String(req.params.id));
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-members" });
     res.status(500).json({ error: "list members failed" });
   }
 });
@@ -3829,6 +3925,7 @@ qcoreaiRouter.post("/workspaces/:id/members", async (req, res) => {
     const member = await addWorkspaceMember(String(req.params.id), String(userId), role === "editor" ? "editor" : "viewer");
     res.status(201).json({ member });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-members" });
     res.status(500).json({ error: "invite failed" });
   }
 });
@@ -3840,6 +3937,7 @@ qcoreaiRouter.delete("/workspaces/:id/members/:userId", async (req, res) => {
     const ok = await removeWorkspaceMember(String(req.params.id), String(req.params.userId));
     res.json({ ok });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-members" });
     res.status(500).json({ error: "remove member failed" });
   }
 });
@@ -3852,6 +3950,7 @@ qcoreaiRouter.get("/workspaces/:id/sessions", async (req, res) => {
     const items = await listWorkspaceSessions(String(req.params.id));
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-sessions" });
     res.status(500).json({ error: "list workspace sessions failed" });
   }
 });
@@ -3865,6 +3964,7 @@ qcoreaiRouter.post("/workspaces/:id/sessions", async (req, res) => {
     await addWorkspaceSession(String(req.params.id), String(sessionId));
     res.status(201).json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-sessions" });
     res.status(500).json({ error: "add session failed" });
   }
 });
@@ -3876,6 +3976,7 @@ qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", async (req, res) => 
     const ok = await removeWorkspaceSession(String(req.params.id), String(req.params.sessionId));
     res.json({ ok });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-sessions" });
     res.status(500).json({ error: "remove session failed" });
   }
 });
@@ -3904,6 +4005,7 @@ qcoreaiRouter.post("/notebook", async (req, res) => {
     });
     res.status(201).json({ snippet });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-notebook" });
     res.status(500).json({ error: "create snippet failed" });
   }
 });
@@ -3915,6 +4017,7 @@ qcoreaiRouter.get("/notebook/tags", async (req, res) => {
     const items = await listSnippetTagCloud(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "notebook-tags" });
     res.status(500).json({ error: "tag cloud failed" });
   }
 });
@@ -3930,6 +4033,7 @@ qcoreaiRouter.get("/notebook", async (req, res) => {
     const items = await listSnippets(auth.sub, { q, tag, pinned, limit });
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-notebook" });
     res.status(500).json({ error: "list snippets failed" });
   }
 });
@@ -3942,6 +4046,7 @@ qcoreaiRouter.get("/notebook/:id", async (req, res) => {
     if (!snippet || snippet.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
     res.json({ snippet });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-notebook" });
     res.status(500).json({ error: "get snippet failed" });
   }
 });
@@ -3959,6 +4064,7 @@ qcoreaiRouter.patch("/notebook/:id", async (req, res) => {
     if (!snippet) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ snippet });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-notebook" });
     res.status(500).json({ error: "update snippet failed" });
   }
 });
@@ -3971,6 +4077,7 @@ qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-notebook" });
     res.status(500).json({ error: "delete snippet failed" });
   }
 });
@@ -4001,6 +4108,7 @@ qcoreaiRouter.get("/sessions/:id/stats", async (req, res) => {
     }, {});
     res.json({ sessionId: session.id, totalRuns, doneCount, totalCostUsd, avgCostUsd, totalDurationMs, avgDurationMs, strategies });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-stats" });
     res.status(500).json({ error: "session stats failed" });
   }
 });
@@ -4021,6 +4129,7 @@ qcoreaiRouter.get("/runs/:id/annotations", async (req, res) => {
     const rows = await listAnnotations(String(req.params.id), auth.sub);
     res.json({ annotations: rows });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-annotations" });
     res.status(500).json({ error: "list annotations failed" });
   }
 });
@@ -4041,6 +4150,7 @@ qcoreaiRouter.post("/runs/:id/annotations", async (req, res) => {
     void notifyEvent({ event: "annotation.created", annotationId: ann.id, runId: String(req.params.id), userId: auth.sub, note: ann.note, color: ann.color, createdAt: ann.createdAt }, null, auth.sub);
     res.status(201).json(ann);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-annotations" });
     res.status(500).json({ error: "create annotation failed" });
   }
 });
@@ -4055,6 +4165,7 @@ qcoreaiRouter.patch("/annotations/:id", async (req, res) => {
     if (!ann) return res.status(404).json({ error: "not found or forbidden" });
     res.json(ann);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "update-annotation" });
     res.status(500).json({ error: "update annotation failed" });
   }
 });
@@ -4067,6 +4178,7 @@ qcoreaiRouter.delete("/annotations/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-annotation" });
     res.status(500).json({ error: "delete annotation failed" });
   }
 });
@@ -4087,6 +4199,7 @@ qcoreaiRouter.get("/me/annotations", async (req, res) => {
     }
     res.json({ annotations: rows });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-annotations" });
     res.status(500).json({ error: "list annotations failed" });
   }
 });
@@ -4108,6 +4221,7 @@ qcoreaiRouter.patch("/workspaces/:id/sessions/:sessionId/pin", async (req, res) 
     if (!ok) return res.status(404).json({ error: "session not in workspace" });
     res.json({ pinOrder });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "workspaces-sessions-pin" });
     res.status(500).json({ error: "pin session failed" });
   }
 });
@@ -4127,6 +4241,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
     const results = await searchQCore(auth.sub, q, limit);
     res.json({ results, query: q });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-search" });
     res.status(500).json({ error: "search failed" });
   }
 });
@@ -4182,6 +4297,7 @@ qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
     }
     res.json({ suggestions: suggestions.slice(0, 5).map((s: string) => String(s).trim()).filter(Boolean) });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-suggest" });
     res.status(500).json({ error: "suggest failed" });
   }
 });
@@ -4221,6 +4337,7 @@ qcoreaiRouter.post("/runs/:id/follow-up", async (req, res) => {
     await touchSession(session.id);
     res.status(201).json({ run: newRun, sourceRunId: sourceRun.id });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-follow-up" });
     res.status(500).json({ error: "follow-up failed" });
   }
 });
@@ -4361,6 +4478,7 @@ qcoreaiRouter.post("/sessions/:id/presence/ping", async (req, res) => {
     m.set(auth.sub, Date.now());
     res.json({ sessionId, onlineCount: m.size });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-presence-ping" });
     res.status(500).json({ error: "presence ping failed" });
   }
 });
@@ -4375,6 +4493,7 @@ qcoreaiRouter.get("/sessions/:id/presence", async (req, res) => {
     const users = m ? Array.from(m.entries()).map(([uid, ts]) => ({ userId: uid, lastSeenMs: ts })) : [];
     res.json({ sessionId, onlineCount: users.length, users });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-presence" });
     res.status(500).json({ error: "presence get failed" });
   }
 });
@@ -4421,6 +4540,7 @@ qcoreaiRouter.post("/notebook/qa", async (req, res) => {
     const result = await callProvider(provider.id, messages, provider.defaultModel, 0.5);
     res.json({ answer: result.reply, snippetsUsed: snippets.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "notebook-qa" });
     res.status(500).json({ error: "notebook QA failed" });
   }
 });
@@ -4483,6 +4603,7 @@ qcoreaiRouter.post("/widget/run", async (req, res) => {
         finalContent = result.reply;
         await finishRun(run.id, "done", { finalContent });
       } catch (provErr: any) {
+        captureQCoreAIError(provErr, { route: "widget-run" });
         finalContent = "Error calling provider: " + (provErr?.message || "unknown");
         await finishRun(run.id, "error", { finalContent });
       }
@@ -4493,6 +4614,7 @@ qcoreaiRouter.post("/widget/run", async (req, res) => {
 
     res.json({ runId: run.id, sessionId: session.id, finalContent });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "widget-run" });
     res.status(500).json({ error: "widget run failed" });
   }
 });
@@ -4559,6 +4681,7 @@ qcoreaiRouter.get("/me/usage", async (req, res) => {
       planName: "free",
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-usage" });
     res.status(500).json({ error: "usage fetch failed" });
   }
 });
@@ -4576,6 +4699,7 @@ qcoreaiRouter.get("/me/plan", async (req, res) => {
       },
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-plan" });
     res.status(500).json({ error: "plan fetch failed" });
   }
 });
@@ -4605,11 +4729,13 @@ qcoreaiRouter.post("/sessions/bulk-delete", async (req, res) => {
         await deleteSession(sid, auth.sub);
         deleted++;
       } catch (e: any) {
+        captureQCoreAIError(e, { route: "sessions-bulk-delete" });
         errors.push(`${sid}: ${e?.message}`);
       }
     }
     res.json({ deleted, errors });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-bulk-delete" });
     res.status(500).json({ error: "bulk delete failed" });
   }
 });
@@ -4633,11 +4759,13 @@ qcoreaiRouter.post("/sessions/bulk-archive", async (req, res) => {
         await archiveSession(sid, auth.sub, shouldArchive);
         updated++;
       } catch (e: any) {
+        captureQCoreAIError(e, { route: "sessions-bulk-archive" });
         errors.push(`${sid}: ${e?.message}`);
       }
     }
     res.json({ updated, archive: shouldArchive, errors });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-bulk-archive" });
     res.status(500).json({ error: "bulk archive failed" });
   }
 });
@@ -4655,6 +4783,7 @@ qcoreaiRouter.get("/runs/:id/siblings", async (req, res) => {
     const siblings = allRuns.filter((r: any) => r.id !== run.id).slice(0, limit);
     res.json({ runId: run.id, sessionId: run.sessionId, siblings, total: siblings.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-siblings" });
     res.status(500).json({ error: "siblings fetch failed" });
   }
 });
@@ -4679,6 +4808,7 @@ qcoreaiRouter.post("/orgs", async (req, res) => {
     const org = await createOrg({ name, ownerId: auth.sub });
     res.status(201).json({ org });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-org" });
     res.status(500).json({ error: "create org failed" });
   }
 });
@@ -4690,6 +4820,7 @@ qcoreaiRouter.get("/orgs", async (req, res) => {
     const items = await listOrgs(auth.sub);
     res.json({ items, total: items.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-orgs" });
     res.status(500).json({ error: "list orgs failed" });
   }
 });
@@ -4704,6 +4835,7 @@ qcoreaiRouter.get("/orgs/:id", async (req, res) => {
     if (!isMember) return res.status(403).json({ error: "forbidden" });
     res.json({ org });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-org" });
     res.status(500).json({ error: "get org failed" });
   }
 });
@@ -4716,6 +4848,7 @@ qcoreaiRouter.delete("/orgs/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "org not found or forbidden" });
     res.json({ deleted: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-org" });
     res.status(500).json({ error: "delete org failed" });
   }
 });
@@ -4733,6 +4866,7 @@ qcoreaiRouter.post("/orgs/:id/members", async (req, res) => {
     await addOrgMember(org.id, userId, role);
     res.status(201).json({ orgId: org.id, userId, role });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "orgs-members" });
     res.status(500).json({ error: "add member failed" });
   }
 });
@@ -4748,6 +4882,7 @@ qcoreaiRouter.delete("/orgs/:id/members/:userId", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "member not found" });
     res.json({ removed: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "orgs-members" });
     res.status(500).json({ error: "remove member failed" });
   }
 });
@@ -4763,6 +4898,7 @@ qcoreaiRouter.get("/orgs/:id/members", async (req, res) => {
     const members = await listOrgMembers(org.id);
     res.json({ members, total: members.length });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "orgs-members" });
     res.status(500).json({ error: "list members failed" });
   }
 });
@@ -4856,6 +4992,7 @@ qcoreaiRouter.post("/me/optimize-costs", async (req, res) => {
       source: "analyzed",
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-optimize-cost" });
     res.status(500).json({ error: "optimize-costs failed" });
   }
 });
@@ -4907,9 +5044,11 @@ qcoreaiRouter.get("/me/cost-trend", async (req, res) => {
 
       res.json({ points, days });
     } catch (dbErr: any) {
+      captureQCoreAIError(dbErr, { route: "list-cost-trend" });
       res.json({ points: [], days, error: dbErr?.message });
     }
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-cost-trend" });
     res.status(500).json({ error: "cost-trend failed" });
   }
 });
@@ -4951,6 +5090,7 @@ qcoreaiRouter.post("/me/api-keys", apiKeyLimiter, async (req, res) => {
     void logAudit(auth.sub, "api-key.created", { resourceId: result.id, resourceType: "api-key" });
     res.status(201).json(result);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-api-key" });
     res.status(500).json({ error: "create api-key failed" });
   }
 });
@@ -4962,6 +5102,7 @@ qcoreaiRouter.get("/me/api-keys", apiKeyLimiter, async (req, res) => {
     const items = await listApiKeys(auth.sub);
     res.json({ items });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-api-keys" });
     res.status(500).json({ error: "list api-keys failed" });
   }
 });
@@ -4975,6 +5116,7 @@ qcoreaiRouter.delete("/me/api-keys/:id", apiKeyLimiter, async (req, res) => {
     void logAudit(auth.sub, "api-key.deleted", { resourceId: String(req.params.id), resourceType: "api-key" });
     res.json({ ok: true });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-api-key" });
     res.status(500).json({ error: "delete api-key failed" });
   }
 });
@@ -4998,6 +5140,7 @@ qcoreaiRouter.post("/shared/:token/clap", clapLimiter, async (req, res) => {
     const clapCount = await clapRun(run.id);
     res.json({ clapCount });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "shared-clap" });
     res.status(500).json({ error: "clap failed" });
   }
 });
@@ -5036,6 +5179,7 @@ qcoreaiRouter.get("/runs/:id/embed", async (req, res) => {
 </html>`;
     res.json({ html });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-embed" });
     res.status(500).json({ error: "embed failed" });
   }
 });
@@ -5067,6 +5211,7 @@ qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
       exportedAt: new Date().toISOString(),
     });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-export-pdf-data" });
     res.status(500).json({ error: "export-pdf-data failed" });
   }
 });
@@ -5111,6 +5256,7 @@ qcoreaiRouter.post("/sessions/:id/ai-summary", async (req, res) => {
     await setSessionAiSummary(session.id, summary);
     return res.json({ summary, sessionId: session.id, generatedAt: new Date().toISOString() });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-ai-summary" });
     return res.status(500).json({ error: "ai-summary failed" });
   }
 });
@@ -5125,6 +5271,7 @@ qcoreaiRouter.get("/sessions/:id/ai-summary", async (req, res) => {
     const cached = await getSessionAiSummary(session.id);
     return res.json(cached || { summary: null, generatedAt: null });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-ai-summary" });
     return res.status(500).json({ error: "get-ai-summary failed" });
   }
 });
@@ -5154,6 +5301,7 @@ qcoreaiRouter.get("/sessions/:id/timeline", async (req, res) => {
       }));
     return res.json({ points });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-timeline" });
     return res.status(500).json({ error: "timeline failed" });
   }
 });
@@ -5192,6 +5340,7 @@ qcoreaiRouter.get("/me/rate-limits", async (req, res) => {
     });
     return res.json({ rateLimits: result });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-rate-limits" });
     return res.status(500).json({ error: "rate-limits failed" });
   }
 });
@@ -5210,6 +5359,7 @@ qcoreaiRouter.delete("/admin/rate-limits/:userId/:bucket", async (req, res) => {
     const ok = await adminResetRateLimit(req.params.userId, req.params.bucket);
     return res.json({ ok, userId: req.params.userId, bucket: req.params.bucket });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-rate-limit" });
     return res.status(500).json({ error: "reset-rate-limit failed" });
   }
 });
@@ -5239,7 +5389,7 @@ qcoreaiRouter.post("/prompt-chains", async (req, res) => {
       isPublic: Boolean(isPublic),
     });
     res.status(201).json({ chain });
-  } catch (err: any) { res.status(500).json({ error: "create chain failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "create-prompt-chain" }); res.status(500).json({ error: "create chain failed" }); }
 });
 
 qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
@@ -5247,7 +5397,7 @@ qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
     const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
     const items = await listPublicPromptChains(limit);
     res.json({ items });
-  } catch (err: any) { res.status(500).json({ error: "list public chains failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "prompt-chains-public" }); res.status(500).json({ error: "list public chains failed" }); }
 });
 
 qcoreaiRouter.get("/prompt-chains", async (req, res) => {
@@ -5256,7 +5406,7 @@ qcoreaiRouter.get("/prompt-chains", async (req, res) => {
   try {
     const items = await listPromptChains(auth.sub);
     res.json({ items });
-  } catch (err: any) { res.status(500).json({ error: "list chains failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-prompt-chains" }); res.status(500).json({ error: "list chains failed" }); }
 });
 
 qcoreaiRouter.get("/prompt-chains/:id", async (req, res) => {
@@ -5266,7 +5416,7 @@ qcoreaiRouter.get("/prompt-chains/:id", async (req, res) => {
     if (!chain) return res.status(404).json({ error: "not found" });
     if (!chain.isPublic && chain.userId !== auth?.sub) return res.status(403).json({ error: "forbidden" });
     res.json({ chain });
-  } catch (err: any) { res.status(500).json({ error: "get chain failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "get-prompt-chain" }); res.status(500).json({ error: "get chain failed" }); }
 });
 
 qcoreaiRouter.patch("/prompt-chains/:id", async (req, res) => {
@@ -5282,7 +5432,7 @@ qcoreaiRouter.patch("/prompt-chains/:id", async (req, res) => {
     });
     if (!chain) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ chain });
-  } catch (err: any) { res.status(500).json({ error: "update chain failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "update-prompt-chain" }); res.status(500).json({ error: "update chain failed" }); }
 });
 
 qcoreaiRouter.delete("/prompt-chains/:id", async (req, res) => {
@@ -5292,7 +5442,7 @@ qcoreaiRouter.delete("/prompt-chains/:id", async (req, res) => {
     const ok = await deletePromptChain(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
-  } catch (err: any) { res.status(500).json({ error: "delete chain failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-prompt-chain" }); res.status(500).json({ error: "delete chain failed" }); }
 });
 
 qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
@@ -5354,7 +5504,7 @@ qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
 
     await incrPromptChainRunCount(chain.id);
     res.json({ chainId: chain.id, results });
-  } catch (err: any) { res.status(500).json({ error: "run chain failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "prompt-chains-run" }); res.status(500).json({ error: "run chain failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5404,7 +5554,7 @@ qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
       tags = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
     }
     res.json({ tags });
-  } catch (err: any) { res.status(500).json({ error: "auto-tag failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-auto-tag" }); res.status(500).json({ error: "auto-tag failed" }); }
 });
 
 qcoreaiRouter.get("/notebook/collections/:id/summary", async (req, res) => {
@@ -5437,7 +5587,7 @@ qcoreaiRouter.get("/notebook/collections/:id/summary", async (req, res) => {
     } catch { /* use fallback summary */ }
 
     res.json({ summary, snippetCount: collSnippets.length, tags: allTags.slice(0, 20) });
-  } catch (err: any) { res.status(500).json({ error: "collection summary failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections-summary" }); res.status(500).json({ error: "collection summary failed" }); }
 });
 
 qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
@@ -5471,7 +5621,7 @@ qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="collection-${req.params.id}.md"`);
     res.send(md);
-  } catch (err: any) { res.status(500).json({ error: "export failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections-export" }); res.status(500).json({ error: "export failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5485,7 +5635,7 @@ qcoreaiRouter.get("/me/stats", async (req, res) => {
   try {
     const stats = await getUserStats(auth.sub);
     res.json({ stats });
-  } catch (err: any) { res.status(500).json({ error: "stats failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-stats" }); res.status(500).json({ error: "stats failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5510,7 +5660,7 @@ qcoreaiRouter.post("/sessions/:id/invites", async (req, res) => {
     });
     void logAudit(auth.sub, "session.shared", { resourceId: req.params.id, resourceType: "session", meta: { inviteId: invite.id, role: invite.role } });
     res.status(201).json(invite);
-  } catch (err: any) { res.status(500).json({ error: "create invite failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "sessions-invites" }); res.status(500).json({ error: "create invite failed" }); }
 });
 
 qcoreaiRouter.get("/sessions/:id/invites", async (req, res) => {
@@ -5522,7 +5672,7 @@ qcoreaiRouter.get("/sessions/:id/invites", async (req, res) => {
     if (session.userId && session.userId !== auth.sub) return res.status(403).json({ error: "not session owner" });
     const invites = await listSessionInvites(req.params.id, auth.sub);
     res.json({ invites });
-  } catch (err: any) { res.status(500).json({ error: "list invites failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "sessions-invites" }); res.status(500).json({ error: "list invites failed" }); }
 });
 
 qcoreaiRouter.delete("/sessions/:id/invites/:inviteId", async (req, res) => {
@@ -5532,7 +5682,7 @@ qcoreaiRouter.delete("/sessions/:id/invites/:inviteId", async (req, res) => {
     const ok = await deleteSessionInvite(req.params.inviteId, auth.sub);
     if (!ok) return res.status(404).json({ error: "invite not found or not yours" });
     res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ error: "delete invite failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "sessions-invites" }); res.status(500).json({ error: "delete invite failed" }); }
 });
 
 qcoreaiRouter.get("/invites/:token", async (req, res) => {
@@ -5541,7 +5691,7 @@ qcoreaiRouter.get("/invites/:token", async (req, res) => {
     if (!invite) return res.json({ valid: false, sessionId: null, role: null });
     await incrementInviteUseCount(invite.token);
     res.json({ sessionId: invite.sessionId, role: invite.role, valid: true });
-  } catch (err: any) { res.status(500).json({ error: "resolve invite failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "get-invite" }); res.status(500).json({ error: "resolve invite failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5556,7 +5706,7 @@ qcoreaiRouter.get("/me/audit-log", async (req, res) => {
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10) || 50));
     const entries = await listAuditLog(auth.sub, limit);
     res.json({ entries });
-  } catch (err: any) { res.status(500).json({ error: "audit log failed" }); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-audit-log" }); res.status(500).json({ error: "audit log failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5597,7 +5747,7 @@ qcoreaiRouter.post("/me/memories", async (req, res) => {
   try {
     const mem = await addMemory(auth.sub, String(content).slice(0, 4000), { category, pinned });
     res.json({ memory: mem });
-  } catch (err: any) { res.status(500).json({ error: "add memory failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "create-memory" }); res.status(500).json({ error: "add memory failed"}); }
 });
 
 qcoreaiRouter.get("/me/memories", async (req, res) => {
@@ -5610,7 +5760,7 @@ qcoreaiRouter.get("/me/memories", async (req, res) => {
   try {
     const memories = await listMemories(auth.sub, { category, pinned, limit });
     res.json({ memories });
-  } catch (err: any) { res.status(500).json({ error: "list memories failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-memories" }); res.status(500).json({ error: "list memories failed"}); }
 });
 
 // Extract must come before :id to avoid routing collision
@@ -5625,7 +5775,7 @@ qcoreaiRouter.post("/me/memories/extract", async (req, res) => {
     // Fire-and-forget — non-blocking
     void extractMemoriesFromRun(auth.sub, run.finalContent || "", run.userInput);
     res.json({ ok: true, runId });
-  } catch (err: any) { res.status(500).json({ error: "extract failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "memories-extract" }); res.status(500).json({ error: "extract failed"}); }
 });
 
 qcoreaiRouter.patch("/me/memories/:id", async (req, res) => {
@@ -5636,7 +5786,7 @@ qcoreaiRouter.patch("/me/memories/:id", async (req, res) => {
     const mem = await updateMemory(String(req.params.id), auth.sub, { content, category, pinned });
     if (!mem) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ memory: mem });
-  } catch (err: any) { res.status(500).json({ error: "update memory failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "update-memory" }); res.status(500).json({ error: "update memory failed"}); }
 });
 
 qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
@@ -5646,7 +5796,7 @@ qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
     const ok = await deleteMemory(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ deleted: true });
-  } catch (err: any) { res.status(500).json({ error: "delete memory failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-memory" }); res.status(500).json({ error: "delete memory failed"}); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5714,6 +5864,7 @@ qcoreaiRouter.post("/templates/suggest", async (req, res) => {
       return res.json({ suggestions });
     } catch { return res.json({ suggestions: STATIC_FALLBACK }); }
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "templates-suggest" });
     res.status(500).json({ error: "suggest failed"});
   }
 });
@@ -5728,7 +5879,7 @@ qcoreaiRouter.get("/templates/:id/usage-stats", async (req, res) => {
       avgCostUsd: null,
       avgDurationMs: null,
     });
-  } catch (err: any) { res.status(500).json({ error: "usage stats failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "templates-usage-stats" }); res.status(500).json({ error: "usage stats failed"}); }
 });
 
 qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
@@ -5739,7 +5890,7 @@ qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
     const ok = await pinTemplate(String(req.params.id), auth.sub, pinned);
     if (!ok) return res.status(404).json({ error: "not found or forbidden" });
     res.json({ pinned });
-  } catch (err: any) { res.status(500).json({ error: "pin template failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "templates-pin" }); res.status(500).json({ error: "pin template failed"}); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5962,7 +6113,7 @@ qcoreaiRouter.post("/ab-tests", async (req, res) => {
   try {
     const test = await createAbTest({ userId: auth.sub, name: String(name).trim(), promptA, promptB, strategy, overrides });
     res.json({ test });
-  } catch (err: any) { res.status(500).json({ error: "create ab-test failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "create-ab-test" }); res.status(500).json({ error: "create ab-test failed"}); }
 });
 
 qcoreaiRouter.get("/ab-tests", async (req, res) => {
@@ -5971,7 +6122,7 @@ qcoreaiRouter.get("/ab-tests", async (req, res) => {
   try {
     const items = await listAbTests(auth.sub);
     res.json({ items });
-  } catch (err: any) { res.status(500).json({ error: "list ab-tests failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-ab-tests" }); res.status(500).json({ error: "list ab-tests failed"}); }
 });
 
 qcoreaiRouter.get("/ab-tests/:id", async (req, res) => {
@@ -5981,7 +6132,7 @@ qcoreaiRouter.get("/ab-tests/:id", async (req, res) => {
     const test = await getAbTest(req.params.id, auth.sub);
     if (!test) return res.status(404).json({ error: "not found" });
     res.json({ test });
-  } catch (err: any) { res.status(500).json({ error: "get ab-test failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "get-ab-test" }); res.status(500).json({ error: "get ab-test failed"}); }
 });
 
 qcoreaiRouter.delete("/ab-tests/:id", async (req, res) => {
@@ -5991,7 +6142,7 @@ qcoreaiRouter.delete("/ab-tests/:id", async (req, res) => {
     const ok = await deleteAbTest(req.params.id, auth.sub);
     if (!ok) return res.status(404).json({ error: "not found" });
     res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ error: "delete ab-test failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-ab-test" }); res.status(500).json({ error: "delete ab-test failed"}); }
 });
 
 qcoreaiRouter.post("/ab-tests/:id/run", async (req, res) => {
@@ -6026,7 +6177,7 @@ qcoreaiRouter.post("/ab-tests/:id/run", async (req, res) => {
     await recordAbTestResult(testId, "b", variantB.costUsd, 0);
 
     res.json({ testId, variantA, variantB });
-  } catch (err: any) { res.status(500).json({ error: "run ab-test failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "ab-tests-run" }); res.status(500).json({ error: "run ab-test failed"}); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -6042,7 +6193,7 @@ qcoreaiRouter.get("/me/settings", async (req, res) => {
   try {
     const settings = await getAllUserSettings(auth.sub);
     res.json({ settings });
-  } catch (err: any) { res.status(500).json({ error: "get settings failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "list-settings" }); res.status(500).json({ error: "get settings failed"}); }
 });
 
 qcoreaiRouter.put("/me/settings/:key", async (req, res) => {
@@ -6054,7 +6205,7 @@ qcoreaiRouter.put("/me/settings/:key", async (req, res) => {
   try {
     await setUserSetting(auth.sub, key, value);
     res.json({ ok: true, key, value });
-  } catch (err: any) { res.status(500).json({ error: "set setting failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "update-setting" }); res.status(500).json({ error: "set setting failed"}); }
 });
 
 qcoreaiRouter.delete("/me/settings/:key", async (req, res) => {
@@ -6063,7 +6214,7 @@ qcoreaiRouter.delete("/me/settings/:key", async (req, res) => {
   try {
     const ok = await deleteUserSetting(auth.sub, req.params.key);
     res.json({ ok });
-  } catch (err: any) { res.status(500).json({ error: "delete setting failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "delete-setting" }); res.status(500).json({ error: "delete setting failed"}); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -6107,7 +6258,7 @@ qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
       runsWeek2: row.runsWeek2,
     }));
     res.json({ cohorts });
-  } catch (err: any) { res.status(500).json({ error: "cohorts failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "analytics-cohorts" }); res.status(500).json({ error: "cohorts failed"}); }
 });
 
 qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
@@ -6141,7 +6292,7 @@ qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
       efficiency: row.runs > 0 && row.avgCostUsd > 0 ? row.runs / row.avgCostUsd : 0,
     }));
     res.json({ hours });
-  } catch (err: any) { res.status(500).json({ error: "top-hours failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "analytics-top-hours" }); res.status(500).json({ error: "top-hours failed"}); }
 });
 
 qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
@@ -6190,7 +6341,7 @@ qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
         avgLength: row.avgLength,
       })),
     });
-  } catch (err: any) { res.status(500).json({ error: "run-quality failed"}); }
+  } catch (err: any) { captureQCoreAIError(err, { route: "analytics-run-quality" }); res.status(500).json({ error: "run-quality failed"}); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -6236,6 +6387,7 @@ qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
 
     return res.status(201).json({ branch: { ...branch, status: "completed", resultRunId: newRun.id }, run: { id: newRun.id, sessionId: newRun.sessionId } });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-branch" });
     return res.status(500).json({ error: "branch failed"});
   }
 });
@@ -6246,6 +6398,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
     const branches = await listBranches(parentRunId);
     return res.json({ branches });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-branches" });
     return res.status(500).json({ error: "list branches failed"});
   }
 });
@@ -6313,6 +6466,7 @@ qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     return res.json(bundle);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "export-session-bundle" });
     return res.status(500).json({ error: "export failed"});
   }
 });
@@ -6358,6 +6512,7 @@ qcoreaiRouter.post("/export/full-account", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     return res.json(bundle);
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "export-full-account" });
     return res.status(500).json({ error: "full export failed"});
   }
 });
@@ -6389,6 +6544,7 @@ qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
     await setUserSetting(userId, "routing_rules", sanitized);
     return res.json({ ok: true, rules: sanitized });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-routing-rule" });
     return res.status(500).json({ error: "save routing rules failed"});
   }
 });
@@ -6402,6 +6558,7 @@ qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
     const rules = await getUserSetting(userId, "routing_rules");
     return res.json({ rules: rules ?? [] });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-routing-rules" });
     return res.status(500).json({ error: "get routing rules failed"});
   }
 });
@@ -6449,6 +6606,7 @@ qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
 
     return res.status(201).json({ branch: { ...branch, status: "completed", resultRunId: newRun.id }, run: { id: newRun.id, sessionId: newRun.sessionId } });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-branch" });
     return res.status(500).json({ error: "branch failed" });
   }
 });
@@ -6459,6 +6617,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
     const branches = await listBranches(parentRunId);
     return res.json({ branches });
   } catch (err: any) {
+    captureQCoreAIError(err, { route: "runs-branches" });
     return res.status(500).json({ error: "list branches failed" });
   }
 });
@@ -6489,7 +6648,8 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
     });
     const url = `https://aevion.app/qcoreai/collab/${token}`;
     return res.status(201).json({ token, url, expiresAt });
-  } catch {
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "create-collab" });
     return res.status(500).json({ error: "collab create failed" });
   }
 });
@@ -6514,7 +6674,8 @@ qcoreaiRouter.get("/collab/:token", async (req, res) => {
       })),
       viewers: collab.viewers,
     });
-  } catch {
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "get-collab" });
     return res.status(500).json({ error: "collab fetch failed" });
   }
 });
@@ -6539,7 +6700,8 @@ qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
       }
     }
     return res.json({ totalViews, activeViewers, tokenCreatedAt });
-  } catch {
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "collab-stats" });
     return res.status(500).json({ error: "collab stats failed" });
   }
 });
@@ -6559,7 +6721,8 @@ qcoreaiRouter.delete("/sessions/:id/collab", async (req, res) => {
       }
     }
     return res.json({ revoked, sessionId });
-  } catch {
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "delete-collab" });
     return res.status(500).json({ error: "collab revoke failed" });
   }
 });
@@ -6581,7 +6744,8 @@ qcoreaiRouter.get("/me/collabs", async (req, res) => {
         url: `https://aevion.app/qcoreai/collab/${token}`,
       }));
     return res.json({ links });
-  } catch {
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "list-collabs" });
     return res.status(500).json({ error: "list collabs failed" });
   }
 });

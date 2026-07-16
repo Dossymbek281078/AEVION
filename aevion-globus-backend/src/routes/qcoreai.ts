@@ -2735,9 +2735,16 @@ qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
     const h = sanitizeMessages(req.body.history);
     if (h) args.history = h;
   }
+  // Optional caller-supplied module tag for savings attribution (which product
+  // surface the ask came from). Slugified + capped so the dashboard can't be
+  // polluted with junk tags; empty/invalid falls back to "qcoreai".
+  const moduleTag =
+    (typeof req.body?.module === "string"
+      ? req.body.module.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24)
+      : "") || "qcoreai";
 
   try {
-    const result = await smartComplete(args, { module: "qcoreai" });
+    const result = await smartComplete(args, { module: moduleTag });
     return res.json({ ...result, savings: smartSavingsSnapshot() });
   } catch (e: any) {
     return res.status(502).json({ error: e?.message || "smartComplete failed" });

@@ -10,6 +10,7 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useABVariant } from "@/lib/abVariant";
 import NewStructureShowcase from "./_components/NewStructureShowcase";
+import AskAi from "@/components/AskAi";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -2187,6 +2188,14 @@ export default function PricingPage() {
           </code>
           .
         </div>
+      </section>
+
+      <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>
+        <AskAi
+          module="pricing"
+          title="Ask about plans"
+          placeholder="e.g. What's the difference between Lite and Full?"
+        />
       </section>
     </ProductPageShell>
   );

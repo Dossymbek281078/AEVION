@@ -169,7 +169,12 @@
       "Bash(echo \"=== ai/index diff exit: $? ===\")",
       "Bash(EXPECT_ENFORCED=qfusionai,multichat-engine,healthai,qai,qlearn,qnews node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 654 --patch)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29495744828 --job 87612156372 --log-failed)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29495744828 --job 87612156372 --log-failed)",
+      "Bash(cmd //c \"mklink /J \\\\\"C:\\\\\\\\Users\\\\\\\\user\\\\\\\\aevion-mapreality-fix\\\\\\\\frontend\\\\\\\\node_modules\\\\\" \\\\\"C:\\\\\\\\Users\\\\\\\\user\\\\\\\\aevion-core\\\\\\\\frontend\\\\\\\\node_modules\\\\\"\")",
+      "Bash(awk 'NR==16229,NR==16467' frontend/src/lib/i18n-data.ts)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 654)",
+      "Bash(grep -n \"^Object.assign\\(translations, {\" frontend/src/lib/i18n-data.ts)",
+      "Bash(grep -n \"^  ru: {$\\\\|^  kk: {$\" frontend/src/lib/i18n-data.ts)"
     ]
   }
 }

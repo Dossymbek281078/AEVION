@@ -2712,7 +2712,7 @@ const SMART_DEFAULT_MAX_COST_USD = 0.25;
 qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
 
-  const raw = typeof req.body?.input === "string" ? req.body.input : "";
+  const raw: string = typeof req.body?.input === "string" ? req.body.input : "";
   // Strip C0 control chars except tab/newline/carriage-return, then cap length.
   const userInput = raw.split("").filter((ch) => { const c = ch.charCodeAt(0); return c > 31 || c === 9 || c === 10 || c === 13; }).join("").trim().slice(0, SMART_PUBLIC_MAX_CHARS);
   if (!userInput) return res.status(400).json({ error: "input required" });

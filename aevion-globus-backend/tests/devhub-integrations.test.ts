@@ -181,6 +181,20 @@ describe("POST /api/devhub/media/email (Brevo)", () => {
     expect(body.sender.email).toBe("noreply@aevion.app");
     expect(body.to[0].email).toBe("u@example.com");
   });
+
+  test("degraded: true when Brevo returns 2xx with no messageId — not a silent success", async () => {
+    process.env.BREVO_API_KEY = "brevo-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, {})); // 2xx but no messageId
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email")
+      .send({ to: "u@example.com", subject: "Welcome", htmlBody: "<p>Hello</p>" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.degraded).toBe(true);
+    expect(r.body.degradedReason).toMatch(/messageId/);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1049,6 +1063,19 @@ describe("POST /api/devhub/media/sms (Brevo)", () => {
     expect(body.recipient).toBe("+14155552671");
     expect(body.type).toBe("transactional");
   });
+
+  test("degraded: true when Brevo returns 2xx with no messageId", async () => {
+    process.env.BREVO_API_KEY = "brevo-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, { reference: "ref-123", smsCount: 1 })); // no messageId
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/sms")
+      .send({ recipient: "+14155552671", content: "Test SMS" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.degraded).toBe(true);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1096,6 +1123,20 @@ describe("POST /api/devhub/media/whatsapp (Brevo)", () => {
     expect(body.contactNumbers).toEqual(["14155552671"]); // no +
     expect(body.templateId).toBe(42);
     expect(body.params).toEqual({ name: "Alice" });
+  });
+
+  test("degraded: true when Brevo returns 2xx with no messageId", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-abc";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, {})); // no messageId
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/whatsapp")
+      .send({ contactNumber: "+14155552671", templateId: 42 });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.degraded).toBe(true);
   });
 });
 

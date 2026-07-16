@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 
-export type ToastVariant = "success" | "error" | "info";
+export type ToastVariant = "success" | "error" | "info" | "warning";
 
 type ToastItem = {
   id: string;
@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (message: string, variant: ToastVariant = "info", durationMs?: number) => {
       const id = nextId();
       const fallback =
-        variant === "error" ? 7000 : variant === "success" ? 4800 : 5200;
+        variant === "error" ? 7000 : variant === "warning" ? 6000 : variant === "success" ? 4800 : 5200;
       const ms = typeof durationMs === "number" && durationMs > 0 ? durationMs : fallback;
       setToasts((prev) => [...prev, { id, message, variant }]);
       const t = setTimeout(() => removeToast(id), ms);
@@ -101,7 +101,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               ? { bg: "linear-gradient(135deg, rgba(6,95,70,0.96), rgba(15,118,110,0.96))", border: "rgba(16, 185, 129, 0.55)", icon: "✓", iconBg: "rgba(16,185,129,0.25)" }
               : t.variant === "error"
                 ? { bg: "linear-gradient(135deg, rgba(127,29,29,0.96), rgba(153,27,27,0.96))", border: "rgba(248, 113, 113, 0.6)", icon: "✕", iconBg: "rgba(248,113,113,0.25)" }
-                : { bg: "linear-gradient(135deg, rgba(15,23,42,0.94), rgba(30,41,59,0.94))", border: "rgba(148, 163, 184, 0.5)", icon: "i", iconBg: "rgba(148,163,184,0.2)" };
+                : t.variant === "warning"
+                  ? { bg: "linear-gradient(135deg, rgba(120,53,15,0.96), rgba(146,64,14,0.96))", border: "rgba(245, 158, 11, 0.6)", icon: "!", iconBg: "rgba(245,158,11,0.25)" }
+                  : { bg: "linear-gradient(135deg, rgba(15,23,42,0.94), rgba(30,41,59,0.94))", border: "rgba(148, 163, 184, 0.5)", icon: "i", iconBg: "rgba(148,163,184,0.2)" };
           return (
             <div
               key={t.id}

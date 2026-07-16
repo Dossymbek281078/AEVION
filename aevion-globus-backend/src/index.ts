@@ -928,7 +928,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/veilnetx", "veilnetx"],
   ["/api/veilnetx-ledger", "veilnetx"],
   ["/api/healthai", "healthai"],
-  ["/api/longevity", "qrenew"],
+  ["/api/longevity", "longevity"],
   ["/api/qai", "qai"],
   ["/api/qlearn", "qlearn"],
   ["/api/qnews", "qnews"],

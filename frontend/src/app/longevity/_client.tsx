@@ -270,6 +270,32 @@ export default function LongevityClient() {
           )}
         </section>
 
+        {/* History — trend of saved assessments (signed-in only) */}
+        {signedIn && history && history.length > 0 && (
+          <section style={styles.card}>
+            <h2 style={styles.h2}>История оценок</h2>
+            <p style={styles.sub}>
+              {history.length} сохранённых {history.length === 1 ? "оценка" : "оценок"} — маркеров вне коридора по времени, новые сверху.
+            </p>
+            <div style={styles.historyList}>
+              {[...history].reverse().map((h) => {
+                const maxFlag = Math.max(1, ...history.map((x) => x.flaggedCount));
+                const pct = Math.max(Math.round((h.flaggedCount / maxFlag) * 100), h.flaggedCount > 0 ? 6 : 0);
+                const barColor = h.flaggedCount === 0 ? "#55C093" : h.flaggedCount <= 2 ? "#DDB253" : "#E0787F";
+                return (
+                  <div key={h.id} style={styles.historyRow}>
+                    <div style={styles.historyDate}>{new Date(h.createdAt).toLocaleDateString("ru-RU")}</div>
+                    <div style={styles.historyBarTrack}>
+                      <div style={{ ...styles.historyBarFill, width: `${pct}%`, background: barColor }} />
+                    </div>
+                    <div style={styles.historyCount}>{h.flaggedCount} вне коридора</div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Step 3: progress */}
         <section style={styles.card}>
           <h2 style={styles.h2}>Шаг 3 · Перемер и прогресс</h2>
@@ -381,6 +407,12 @@ const styles: Record<string, React.CSSProperties> = {
   btn: { marginTop: 20, background: "#35c9b3", color: "#04120f", border: "none", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   error: { color: "#e0787f", marginTop: 12 },
   savedNote: { fontSize: 12.5, color: "#35c9b3", margin: "4px 0 0" },
+  historyList: { display: "flex", flexDirection: "column", gap: 8 },
+  historyRow: { display: "grid", gridTemplateColumns: "84px 1fr 108px", alignItems: "center", gap: 12 },
+  historyDate: { fontFamily: "monospace", fontSize: 12, color: "#9fb0c4" },
+  historyBarTrack: { background: "#0a101c", border: "1px solid #1c2942", borderRadius: 6, height: 10, overflow: "hidden" },
+  historyBarFill: { height: "100%", borderRadius: 6, transition: "width 0.3s ease" },
+  historyCount: { fontSize: 12, color: "#8b9bb0", textAlign: "right" },
   result: { marginTop: 20 },
   blockTitle: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6c7d92", margin: "18px 0 10px" },
   chips: { display: "flex", flexWrap: "wrap", gap: 8 },

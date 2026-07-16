@@ -412,6 +412,13 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",
   },
   {
+    id: "longevity",
+    addonMonthly: 19,
+    includedIn: ["medium", "full", "enterprise"],
+    availability: "beta",
+    oneLiner: "Протокол долголетия: измерь → воздействуй → перемерь, 12-недельный цикл",
+  },
+  {
     id: "smeta-trainer",
     addonMonthly: 19,
     includedIn: ["medium", "full", "enterprise"],

@@ -1102,6 +1102,115 @@ describe("Per-project GitHub token override", () => {
   });
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 11b. GitHub pull request — real merge/PR capability (agent can open a PR,
+//      not just create a repo)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/github/pull-request", () => {
+  async function createProjectWithRepo(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "PRTest" });
+    const id = cr.body.project.id;
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/owner/repo" });
+    return id;
+  }
+
+  test("400 when title missing", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request`).send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("ok:false when GITHUB_TOKEN is not configured", async () => {
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request`).send({ title: "Add feature" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/GITHUB_TOKEN/);
+  });
+
+  test("ok:false when the project has no linked GitHub repo yet", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoRepo" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/github/pull-request`).send({ title: "Add feature" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/push to GitHub first/);
+  });
+
+  test("opens a PR on a new branch against the repo's default branch (no files)", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" })) // repo lookup
+      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha-123" } })) // base ref
+      .mockResolvedValueOnce(jsonResp(201, { ref: "refs/heads/aevion-agent-1" })) // create branch
+      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/7", number: 7 })); // create PR
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request`)
+      .send({ title: "Add login page", body: "Adds a login form + API route", branch: "feat/login" });
+
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, prUrl: "https://github.com/owner/repo/pull/7", prNumber: 7, branch: "feat/login", pushedFiles: 0 });
+
+    const createRefBody = JSON.parse((fetchMock.mock.calls[2][1] as any).body);
+    expect(createRefBody).toEqual({ ref: "refs/heads/feat/login", sha: "base-sha-123" });
+    const prBody = JSON.parse((fetchMock.mock.calls[3][1] as any).body);
+    expect(prBody).toEqual({ title: "Add login page", head: "feat/login", base: "main", body: "Adds a login form + API route" });
+  });
+
+  test("auto-generates a branch name when none is given", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" }))
+      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha" } }))
+      .mockResolvedValueOnce(jsonResp(201, {}))
+      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/1", number: 1 }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request`)
+      .send({ title: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.branch).toMatch(/^aevion-agent-\d+$/);
+  });
+
+  test("commits an existing file with its current sha (avoids a Contents API conflict)", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+    await request(app).put(`/api/devhub/projects/${id}/file`).send({ path: "pages/index.tsx", content: "updated" });
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" })) // repo lookup
+      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha" } })) // base ref
+      .mockResolvedValueOnce(jsonResp(201, {})) // create branch
+      .mockResolvedValueOnce(jsonResp(200, { sha: "existing-file-sha" })) // GET contents on new branch — file exists
+      .mockResolvedValueOnce(jsonResp(200, { content: { sha: "new-sha" } })) // PUT contents
+      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/2", number: 2 })); // create PR
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request`)
+      .send({ title: "Update index" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.pushedFiles).toBe(1);
+    const putBody = JSON.parse((fetchMock.mock.calls[4][1] as any).body);
+    expect(putBody.sha).toBe("existing-file-sha");
+    expect(putBody.branch).toBeTruthy();
+  });
+});
+
 afterEach(() => {
   for (const key of ["CLOUDFLARE_ACCOUNT_ID", "BREVO_SMS_SENDER", "BREVO_WHATSAPP_SENDER_ID"]) {
     delete process.env[key];

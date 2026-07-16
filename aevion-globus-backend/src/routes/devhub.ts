@@ -1425,6 +1425,128 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   }
 });
 
+// POST /api/devhub/projects/:id/github/pull-request — open a PR with the
+// project's current files on a new branch, targeting the repo's default branch.
+// Requires the project to already be linked to GitHub (via /github/push).
+devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  const { title, body: prBody, branch: branchInput } = req.body || {};
+  if (!title || typeof title !== "string") {
+    return res.status(400).json({ error: "title is required" });
+  }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return res.json({
+      ok: false,
+      message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+      setupUrl: "https://github.com/settings/tokens",
+    });
+  }
+  if (!project.repoUrl) {
+    return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+  }
+  const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) {
+    return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+  }
+  const [, owner, repo] = match;
+  const ghHeaders = { Authorization: `Bearer ${githubToken}`, "User-Agent": "AEVION-DevHub" };
+
+  try {
+    // 1. Resolve the default branch + its current commit sha.
+    const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: { ...ghHeaders, Accept: "application/vnd.github+json" },
+    });
+    if (!repoResp.ok) {
+      return res.json({ ok: false, message: `GitHub repo lookup error: ${(await repoResp.text()).slice(0, 300)}` });
+    }
+    const repoData = await repoResp.json() as { default_branch: string };
+    const baseBranch = repoData.default_branch;
+
+    const refResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${baseBranch}`, {
+      headers: { ...ghHeaders, Accept: "application/vnd.github+json" },
+    });
+    if (!refResp.ok) {
+      return res.json({ ok: false, message: `GitHub base branch lookup error: ${(await refResp.text()).slice(0, 300)}` });
+    }
+    const refData = await refResp.json() as { object: { sha: string } };
+    const baseSha = refData.object.sha;
+
+    // 2. Create a new branch from the base commit.
+    const branch = (typeof branchInput === "string" && branchInput.trim()) ? branchInput.trim() : `aevion-agent-${Date.now()}`;
+    const createRefResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+      method: "POST",
+      headers: { ...ghHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+    });
+    if (!createRefResp.ok) {
+      return res.json({ ok: false, message: `GitHub branch create error: ${(await createRefResp.text()).slice(0, 300)}` });
+    }
+
+    // 3. Commit the project's current files onto the new branch (each file
+    // already exists there as a copy of the base commit, so its current sha
+    // must be looked up before overwriting it — Contents API rejects a PUT
+    // without sha for an existing file).
+    const files = await dbListFiles(project.id);
+    let pushedFiles = 0;
+    for (const file of files) {
+      try {
+        const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
+        let sha: string | undefined;
+        const getResp = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
+          { headers: ghHeaders }
+        );
+        if (getResp.ok) {
+          const existing = await getResp.json() as { sha?: string };
+          sha = existing.sha;
+        }
+        const putResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}`, {
+          method: "PUT",
+          headers: { ...ghHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: title,
+            content: Buffer.from(file.content).toString("base64"),
+            branch,
+            ...(sha ? { sha } : {}),
+          }),
+        });
+        if (putResp.ok) pushedFiles += 1;
+      } catch {
+        // continue with other files
+      }
+    }
+    if (files.length > 0 && pushedFiles === 0) {
+      return res.json({ ok: false, message: "Branch created but no files could be committed", branch });
+    }
+
+    // 4. Open the pull request.
+    const prResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+      method: "POST",
+      headers: { ...ghHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ title, head: branch, base: baseBranch, body: prBody || "" }),
+    });
+    if (!prResp.ok) {
+      return res.json({ ok: false, message: `GitHub PR create error: ${(await prResp.text()).slice(0, 300)}`, branch, pushedFiles });
+    }
+    const prData = await prResp.json() as { html_url: string; number: number };
+    return res.json({ ok: true, prUrl: prData.html_url, prNumber: prData.number, branch, pushedFiles });
+  } catch (e: any) {
+    captureException(e, { route: "devhub/github:pull-request", projectId: project.id });
+    return res.json({ ok: false, message: e?.message || "GitHub pull request creation failed" });
+  }
+});
+
 // GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const auth = verifyBearerOptional(req);

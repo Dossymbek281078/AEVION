@@ -111,7 +111,7 @@ function TalentBody() {
         <div>
           <h1 className="text-2xl font-bold text-white">Talent search</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Search candidates by skill, city, experience. All resumes — на любом тарифе, без отдельной платы за доступ к базе.
+            Search candidates by skill, city, experience. All resumes — on every plan, with no separate fee for database access.
           </p>
         </div>
         <Link

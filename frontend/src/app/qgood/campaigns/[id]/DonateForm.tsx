@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { getApiBase } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   campaignId: string;
@@ -22,6 +23,7 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
   const [messageText, setMessageText] = useState<string>("");
   const [anonymous, setAnonymous] = useState<boolean>(false);
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
+  const { t } = useI18n();
 
   const isActive = status === "active";
   const isSubmitting = state.kind === "submitting";
@@ -32,7 +34,7 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
 
     const amountNum = parseFloat(amount);
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setState({ kind: "error", message: "Please enter a valid amount greater than zero." });
+      setState({ kind: "error", message: t("qgood.donate.err.amount") });
       return;
     }
     const amountCents = Math.round(amountNum * 100);
@@ -56,10 +58,15 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const msg =
-          (data && typeof data.error === "string" && humanizeError(data.error)) ||
-          (data && typeof data.message === "string" && data.message) ||
-          `Donation failed (HTTP ${r.status}).`;
+        let msg: string;
+        if (data && typeof data.error === "string") {
+          const k = errKey(data.error);
+          msg = k ? t(k) : data.error.replace(/_/g, " ");
+        } else if (data && typeof data.message === "string") {
+          msg = data.message;
+        } else {
+          msg = t("qgood.donate.err.http", { status: r.status });
+        }
         setState({ kind: "error", message: msg });
         return;
       }
@@ -70,7 +77,7 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
       setMessageText("");
       setAnonymous(false);
     } catch (err) {
-      setState({ kind: "error", message: "Network error. Please try again." });
+      setState({ kind: "error", message: t("qgood.donate.err.network") });
     }
   }
 
@@ -78,10 +85,10 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
     return (
       <div style={cardBox}>
         <div style={{ fontSize: 13, fontWeight: 800, color: "#fbbf24", marginBottom: 6 }}>
-          Not accepting donations
+          {t("qgood.donate.closed.title")}
         </div>
         <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, lineHeight: 1.5 }}>
-          This campaign isn&apos;t accepting donations right now (status: <code style={{ color: "#cbd5e1" }}>{status}</code>).
+          {t("qgood.donate.closed.body", { status })}
         </p>
       </div>
     );
@@ -91,17 +98,17 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
     return (
       <div style={cardBox}>
         <div style={{ fontSize: 14, fontWeight: 900, color: "#34d399", marginBottom: 8 }}>
-          Thank you! Your donation was recorded.
+          {t("qgood.donate.success.title")}
         </div>
         <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, marginBottom: 12, lineHeight: 1.5 }}>
-          Refresh the page to see your contribution in the donor list.
+          {t("qgood.donate.success.body")}
         </p>
         <button
           type="button"
           onClick={() => setState({ kind: "idle" })}
           style={primaryBtn}
         >
-          Donate again
+          {t("qgood.donate.again")}
         </button>
       </div>
     );
@@ -110,11 +117,11 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
   return (
     <form onSubmit={handleSubmit} style={cardBox}>
       <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 12, color: "#f1f5f9" }}>
-        Donate to this campaign
+        {t("qgood.donate.title")}
       </div>
 
       <label style={labelStyle}>
-        Amount ({currency})
+        {t("qgood.donate.amount", { currency })}
         <div style={{ position: "relative", marginTop: 4 }}>
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#64748b", fontSize: 13 }}>$</span>
           <input
@@ -158,25 +165,25 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
           onChange={(e) => setAnonymous(e.target.checked)}
           style={{ accentColor: "#10b981", width: 16, height: 16, cursor: "pointer" }}
         />
-        <span style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600 }}>Donate anonymously</span>
+        <span style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600 }}>{t("qgood.donate.anon")}</span>
       </label>
 
       {!anonymous && (
         <label style={labelStyle}>
-          Your name (optional)
+          {t("qgood.donate.name")}
           <input
             type="text"
             maxLength={120}
             value={donorName}
             onChange={(e) => setDonorName(e.target.value)}
-            placeholder="Shown publicly in donor list"
+            placeholder={t("qgood.donate.name.ph")}
             style={inputStyle}
           />
         </label>
       )}
 
       <label style={labelStyle}>
-        Email (optional, for receipt)
+        {t("qgood.donate.email")}
         <input
           type="email"
           maxLength={200}
@@ -188,12 +195,12 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
       </label>
 
       <label style={labelStyle}>
-        Message (optional)
+        {t("qgood.donate.message")}
         <textarea
           maxLength={500}
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
-          placeholder="A few words of support…"
+          placeholder={t("qgood.donate.message.ph")}
           rows={3}
           style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
         />
@@ -206,29 +213,25 @@ export default function DonateForm({ campaignId, currency, status }: Props) {
       )}
 
       <button type="submit" disabled={isSubmitting} style={{ ...primaryBtn, opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "wait" : "pointer" }}>
-        {isSubmitting ? "Processing…" : `Donate $${amount || "0"}`}
+        {isSubmitting ? t("qgood.donate.processing") : t("qgood.donate.submit", { amount: amount || "0" })}
       </button>
 
       <p style={{ fontSize: 10, color: "#64748b", margin: 0, marginTop: 10, lineHeight: 1.5 }}>
-        No payment is captured in MVP mode — your donation is recorded on the QGood audit ledger. Stripe integration arrives in a follow-up release.
+        {t("qgood.donate.mvpNote")}
       </p>
     </form>
   );
 }
 
-function humanizeError(code: string): string {
-  switch (code) {
-    case "campaign_not_found": return "Campaign not found.";
-    case "campaign_not_active": return "This campaign is no longer accepting donations.";
-    case "currency_mismatch": return "Currency mismatch — please reload the page.";
-    case "invalid_amount": return "Amount is invalid. Try a positive number.";
-    case "amount_too_small": return "Amount is too small.";
-    case "amount_too_large": return "Amount is too large.";
-    case "invalid_email": return "Email address looks invalid.";
-    case "invalid_currency": return "Currency is invalid.";
-    case "rate_limited": return "Too many donations from this device. Please try again shortly.";
-    default: return code.replace(/_/g, " ");
-  }
+const KNOWN_DONATE_ERRORS = new Set([
+  "campaign_not_found", "campaign_not_active", "currency_mismatch",
+  "invalid_amount", "amount_too_small", "amount_too_large",
+  "invalid_email", "invalid_currency", "rate_limited",
+]);
+// Maps a known backend error code to its i18n key, or null for unknown codes
+// (caller falls back to a humanized form of the raw code).
+function errKey(code: string): string | null {
+  return KNOWN_DONATE_ERRORS.has(code) ? `qgood.donate.err.${code}` : null;
 }
 
 const cardBox: React.CSSProperties = {

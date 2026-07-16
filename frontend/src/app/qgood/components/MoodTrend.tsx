@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { useI18n } from '@/lib/i18n';
 
 interface MoodEntry {
   id: number;
@@ -42,6 +43,7 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [trends, setTrends] = useState<Trends | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,7 +71,7 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
   if (loading) {
     return (
       <div style={{ background: '#fdf6ff', borderRadius: 16, padding: '24px', border: '1px solid #e8d5f5' }}>
-        <div style={{ color: '#9ca3af', fontSize: 14 }}>Загрузка…</div>
+        <div style={{ color: '#9ca3af', fontSize: 14 }}>{t('qgood.trend.loading')}</div>
       </div>
     );
   }
@@ -79,23 +81,23 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
   return (
     <div style={{ background: '#fdf6ff', borderRadius: 16, padding: '24px', border: '1px solid #e8d5f5' }}>
       <h2 style={{ color: '#6b21a8', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-        Динамика настроения (7 дней)
+        {t('qgood.trend.title')}
       </h2>
 
       {moods.length === 0 ? (
         <div style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>
-          Нет записей. Зафиксируйте первое настроение!
+          {t('qgood.trend.empty')}
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             <div style={{ fontSize: 48 }}>{scoreEmoji(avg)}</div>
             <div>
-              <div style={{ fontSize: 13, color: '#6b7280' }}>Средний балл за 7 дней</div>
+              <div style={{ fontSize: 13, color: '#6b7280' }}>{t('qgood.trend.avg')}</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#6b21a8' }}>
                 {avg !== null ? avg.toFixed(1) : '—'} / 10
               </div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>{trends?.total_entries ?? 0} записей</div>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('qgood.trend.entries', { n: trends?.total_entries ?? 0 })}</div>
             </div>
           </div>
 
@@ -123,7 +125,7 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
           {/* Emotion frequency */}
           {trends && trends.emotion_frequency.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>Частые эмоции</div>
+              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>{t('qgood.trend.freqEmotions')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {trends.emotion_frequency.map((ef) => (
                   <span
@@ -134,7 +136,7 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
                       fontSize: 12, fontWeight: 500,
                     }}
                   >
-                    {ef.emotion} ×{ef.freq}
+                    {t('qgood.mood.emo.' + ef.emotion)} ×{ef.freq}
                   </span>
                 ))}
               </div>

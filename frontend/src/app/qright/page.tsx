@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { InfoTip } from "@/components/InfoTip";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { Sparkline } from "@/components/Sparkline";
@@ -1764,6 +1765,14 @@ export default function QRightPage() {
             Открыть в редакторе →
           </a>
         </div>
+      </section>
+
+      <section style={{ maxWidth: 760, margin: "28px auto 40px", padding: "0 16px" }}>
+        <AskAi
+          module="qright"
+          title="Ask about QRight"
+          placeholder="e.g. How does content hashing prove ownership?"
+        />
       </section>
     </main>
   );

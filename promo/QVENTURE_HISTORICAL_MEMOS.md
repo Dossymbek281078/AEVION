@@ -143,6 +143,62 @@ Would you have taken the crypto-cycle risk at seed? https://aevion.vercel.app/qv
 
 ---
 
+## FLAGSHIP #2 — "The graveyard" (pre-empts survivorship bias; real live-API results 2026-07-13)
+
+> Kills the #1 objection ("you only tested winners") with data. All PASS. The honesty
+> beat (quant over-rated moat, council overrode) is a feature, not a bug — it disarms
+> "it's rigged." Post as the follow-up to the winners thread.
+
+| Flop (pitch stage) | Score | Verdict | Fatal flaw it named |
+|---|---|---|---|
+| WeWork (growth) | 61.5 | WATCH → memo PASS | Unit econ 43; "real-estate arbitrage dressed as SaaS — the tech multiple is the thesis flaw" |
+| Quibi (pre-launch) | 65.7 | WATCH → memo PASS | "moat is fiction — no network effects, no clip-sharing, brutal free competition" |
+| Juicero (seed) | 63.5 | WATCH → memo PASS | "$700 press adds no measurable value over hand-squeezing the packs" |
+
+### X / Threads / Bluesky thread
+
+**1/**
+Last time I ran three unicorns through my AI investment analyst and all got WATCH.
+
+Fair pushback: "you only tested winners."
+
+So I ran the graveyard — WeWork, Quibi, Juicero — with only the optimistic pitch investors saw. Verdict on all three: PASS. 🧵
+
+**2/**
+WeWork → PASS. Unit economics: 43/100.
+
+All four analyst lenses said the same thing: "a rate-sensitive real-estate arbitrage dressed as SaaS — the 'tech' multiple is the core thesis flaw. Rents accrue to landlords, not WeWork."
+
+The duration mismatch, named before the world knew.
+
+**3/**
+Quibi → PASS, pre-launch, on the $1.75B optimistic pitch.
+
+It called the moat "fiction": no network effects, no clip-sharing, no organic virality — premium production confused for defensibility, against free competition.
+
+Quibi shut down 6 months after launch.
+
+**4/**
+Juicero → PASS.
+
+The scientist lens, verbatim: "the $700 press adds no measurable value over hand-squeezing the pre-pressed packs."
+
+That is the exact thing that killed Juicero — and the model flagged it from the pitch alone, no hindsight.
+
+**5/**
+Now the honest part, because it matters more than a clean win:
+
+On Quibi & Juicero the DETERMINISTIC score over-rated the moat (90/100) — it over-credits "proprietary/premium" as a moat. The 4-expert council is what caught the fiction and overrode to PASS.
+
+**6/**
+That gap is a real weakness, and I'd rather show it than hide it. It's exactly what I'm tuning next.
+
+Winners → WATCH, enter staged. Flops → PASS, flaw named. That's the calibration I want.
+
+Break it with your own deal (free, no signup): https://aevion.vercel.app/qventure
+
+---
+
 ## Drip schedule (one recognizable subject per week keeps the channel alive)
 - Wk 1: this flagship thread (X) + LinkedIn long-form.
 - Wk 2: single-company deep dive (pick the one that got the most engagement) + Reddit method post.

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { smartComplete } from "../services/qcoreai/smartComplete";
 
 const captureHealthAIError = makeServiceCapture("healthai");
 
@@ -1112,6 +1113,73 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
       : "All configured LLM providers failed; see attempts.",
     attempts: tried,
   });
+});
+
+// Additive: same educational health advice, but routed through the platform
+// smartComplete layer (auto-router picks a single flagship vs the weight-graded
+// Council) instead of the bespoke Anthropic→OpenAI→Gemini chain above. Returns
+// the advice plus the `routing` record and feeds the shared cross-module
+// savings tally under the "healthai" tag. The strict safety system prompt is
+// applied to both the crowd and the chair. /check-llm stays untouched.
+healthaiRouter.post("/check-smart", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const profile = await store.getProfile(body.profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId) {
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth-required" });
+    if (auth.sub !== profile.userId) return res.status(403).json({ error: "not-profile-owner" });
+  }
+  const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+  if (symptoms.length === 0) return res.status(400).json({ error: "symptoms-empty" });
+  const lang = body.lang === "en" ? "en" : "ru";
+
+  const profileLine = `Возраст: ${profile.age || "?"}, пол: ${profile.sex}, рост: ${profile.heightCm || "?"}см, вес: ${profile.weightKg || "?"}кг.`;
+  const extra = [
+    profile.conditions.length ? `Хронические: ${profile.conditions.join(", ")}.` : "",
+    profile.allergies.length ? `Аллергии: ${profile.allergies.join(", ")}.` : "",
+    profile.medications.length ? `Лекарства: ${profile.medications.join(", ")}.` : "",
+  ].filter(Boolean).join(" ");
+
+  const systemPrompt =
+    lang === "en"
+      ? `You are AEVION HealthAI — an educational health assistant. STRICT RULES:
+1. NEVER provide a medical diagnosis.
+2. NEVER recommend specific medications or dosages.
+3. If symptoms suggest an URGENT condition (chest pain, stroke signs, severe shortness of breath, sudden severe pain, suicidal ideation) — say so clearly and recommend emergency services.
+4. Otherwise: 2-4 short paragraphs of self-care + a clear marker for when to see a doctor.
+5. Plain language, no jargon. Reference the profile only if relevant.
+6. End with: "This is not a medical diagnosis — see a doctor if in doubt."`
+      : `Ты — AEVION HealthAI, образовательный AI-помощник по здоровью. ЖЁСТКИЕ ПРАВИЛА:
+1. НИКОГДА не ставь диагноз.
+2. НИКОГДА не рекомендуй конкретные лекарства и дозировки.
+3. Если симптомы указывают на СРОЧНОЕ состояние (боль в груди, признаки инсульта, тяжёлая одышка, внезапная острая боль, суицидальные мысли) — прямо скажи об этом и направь к скорой.
+4. Иначе: 2-4 коротких абзаца self-care + ясный маркер когда обращаться к врачу.
+5. Простой язык, без жаргона. Ссылайся на профиль только если релевантно.
+6. Закончи: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`;
+
+  const userInput =
+    `${lang === "en" ? "Patient profile" : "Профиль пациента"}: ${profileLine} ${extra}\n` +
+    `${lang === "en" ? "Symptoms" : "Симптомы"}: ${symptoms.join("; ")}.\n` +
+    `${lang === "en" ? "Duration" : "Длительность"}: ${body.durationH || "?"}h. ${lang === "en" ? "Severity" : "Тяжесть"}: ${body.severity || "?"}/10.` +
+    `${body.notes ? `\n${lang === "en" ? "Notes" : "Заметки"}: ${body.notes}` : ""}`;
+
+  try {
+    const { answer, routing } = await smartComplete(
+      {
+        userInput,
+        overrides: { writer: { systemPrompt }, critic: { systemPrompt } },
+      },
+      { module: "healthai" }
+    );
+    return res.json({ advice: answer, routing, disclaimer: DISCLAIMER });
+  } catch (e: any) {
+    captureHealthAIError(e, { route: "check-smart" });
+    return res.status(502).json({ error: "llm-failed", message: e?.message || "smart advice failed" });
+  }
 });
 
 healthaiRouter.post("/import", async (req: Request, res: Response) => {

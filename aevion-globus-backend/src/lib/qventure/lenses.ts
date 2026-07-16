@@ -19,6 +19,7 @@ import {
   type ChatMessage,
 } from "../../services/qcoreai/providers";
 import type { AnalysisInput, AnalysisResult } from "./engine";
+import { legalSurface } from "./jurisdictions";
 
 export type LensId = "scientist" | "data_analyst" | "economist" | "lawyer";
 
@@ -86,6 +87,21 @@ function dealContext(input: AnalysisInput, result: AnalysisResult): string {
   ].join("\n");
 }
 
+/** Jurisdiction-specific legal surface, appended to the lawyer lens prompt. */
+function legalContext(input: AnalysisInput, result: AnalysisResult): string {
+  const ls = legalSurface(result.sector, input.geography);
+  return [
+    `LEGAL SURFACE (${ls.jurisdiction.label}):`,
+    `  Securities regime for the round: ${ls.jurisdiction.securitiesRegime}`,
+    `  Available exemptions: ${ls.jurisdiction.privateExemptions.join(", ")}`,
+    `  Sector licensing (${result.sector.label}): ${ls.sectorLicensing}`,
+    `  Data privacy: ${ls.jurisdiction.dataPrivacy}`,
+    `  AI governance: ${ls.jurisdiction.aiGovernance}`,
+    `  Investor-protection norms: ${ls.jurisdiction.investorTerms.join("; ")}`,
+    `  Jurisdiction note: ${ls.jurisdiction.note}`,
+  ].join("\n");
+}
+
 async function runLens(
   lens: LensId,
   provider: string,
@@ -93,7 +109,7 @@ async function runLens(
   result: AnalysisResult
 ): Promise<LensOutput> {
   const meta = ROLE_META[lens];
-  const fallback = deterministicLens(lens, result);
+  const fallback = deterministicLens(lens, result, input);
   if (provider === "stub") return fallback;
 
   const system: ChatMessage = {
@@ -105,7 +121,9 @@ async function runLens(
       `{"headline": string (<=140 chars), "points": string[3-4 concise findings], "risks": string[2-3 concrete risks]}. ` +
       `Be specific, quantitative where possible, and intellectually honest — surface the strongest counter-argument.`,
   };
-  const user: ChatMessage = { role: "user", content: dealContext(input, result) };
+  const legalAppendix =
+    lens === "lawyer" ? `\n\n${legalContext(input, result)}` : "";
+  const user: ChatMessage = { role: "user", content: dealContext(input, result) + legalAppendix };
 
   try {
     const model = providerDefaultModel(provider);
@@ -145,7 +163,7 @@ function sanitizeList(v: unknown, fallback: string[]): string[] {
 }
 
 /** Deterministic narrative from the engine result — the offline-safe fallback. */
-function deterministicLens(lens: LensId, result: AnalysisResult): LensOutput {
+function deterministicLens(lens: LensId, result: AnalysisResult, input: AnalysisInput): LensOutput {
   const meta = ROLE_META[lens];
   const s = result.sector;
   const f = (key: string) => result.factors.find((x) => x.key === key);
@@ -193,20 +211,28 @@ function deterministicLens(lens: LensId, result: AnalysisResult): LensOutput {
           "Durable pricing power unproven at this stage.",
         ],
       };
-    case "lawyer":
+    case "lawyer": {
+      const ls = legalSurface(result.sector, input.geography);
       return {
         lens, role: meta.role,
-        headline: `Regulatory intensity ${Math.round(s.regulatoryIntensity * 100)}% — legal headroom ${f("legal")?.score}/100.`,
+        headline: `${ls.jurisdiction.label}: ${ls.jurisdiction.privateExemptions[0]} round; regulatory intensity ${Math.round(s.regulatoryIntensity * 100)}% — legal headroom ${f("legal")?.score}/100.`,
         points: [
-          `Regulatory drag factor: intensity ${Math.round(s.regulatoryIntensity * 100)}%.`,
-          `${s.primaryMoat === "regulatory-license" ? "Licensing is itself the moat — confirm the entity holds (or can obtain) it." : "Confirm IP ownership and freedom-to-operate."}`,
-          "Structure entry with pro-rata rights, information rights, and standard downside protection.",
+          `Round structure: ${ls.jurisdiction.securitiesRegime}`,
+          `Sector licensing (${result.sector.label}): ${ls.sectorLicensing}`,
+          ls.regulated
+            ? `${s.primaryMoat === "regulatory-license" ? "Licensing is itself the moat — confirm the entity holds (or can obtain) it." : "Named regime applies — confirm the entity's authorizations before close."}`
+            : "Structure entry with pro-rata rights, information rights, and standard downside protection.",
+          `Data/AI exposure: ${ls.jurisdiction.dataPrivacy} · ${ls.jurisdiction.aiGovernance}`,
         ],
         risks: [
-          "Jurisdiction-specific licensing / compliance not yet verified.",
-          "IP, data-privacy, and liability exposure require counsel review.",
+          ls.regulated
+            ? `${ls.jurisdiction.label} licensing/authorization for a ${result.sector.label.toLowerCase()} venture not yet verified.`
+            : "Jurisdiction-specific compliance and IP freedom-to-operate not yet verified.",
+          `${ls.jurisdiction.note}`,
+          "IP, data-privacy, and liability exposure require local counsel review — this is directional, not legal advice.",
         ],
       };
+    }
   }
 }
 

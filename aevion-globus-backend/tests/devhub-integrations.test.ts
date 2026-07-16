@@ -325,6 +325,67 @@ describe("POST /api/devhub/media/music (ElevenLabs)", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 5b. Credit gating — TTS/music/deploy actually enforce the free-tier ceiling
+//     (previously only image/video were gated; the credits UI showed limits
+//     for all five capabilities but four of them were unenforced)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Credit gating on metered routes", () => {
+  test("TTS: free tier (100k chars/mo) is denied with 402 once exhausted", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const app = makeApp();
+    fetchMock.mockResolvedValue(audioResp(200, 100));
+
+    // 20 * 5000 = 100000 == free-tier limit, each call individually valid (<=5000)
+    for (let i = 0; i < 20; i++) {
+      const r = await request(app).post("/api/devhub/media/tts").send({ text: "x".repeat(5000) });
+      expect(r.status).toBe(200);
+    }
+
+    const over = await request(app).post("/api/devhub/media/tts").send({ text: "one more char" });
+    expect(over.status).toBe(402);
+    expect(over.body.error).toMatch(/TTS character limit/);
+    expect(over.body.limit).toBe(100000);
+  });
+
+  test("Music: free tier (5 tracks/mo) is denied with 402 on the 6th track", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const app = makeApp();
+    fetchMock.mockResolvedValue(audioResp(200, 100));
+
+    for (let i = 0; i < 5; i++) {
+      const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
+      expect(r.status).toBe(200);
+    }
+
+    const sixth = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
+    expect(sixth.status).toBe(402);
+    expect(sixth.body.error).toMatch(/music generation limit/);
+    expect(sixth.body.limit).toBe(5);
+  });
+
+  test("Deploy (Vercel): free tier (10 deploys/mo) is denied with 402 on the 11th deploy", async () => {
+    process.env.VERCEL_API_TOKEN = "fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    expect(cr.status).toBe(201);
+    const projectId = cr.body.project.id as string;
+
+    fetchMock.mockResolvedValue(jsonResp(200, { id: "dep_1", url: "myapp.vercel.app" }));
+
+    for (let i = 0; i < 10; i++) {
+      const r = await request(app).post(`/api/devhub/projects/${projectId}/deploy/vercel`).send({});
+      expect(r.status).toBe(200);
+    }
+
+    const eleventh = await request(app).post(`/api/devhub/projects/${projectId}/deploy/vercel`).send({});
+    expect(eleventh.status).toBe(402);
+    expect(eleventh.body.error).toMatch(/deploy limit/);
+    expect(eleventh.body.limit).toBe(10);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // 6. Cloudflare domain auto-setup (uses project)
 // ═════════════════════════════════════════════════════════════════════════════
 

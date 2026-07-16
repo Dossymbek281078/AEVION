@@ -201,7 +201,7 @@ export default function StudioPage() {
               </div>
               {credits.tier === "free" && (
                 <a href="#upgrade" style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none", padding: "4px 12px", border: "1px solid #0d9488", borderRadius: 6 }}>
-                  Upgrade to Pro $29 →
+                  Upgrade to Pro $149 →
                 </a>
               )}
             </div>
@@ -281,9 +281,9 @@ export default function StudioPage() {
               cta: "Current plan", ctaHref: "#", disabled: true,
             },
             {
-              tier: "Pro", price: "$29", color: "#0d9488",
-              features: ["50 videos / month", "200 images / month", "1M TTS chars", "100 music tracks", "Unlimited deploys", "Everything in Free", "Priority support"],
-              cta: "Upgrade to Pro", ctaHref: "https://aevion.gumroad.com/l/studio-pro", disabled: false,
+              tier: "Pro", price: "$149", color: "#0d9488",
+              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Everything in Free", "Priority support"],
+              cta: "Upgrade to Pro", ctaHref: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57", disabled: false,
             },
             {
               tier: "Enterprise", price: "Custom", color: "#7c3aed",

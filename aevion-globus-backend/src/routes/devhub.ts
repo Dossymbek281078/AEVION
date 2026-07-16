@@ -148,13 +148,13 @@ async function getMonthUsage(userId: string, month: string, capability: Capabili
   } catch { return 0; }
 }
 
-async function checkCredit(userId: string, capability: CapabilityKey): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
   if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
   const month = creditMonth();
   const used = await getMonthUsage(userId, month, capability);
-  return { allowed: used < limit, used, limit, tier };
+  return { allowed: used + amount <= limit, used, limit, tier };
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
@@ -952,6 +952,17 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+
+  const deployCredit = await checkCredit(userId, "deploy");
+  if (!deployCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly deploy limit reached",
+      tier: deployCredit.tier, used: deployCredit.used, limit: deployCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+  await debitCredit(userId, "deploy").catch(() => {});
+
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
   const deployUrl = `https://${deploySlug}.aevion.app`;
@@ -1844,12 +1855,23 @@ devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
 
 // POST /api/devhub/media/tts — text-to-speech via ElevenLabs
 devhubRouter.post("/media/tts", async (req, res) => {
+  const ttsAuth = verifyBearerOptional(req);
+  const ttsUserId = ttsAuth?.sub ?? "anonymous";
   const { text, voice = "Rachel" } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "text is required" });
   }
   if (text.trim().length > 5000) {
     return res.status(400).json({ error: "text too long (max 5000 chars)" });
+  }
+
+  const ttsCredit = await checkCredit(ttsUserId, "tts", text.trim().length);
+  if (!ttsCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly TTS character limit reached",
+      tier: ttsCredit.tier, used: ttsCredit.used, limit: ttsCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -1895,6 +1917,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
     }
 
     const audioBuffer = Buffer.from(await elResp.arrayBuffer());
+    await debitCredit(ttsUserId, "tts", text.trim().length).catch(() => {});
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -2126,12 +2149,23 @@ devhubRouter.post("/media/sfx", async (req, res) => {
 
 // POST /api/devhub/media/music — ElevenLabs music compose
 devhubRouter.post("/media/music", async (req, res) => {
+  const musicAuth = verifyBearerOptional(req);
+  const musicUserId = musicAuth?.sub ?? "anonymous";
   const { prompt, musicLengthMs } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt (music description) required" });
   }
   if (prompt.trim().length > 2000) {
     return res.status(400).json({ error: "prompt too long (max 2000 chars)" });
+  }
+
+  const musicCredit = await checkCredit(musicUserId, "music");
+  if (!musicCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly music generation limit reached",
+      tier: musicCredit.tier, used: musicCredit.used, limit: musicCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -2159,6 +2193,7 @@ devhubRouter.post("/media/music", async (req, res) => {
       return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
+    await debitCredit(musicUserId, "music").catch(() => {});
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -3697,6 +3732,15 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     });
   }
 
+  const vercelDeployCredit = await checkCredit(userId, "deploy");
+  if (!vercelDeployCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly deploy limit reached",
+      tier: vercelDeployCredit.tier, used: vercelDeployCredit.used, limit: vercelDeployCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
 
@@ -3771,6 +3815,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
       }
     }, 5000);
 
+    await debitCredit(userId, "deploy").catch(() => {});
     return res.json({
       ok: true,
       deploymentId,
@@ -3833,6 +3878,15 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       error: "Cloudflare Pages not configured",
       needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
       setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  const pagesDeployCredit = await checkCredit(userId, "deploy");
+  if (!pagesDeployCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly deploy limit reached",
+      tier: pagesDeployCredit.tier, used: pagesDeployCredit.used, limit: pagesDeployCredit.limit,
+      upgrade: "/studio#upgrade",
     });
   }
 
@@ -3910,6 +3964,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deployment.deployUrl = pagesUrl;
     deployment.buildLog = `CF Pages deployment ${deployData.result?.id ?? "?"} queued`;
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    await debitCredit(userId, "deploy").catch(() => {});
 
     // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
     let customDomain: string | null = null;

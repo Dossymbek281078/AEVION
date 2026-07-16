@@ -471,6 +471,27 @@ async function main() {
     ok("webhook payment.succeeded (HMAC signed)", `orderId=${boostOrderId.slice(0, 8)}…`);
   } else ok("webhook payment (informational)", `status=${r.status} secret=${WEBHOOK_SECRET ? "set" : "missing"}`);
 
+  // 32b. Channel-agnostic webhook: a LemonSqueezy-shaped event (meta.event_name
+  // + meta.custom_data.orderId) must resolve + mark a fresh order PAID. Proves
+  // the Paddle-free webhook extracts orderId/event across provider shapes.
+  r = await call("POST", `/api/build/vacancies/${vacancyId}/boost`, { days: 7, paid: true }, clientToken);
+  const boost2 = unwrap(r);
+  if (r.status === 201 && boost2?.orderId) {
+    const lsBody = { meta: { event_name: "order_created", custom_data: { orderId: boost2.orderId } } };
+    const lsRes = await fetch(`${BASE}/api/build/webhooks/payment`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...signBody(lsBody) },
+      body: JSON.stringify(lsBody),
+    }).then(async (res) => ({ status: res.status, body: await res.json().catch(() => null) }));
+    const lsData = lsRes.body?.data ?? lsRes.body; // tolerate both enveloped + flat
+    if (is2xx(lsRes) && lsData?.processed === true && lsData?.orderId === boost2.orderId) {
+      ok("webhook LemonSqueezy-shape marks order paid", `orderId=${boost2.orderId.slice(0, 8)}…`);
+    } else ok("webhook LS-shape (informational)", `status=${lsRes.status} secret=${WEBHOOK_SECRET ? "set" : "missing"}`);
+  } else {
+    step += 1;
+    console.log(`  ${String(step).padStart(2, "0")}  SKIP  webhook LS-shape (no second boost order)`);
+  }
+
   // 33. Cashback ledger picked up the new entry. Client is on DEFAULT
   // tier (cashbackBps=200) and the boost order is 990 RUB × 1 week →
   // expected cashbackAev = 990 × 0.02 = 19.8 AEV.

@@ -66,6 +66,23 @@ ok("assessOpenDepth imperative task chain (3+ verbs) → 2 (deep)",
   assessOpenDepth("Write a post-mortem: summarize what happened, identify three root causes, and propose concrete process changes.") === 2);
 ok("assessOpenDepth single task verb stays light",
   assessOpenDepth("Summarize this article in three sentences.") === 1);
+// Borderline-eval fixes (2026-07): genuinely two-part prompts that used to slip
+// through as light.
+ok("assessOpenDepth 'difference between … and describe …' → 2 (deep)",
+  assessOpenDepth("Explain the difference between TCP and UDP, and describe when to use each one.") === 2);
+ok("assessOpenDepth ranked-list comparison → 2 (deep)",
+  assessOpenDepth("Give me a detailed comparison of the top five project management tools.") === 2);
+ok("assessOpenDepth compare-cue + second verb (short) → 2 (deep)",
+  assessOpenDepth("Compare in-house hiring versus outsourcing for a small agency, and explain the trade-offs for cost and quality.") === 2);
+// Guards: these must STAY light — tuning shouldn't over-trigger the deep tier.
+ok("assessOpenDepth long narrative single-ask stays light",
+  assessOpenDepth("I have been feeling unmotivated at work lately even though I like my job and my team, and I am wondering what one small change might help me feel more engaged again.") === 1);
+ok("assessOpenDepth short 'pros and cons' stays light",
+  assessOpenDepth("What are the pros and cons of remote work?") === 1);
+ok("assessOpenDepth short single-verb compare stays light",
+  assessOpenDepth("Compare Python and JavaScript for web development.") === 1);
+ok("assessOpenDepth ranked-list without compare/length stays light",
+  assessOpenDepth("What are your top 3 tips for productivity?") === 1);
 ok("assessOpenDepth always returns 1 or 2",
   [1, 2].includes(assessOpenDepth("anything")) && [1, 2].includes(assessOpenDepth("")));
 

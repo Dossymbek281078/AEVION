@@ -193,15 +193,18 @@ constitutionAiRouter.post(
   async (req: Request, res: Response) => {
     const { description } = req.body as { description: string };
     try {
-      const { answer, routing } = await smartComplete({
-        userInput: description.slice(0, 4000),
-        // Apply the Constitution domain framing to both the single-call and the
-        // Council chair paths.
-        overrides: {
-          writer: { systemPrompt: SYSTEM_PROMPT },
-          critic: { systemPrompt: SYSTEM_PROMPT },
+      const { answer, routing } = await smartComplete(
+        {
+          userInput: description.slice(0, 4000),
+          // Apply the Constitution domain framing to both the single-call and
+          // the Council chair paths.
+          overrides: {
+            writer: { systemPrompt: SYSTEM_PROMPT },
+            critic: { systemPrompt: SYSTEM_PROMPT },
+          },
         },
-      });
+        { module: "constitution" }
+      );
       return res.json({ answer, routing });
     } catch (e: any) {
       capture(e);

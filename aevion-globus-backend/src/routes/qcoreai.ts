@@ -28,6 +28,7 @@ import {
   smartSavingsSnapshot,
   type SmartCompleteInput,
 } from "../services/qcoreai/smartComplete";
+import { aggregateSmartRuns } from "../lib/smartRunLog";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { getPool } from "../lib/dbPool";
@@ -2736,17 +2737,20 @@ qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
   }
 
   try {
-    const result = await smartComplete(args);
+    const result = await smartComplete(args, { module: "qcoreai" });
     return res.json({ ...result, savings: smartSavingsSnapshot() });
   } catch (e: any) {
     return res.status(502).json({ error: e?.message || "smartComplete failed" });
   }
 });
 
-// Cross-module savings snapshot — how much the platform saved by routing through
-// smartComplete instead of always running the full Council.
-qcoreaiRouter.get("/smart/savings", (_req, res) => {
-  res.json(smartSavingsSnapshot());
+// Cross-module savings — the durable all-time aggregate (per module) from the
+// smart_run_log when a database is reachable, else this process's in-memory
+// session tally. `scope` tells the caller which they got.
+qcoreaiRouter.get("/smart/savings", async (_req, res) => {
+  const allTime = await aggregateSmartRuns();
+  if (allTime) return res.json({ scope: "all-time", ...allTime });
+  return res.json({ scope: "session", ...smartSavingsSnapshot() });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

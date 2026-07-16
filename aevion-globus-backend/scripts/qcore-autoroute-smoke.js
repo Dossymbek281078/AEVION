@@ -172,13 +172,17 @@ ok("assessOpenDepth always returns 1 or 2",
   ok("smartComplete routing carries a numeric costUsd", typeof sc1?.routing?.costUsd === "number" && sc1.routing.costUsd >= 0);
   ok("smartComplete routing carries durationMs", typeof sc1?.routing?.durationMs === "number" && sc1.routing.durationMs >= 0);
 
-  // A second run — the shared tally must aggregate across calls (cross-module).
-  await smartComplete({ userInput: "Compare a monolith versus microservices, weigh the trade-offs across cost and hiring, and recommend which to pick.", councilSize: 3 });
+  // A second run under a DIFFERENT module tag — the shared tally must aggregate
+  // across calls AND split per module (cross-module dashboard).
+  await smartComplete({ userInput: "Compare a monolith versus microservices, weigh the trade-offs across cost and hiring, and recommend which to pick.", councilSize: 3 }, { module: "devhub" });
   const snap = smartSavingsSnapshot();
   ok("savings tally counted both runs", snap.runs === 2);
   ok("savings tally buckets sum to runs", snap.facts + snap.light + snap.deep === snap.runs);
   ok("savings tally tracks estAlwaysCouncil = runs × baseline", Math.abs(snap.estAlwaysCouncilUsd - snap.runs * EST_COUNCIL_COST_USD) < 1e-9);
   ok("savings tally savedPct is within 0–100", snap.savedPct >= 0 && snap.savedPct <= 100);
+  ok("savings tally has a per-module breakdown", Array.isArray(snap.perModule) && snap.perModule.length === 2);
+  ok("per-module runs sum to total runs", snap.perModule.reduce((s, m) => s + m.runs, 0) === snap.runs);
+  ok("per-module tags include qcoreai + devhub", snap.perModule.map((m) => m.module).sort().join(",") === "devhub,qcoreai");
   ok("smartComplete forced-deep override works", (await smartComplete({ userInput: "short", councilSize: 3, councilLayers: 2 })).routing.layers === 2);
 
   console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);

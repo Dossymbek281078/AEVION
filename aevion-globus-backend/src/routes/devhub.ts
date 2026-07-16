@@ -35,7 +35,7 @@ devhubRouter.post("/ask", async (req, res) => {
     ? `Context (a developer's project/code):\n${context}\n\nQuestion: ${question}`
     : question;
   try {
-    const { answer, routing } = await smartComplete({ userInput });
+    const { answer, routing } = await smartComplete({ userInput }, { module: "devhub" });
     return res.json({ answer, routing });
   } catch (e: any) {
     captureException(e);

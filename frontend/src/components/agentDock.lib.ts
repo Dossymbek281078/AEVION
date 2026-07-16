@@ -54,9 +54,22 @@ export function clampMaxSteps(n: unknown): number {
   return Math.min(8, Math.max(1, v));
 }
 
-/** Build the /run request body from a raw user message. */
-export function buildRunRequest(message: string, maxSteps?: number): { message: string; maxSteps: number } {
-  return { message: message.trim(), maxSteps: clampMaxSteps(maxSteps ?? 5) };
+/** Build the /run request body from a raw user message. `projectId`, when the
+ * user is on a DevHub project page, scopes the generate_code tool to that
+ * project — omitted entirely everywhere else so unrelated pages are unaffected. */
+export function buildRunRequest(message: string, maxSteps?: number, projectId?: string): { message: string; maxSteps: number; projectId?: string } {
+  return {
+    message: message.trim(),
+    maxSteps: clampMaxSteps(maxSteps ?? 5),
+    ...(projectId ? { projectId } : {}),
+  };
+}
+
+/** Extract a DevHub project id from the current pathname, e.g. "/devhub/abc123" or
+ * "/devhub/abc123/deploy" → "abc123". Returns undefined off DevHub project pages. */
+export function extractDevHubProjectId(pathname: string): string | undefined {
+  const m = /^\/devhub\/([^/]+)(?:\/|$)/.exec(pathname);
+  return m ? m[1] : undefined;
 }
 
 /** Whether a message is worth sending (non-empty after trim). */

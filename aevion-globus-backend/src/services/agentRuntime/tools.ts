@@ -109,6 +109,21 @@ export const TOOL_SPECS: ToolSpec[] = [
       required: ["text", "targetLang"],
     },
   },
+  {
+    name: "generate_code",
+    description:
+      "Generate or update a code file with AI and save it directly into the DevHub project the user currently " +
+      "has open. Only works when the request carries project context (i.e. the user is on a DevHub project page) " +
+      "— if there is no open project, this tool is unavailable.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "What to build, e.g. 'a login form with email and password fields'." },
+        targetFile: { type: "string", description: "Optional file path to write, e.g. 'pages/login.tsx'. Omit to let the generator choose." },
+      },
+      required: ["prompt"],
+    },
+  },
 ];
 
 /** Map a tool name → the DevHub endpoint path that performs it. */
@@ -133,21 +148,41 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
   if (name === "generate_sound_effect") return { text: input.text, ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}) };
   if (name === "send_sms") return { recipient: input.recipient, content: input.content, ...(input.sender ? { sender: input.sender } : {}) };
   if (name === "translate_text") return { text: input.text, targetLang: input.targetLang, ...(input.sourceLang ? { sourceLang: input.sourceLang } : {}) };
+  if (name === "generate_code") return { prompt: input.prompt, ...(input.targetFile ? { targetFile: input.targetFile } : {}) };
   return input;
+}
+
+/** Per-request context an executor may need beyond the model's tool input. */
+export interface ExecutorContext {
+  /** DevHub project id, when the caller is on a DevHub project page — required by generate_code. */
+  projectId?: string;
+  /** Forwarded as-is to project-scoped endpoints so ownership checks (e.g. /generate) see the real caller. */
+  authHeader?: string;
 }
 
 /**
  * Build an ExecTool that runs a tool call against the running server's own
  * DevHub endpoints. `baseUrl` is the server's self URL (e.g. http://127.0.0.1:PORT).
+ * `context` carries per-request info (like the open project id) that isn't part
+ * of the model's tool input — e.g. generate_code writes into `context.projectId`.
  */
-export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch): ExecTool {
+export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch, context: ExecutorContext = {}): ExecTool {
   return async (call: ToolCall) => {
-    const path = ENDPOINT_BY_TOOL[call.name];
+    let path = ENDPOINT_BY_TOOL[call.name];
+    if (call.name === "generate_code") {
+      if (!context.projectId) {
+        return { ok: false, content: "No DevHub project is open — generate_code needs an open project to write into." };
+      }
+      path = `/api/devhub/projects/${context.projectId}/generate`;
+    }
     if (!path) return { ok: false, content: `Unknown tool: ${call.name}` };
     try {
       const r = await fetchImpl(`${baseUrl}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(context.authHeader ? { Authorization: context.authHeader } : {}),
+        },
         body: JSON.stringify(toBody(call.name, call.input || {})),
       });
       const data = await r.json().catch(() => ({}));

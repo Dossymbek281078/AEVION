@@ -231,6 +231,57 @@ describe("makeExecutor", () => {
     expect(seenBody).toEqual({ prompt: "ambient" });
     expect("musicLengthMs" in seenBody).toBe(false);
   });
+
+  // generate_code is the one tool that needs per-request context (an open
+  // DevHub project) instead of everything coming from the model's own input.
+  test("generate_code with no projectId in context → ok:false without any fetch", async () => {
+    let called = false;
+    const fakeFetch = (async () => {
+      called = true;
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch); // no context passed
+    const r = await exec({ id: "t1", name: "generate_code", input: { prompt: "a login form" } });
+
+    expect(called).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(String(r.content)).toMatch(/no devhub project is open/i);
+  });
+
+  test("generate_code with projectId in context → posts to the project's /generate endpoint", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    let seenHeaders: Record<string, string> = {};
+    const fakeFetch = (async (url: string, init?: { body?: string; headers?: Record<string, string> }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      seenHeaders = init?.headers ?? {};
+      return { ok: true, json: async () => ({ files: [{ path: "pages/login.tsx" }], aiGenerated: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1", authHeader: "Bearer tok-1" });
+    const r = await exec({ id: "t1", name: "generate_code", input: { prompt: "a login form", targetFile: "pages/login.tsx" } });
+
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/projects/proj-1/generate");
+    expect(seenBody).toEqual({ prompt: "a login form", targetFile: "pages/login.tsx" });
+    expect(seenHeaders.Authorization).toBe("Bearer tok-1");
+    expect(r.ok).toBe(true);
+    expect(r.content).toEqual({ files: [{ path: "pages/login.tsx" }], aiGenerated: true });
+  });
+
+  test("generate_code omits Authorization header when the caller sent none (anonymous project)", async () => {
+    let seenHeaders: Record<string, string> = {};
+    const fakeFetch = (async (_url: string, init?: { body?: string; headers?: Record<string, string> }) => {
+      seenHeaders = init?.headers ?? {};
+      return { ok: true, json: async () => ({ files: [], aiGenerated: false }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" }); // no authHeader
+    await exec({ id: "t1", name: "generate_code", input: { prompt: "x" } });
+
+    expect("Authorization" in seenHeaders).toBe(false);
+  });
 });
 
 // ── makeAnthropicCallModel (wire-format conversion) ──────────────────

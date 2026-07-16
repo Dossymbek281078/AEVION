@@ -4,6 +4,7 @@ import {
   buildRunRequest,
   canSend,
   describeToolActivity,
+  extractDevHubProjectId,
   summarizeRun,
   summarizeHealth,
   prettyToolName,
@@ -68,9 +69,35 @@ describe("buildRunRequest / canSend", () => {
     expect(buildRunRequest("  hi  ", 20)).toEqual({ message: "hi", maxSteps: 8 });
     expect(buildRunRequest("draw a cat")).toEqual({ message: "draw a cat", maxSteps: 5 });
   });
+  test("omits projectId when not given (unrelated pages are unaffected)", () => {
+    expect(buildRunRequest("hi")).toEqual({ message: "hi", maxSteps: 5 });
+    expect("projectId" in buildRunRequest("hi")).toBe(false);
+  });
+  test("includes projectId when given, for scoping generate_code", () => {
+    expect(buildRunRequest("add a login page", 5, "proj-123")).toEqual({
+      message: "add a login page",
+      maxSteps: 5,
+      projectId: "proj-123",
+    });
+  });
   test("canSend rejects blank", () => {
     expect(canSend("   ")).toBe(false);
     expect(canSend("x")).toBe(true);
+  });
+});
+
+describe("extractDevHubProjectId", () => {
+  test("extracts the id from a DevHub project page", () => {
+    expect(extractDevHubProjectId("/devhub/abc123")).toBe("abc123");
+  });
+  test("extracts the id from a nested DevHub sub-route", () => {
+    expect(extractDevHubProjectId("/devhub/abc123/deploy")).toBe("abc123");
+  });
+  test("returns undefined off DevHub pages, and on the bare /devhub listing", () => {
+    expect(extractDevHubProjectId("/devhub")).toBeUndefined();
+    expect(extractDevHubProjectId("/devhub/")).toBeUndefined();
+    expect(extractDevHubProjectId("/qcoreai")).toBeUndefined();
+    expect(extractDevHubProjectId("/")).toBeUndefined();
   });
 });
 

@@ -13,11 +13,13 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import {
   buildRunRequest,
   canSend,
   describeToolActivity,
+  extractDevHubProjectId,
   summarizeRun,
   summarizeHealth,
   prettyToolName,
@@ -62,6 +64,8 @@ function ToolChips({ title, names, tone }: { title: string; names: string[]; ton
 }
 
 export function AgentDock() {
+  const pathname = usePathname();
+  const projectId = extractDevHubProjectId(pathname || "");
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,7 +92,7 @@ export function AgentDock() {
       const r = await fetch(apiUrl("/api/agent-runtime/run"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildRunRequest(message)),
+        body: JSON.stringify(buildRunRequest(message, undefined, projectId)),
       });
       const data = (await r.json().catch(() => ({}))) as DockRunResponse;
       if (!r.ok || data.ok === false) {
@@ -219,7 +223,9 @@ export function AgentDock() {
         <span style={{ fontSize: 16 }}>✦</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>AEVION Agent</div>
-          <div style={{ fontSize: 10, color: "#8aa0c6" }}>image · voice · music · pay · email · SMS · translate</div>
+          <div style={{ fontSize: 10, color: "#8aa0c6" }}>
+            {projectId ? "code · image · voice · music · pay · email · SMS · translate" : "image · voice · music · pay · email · SMS · translate"}
+          </div>
         </div>
         {health && (
           <button
@@ -280,8 +286,9 @@ export function AgentDock() {
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
         {log.length === 0 && (
           <div style={{ color: "#7c90b5", fontSize: 12, lineHeight: 1.5 }}>
-            Ask for anything and I&apos;ll use the right tool — e.g. “make a 10-second lofi music clip”,
-            “translate this to Kazakh”, or “create a $25 payment link for a consult”.
+            {projectId
+              ? <>Ask for anything and I&apos;ll use the right tool — e.g. “add a login page to this project”, “make a 10-second lofi music clip”, or “create a $25 payment link for a consult”.</>
+              : <>Ask for anything and I&apos;ll use the right tool — e.g. “make a 10-second lofi music clip”, “translate this to Kazakh”, or “create a $25 payment link for a consult”.</>}
           </div>
         )}
         {log.map((m, i) => (

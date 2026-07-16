@@ -159,11 +159,25 @@ app.use(express.urlencoded({
 // Health-check. Both /health (legacy) and /api/health (the path the
 // frontend + diagnostics page have always probed against) return the
 // same shape so existing callers don't break.
+// Build/version marker so a post-deploy check can confirm exactly which commit
+// is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
+// at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
+const BUILD_COMMIT = (
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.GIT_SHA ||
+  process.env.SOURCE_VERSION ||
+  "unknown"
+).slice(0, 12);
+const BOOT_TIME = new Date().toISOString();
+
 function healthPayload() {
   return {
     status: "ok",
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
+    commit: BUILD_COMMIT,
+    bootedAt: BOOT_TIME,
+    uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
   };
 }
 app.get("/health", (_req, res) => res.json(healthPayload()));

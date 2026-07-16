@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
@@ -123,10 +124,10 @@ export default async function SkillPage({
 
         {salary && salary.count > 0 && (
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Tile label="Median salary" value={salary.median > 0 ? `$${salary.median.toLocaleString()}` : "—"} tone="emerald" />
-            <Tile label="Avg salary" value={salary.avg > 0 ? `$${salary.avg.toLocaleString()}` : "—"} />
-            <Tile label="Min" value={salary.min > 0 ? `$${salary.min.toLocaleString()}` : "—"} />
-            <Tile label="Max" value={salary.max > 0 ? `$${salary.max.toLocaleString()}` : "—"} />
+            <Tile label="Median salary" value={formatSalary(salary.median)} tone="emerald" />
+            <Tile label="Avg salary" value={formatSalary(salary.avg)} />
+            <Tile label="Min" value={formatSalary(salary.min)} />
+            <Tile label="Max" value={formatSalary(salary.max)} />
           </div>
         )}
 
@@ -168,7 +169,7 @@ export default async function SkillPage({
                   <h3 className="min-w-0 truncate text-sm font-semibold text-white">{v.title}</h3>
                   {v.salary > 0 && (
                     <div className="shrink-0 text-sm font-semibold text-emerald-300">
-                      ${v.salary.toLocaleString()}
+                      {formatSalary(v.salary, v.salaryCurrency)}
                     </div>
                   )}
                 </div>

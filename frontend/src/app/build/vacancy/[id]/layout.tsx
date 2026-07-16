@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { formatSalary } from "@/lib/build/format";
 import { getApiBase } from "@/lib/apiBase";
 
 type VacancyMeta = {
@@ -37,7 +38,7 @@ export async function generateMetadata({
   const { id } = await params;
   const v = await fetchVacancy(id);
   const title = v?.title ?? "Vacancy";
-  const salary = v?.salary ? ` · $${v.salary.toLocaleString()}` : "";
+  const salary = v?.salary ? ` · ${formatSalary(v.salary, v.salaryCurrency)}` : "";
   const desc = v?.description
     ? `${v.description.slice(0, 140)}…`
     : "Apply for this vacancy on AEVION QBuild — construction recruiting platform.";

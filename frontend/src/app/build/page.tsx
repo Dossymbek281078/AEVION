@@ -6,6 +6,7 @@ import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
 import { Skeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
+import { formatSalary } from "@/lib/build/format";
 import { useBuildAuth } from "@/lib/build/auth";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
@@ -24,11 +25,30 @@ export default function BuildHomePage() {
     candidates: number;
     projects: number;
   } | null>(null);
+  // Platform-wide summary for the stat cards (real DB counts, not the
+  // capped/filtered list length — keeps the cards consistent with the hero).
+  const [summary, setSummary] = useState<{
+    total: number;
+    open: number;
+    inProgress: number;
+    vacancies: number;
+  } | null>(null);
 
   useEffect(() => {
     buildApi
       .publicStats()
       .then((r) => setPublicStats(r))
+      .catch(() => {});
+    buildApi
+      .buildStats()
+      .then((r) =>
+        setSummary({
+          total: r.projects.total,
+          open: r.projects.open,
+          inProgress: r.projects.inProgress,
+          vacancies: r.vacancies.total,
+        }),
+      )
       .catch(() => {});
   }, []);
 
@@ -86,10 +106,10 @@ export default function BuildHomePage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Total" value={stats.total} />
-        <Stat label="Open" value={stats.open} tone="emerald" />
-        <Stat label="In progress" value={stats.active} tone="amber" />
-        <Stat label="Vacancies" value={stats.vacancies} />
+        <Stat label="Total" value={summary?.total ?? stats.total} />
+        <Stat label="Open" value={summary?.open ?? stats.open} tone="emerald" />
+        <Stat label="In progress" value={summary?.inProgress ?? stats.active} tone="amber" />
+        <Stat label="Vacancies" value={summary?.vacancies ?? stats.vacancies} />
       </div>
 
       <LiveActivityBand />
@@ -215,7 +235,7 @@ function SmartSuggestions() {
           >
             <div className="font-semibold text-white text-sm">{v.title}</div>
             <div className="mt-0.5 text-xs text-slate-400">
-              {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+              {formatSalary(v.salary, v.salaryCurrency)}
               {v.city ? ` · ${v.city}` : ""}
             </div>
           </Link>

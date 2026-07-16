@@ -6,6 +6,7 @@ import {
   VACANCY_STATUSES,
   APPLICATION_STATUSES,
   BUILD_ROLES,
+  excludeTestUsers,
 } from "../../lib/build";
 
 // In-memory request counter (resets on restart — Prometheus-style gauge)
@@ -20,10 +21,12 @@ healthRouter.get("/", async (_req, res) => {
   let candidates = 0;
   let projects = 0;
   try {
+    // Storefront hero counters: exclude @aevion.test/@smoke.test fixtures.
+    const notTest = excludeTestUsers("u");
     const r = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" WHERE "status" = 'OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile" bp JOIN "AEVIONUser" u ON u."id" = bp."userId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest}`),
     ]);
     vacancies = Number(r[0].rows[0]?.n ?? 0);
     candidates = Number(r[1].rows[0]?.n ?? 0);

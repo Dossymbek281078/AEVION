@@ -124,7 +124,10 @@ export function RoyaltyStream() {
   }, []);
 
   useEffect(() => {
-    if (!data || paused) return;
+    // Only synthesize ticks on top of the demo generator. Once real royalty
+    // events exist (data.isLive), injecting fake ones alongside them would
+    // misrepresent actual payouts.
+    if (!data || data.isLive || paused) return;
     const schedule = () => {
       const delay = 7000 + Math.random() * 5000;
       tickRef.current = window.setTimeout(() => {
@@ -228,11 +231,13 @@ export function RoyaltyStream() {
             {t("rs.title")}
           </h2>
           <StatusPill
-            kind={probe.alive ? "partial" : "mock"}
+            kind={data?.isLive ? "live" : probe.alive ? "partial" : "mock"}
             reason={
-              probe.alive
-                ? `/api/qright/royalties is live (${probe.count ?? 0} events). Stream below blends real events with deterministic simulation until webhooks fire.`
-                : "Awaiting /api/qright/royalties + verify webhook → qtrade transfer. Events shown are simulated."
+              data?.isLive
+                ? `/api/qright/royalties/summary is live (${data.recentEvents.length} real events). No simulation running.`
+                : probe.alive
+                  ? "/api/qright/royalties is reachable but you have no royalty events yet — showing the demo preview below."
+                  : "Awaiting auth / /api/qright/royalties/summary. Events shown are simulated."
             }
           />
         </div>

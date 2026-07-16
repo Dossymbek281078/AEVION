@@ -1,11 +1,33 @@
 // Real-time royalty stream from QRight IP verifications.
-// TODO backend (aevion-backend-modules / QRight module):
-//   1. Emit webhook on /api/qright/objects/:id verification → qtrade transfer (0.01 AEC) to owner.
-//   2. Expose GET /api/qright/royalties?accountId=... with { works, recentEvents, averages }.
-//   3. Optional: Server-Sent Events /api/qright/royalties/stream for live feed.
+//
+// Backend status:
+//   1. done — POST /api/qright/royalties/verify-webhook credits a real QTrade
+//      account (see aevion-globus-backend/src/routes/qrightRoyalties.ts).
+//   2. done — GET /api/qright/royalties/summary returns { works, recentEvents,
+//      avgPerDay7d/30d, estimated30d, hasRealData }, fetched below.
+//   3. still TODO — SSE /api/qright/royalties/stream for a push-based feed;
+//      for now the widget polls + locally simulates ticks between fetches.
+//
+// fetchRoyaltyStream tries the real summary first. It falls back to the
+// deterministic per-account demo generator when the caller has no real
+// royalty events yet (fresh accounts, or logged-out/dev contexts without a
+// token) so the widget still has something worth looking at.
 
+import { apiUrl } from "@/lib/apiBase";
 import { QRIGHT_WORKS_BY_KIND } from "./mockCatalog";
 import { pick, seeded } from "./random";
+
+const TOKEN_KEY = "aevion_auth_token_v1";
+
+function authHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const t = localStorage.getItem(TOKEN_KEY);
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 export type IPKind = "music" | "photo" | "code" | "design" | "writing" | "video";
 
@@ -34,6 +56,8 @@ export type RoyaltyStreamSummary = {
   avgPerDay7d: number;
   avgPerDay30d: number;
   estimated30d: number;
+  /** True when this came from real royalty events, not the demo generator. */
+  isLive: boolean;
 };
 
 const IP_KINDS: IPKind[] = ["music", "photo", "code", "design", "writing", "video"];
@@ -168,10 +192,36 @@ function generateStream(accountId: string): RoyaltyStreamSummary {
 
   const est = computeEstimated(events);
 
-  return { works, recentEvents: events, ...est };
+  return { works, recentEvents: events, ...est, isLive: false };
+}
+
+type SummaryResponse = {
+  hasRealData: boolean;
+  works: IPWork[];
+  recentEvents: RoyaltyEvent[];
+  avgPerDay7d: number;
+  avgPerDay30d: number;
+  estimated30d: number;
+};
+
+async function fetchRealSummary(): Promise<SummaryResponse | null> {
+  const headers = authHeaders();
+  if (!headers.Authorization) return null;
+  try {
+    const r = await fetch(apiUrl("/api/qright/royalties/summary"), { headers, cache: "no-store" });
+    if (!r.ok) return null;
+    return (await r.json()) as SummaryResponse;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchRoyaltyStream(accountId: string): Promise<RoyaltyStreamSummary> {
+  const real = await fetchRealSummary();
+  if (real && real.hasRealData) {
+    const { hasRealData: _hasRealData, ...summary } = real;
+    return { ...summary, isLive: true };
+  }
   return generateStream(accountId);
 }
 

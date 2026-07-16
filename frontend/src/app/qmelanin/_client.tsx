@@ -127,6 +127,22 @@ export default function QMelaninClient() {
           <ModulePricingChip moduleId="qmelanin" theme="dark" />
         </div>
 
+        <a
+          href="https://aevion.gumroad.com/l/tmuyxw"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.buyCard}
+        >
+          <span>
+            <span style={styles.buyTitle}>📘 Гайд «Протокол Анти-седина» (PDF)</span>
+            <span style={styles.buySub}>
+              Вся наука без хайпа: почему волос седеет, какие рычаги реально работают
+              (медь/цинк, спермидин, окислительный стресс) и 12-недельный план. Wellness, не медицина.
+            </span>
+          </span>
+          <span style={styles.buyBtn}>Получить за&nbsp;$9&nbsp;→</span>
+        </a>
+
         <section style={styles.card}>
           <h2 style={styles.h2}>Ваши анализы</h2>
           <div style={styles.grid}>
@@ -257,6 +273,10 @@ const styles: Record<string, React.CSSProperties> = {
   eyebrow: { fontFamily: "monospace", fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", color: "#c8823f" },
   h1: { fontSize: 34, margin: "10px 0 0", fontWeight: 700 },
   lede: { color: "#9fb0c4", marginTop: 14, lineHeight: 1.6, maxWidth: 640 },
+  buyCard: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap", background: "#0d1422", border: "1px solid #c8823f", borderRadius: 16, padding: "18px 22px", marginTop: 16, textDecoration: "none", color: "#e8eef6" },
+  buyTitle: { display: "block", fontSize: 16, fontWeight: 700 },
+  buySub: { display: "block", fontSize: 13, color: "#9fb0c4", marginTop: 5, maxWidth: 470, lineHeight: 1.5 },
+  buyBtn: { background: "#c8823f", color: "#0a0a0a", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" },
   card: { background: "#0d1422", border: "1px solid #1c2942", borderRadius: 16, padding: 24, marginTop: 26 },
   h2: { fontSize: 20, margin: "0 0 16px" },
   h3: { fontSize: 15, margin: "22px 0 10px", color: "#c8823f" },

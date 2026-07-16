@@ -18,6 +18,7 @@
 import { CITY } from "../routes/qskyway.city";
 import { CITY_NYC } from "../routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../routes/qskyway.city.tokyo";
+import { PROVENANCE_SNAPSHOTS } from "../data/moduleProvenanceSnapshots";
 
 export interface DataQuality {
   total: number;
@@ -76,6 +77,16 @@ const qskywayProvider: Provider = () => {
 const PROVIDERS: Record<string, Provider> = {
   qskyway: qskywayProvider,
 };
+
+// Register a provider for every build-time provenance snapshot (frontend-data
+// modules that shipped their counts to the backend).
+for (const [id, snap] of Object.entries(PROVENANCE_SNAPSHOTS)) {
+  PROVIDERS[id] = () =>
+    fromCounts(snap.measured, snap.derived, snap.guessed, {
+      source: `${snap.source} (snapshot ${snap.capturedAt})`,
+      note: snap.note,
+    });
+}
 
 // ── Public API ──────────────────────────────────────────────────────────────
 

@@ -179,8 +179,7 @@
       "Bash(tee /tmp/be-tsc.log)",
       "Bash(tee /tmp/fe-tsc2.log)",
       "Bash(PORT=4099 npx ts-node-dev --respawn --transpile-only src/index.ts)",
-      "Bash(PORT=4111 npx ts-node-dev --respawn --transpile-only src/index.ts)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/ecosystem-earnings-real --title 'feat\\(ecosystem,bank\\): Total Earnings widget shows real qright/chess/planet data' --body ' *)"
+      "Bash(PORT=4111 npx ts-node-dev --respawn --transpile-only src/index.ts)"
     ]
   }
 }

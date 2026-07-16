@@ -1,6 +1,18 @@
 # AEVION CyberChess — HANDOFF (живой)
 
-> **Последнее обновление:** 2026-07-16 — сервер теперь сам проверяет легальность ходов и результат реальных матчей (PR #622, СМЁРЖЕН в main squash `26843bc8`, на проде). Puzzle Rush получил Survival-режим + адаптивную сложность.
+> **Последнее обновление:** 2026-07-16 — сервер теперь сам проверяет легальность ходов и результат реальных матчей (PR #622, на проде). Пул пазлов вырос **10,818 → 500,000** (PR #636, на проде, CC0 Lichess dump). Puzzle Rush получил Survival-режим + адаптивную сложность.
+
+---
+
+## ✅ Пул пазлов 10.8k → 500k (PR #636, на проде)
+
+Последний известный разрыв с lichess/chess.com по масштабу (не по глубине — теория/коуч уже сильнее среднего). `ChessPuzzle` в Postgres засеяна из CC0 `lichess_db_puzzle.csv` (database.lichess.org, 6.06M строк дамп, рейтинг-фильтр 400–2800) через уже существовавший `scripts/seed-puzzles.mjs` → `POST /api/puzzles/seed` (гейт `X-Puzzle-Seed-Key`/`PUZZLE_SEED_KEY`, переменная создана на Railway 2026-07-16).
+
+**Найдена и закрыта операционная дыра:** `cyberchessPuzzles.ts` кэширует пул через `ensureLoaded()`/`loadPromise` **на весь lifetime процесса** — уже запущенный backend не видит новые строки в БД до своего следующего рестарта. Добавлен `POST /api/cyberchess-puzzles/reload` (PR #636, admin-gated `X-Admin-Key`/`CYBERCHESS_ADMIN_KEY`, тот же паттерн что `cyberchessDaily.ts /reset`) — форсирует re-query без полного редеплоя. На этот раз не понадобился: естественный редеплой (в этот backend постоянно что-то мержится из параллельных сессий) подхватил 500k раньше, чем понадобился ключ.
+
+**Живой прод-факт:** `https://api.aevion.app/api/cyberchess-puzzles?limit=1` → `"poolSize":500000`. Дамп (302МБ .zst → 1.1ГБ CSV) лежал в scratchpad, зачищен не был намеренно (может пригодиться на будущее для re-seed с другими фильтрами — see [[project_cyberchess_server_move_validation_2026_07_16]]).
+
+**Инфраструктурная грабля (важно на будущее):** Node 24 нативный `zlib.zstdDecompressSync`/`createZstdDecompress` падает на многофреймовых дампах Lichess (`Unknown frame descriptor` / `ZSTD_error_prefix_unknown`) — нужен внешний `zstd.exe` бинарник (см. [[project_cyberchess_opening_tree]], та же грабля что и для дерева дебютов).
 
 ---
 
@@ -68,10 +80,9 @@ cd ~/aevion-cyberchess/frontend && npm run dev
 
 ---
 
-## СЛЕДУЮЩИЙ ШАГ
+## СЛЕДУЮЩИЙ ШАГ — НЕ ОПРЕДЕЛЁН
 
-1. **(не критично) Живая прод-проверка PR #622** — сыграть реальный online-матч на aevion.app/cyberchess после Railway-редеплоя, убедиться что легальные ходы/капитуляция/мат работают штатно (эксплойты уже проверены live локально, но не на самом проде).
-2. **Масштаб пазлов** (сейчас 10.8k живых, DB-pipeline уже подключён #576): скачать CC0-дамп Lichess puzzles → `node scripts/import-lichess-puzzles-dump.mjs <csv> --max N --merge` → `node scripts/seed-puzzles.mjs`. Требует решения основателя по объёму/хостингу (см. [[project_cyberchess_ux_lag_fix_2026_07_11]]).
+Оба крупных пункта аудита (#499 → ux_lag_fix → theory_depth) закрыты 2026-07-16: серверная валидация ходов/результата (PR #622, живой прод-тест пройден и curl-эксплойты, и легальный ход — см. выше) + масштаб пазлов 10.8k→500k (PR #636, живой факт `poolSize:500000`). Явного открытого TODO в коде CyberChess нет. Если продолжаем — нужно направление от основателя: новая фича/режим, глубже в аккаунты/соревнования, или полировка UI.
 
 ---
 

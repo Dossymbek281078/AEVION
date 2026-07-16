@@ -17,6 +17,7 @@ import {
   runMultiAgent,
   type OrchestratorInput,
 } from "./orchestrator";
+import { insertSmartRun } from "../../lib/smartRunLog";
 
 export type SmartRouting = {
   /** Query type the classifier saw. */
@@ -66,47 +67,56 @@ export type SmartTally = {
   savedUsd: number; // Σ max(0, estCouncil − actual) per run
 };
 
-const tally: SmartTally = {
-  runs: 0,
-  facts: 0,
-  light: 0,
-  deep: 0,
-  totalCostUsd: 0,
-  estAlwaysCouncilUsd: 0,
-  savedUsd: 0,
-};
+const zero = (): SmartTally => ({
+  runs: 0, facts: 0, light: 0, deep: 0, totalCostUsd: 0, estAlwaysCouncilUsd: 0, savedUsd: 0,
+});
 
-/** Fold one routed run into the shared tally. Exported for tests. */
-export function recordSmartRun(r: SmartRouting): void {
-  tally.runs += 1;
-  tally.totalCostUsd += r.costUsd;
-  tally.estAlwaysCouncilUsd += EST_COUNCIL_COST_USD;
-  tally.savedUsd += Math.max(0, EST_COUNCIL_COST_USD - r.costUsd);
-  if (r.resolved === "single") tally.facts += 1;
-  else if (r.depth === "deep") tally.deep += 1;
-  else tally.light += 1;
+const tally: SmartTally = zero();
+// Per-module in-memory breakdown (this process's session). The DB log
+// (smartRunLog) holds the durable all-time history; this is the fast fallback.
+const byModule = new Map<string, SmartTally>();
+
+function fold(t: SmartTally, r: SmartRouting, savedUsd: number): void {
+  t.runs += 1;
+  t.totalCostUsd += r.costUsd;
+  t.estAlwaysCouncilUsd += EST_COUNCIL_COST_USD;
+  t.savedUsd += savedUsd;
+  if (r.resolved === "single") t.facts += 1;
+  else if (r.depth === "deep") t.deep += 1;
+  else t.light += 1;
 }
 
-/** Snapshot the cross-module savings, with a derived saved-percentage. */
-export function smartSavingsSnapshot(): SmartTally & { savedPct: number } {
-  const savedPct =
-    tally.estAlwaysCouncilUsd > 0
-      ? (100 * tally.savedUsd) / tally.estAlwaysCouncilUsd
-      : 0;
-  return { ...tally, savedPct };
+/** Fold one routed run into the shared tally + per-module + durable log. */
+export function recordSmartRun(r: SmartRouting, moduleTag = "qcoreai"): void {
+  const savedUsd = Math.max(0, EST_COUNCIL_COST_USD - r.costUsd);
+  fold(tally, r, savedUsd);
+  let m = byModule.get(moduleTag);
+  if (!m) { m = zero(); byModule.set(moduleTag, m); }
+  fold(m, r, savedUsd);
+  // Fire-and-forget durable log (no-ops when DB is unavailable).
+  insertSmartRun({ module: moduleTag, resolved: r.resolved, depth: r.depth, costUsd: r.costUsd, savedUsd });
+}
+
+const withPct = (t: SmartTally): SmartTally & { savedPct: number } => ({
+  ...t,
+  savedPct: t.estAlwaysCouncilUsd > 0 ? (100 * t.savedUsd) / t.estAlwaysCouncilUsd : 0,
+});
+
+/** Snapshot the in-memory (session) cross-module savings + per-module split. */
+export function smartSavingsSnapshot(): SmartTally & {
+  savedPct: number;
+  perModule: Array<SmartTally & { savedPct: number; module: string }>;
+} {
+  const perModule = [...byModule.entries()]
+    .map(([module, t]) => ({ module, ...withPct(t) }))
+    .sort((a, b) => b.runs - a.runs);
+  return { ...withPct(tally), perModule };
 }
 
 /** Reset the tally (tests only). */
 export function resetSmartTally(): void {
-  Object.assign(tally, {
-    runs: 0,
-    facts: 0,
-    light: 0,
-    deep: 0,
-    totalCostUsd: 0,
-    estAlwaysCouncilUsd: 0,
-    savedUsd: 0,
-  });
+  Object.assign(tally, zero());
+  byModule.clear();
 }
 
 /* ── The call ─────────────────────────────────────────────────────────────── */
@@ -118,10 +128,11 @@ export function resetSmartTally(): void {
  */
 export async function smartComplete(
   input: SmartCompleteInput,
-  opts?: { timeoutMs?: number }
+  opts?: { timeoutMs?: number; module?: string }
 ): Promise<SmartResult> {
   const t0 = Date.now();
   const timeoutMs = opts?.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const moduleTag = opts?.module?.trim() || "qcoreai";
   let answer = "";
   let classification: "open" | "fact" = "open";
   let resolved: "single" | "council" = "council";
@@ -195,6 +206,6 @@ export async function smartComplete(
     costUsd,
     durationMs: durationMs || Date.now() - t0,
   };
-  recordSmartRun(routing);
+  recordSmartRun(routing, moduleTag);
   return { answer, routing };
 }

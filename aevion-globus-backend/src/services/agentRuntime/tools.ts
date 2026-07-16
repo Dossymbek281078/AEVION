@@ -112,14 +112,17 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: "generate_code",
     description:
-      "Generate or update a code file with AI and save it directly into the DevHub project the user currently " +
+      "Generate or update code file(s) with AI and save them directly into the DevHub project the user currently " +
       "has open. Only works when the request carries project context (i.e. the user is on a DevHub project page) " +
-      "— if there is no open project, this tool is unavailable.",
+      "— if there is no open project, this tool is unavailable. When a change needs multiple files to work together " +
+      "(e.g. an API route plus the page that calls it), pass all of them in targetFiles in one call so they're " +
+      "generated together and kept consistent with each other — don't call this tool once per file for a coordinated change.",
     inputSchema: {
       type: "object",
       properties: {
         prompt: { type: "string", description: "What to build, e.g. 'a login form with email and password fields'." },
-        targetFile: { type: "string", description: "Optional file path to write, e.g. 'pages/login.tsx'. Omit to let the generator choose." },
+        targetFile: { type: "string", description: "Optional single file path to write, e.g. 'pages/login.tsx'. Omit to let the generator choose. Use targetFiles instead for more than one file." },
+        targetFiles: { type: "array", items: { type: "string" }, description: "Optional list of file paths to generate/edit together in one coordinated call, e.g. ['pages/api/login.ts', 'pages/login.tsx']." },
       },
       required: ["prompt"],
     },
@@ -148,7 +151,13 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
   if (name === "generate_sound_effect") return { text: input.text, ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}) };
   if (name === "send_sms") return { recipient: input.recipient, content: input.content, ...(input.sender ? { sender: input.sender } : {}) };
   if (name === "translate_text") return { text: input.text, targetLang: input.targetLang, ...(input.sourceLang ? { sourceLang: input.sourceLang } : {}) };
-  if (name === "generate_code") return { prompt: input.prompt, ...(input.targetFile ? { targetFile: input.targetFile } : {}) };
+  if (name === "generate_code") {
+    return {
+      prompt: input.prompt,
+      ...(input.targetFile ? { targetFile: input.targetFile } : {}),
+      ...(Array.isArray(input.targetFiles) ? { targetFiles: input.targetFiles } : {}),
+    };
+  }
   return input;
 }
 

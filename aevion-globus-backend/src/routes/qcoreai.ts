@@ -2701,10 +2701,20 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
    and every module's own endpoints are untouched.
    ═══════════════════════════════════════════════════════════════════════ */
 
+// Public-facing input ceiling for /smart (the AskAi box on product pages hits
+// this). Tighter than the internal 16k, and control chars are stripped so a
+// pasted payload can't smuggle terminal/escape sequences into a prompt.
+const SMART_PUBLIC_MAX_CHARS = 6000;
+// Safety net: an anonymous ask can't run an unbounded deep council. The router
+// still picks single vs light/deep; this just caps the worst case.
+const SMART_DEFAULT_MAX_COST_USD = 0.25;
+
 qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
 
-  const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
+  const raw: string = typeof req.body?.input === "string" ? req.body.input : "";
+  // Strip C0 control chars except tab/newline/carriage-return, then cap length.
+  const userInput = raw.split("").filter((ch) => { const c = ch.charCodeAt(0); return c > 31 || c === 9 || c === 10 || c === 13; }).join("").trim().slice(0, SMART_PUBLIC_MAX_CHARS);
   if (!userInput) return res.status(400).json({ error: "input required" });
 
   const args: SmartCompleteInput = { userInput };
@@ -2719,6 +2729,9 @@ qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
   if (req.body?.offline === true || req.body?.localOnly === true) args.localOnly = true;
   if (typeof req.body?.maxCostUsd === "number" && isFinite(req.body.maxCostUsd) && req.body.maxCostUsd > 0) {
     args.maxCostUsd = Math.min(50, req.body.maxCostUsd);
+  } else {
+    // Public default cap — a single anonymous ask can't run away in cost.
+    args.maxCostUsd = SMART_DEFAULT_MAX_COST_USD;
   }
   // Optional chair override (same convenience as /multi-agent's synthModel).
   if (typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {

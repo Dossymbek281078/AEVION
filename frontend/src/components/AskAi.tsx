@@ -22,11 +22,18 @@ export default function AskAi({
   const [routing, setRouting] = useState<AskRouting | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const lastSubmitRef = useRef(0);
 
   const submit = async () => {
     const question = q.trim();
     if (!question || busy) return;
+    // Debounce: ignore rapid re-submits within 800ms.
+    const now = Date.now();
+    if (now - lastSubmitRef.current < 800) return;
+    lastSubmitRef.current = now;
+    if (now < cooldownUntil) return;
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -39,7 +46,18 @@ export default function AskAi({
       setAnswer(r.answer);
       setRouting(r.routing);
     } catch (e: any) {
-      if (e?.name !== "AbortError") setErr(e?.message || "failed");
+      if (e?.name === "AbortError") return;
+      const msg = String(e?.message || "");
+      // Friendly handling for the known gate responses on the public endpoint.
+      if (/(^|\D)429(\D|$)|too many/i.test(msg)) {
+        setErr("Too many requests — please wait a few seconds.");
+        setCooldownUntil(Date.now() + 8000);
+      } else if (/(^|\D)402(\D|$)|quota|payment/i.test(msg)) {
+        setErr("Free AI quota reached. Upgrade to keep asking.");
+        setCooldownUntil(Date.now() + 30000);
+      } else {
+        setErr(msg || "failed");
+      }
     } finally {
       setBusy(false);
     }

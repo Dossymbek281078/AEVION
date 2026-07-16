@@ -1925,6 +1925,14 @@ export const translations = {
     "qpaynet.widget.amountLabel": "Amount ({currency})",
     "qpaynet.widget.pay": "Pay →",
     "qpaynet.widget.footer": "Secured by AEVION QPayNet ↗",
+    /* MapReality — form placeholders (AutoTranslate skips <input>/<textarea>, so these need an explicit t() key) */
+    "mapreality.alias.ph": "pick a pseudonym",
+    "mapreality.form.titlePh": "Title (e.g. Need 3 GPs for week of May 20)",
+    "mapreality.form.descPh": "Describe the need / event / request in detail (max 2000 chars)",
+    "mapreality.form.countryPh": "Country (KZ, RU, US...)",
+    "mapreality.form.cityPh": "City (optional)",
+    "mapreality.form.latPh": "lat (optional)",
+    "mapreality.form.lngPh": "lng (optional)",
   },
 
   ru: {
@@ -3650,6 +3658,14 @@ export const translations = {
     "qpaynet.widget.amountLabel": "Сумма ({currency})",
     "qpaynet.widget.pay": "Оплатить →",
     "qpaynet.widget.footer": "Безопасно через AEVION QPayNet ↗",
+    /* MapReality — плейсхолдеры форм (AutoTranslate не заходит в <input>/<textarea>, нужен явный t()) */
+    "mapreality.alias.ph": "укажите псевдоним",
+    "mapreality.form.titlePh": "Заголовок (напр.: нужны 3 терапевта на неделю 20 мая)",
+    "mapreality.form.descPh": "Опишите потребность / событие / запрос подробно (макс. 2000 символов)",
+    "mapreality.form.countryPh": "Страна (KZ, RU, US...)",
+    "mapreality.form.cityPh": "Город (необязательно)",
+    "mapreality.form.latPh": "широта (необязательно)",
+    "mapreality.form.lngPh": "долгота (необязательно)",
   },
 
   kk: {

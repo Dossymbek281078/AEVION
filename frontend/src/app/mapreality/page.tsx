@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { SignalForm } from "./components/SignalForm";
@@ -36,6 +37,7 @@ export default function MapRealityPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [nearbySignals, setNearbySignals] = useState<Signal[] | null>(null);
+  const { t } = useI18n();
 
   // Restore alias from localStorage on mount
   useEffect(() => {
@@ -138,7 +140,7 @@ export default function MapRealityPage() {
               type="text"
               value={alias}
               onChange={(e) => setAlias(e.target.value.slice(0, 64))}
-              placeholder="pick a pseudonym"
+              placeholder={t("mapreality.alias.ph")}
               style={{
                 padding: "5px 9px",
                 fontSize: 13,

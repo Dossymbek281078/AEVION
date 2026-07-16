@@ -93,6 +93,9 @@ function dealContext(input: AnalysisInput, result: AnalysisResult): string {
     result.stress.resilience !== "insufficient-data"
       ? `STRESS TEST — resilience "${result.stress.resilience}" (base LTV/CAC ${result.stress.base.ltvCac}, worst-case ${result.stress.worstLtvCac} under combined CAC+churn shocks): ${result.stress.note}`
       : `STRESS TEST: not run — unit economics (LTV/CAC) not disclosed.`,
+    result.tam.mode !== "insufficient"
+      ? `TAM TRIANGULATION: ${result.tam.triangulation.join(" ")}${result.tam.flags.length ? ` FLAGS: ${result.tam.flags.join(" ")}` : ""}`
+      : `TAM TRIANGULATION: not run — no bottom-up TAM or revenue/customers disclosed.`,
   ].join("\n");
 }
 

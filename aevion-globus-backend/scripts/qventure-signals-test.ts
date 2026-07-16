@@ -4,6 +4,8 @@
 import { parsePlanSignals } from "../src/lib/qventure/signals";
 import { analyze } from "../src/lib/qventure/engine";
 import { stressTest } from "../src/lib/qventure/stress";
+import { triangulateTam } from "../src/lib/qventure/tam";
+import { resolveSector } from "../src/lib/qventure/sectors";
 
 let pass = 0, fail = 0;
 const ok = (label: string, cond: boolean, info = "") => {
@@ -73,6 +75,22 @@ const noData = stressTest(parsePlanSignals("Great SaaS product for teams."));
 ok("insufficient-data when no unit economics", noData.resilience === "insufficient-data" && noData.scenarios.length === 0);
 ok("stress wired into analyze() — base 5 → fragile (downturn 2.2)", analyze({ name: "X", sector: "saas", stage: "seed", description: "SaaS with LTV:CAC of 5:1 and 8 month payback." }).stress.resilience === "fragile");
 ok("stress wired into analyze() — base 8 → robust", analyze({ name: "Y", sector: "saas", stage: "seed", description: "SaaS with LTV:CAC of 8:1 and 6 month payback." }).stress.resilience === "robust");
+
+console.log("\n7. Bottom-up TAM triangulation");
+const saasSector = resolveSector("saas");
+const fullTam = triangulateTam(parsePlanSignals("$2M ARR, 2000 customers, TAM of $12B addressable market"), saasSector);
+ok("full mode when TAM + revenue/customers present", fullTam.mode === "full", fullTam.mode);
+ok("ACV = revenue/customers ($2M/2000 = $1000)", fullTam.acvUsd === 1000, String(fullTam.acvUsd));
+ok("implied accounts = TAM/ACV ($12B/$1000 = 12M)", fullTam.impliedAccounts === 12_000_000, String(fullTam.impliedAccounts));
+ok("penetration = rev/TAM (2M/12B ≈ 0.0167%)", fullTam.currentPenetrationPct !== null && fullTam.currentPenetrationPct < 0.02, String(fullTam.currentPenetrationPct));
+ok("SOM @1% = $120M", fullTam.somAt1PctUsd === 120_000_000, String(fullTam.somAt1PctUsd));
+const inflatedTamT = triangulateTam(parsePlanSignals("$1M ARR, 1000 customers, TAM of $9000B addressable market"), saasSector);
+ok("flags TAM > sector", inflatedTamT.flags.some(f => /exceeds the entire/.test(f)), inflatedTamT.flags.join("|"));
+const partialTam = triangulateTam(parsePlanSignals("$5M ARR, 5000 customers, strong growth"), saasSector);
+ok("partial when only ACV derivable", partialTam.mode === "partial" && partialTam.acvUsd === 1000);
+const noTam = triangulateTam(parsePlanSignals("A great product for teams."), saasSector);
+ok("insufficient when nothing disclosed", noTam.mode === "insufficient");
+ok("tam wired into analyze()", analyze({ name: "T", sector: "saas", stage: "seed", description: "$2M ARR, 2000 customers, TAM of $12B." }).tam.acvUsd === 1000);
 
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -15,6 +15,7 @@
 import { resolveSector, type SectorProfile, type MoatArchetype } from "./sectors";
 import { parsePlanSignals, type PlanSignals } from "./signals";
 import { stressTest, type StressResult } from "./stress";
+import { triangulateTam, type TamAnalysis } from "./tam";
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -75,6 +76,8 @@ export interface AnalysisResult {
   redFlags: string[];
   /** Financial stress test: unit economics flexed under CAC/churn/margin shocks. */
   stress: StressResult;
+  /** Bottom-up TAM triangulation: claimed TAM vs derived ACV, implied accounts, penetration, SOM. */
+  tam: TamAnalysis;
 }
 
 // ── US-market stage norms (directional; 2024–2026 window) ──────────────────
@@ -324,8 +327,9 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   ];
 
   const stress = stressTest(signals);
+  const tam = triangulateTam(signals, sector);
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress };
+  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam };
 }
 
 function buildStrategy(args: {

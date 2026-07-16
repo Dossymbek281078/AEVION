@@ -70,6 +70,18 @@ export interface AnalysisResult {
       worstLtvCac: number | null;
       note: string;
     };
+    tam?: {
+      mode: "full" | "partial" | "insufficient";
+      acvUsd: number | null;
+      claimedTamUsd: number | null;
+      sectorTamUsd: number;
+      claimedVsSectorPct: number | null;
+      impliedAccounts: number | null;
+      currentPenetrationPct: number | null;
+      somAt1PctUsd: number | null;
+      triangulation: string[];
+      flags: string[];
+    };
   };
 }
 
@@ -426,6 +438,42 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
+/** Bottom-up TAM triangulation — claimed TAM vs derived ACV / implied accounts / SOM. */
+function TamPanel({ tam }: { tam: NonNullable<AnalysisResult["result"]["tam"]> }) {
+  if (tam.mode === "insufficient") return null;
+  const fmt = (n: number | null) => (n === null ? "—" : n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
+  const stat = (label: string, value: string) => (
+    <div style={{ minWidth: 120 }}>
+      <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={SECTION}>
+      <h2 style={H2}>Bottom-up TAM triangulation</h2>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
+        {tam.acvUsd !== null && stat("Derived ACV", fmt(tam.acvUsd))}
+        {tam.claimedTamUsd !== null && stat("Claimed TAM", fmt(tam.claimedTamUsd))}
+        {tam.impliedAccounts !== null && stat("Implied accounts", tam.impliedAccounts.toLocaleString("en-US"))}
+        {tam.currentPenetrationPct !== null && stat("Penetration", tam.currentPenetrationPct + "%")}
+        {stat("SOM @ 1%", fmt(tam.somAt1PctUsd))}
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 20 }}>
+        {tam.triangulation.map((t, i) => (
+          <li key={i} style={{ fontSize: 13, color: "#334155", lineHeight: 1.55, marginBottom: 4 }}>{t}</li>
+        ))}
+      </ul>
+      {tam.flags.length > 0 && (
+        <div style={{ marginTop: 12, padding: 12, background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10 }}>
+          {tam.flags.map((f, i) => (
+            <div key={i} style={{ fontSize: 13, color: "#78350f", lineHeight: 1.5 }}>⚠ {f}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Financial stress test — unit economics flexed under CAC/churn/margin shocks. */
 function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"]["stress"]> }) {
   if (stress.resilience === "insufficient-data") {
@@ -564,6 +612,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Entry strategy</h2>
         <StrategyPanel s={result.result.strategy} />
       </div>
+
+      {result.result.tam && <TamPanel tam={result.result.tam} />}
 
       {result.result.stress && <StressPanel stress={result.result.stress} />}
 

@@ -14,6 +14,7 @@
 
 import { resolveSector, type SectorProfile, type MoatArchetype } from "./sectors";
 import { parsePlanSignals, type PlanSignals } from "./signals";
+import { stressTest, type StressResult } from "./stress";
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -72,6 +73,8 @@ export interface AnalysisResult {
   signalCoverage: number;
   /** Deterministic red flags: internal inconsistencies or weak metrics in the plan. */
   redFlags: string[];
+  /** Financial stress test: unit economics flexed under CAC/churn/margin shocks. */
+  stress: StressResult;
 }
 
 // ── US-market stage norms (directional; 2024–2026 window) ──────────────────
@@ -320,7 +323,9 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags };
+  const stress = stressTest(signals);
+
+  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress };
 }
 
 function buildStrategy(args: {

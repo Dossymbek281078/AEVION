@@ -90,6 +90,9 @@ function dealContext(input: AnalysisInput, result: AnalysisResult): string {
     result.redFlags.length
       ? `RED FLAGS (auto-detected): ${result.redFlags.map((r) => `(!) ${r}`).join(" ")}`
       : `RED FLAGS: none auto-detected.`,
+    result.stress.resilience !== "insufficient-data"
+      ? `STRESS TEST — resilience "${result.stress.resilience}" (base LTV/CAC ${result.stress.base.ltvCac}, worst-case ${result.stress.worstLtvCac} under combined CAC+churn shocks): ${result.stress.note}`
+      : `STRESS TEST: not run — unit economics (LTV/CAC) not disclosed.`,
   ].join("\n");
 }
 

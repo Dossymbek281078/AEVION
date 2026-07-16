@@ -3,6 +3,7 @@
  */
 import { parsePlanSignals } from "../src/lib/qventure/signals";
 import { analyze } from "../src/lib/qventure/engine";
+import { stressTest } from "../src/lib/qventure/stress";
 
 let pass = 0, fail = 0;
 const ok = (label: string, cond: boolean, info = "") => {
@@ -57,6 +58,21 @@ const a1 = analyze({ ...base, description: strong.signals ? "A B2B SaaS tool for
 const a2 = analyze({ ...base, description: "A B2B SaaS tool for teams. $3M ARR growing 20% MoM, 85% gross margin, LTV:CAC 5:1, 2,000 customers." });
 ok("composite reproducible", a1.composite === a2.composite, `${a1.composite} vs ${a2.composite}`);
 ok("coverage reproducible", a1.signalCoverage === a2.signalCoverage);
+
+console.log("\n6. Financial stress test");
+const robust = stressTest(parsePlanSignals("LTV:CAC of 8:1, 6 month payback, 80% gross margin, 2% churn"));
+ok("robust: resilience robust (worst ≥3)", robust.resilience === "robust", `${robust.resilience}/${robust.worstLtvCac}`);
+ok("robust: 6 scenarios incl margin + downturn", robust.scenarios.length === 6, String(robust.scenarios.length));
+ok("robust: CAC×2 halves LTV/CAC (8→4)", robust.scenarios.find(s => s.label === "CAC ×2")!.ltvCac === 4);
+const fragile = stressTest(parsePlanSignals("LTV:CAC of 2.2:1, 14 month payback"));
+ok("fragile: resilience fragile", fragile.resilience === "fragile", `${fragile.resilience}/${fragile.worstLtvCac}`);
+ok("fragile: downturn pushes below 1.5", (fragile.worstLtvCac ?? 9) < 1.5, String(fragile.worstLtvCac));
+const underwater = stressTest(parsePlanSignals("LTV:CAC of 1.1:1 currently"));
+ok("underwater: a shock pushes < 1", underwater.resilience === "underwater", `${underwater.resilience}/${underwater.worstLtvCac}`);
+const noData = stressTest(parsePlanSignals("Great SaaS product for teams."));
+ok("insufficient-data when no unit economics", noData.resilience === "insufficient-data" && noData.scenarios.length === 0);
+ok("stress wired into analyze() — base 5 → fragile (downturn 2.2)", analyze({ name: "X", sector: "saas", stage: "seed", description: "SaaS with LTV:CAC of 5:1 and 8 month payback." }).stress.resilience === "fragile");
+ok("stress wired into analyze() — base 8 → robust", analyze({ name: "Y", sector: "saas", stage: "seed", description: "SaaS with LTV:CAC of 8:1 and 6 month payback." }).stress.resilience === "robust");
 
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

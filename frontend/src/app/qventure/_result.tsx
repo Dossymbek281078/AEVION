@@ -63,6 +63,13 @@ export interface AnalysisResult {
     signalCoverage?: number;
     redFlags?: string[];
     signals?: { fieldsFound: number };
+    stress?: {
+      base: { ltvCac: number | null; paybackMonths: number | null };
+      scenarios: { label: string; shock: string; ltvCac: number | null; paybackMonths: number | null; health: "healthy" | "tight" | "underwater" }[];
+      resilience: "robust" | "fragile" | "underwater" | "insufficient-data";
+      worstLtvCac: number | null;
+      note: string;
+    };
   };
 }
 
@@ -419,6 +426,55 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
+/** Financial stress test — unit economics flexed under CAC/churn/margin shocks. */
+function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"]["stress"]> }) {
+  if (stress.resilience === "insufficient-data") {
+    return (
+      <div style={SECTION}>
+        <h2 style={H2}>Financial stress test</h2>
+        <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>{stress.note}</p>
+      </div>
+    );
+  }
+  const RES: Record<string, { c: string; bg: string; label: string }> = {
+    robust: { c: "#16a34a", bg: "#f0fdf4", label: "ROBUST" },
+    fragile: { c: "#d97706", bg: "#fffbeb", label: "FRAGILE" },
+    underwater: { c: "#dc2626", bg: "#fef2f2", label: "UNDERWATER" },
+  };
+  const HEALTH: Record<string, string> = { healthy: "#16a34a", tight: "#d97706", underwater: "#dc2626" };
+  const r = RES[stress.resilience];
+  return (
+    <div style={{ ...SECTION, background: r.bg, borderColor: `${r.c}44` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <h2 style={{ ...H2, margin: 0 }}>Financial stress test</h2>
+        <span style={{ padding: "3px 10px", borderRadius: 999, background: r.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{r.label}</span>
+        <span style={{ fontSize: 12.5, color: "#475569" }}>base LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "#64748b", fontSize: 11.5, textTransform: "uppercase" }}>
+              <th style={{ padding: "6px 8px" }}>Scenario</th>
+              <th style={{ padding: "6px 8px" }}>LTV/CAC</th>
+              <th style={{ padding: "6px 8px" }}>Payback</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stress.scenarios.map((s, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #e2e8f0" }}>
+                <td style={{ padding: "7px 8px" }}><b>{s.label}</b> <span style={{ color: "#94a3b8" }}>· {s.shock}</span></td>
+                <td style={{ padding: "7px 8px", fontWeight: 700, color: HEALTH[s.health] }}>{s.ltvCac ?? "—"}</td>
+                <td style={{ padding: "7px 8px", color: "#475569" }}>{s.paybackMonths !== null ? `${s.paybackMonths} mo` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ margin: "12px 0 0", fontSize: 13, color: "#334155", lineHeight: 1.5 }}>{stress.note}</p>
+    </div>
+  );
+}
+
 /** Shows how much of the score is backed by the plan's own numbers vs sector priors. */
 function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: number }) {
   const pct = Math.round(coverage * 100);
@@ -508,6 +564,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Entry strategy</h2>
         <StrategyPanel s={result.result.strategy} />
       </div>
+
+      {result.result.stress && <StressPanel stress={result.result.stress} />}
 
       <ComparablesBlock sectorLabel={result.result.sector.label} stage={result.result.stage} />
 

@@ -538,17 +538,25 @@ interface GeneratedCodeResult {
  * model to fit in, not enough to blow the context budget on a big project. */
 const CONTEXT_MAX_FILES = 60;
 const CONTEXT_MAX_FILE_CHARS = 8000;
+const CONTEXT_MAX_FILE_CHARS_MULTI = 4000; // smaller per-file cap once several files are inlined at once
+const CONTEXT_MAX_TARGET_FILES = 5; // coordinated multi-file edits stop inlining full content beyond this
 
 /** Describe the project's existing files so generation edits in place / matches
- * conventions instead of overwriting blind. Empty string for a fresh project. */
-function buildFileContext(existingFiles: Array<{ path: string; content: string }>, targetFile?: string): string {
+ * conventions instead of overwriting blind. Empty string for a fresh project.
+ * Inlines the current content of every targetFile that already exists, so a
+ * multi-file request (e.g. an API route + the page that calls it) can see
+ * both files at once and keep them consistent with each other. */
+function buildFileContext(existingFiles: Array<{ path: string; content: string }>, targetFiles: string[] = []): string {
   if (existingFiles.length === 0) return "";
   const paths = existingFiles.slice(0, CONTEXT_MAX_FILES).map((f) => `- ${f.path}`).join("\n");
   const more = existingFiles.length > CONTEXT_MAX_FILES ? `\n- …and ${existingFiles.length - CONTEXT_MAX_FILES} more files` : "";
   let ctx = `\n\nExisting project files (match their conventions — imports, style, naming):\n${paths}${more}`;
-  const current = targetFile ? existingFiles.find((f) => f.path === targetFile) : undefined;
-  if (current) {
-    ctx += `\n\nCurrent content of ${targetFile} — edit this file in place, preserving anything unrelated to the request:\n\`\`\`\n${current.content.slice(0, CONTEXT_MAX_FILE_CHARS)}\n\`\`\``;
+  const perFileCap = targetFiles.length > 1 ? CONTEXT_MAX_FILE_CHARS_MULTI : CONTEXT_MAX_FILE_CHARS;
+  for (const tf of targetFiles.slice(0, CONTEXT_MAX_TARGET_FILES)) {
+    const current = existingFiles.find((f) => f.path === tf);
+    if (current) {
+      ctx += `\n\nCurrent content of ${tf} — edit this file in place, preserving anything unrelated to the request:\n\`\`\`\n${current.content.slice(0, perFileCap)}\n\`\`\``;
+    }
   }
   return ctx;
 }
@@ -556,14 +564,14 @@ function buildFileContext(existingFiles: Array<{ path: string; content: string }
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
-  targetFile?: string,
+  targetFiles: string[] = [],
   existingFiles: Array<{ path: string; content: string }> = []
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
   if (configured.length === 0) {
     // Fallback — return a stub file
-    const path = targetFile || (stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html");
+    const path = targetFiles[0] || (stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html");
     const language = detectLanguage(path);
     return {
       files: [{ path, content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`, language }],
@@ -572,11 +580,14 @@ async function generateCodeWithAI(
   }
   const provider = configured[0];
 
-  const systemPrompt = targetFile
-    ? `You are an expert developer. Generate complete, working code for a single file. When given the file's current content, edit it in place rather than starting over. Return ONLY a JSON object: {"files": [{"path": "${targetFile}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
-    : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
+  const systemPrompt =
+    targetFiles.length === 1
+      ? `You are an expert developer. Generate complete, working code for a single file. When given the file's current content, edit it in place rather than starting over. Return ONLY a JSON object: {"files": [{"path": "${targetFiles[0]}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
+      : targetFiles.length > 1
+        ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
+        : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${buildFileContext(existingFiles, targetFile)}`;
+  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${buildFileContext(existingFiles, targetFiles)}`;
 
   let result;
   try {
@@ -590,7 +601,7 @@ async function generateCodeWithAI(
       0.2
     );
   } catch {
-    const path = targetFile || "generated.ts";
+    const path = targetFiles[0] || "generated.ts";
     return {
       files: [{ path, content: `// AI generation failed — configure a provider\n// Prompt: ${prompt}\n`, language: detectLanguage(path) }],
       aiGenerated: false,
@@ -610,7 +621,7 @@ async function generateCodeWithAI(
       }));
     }
   } catch {
-    const path = targetFile || "output.ts";
+    const path = targetFiles[0] || "output.ts";
     files = [{ path, content: result.reply, language: detectLanguage(path) }];
   }
   return { files, aiGenerated: true };
@@ -959,14 +970,20 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
-  const { prompt, targetFile, stack } = req.body || {};
+  const { prompt, targetFile, targetFiles: targetFilesRaw, stack } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
+  // targetFiles (array) lets a caller request several coordinated files at once
+  // (e.g. an API route + the page that calls it); targetFile (string) stays as
+  // the single-file shorthand for back-compat.
+  const targetFiles: string[] = Array.isArray(targetFilesRaw)
+    ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
+    : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
   try {
     const existingFiles = await dbListFiles(project.id);
-    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFile || undefined, existingFiles);
+    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
     // Save each generated file
     for (const gf of generatedFiles) {
       const file: DevHubFile = {
@@ -2616,9 +2633,11 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
         const prompt = String(step.prompt || "");
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
-        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const targetFiles: string[] = Array.isArray(step.saveAs)
+          ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
+          : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile, existingFiles);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2857,9 +2876,11 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         const prompt = String(step.prompt || "");
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
-        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const targetFiles: string[] = Array.isArray(step.saveAs)
+          ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
+          : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile, existingFiles);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,

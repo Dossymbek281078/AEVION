@@ -511,6 +511,52 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
     expect(userMsg).not.toContain("Existing project files");
   });
+
+  test("targetFiles (plural) inlines the current content of every existing target file, coordinated", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/api/login.ts", content: "export default function handler(req, res) {}" });
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/login.tsx", content: "export default function Login() { return <form />; }" });
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({
+        files: [
+          { path: "pages/api/login.ts", content: "handles POST", language: "typescript" },
+          { path: "pages/login.tsx", content: "calls /api/login", language: "typescript" },
+        ],
+      }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "wire the login form to a real API route", targetFiles: ["pages/api/login.ts", "pages/login.tsx"] });
+
+    expect(r.status).toBe(200);
+    expect(r.body.files).toHaveLength(2);
+    const [systemPrompt, userMsg] = vi.mocked(callProvider).mock.calls[0][1].map((m: any) => m.content) as string[];
+    expect(systemPrompt).toContain("MULTIPLE coordinated files");
+    expect(systemPrompt).toContain("pages/api/login.ts");
+    expect(systemPrompt).toContain("pages/login.tsx");
+    expect(userMsg).toContain("Current content of pages/api/login.ts");
+    expect(userMsg).toContain("export default function handler(req, res)");
+    expect(userMsg).toContain("Current content of pages/login.tsx");
+    expect(userMsg).toContain("export default function Login()");
+  });
+
+  test("single targetFile (string, back-compat) still uses the strict single-file prompt", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    mockProvider();
+
+    await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "a login form", targetFile: "pages/login.tsx" });
+
+    const systemPrompt = vi.mocked(callProvider).mock.calls[0][1][0].content as string;
+    expect(systemPrompt).toContain("single file");
+    expect(systemPrompt).not.toContain("MULTIPLE coordinated files");
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -945,6 +991,35 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     expect(r.body.successCount).toBe(2);
     const secondCallUserMsg = vi.mocked(callProvider).mock.calls[1][1][1].content as string;
     expect(secondCallUserMsg).toContain("- lib/api.ts");
+  });
+
+  test("a code step's saveAs can be an array to generate several coordinated files in one step", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any,
+    ]);
+    vi.mocked(callProvider).mockResolvedValueOnce({
+      reply: JSON.stringify({
+        files: [
+          { path: "pages/api/login.ts", content: "handles POST", language: "typescript" },
+          { path: "pages/login.tsx", content: "calls /api/login", language: "typescript" },
+        ],
+      }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({
+        steps: [{ type: "code", prompt: "login page + its API route", saveAs: ["pages/api/login.ts", "pages/login.tsx"] }],
+      });
+
+    expect(r.status).toBe(200);
+    expect(r.body.successCount).toBe(1);
+    expect(r.body.results[0].output.files).toEqual(["pages/api/login.ts", "pages/login.tsx"]);
+    const systemPrompt = vi.mocked(callProvider).mock.calls[0][1][0].content as string;
+    expect(systemPrompt).toContain("MULTIPLE coordinated files");
   });
 
   test("reports per-step errors without aborting workflow", async () => {

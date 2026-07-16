@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { isSaved, toggleWatchlist } from "./_watchlist";
+import { DataProvenanceChip } from "@/components/DataProvenanceChip";
+import { dataQualityFromCounts, type DataQuality } from "@/lib/dataQuality";
 
 // ─── Types (mirror backend engine.ts) ────────────────────────────────────────
 
@@ -108,6 +110,28 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
       </div>
     </div>
   );
+}
+
+// Provenance of the composite score: how much of it reflects THIS startup's own
+// disclosed evidence vs. sector-level priors. Only the execution factor is scored
+// from the founder's traction input; the other seven are sector-benchmark derived
+// (from SectorProfile, which carries cited sources). Honest by the engine's design.
+export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
+  let measured = 0, derived = 0, guessed = 0;
+  for (const f of factors) {
+    if (f.key === "execution") {
+      const r = f.rationale.toLowerCase();
+      if (r.includes("cited")) measured++;               // founder cited concrete metrics
+      else if (r.includes("no traction") || r.includes("unproven")) guessed++;
+      else derived++;                                     // qualitative traction only
+    } else {
+      derived++;                                          // sector benchmark (sourced)
+    }
+  }
+  return dataQualityFromCounts(measured, derived, guessed, {
+    source: "QVenture engine — 1 execution factor from startup input, 7 from sector benchmarks",
+    note: "из данных стартапа — фактор оценён по раскрытым метрикам основателя; секторный бенчмарк — из отраслевых норм (с источниками); нет данных — трэкшн не раскрыт. Скор — секторный скрининг, не глубокий DD.",
+  });
 }
 
 export function FactorBar({ f }: { f: ScoreFactor }) {
@@ -513,6 +537,12 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
 
       <div style={SECTION}>
         <h2 style={H2}>Score breakdown</h2>
+        <div style={{ marginBottom: 12 }}>
+          <DataProvenanceChip
+            dataQuality={ventureDataQuality(result.result.factors)}
+            labels={{ measured: "из данных стартапа", derived: "секторный бенчмарк", guessed: "нет данных", unit: "факторов" }}
+          />
+        </div>
         {result.result.factors.map((f) => <FactorBar key={f.key} f={f} />)}
       </div>
 

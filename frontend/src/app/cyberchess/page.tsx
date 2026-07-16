@@ -2301,8 +2301,14 @@ export default function CyberChessPage(){
   // стрим и вернуться в любой момент; пока игрок не на вкладке «play», часы ЗАМИРАЮТ.
   const isHumanGame=p2pMode||hotseat;
   const clockActive=tab==="play"||isHumanGame;
-  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");snd("x")});
-  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");snd("x")});
+  // sOn(false) matters here — every other game-ending call site (checkmate,
+  // resignation, variant win conditions) pairs sOver(...) with it, but these
+  // two didn't. Without it `on` stays true forever after a timeout, and the
+  // full post-game overlay (accuracy/blunder-map/AI review, further down)
+  // is gated on `!on` — so timeout losses/wins silently never got the rich
+  // report, only the bare "Time out" card.
+  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");sOn(false);snd("x")});
+  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");sOn(false);snd("x")});
 
   // Shop v2: consume time_boost on game start — applies +Ns to user's clock
   // once per purchase. Triggered at game start when ach.time_boost > 0.

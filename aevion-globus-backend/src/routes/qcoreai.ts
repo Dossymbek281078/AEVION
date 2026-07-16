@@ -23,6 +23,11 @@ import {
   PipelineStrategy,
   RequestedStrategy,
 } from "../services/qcoreai/orchestrator";
+import {
+  smartComplete,
+  smartSavingsSnapshot,
+  type SmartCompleteInput,
+} from "../services/qcoreai/smartComplete";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { getPool } from "../lib/dbPool";
@@ -2637,6 +2642,66 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   } else {
     try { res.end(); } catch { /* noop */ }
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   smartComplete — the platform "smart call" (non-streaming JSON)
+   ═══════════════════════════════════════════════════════════════════════
+   Any AEVION module can POST a prompt here and get back { answer, routing }
+   instead of hitting a provider directly — the auto-router decides FACT→single
+   vs weight-graded Council. A shared process-level tally aggregates the savings
+   across every module (GET /smart/savings), so the platform shows one
+   "premium model spent rationally" number. Additive: /multi-agent (streaming)
+   and every module's own endpoints are untouched.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
+  if (await enforceFreeTokenQuota(req, res)) return;
+
+  const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
+  if (!userInput) return res.status(400).json({ error: "input required" });
+
+  const args: SmartCompleteInput = { userInput };
+  if (typeof req.body?.councilSize === "number") {
+    args.councilSize = Math.max(2, Math.min(8, Math.floor(req.body.councilSize)));
+  }
+  // Absent councilLayers is intentionally left undefined so the router grades
+  // depth itself (light L1 vs deep L2); an explicit value still wins.
+  if (typeof req.body?.councilLayers === "number") {
+    args.councilLayers = Math.max(1, Math.min(3, Math.floor(req.body.councilLayers)));
+  }
+  if (req.body?.offline === true || req.body?.localOnly === true) args.localOnly = true;
+  if (typeof req.body?.maxCostUsd === "number" && isFinite(req.body.maxCostUsd) && req.body.maxCostUsd > 0) {
+    args.maxCostUsd = Math.min(50, req.body.maxCostUsd);
+  }
+  // Optional chair override (same convenience as /multi-agent's synthModel).
+  if (typeof req.body?.synthModel === "string" && req.body.synthModel.trim()) {
+    args.overrides = {
+      critic: {
+        provider: typeof req.body?.synthProvider === "string" && req.body.synthProvider.trim()
+          ? req.body.synthProvider.trim()
+          : "anthropic",
+        model: req.body.synthModel.trim(),
+      },
+    };
+  }
+  if (Array.isArray(req.body?.history)) {
+    const h = sanitizeMessages(req.body.history);
+    if (h) args.history = h;
+  }
+
+  try {
+    const result = await smartComplete(args);
+    return res.json({ ...result, savings: smartSavingsSnapshot() });
+  } catch (e: any) {
+    return res.status(502).json({ error: e?.message || "smartComplete failed" });
+  }
+});
+
+// Cross-module savings snapshot — how much the platform saved by routing through
+// smartComplete instead of always running the full Council.
+qcoreaiRouter.get("/smart/savings", (_req, res) => {
+  res.json(smartSavingsSnapshot());
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

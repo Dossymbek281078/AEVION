@@ -34,6 +34,8 @@ process.env.QCOREAI_STUB = "1";
 process.env.QCOREAI_STUB_DELAY = "0";
 
 const { runMultiAgent, parseRouteToken, assessOpenDepth } = require(orchPath);
+const smartPath = path.join(__dirname, "..", "dist", "services", "qcoreai", "smartComplete.js");
+const { smartComplete, smartSavingsSnapshot, resetSmartTally, EST_COUNCIL_COST_USD } = require(smartPath);
 
 console.log("QCoreAI auto-router smoke\n");
 
@@ -153,6 +155,31 @@ ok("assessOpenDepth always returns 1 or 2",
   const forcedRoute = forced.find((e) => e.type === "route");
   ok("explicit councilLayers overrides heuristic (light query forced deep)",
     forcedRoute?.layers === 2 && forcedRoute?.depth === "deep");
+
+  // 5. smartComplete — the platform smart-call wrapper. Non-streaming, returns
+  //    { answer, routing } and folds each run into the shared savings tally.
+  resetSmartTally();
+  let sc1;
+  try {
+    sc1 = await smartComplete({ userInput: "Is TypeScript worth it for a small project?", councilSize: 3 });
+  } catch (e) {
+    ok("smartComplete did not throw", false);
+    console.log("    " + (e && e.message ? e.message : String(e)));
+  }
+  ok("smartComplete returns a non-empty answer", !!sc1 && typeof sc1.answer === "string" && sc1.answer.length > 0);
+  ok("smartComplete routing has resolved council (stub can't say FACT)", sc1?.routing?.resolved === "council");
+  ok("smartComplete routing carries depth + layers", (sc1?.routing?.depth === "light" || sc1?.routing?.depth === "deep") && typeof sc1?.routing?.layers === "number");
+  ok("smartComplete routing carries a numeric costUsd", typeof sc1?.routing?.costUsd === "number" && sc1.routing.costUsd >= 0);
+  ok("smartComplete routing carries durationMs", typeof sc1?.routing?.durationMs === "number" && sc1.routing.durationMs >= 0);
+
+  // A second run — the shared tally must aggregate across calls (cross-module).
+  await smartComplete({ userInput: "Compare a monolith versus microservices, weigh the trade-offs across cost and hiring, and recommend which to pick.", councilSize: 3 });
+  const snap = smartSavingsSnapshot();
+  ok("savings tally counted both runs", snap.runs === 2);
+  ok("savings tally buckets sum to runs", snap.facts + snap.light + snap.deep === snap.runs);
+  ok("savings tally tracks estAlwaysCouncil = runs × baseline", Math.abs(snap.estAlwaysCouncilUsd - snap.runs * EST_COUNCIL_COST_USD) < 1e-9);
+  ok("savings tally savedPct is within 0–100", snap.savedPct >= 0 && snap.savedPct <= 100);
+  ok("smartComplete forced-deep override works", (await smartComplete({ userInput: "short", councilSize: 3, councilLayers: 2 })).routing.layers === 2);
 
   console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

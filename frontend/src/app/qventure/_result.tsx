@@ -59,6 +59,10 @@ export interface AnalysisResult {
     sector: { id?: string; label: string; sources?: SectorSource[] };
     stage: string;
     council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
+    // Company-specific scoring (added 2026-07; optional for older persisted records).
+    signalCoverage?: number;
+    redFlags?: string[];
+    signals?: { fieldsFound: number };
   };
 }
 
@@ -415,6 +419,27 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
+/** Shows how much of the score is backed by the plan's own numbers vs sector priors. */
+function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: number }) {
+  const pct = Math.round(coverage * 100);
+  const color = pct >= 40 ? "#16a34a" : pct >= 15 ? "#d97706" : "#64748b";
+  const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
+  return (
+    <div
+      title="Share of the composite score backed by metrics disclosed in the plan (revenue, growth, margin, LTV/CAC…) rather than sector averages. Add financials to raise it."
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
+        padding: "5px 10px", borderRadius: 999, background: "#f8fafc",
+        border: `1px solid ${color}33`, fontSize: 12, color: "#334155",
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 999, background: color }} />
+      <span><b style={{ color }}>{pct}%</b> signal coverage · {label}</span>
+      <span style={{ color: "#94a3b8" }}>({fields} metric{fields === 1 ? "" : "s"} parsed)</span>
+    </div>
+  );
+}
+
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
   return (
     <>
@@ -423,6 +448,12 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           <div>
             <h2 style={{ ...H2, marginBottom: 4 }}>{result.name}</h2>
             <div style={{ fontSize: 13, color: "#64748b" }}>{result.result.sector.label} · {result.result.stage}</div>
+            {typeof result.result.signalCoverage === "number" && (
+              <SignalCoverageChip
+                coverage={result.result.signalCoverage}
+                fields={result.result.signals?.fieldsFound ?? 0}
+              />
+            )}
             <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
               <a
                 href={apiUrl(`/api/qventure/analyses/${result.id}/pdf`)}
@@ -444,6 +475,19 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           <ScoreGauge score={result.composite} verdict={result.verdict} />
         </div>
       </div>
+
+      {result.result.redFlags && result.result.redFlags.length > 0 && (
+        <div style={{ ...SECTION, background: "#fffbeb", border: "1px solid #fcd34d" }}>
+          <h2 style={{ ...H2, marginBottom: 8, color: "#b45309" }}>
+            ⚠ Red flags <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>({result.result.redFlags.length} auto-detected from the plan)</span>
+          </h2>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {result.result.redFlags.map((f, i) => (
+              <li key={i} style={{ fontSize: 13.5, color: "#78350f", lineHeight: 1.55, marginBottom: 6 }}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <BenchmarkBlock
         sectorId={result.result.sector.id ?? ""}

@@ -84,7 +84,29 @@ function dealContext(input: AnalysisInput, result: AnalysisResult): string {
     ``,
     `SECTOR FRONTIER: ${result.sector.scienceFrontier}`,
     `STRUCTURAL RISK: ${result.sector.structuralRisk}`,
+    ``,
+    `PARSED PLAN METRICS (deterministically extracted from the plan — ${result.signals.fieldsFound} quantified field(s); signal coverage ${Math.round(result.signalCoverage * 100)}%):`,
+    signalLines(result),
+    result.redFlags.length
+      ? `RED FLAGS (auto-detected): ${result.redFlags.map((r) => `(!) ${r}`).join(" ")}`
+      : `RED FLAGS: none auto-detected.`,
   ].join("\n");
+}
+
+/** One-line digest of the quantitative signals parsed from the plan. */
+function signalLines(result: AnalysisResult): string {
+  const s = result.signals;
+  const parts: string[] = [];
+  if (s.revenueUsd !== null) parts.push(`revenue ~$${Math.round(s.revenueUsd).toLocaleString("en-US")} (${s.revenueBasis ?? "revenue"})`);
+  if (s.growthPct !== null) parts.push(`growth ${s.growthPct}% ${s.growthPeriod ?? ""}`.trim());
+  if (s.grossMarginPct !== null) parts.push(`gross margin ${s.grossMarginPct}%`);
+  if (s.ltvCacRatio !== null) parts.push(`LTV/CAC ${s.ltvCacRatio}`);
+  if (s.paybackMonths !== null) parts.push(`payback ${s.paybackMonths}mo`);
+  if (s.churnPct !== null) parts.push(`churn ${s.churnPct}%`);
+  if (s.retentionPct !== null) parts.push(`retention ${s.retentionPct}%`);
+  if (s.customers !== null) parts.push(`${s.customers.toLocaleString("en-US")} customers`);
+  if (s.bottomUpTamUsd !== null) parts.push(`bottom-up TAM ~$${Math.round(s.bottomUpTamUsd).toLocaleString("en-US")}`);
+  return parts.length ? `  ${parts.join(" · ")}` : `  (none disclosed — scoring leans on sector priors)`;
 }
 
 /** Jurisdiction-specific legal surface, appended to the lawyer lens prompt. */

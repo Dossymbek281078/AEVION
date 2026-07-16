@@ -13,6 +13,7 @@
  */
 
 import { resolveSector, type SectorProfile, type MoatArchetype } from "./sectors";
+import { parsePlanSignals, type PlanSignals } from "./signals";
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -64,6 +65,13 @@ export interface AnalysisResult {
   stage: Stage;
   strategy: EntryStrategy;
   assumptions: string[];
+  /** Quantitative signals parsed from THIS plan (drives company-specific scoring). */
+  signals: PlanSignals;
+  /** Fraction of the composite's weight backed by the company's own disclosed
+   *  numbers rather than sector priors (0 = pure sector average, 1 = fully company-specific). */
+  signalCoverage: number;
+  /** Deterministic red flags: internal inconsistencies or weak metrics in the plan. */
+  redFlags: string[];
 }
 
 // ── US-market stage norms (directional; 2024–2026 window) ──────────────────
@@ -145,7 +153,46 @@ function timingScore(sector: SectorProfile): number {
   return clamp(50 + (sector.cagr - 0.12) * 250);
 }
 
-export function analyze(rawInput: AnalysisInput): AnalysisResult {
+/** Compact money formatter for rationale/flag text ($1.2M, $500k). */
+function fmtMoney(n: number): string {
+  if (n >= 1e9) return `$${round(n / 1e9, 1)}B`;
+  if (n >= 1e6) return `$${round(n / 1e6, 1)}M`;
+  if (n >= 1e3) return `$${round(n / 1e3)}k`;
+  return `$${round(n)}`;
+}
+
+/** Execution score from the plan's *actual* disclosed metrics (revenue, growth,
+ *  customers, retention). Returns null when no quantitative traction is parsed,
+ *  so the caller falls back to the qualitative tractionSignal heuristic. */
+function quantifiedExecution(sig: PlanSignals): { score: number; note: string } | null {
+  if (sig.revenueUsd === null && sig.customers === null && sig.growthPct === null) return null;
+  let s = 50;
+  const notes: string[] = [];
+  if (sig.revenueUsd !== null) {
+    const r = sig.revenueUsd;
+    s += r >= 10e6 ? 28 : r >= 1e6 ? 22 : r >= 1e5 ? 14 : 8;
+    notes.push(`${fmtMoney(r)} ${sig.revenueBasis ?? "revenue"}`);
+  }
+  if (sig.growthPct !== null) {
+    const g = sig.growthPct;
+    const add = sig.growthPeriod === "MoM"
+      ? (g >= 15 ? 14 : g >= 7 ? 9 : g >= 3 ? 4 : 1)
+      : sig.growthPeriod === "YoY"
+        ? (g >= 100 ? 12 : g >= 50 ? 8 : g >= 20 ? 3 : 1)
+        : (g >= 50 ? 8 : g >= 20 ? 4 : 1);
+    s += add;
+    notes.push(`${g}% ${sig.growthPeriod ?? ""} growth`.replace(/\s+/g, " ").trim());
+  }
+  if (sig.customers !== null) {
+    s += sig.customers >= 1000 ? 8 : sig.customers >= 100 ? 5 : sig.customers >= 10 ? 2 : 1;
+    notes.push(`${sig.customers.toLocaleString("en-US")} customers`);
+  }
+  if (sig.retentionPct !== null) s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
+  if (sig.churnPct !== null && sig.churnPct > 5) { s -= 6; notes.push(`${sig.churnPct}% churn`); }
+  return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
+}
+
+export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals): AnalysisResult {
   const sector = resolveSector(rawInput.sector);
   const stage = STAGES.includes(rawInput.stage) ? rawInput.stage : "seed";
   const norms = STAGE_NORMS[stage];
@@ -153,29 +200,74 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
     ? rawInput.claimedMoat
     : sector.primaryMoat;
 
-  // ── Factor scores (each 0–100) ──────────────────────────────────────────
-  const marketScore = clamp(35 + Math.log10(Math.max(1, sector.tamUsdBn)) * 12);
+  // Company-specific signals parsed deterministically from THIS plan's text.
+  const signals = signalsOverride
+    ?? parsePlanSignals(`${rawInput.description || ""} ${rawInput.tractionNotes || ""}`);
+  const sectorTamUsd = sector.tamUsdBn * 1e9;
+
+  // ── Market: sector-anchored; a credible bottom-up TAM earns a small rigor
+  //    credit, an inflated one earns none (and a red flag). ─────────────────
+  const sectorMarketScore = clamp(35 + Math.log10(Math.max(1, sector.tamUsdBn)) * 12);
+  let marketScore = sectorMarketScore;
+  let marketCompany = false;
+  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd <= sectorTamUsd * 2) {
+    marketScore = clamp(sectorMarketScore + 3);
+    marketCompany = true;
+  }
+
   const timing = timingScore(sector);
-  const traction = tractionSignal(rawInput);
-  const econScore = clamp(sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30);
-  // Moat = the archetype's mature ceiling, credited only as far as it is realized
-  // at this stage/traction (see MOAT_FLOOR / moatRealization above).
+
+  // ── Execution: real metrics when disclosed, else qualitative heuristic. ──
+  const quant = quantifiedExecution(signals);
+  const traction = quant ?? tractionSignal(rawInput);
+  const execCompany = quant !== null;
+
+  // ── Unit economics: actual gross margin & LTV/CAC when disclosed. ────────
+  let econScoreRaw = sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30;
+  let econCompany = false;
+  const econNotes: string[] = [];
+  if (signals.grossMarginPct !== null) {
+    econScoreRaw = signals.grossMarginPct * 0.7 + (1 - sector.capitalIntensity) * 30;
+    econCompany = true;
+    econNotes.push(`${signals.grossMarginPct}% disclosed gross margin`);
+  }
+  if (signals.ltvCacRatio !== null) {
+    econScoreRaw += signals.ltvCacRatio >= 3 ? 10 : signals.ltvCacRatio >= 1.5 ? 4 : signals.ltvCacRatio >= 1 ? -4 : -18;
+    econCompany = true;
+    econNotes.push(`LTV/CAC ${signals.ltvCacRatio}`);
+  }
+  if (signals.paybackMonths !== null) {
+    econScoreRaw += signals.paybackMonths <= 12 ? 4 : signals.paybackMonths > 24 ? -6 : 0;
+    econCompany = true;
+    econNotes.push(`${signals.paybackMonths}mo payback`);
+  }
+  const econScore = clamp(econScoreRaw);
+
+  // ── Moat: archetype ceiling × realization (from stage & the now-company-
+  //    specific traction), nudged up if the plan asserts patents. ──────────
   const moatCeiling = MOAT_STRENGTH[moat];
-  const moatRealized = moatRealization(stage, traction.score);
+  let moatRealized = moatRealization(stage, traction.score);
+  if (signals.mentionsPatent && moat === "ip-patents") moatRealized = clamp01(moatRealized + 0.1);
   const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
+  const moatCompany = execCompany || signals.mentionsPatent;
+
   const scienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
   const legalScore = clamp(100 - sector.regulatoryIntensity * 65); // higher = less legal drag
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
 
   const factors: ScoreFactor[] = [
     { key: "market", label: "Market size & growth", weight: 0.20, score: round(marketScore),
-      rationale: `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
+      rationale: marketCompany
+        ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
+        : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
     { key: "timing", label: "Timing / tailwinds", weight: 0.10, score: round(timing),
       rationale: `Sector growth ${round(sector.cagr * 100)}% vs. 12% neutral baseline.` },
     { key: "moat", label: "Moat / defensibility", weight: 0.15, score: round(moatScore),
-      rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${(rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
+      rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${execCompany ? " given disclosed traction" : (rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"}${signals.mentionsPatent && moat === "ip-patents" ? " (patent claim credited)" : ""} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
     { key: "economics", label: "Unit economics potential", weight: 0.15, score: round(econScore),
-      rationale: `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}%.` },
+      rationale: econCompany
+        ? `Company metrics: ${econNotes.join(", ")} (capital intensity ${round(sector.capitalIntensity * 100)}%).`
+        : `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}% (sector reference).` },
     { key: "execution", label: "Team / execution signal", weight: 0.12, score: round(traction.score),
       rationale: traction.note },
     { key: "science", label: "Scientific / tech feasibility", weight: 0.10, score: round(scienceScore),
@@ -188,6 +280,34 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
 
   const composite = round(factors.reduce((acc, f) => acc + f.weight * f.score, 0), 1);
 
+  // ── Signal coverage: share of the composite weight backed by company data. ──
+  const companyWeight =
+    (marketCompany ? 0.20 : 0) + (econCompany ? 0.15 : 0) +
+    (execCompany ? 0.12 : 0) + (moatCompany ? 0.15 : 0);
+  const signalCoverage = round(companyWeight, 2);
+
+  // ── Deterministic red flags: inconsistencies / weak disclosed metrics. ──
+  const redFlags: string[] = [];
+  const sectorGmPct = round(sector.grossMargin * 100);
+  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
+    redFlags.push(`Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.`);
+  }
+  if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
+    redFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
+  }
+  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd > sectorTamUsd * 2) {
+    redFlags.push(`Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} exceeds 2× the entire ${sector.label} market (~$${sector.tamUsdBn}B) — likely top-down inflation.`);
+  }
+  if (signals.mentionsRevenueNoNumber && signals.revenueUsd === null) {
+    redFlags.push(`Revenue / monetization is referenced but no figure is disclosed — treat traction as unverified.`);
+  }
+  if (signals.growthPct !== null && signals.growthPeriod === "MoM" && signals.growthPct > 40) {
+    redFlags.push(`${signals.growthPct}% month-over-month growth is exceptionally high — confirm it is sustained, not a single-period spike.`);
+  }
+  if (signals.churnPct !== null && signals.churnPct > 8) {
+    redFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
+  }
+
   const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput });
 
   const citedSource = sector.sources[0];
@@ -195,11 +315,12 @@ export function analyze(rawInput: AnalysisInput): AnalysisResult {
     citedSource
       ? `Market size / growth for ${sector.label} is anchored to ${citedSource.publisher} (${citedSource.year}): ${citedSource.claim}. Full citations are listed under "Market data sources".`
       : `Sector reference data (${sector.label}) is directional — override with primary diligence.`,
+    `Signal coverage: ~${round(signalCoverage * 100)}% of the score is backed by the plan's own disclosed metrics (${signals.fieldsFound} quantified field${signals.fieldsFound === 1 ? "" : "s"}); the remainder uses ${sector.label} sector priors — add financials to raise it.`,
     `Stage norms reflect US-market ${stage} deals; adjust for geography "${rawInput.geography || "US"}".`,
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions };
+  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags };
 }
 
 function buildStrategy(args: {

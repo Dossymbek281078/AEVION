@@ -90,7 +90,6 @@
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx\\)..\\($idx+25\\)] | ForEach-Object {Write-Host $_} })",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges &&\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx-3\\)..\\($idx+30\\)] | ForEach-Object {Write-Host \"$\\($lines.IndexOf\\($_\\) + 1\\):  $_\"} })",
       "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)",
-<<<<<<< Updated upstream
       "Bash(echo \"EXIT: $?\")",
       "Bash(echo \"TSC_EXIT: $?\")",
       "Bash(python -X utf8 -c ' *)",
@@ -110,8 +109,7 @@
       "Bash(npm -v)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(echo \"BUILD:$?\")",
-      "Bash(xargs -n1 basename)"
-=======
+      "Bash(xargs -n1 basename)",
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_take_screenshot",
@@ -133,8 +131,34 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 438 --squash --delete-branch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 438 --squash)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/paywall-402-ux)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)"
->>>>>>> Stashed changes
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)",
+      "Bash(python *)",
+      "Skill(update-config)",
+      "Bash(jq --version)",
+      "Bash(sed -E 's#[:/\\\\\\\\]+#-#g')",
+      "Bash(find /tmp -maxdepth 0 -mmin -10)",
+      "Bash(where railway *)",
+      "Bash(railway --version)",
+      "Bash(railway whoami *)",
+      "Bash(railway status *)",
+      "Bash(cp aevion-globus-backend/src/routes/qcoreai.ts /tmp_qcoreai_backup.ts)",
+      "Bash(cp aevion-globus-backend/src/routes/qcoreai.ts \"C:/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/qcoreai.realbackup.ts\")",
+      "Bash(cp \"C:/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/qcoreai.instrumented.ts\" aevion-globus-backend/src/routes/qcoreai.ts)",
+      "Bash(node_modules/.bin/tsc --version)",
+      "Bash(node_modules/.bin/tsc --noEmit --project aevion-globus-backend/tsconfig.json)",
+      "Bash(node_modules/typescript/bin/tsc --noEmit -p tsconfig.json)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(grep -B1 -A2 -- '^-  } catch {$')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(qcoreai,multichat\\): wire missing Sentry capture calls in uncovered catch blocks' --base main --head fix/qcoreai-multichat-sentry-gaps --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 624 --json additions,deletions,changedFiles,title,mergeable,mergeStateStatus)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 624 --patch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 624 --json mergeable,mergeStateStatus,statusCheckRollup)",
+      "Bash(echo \"tracked: $?\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 632 --json state,mergedAt)",
+      "Bash(chmod +x /c/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/audit.sh)",
+      "Bash(bash /c/Users/user/AppData/Local/Temp/claude/C--Users-user-aevion-build/6eff20ed-5438-4d3e-8d0f-fb7960d0fc65/scratchpad/audit.sh)",
+      "Bash(railway login *)",
+      "Bash(export RAILWAY_API_TOKEN=\"114b3b52-8c19-4fcd-80f9-0e8fc14b91e6\")"
     ]
   }
 }

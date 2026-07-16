@@ -110,6 +110,33 @@ function ownerEmail(req: Request): string {
   return req.auth?.email ?? "";
 }
 
+// Bank dashboard's Total Earnings widget (frontend/src/app/bank/_lib/ecosystem.ts)
+// only ever charted a per-account deterministic mock — banking was the lone
+// real source (computed client-side from qtrade operations), qright/chess/
+// planet were fabricated. `daily`/`recent`/`hasRealData` below let the
+// frontend chart the real ledgers instead, using the exact same 365-day
+// bucket + top-20-recent shape its own mock generator already produces, so
+// it can merge banking (still computed client-side) with real data here via
+// one shared aggregation helper rather than two divergent code paths.
+const EARNINGS_DAILY_WINDOW = 365;
+
+function dailyBuckets(): Map<string, { qright: number; chess: number; planet: number }> {
+  const map = new Map<string, { qright: number; chess: number; planet: number }>();
+  // Anchor at UTC midnight, not local midnight: event timestamps (paidAt /
+  // finalizedAt / certifiedAt) are ISO UTC, so bucketing by local calendar
+  // day would misfile events by a day on any server not running in UTC
+  // (this box runs UTC+5 — local-midnight-in-UTC-5 serialises to the
+  // *previous* UTC day, so every real event landed in a bucket that didn't
+  // exist).
+  const todayUtcMidnight = new Date();
+  todayUtcMidnight.setUTCHours(0, 0, 0, 0);
+  for (let i = EARNINGS_DAILY_WINDOW - 1; i >= 0; i--) {
+    const d = new Date(todayUtcMidnight.getTime() - i * 86_400_000);
+    map.set(d.toISOString().slice(0, 10), { qright: 0, chess: 0, planet: 0 });
+  }
+  return map;
+}
+
 ecosystemRouter.get("/earnings", (req, res) => {
   const email = ownerEmail(req);
   const r = royaltyEvents.filter((x) => x.email === email);
@@ -120,7 +147,49 @@ ecosystemRouter.get("/earnings", (req, res) => {
   const sumC = c.reduce((s, x) => s + x.amount, 0);
   const sumP = p.reduce((s, x) => s + x.amount, 0);
 
+  const buckets = dailyBuckets();
+  const addToDay = (iso: string, key: "qright" | "chess" | "planet", amount: number) => {
+    const bucket = buckets.get(iso.slice(0, 10));
+    if (bucket) bucket[key] += amount;
+  };
+  for (const x of r) addToDay(x.paidAt, "qright", x.amount);
+  for (const x of c) addToDay(x.finalizedAt, "chess", x.amount);
+  for (const x of p) addToDay(x.certifiedAt, "planet", x.amount);
+  const daily = [...buckets.entries()].map(([date, v]) => ({ date, ...v }));
+
+  const recent = [
+    ...r.map((x) => ({
+      id: `earn_r_${x.id}`,
+      source: "qright" as const,
+      amount: x.amount,
+      timestamp: x.paidAt,
+      title: `Royalty: ${x.productKey}`,
+      meta: `period ${x.period}`,
+    })),
+    ...c.map((x) => ({
+      id: `earn_c_${x.id}`,
+      source: "chess" as const,
+      amount: x.amount,
+      timestamp: x.finalizedAt,
+      title: `Tournament #${x.tournamentId}`,
+      meta: `place ${x.place}`,
+    })),
+    ...p.map((x) => ({
+      id: `earn_p_${x.id}`,
+      source: "planet" as const,
+      amount: x.amount,
+      timestamp: x.certifiedAt,
+      title: "Planet certificate",
+      meta: undefined as string | undefined,
+    })),
+  ]
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
+    .slice(0, 20);
+
   res.json({
+    hasRealData: r.length + c.length + p.length > 0,
+    daily,
+    recent,
     totals: {
       qright: Math.round(sumR * 100) / 100,
       cyberchess: Math.round(sumC * 100) / 100,

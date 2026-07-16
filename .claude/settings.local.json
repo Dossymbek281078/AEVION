@@ -171,7 +171,16 @@
       "Bash(curl -s http://127.0.0.1:4077/api/qtrade/accounts -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(curl -s http://127.0.0.1:4077/api/qright/royalties -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(curl -s http://127.0.0.1:4077/api/qtrade/operations -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
-      "Bash(curl -s -X POST http://127.0.0.1:4077/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-final-2\",\"email\":\"royalty-final-1784187550@example.com\",\"productKey\":\"song-final\",\"period\":\"2026-08\",\"amount\":10}')"
+      "Bash(curl -s -X POST http://127.0.0.1:4077/api/qright/royalties/verify-webhook -H 'Content-Type: application/json' -H 'X-QRight-Secret: dev-qright-webhook' -d '{\"eventId\":\"evt-final-2\",\"email\":\"royalty-final-1784187550@example.com\",\"productKey\":\"song-final\",\"period\":\"2026-08\",\"amount\":10}')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/qright-royalty-summary --title 'feat\\(qright,bank\\): royalty stream widget shows real payouts, not just demo' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 639)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 639 --squash --delete-branch)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(tee /tmp/be-tsc.log)",
+      "Bash(tee /tmp/fe-tsc2.log)",
+      "Bash(PORT=4099 npx ts-node-dev --respawn --transpile-only src/index.ts)",
+      "Bash(PORT=4111 npx ts-node-dev --respawn --transpile-only src/index.ts)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/ecosystem-earnings-real --title 'feat\\(ecosystem,bank\\): Total Earnings widget shows real qright/chess/planet data' --body ' *)"
     ]
   }
 }

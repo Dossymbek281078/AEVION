@@ -106,11 +106,10 @@ import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
 import { startupExchangeRouter } from "./routes/startupExchange";
 import { venturesRouter } from "./routes/ventures";
-import { qventureRouter } from "./routes/qventure";
-import { qskywayRouter } from "./routes/qskyway";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
-import { qeventsRouter } from "./routes/qevents";
+// qventure / qskyway / qevents routers are mounted via routes/moduleManifest.ts
+import { EXTRA_MOUNTS } from "./routes/moduleManifest";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
@@ -1085,6 +1084,15 @@ app.use("/api/deepsan", deepSanRouter);
 app.use("/api/qpersona", qpersonaRouter);
 app.use("/api/qlife", qlifeRouter);
 
+// Module route manifest (append-only — see routes/moduleManifest.ts). Mounted
+// BEFORE the planning stubs so dedicated module routers win over the generic
+// /api/<id> status stubs, matching the convention of the inline mounts above.
+// New modules add ONE entry to EXTRA_MOUNTS instead of editing this file.
+for (const m of EXTRA_MOUNTS) {
+  if (m.module) app.use(m.path, requireModule(m.module), m.router);
+  else app.use(m.path, m.router);
+}
+
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.
 // `/api/startup-exchange/listings`) take precedence and unknown paths
@@ -1121,10 +1129,7 @@ app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
 app.use("/api/ventures", venturesRouter);
-// QVenture — AI investment analyst: quant score + 4-role council + entry strategy
-app.use("/api/qventure", qventureRouter);
-// QSkyway — 3D-аэрокоридоры для аэротакси (движок A* по полю высот + рынок слотов QRight)
-app.use("/api/qskyway", qskywayRouter);
+// QVenture + QSkyway now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
 // Voice of Earth — multilang music tracks + voting
@@ -1135,8 +1140,7 @@ app.use("/api/qjobs", qjobsRouter);
 // QSocial → QBuild social layer. Canonical: /api/build/social, legacy: /api/qsocial
 app.use("/api/build/social", qsocialRouter);
 app.use("/api/qsocial", qsocialRouter);
-// QEvents — events platform (RSVP, create, attend)
-app.use("/api/qevents", qeventsRouter);
+// QEvents now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 
 // Revenue Hub — centralized monetization: Paddle + YouTube + Twitch per app
 app.use("/api/revenue", revenueRouter);

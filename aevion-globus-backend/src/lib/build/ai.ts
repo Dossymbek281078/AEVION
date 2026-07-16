@@ -96,7 +96,16 @@ async function callClaudeRaw(body: Record<string, unknown>): Promise<ClaudeReply
     error?: { message?: string };
   };
   const data = (await r.json()) as AnthropicResp;
-  if (!r.ok) throw new Error(data?.error?.message || `Anthropic ${r.status}`);
+  if (!r.ok) {
+    // Tag upstream Anthropic failures (429 rate-limit, 529 overloaded, 5xx) so
+    // callers can return a retryable 503 instead of a generic 500 that reads
+    // like an app bug.
+    const err = new Error(data?.error?.message || `Anthropic ${r.status}`) as
+      Error & { upstreamStatus?: number; upstream?: boolean };
+    err.upstreamStatus = r.status;
+    err.upstream = r.status === 429 || r.status === 529 || r.status >= 500;
+    throw err;
+  }
 
   const text = (data.content || [])
     .filter((p) => p.type === "text" && typeof p.text === "string")

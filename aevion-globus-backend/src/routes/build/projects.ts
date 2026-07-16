@@ -9,6 +9,7 @@ import {
   vNumber,
   vEnum,
   PROJECT_STATUSES,
+  excludeTestUsers,
 } from "../../lib/build";
 
 export const projectsRouter = Router();
@@ -71,6 +72,10 @@ projectsRouter.get("/", async (req, res) => {
       params.push(auth.sub);
       conds.push(`"clientId" = $${params.length}`);
     }
+    // Public listing hides smoke/E2E throwaway projects; "mine" still shows the
+    // owner their own rows (including a test user viewing their own).
+    const joinUser = mine ? "" : `JOIN "AEVIONUser" u ON u."id" = p."clientId"`;
+    if (!mine) conds.push(excludeTestUsers("u"));
     params.push(limit);
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
@@ -78,8 +83,9 @@ projectsRouter.get("/", async (req, res) => {
       `SELECT p.*,
               (SELECT COUNT(*) FROM "BuildVacancy" v WHERE v."projectId" = p."id")::int AS "vacancyCount"
        FROM "BuildProject" p
+       ${joinUser}
        ${where}
-       ORDER BY "createdAt" DESC
+       ORDER BY p."createdAt" DESC
        LIMIT $${params.length}`,
       params,
     );

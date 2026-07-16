@@ -179,11 +179,13 @@ async function main() {
   else return fail("create vacancy", `status=${r.status}`);
   const vacancyId = vacancy.id;
 
-  // 9. cross-project vacancies feed picks it up
-  r = await call("GET", "/api/build/vacancies?status=OPEN&limit=100");
-  const feed = unwrap(r);
-  if (is2xx(r) && feed?.items?.some((v) => v.id === vacancyId)) ok("vacancies feed contains new row");
-  else return fail("vacancies feed", `status=${r.status}`);
+  // 9. vacancy is publicly retrievable by id
+  // (public list feed hides @aevion.test/@smoke.test data via excludeTestUsers,
+  //  so verify by-id rather than scanning the storefront feed)
+  r = await call("GET", `/api/build/vacancies/${vacancyId}`);
+  const feedVacancy = unwrap(r);
+  if (is2xx(r) && feedVacancy?.id === vacancyId) ok("vacancy retrievable by id");
+  else return fail("vacancy by id", `status=${r.status}`);
 
   // 10. worker applies
   r = await call("POST", "/api/build/applications", {

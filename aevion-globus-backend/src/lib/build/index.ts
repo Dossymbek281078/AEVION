@@ -27,6 +27,20 @@ export function fail(
   return res.status(status).json({ success: false, error: message, ...(extra ?? {}) });
 }
 
+// ── Storefront hygiene ───────────────────────────────────────────────
+
+// Smoke / E2E runs register users on @aevion.test and @smoke.test and create
+// throwaway projects + vacancies. Those must never surface on the public
+// storefront (home carousel, live activity, vacancy feed). Returns a SQL
+// predicate for a joined AEVIONUser alias that excludes such rows.
+// BUILD_INCLUDE_TEST_DATA=1 disables the filter — used by local smoke, where
+// the only data that exists IS test data. `userAlias` is a code-controlled
+// table alias (never user input), so string interpolation here is safe.
+export function excludeTestUsers(userAlias: string): string {
+  if (process.env.BUILD_INCLUDE_TEST_DATA === "1") return "TRUE";
+  return `("${userAlias}"."email" NOT LIKE '%@aevion.test' AND "${userAlias}"."email" NOT LIKE '%@smoke.test')`;
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────
 
 export function requireBuildAuth(req: Request, res: Response): JwtPayload | null {

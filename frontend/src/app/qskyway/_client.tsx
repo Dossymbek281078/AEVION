@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { DataProvenanceChip } from "@/components/DataProvenanceChip";
+import type { DataQuality } from "@/lib/dataQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -10,7 +12,6 @@ import { apiUrl } from "@/lib/apiBase";
 // Честно: движок и доказательство концепции, не сертифицированное авиационное ПО.
 
 interface NoFly { id: string; name: string; kind: string; x: number; y: number; radiusM: number; }
-interface DataQuality { total: number; measured: number; derived: number; guessed: number; measuredPct: number; realPct: number; }
 interface CityData {
   city: string;
   meters: { w: number; h: number };
@@ -59,7 +60,7 @@ export default function QSkywayClient() {
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -171,6 +172,7 @@ export default function QSkywayClient() {
         nofly: city.nofly?.length ?? 0,
         heightPct: city.dataQuality?.measuredPct ?? 0,
         realPct: city.dataQuality?.realPct ?? 0,
+        dq: city.dataQuality,
       });
       setLoaded(true);
       newHero();
@@ -408,9 +410,7 @@ export default function QSkywayClient() {
                   <span>🌬 ветер {meta.wind}</span>
                   <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
                   <span style={{ color: "#2dd4bf" }}>🔏 Ed25519 · {meta.signed}…</span>
-                  <span title="Доля зданий с измеренной высотой (OSM height tag). Остальное выведено из этажности или угадано дефолтом 12 м; над такими борт летит с повышенным просветом. Апгрейд LiDAR/LOD2/3D Tiles снижает крейсер.">
-                    📐 высоты: <span style={{ color: meta.heightPct >= 60 ? "#2dd4bf" : meta.heightPct >= 25 ? "#fbbf24" : "#fb7185" }}>{meta.heightPct}% измерено</span>, {meta.realPct}% реальных
-                  </span>
+                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
                   <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
                 </div>
               )}

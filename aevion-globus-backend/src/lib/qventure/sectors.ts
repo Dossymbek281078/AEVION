@@ -7,8 +7,9 @@
  * moat archetype, and the live scientific/technological frontier that a
  * scientist-analyst would flag.
  *
- * `tamUsdBn` and `cagr` are anchored to recent (2024–2026) third-party market
- * research and each row carries the `sources` it was drawn from, so the market
+ * `tamUsdBn` and `cagr` are anchored to recent third-party market research
+ * (refreshed 2026-07 against the latest available reports) and each row carries
+ * the `sources` it was drawn from, so the market
  * factor is *cited*, not invented. Figures are the technology-addressable
  * market (what a startup can actually capture), taken at current (~2025) size;
  * where research firms disagree we use a representative mid-range and list the
@@ -63,24 +64,24 @@ export interface SectorProfile {
 export const SECTORS: Record<string, SectorProfile> = {
   fintech: {
     id: "fintech", label: "Fintech / Payments",
-    tamUsdBn: 340, cagr: 0.17, regulatoryIntensity: 0.85, capitalIntensity: 0.55,
+    tamUsdBn: 400, cagr: 0.16, regulatoryIntensity: 0.85, capitalIntensity: 0.55,
     grossMargin: 0.55, competitiveIntensity: 0.8, primaryMoat: "regulatory-license",
     scienceFrontier: "real-time risk ML, on-device fraud graphs, programmable stablecoin rails",
     structuralRisk: "rate-cycle sensitivity and licensing moats favoring incumbents",
     sources: [
-      { publisher: "Mordor Intelligence", year: 2025, claim: "Global fintech market ~$253–395B in 2025, ~16–18% CAGR to 2030", url: "https://www.mordorintelligence.com/industry-reports/global-fintech-market" },
-      { publisher: "Grand View Research", year: 2025, claim: "Fintech-as-a-Service to reach $949.5B by 2030 at 17.5% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/fintech-as-a-service-market-report" },
+      { publisher: "Polaris Market Research", year: 2026, claim: "Fintech ~$395.4B in 2025, ~16.3% CAGR 2026–2034", url: "https://www.polarismarketresearch.com/industry-analysis/fintech-market" },
+      { publisher: "Fortune Business Insights", year: 2026, claim: "Fintech $460.8B in 2026 → $1,760.2B by 2034 at 16.2% CAGR", url: "https://www.fortunebusinessinsights.com/fintech-market-108641" },
     ],
   },
   healthtech: {
     id: "healthtech", label: "Healthtech / Digital Health",
-    tamUsdBn: 200, cagr: 0.22, regulatoryIntensity: 0.9, capitalIntensity: 0.6,
+    tamUsdBn: 420, cagr: 0.23, regulatoryIntensity: 0.9, capitalIntensity: 0.6,
     grossMargin: 0.6, competitiveIntensity: 0.6, primaryMoat: "regulatory-license",
     scienceFrontier: "multimodal diagnostic models, FDA SaMD pathways, RWE evidence loops",
     structuralRisk: "reimbursement dependency and long clinical validation cycles",
     sources: [
-      { publisher: "Grand View Research", year: 2025, claim: "Digital health to reach $946.0B by 2030 at 22.2% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/digital-health-market" },
-      { publisher: "MarketsandMarkets", year: 2025, claim: "$199.1B in 2025 → $573.5B by 2030 at 23.6% CAGR", url: "https://www.marketsandmarkets.com/Market-Reports/digital-health-market-45458752.html" },
+      { publisher: "Grand View Research", year: 2026, claim: "Digital health $420.2B in 2026, 23.4% CAGR 2026–2033", url: "https://www.grandviewresearch.com/industry-analysis/digital-health-market" },
+      { publisher: "Fortune Business Insights", year: 2026, claim: "Digital health $491.6B in 2026 at 21.6% CAGR through 2034", url: "https://www.fortunebusinessinsights.com/industry-reports/digital-health-market-100227" },
     ],
   },
   biotech: {
@@ -101,30 +102,30 @@ export const SECTORS: Record<string, SectorProfile> = {
     scienceFrontier: "solid-state storage, long-duration storage chemistry, DAC cost curves",
     structuralRisk: "policy/subsidy dependence and commodity-linked margins",
     sources: [
-      { publisher: "Fortune Business Insights", year: 2025, claim: "Climate tech $31.2B in 2025 → $202.8B by 2034 at 23.8% CAGR", url: "https://www.fortunebusinessinsights.com/climate-tech-market-109849" },
-      { publisher: "Precedence Research", year: 2025, claim: "To ~$282B by 2035 at 24.4% CAGR", url: "https://www.precedenceresearch.com/climate-tech-market" },
+      { publisher: "Fortune Business Insights", year: 2026, claim: "Climate tech $39.1B in 2026 at 23.3% CAGR 2026–2034 (~$31–32B in 2025)", url: "https://www.fortunebusinessinsights.com/climate-tech-market-109849" },
+      { publisher: "Precedence Research", year: 2026, claim: "$39.6B in 2026 → $282.0B by 2035 at 24.4% CAGR", url: "https://www.precedenceresearch.com/climate-tech-market" },
     ],
   },
   ai_infra: {
     id: "ai_infra", label: "AI Infrastructure / Tooling",
-    tamUsdBn: 158, cagr: 0.24, regulatoryIntensity: 0.35, capitalIntensity: 0.7,
+    tamUsdBn: 190, cagr: 0.19, regulatoryIntensity: 0.35, capitalIntensity: 0.7,
     grossMargin: 0.65, competitiveIntensity: 0.9, primaryMoat: "data-scale",
     scienceFrontier: "inference cost curves, sparse/MoE architectures, eval + safety tooling",
     structuralRisk: "foundation-model commoditization compressing the middle layer",
     sources: [
-      { publisher: "BCC Research", year: 2025, claim: "AI infrastructure $158.3B in 2025 → $418.8B by 2030 at 21.5% CAGR", url: "https://www.bccresearch.com/market-research/artificial-intelligence-technology/ai-infrastructure-market.html" },
-      { publisher: "Grand View Research", year: 2025, claim: "To $223.4B by 2030 at 30.4% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/ai-infrastructure-market-report" },
+      { publisher: "MarketsandMarkets", year: 2026, claim: "AI infrastructure $135.8B (2024) → $394.5B by 2030 at 19.4% CAGR (~$190B in 2026)", url: "https://www.marketsandmarkets.com/Market-Reports/ai-infrastructure-market-38254348.html" },
+      { publisher: "Precedence Research", year: 2026, claim: "To reach $465.9B by 2034", url: "https://www.precedenceresearch.com/artificial-intelligence-infrastructure-market" },
     ],
   },
   ai_app: {
     id: "ai_app", label: "AI Applications (vertical SaaS)",
-    tamUsdBn: 45, cagr: 0.37, regulatoryIntensity: 0.4, capitalIntensity: 0.35,
+    tamUsdBn: 70, cagr: 0.36, regulatoryIntensity: 0.4, capitalIntensity: 0.35,
     grossMargin: 0.7, competitiveIntensity: 0.85, primaryMoat: "switching-costs",
     scienceFrontier: "agentic workflows, domain eval harnesses, retrieval + tool orchestration",
     structuralRisk: "thin wrapper risk — value must accrue above the model layer",
     sources: [
-      { publisher: "Grand View Research", year: 2025, claim: "Generative AI $22.2B in 2025, 37.6% CAGR to 2030", url: "https://www.grandviewresearch.com/industry-analysis/generative-ai-market-report" },
-      { publisher: "ABI Research", year: 2025, claim: "Gen-AI software $63B in 2025 → ~$220B by 2030 at ~29% CAGR", url: "https://www.abiresearch.com/blog/generative-ai-software-market-report-summary" },
+      { publisher: "Global Market Insights", year: 2026, claim: "Generative AI $83.3B in 2026 → $988.4B by 2035 at 31.6% CAGR", url: "https://www.gminsights.com/industry-analysis/generative-ai-market" },
+      { publisher: "Fortune Business Insights", year: 2026, claim: "Generative AI $161B in 2026 → $1,260.2B by 2034 at 39.6% CAGR", url: "https://www.fortunebusinessinsights.com/generative-ai-market-107837" },
     ],
   },
   saas: {
@@ -166,7 +167,7 @@ export const SECTORS: Record<string, SectorProfile> = {
     scienceFrontier: "adaptive tutoring, learning-science-backed retention, credentialing",
     structuralRisk: "engagement/retention cliffs and fragmented buyer budgets",
     sources: [
-      { publisher: "Grand View Research", year: 2025, claim: "EdTech $187.0B in 2025 → $437.5B by 2033 at 10.8% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/education-technology-market" },
+      { publisher: "Grand View Research", year: 2026, claim: "EdTech $187.0B (2025) → $213.2B in 2026 → $437.5B by 2033 at 10.8% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/education-technology-market" },
       { publisher: "MarketsandMarkets", year: 2025, claim: "$197.3B in 2025 → $353.1B by 2030 at 12.3% CAGR", url: "https://www.marketsandmarkets.com/Market-Reports/educational-technology-ed-tech-market-1066.html" },
     ],
   },
@@ -177,19 +178,19 @@ export const SECTORS: Record<string, SectorProfile> = {
     scienceFrontier: "AI-driven detection, post-quantum crypto migration, identity graphs",
     structuralRisk: "platform consolidation squeezing point solutions",
     sources: [
-      { publisher: "MarketsandMarkets", year: 2025, claim: "Cybersecurity $227.6B in 2025 → $351.9B by 2030 at 9.1% CAGR", url: "https://www.marketsandmarkets.com/Market-Reports/cyber-security-market-505.html" },
-      { publisher: "Grand View Research", year: 2025, claim: "$271.9B in 2025 → $663.2B by 2033 at 11.9% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/cyber-security-market" },
+      { publisher: "Grand View Research", year: 2026, claim: "Cybersecurity $271.9B (2025) → $302.0B in 2026 at 11.7% CAGR 2026–2033", url: "https://www.grandviewresearch.com/industry-analysis/cyber-security-market" },
+      { publisher: "Mordor Intelligence", year: 2026, claim: "~12.3% CAGR over 2026–2031", url: "https://www.mordorintelligence.com/industry-reports/cyber-security-market" },
     ],
   },
   logistics: {
     id: "logistics", label: "Logistics / Supply Chain",
-    tamUsdBn: 93, cagr: 0.13, regulatoryIntensity: 0.5, capitalIntensity: 0.8,
+    tamUsdBn: 72, cagr: 0.13, regulatoryIntensity: 0.5, capitalIntensity: 0.8,
     grossMargin: 0.35, competitiveIntensity: 0.7, primaryMoat: "economies-of-scale",
     scienceFrontier: "autonomy, route optimization, warehouse robotics + vision",
     structuralRisk: "asset heaviness and macro/freight-cycle exposure",
     sources: [
-      { publisher: "Grand View Research", year: 2025, claim: "Digital logistics $33.8B (2024) → $93.3B by 2030 at 18.8% CAGR", url: "https://www.grandviewresearch.com/horizon/outlook/digital-logistics-market-size/global" },
-      { publisher: "MarketsandMarkets", year: 2025, claim: "Supply-chain management market to $48.6B by 2030 at 11.4% CAGR", url: "https://www.marketsandmarkets.com/Market-Reports/supply-chain-management-market-190997554.html" },
+      { publisher: "Research and Markets", year: 2026, claim: "Digital supply-chain/logistics tech ~$72B in 2025 → $146.9B by 2031 (~12.6% CAGR)", url: "https://www.researchandmarkets.com/reports/4896677/digital-logistics-market-global-forecast-2026" },
+      { publisher: "Mordor Intelligence", year: 2026, claim: "Narrower digital logistics $55.6B in 2026 → $150.8B by 2031 at 22.1% CAGR", url: "https://www.mordorintelligence.com/industry-reports/digital-logistics-market" },
     ],
   },
   proptech: {
@@ -199,8 +200,8 @@ export const SECTORS: Record<string, SectorProfile> = {
     scienceFrontier: "valuation models, energy/DPE analytics, construction automation",
     structuralRisk: "rate sensitivity and balance-sheet-heavy transaction models",
     sources: [
-      { publisher: "Precedence Research", year: 2025, claim: "PropTech $40.2B in 2025 → $185.3B by 2035 (~15–16% CAGR)", url: "https://www.precedenceresearch.com/proptech-market" },
-      { publisher: "Grand View Research", year: 2025, claim: "Double-digit CAGR to 2030 driven by AI/IoT/VR adoption", url: "https://www.grandviewresearch.com/industry-analysis/proptech-market-report" },
+      { publisher: "Fortune Business Insights", year: 2026, claim: "PropTech $44.6B in 2026 (~$40B in 2025) at 11.2% CAGR through 2034", url: "https://www.fortunebusinessinsights.com/proptech-market-108634" },
+      { publisher: "Mordor Intelligence", year: 2026, claim: "$53.2B in 2026 at 17.8% CAGR through 2031", url: "https://www.mordorintelligence.com/industry-reports/proptech-market" },
     ],
   },
   space: {
@@ -225,24 +226,24 @@ export const SECTORS: Record<string, SectorProfile> = {
   },
   gaming: {
     id: "gaming", label: "Gaming / Interactive",
-    tamUsdBn: 300, cagr: 0.1, regulatoryIntensity: 0.4, capitalIntensity: 0.5,
+    tamUsdBn: 300, cagr: 0.06, regulatoryIntensity: 0.4, capitalIntensity: 0.5,
     grossMargin: 0.68, competitiveIntensity: 0.9, primaryMoat: "brand",
     scienceFrontier: "gen-AI content pipelines, procedural worlds, live-ops ML",
-    structuralRisk: "hit-driven revenue and rising production costs",
+    structuralRisk: "hit-driven revenue, rising production costs, and post-2024 growth deceleration to mid-single digits",
     sources: [
-      { publisher: "Grand View Research", year: 2025, claim: "Video games $322.6B in 2025 → $600.7B by 2030 at 12.2% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/video-game-market" },
-      { publisher: "Mordor Intelligence", year: 2025, claim: "$289.7B in 2025 → $593.4B by 2031 at 12.68% CAGR", url: "https://www.mordorintelligence.com/industry-reports/video-game-market" },
+      { publisher: "Newzoo", year: 2026, claim: "Global games market $201.6B in 2025 (+9.1% YoY) → ~$205B in 2026; forward growth mid-single digits", url: "https://gamedevreports.substack.com/p/newzoo-gaming-market-surpassed-200" },
+      { publisher: "Grand View Research", year: 2026, claim: "Video games (incl. hardware) $351.6B in 2026 → $498.0B by 2033 at 5.1% CAGR", url: "https://www.grandviewresearch.com/industry-analysis/video-game-market" },
     ],
   },
   agtech: {
     id: "agtech", label: "Agtech / Food",
-    tamUsdBn: 24, cagr: 0.12, regulatoryIntensity: 0.6, capitalIntensity: 0.7,
+    tamUsdBn: 35, cagr: 0.12, regulatoryIntensity: 0.6, capitalIntensity: 0.7,
     grossMargin: 0.4, competitiveIntensity: 0.55, primaryMoat: "ip-patents",
     scienceFrontier: "precision ag sensing, biologicals, alt-protein fermentation",
     structuralRisk: "commodity margins and long adoption cycles among growers",
     sources: [
-      { publisher: "Research and Markets", year: 2025, claim: "Agritech $24.4B (2024) → $48.98B by 2030 at 12.3% CAGR", url: "https://www.researchandmarkets.com/report/agricultural-technology" },
-      { publisher: "Mordor Intelligence", year: 2025, claim: "~11–15% CAGR through 2031; AI-in-ag CAGR ~28.5%", url: "https://www.mordorintelligence.com/industry-reports/global-agritech-market" },
+      { publisher: "The Business Research Company", year: 2026, claim: "Agritech $34.6B (2025) → $38.6B in 2026 at 11.5% CAGR", url: "https://www.thebusinessresearchcompany.com/report/agritech-global-market-report" },
+      { publisher: "Data Bridge Market Research", year: 2026, claim: "$31.5B in 2025 → $77.9B by 2033 at 13.4% CAGR", url: "https://www.databridgemarketresearch.com/reports/global-agritech-market" },
     ],
   },
   other: {

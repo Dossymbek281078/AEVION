@@ -600,7 +600,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       setFiles(listData.files || []);
-      showToast(`Generated ${newGenerated.length} file(s)`, "success");
+      if (data.aiGenerated === false) {
+        showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");
+      } else {
+        showToast(`Generated ${newGenerated.length} file(s)`, "success");
+      }
       setAiPrompt("");
     } catch (e: any) {
       showToast(e.message || "Generation failed", "error");

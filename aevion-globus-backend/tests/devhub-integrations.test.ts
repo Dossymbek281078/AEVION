@@ -16,12 +16,14 @@ vi.mock("../src/lib/ensureDevHubTables", () => ({
 
 // Mock AI providers so /generate doesn't hit real OpenAI in any side path
 vi.mock("../src/services/qcoreai/providers", () => ({
-  getProviders: () => [],
+  getProviders: vi.fn(() => []),
   callProvider: vi.fn(),
 }));
 
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+// eslint-disable-next-line import/first
+import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
 function makeApp() {
   const app = express();
@@ -43,6 +45,8 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  vi.mocked(getProviders).mockReturnValue([]);
+  vi.mocked(callProvider).mockReset();
   for (const key of [
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
     "BREVO_API_KEY", "PADDLE_API_KEY", "PADDLE_SANDBOX",
@@ -382,6 +386,56 @@ describe("Credit gating on metered routes", () => {
     expect(eleventh.status).toBe(402);
     expect(eleventh.body.error).toMatch(/deploy limit/);
     expect(eleventh.body.limit).toBe(10);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5c. AI code generation honesty — /generate must tell the caller when it
+//     silently fell back to a placeholder stub instead of real AI output
+//     (previously the response had no signal, and the UI showed a green
+//     "Generated N file(s)" success toast for a commented-out placeholder)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    expect(cr.status).toBe(201);
+    return cr.body.project.id as string;
+  }
+
+  test("aiGenerated: false + stub content when no provider is configured", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "a login form" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.aiGenerated).toBe(false);
+    expect(r.body.files[0].content).toMatch(/Generated stub for/);
+  });
+
+  test("aiGenerated: true when a provider is configured and responds", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any,
+    ]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "pages/index.tsx", content: "export default function Page() { return null; }", language: "typescript" }] }),
+      model: "gpt-4o-mini",
+      usage: {},
+    } as any);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "a login form" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.aiGenerated).toBe(true);
+    expect(r.body.files[0].path).toBe("pages/index.tsx");
   });
 });
 

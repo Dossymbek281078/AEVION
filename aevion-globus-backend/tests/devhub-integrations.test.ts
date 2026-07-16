@@ -451,6 +451,66 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     expect(r.body.aiGenerated).toBe(true);
     expect(r.body.files[0].path).toBe("pages/index.tsx");
   });
+
+  function mockProvider() {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any,
+    ]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "pages/login.tsx", content: "updated", language: "typescript" }] }),
+      model: "gpt-4o-mini",
+      usage: {},
+    } as any);
+  }
+
+  test("editing an existing targetFile includes its current content in the prompt", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app)
+      .put(`/api/devhub/projects/${projectId}/file`)
+      .send({ path: "pages/login.tsx", content: "export default function Login() { return <form />; }" });
+    mockProvider();
+
+    await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "add a forgot-password link", targetFile: "pages/login.tsx" });
+
+    const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
+    expect(userMsg).toContain("Current content of pages/login.tsx");
+    expect(userMsg).toContain("export default function Login()");
+    expect(userMsg).toContain("edit this file in place");
+  });
+
+  test("lists other project files by path even when targetFile is new (no content dump)", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app)
+      .put(`/api/devhub/projects/${projectId}/file`)
+      .send({ path: "lib/auth.ts", content: "SECRET_DO_NOT_LEAK" });
+    mockProvider();
+
+    await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "a signup page", targetFile: "pages/signup.tsx" });
+
+    const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
+    expect(userMsg).toContain("Existing project files");
+    expect(userMsg).toContain("- lib/auth.ts");
+    expect(userMsg).not.toContain("SECRET_DO_NOT_LEAK"); // only the targetFile's content is inlined, not unrelated files
+  });
+
+  test("fresh project with no files sends no file-context section", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    mockProvider();
+
+    await request(app)
+      .post(`/api/devhub/projects/${projectId}/generate`)
+      .send({ prompt: "a login form" });
+
+    const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
+    expect(userMsg).not.toContain("Existing project files");
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -860,6 +920,31 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     expect(r.body.results[0].type).toBe("code");
     expect(r.body.results[1].savedAs).toBe("public/hero.url.txt");
     expect(r.body.results[2].savedAs).toBe("public/welcome.mp3.b64");
+  });
+
+  test("a second code step sees the file the first code step just wrote", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any,
+    ]);
+    vi.mocked(callProvider)
+      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "lib/api.ts", content: "export function fetchUsers() {}", language: "typescript" }] }), model: "m", usage: {} } as any)
+      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "pages/users.tsx", content: "uses fetchUsers", language: "typescript" }] }), model: "m", usage: {} } as any);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({
+        steps: [
+          { type: "code", prompt: "an api helper", saveAs: "lib/api.ts" },
+          { type: "code", prompt: "a page that calls the api helper", saveAs: "pages/users.tsx" },
+        ],
+      });
+
+    expect(r.status).toBe(200);
+    expect(r.body.successCount).toBe(2);
+    const secondCallUserMsg = vi.mocked(callProvider).mock.calls[1][1][1].content as string;
+    expect(secondCallUserMsg).toContain("- lib/api.ts");
   });
 
   test("reports per-step errors without aborting workflow", async () => {

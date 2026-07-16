@@ -510,7 +510,31 @@ interface GeneratedCodeResult {
   aiGenerated: boolean; // false = no provider configured / call failed, caller got a placeholder stub
 }
 
-async function generateCodeWithAI(prompt: string, stack: string, targetFile?: string): Promise<GeneratedCodeResult> {
+/** Cap how much existing-project context rides in the prompt — enough for the
+ * model to fit in, not enough to blow the context budget on a big project. */
+const CONTEXT_MAX_FILES = 60;
+const CONTEXT_MAX_FILE_CHARS = 8000;
+
+/** Describe the project's existing files so generation edits in place / matches
+ * conventions instead of overwriting blind. Empty string for a fresh project. */
+function buildFileContext(existingFiles: Array<{ path: string; content: string }>, targetFile?: string): string {
+  if (existingFiles.length === 0) return "";
+  const paths = existingFiles.slice(0, CONTEXT_MAX_FILES).map((f) => `- ${f.path}`).join("\n");
+  const more = existingFiles.length > CONTEXT_MAX_FILES ? `\n- …and ${existingFiles.length - CONTEXT_MAX_FILES} more files` : "";
+  let ctx = `\n\nExisting project files (match their conventions — imports, style, naming):\n${paths}${more}`;
+  const current = targetFile ? existingFiles.find((f) => f.path === targetFile) : undefined;
+  if (current) {
+    ctx += `\n\nCurrent content of ${targetFile} — edit this file in place, preserving anything unrelated to the request:\n\`\`\`\n${current.content.slice(0, CONTEXT_MAX_FILE_CHARS)}\n\`\`\``;
+  }
+  return ctx;
+}
+
+async function generateCodeWithAI(
+  prompt: string,
+  stack: string,
+  targetFile?: string,
+  existingFiles: Array<{ path: string; content: string }> = []
+): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
   if (configured.length === 0) {
@@ -525,10 +549,10 @@ async function generateCodeWithAI(prompt: string, stack: string, targetFile?: st
   const provider = configured[0];
 
   const systemPrompt = targetFile
-    ? `You are an expert developer. Generate complete, working code for a single file. Return ONLY a JSON object: {"files": [{"path": "${targetFile}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
-    : `You are an expert developer. Generate complete, working code. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
+    ? `You are an expert developer. Generate complete, working code for a single file. When given the file's current content, edit it in place rather than starting over. Return ONLY a JSON object: {"files": [{"path": "${targetFile}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
+    : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.`;
+  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${buildFileContext(existingFiles, targetFile)}`;
 
   let result;
   try {
@@ -917,7 +941,8 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   }
   const resolvedStack = stack || project.stack;
   try {
-    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFile || undefined);
+    const existingFiles = await dbListFiles(project.id);
+    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFile || undefined, existingFiles);
     // Save each generated file
     for (const gf of generatedFiles) {
       const file: DevHubFile = {
@@ -2568,7 +2593,8 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
         const targetFile = step.saveAs ? String(step.saveAs) : undefined;
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile);
+        const existingFiles = await dbListFiles(project.id);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2808,7 +2834,8 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
         const targetFile = step.saveAs ? String(step.saveAs) : undefined;
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile);
+        const existingFiles = await dbListFiles(project.id);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,

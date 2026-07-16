@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, ren
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { degraded } from "../lib/degradedResponse";
 
 const capture = makeServiceCapture("provisioning");
 
@@ -159,7 +160,7 @@ interface EmailPayload {
   text: string;
 }
 
-export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string }> {
+export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string; degraded?: boolean; degradedReason?: string }> {
   if (!RESEND_KEY) {
     console.log(`[email/STUB] To: ${payload.to} | Subject: ${payload.subject}`);
     return { ok: true, mode: "stub" };
@@ -182,6 +183,15 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     const j = await r.json();
     if (!r.ok) {
       return { ok: false, mode: "real", error: j.message ?? `HTTP ${r.status}` };
+    }
+    if (!j.id) {
+      // Resend returned 2xx but no message id — not the documented success shape.
+      // Report it as ok (HTTP-level it was) but flag it so callers don't silently
+      // over-count "email sent" for a payment-confirmation email that may not
+      // actually have been queued.
+      const { degradedReason } = degraded("Resend returned 2xx with no message id — delivery not confirmed");
+      capture(new Error(`sendEmail degraded: ${degradedReason}`), { route: "provisioning/sendEmail", to: payload.to });
+      return { ok: true, mode: "real", degraded: true, degradedReason };
     }
     return { ok: true, mode: "real", id: j.id };
   } catch (e) {
@@ -281,7 +291,7 @@ export async function provisionSubscription(input: {
   stripeSessionId?: string;
   paddleTransactionId?: string;
   source?: string;
-}): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string }> {
+}): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
   const validityDays = trialDays > 0 ? trialDays : period === "annual" ? 365 : 30;
@@ -317,5 +327,6 @@ export async function provisionSubscription(input: {
     emailSent: result.ok,
     emailMode: result.mode,
     emailError: result.error,
+    emailDegraded: result.degraded,
   };
 }

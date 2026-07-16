@@ -11,6 +11,8 @@
  *   - Future transactional emails: welcome, upgrade confirmation, cert-issued
  */
 
+import { degraded } from "./degradedResponse";
+
 const BREVO_API = "https://api.brevo.com/v3";
 
 type BrevoRecipient = { email: string; name?: string };
@@ -28,6 +30,8 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
   ok: boolean;
   messageId?: string;
   error?: string;
+  degraded?: boolean;
+  degradedReason?: string;
 }> {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) {
@@ -62,6 +66,10 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
       return { ok: false, error: `Brevo HTTP ${r.status}: ${text.slice(0, 200)}` };
     }
     const j = await r.json() as { messageId?: string };
+    if (!j.messageId) {
+      const { degradedReason } = degraded("Brevo returned 2xx with no messageId — delivery not confirmed");
+      return { ok: true, degraded: true, degradedReason };
+    }
     return { ok: true, messageId: j.messageId };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "unknown" };
@@ -160,6 +168,8 @@ export async function sendWaitlistConfirm(email: string): Promise<void> {
   const result = await sendBrevoEmail(payload);
   if (!result.ok) {
     console.error("[Brevo] waitlist-confirm failed:", result.error);
+  } else if (result.degraded) {
+    console.warn(`[Brevo] waitlist-confirm degraded for ${email}: ${result.degradedReason}`);
   }
 }
 
@@ -167,18 +177,27 @@ export async function sendWeeklyDigestEmail(
   recipients: Array<{ email: string }>,
   topArtifacts: Array<{ title: string; regimeName: string; url: string; votes: number }>,
   weekOf: string,
-): Promise<{ sent: number; errors: number }> {
-  if (!recipients.length) return { sent: 0, errors: 0 };
+): Promise<{ sent: number; errors: number; degraded: number }> {
+  if (!recipients.length) return { sent: 0, errors: 0, degraded: 0 };
   // Brevo allows up to 50 recipients per send; batch if needed
   const BATCH = 50;
   let sent = 0;
   let errors = 0;
+  let degradedCount = 0;
   for (let i = 0; i < recipients.length; i += BATCH) {
     const batch = recipients.slice(i, i + BATCH);
     const payload = buildWeeklyDigestEmail(batch, topArtifacts, weekOf);
     const result = await sendBrevoEmail(payload);
-    if (result.ok) sent += batch.length;
-    else errors += batch.length;
+    if (!result.ok) {
+      errors += batch.length;
+    } else if (result.degraded) {
+      // Delivery not confirmed — don't count it as a clean "sent", but it did
+      // reach Brevo without an HTTP error, so it's not a hard failure either.
+      degradedCount += batch.length;
+      console.warn(`[Brevo] weekly-digest degraded for batch of ${batch.length}: ${result.degradedReason}`);
+    } else {
+      sent += batch.length;
+    }
   }
-  return { sent, errors };
+  return { sent, errors, degraded: degradedCount };
 }

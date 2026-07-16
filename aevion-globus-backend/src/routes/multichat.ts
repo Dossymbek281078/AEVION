@@ -416,11 +416,22 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           error: data?.error || `upstream ${r.status}`,
         };
       }
+      if (!data?.reply?.trim()) {
+        // /api/qcoreai/chat returned 200 with no (or blank) reply — a real
+        // failure the caller shouldn't render as a successful, silently-empty
+        // chat bubble.
+        return {
+          agentId,
+          role,
+          ok: false,
+          error: "empty reply from provider",
+        };
+      }
       return {
         agentId,
         role,
         ok: true,
-        reply: data?.reply ?? "",
+        reply: data.reply,
         provider: data?.provider ?? null,
         model: data?.model ?? null,
         usage: data?.usage ?? null,

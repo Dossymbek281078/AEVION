@@ -1081,6 +1081,24 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
         });
         const gqlData = await gqlResp.json() as any;
         const railwayDeploymentId = gqlData?.data?.deploymentCreate?.id as string | undefined;
+        const railwayErrors = Array.isArray(gqlData?.errors) ? gqlData.errors : null;
+
+        // GraphQL returns HTTP 200 even when the mutation itself failed — errors
+        // (or a missing deployment id) ride in the body, not the status code.
+        // Without this check a broken/expired Railway token or bad project/service
+        // id would still flip the deployment to "building" then "live" on a
+        // fabricated *.up.railway.app URL that never actually deployed anything.
+        if (!gqlResp.ok || railwayErrors || !railwayDeploymentId) {
+          const errMsg = railwayErrors?.map((e: any) => e?.message).filter(Boolean).join("; ")
+            || `Railway API returned no deployment id (HTTP ${gqlResp.status})`;
+          deployment.status = "failed";
+          deployment.buildLog = `Railway deploy failed: ${errMsg}`;
+          deployment.completedAt = now();
+          try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+          captureException(new Error(`Railway deploymentCreate failed: ${errMsg}`), { route: "devhub/deploy:railway", projectId: project!.id });
+          return;
+        }
+
         const railwayDeployUrl = `https://${deploySlug}.up.railway.app`;
 
         deployment.status = "building";

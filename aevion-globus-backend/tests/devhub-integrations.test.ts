@@ -49,6 +49,7 @@ afterEach(() => {
   vi.mocked(callProvider).mockReset();
   for (const key of [
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
+    "RAILWAY_API_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE_ID",
     "BREVO_API_KEY", "PADDLE_API_KEY", "PADDLE_SANDBOX",
     "LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
     "OPENAI_API_KEY",
@@ -400,6 +401,86 @@ describe("Credit gating on metered routes", () => {
     expect(eleventh.status).toBe(402);
     expect(eleventh.body.error).toMatch(/deploy limit/);
     expect(eleventh.body.limit).toBe(10);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5b2. Railway deploy honesty — GraphQL returns HTTP 200 even when the
+//      mutation itself failed (bad token, wrong project/service id); the
+//      deployment record must not silently flip to "live" on a fabricated
+//      *.up.railway.app URL that was never actually deployed.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    expect(cr.status).toBe(201);
+    return cr.body.project.id as string;
+  }
+
+  async function flushMicrotasks() {
+    // The Railway branch is a fire-and-forget async IIFE; the failure path
+    // resolves after one `await fetch(...)` + one `await r.json()`, well
+    // before the 5s "mark as live" timer, so a couple of ticks are enough.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  test("GraphQL 200-with-errors is reported as a failed deployment, not live", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.RAILWAY_PROJECT_ID = "proj";
+    process.env.RAILWAY_SERVICE_ID = "svc";
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: null,
+      errors: [{ message: "Not Authorized" }],
+    }));
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
+    expect(r.status).toBe(200);
+    expect(r.body.status).toBe("building"); // optimistic immediate response, unchanged
+
+    await flushMicrotasks();
+
+    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
+    const latest = list.body.deployments[0];
+    expect(latest.status).toBe("failed");
+    expect(latest.buildLog).toMatch(/Not Authorized/);
+  });
+
+  test("GraphQL 200 with no deploymentCreate.id is also a failure, not a fabricated live URL", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.RAILWAY_PROJECT_ID = "proj";
+    process.env.RAILWAY_SERVICE_ID = "svc";
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { data: {} })); // no deploymentCreate at all
+
+    await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
+    await flushMicrotasks();
+
+    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
+    expect(list.body.deployments[0].status).toBe("failed");
+  });
+
+  test("a real deploymentCreate.id still goes building (happy path unaffected)", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.RAILWAY_PROJECT_ID = "proj";
+    process.env.RAILWAY_SERVICE_ID = "svc";
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { data: { deploymentCreate: { id: "dep_ok", status: "QUEUED" } } }));
+
+    await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
+    await flushMicrotasks();
+
+    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
+    expect(list.body.deployments[0].status).toBe("building");
+    expect(list.body.deployments[0].deployUrl).toMatch(/\.up\.railway\.app$/);
   });
 });
 

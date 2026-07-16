@@ -163,7 +163,13 @@
       "Bash(railway link *)",
       "Bash(echo \"exit=$?\")",
       "Bash(railway variables *)",
-      "Bash(EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait)"
+      "Bash(EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait)",
+      "Bash(echo \"=== scenarioLabels diff exit: $? ===\")",
+      "Bash(echo \"=== scenarioBreakdowns diff exit: $? ===\")",
+      "Bash(echo \"=== ai/index diff exit: $? ===\")",
+      "Bash(EXPECT_ENFORCED=qfusionai,multichat-engine,healthai,qai,qlearn,qnews node aevion-globus-backend/scripts/paywall-policy-smoke.js --wait)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 654 --patch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29495744828 --job 87612156372 --log-failed)"
     ]
   }
 }

@@ -396,7 +396,21 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     const verdictColor = row.verdict === "invest" ? "#15803d" : row.verdict === "watch" ? "#b45309" : "#b91c1c";
     doc.fontSize(15).font("Helvetica-Bold").fillColor(verdictColor)
       .text(`Score ${row.composite}/100  —  ${row.verdict.toUpperCase()}  (conviction: ${s.conviction})`);
-    doc.moveDown(0.8);
+    doc.moveDown(0.4);
+
+    // Signal coverage + red flags (company-specific analysis)
+    if (typeof r.signalCoverage === "number") {
+      doc.fontSize(9).font("Helvetica").fillColor("#475569")
+        .text(`Signal coverage: ${Math.round(r.signalCoverage * 100)}% company-specific (${r.signals?.fieldsFound ?? 0} metrics parsed from the plan); remainder from sector priors.`, { width: W });
+      doc.moveDown(0.3);
+    }
+    if (r.redFlags && r.redFlags.length) {
+      doc.fontSize(12).font("Helvetica-Bold").fillColor("#b45309").text(`Red flags (${r.redFlags.length})`);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#78350f");
+      for (const f of r.redFlags) doc.text(`  (!) ${f}`, { width: W });
+      doc.moveDown(0.4);
+    }
+    doc.moveDown(0.4);
 
     // Investment memo
     doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Investment memo");
@@ -421,6 +435,33 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     doc.moveDown(0.2);
     doc.fillColor("#166534").text(`Portfolio: ${s.portfolioNote}`, { width: W });
     doc.moveDown(0.8);
+
+    // Bottom-up TAM triangulation
+    if (r.tam && r.tam.mode !== "insufficient") {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Bottom-up TAM triangulation");
+      doc.moveDown(0.2);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#475569");
+      for (const t of r.tam.triangulation) doc.text(`  • ${t}`, { width: W });
+      if (r.tam.flags.length) {
+        doc.fillColor("#b45309");
+        for (const f of r.tam.flags) doc.text(`  (!) ${f}`, { width: W });
+      }
+      doc.moveDown(0.7);
+    }
+
+    // Financial stress test
+    if (r.stress && r.stress.resilience !== "insufficient-data") {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a")
+        .text(`Financial stress test — resilience: ${r.stress.resilience.toUpperCase()}`);
+      doc.moveDown(0.2);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#334155")
+        .text(`Base LTV/CAC ${r.stress.base.ltvCac} -> worst-case ${r.stress.worstLtvCac} under combined CAC+churn shocks.`, { width: W });
+      for (const sc of r.stress.scenarios) {
+        doc.text(`  • ${sc.label}: LTV/CAC ${sc.ltvCac}${sc.paybackMonths !== null ? `, payback ${sc.paybackMonths}mo` : ""}`, { width: W });
+      }
+      doc.fillColor("#475569").text(r.stress.note, { width: W });
+      doc.moveDown(0.7);
+    }
 
     // Score breakdown
     doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Score breakdown");

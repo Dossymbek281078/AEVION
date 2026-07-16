@@ -43,6 +43,9 @@ export function SiteHeader() {
           <Link href="/explore" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#1a1205", background: "linear-gradient(135deg, #a9761f, #e6b24a)" }}>
             Explore
           </Link>
+          <Link href="/shop" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #059669, #10b981)" }}>
+            Shop
+          </Link>
           {[
             { href: "/auth", label: "Auth" },
             { href: "/qright", label: "QRight" },

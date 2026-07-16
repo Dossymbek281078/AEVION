@@ -947,9 +947,13 @@ export function assessOpenDepth(query: string): 1 | 2 {
     (q.match(/\b\d+[.)]\s+/g) || []).length >= 2 ||
     /(^|\n)\s*[-*•]\s+/m.test(q);
   const lines = q.split(/\n/).filter((l) => l.trim()).length;
-  // Multi-part cues that signal several distinct angles in one prompt.
+  // Multi-part cues that signal several distinct angles in one prompt. Includes
+  // the noun forms ("comparison", "difference(s) between") and "distinguish",
+  // which the verb list below misses — borderline eval (2026-07) showed genuinely
+  // two-part prompts like "explain the difference between X and Y, and describe …"
+  // slipping through as light.
   const multiPartCue =
-    /\b(compare|contrast|versus|vs\.?|pros and cons|trade-?offs?|step[-\s]?by[-\s]?step|as well as|and also|then explain|both|each of)\b/i.test(q);
+    /\b(compare|comparisons?|contrast|versus|vs\.?|pros and cons|trade-?offs?|differences? between|distinguish|step[-\s]?by[-\s]?step|as well as|and also|then explain|both|each of)\b/i.test(q);
   // Imperative task chain: 3+ distinct "do this" verbs in one prompt
   // ("summarize …, identify …, and propose …") signals several sub-asks even
   // without enumeration or an explicit compare cue.
@@ -958,6 +962,10 @@ export function assessOpenDepth(query: string): 1 | 2 {
       .map((v) => v.toLowerCase())
   );
   const imperativeChain = taskVerbs.size >= 3;
+  // Ranked-list ask ("the top five tools", "top 3 frameworks") — an implicit
+  // enumeration the numbered-marker check can't see. Only heavy when paired with
+  // a compare cue or enough length, so "top 3 tips" alone stays light.
+  const rankedList = /\btop\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(q);
   // "and"-joined asks ("do X and explain Y and weigh Z") — 2+ "and" hints breadth.
   const andJoins = (q.match(/\band\b/gi) || []).length;
 
@@ -967,8 +975,14 @@ export function assessOpenDepth(query: string): 1 | 2 {
     enumerated ||
     lines >= 3 ||
     imperativeChain ||
+    (rankedList && (multiPartCue || words >= 14)) ||
+    // An explicit compare cue plus a second distinct task verb = two real asks
+    // ("compare X vs Y, and explain the trade-offs") — deep regardless of length.
+    (multiPartCue && taskVerbs.size >= 2) ||
     (multiPartCue && words >= 18) ||
-    (andJoins >= 2 && words >= 28);
+    // Breadth by conjunction, but only when a task/compare signal backs it — bare
+    // narrative "and"s ("I like my job and my team, and I wonder …") stay light.
+    (andJoins >= 2 && words >= 28 && (multiPartCue || taskVerbs.size >= 2));
 
   return heavy ? 2 : 1;
 }

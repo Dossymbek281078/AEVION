@@ -133,7 +133,15 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/paywall-402-ux)",
       "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)",
       "PowerShell(node -e \"try { JSON.parse\\(require\\('fs'\\).readFileSync\\('C:/Users/user/aevion-core/.claude/settings.local.json','utf8'\\)\\); console.log\\('VALID'\\) } catch\\(e\\){ console.log\\('ERROR:', e.message\\) }\")",
-      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Size: $\\($bytes.Length\\) bytes\"; \"First 4 bytes \\(hex\\): $\\($bytes[0..3] | ForEach-Object { '{0:X2}' -f $_ }\\)\"; $text = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Trailing chars after last }: '$\\($text.Substring\\($text.LastIndexOf\\('}'\\) + 1\\)\\)'\")"
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Size: $\\($bytes.Length\\) bytes\"; \"First 4 bytes \\(hex\\): $\\($bytes[0..3] | ForEach-Object { '{0:X2}' -f $_ }\\)\"; $text = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Trailing chars after last }: '$\\($text.Substring\\($text.LastIndexOf\\('}'\\) + 1\\)\\)'\")",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr diff 477 --name-only)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr diff 476 --name-only)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr comment 477 --body '@dependabot rebase')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr comment 476 --body '@dependabot rebase')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr view 477 --json mergeable,mergeStateStatus,statusCheckRollup -q '{mergeable,mergeStateStatus,checks:[.statusCheckRollup[]|{name,conclusion,status}]}')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr view 476 --json mergeable,mergeStateStatus,statusCheckRollup -q '{mergeable,mergeStateStatus,checks:[.statusCheckRollup[]|{name,conclusion,status}]}')",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr merge 477 --squash --delete-branch)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr merge 476 --squash --delete-branch)"
     ]
   }
 }

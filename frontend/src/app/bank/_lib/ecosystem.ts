@@ -1,10 +1,18 @@
 // Aggregates earnings across AEVION modules (banking, QRight, CyberChess, Planet).
-// TODO backend: GET /api/ecosystem/earnings?accountId=... returning EcosystemEarningsSummary.
-// For now we synthesise deterministic mock per accountId and merge real banking ops.
+//
+// Backend status: GET /api/ecosystem/earnings returns real `daily`/`recent`
+// for qright/chess/planet (hasRealData flags whether any real events exist)
+// — see aevion-globus-backend/src/routes/ecosystem.ts. Banking is always
+// real, computed here from the caller's own qtrade operations (never came
+// from a mock). fetchEcosystemEarnings merges the two; when the backend has
+// no real qright/chess/planet events yet it falls back to the full
+// deterministic demo generator instead of a real-banking/fake-rest blend, so
+// the widget never mixes one real source with three fabricated ones.
 
 import { CHESS_TOURNAMENT_NAMES, PLANET_TASKS, QRIGHT_FLAT_WORKS } from "./mockCatalog";
 import { pick, seeded } from "./random";
 import type { Operation } from "./types";
+import { apiUrl } from "@/lib/apiBase";
 
 export type EarningSource = "banking" | "qright" | "chess" | "planet";
 
@@ -37,6 +45,8 @@ export type EcosystemEarningsSummary = {
   perSource: Record<EarningSource, SourceTotals>;
   daily: DailyPoint[];
   recent: EarningEvent[];
+  /** True when qright/chess/planet came from real ledgers, not the demo generator. Banking is always real. */
+  isLive: boolean;
 };
 
 export const SOURCE_COLOR: Record<EarningSource, string> = {
@@ -90,16 +100,60 @@ function bankingOnDate(ops: Operation[], accountId: string, dateStr: string): nu
   return s;
 }
 
+// Real banking events, shared by both the mock path and the real-data path —
+// banking is always real (qtrade operations), never fabricated.
+function bankingRecent(ops: Operation[], accountId: string): EarningEvent[] {
+  const out: EarningEvent[] = [];
+  for (const op of ops) {
+    if (op.to !== accountId) continue;
+    const t = new Date(op.createdAt).getTime();
+    if (!Number.isFinite(t) || Date.now() - t >= 30 * 86_400_000) continue;
+    out.push({
+      id: `bk_${op.id}`,
+      source: "banking",
+      amount: op.amount,
+      timestamp: op.createdAt,
+      title: op.kind === "topup" ? "Wallet top-up" : "Incoming transfer",
+      meta: op.from ?? undefined,
+    });
+  }
+  return out;
+}
+
+// Shared by both the demo generator and the real-data path: derives
+// perSource / totalAec purely from a completed `daily` series, so real and
+// mock data are aggregated identically.
+function aggregateFromDaily(daily: DailyPoint[]): { totalAec: number; perSource: Record<EarningSource, SourceTotals> } {
+  const sumKey = (k: EarningSource, n: number): number => {
+    let s = 0;
+    for (const p of daily.slice(-n)) s += p[k];
+    return s;
+  };
+  const days = daily.length;
+  const perSource = Object.fromEntries(
+    (["banking", "qright", "chess", "planet"] as EarningSource[]).map((src) => [
+      src,
+      { total: sumKey(src, days), last30d: sumKey(src, 30), last90d: sumKey(src, 90), last365d: sumKey(src, 365) },
+    ]),
+  ) as Record<EarningSource, SourceTotals>;
+  const totalAec = perSource.banking.total + perSource.qright.total + perSource.chess.total + perSource.planet.total;
+  return { totalAec, perSource };
+}
+
 function generateMock(accountId: string, ops: Operation[]): EcosystemEarningsSummary {
   const rand = seeded(accountId);
+  // UTC-midnight anchor, not local midnight — bankingOnDate compares against
+  // real op.createdAt (ISO UTC), so a local-timezone anchor would misfile
+  // real banking ops by a day on any non-UTC server/browser.
   const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
   const days = 365;
 
   const daily: DailyPoint[] = [];
   const recent: EarningEvent[] = [];
 
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const d = new Date(today.getTime() - i * 86_400_000);
     const ds = dateKey(d);
 
     let qright = 0;
@@ -155,52 +209,66 @@ function generateMock(accountId: string, ops: Operation[]): EcosystemEarningsSum
     daily.push({ date: ds, banking, qright, chess, planet });
   }
 
-  for (const op of ops) {
-    if (op.to === accountId) {
-      const t = new Date(op.createdAt).getTime();
-      if (Number.isFinite(t) && Date.now() - t < 30 * 86_400_000) {
-        recent.push({
-          id: `bk_${op.id}`,
-          source: "banking",
-          amount: op.amount,
-          timestamp: op.createdAt,
-          title: op.kind === "topup" ? "Wallet top-up" : "Incoming transfer",
-          meta: op.from ?? undefined,
-        });
-      }
-    }
-  }
-
+  recent.push(...bankingRecent(ops, accountId));
   recent.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const recentTrimmed = recent.slice(0, 20);
 
-  const sumKey = (k: keyof DailyPoint, n: number): number => {
-    if (k === "date") return 0;
-    let s = 0;
-    for (const p of daily.slice(-n)) s += (p[k] as number);
-    return s;
-  };
+  return { ...aggregateFromDaily(daily), daily, recent: recentTrimmed, isLive: false };
+}
 
-  const perSource: Record<EarningSource, SourceTotals> = {
-    banking: { total: sumKey("banking", days), last30d: sumKey("banking", 30), last90d: sumKey("banking", 90), last365d: sumKey("banking", 365) },
-    qright:  { total: sumKey("qright",  days), last30d: sumKey("qright",  30), last90d: sumKey("qright",  90), last365d: sumKey("qright",  365) },
-    chess:   { total: sumKey("chess",   days), last30d: sumKey("chess",   30), last90d: sumKey("chess",   90), last365d: sumKey("chess",   365) },
-    planet:  { total: sumKey("planet",  days), last30d: sumKey("planet",  30), last90d: sumKey("planet",  90), last365d: sumKey("planet",  365) },
-  };
+const TOKEN_KEY = "aevion_auth_token_v1";
 
-  const totalAec = perSource.banking.total + perSource.qright.total + perSource.chess.total + perSource.planet.total;
+function authHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const t = localStorage.getItem(TOKEN_KEY);
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
 
-  return { totalAec, perSource, daily, recent: recentTrimmed };
+type RealEarningsResponse = {
+  hasRealData: boolean;
+  daily: { date: string; qright: number; chess: number; planet: number }[];
+  recent: { id: string; source: "qright" | "chess" | "planet"; amount: number; timestamp: string; title: string; meta?: string }[];
+};
+
+async function fetchRealEarnings(): Promise<RealEarningsResponse | null> {
+  const headers = authHeaders();
+  if (!headers.Authorization) return null;
+  try {
+    const r = await fetch(apiUrl("/api/ecosystem/earnings"), { headers, cache: "no-store" });
+    if (!r.ok) return null;
+    return (await r.json()) as RealEarningsResponse;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchEcosystemEarnings(params: {
   accountId: string;
   operations: Operation[];
 }): Promise<EcosystemEarningsSummary> {
-  // TODO backend: replace with real GET /api/ecosystem/earnings?accountId=...
-  // Currently synthesised: banking is real (from qtrade ops), other sources are
-  // seeded mock until QRight/CyberChess/Planet expose earnings endpoints.
-  return generateMock(params.accountId, params.operations);
+  const { accountId, operations: ops } = params;
+  const real = await fetchRealEarnings();
+  if (real && real.hasRealData) {
+    // Real qright/chess/planet daily buckets from the backend, banking daily
+    // computed here from the caller's own qtrade operations (always real,
+    // same source the demo path uses).
+    const daily: DailyPoint[] = real.daily.map((d) => ({
+      date: d.date,
+      banking: bankingOnDate(ops, accountId, d.date),
+      qright: d.qright,
+      chess: d.chess,
+      planet: d.planet,
+    }));
+    const recent = [...real.recent, ...bankingRecent(ops, accountId)]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 20);
+    return { ...aggregateFromDaily(daily), daily, recent, isLive: true };
+  }
+  return generateMock(accountId, ops);
 }
 
 export function periodTotals(

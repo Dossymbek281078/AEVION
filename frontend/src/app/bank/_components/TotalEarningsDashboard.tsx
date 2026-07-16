@@ -112,11 +112,13 @@ export function TotalEarningsDashboard() {
               <span>{t("te.title")}</span>
             </InfoTooltip>
             <StatusPill
-              kind={probe.alive ? "live" : "partial"}
+              kind={summary?.isLive ? "live" : probe.alive ? "partial" : "mock"}
               reason={
-                probe.alive
-                  ? `Banking stream live + /api/ecosystem/earnings live (${probe.count ?? 0} sources tracked). Seeded data fills the gap until QRight / CyberChess / Planet webhooks populate the ledger.`
-                  : "Banking stream is live (real qtrade operations). QRight / CyberChess / Planet streams use seeded ecosystem data until /api/ecosystem/earnings exists."
+                summary?.isLive
+                  ? "Banking + QRight/CyberChess/Planet all real — sourced from qtrade operations and the ecosystem ledger."
+                  : probe.alive
+                    ? "Banking stream is live (real qtrade operations). QRight / CyberChess / Planet show seeded demo data until you have real events on those ledgers."
+                    : "Awaiting auth / /api/ecosystem/earnings. Non-banking streams are simulated."
               }
             />
           </h2>

@@ -8,6 +8,7 @@ import { VacancyCard } from "@/components/build/VacancyCard";
 import { VacancySkeleton } from "@/components/build/Skeleton";
 import { CompareToggleButton } from "@/components/build/CompareToggleButton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
+import { formatSalary } from "@/lib/build/format";
 import { getRecentVacancies, clearRecentVacancies, type RecentVacancy } from "@/lib/build/recentlyViewed";
 
 const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
@@ -96,13 +97,26 @@ function VacanciesFeedInner() {
 
   const stats = useMemo(() => {
     const openItems = items.filter((v) => v.status === "OPEN");
-    const totalSalary = openItems.reduce((s, v) => s + (v.salary || 0), 0);
-    const avgSalary = openItems.length ? Math.round(totalSalary / openItems.length) : 0;
+    const paid = openItems.filter((v) => (v.salary || 0) > 0);
+    const totalSalary = paid.reduce((s, v) => s + (v.salary || 0), 0);
+    const avgSalary = paid.length ? Math.round(totalSalary / paid.length) : 0;
     const cities = new Set(items.map((v) => v.projectCity).filter(Boolean) as string[]);
+    // Salaries can be posted in mixed currencies; averaging them under a single
+    // hardcoded "$" was wrong (e.g. showed "$3 661" for ₽-only vacancies). Label
+    // the average with the currency the paid vacancies actually most use.
+    const curCounts = new Map<string, number>();
+    for (const v of paid) {
+      const c = v.salaryCurrency || "RUB";
+      curCounts.set(c, (curCounts.get(c) || 0) + 1);
+    }
+    let avgCurrency = "RUB";
+    let best = -1;
+    for (const [c, n] of curCounts) if (n > best) { best = n; avgCurrency = c; }
     return {
       total: items.length,
       open: openItems.length,
       avgSalary,
+      avgCurrency,
       cities: cities.size,
     };
   }, [items]);
@@ -159,7 +173,7 @@ function VacanciesFeedInner() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Listed" value={stats.total} />
         <Stat label="Open" value={stats.open} tone="emerald" />
-        <Stat label="Avg salary" value={stats.avgSalary > 0 ? `$${stats.avgSalary.toLocaleString()}` : "—"} />
+        <Stat label="Avg salary" value={stats.avgSalary > 0 ? formatSalary(stats.avgSalary, stats.avgCurrency) : "—"} />
         <Stat label="Cities" value={stats.cities} />
       </div>
 
@@ -210,7 +224,7 @@ function VacanciesFeedInner() {
           className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
           title="Salary currency"
         >
-          <option value="">Any ¤</option>
+          <option value="">Any currency</option>
           <option value="USD">USD</option>
           <option value="RUB">RUB</option>
           <option value="KZT">KZT</option>
@@ -313,14 +327,17 @@ function VacanciesFeedInner() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((v) => (
-            <div key={v.id} className="relative">
-              <VacancyCard vacancy={v} showProject hot={hotIds.has(v.id)} />
-              <div className="absolute bottom-2 right-2">
+            <VacancyCard
+              key={v.id}
+              vacancy={v}
+              showProject
+              hot={hotIds.has(v.id)}
+              footerAction={
                 <CompareToggleButton
                   entry={{ id: v.id, title: v.title, salary: v.salary, city: v.city ?? null }}
                 />
-              </div>
-            </div>
+              }
+            />
           ))}
         </div>
       )}
@@ -390,7 +407,7 @@ function RecentlyViewedRow() {
               {v.title}
             </div>
             <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
-              {v.salary > 0 && <span className="text-emerald-300">${v.salary.toLocaleString()}</span>}
+              {v.salary > 0 && <span className="text-emerald-300">{formatSalary(v.salary)}</span>}
               {v.city && <span>📍 {v.city}</span>}
             </div>
           </Link>

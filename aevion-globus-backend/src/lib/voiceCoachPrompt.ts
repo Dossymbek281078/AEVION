@@ -60,6 +60,8 @@ export interface LLMOptions {
   timeoutMs?: number;
   /** Optional abort signal (combined with the internal timeout). */
   signal?: AbortSignal;
+  /** Output token budget (default 220 — sized for 1-2 sentence move commentary; answerQuestion overrides this, see below). */
+  maxTokens?: number;
 }
 
 const pieceNameRu: Record<string, string> = {
@@ -363,7 +365,11 @@ async function callQCoreAIChat(
       body: JSON.stringify({
         model: opts.model,
         temperature: opts.temperature ?? 0.5,
-        max_tokens: 220,
+        // Default (220) fits buildCommentLLM's 1-2 sentence per-move remark.
+        // answerQuestion (GM-разбор — full position analysis: eval + ideas +
+        // plans for both sides + what to play next) asks for far more room —
+        // it used to share this same 220 cap and get truncated mid-thought.
+        max_tokens: opts.maxTokens ?? 220,
         messages,
       }),
       signal: timeoutSignal,
@@ -547,7 +553,11 @@ export async function answerQuestion(
     content: `${contextBlock}Вопрос игрока: ${q}`,
   });
 
-  return callQCoreAIChat(messages, { ...opts, temperature: opts.temperature ?? 0.55 });
+  return callQCoreAIChat(messages, {
+    ...opts,
+    temperature: opts.temperature ?? 0.55,
+    maxTokens: opts.maxTokens ?? 900,
+  });
 }
 
 // Exposed so the route layer can avoid duplicating signature joining etc.

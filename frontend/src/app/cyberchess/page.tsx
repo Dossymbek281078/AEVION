@@ -827,6 +827,77 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
   );
 }
 
+/* ═══ AI Game Review — whole-game post-mortem ═══
+   The "🤖 Разбор от тренера" button used to send 30 plain-SAN moves with no
+   FEN, no engine lines, no system prompt to the generic QCoreAI one-shot
+   (2-3 sentences, capped hard). Meanwhile the in-game AI Coach (AiCoach.tsx)
+   already builds a rich per-move engine report for live play. The postgame
+   `analysis[]` array (populated by runAnalysis / the silent auto-analysis
+   effect) carries the exact same ingredients — per-ply quality, cpLoss, and
+   the engine's best alternative — just for the whole game instead of one
+   position. This wires it into the SAME dedicated coach.ts Anthropic proxy
+   AiCoach.tsx uses (proper system prompt, real token budget), instead of
+   the bare qcoreai passthrough. */
+const SYSTEM_GAME_REVIEW = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION (тот же тренер, что ведёт живой разбор партий). Сейчас партия ЗАКОНЧЕНА — ученик просит послематчевый разбор целиком, как тренер даёт после турнирной партии: не позиция за позицией, а история — что решило исход, где сломался план, что учить дальше.
+
+═══ ИСТОЧНИК ИСТИНЫ ═══
+Тебе присылают список ходов партии + для каждого хода ученика с оценкой "Ошибка"/"Зевок" — просадку в пешках и лучшую альтернативу движка (когда она известна). Это твоя единственная опора по конкретике: не выдумывай ходы или варианты, которых там нет. Если лучшая альтернатива не дана — не придумывай её, говори про идею словами ("нужно было укрепить пункт d5"), не про конкретный ход.
+
+═══ ЧТО НУЖНО ═══
+1. **Переломный момент**: назови ОДИН ход, который реально решил партию (обычно первый крупный зевок/ошибка, если после него оценка не восстановилась) — не перечисляй все ошибки одинаково, вычлени главную.
+2. **Почему, а не только что**: не "ты зевнул фигуру на 14 ходу" — а "на 14-м ходу ты разменял активного слона, и после этого у соперника не осталось слабостей для игры" — причина, а не констатация.
+3. **Стадийная картина**: если знаешь дебют/структуру/слабости ученика (даны в контексте) — свяжи с ними: "это уже третья партия, где ты теряешь нить после дебюта" звучит как тренер, который следит за учеником, а не разбирает партию в вакууме.
+4. **Что делать дальше**: 1-2 конкретных совета, привязанных к найденной причине, а не общие ("играй аккуратнее").
+
+═══ ТОН ═══
+- Русский, живой, как тренер за столом — не отчёт, не таблица.
+- Конкретика: цифры оценки, названия ходов алгебраикой (Кf3, Фxf7+).
+- Если партия выиграна чисто (мало ошибок) — не выдумывай драму, скажи это честно и похвали за что конкретно.
+- 4-6 предложений, 1-2 абзаца. Без "надеюсь это поможет", без дисклеймеров.
+
+═══ НЕЛЬЗЯ ═══
+- Придумывать ходы или оценки, которых нет в присланных данных.
+- Перечислять ошибки списком без выделения главной.
+- Общие фразы уровня "играй активнее" без привязки к конкретному моменту этой партии.`;
+
+function buildGameReviewPrompt(args: {
+  hist: string[];
+  analysis: { move: number; cp: number; mate: number; quality: string; cpLoss: number; best?: string }[];
+  pCol: "w" | "b";
+  result: string; // over string, e.g. "Мат! Вы победили"
+  openingName?: string;
+  weaknesses?: string;
+}): string {
+  const { hist, analysis, pCol, result, openingName, weaknesses } = args;
+  const movesStr = hist.map((m, i) => (i % 2 === 0 ? `${Math.floor(i / 2) + 1}.${m}` : m)).join(" ");
+  const userIsWhite = pCol === "w";
+  // analysis[i] describes the quality of hist[i] — see runAnalysis() / the
+  // "ПЕРЕИГРАТЬ ОШИБКИ" block above for the same indexing convention.
+  const myMoments = analysis
+    .map((a, i) => ({ a, i }))
+    .filter(({ i }) => userIsWhite ? i % 2 === 0 : i % 2 === 1)
+    .filter(({ a }) => a.quality === "blunder" || a.quality === "mistake" || a.quality === "brilliant")
+    .map(({ a, i }) => {
+      const moveNum = Math.floor(i / 2) + 1;
+      const san = hist[i];
+      const label = a.quality === "brilliant" ? "Отличный ход" : a.quality === "blunder" ? "Зевок" : "Ошибка";
+      const swing = `${a.cpLoss > 0 ? "-" : ""}${(Math.abs(a.cpLoss) / 100).toFixed(1)}`;
+      const alt = a.best ? `, лучше было: ${a.best}` : "";
+      return `${moveNum}${userIsWhite ? "." : "..."}${san} — ${label} (${swing}${alt})`;
+    });
+  const lines = [
+    `Партия целиком: ${movesStr}`,
+    `Ученик играл ${userIsWhite ? "белыми" : "чёрными"}. Результат: ${result}.`,
+    openingName ? `Дебют: ${openingName}.` : "",
+    myMoments.length > 0
+      ? `Ключевые моменты ученика (не все ходы — только значимые):\n${myMoments.join("\n")}`
+      : "Заметных ошибок/зевков у ученика в этой партии не найдено (или разбор ходов ещё не считался).",
+    weaknesses ? `Известные повторяющиеся слабости ученика по истории партий: ${weaknesses}` : "",
+    "Дай послематчевый разбор по правилам своей роли.",
+  ];
+  return lines.filter(Boolean).join("\n\n");
+}
+
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
@@ -14155,12 +14226,26 @@ ${question.trim()}`;
                 {!aiReview.text&&!aiReview.loading&&<button onClick={async()=>{
                   sAiReview({text:"",loading:true});
                   try{
-                    const myBlunders=analysis.filter((a,i)=>(pCol==="w"?i%2===0:i%2===1)&&(a.quality==="blunder"||a.quality==="mistake"));
-                    const moves=hist.slice(0,30).join(" ");
-                    const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((a)=>Math.floor((a.move-1)/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
-                    const res=await fetch("/api-backend/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
+                    const prompt=buildGameReviewPrompt({
+                      hist,analysis,pCol,result:over||"",
+                      openingName:currentOpening?`${currentOpening.name}${currentOpening.eco?` (${currentOpening.eco})`:""}`:undefined,
+                      weaknesses:coachWeaknessSummary||undefined,
+                    });
+                    const ctrl=new AbortController();
+                    const timeoutId=setTimeout(()=>ctrl.abort(),30000);
+                    let res:Response;
+                    try{
+                      res=await fetch("/api-backend/api/coach/chat",{
+                        method:"POST",headers:{"Content-Type":"application/json"},
+                        body:JSON.stringify({system:SYSTEM_GAME_REVIEW,messages:[{role:"user",content:prompt}],maxTokens:900}),
+                        signal:ctrl.signal,
+                      });
+                    }finally{clearTimeout(timeoutId);}
                     const d=await res.json().catch(()=>null);
-                    sAiReview({text:d?.reply||"Тренер не отвечает — попробуй позже.",loading:false});
+                    const text=Array.isArray(d?.content)
+                      ?d.content.filter((c:any)=>c?.type==="text"||c?.text).map((c:any)=>c.text||"").join("")
+                      :"";
+                    sAiReview({text:text||"Тренер не отвечает — попробуй позже.",loading:false});
                   }catch{sAiReview({text:"Тренер недоступен.",loading:false});}
                 }} style={{
                   width:"100%",padding:"8px 0",borderRadius:8,border:"1px solid rgba(124,58,237,0.4)",

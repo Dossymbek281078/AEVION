@@ -31,5 +31,6 @@ export type PlanetCert = {
   artifactVersionId: string;
   amount: number;
   certifiedAt: string;
+  transferId: string | null;
   source: "planet";
 };

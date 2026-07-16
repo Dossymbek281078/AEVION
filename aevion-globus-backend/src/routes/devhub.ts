@@ -504,14 +504,22 @@ const TEMPLATES = [
 ];
 
 // ── AI code generation helper ─────────────────────────────────────────────────
-async function generateCodeWithAI(prompt: string, stack: string, targetFile?: string): Promise<Array<{ path: string; content: string; language: string }>> {
+interface GeneratedCodeResult {
+  files: Array<{ path: string; content: string; language: string }>;
+  aiGenerated: boolean; // false = no provider configured / call failed, caller got a placeholder stub
+}
+
+async function generateCodeWithAI(prompt: string, stack: string, targetFile?: string): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
   if (configured.length === 0) {
     // Fallback — return a stub file
     const path = targetFile || (stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html");
     const language = detectLanguage(path);
-    return [{ path, content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`, language }];
+    return {
+      files: [{ path, content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`, language }],
+      aiGenerated: false,
+    };
   }
   const provider = configured[0];
 
@@ -534,7 +542,10 @@ async function generateCodeWithAI(prompt: string, stack: string, targetFile?: st
     );
   } catch {
     const path = targetFile || "generated.ts";
-    return [{ path, content: `// AI generation failed — configure a provider\n// Prompt: ${prompt}\n`, language: detectLanguage(path) }];
+    return {
+      files: [{ path, content: `// AI generation failed — configure a provider\n// Prompt: ${prompt}\n`, language: detectLanguage(path) }],
+      aiGenerated: false,
+    };
   }
 
   let files: Array<{ path: string; content: string; language: string }> = [];
@@ -553,7 +564,7 @@ async function generateCodeWithAI(prompt: string, stack: string, targetFile?: st
     const path = targetFile || "output.ts";
     files = [{ path, content: result.reply, language: detectLanguage(path) }];
   }
-  return files;
+  return { files, aiGenerated: true };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -905,7 +916,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   }
   const resolvedStack = stack || project.stack;
   try {
-    const generatedFiles = await generateCodeWithAI(prompt, resolvedStack, targetFile || undefined);
+    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFile || undefined);
     // Save each generated file
     for (const gf of generatedFiles) {
       const file: DevHubFile = {
@@ -929,7 +940,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
         }
       }
     }
-    res.json({ files: generatedFiles, projectId: project.id });
+    res.json({ files: generatedFiles, aiGenerated, projectId: project.id });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "generation failed" });
   }
@@ -2552,7 +2563,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
         const targetFile = step.saveAs ? String(step.saveAs) : undefined;
-        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2565,7 +2576,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path) } });
+        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated } });
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) throw new Error("OPENAI_API_KEY not set");
@@ -2792,7 +2803,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         if (!prompt) throw new Error("prompt required for code step");
         const stack = String(step.stack || project.stack);
         const targetFile = step.saveAs ? String(step.saveAs) : undefined;
-        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFile);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2805,7 +2816,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path) } });
+        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated } });
         okCount++;
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;

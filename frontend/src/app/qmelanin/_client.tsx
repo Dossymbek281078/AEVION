@@ -127,21 +127,38 @@ export default function QMelaninClient() {
           <ModulePricingChip moduleId="qmelanin" theme="dark" />
         </div>
 
-        <a
-          href="https://aevion.gumroad.com/l/tmuyxw"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={styles.buyCard}
-        >
-          <span>
-            <span style={styles.buyTitle}>📘 Гайд «Протокол Анти-седина» (PDF)</span>
-            <span style={styles.buySub}>
-              Вся наука без хайпа: почему волос седеет, какие рычаги реально работают
-              (медь/цинк, спермидин, окислительный стресс) и 12-недельный план. Wellness, не медицина.
+        <div style={styles.buyRow}>
+          <a
+            href="https://aevion.gumroad.com/l/tmuyxw"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ ...styles.buyCard, flex: 1, minWidth: 280, marginTop: 0 }}
+          >
+            <span>
+              <span style={styles.buyTitle}>🇷🇺 Гайд «Протокол Анти-седина» (PDF)</span>
+              <span style={styles.buySub}>
+                Вся наука без хайпа: почему волос седеет, какие рычаги реально работают
+                (медь/цинк, спермидин, окислительный стресс) и 12-недельный план. Wellness, не медицина.
+              </span>
             </span>
-          </span>
-          <span style={styles.buyBtn}>Получить за&nbsp;$9&nbsp;→</span>
-        </a>
+            <span style={styles.buyBtn}>Получить за&nbsp;$9&nbsp;→</span>
+          </a>
+          <a
+            href="https://aevion.gumroad.com/l/kkiavh"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ ...styles.buyCard, flex: 1, minWidth: 280, marginTop: 0 }}
+          >
+            <span>
+              <span style={styles.buyTitle}>🇬🇧 The Anti-Grey Protocol (PDF, English)</span>
+              <span style={styles.buySub}>
+                Same protocol, English edition: why hair greys, which levers actually work
+                (copper/zinc, spermidine, oxidative stress) and the 12-week plan. Wellness, not medicine.
+              </span>
+            </span>
+            <span style={styles.buyBtn}>Get for&nbsp;$19&nbsp;→</span>
+          </a>
+        </div>
 
         <section style={styles.card}>
           <h2 style={styles.h2}>Ваши анализы</h2>
@@ -273,6 +290,7 @@ const styles: Record<string, React.CSSProperties> = {
   eyebrow: { fontFamily: "monospace", fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", color: "#c8823f" },
   h1: { fontSize: 34, margin: "10px 0 0", fontWeight: 700 },
   lede: { color: "#9fb0c4", marginTop: 14, lineHeight: 1.6, maxWidth: 640 },
+  buyRow: { display: "flex", gap: 16, flexWrap: "wrap", marginTop: 16 },
   buyCard: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap", background: "#0d1422", border: "1px solid #c8823f", borderRadius: 16, padding: "18px 22px", marginTop: 16, textDecoration: "none", color: "#e8eef6" },
   buyTitle: { display: "block", fontSize: 16, fontWeight: 700 },
   buySub: { display: "block", fontSize: 13, color: "#9fb0c4", marginTop: 5, maxWidth: 470, lineHeight: 1.5 },

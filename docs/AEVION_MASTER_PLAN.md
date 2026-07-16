@@ -65,20 +65,32 @@ window's auto-memory `MEMORY.md`:
 > - Always run `npm run verify` (or local equivalent) before marking a task
 >   "done". CI on Vercel and Railway is not a substitute.
 > - Secrets through env only — no hardcoding, no logging.
+> - **One dedicated, persistent worktree per project — never an ad-hoc one.**
+>   § 2 below is the single source of truth for which worktree owns which
+>   project. Before creating a new directory/worktree for a project, check
+>   § 2 first and reuse the one listed there, so parallel sessions never
+>   collide and nothing gets orphaned. If a listed worktree has moved, been
+>   renamed, or no longer exists, **fix § 2 in the same PR** — don't just spin
+>   up a new stray directory next to it. (2026-07-16 audit found the disk had
+>   drifted from this doc: `frontend-qcore` no longer exists at all,
+>   `aevion-qbuild` had been replaced by `aevion-qbuild-fix` without updating
+>   this table, and several undocumented one-off directories — `aevion-sentry`,
+>   `aevion-sentry-fix` — existed and weren't even git repos. That drift is
+>   exactly what causes "which window am I supposed to use" confusion.)
 
 ---
 
-## § 2. Inventory — who is on which window (snapshot 2026-05-03)
+## § 2. Inventory — who is on which window (snapshot 2026-05-03, reconciled 2026-07-16)
 
 | Worktree | Branch (typical) | Scope | Status |
 |---|---|---|---|
 | `aevion-core` | `main` | monorepo root, frontend coordination | hub |
 | `aevion-backend-modules` | `main` / `feat/*` | platform backend (qright, bureau, awards, pipeline, qshield, planet, modules) | active |
 | `aevion-qsign` | `feat/qsign-v2` | QSign v2 | **shipped (PR #2)** — do nothing without checking PR list |
-| `frontend-qcore` | `qcore-multi-agent` | QCoreAI multi-agent | shipped (PRs #3, #20, #31) |
+| ~~`frontend-qcore`~~ | — | QCoreAI multi-agent + Multichat Engine | **directory no longer exists (confirmed missing 2026-07-16).** Routes (`aevion-globus-backend/src/routes/{qcoreai,multichat}.ts`) live in the main monorepo checkout — work them via `aevion-core` or a dedicated isolated worktree, not an assumed `frontend-qcore` checkout. |
 | `aevion-bank` | `main` (`frontend/src/app/bank/`) | Bank UI + AEC ledger | active — branch archived, work continues on main |
 | `aevion-smeta` | `feat/smeta-trainer` | смета (construction estimates) | active |
-| `aevion-qbuild` | `port-qbuild-v3` | qbuild (construction hiring) | active |
+| `aevion-qbuild-fix` | `feat/qbuild-i18n` | qbuild (construction hiring) | active — **supersedes the old `aevion-qbuild`/`port-qbuild-v3` entry**, which no longer exists on disk. i18n live-translation fix (`<AutoTranslate observe>` on `/build` layout) already merged to main as of 2026-07-16 — don't redo it. |
 | `aevion-cyberchess` | `chess-tournaments` | CyberChess UX | active |
 | `aevion-globus` | various | globus / 27-node visualisation | active |
 
@@ -114,15 +126,15 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 |---|---|---|---|---|---|---|---|---|---|
 | 12 | Awards | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Music + Film tracks; admin bulk #59; Sentry #86 |
 | 13 | CyberChess | (n/a) | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | tournaments + variants + brilliancy + bot personas; June layout/polish + in-game PiP + puzzles-flow (#372-#377); active in `feat/cyberchess-polish-0613` |
-| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | 10 killer features (#62); docs/portfolio + push events (#184-#185); UI polish in `port-qbuild-v3` |
+| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | 10 killer features (#62); docs/portfolio + push events (#184-#185); i18n live-translate on `/build` confirmed merged to main 2026-07-16 (worktree renamed to `aevion-qbuild-fix`, see § 2); SEO amplifier still not applied to qbuild landings |
 | 15 | смета (smeta) | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ✅ | ⚠ | **full product now** — exam mode + auto-graded LSR/AI scoring, 499 rates catalog + facets, volume calc, 15 pre-exam lessons, 3-tier QR cert, 250+ object corpus batches (#317-#360, May 18-25) |
 
 ### Tier 3 — Intelligence + cross-platform
 
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 16 | QCoreAI multi-agent | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | V1-V70 (PRs #3-#193); judge + comparison + Redis + run-branching + A/B + cohort analytics + AI memory; SDK v1.0.0 final (#187) |
-| 17 | Multichat Engine | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | beta status; landing wired |
+| 16 | QCoreAI multi-agent | ✅ | ✅ | ⚠ | ✅ | ✅ | ⚠ | ⚠ | V1-V70 (PRs #3-#193); judge + comparison + Redis + run-branching + A/B + cohort analytics + AI memory; SDK v1.0.0 final (#187); Sentry capture gap-filled to 232/232 real catch blocks (PR #624, 2026-07-16) |
+| 17 | Multichat Engine | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | ⚠ | beta status; landing wired; Sentry capture gap-filled (PR #624, 2026-07-16) |
 | 18 | Modules registry | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | Tier 3 amplifier; admin bulk; webhooks; Sentry wired 2026-06-22 |
 
 ### Tier 4 — Marketing surfaces
@@ -278,10 +290,11 @@ If the user insists on more code work in this window, candidates are:
 1. **P2-4** Sentry + smoke + i18n
 2. Export format audit — RK construction codes coverage
 
-### `aevion-qbuild` / `port-qbuild-v3`
-1. **P2-3** Merge `port-qbuild-v3` UI polish into main
-2. Vacancy / application e2e smoke
-3. SEO meta on qbuild landings (Tier 3 amplifier pattern not yet applied)
+### `aevion-qbuild-fix` / `feat/qbuild-i18n` (worktree renamed — see § 2)
+1. ~~i18n live-translate on `/build`~~ ✅ confirmed already merged to main (2026-07-16) — don't redo
+2. **P2-3** Merge remaining `port-qbuild-v3`-era UI polish into main (re-verify what's still outstanding — the i18n piece already landed)
+3. Vacancy / application e2e smoke
+4. SEO meta on qbuild landings (Tier 3 amplifier pattern not yet applied)
 
 ---
 
@@ -290,6 +303,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-07-16  #624 fix(qcoreai,multichat): Sentry capture gap-fill — captureQCoreAIError wired from 16 to 232/232 real catch blocks in qcoreai.ts, captureMultichatError from 13 to 15/15 in multichat.ts (5 previously-unbound `catch {}` blocks fixed to bind+capture). Closes the QCoreAI/Multichat Sentry ⚠ in §3. Intentional best-effort swallows (health probes, JSON-parse fallbacks) left untouched by design.
+2026-07-16  — audit: qbuild i18n live-translate (`<AutoTranslate observe>` on `/build` layout) confirmed already on main — the `feat/qbuild-i18n` branch (worktree renamed `aevion-qbuild` → `aevion-qbuild-fix`) was fully superseded. § 2 inventory reconciled with actual disk state (frontend-qcore no longer exists; several stray non-canonical worktree dirs found and flagged, not deleted).
 2026-06-25  #440 test(cyberchess): finalize→prize webhook smoke — live e2e for /api/cyberchess/tournament-finalized (sig-reject 401×2, valid 201 record, idempotent replay, malformed 400, Bearer-scoped /results + CSV) in all-smokes. CyberChess P2 backlog now fully cleared (P2P friend-play was already shipped — useP2P wired in page.tsx; the 2026-05-01 orphan note was stale).
 2026-06-25  #436 test(cyberchess): P2-2 — regression suite for premoveLegalMoves (10 vitest cases) locks the premove move-gen contract (pass-1 legal / pass-2 rescue / pass-3 pawn pseudo-legal) that v6/v7/v8 board-input rewrites kept breaking. Drag/click paths are DOM-coupled, deferred.
 2026-06-22  —    PROD EVIDENCE: read-only smoke suite 40/40 PASS against live Railway backend (https://aevion-production-a70c.up.railway.app, health 200) — auth/qtrade/bureau/qsign/planet/pipeline/qshield/modules/pricing/healthai/qcore/hub/ecosystem + all q-zone. Backend API is prod-ready; only Phase 0 (public domain + SSO removal) gates "100% publicly visible".

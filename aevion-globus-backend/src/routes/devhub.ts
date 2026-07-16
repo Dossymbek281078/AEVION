@@ -5,6 +5,7 @@ import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 import { captureException } from "../lib/sentry";
+import { degraded } from "../lib/degradedResponse";
 
 export const devhubRouter = Router();
 
@@ -1976,7 +1977,11 @@ devhubRouter.post("/media/email", async (req, res) => {
       return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
-    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+    const messageId = (data as any)?.messageId ?? null;
+    res.json({
+      ok: true, messageId,
+      ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Email send failed" });
   }
@@ -2998,11 +3003,13 @@ devhubRouter.post("/media/sms", async (req, res) => {
       return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
+    const messageId = (data as any)?.messageId ?? null;
     res.json({
       ok: true,
       reference: (data as any)?.reference ?? null,
-      messageId: (data as any)?.messageId ?? null,
+      messageId,
       smsCount: (data as any)?.smsCount ?? null,
+      ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "SMS send failed" });
@@ -3045,7 +3052,11 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
       return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
-    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+    const messageId = (data as any)?.messageId ?? null;
+    res.json({
+      ok: true, messageId,
+      ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "WhatsApp send failed" });
   }

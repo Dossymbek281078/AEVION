@@ -114,9 +114,9 @@ function CodeEditor({ value, onChange, language }: { value: string; onChange: (v
   );
 }
 
-function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info"; onClose: () => void }) {
-  const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : "#dbeafe";
-  const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : "#1e40af";
+function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info" | "warning"; onClose: () => void }) {
+  const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
+  const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : "#1e40af";
   return (
     <div style={{
       position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
@@ -172,7 +172,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
   // AI Chat state
   const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
@@ -315,14 +315,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [smsContent, setSmsContent] = useState("");
   const [smsSender, setSmsSender] = useState("AEVION");
   const [smsLoading, setSmsLoading] = useState(false);
-  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string; degraded?: boolean } | null>(null);
 
   // WhatsApp state
   const [waContact, setWaContact] = useState("");
   const [waTemplateId, setWaTemplateId] = useState("");
   const [waParams, setWaParams] = useState("");
   const [waLoading, setWaLoading] = useState(false);
-  const [waMsg, setWaMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [waMsg, setWaMsg] = useState<{ ok: boolean; text: string; degraded?: boolean } | null>(null);
 
   // Cloudflare Images upload state (per-DALL-E-result)
   const [cfImgUploading, setCfImgUploading] = useState(false);
@@ -391,7 +391,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string; degraded?: boolean } | null>(null);
 
   // Payment link state (Stripe one-off link OR Gumroad product checkout).
   // Gumroad is the only live processor — Stripe/Paddle blocked by KYC.
@@ -418,7 +418,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
+  const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
@@ -927,6 +927,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const d = await r.json();
       if (!r.ok || !d.ok) {
         setEmailMsg({ ok: false, text: d.error || "Send failed" });
+      } else if (d.degraded) {
+        setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
+        setEmailTo(""); setEmailSubject(""); setEmailBody("");
       } else {
         setEmailMsg({ ok: true, text: `Email sent to ${emailTo}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
@@ -1234,6 +1237,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const d = await r.json();
       if (!r.ok || !d.ok) {
         setSmsMsg({ ok: false, text: d.error || "Send failed" });
+      } else if (d.degraded) {
+        setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
+        setSmsRecipient(""); setSmsContent("");
       } else {
         setSmsMsg({ ok: true, text: `SMS sent (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
         setSmsRecipient(""); setSmsContent("");
@@ -1272,6 +1278,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const d = await r.json();
       if (!r.ok || !d.ok) {
         setWaMsg({ ok: false, text: d.error || "Send failed" });
+      } else if (d.degraded) {
+        setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
+        setWaContact(""); setWaTemplateId(""); setWaParams("");
       } else {
         setWaMsg({ ok: true, text: `WhatsApp sent (msg ${d.messageId})` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
@@ -2913,8 +2922,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {emailMsg && (
                         <div style={{
                           padding: "8px 12px", borderRadius: 7, fontSize: 13,
-                          background: emailMsg.ok ? "#d1fae5" : "#fee2e2",
-                          color: emailMsg.ok ? "#065f46" : "#991b1b",
+                          background: !emailMsg.ok ? "#fee2e2" : emailMsg.degraded ? "#fef3c7" : "#d1fae5",
+                          color: !emailMsg.ok ? "#991b1b" : emailMsg.degraded ? "#92400e" : "#065f46",
                         }}>
                           {emailMsg.text}
                         </div>
@@ -3426,8 +3435,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {smsMsg && (
                         <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
-                          background: smsMsg.ok ? "#d1fae5" : "#fee2e2",
-                          color: smsMsg.ok ? "#065f46" : "#991b1b" }}>
+                          background: !smsMsg.ok ? "#fee2e2" : smsMsg.degraded ? "#fef3c7" : "#d1fae5",
+                          color: !smsMsg.ok ? "#991b1b" : smsMsg.degraded ? "#92400e" : "#065f46" }}>
                           {smsMsg.text}
                         </div>
                       )}
@@ -3469,8 +3478,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {waMsg && (
                         <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
-                          background: waMsg.ok ? "#d1fae5" : "#fee2e2",
-                          color: waMsg.ok ? "#065f46" : "#991b1b" }}>
+                          background: !waMsg.ok ? "#fee2e2" : waMsg.degraded ? "#fef3c7" : "#d1fae5",
+                          color: !waMsg.ok ? "#991b1b" : waMsg.degraded ? "#92400e" : "#065f46" }}>
                           {waMsg.text}
                         </div>
                       )}

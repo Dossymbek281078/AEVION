@@ -604,7 +604,9 @@ async function callLlm(systemPrompt: string, userPrompt: string): Promise<string
     });
     const data = (await r.json()) as { content?: Array<{ text?: string }>; error?: { message?: string } };
     if (!r.ok) throw new Error(data.error?.message || `Anthropic ${r.status}`);
-    return data.content?.map((b) => b.text || "").join("").trim() || "";
+    const text = data.content?.map((b) => b.text || "").join("").trim() || "";
+    if (!text) throw new Error("Anthropic returned an empty reply");
+    return text;
   }
 
   // OpenAI fallback
@@ -624,7 +626,9 @@ async function callLlm(systemPrompt: string, userPrompt: string): Promise<string
     });
     const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
     if (!r.ok) throw new Error(data.error?.message || `OpenAI ${r.status}`);
-    return data.choices?.[0]?.message?.content?.trim() || "";
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    if (!text) throw new Error("OpenAI returned an empty reply");
+    return text;
   }
 
   throw new Error("not-configured");

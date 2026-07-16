@@ -35,17 +35,27 @@ type Savings = {
 const usd = (n: number) => (n >= 0.005 ? `$${n.toFixed(2)}` : n > 0 ? "<$0.01" : "$0.00");
 const usd4 = (n: number) => `$${n.toFixed(4)}`;
 
+type Day = { date: string; runs: number; savedUsd: number; costUsd: number };
+
 export default function AiSpendPage() {
   const [data, setData] = useState<Savings | null>(null);
+  const [daily, setDaily] = useState<Day[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = (await r.json()) as Savings;
+      const [sR, dR] = await Promise.all([
+        fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" }),
+        fetch(apiUrl("/api/qcoreai/smart/savings/daily?days=7"), { cache: "no-store" }),
+      ]);
+      if (!sR.ok) throw new Error(`HTTP ${sR.status}`);
+      const j = (await sR.json()) as Savings;
       setData(j);
+      if (dR.ok) {
+        const dj = (await dR.json()) as { series?: Day[] };
+        setDaily(Array.isArray(dj.series) ? dj.series : []);
+      }
       setErr(null);
     } catch (e: any) {
       setErr(e?.message || "failed to load");
@@ -72,6 +82,7 @@ export default function AiSpendPage() {
         <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>AI spend by module</h1>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <Link href="/admin" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none" }}>← Admin</Link>
+          <a href={apiUrl("/api/qcoreai/smart/savings.csv")} style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", fontSize: 13, fontWeight: 700, color: "#334155", textDecoration: "none" }}>Export CSV</a>
           <button onClick={load} style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Refresh</button>
         </div>
       </div>
@@ -109,6 +120,15 @@ export default function AiSpendPage() {
             </div>
           </div>
 
+          {daily.length > 0 && (
+            <div style={{ ...card, marginBottom: 18 }}>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
+                Saved per day · last {daily.length} days · total {usd(daily.reduce((s, d) => s + d.savedUsd, 0))}
+              </div>
+              <Sparkline days={daily} />
+            </div>
+          )}
+
           <div style={{ ...card, padding: 0, overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
               <thead>
@@ -143,5 +163,31 @@ export default function AiSpendPage() {
         </>
       )}
     </main>
+  );
+}
+
+// Minimal dependency-free SVG bar sparkline of daily savings.
+function Sparkline({ days }: { days: Day[] }) {
+  const W = 560, H = 64, pad = 4;
+  const max = Math.max(...days.map((d) => d.savedUsd), 0.0001);
+  const n = days.length;
+  const bw = (W - pad * 2) / n;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H + 16}`} width="100%" style={{ maxWidth: W, display: "block" }} role="img" aria-label="Saved per day">
+        {days.map((d, i) => {
+          const h = Math.max(1, (d.savedUsd / max) * H);
+          const x = pad + i * bw;
+          return (
+            <g key={d.date}>
+              <rect x={x + 1} y={H - h} width={Math.max(1, bw - 2)} height={h} rx={2} fill="#10b981">
+                <title>{`${d.date}: $${d.savedUsd.toFixed(3)} saved · ${d.runs} calls`}</title>
+              </rect>
+              <text x={x + bw / 2} y={H + 12} textAnchor="middle" fontSize="8" fill="#94a3b8">{d.date.slice(5)}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }

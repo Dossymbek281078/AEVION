@@ -28,7 +28,7 @@ import {
   smartSavingsSnapshot,
   type SmartCompleteInput,
 } from "../services/qcoreai/smartComplete";
-import { aggregateSmartRuns } from "../lib/smartRunLog";
+import { aggregateSmartRuns, dailySmartRuns } from "../lib/smartRunLog";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { getPool } from "../lib/dbPool";
@@ -2751,6 +2751,35 @@ qcoreaiRouter.get("/smart/savings", async (_req, res) => {
   const allTime = await aggregateSmartRuns();
   if (allTime) return res.json({ scope: "all-time", ...allTime });
   return res.json({ scope: "session", ...smartSavingsSnapshot() });
+});
+
+// Per-day savings series for a sparkline (default 7 days, UTC, zero-filled).
+// Empty array when the DB has no persisted history yet.
+qcoreaiRouter.get("/smart/savings/daily", async (req, res) => {
+  const days = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 7;
+  const series = await dailySmartRuns(Number.isFinite(days) ? days : 7);
+  res.json({ days: series ? series.length : 0, series: series ?? [] });
+});
+
+// CSV export of the per-module all-time aggregate (for spreadsheets / finance).
+qcoreaiRouter.get("/smart/savings.csv", async (_req, res) => {
+  const agg = await aggregateSmartRuns();
+  const rows = agg?.perModule ?? [];
+  const esc = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["module", "runs", "fact_single", "focused_light", "heavy_deep", "spend_usd", "saved_usd"];
+  const lines = [header.join(",")];
+  for (const m of rows) {
+    lines.push([m.module, m.runs, m.facts, m.light, m.deep, m.totalCostUsd.toFixed(6), m.savedUsd.toFixed(6)].map(esc).join(","));
+  }
+  if (agg) {
+    lines.push(["TOTAL", agg.runs, agg.facts, agg.light, agg.deep, agg.totalCostUsd.toFixed(6), agg.savedUsd.toFixed(6)].map(esc).join(","));
+  }
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="aevion-ai-spend.csv"');
+  res.send(lines.join("\n") + "\n");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

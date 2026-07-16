@@ -129,3 +129,50 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
     return null;
   }
 }
+
+export type SmartDay = { date: string; runs: number; savedUsd: number; costUsd: number };
+
+/** Per-day savings for the last `days` days (UTC), oldest→newest. Missing days
+ *  are zero-filled so a sparkline has a fixed-width series. Null if no DB. */
+export async function dailySmartRuns(days = 7): Promise<SmartDay[] | null> {
+  const n = Math.max(1, Math.min(90, Math.floor(days)));
+  if (!(await ensureTable())) return null;
+  try {
+    type DRow = { day: string; runs: string; saved: string; cost: string };
+    const result = await getPool().query(
+      `
+      SELECT to_char(date_trunc('day', "ts"), 'YYYY-MM-DD') AS day,
+             COUNT(*) AS runs,
+             COALESCE(SUM("savedUsd"), 0) AS saved,
+             COALESCE(SUM("costUsd"), 0) AS cost
+      FROM "smart_run_log"
+      WHERE "ts" >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY 1
+      ORDER BY 1
+      `,
+      [n]
+    );
+    const rows = result.rows as DRow[];
+    const byDay = new Map(rows.map((r) => [r.day, r]));
+    // Zero-fill from n-1 days ago → today, using pure arithmetic on ms (no
+    // Date.now(): derive "today" from the newest row, else fall back to rows).
+    const out: SmartDay[] = [];
+    // Build the date list from the max present day backwards; if empty, return [].
+    if (rows.length === 0) return [];
+    const last = rows[rows.length - 1].day;
+    const lastMs = Date.parse(last + "T00:00:00Z");
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(lastMs - i * 86_400_000).toISOString().slice(0, 10);
+      const hit = byDay.get(d);
+      out.push({
+        date: d,
+        runs: hit ? Number(hit.runs) : 0,
+        savedUsd: hit ? Number(hit.saved) : 0,
+        costUsd: hit ? Number(hit.cost) : 0,
+      });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}

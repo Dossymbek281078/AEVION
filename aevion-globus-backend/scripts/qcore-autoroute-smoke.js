@@ -185,6 +185,14 @@ ok("assessOpenDepth always returns 1 or 2",
   ok("per-module tags include qcoreai + devhub", snap.perModule.map((m) => m.module).sort().join(",") === "devhub,qcoreai");
   ok("smartComplete forced-deep override works", (await smartComplete({ userInput: "short", councilSize: 3, councilLayers: 2 })).routing.layers === 2);
 
+  // Durable log helpers are DB-optional — with no database they must return null
+  // (never throw), so the route falls back to the in-memory session snapshot.
+  const { aggregateSmartRuns, dailySmartRuns } = require(path.join(__dirname, "..", "dist", "lib", "smartRunLog.js"));
+  const agg = await aggregateSmartRuns();
+  ok("aggregateSmartRuns returns null when no DB (no throw)", agg === null);
+  const series = await dailySmartRuns(7);
+  ok("dailySmartRuns returns null when no DB (no throw)", series === null);
+
   console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 })();

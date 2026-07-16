@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-semibold text-white mb-2">2. How We Use Your Information</h2>
           <ul className="list-disc list-inside space-y-1 text-gray-300">
             <li>To provide and improve the Service</li>
-            <li>To process payments via Paddle (our Merchant of Record)</li>
+            <li>To process payments via Gumroad (our Merchant of Record)</li>
             <li>To send transactional emails and service updates</li>
             <li>To comply with legal obligations</li>
           </ul>

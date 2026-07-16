@@ -32,7 +32,7 @@ export default function RefundPage() {
 
         <div>
           <h2 className="text-lg font-semibold text-white mb-2">6. How Refunds Are Processed</h2>
-          <p>Refunds are processed through Paddle (our payment processor) and typically appear on your statement within 5–10 business days, depending on your bank.</p>
+          <p>Refunds are processed through Gumroad (our payment processor) and typically appear on your statement within 5–10 business days, depending on your bank.</p>
         </div>
 
         <div>

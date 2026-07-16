@@ -25,16 +25,16 @@ function SuccessInner() {
   const tp = usePricingT();
   const sp = useSearchParams();
   const sessionId = sp.get("session_id");
-  const paddleTxn = sp.get("_ptxn");
-  const provider = sp.get("provider") ?? (paddleTxn ? "paddle" : "legacy");
+  // Gumroad redirects back with ?sale_id=...; keep _ptxn as a legacy fallback.
+  const saleId = sp.get("sale_id") ?? sp.get("_ptxn");
+  const provider = sp.get("provider") ?? "gumroad";
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");
   const totalCents = sp.get("total");
-  const trialDays = sp.get("trial") ? parseInt(sp.get("trial")!, 10) : 14; // Paddle всегда 14
+  const trialDays = sp.get("trial") ? parseInt(sp.get("trial")!, 10) : 0;
   const appId = sp.get("appId") ?? "platform";
 
-  const isPaddle = provider === "paddle";
   const totalUsd = totalCents ? Math.round(parseInt(totalCents, 10) / 100) : null;
   const trialEndDate =
     trialDays > 0
@@ -50,7 +50,7 @@ function SuccessInner() {
       tier: tier ?? undefined,
       source: "pricing",
       value: totalUsd ?? undefined,
-      meta: { stub, period: period ?? null, sessionId: sessionId ?? paddleTxn ?? null, provider },
+      meta: { stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null, provider },
     });
   }, [sessionId, stub, tier, period, totalUsd]);
 
@@ -67,9 +67,7 @@ function SuccessInner() {
         style={{
           padding: "40px 36px",
           textAlign: "center",
-          background: isPaddle
-            ? "linear-gradient(135deg, #1e40af, #4f46e5, #7c3aed)"
-            : "linear-gradient(135deg, #0d9488, #0ea5e9)",
+          background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
           color: "#fff",
           borderRadius: 20,
           marginTop: 24,
@@ -92,7 +90,7 @@ function SuccessInner() {
         {/* Subtitle */}
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           {stub
-            ? "Paddle KYB верификация на рассмотрении (1–3 дня). Как только одобрят — реальные платежи заработают."
+            ? "Тестовый режим checkout. На проде оплата идёт через Gumroad — реальные платежи проходят сразу."
             : trialDays > 0
               ? `Триал до ${trialEndDate}. Карта не списывается до окончания периода — отмена в любой момент.`
               : `Спасибо! Ваша подписка AEVION ${tierName} активна.`}
@@ -124,21 +122,21 @@ function SuccessInner() {
         )}
 
         {/* Provider badge */}
-        {isPaddle && !stub && (
+        {!stub && (
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 12px",
             fontSize: 12, marginBottom: 24, border: "1px solid rgba(255,255,255,0.2)",
           }}>
             <span>🔒</span>
-            <span>Оплата через Paddle · безопасно · {period === "annual" ? "годовая" : "месячная"}</span>
+            <span>Оплата через Gumroad · безопасно{period ? ` · ${period === "annual" ? "годовая" : "месячная"}` : ""}</span>
           </div>
         )}
 
         {/* Transaction ID */}
-        {(paddleTxn || sessionId) && (
+        {(saleId || sessionId) && (
           <p style={{ fontSize: 11, opacity: 0.6, margin: "0 0 20px" }}>
-            {paddleTxn ? "Paddle TX" : "Session"}: <code style={{ fontFamily: "monospace" }}>{paddleTxn ?? sessionId}</code>
+            {saleId ? "Gumroad" : "Session"}: <code style={{ fontFamily: "monospace" }}>{saleId ?? sessionId}</code>
           </p>
         )}
 
@@ -148,7 +146,7 @@ function SuccessInner() {
             href={appLink.href}
             style={{
               display: "inline-block", padding: "13px 28px",
-              background: "#fff", color: isPaddle ? "#4f46e5" : "#0d9488",
+              background: "#fff", color: "#0d9488",
               borderRadius: 12, textDecoration: "none",
               fontWeight: 800, fontSize: 15,
             }}
@@ -182,9 +180,9 @@ function SuccessInner() {
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { icon: "📧", text: "Проверьте email — квитанция от Paddle уже отправлена" },
+              { icon: "📧", text: "Проверьте email — квитанция от Gumroad уже отправлена" },
               { icon: "🚀", text: `Откройте ${appLink.label.replace("Открыть ", "")} и начните работать` },
-              { icon: "⚙️", text: "Управление подпиской — в вашем аккаунте Paddle" },
+              { icon: "⚙️", text: "Управление подпиской — в вашем аккаунте Gumroad" },
               { icon: "💬", text: "Вопросы? Пишите на support@aevion.app" },
             ].map((item, i) => (
               <li key={i} style={{ display: "flex", gap: 10, fontSize: 13, color: "#475569" }}>
@@ -203,8 +201,8 @@ function SuccessInner() {
           background: "#fef3c7", borderRadius: 12,
           border: "1px solid #fde68a", fontSize: 13, color: "#92400e",
         }}>
-          <strong>Тестовый режим.</strong> Paddle KYB верификация обычно занимает 1–3 рабочих дня.
-          Как только аккаунт будет одобрен, реальные платежи заработают автоматически.
+          <strong>Тестовый режим.</strong> Это демонстрационный checkout без реального списания.
+          На проде оплата идёт через Gumroad — реальные платежи проходят сразу.
         </div>
       )}
     </ProductPageShell>

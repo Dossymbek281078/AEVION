@@ -13,9 +13,10 @@
  */
 
 import { resolveSector, type SectorProfile, type MoatArchetype } from "./sectors";
-import { parsePlanSignals, type PlanSignals } from "./signals";
+import { parsePlanSignals, mergeStructuredSignals, type PlanSignals, type StructuredFinancials } from "./signals";
 import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
+import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -31,6 +32,10 @@ export interface AnalysisInput {
   url?: string;
   /** Analyst-declared moat, overrides sector default when provided. */
   claimedMoat?: MoatArchetype;
+  /** Exact financials supplied directly — override the text parser (precise input). */
+  financials?: StructuredFinancials;
+  /** Multi-year revenue plan for the projection / hockey-stick check. */
+  projections?: ProjectionPoint[];
 }
 
 export interface ScoreFactor {
@@ -78,6 +83,8 @@ export interface AnalysisResult {
   stress: StressResult;
   /** Bottom-up TAM triangulation: claimed TAM vs derived ACV, implied accounts, penetration, SOM. */
   tam: TamAnalysis;
+  /** Revenue projection check vs sector CAGR (null when < 2 projection points). */
+  projections: ProjectionAnalysis | null;
 }
 
 // ── US-market stage norms (directional; 2024–2026 window) ──────────────────
@@ -206,9 +213,11 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     ? rawInput.claimedMoat
     : sector.primaryMoat;
 
-  // Company-specific signals parsed deterministically from THIS plan's text.
-  const signals = signalsOverride
+  // Company-specific signals: parse the plan text, then let any exact structured
+  // financials override the parsed guesses (precise input beats regex).
+  const parsedSignals = signalsOverride
     ?? parsePlanSignals(`${rawInput.description || ""} ${rawInput.tractionNotes || ""}`);
+  const signals = mergeStructuredSignals(parsedSignals, rawInput.financials);
   const sectorTamUsd = sector.tamUsdBn * 1e9;
 
   // ── Market: sector-anchored; a credible bottom-up TAM earns a small rigor
@@ -328,8 +337,9 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
 
   const stress = stressTest(signals);
   const tam = triangulateTam(signals, sector);
+  const projections = analyzeProjections(rawInput.projections, sector);
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam };
+  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
 }
 
 function buildStrategy(args: {

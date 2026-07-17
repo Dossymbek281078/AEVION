@@ -21,6 +21,8 @@ import {
   isQVentureDbReady,
 } from "../lib/ensureQVentureTables";
 import { analyze, STAGES, type AnalysisInput, type Stage } from "../lib/qventure/engine";
+import type { StructuredFinancials } from "../lib/qventure/signals";
+import type { ProjectionPoint } from "../lib/qventure/projections";
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
@@ -148,6 +150,36 @@ function contentHash(input: AnalysisInput): string {
 
 function badRequest(res: Response, message: string): void {
   res.status(400).json({ ok: false, error: message });
+}
+
+/** Pick numeric, non-negative, finite fields from a client-supplied financials object. */
+function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && isFinite(v) && v >= 0 ? Math.min(v, 1e15) : undefined;
+  const f: StructuredFinancials = {
+    revenueUsd: num(r.revenueUsd), mrrUsd: num(r.mrrUsd), arrUsd: num(r.arrUsd),
+    growthPct: num(r.growthPct), grossMarginPct: num(r.grossMarginPct),
+    cacUsd: num(r.cacUsd), ltvUsd: num(r.ltvUsd), ltvCacRatio: num(r.ltvCacRatio),
+    paybackMonths: num(r.paybackMonths), churnPct: num(r.churnPct),
+    retentionPct: num(r.retentionPct), customers: num(r.customers), bottomUpTamUsd: num(r.bottomUpTamUsd),
+  };
+  const period = r.growthPeriod;
+  if (period === "MoM" || period === "YoY" || period === "WoW" || period === "unspecified") f.growthPeriod = period;
+  const hasAny = Object.values(f).some((v) => v !== undefined);
+  return hasAny ? f : undefined;
+}
+
+/** Sanitize a client-supplied revenue projection array. */
+function sanitizeProjections(raw: unknown): ProjectionPoint[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const pts = raw
+    .map((p) => (p && typeof p === "object" ? (p as Record<string, unknown>) : {}))
+    .filter((p) => typeof p.year === "number" && typeof p.revenueUsd === "number" && isFinite(p.year) && isFinite(p.revenueUsd) && (p.revenueUsd as number) >= 0)
+    .map((p) => ({ year: Math.round(p.year as number), revenueUsd: Math.min(p.revenueUsd as number, 1e15) }))
+    .slice(0, 12);
+  return pts.length >= 2 ? pts : undefined;
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -300,6 +332,8 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
     const input: AnalysisInput = {
       name, description, sector, stage, geography,
       askUsd, tractionNotes: tractionNotes || undefined, url,
+      financials: sanitizeFinancials(body.financials),
+      projections: sanitizeProjections(body.projections),
     };
 
     const engineResult = analyze(input);
@@ -460,6 +494,15 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
         doc.text(`  • ${sc.label}: LTV/CAC ${sc.ltvCac}${sc.paybackMonths !== null ? `, payback ${sc.paybackMonths}mo` : ""}`, { width: W });
       }
       doc.fillColor("#475569").text(r.stress.note, { width: W });
+      doc.moveDown(0.7);
+    }
+
+    // Revenue projection
+    if (r.projections) {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a")
+        .text(`Revenue projection — ${r.projections.verdict.toUpperCase()}`);
+      doc.moveDown(0.2);
+      doc.fontSize(9.5).font("Helvetica").fillColor("#334155").text(r.projections.note, { width: W });
       doc.moveDown(0.7);
     }
 

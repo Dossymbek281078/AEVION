@@ -244,8 +244,9 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
   }, []);
 
   const runSample = useCallback(() => {
-    setForm(SAMPLE);
-    run(SAMPLE);
+    const s: FormShape = { ...emptyForm(), ...SAMPLE };
+    setForm(s);
+    run(s);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [run]);
 
@@ -269,6 +270,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
       if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Could not read that deck — enter the details manually."); return; }
       const d = j.data;
       setForm({
+        ...emptyForm(),
         name: d.name || "",
         sector: d.sector || "ai_app",
         stage: ((STAGES as readonly string[]).includes(d.stage) ? d.stage : "seed") as FormShape["stage"],

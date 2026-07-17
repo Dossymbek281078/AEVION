@@ -1170,18 +1170,27 @@ export async function* runMultiAgent(
     return;
   }
 
-  const analyst = buildAgent("analyst", input.overrides?.analyst);
-  const writer = buildAgent("writer", input.overrides?.writer);
+  // Offline (localOnly): sequential/parallel/debate can also run entirely on
+  // local runtimes (Ollama / LM Studio / …). Discover which models each local
+  // runtime has actually pulled so builders never name a missing model — same
+  // as the council path. Under localOnly a no-provider error is a LOCAL one.
+  const argueLocalOnly = input.localOnly === true;
+  const argueLocalModels = argueLocalOnly ? await discoverLocalModels() : undefined;
+  const bopts = { localOnly: argueLocalOnly, localModels: argueLocalModels };
+  const noProv = () => (argueLocalOnly ? noLocalProviderMsg() : noProviderMsg());
+
+  const analyst = buildAgent("analyst", input.overrides?.analyst, bopts);
+  const writer = buildAgent("writer", input.overrides?.writer, bopts);
 
   if (strategy === "parallel") {
     if (!analyst || !writer) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: noProv() };
       return;
     }
-    const writerB = buildWriterB(writer, input.overrides?.writerB);
-    const judge = buildJudge(input.overrides?.critic);
+    const writerB = buildWriterB(writer, input.overrides?.writerB, bopts);
+    const judge = buildJudge(input.overrides?.critic, bopts);
     if (!writerB || !judge) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: noProv() };
       return;
     }
     yield* runParallel(input, { analyst, writerA: writer, writerB, judge }, t0);
@@ -1190,27 +1199,27 @@ export async function* runMultiAgent(
 
   if (strategy === "debate") {
     if (!analyst) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: noProv() };
       return;
     }
-    const pro = buildPro(input.overrides?.writer);
+    const pro = buildPro(input.overrides?.writer, bopts);
     if (!pro) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: noProv() };
       return;
     }
-    const con = buildCon(pro, input.overrides?.writerB);
-    const moderator = buildModerator(input.overrides?.critic);
+    const con = buildCon(pro, input.overrides?.writerB, bopts);
+    const moderator = buildModerator(input.overrides?.critic, bopts);
     if (!con || !moderator) {
-      yield { type: "error", message: noProviderMsg() };
+      yield { type: "error", message: noProv() };
       return;
     }
     yield* runDebate(input, { analyst, pro, con, moderator }, t0);
     return;
   }
 
-  const critic = buildAgent("critic", input.overrides?.critic);
+  const critic = buildAgent("critic", input.overrides?.critic, bopts);
   if (!analyst || !writer || !critic) {
-    yield { type: "error", message: noProviderMsg() };
+    yield { type: "error", message: noProv() };
     return;
   }
   yield* runSequential(input, { analyst, writer, critic }, t0);

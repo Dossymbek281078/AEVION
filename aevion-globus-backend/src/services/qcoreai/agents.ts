@@ -148,31 +148,55 @@ export const WRITER_REVISE_INSTRUCTION = [
  * If no provider is configured at all, returns null (caller should surface
  * a helpful "configure API key" error to the UI).
  */
+export type RoleBuildOpts = {
+  /** Restrict to LOCAL runtimes only (Ollama / LM Studio / …) — offline mode. */
+  localOnly?: boolean;
+  /** Discovered pulled models per provider id, so we never name a missing one. */
+  localModels?: Record<string, string[]>;
+};
+
 export function resolveRoleProvider(
   preferredProvider: string | undefined,
   preferredModel: string | undefined,
-  roleDefault: { provider: string; model: string }
+  roleDefault: { provider: string; model: string },
+  opts?: RoleBuildOpts
 ): { provider: string; model: string } | null {
-  const providers = getProviders();
+  const localOnly = opts?.localOnly === true;
+  // Under localOnly the candidate set is local runtimes only; a non-local pin or
+  // role default (e.g. anthropic/opus) is then ignored and we fall through to a
+  // configured local provider.
+  const providers = getProviders().filter((p) => !localOnly || p.local);
   const byId = (id: string) => providers.find((p) => p.id === id);
+  // Prefer the discovered (actually-pulled) model list under localOnly so we
+  // don't hand a local runtime a model it hasn't downloaded.
+  const modelsFor = (p: { id: string; models: string[]; defaultModel: string }) => {
+    const disc = opts?.localModels?.[p.id];
+    return disc && disc.length ? disc : p.models;
+  };
 
-  // 1. explicit user choice
+  // 1. explicit user choice (kept only if it survives the localOnly filter)
   if (preferredProvider && byId(preferredProvider)?.configured) {
     const p = byId(preferredProvider)!;
-    const model = preferredModel && p.models.includes(preferredModel) ? preferredModel : p.defaultModel;
+    const ms = modelsFor(p);
+    const model = preferredModel && ms.includes(preferredModel) ? preferredModel : (ms[0] ?? p.defaultModel);
     return { provider: p.id, model };
   }
 
-  // 2. role default (e.g. critic prefers Haiku)
+  // 2. role default (e.g. critic prefers Haiku) — skipped under localOnly since
+  //    the default providers aren't local.
   const def = byId(roleDefault.provider);
   if (def?.configured) {
-    const model = def.models.includes(roleDefault.model) ? roleDefault.model : def.defaultModel;
+    const ms = modelsFor(def);
+    const model = ms.includes(roleDefault.model) ? roleDefault.model : (ms[0] ?? def.defaultModel);
     return { provider: def.id, model };
   }
 
-  // 3. any configured provider
+  // 3. any configured provider (local one under localOnly)
   for (const p of providers) {
-    if (p.configured) return { provider: p.id, model: p.defaultModel };
+    if (p.configured) {
+      const ms = modelsFor(p);
+      return { provider: p.id, model: ms[0] ?? p.defaultModel };
+    }
   }
 
   return null;
@@ -212,12 +236,12 @@ const ROLE_DEFAULTS: Record<AgentRole, { provider: string; model: string; temper
 };
 
 /** Build a concrete agent config, merging override → role default → global fallback. */
-export function buildAgent(role: AgentRole, override?: AgentOverride): AgentConfig | null {
+export function buildAgent(role: AgentRole, override?: AgentOverride, opts?: RoleBuildOpts): AgentConfig | null {
   const def = ROLE_DEFAULTS[role];
   const resolved = resolveRoleProvider(override?.provider, override?.model, {
     provider: def.provider,
     model: def.model,
-  });
+  }, opts);
   if (!resolved) return null;
   return {
     role,
@@ -236,14 +260,20 @@ export function buildAgent(role: AgentRole, override?: AgentOverride): AgentConf
  */
 export function buildWriterB(
   primary: AgentConfig,
-  override?: AgentOverride
+  override?: AgentOverride,
+  opts?: RoleBuildOpts
 ): AgentConfig | null {
-  const providers = getProviders();
+  const localOnly = opts?.localOnly === true;
+  const providers = getProviders().filter((p) => !localOnly || p.local);
   const configuredOthers = providers.filter((p) => p.configured && p.id !== primary.provider);
+  const modelsFor = (p: { id: string; models: string[]; defaultModel: string }) => {
+    const disc = opts?.localModels?.[p.id];
+    return disc && disc.length ? disc : p.models;
+  };
 
   // Explicit override wins.
   if (override?.provider || override?.model) {
-    const built = buildAgent("writer", override);
+    const built = buildAgent("writer", override, opts);
     if (built) {
       return { ...built, systemPrompt: override.systemPrompt?.trim() || WRITER_B_PROMPT };
     }
@@ -252,10 +282,11 @@ export function buildWriterB(
   // Prefer a different provider if any is configured.
   if (configuredOthers.length > 0) {
     const alt = configuredOthers[0];
+    const ms = modelsFor(alt);
     return {
       role: "writer",
       provider: alt.id,
-      model: alt.defaultModel,
+      model: ms[0] ?? alt.defaultModel,
       systemPrompt: WRITER_B_PROMPT,
       temperature: 0.7,
     };
@@ -264,7 +295,8 @@ export function buildWriterB(
   // Same provider — pick a different model in its list, if possible.
   const sameProv = providers.find((p) => p.id === primary.provider);
   if (sameProv) {
-    const altModel = sameProv.models.find((m) => m !== primary.model) || sameProv.defaultModel;
+    const ms = modelsFor(sameProv);
+    const altModel = ms.find((m) => m !== primary.model) || ms[0] || sameProv.defaultModel;
     return {
       role: "writer",
       provider: primary.provider,
@@ -283,8 +315,8 @@ export function buildWriterB(
  * makes sense for judging too), but with the JUDGE_PROMPT so the output is a
  * direct final answer instead of APPROVE/REVISE.
  */
-export function buildJudge(override?: AgentOverride): AgentConfig | null {
-  const built = buildAgent("critic", override);
+export function buildJudge(override?: AgentOverride, opts?: RoleBuildOpts): AgentConfig | null {
+  const built = buildAgent("critic", override, opts);
   if (!built) return null;
   return {
     ...built,
@@ -296,8 +328,8 @@ export function buildJudge(override?: AgentOverride): AgentConfig | null {
 }
 
 /** Build the Pro advocate — writer role with PRO_PROMPT. Used by the debate strategy. */
-export function buildPro(override?: AgentOverride): AgentConfig | null {
-  const built = buildAgent("writer", override);
+export function buildPro(override?: AgentOverride, opts?: RoleBuildOpts): AgentConfig | null {
+  const built = buildAgent("writer", override, opts);
   if (!built) return null;
   return {
     ...built,
@@ -307,9 +339,9 @@ export function buildPro(override?: AgentOverride): AgentConfig | null {
 }
 
 /** Build the Con advocate — writer role with CON_PROMPT. Picks a different model than Pro where possible. */
-export function buildCon(pro: AgentConfig, override?: AgentOverride): AgentConfig | null {
+export function buildCon(pro: AgentConfig, override?: AgentOverride, opts?: RoleBuildOpts): AgentConfig | null {
   // Reuse the Writer-B mechanic (prefer different provider / different model).
-  const alt = buildWriterB(pro, override);
+  const alt = buildWriterB(pro, override, opts);
   if (!alt) return null;
   return {
     ...alt,
@@ -319,8 +351,8 @@ export function buildCon(pro: AgentConfig, override?: AgentOverride): AgentConfi
 }
 
 /** Build the Moderator — like Judge but with a balancing/synthesis prompt. */
-export function buildModerator(override?: AgentOverride): AgentConfig | null {
-  const built = buildAgent("critic", override);
+export function buildModerator(override?: AgentOverride, opts?: RoleBuildOpts): AgentConfig | null {
+  const built = buildAgent("critic", override, opts);
   if (!built) return null;
   return {
     ...built,

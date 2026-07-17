@@ -176,7 +176,13 @@
       "Bash(grep -n \"^Object.assign\\(translations, {\" frontend/src/lib/i18n-data.ts)",
       "Bash(grep -n \"^  ru: {$\\\\|^  kk: {$\" frontend/src/lib/i18n-data.ts)",
       "Bash(awk '{print $1}')",
-      "Bash(./node_modules/.bin/tsc --noEmit --project aevion-globus-backend/tsconfig.json)"
+      "Bash(./node_modules/.bin/tsc --noEmit --project aevion-globus-backend/tsconfig.json)",
+      "Bash(./aevion-globus-backend/node_modules/.bin/tsc --noEmit --skipLibCheck --target ES2020 --module commonjs --esModuleInterop --strict aevion-globus-backend/scripts/seed-demo-content.js)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/qgood-i18n-port --title 'feat\\(qgood\\): add live-translation i18n coverage \\(ported from feat/i18n-qgood\\)' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 667 --json additions,deletions,changedFiles,title,mergeable)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 667)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 667 --patch)",
+      "Bash(./aevion-globus-backend/node_modules/.bin/tsc --noEmit --project aevion-globus-backend/tsconfig.json)"
     ]
   }
 }

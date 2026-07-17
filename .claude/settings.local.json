@@ -187,7 +187,10 @@
       "Bash(PORT=4123 npx ts-node-dev --respawn --transpile-only src/index.ts)",
       "Bash(psql \"postgresql://localhost:5432/aevion_dev\" -c \"SELECT count\\(*\\), state FROM pg_stat_activity GROUP BY state;\")",
       "Bash(taskkill //F //PID 61880)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/cyberchess-planet-payouts-credit --title 'feat\\(cyberchess,planet\\): tournament prizes + certification payouts credit real QTrade accounts' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/cyberchess-planet-payouts-credit --title 'feat\\(cyberchess,planet\\): tournament prizes + certification payouts credit real QTrade accounts' --body ' *)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/planet-expectations-copy --title 'docs\\(planet\\): set expectations that Planet is young and actively evolving' --body ' *)",
+      "Bash(PORT=3055 npx next dev)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3055)"
     ]
   }
 }

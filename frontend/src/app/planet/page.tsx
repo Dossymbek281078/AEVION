@@ -368,6 +368,32 @@ export default function PlanetCompliancePage() {
         Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code.
       </div>
 
+      <div
+        style={{
+          marginBottom: 16,
+          padding: "12px 14px",
+          borderRadius: 12,
+          background: "rgba(13,148,136,0.06)",
+          border: "1px solid rgba(13,148,136,0.25)",
+          fontSize: 13,
+          color: "#334155",
+          lineHeight: 1.5,
+        }}
+      >
+        <strong>Planet is the newest, fastest-moving layer of AEVION.</strong>{" "}
+        New validators, apps, and compliance scenarios ship here on a rolling
+        basis, so expect things to keep changing — including some rough edges
+        along the way. If anything here doesn&apos;t work the way you&apos;d
+        expect,{" "}
+        <a
+          href="mailto:yahiin1978@gmail.com?subject=Planet%20feedback"
+          style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}
+        >
+          tell us
+        </a>{" "}
+        — that feedback directly shapes what we build next.
+      </div>
+
       <PitchValueCallout moduleId="planet" variant="dark" />
 
       {planetStats ? (

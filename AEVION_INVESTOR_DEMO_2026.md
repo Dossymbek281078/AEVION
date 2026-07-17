@@ -137,7 +137,7 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 **What it does:** Runs validators on submitted artifacts, community voting, evidence root generation, and signed certificates.
 **Why it matters:** The compliance backbone — connects everything to a verifiable audit trail.
 **Revenue:** Certification fees, API access for enterprise compliance.
-**Status:** LIVE on aevion.app/planet
+**Status:** LIVE (actively evolving) on aevion.app/planet. This is the newest layer of the platform: new validators, apps inside Planet, and compliance scenarios ship on a rolling basis, and we're explicitly asking early users and investors for feedback here — it directly shapes the roadmap.
 
 #### 5. AEVION Awards — Music & Film
 **What it does:** Two award tracks for AI/digital music and film. Community-driven voting with transparent metrics.

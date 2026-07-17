@@ -96,6 +96,9 @@ function dealContext(input: AnalysisInput, result: AnalysisResult): string {
     result.tam.mode !== "insufficient"
       ? `TAM TRIANGULATION: ${result.tam.triangulation.join(" ")}${result.tam.flags.length ? ` FLAGS: ${result.tam.flags.join(" ")}` : ""}`
       : `TAM TRIANGULATION: not run — no bottom-up TAM or revenue/customers disclosed.`,
+    result.projections
+      ? `REVENUE PROJECTIONS — verdict "${result.projections.verdict}": ${result.projections.note}`
+      : `REVENUE PROJECTIONS: none supplied.`,
   ].join("\n");
 }
 

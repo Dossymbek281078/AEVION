@@ -30,9 +30,16 @@ const SAMPLE = {
 type FormShape = {
   name: string; sector: string; stage: (typeof STAGES)[number];
   geography: string; askUsd: string; description: string; tractionNotes: string;
+  // Optional exact financials — override the text parser for precise scoring.
+  finArr: string; finGrossMargin: string; finLtvCac: string; finChurn: string;
+  finCustomers: string; finGrowth: string; finTam: string;
+  // Optional 3-year revenue projection (this year, +1, +2).
+  projY0: string; projY1: string; projY2: string;
 };
 const emptyForm = (): FormShape => ({
   name: "", sector: "ai_app", stage: "seed", geography: "US", askUsd: "", description: "", tractionNotes: "",
+  finArr: "", finGrossMargin: "", finLtvCac: "", finChurn: "", finCustomers: "", finGrowth: "", finTam: "",
+  projY0: "", projY1: "", projY2: "",
 });
 
 const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" };
@@ -50,6 +57,25 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
     };
     const ask = parseFloat(data.askUsd.replace(/[^0-9.]/g, ""));
     if (isFinite(ask) && ask > 0) payload.askUsd = ask;
+
+    // Optional exact financials → override the text parser.
+    const num = (s: string) => { const v = parseFloat((s || "").replace(/[^0-9.]/g, "")); return isFinite(v) && v > 0 ? v : undefined; };
+    const financials: Record<string, number> = {};
+    const map: [string, string][] = [
+      ["arrUsd", data.finArr], ["grossMarginPct", data.finGrossMargin], ["ltvCacRatio", data.finLtvCac],
+      ["churnPct", data.finChurn], ["customers", data.finCustomers], ["growthPct", data.finGrowth], ["bottomUpTamUsd", data.finTam],
+    ];
+    for (const [k, v] of map) { const n = num(v); if (n !== undefined) financials[k] = n; }
+    if (Object.keys(financials).length) payload.financials = financials;
+
+    // Optional 3-year projection.
+    const y0 = new Date().getFullYear();
+    const proj = [data.projY0, data.projY1, data.projY2]
+      .map((v, i) => ({ year: y0 + i, revenueUsd: num(v) }))
+      .filter((p) => p.revenueUsd !== undefined)
+      .map((p) => ({ year: p.year, revenueUsd: p.revenueUsd as number }));
+    if (proj.length >= 2) payload.projections = proj;
+
     const res = await fetch(apiUrl("/api/qventure/analyze"), {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
@@ -499,6 +525,30 @@ function FormFields({ form, set, sectors, full = false }: {
           <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
             placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
         </div>
+      )}
+      {full && (
+        <details style={{ marginBottom: 16, border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px", background: "#f8fafc" }}>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#334155" }}>
+            Exact financials & projections (optional — precise numbers beat parsing the text)
+          </summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
+            <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Monthly churn (%)</label><input style={INPUT} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Growth (% MoM)</label><input style={INPUT} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              <input style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
+              <input style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
+              <input style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
+            </div>
+          </div>
+        </details>
       )}
     </>
   );

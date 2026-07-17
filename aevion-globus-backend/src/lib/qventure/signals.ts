@@ -39,6 +39,70 @@ export interface PlanSignals {
   fieldsFound: number;
 }
 
+/**
+ * Structured financials an analyst can supply directly (bypassing the text
+ * parser). Every field optional; provided values are *exact*, so they override
+ * whatever the parser guessed from the description. This is the "raise input
+ * depth" path — precise numbers instead of hoping the regex caught them.
+ */
+export interface StructuredFinancials {
+  revenueUsd?: number;
+  mrrUsd?: number; // annualized ×12 into revenue if arr/revenue not given
+  arrUsd?: number;
+  growthPct?: number;
+  growthPeriod?: "MoM" | "YoY" | "WoW" | "unspecified";
+  grossMarginPct?: number;
+  cacUsd?: number;
+  ltvUsd?: number;
+  ltvCacRatio?: number;
+  paybackMonths?: number;
+  churnPct?: number;
+  retentionPct?: number;
+  customers?: number;
+  bottomUpTamUsd?: number;
+}
+
+const numOrNull = (v: unknown): number | null =>
+  typeof v === "number" && isFinite(v) && v >= 0 ? v : null;
+
+/** Merge exact structured financials over parsed text signals (structured wins). */
+export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinancials | undefined): PlanSignals {
+  if (!f) return parsed;
+  const s: PlanSignals = { ...parsed };
+
+  // Revenue: explicit revenue/arr, else annualize mrr.
+  const arr = numOrNull(f.arrUsd) ?? numOrNull(f.revenueUsd);
+  const mrr = numOrNull(f.mrrUsd);
+  if (arr !== null) { s.revenueUsd = arr; s.revenueBasis = f.arrUsd != null ? "ARR" : "revenue"; }
+  else if (mrr !== null) { s.revenueUsd = mrr * 12; s.revenueBasis = "MRR"; }
+
+  const set = <K extends keyof PlanSignals>(key: K, v: number | null) => { if (v !== null) (s[key] as number | null) = v; };
+  set("growthPct", numOrNull(f.growthPct));
+  if (f.growthPct != null && f.growthPeriod) s.growthPeriod = f.growthPeriod;
+  set("grossMarginPct", numOrNull(f.grossMarginPct));
+  set("cacUsd", numOrNull(f.cacUsd));
+  set("ltvUsd", numOrNull(f.ltvUsd));
+  set("ltvCacRatio", numOrNull(f.ltvCacRatio));
+  set("paybackMonths", numOrNull(f.paybackMonths));
+  set("churnPct", numOrNull(f.churnPct));
+  set("retentionPct", numOrNull(f.retentionPct));
+  set("customers", numOrNull(f.customers) !== null ? Math.round(f.customers as number) : null);
+  set("bottomUpTamUsd", numOrNull(f.bottomUpTamUsd));
+
+  // Derive LTV/CAC if not given but CAC+LTV are.
+  if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
+    s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
+  }
+  if (s.revenueUsd !== null) s.mentionsRevenueNoNumber = false;
+
+  const quant: Array<number | null> = [
+    s.revenueUsd, s.growthPct, s.grossMarginPct, s.cacUsd, s.ltvUsd, s.ltvCacRatio,
+    s.paybackMonths, s.churnPct, s.retentionPct, s.customers, s.bottomUpTamUsd,
+  ];
+  s.fieldsFound = quant.filter((x) => x !== null).length;
+  return s;
+}
+
 export function emptySignals(): PlanSignals {
   return {
     revenueUsd: null, revenueBasis: null, growthPct: null, growthPeriod: null,

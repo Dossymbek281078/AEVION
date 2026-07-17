@@ -84,6 +84,16 @@ export interface AnalysisResult {
       triangulation: string[];
       flags: string[];
     };
+    projections?: {
+      years: number;
+      startRevenueUsd: number;
+      endRevenueUsd: number;
+      multiple: number;
+      impliedCagrPct: number | null;
+      sectorCagrPct: number;
+      verdict: "grounded" | "aggressive" | "hockey-stick" | "pre-revenue";
+      note: string;
+    } | null;
   };
 }
 
@@ -463,6 +473,30 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
 /** Bottom-up TAM triangulation — claimed TAM vs derived ACV / implied accounts / SOM. */
+/** Revenue projection vs sector CAGR — the hockey-stick check. */
+function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["result"]["projections"]>> }) {
+  const V: Record<string, { c: string; bg: string; label: string }> = {
+    grounded: { c: "#16a34a", bg: "#f0fdf4", label: "GROUNDED" },
+    aggressive: { c: "#d97706", bg: "#fffbeb", label: "AGGRESSIVE" },
+    "hockey-stick": { c: "#dc2626", bg: "#fef2f2", label: "HOCKEY STICK" },
+    "pre-revenue": { c: "#64748b", bg: "#f8fafc", label: "PRE-REVENUE" },
+  };
+  const fmt = (n: number) => (n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
+  const v = V[p.verdict];
+  return (
+    <div style={{ ...SECTION, background: v.bg, borderColor: `${v.c}44` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+        <h2 style={{ ...H2, margin: 0 }}>Revenue projection</h2>
+        <span style={{ padding: "3px 10px", borderRadius: 999, background: v.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{v.label}</span>
+        <span style={{ fontSize: 12.5, color: "#475569" }}>
+          {fmt(p.startRevenueUsd)} → {fmt(p.endRevenueUsd)} ({p.multiple}× / {p.years}yr){p.impliedCagrPct !== null ? ` · ${p.impliedCagrPct}% CAGR vs ${p.sectorCagrPct}% sector` : ""}
+        </span>
+      </div>
+      <p style={{ margin: 0, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>{p.note}</p>
+    </div>
+  );
+}
+
 function TamPanel({ tam }: { tam: NonNullable<AnalysisResult["result"]["tam"]> }) {
   if (tam.mode === "insufficient") return null;
   const fmt = (n: number | null) => (n === null ? "—" : n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
@@ -638,6 +672,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       </div>
 
       {result.result.tam && <TamPanel tam={result.result.tam} />}
+
+      {result.result.projections && <ProjectionPanel p={result.result.projections} />}
 
       {result.result.stress && <StressPanel stress={result.result.stress} />}
 

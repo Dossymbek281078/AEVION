@@ -1,10 +1,11 @@
 /* Deterministic unit test for company-specific signal scoring. Run:
  *   npx ts-node --transpile-only scripts/qventure-signals-test.ts
  */
-import { parsePlanSignals } from "../src/lib/qventure/signals";
+import { parsePlanSignals, mergeStructuredSignals } from "../src/lib/qventure/signals";
 import { analyze } from "../src/lib/qventure/engine";
 import { stressTest } from "../src/lib/qventure/stress";
 import { triangulateTam } from "../src/lib/qventure/tam";
+import { analyzeProjections } from "../src/lib/qventure/projections";
 import { resolveSector } from "../src/lib/qventure/sectors";
 
 let pass = 0, fail = 0;
@@ -91,6 +92,27 @@ ok("partial when only ACV derivable", partialTam.mode === "partial" && partialTa
 const noTam = triangulateTam(parsePlanSignals("A great product for teams."), saasSector);
 ok("insufficient when nothing disclosed", noTam.mode === "insufficient");
 ok("tam wired into analyze()", analyze({ name: "T", sector: "saas", stage: "seed", description: "$2M ARR, 2000 customers, TAM of $12B." }).tam.acvUsd === 1000);
+
+console.log("\n8. Structured financials override + projections");
+const parsedBase = parsePlanSignals("Roughly $1M revenue, some customers");
+const merged = mergeStructuredSignals(parsedBase, { arrUsd: 5_000_000, grossMarginPct: 88, ltvCacRatio: 6, customers: 4000 });
+ok("structured ARR overrides parsed revenue", merged.revenueUsd === 5_000_000 && merged.revenueBasis === "ARR", String(merged.revenueUsd));
+ok("structured margin set", merged.grossMarginPct === 88);
+ok("structured LTV/CAC set", merged.ltvCacRatio === 6);
+ok("MRR annualized in merge", mergeStructuredSignals(parsedBase, { mrrUsd: 100_000 }).revenueUsd === 1_200_000);
+const structuredAnalyze = analyze({ name: "S", sector: "saas", stage: "seed", description: "vague pitch", financials: { arrUsd: 3_000_000, grossMarginPct: 85, ltvCacRatio: 5, customers: 3000, bottomUpTamUsd: 8_000_000_000 } });
+ok("structured financials → high coverage", structuredAnalyze.signalCoverage >= 0.4, String(structuredAnalyze.signalCoverage));
+ok("structured financials → TAM full mode", structuredAnalyze.tam.mode === "full", structuredAnalyze.tam.mode);
+
+const saas = resolveSector("saas");
+const grounded = analyzeProjections([{ year: 2026, revenueUsd: 2_000_000 }, { year: 2029, revenueUsd: 3_000_000 }], saas);
+ok("grounded projection", grounded !== null && grounded.verdict === "grounded", grounded?.verdict);
+const hockey = analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 100_000_000 }], saas);
+ok("hockey-stick projection flagged", hockey !== null && hockey.verdict === "hockey-stick", hockey?.verdict);
+const preRev = analyzeProjections([{ year: 2026, revenueUsd: 0 }, { year: 2029, revenueUsd: 5_000_000 }], saas);
+ok("pre-revenue projection handled", preRev !== null && preRev.verdict === "pre-revenue", preRev?.verdict);
+ok("single point → null", analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }], saas) === null);
+ok("projections wired into analyze()", analyze({ name: "P", sector: "saas", stage: "seed", description: "x", projections: [{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 80_000_000 }] }).projections?.verdict === "hockey-stick");
 
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

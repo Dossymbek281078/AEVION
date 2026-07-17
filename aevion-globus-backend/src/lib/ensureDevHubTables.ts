@@ -111,6 +111,7 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "DevHubUsage" (
+<<<<<<< Updated upstream
         "id"         TEXT PRIMARY KEY,
         "userId"     TEXT NOT NULL,
         "month"      TEXT NOT NULL,
@@ -118,15 +119,27 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
         "used"       INTEGER NOT NULL DEFAULT 0,
         "tier"       TEXT NOT NULL DEFAULT 'free',
         "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+=======
+        "id"          TEXT PRIMARY KEY,
+        "userId"      TEXT NOT NULL,
+        "month"       TEXT NOT NULL,
+        "capability"  TEXT NOT NULL,
+        "used"        INTEGER NOT NULL DEFAULT 0,
+        "tier"        TEXT NOT NULL DEFAULT 'free',
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+>>>>>>> Stashed changes
         UNIQUE ("userId", "month", "capability")
       );
     `);
     await pool.query(`
+<<<<<<< Updated upstream
       CREATE INDEX IF NOT EXISTS "DevHubUsage_user_month_idx"
         ON "DevHubUsage" ("userId", "month");
     `);
 
     await pool.query(`
+=======
+>>>>>>> Stashed changes
       CREATE TABLE IF NOT EXISTS "DevHubTier" (
         "userId"    TEXT PRIMARY KEY,
         "tier"      TEXT NOT NULL DEFAULT 'free',
@@ -134,6 +147,7 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+<<<<<<< Updated upstream
     // Email-keyed tier: stores tier granted via payment webhook before user registers
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "DevHubEmailTier" (
@@ -143,6 +157,8 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+=======
+>>>>>>> Stashed changes
     dbReady = true;
     ensured = true;
   } catch (e: any) {

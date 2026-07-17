@@ -2,6 +2,7 @@
 import { usePathname } from "next/navigation";
 import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ToastProvider";
+import { PlanLimitToastBridge } from "@/components/PlanLimitToastBridge";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AppShellLanguagePill } from "@/components/AppShellLanguagePill";
@@ -33,6 +34,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         {!isApp && <SiteHeader />}
         {isApp && <AppShellLanguagePill />}
         <ToastProvider>
+          <PlanLimitToastBridge />
           <div style={{ flex: 1 }}>{children}</div>
         </ToastProvider>
         {!isApp && <SiteFooter />}

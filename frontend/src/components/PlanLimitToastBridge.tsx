@@ -18,16 +18,28 @@ type PlanLimitDetail = {
 // falls back to a generic-but-clear message, so a user is never left staring
 // at a form that silently did nothing.
 const MESSAGES: Record<string, (d: PlanLimitDetail) => string> = {
+  // Plan/tier limits — lifting them means upgrading the plan.
   plan_vacancy_limit_reached: (d) =>
     `Достигнут лимит плана${d.planKey ? ` ${d.planKey}` : ""}: вакансий ${d.used ?? d.limit ?? "—"}/${d.limit ?? "—"}. Откройте «Тарифы», чтобы разместить больше.`,
-  plan_talent_search_limit: (d) =>
-    `Достигнут лимит поиска по базе талантов на плане${d.planKey ? ` ${d.planKey}` : ""}. Откройте «Тарифы» для расширения.`,
+  plan_talent_search_limit_reached: (d) =>
+    `Исчерпан лимит поиска по базе талантов на плане${d.planKey ? ` ${d.planKey}` : ""}${d.limit ? ` (${d.used ?? "—"}/${d.limit} в месяц)` : ""}. Откройте «Тарифы» для расширения.`,
+  // Hard per-account caps — NOT tied to plan tier, so no "upgrade" wording:
+  // the user frees up room by removing existing items.
+  portfolio_photo_limit_reached: (d) =>
+    `Достигнут лимит портфолио: ${d.limit ?? 30} фото. Удалите лишние, чтобы добавить новые.`,
+  bulk_template_limit_reached: (d) =>
+    `Достигнут лимит шаблонов рассылки: ${d.limit ?? 30}. Удалите лишние, чтобы создать новый.`,
 };
 
 function messageFor(d: PlanLimitDetail): string {
   const code = typeof d.error === "string" ? d.error : "";
   if (MESSAGES[code]) return MESSAGES[code](d);
-  return `Достигнут лимит вашего плана${d.planKey ? ` (${d.planKey})` : ""}. Откройте «Тарифы» для апгрейда.`;
+  // Unknown limit: only promise an upgrade for `plan_*` codes; other caps get
+  // a neutral message so we never mislead the user toward the pricing page.
+  if (code.startsWith("plan_")) {
+    return `Достигнут лимит плана${d.planKey ? ` (${d.planKey})` : ""}. Откройте «Тарифы» для апгрейда.`;
+  }
+  return `Достигнут один из лимитов аккаунта. Удалите лишнее или проверьте условия плана.`;
 }
 
 // Global listener: turns a swallowed 403 plan-limit into a visible toast for

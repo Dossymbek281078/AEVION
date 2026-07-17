@@ -630,7 +630,7 @@ async function generateCodeWithAI(
     const path = targetFiles[0] || "output.ts";
     files = [{ path, content: result.reply, language: detectLanguage(path) }];
   }
-  const syntaxProblems = validateGeneratedFiles(files);
+  const syntaxProblems = await validateGeneratedFiles(files);
   return { files, aiGenerated: true, ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}) };
 }
 

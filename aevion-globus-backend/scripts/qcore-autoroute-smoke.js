@@ -156,6 +156,36 @@ ok("assessOpenDepth always returns 1 or 2",
   ok("explicit councilLayers overrides heuristic (light query forced deep)",
     forcedRoute?.layers === 2 && forcedRoute?.depth === "deep");
 
+  // 4b. Debate (agents argue Pro vs Con, a Moderator fuses one combined result)
+  //     must run in BOTH online and offline (localOnly) mode. Offline convenes
+  //     Pro/Con/Moderator from the local stub — no network, same combined output.
+  async function runDebate(localOnly) {
+    const evts = [];
+    for await (const evt of runMultiAgent({
+      strategy: "debate",
+      userInput: "Should a startup build its own auth or use a managed provider?",
+      ...(localOnly ? { localOnly: true } : {}),
+    })) evts.push(evt);
+    return evts;
+  }
+  const dOn = await runDebate(false);
+  const dOnPlan = dOn.find((e) => e.type === "plan");
+  const dOnFinal = dOn.find((e) => e.type === "final");
+  ok("online debate plan strategy is debate", dOnPlan?.strategy === "debate");
+  ok("online debate yields a combined final", !!dOnFinal && typeof dOnFinal.content === "string" && dOnFinal.content.length > 0);
+  ok("online debate completes with done", dOn.some((e) => e.type === "done"));
+
+  const dOff = await runDebate(true);
+  const dOffPlan = dOff.find((e) => e.type === "plan");
+  const dOffFinal = dOff.find((e) => e.type === "final");
+  const dOffErr = dOff.find((e) => e.type === "error");
+  ok("offline debate does not error out", !dOffErr);
+  ok("offline debate yields a combined final", !!dOffFinal && typeof dOffFinal.content === "string" && dOffFinal.content.length > 0);
+  ok("offline debate completes with done", dOff.some((e) => e.type === "done"));
+  // Every debate agent must be the local stub (no cloud provider) offline.
+  const dOffProviders = (dOffPlan && [dOffPlan.analyst?.provider, dOffPlan.writer?.provider, dOffPlan.writerB?.provider, dOffPlan.critic?.provider].filter(Boolean)) || [];
+  ok("offline debate agents are all local (stub)", dOffProviders.length > 0 && dOffProviders.every((p) => p === "stub"));
+
   // 5. smartComplete — the platform smart-call wrapper. Non-streaming, returns
   //    { answer, routing } and folds each run into the shared savings tally.
   resetSmartTally();

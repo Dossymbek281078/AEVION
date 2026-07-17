@@ -33,6 +33,8 @@ import {
   getRating,
   getLeaderboard,
   getHistory,
+  getWallet,
+  getWalletLeaderboard,
 } from "./cyberchessMatchStore";
 
 const router = Router();
@@ -1222,6 +1224,40 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
       losses: r.losses,
       draws: r.draws,
       peak: Math.round(r.peak),
+    })),
+  });
+});
+
+// GET /wallet?userId=X — server-authoritative Chessy balance (see
+// creditWallet() in cyberchessMatchStore.ts). Only credited today from real
+// matchmaking games via finalizeMatch's server-verified result — the
+// existing client-side Chessy (60+ addChessy() call sites in the frontend
+// for puzzles/lessons/cosmetics) is a separate, unrelated balance and is
+// NOT reflected here. Same auth posture as /rating above: not sensitive,
+// not writable through this route, no JWT required.
+router.get("/wallet", async (req: Request, res: Response): Promise<void> => {
+  const userId = String(req.query.userId || "").trim();
+  if (!userId) {
+    res.status(400).json({ ok: false, error: "userId_required" });
+    return;
+  }
+  const wallet = await getWallet(userId).catch(() => ({ userId, displayName: null, balance: 0, earnedTotal: 0 }));
+  res.json({ ok: true, ...wallet });
+});
+
+// GET /wallet/leaderboard?limit=50 — public, top Chessy balances.
+router.get("/wallet/leaderboard", async (req: Request, res: Response): Promise<void> => {
+  const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
+  const rows = await getWalletLeaderboard(limit).catch(() => []);
+  res.json({
+    ok: true,
+    count: rows.length,
+    leaderboard: rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.userId,
+      displayName: r.displayName,
+      balance: r.balance,
+      earnedTotal: r.earnedTotal,
     })),
   });
 });

@@ -90,6 +90,21 @@ export async function ensureDb(): Promise<void> {
       CREATE INDEX IF NOT EXISTS "cybermatch_white_idx" ON "CyberMatch" ("whiteUserId","createdAt" DESC);
       CREATE INDEX IF NOT EXISTS "cybermatch_black_idx" ON "CyberMatch" ("blackUserId","createdAt" DESC);
       CREATE INDEX IF NOT EXISTS "cybermatch_status_idx" ON "CyberMatch" ("status");
+
+      -- Server-authoritative Chessy wallet — see creditWallet() below. Only
+      -- finalizeMatch() (real matchmaking games, server-verified result post
+      -- move-legality hardening) writes to this today; the existing 60+
+      -- addChessy() call sites in the frontend remain client-side/localStorage
+      -- and are out of scope — this table exists specifically so a public
+      -- leaderboard has at least one balance that can't be forged via devtools.
+      CREATE TABLE IF NOT EXISTS "CyberWallet" (
+        "userId"      TEXT PRIMARY KEY,
+        "displayName" TEXT,
+        "balance"     BIGINT NOT NULL DEFAULT 0,
+        "earnedTotal" BIGINT NOT NULL DEFAULT 0,
+        "updatedAt"   TIMESTAMP NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS "cyberwallet_leaderboard_idx" ON "CyberWallet" ("balance" DESC);
     `);
     pool = p;
     dbReady = true;
@@ -290,6 +305,13 @@ export async function finalizeMatch(
 
   await upsertRating(wRow);
   await upsertRating(bRow);
+  // Small, trustworthy Chessy award straight off the server-verified result —
+  // this function only runs once per match (idempotency guard above) and
+  // info.result comes from settleMatch()'s authoritative board/clock logic
+  // (see cyberchessMatchmaking.ts), not a client claim.
+  const CHESSY_WIN = 10, CHESSY_DRAW = 3, CHESSY_PLAYED = 1;
+  await creditWallet(info.whiteUserId, wWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.whiteName);
+  await creditWallet(info.blackUserId, bWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.blackName);
   await q(
     `UPDATE "CyberMatch" SET "status"='ended',"result"=$2,"termination"=$3,
        "whiteRatingBefore"=COALESCE("whiteRatingBefore",$4),"blackRatingBefore"=COALESCE("blackRatingBefore",$5),
@@ -302,6 +324,41 @@ export async function finalizeMatch(
     white: { before: Math.round(wRat.rating), after: Math.round(wNext.rating) },
     black: { before: Math.round(bRat.rating), after: Math.round(bNext.rating) },
   };
+}
+
+/** Credit `amount` Chessy to the server-authoritative wallet. Silent no-op
+ * offline/on error (same fire-and-forget discipline as the rest of this
+ * store) — never blocks or throws into the match-settle path. */
+export async function creditWallet(userId: string, amount: number, displayName?: string | null): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  await q(
+    `INSERT INTO "CyberWallet" ("userId","displayName","balance","earnedTotal","updatedAt")
+     VALUES ($1,$2,$3,$3,now())
+     ON CONFLICT ("userId") DO UPDATE SET
+       "displayName"=COALESCE(EXCLUDED."displayName","CyberWallet"."displayName"),
+       "balance"="CyberWallet"."balance"+$3,
+       "earnedTotal"="CyberWallet"."earnedTotal"+$3,
+       "updatedAt"=now()`,
+    [userId, displayName ?? null, Math.floor(amount)],
+  );
+}
+
+export interface WalletRow { userId: string; displayName: string | null; balance: number; earnedTotal: number }
+
+export async function getWallet(userId: string): Promise<WalletRow> {
+  const rows = await q(`SELECT "userId","displayName","balance","earnedTotal" FROM "CyberWallet" WHERE "userId"=$1`, [userId]);
+  const r = rows[0];
+  return r
+    ? { userId: r.userId, displayName: r.displayName, balance: Number(r.balance), earnedTotal: Number(r.earnedTotal) }
+    : { userId, displayName: null, balance: 0, earnedTotal: 0 };
+}
+
+export async function getWalletLeaderboard(limit = 50): Promise<WalletRow[]> {
+  const rows = await q(
+    `SELECT "userId","displayName","balance","earnedTotal" FROM "CyberWallet" WHERE "balance">0 ORDER BY "balance" DESC LIMIT $1`,
+    [Math.min(200, Math.max(1, limit))],
+  );
+  return rows.map((r) => ({ userId: r.userId, displayName: r.displayName, balance: Number(r.balance), earnedTotal: Number(r.earnedTotal) }));
 }
 
 export async function getLeaderboard(speed: string, limit = 50): Promise<RatingRow[]> {

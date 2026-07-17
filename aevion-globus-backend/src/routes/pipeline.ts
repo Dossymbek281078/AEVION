@@ -267,6 +267,23 @@ async function ensureTables(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_action_at_idx" ON "PipelineAuditLog" ("action", "at" DESC);`,
   );
 
+  // Ported from feat/bureau-v2 (commit 0bcccbbc): per-certificate verify
+  // audit trail. PII-safe — stores HMAC(ip)[:24], not the raw IP. Pairs
+  // with the cheap verifiedCount/lastVerifiedAt aggregates on IPCertificate;
+  // this table is the detail log behind GET /verify/:certId/log.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "VerifyEvent" (
+      "id" TEXT PRIMARY KEY,
+      "certId" TEXT NOT NULL,
+      "ipHash" TEXT,
+      "userAgent" TEXT,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "VerifyEvent_certId_at_idx" ON "VerifyEvent" ("certId", "at" DESC);`,
+  );
+
   tablesReady = true;
 }
 
@@ -383,6 +400,397 @@ async function resolveUser(
 }
 
 /**
+ * Thrown by protectOne() for bad input (missing title, oversized fields,
+ * malformed fileHash). Kept distinct from QRightError/CosignError so
+ * /protect and /protect-batch can each map it to the right response shape.
+ */
+class ProtectInputError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+type ProtectInput = Record<string, any>;
+type ResolvedUser = { userId: string | null; name: string | null; email: string | null };
+
+/**
+ * Core IP protection flow — runs the full QRight/QSign/Shield/Certificate
+ * pipeline (steps 1-4) for a single work and returns the success payload
+ * (everything /protect used to build inline). Both POST /protect and
+ * POST /protect-batch call this so the cryptographic / persistence
+ * behaviour stays identical.
+ *
+ * Ported refactor from feat/bureau-v2 (commit 5d5aaa19), adapted to main's
+ * current /protect implementation (OTS Bitcoin anchor, author cosign,
+ * distributed Shamir shares) — the old branch's version predates all of
+ * that and could not be cherry-picked as-is.
+ *
+ * Throws ProtectInputError / CosignError / QRightError on bad input; the
+ * caller decides how to map each to an HTTP response.
+ */
+async function protectOne(input: ProtectInput, user: ResolvedUser) {
+  await ensureTables();
+
+  // Sane caps on free-text fields — title 500c, description 10kc.
+  if (typeof input?.title === "string" && input.title.length > 500) {
+    throw new ProtectInputError("title must be ≤ 500 characters");
+  }
+  if (typeof input?.description === "string" && input.description.length > 10_000) {
+    throw new ProtectInputError("description must be ≤ 10,000 characters");
+  }
+
+  const {
+    title,
+    description,
+    kind,
+    ownerName,
+    ownerEmail,
+    country,
+    city,
+    authorPublicKey,
+    authorSignature,
+    fileHash,
+  } = input;
+
+  if (!title || !description) {
+    throw new ProtectInputError("title and description are required");
+  }
+  if (fileHash !== undefined && fileHash !== null && !/^[a-f0-9]{64}$/i.test(String(fileHash))) {
+    throw new ProtectInputError("fileHash must be a 64-character lowercase hex SHA-256");
+  }
+  const safeFileHash: string | null = fileHash ? String(fileHash).toLowerCase() : null;
+
+  const authorName = ownerName || user.name || null;
+  const authorEmail = ownerEmail || user.email || null;
+  const authorUserId = user.userId || null;
+
+  // Pre-flight: проверяем env, чтобы не делать частичную запись в БД
+  // ради того, чтобы упасть на QSign-шаге.
+  getQSignSecret();
+
+  /* ── Pre-compute: canonical content hash (NFC + sorted keys) ── */
+  const effectiveKind = kind || "other";
+  const contentHash = canonicalContentHash({
+    title,
+    description,
+    kind: effectiveKind,
+    country,
+    city,
+  });
+
+  /* ── Author co-sign (optional, but verified before any DB write) ── */
+  // The user's browser holds an Ed25519 keypair; the signature on
+  // `contentHash` is sent alongside the form. We verify here so a bad
+  // payload fails before we register the work or split shards.
+  let cosign: ReturnType<typeof verifyAuthorCosign> | null = null;
+  const cosignProvided =
+    typeof authorPublicKey === "string" && authorPublicKey.length > 0;
+  if (cosignProvided) {
+    // CosignError propagates to the caller as-is.
+    cosign = verifyAuthorCosign(
+      {
+        authorPublicKey,
+        authorSignature: typeof authorSignature === "string" ? authorSignature : "",
+      },
+      contentHash,
+    );
+  }
+
+  /* ── Pre-compute: QSign HMAC (signedAt stored for verify re-check) ── */
+  const objectId = crypto.randomUUID();
+  const signedAt = new Date().toISOString();
+  const protectedAt = signedAt; // тот же момент; храним раздельно для ясности
+  const signatureHmac = computeQSignHmac({
+    objectId,
+    title,
+    contentHash,
+    signedAt,
+  });
+
+  /* ── Pre-compute: Ed25519 sign + Shamir split (no DB yet) ── */
+  const shieldId = "qs-" + crypto.randomBytes(8).toString("hex");
+  const { privateKeyRaw, publicKeySpkiHex, publicKeyRawHex } =
+    generateEphemeralEd25519();
+
+  const dataToProtect = JSON.stringify({
+    objectId,
+    title,
+    contentHash,
+    signatureHmac,
+    publicKeyRawHex,
+    signedAt,
+  });
+
+  const pkcs8Prefix = Buffer.from(
+    "302e020100300506032b657004220420",
+    "hex",
+  );
+  const pkcs8Signing = Buffer.concat([pkcs8Prefix, privateKeyRaw]);
+  const signingKey = crypto.createPrivateKey({
+    key: pkcs8Signing,
+    format: "der",
+    type: "pkcs8",
+  });
+  const signatureEd25519 = crypto
+    .sign(null, Buffer.from(dataToProtect), signingKey)
+    .toString("hex");
+  wipeBuffer(pkcs8Signing);
+
+  let shards: AuthenticatedShard[];
+  try {
+    shards = splitAndAuthenticate(privateKeyRaw, shieldId);
+  } finally {
+    wipeBuffer(privateKeyRaw);
+  }
+
+  /* ── All 4 DB writes in a single transaction ── */
+  const certId = "cert-" + crypto.randomBytes(8).toString("hex");
+  const legalBasis = getLegalBasis(country);
+  const algorithm =
+    "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing (2-of-3)";
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    await client.query(
+      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","fileHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
+      [
+        objectId,
+        title,
+        description,
+        effectiveKind,
+        contentHash,
+        safeFileHash,
+        authorName,
+        authorEmail,
+        authorUserId,
+        country || null,
+        city || null,
+      ],
+    );
+
+    // v3 distributed Shamir:
+    //   shards[0] → author (returned in response, NOT stored)
+    //   shards[1] → AEVION vault (QuantumShield.shards = [this one only])
+    //   shards[2] → public witness (PublicShardWitness table + CID)
+    // For v3 `shards` holds a JSON array with exactly ONE element — the
+    // vault shard. Reconstruction requires the author's downloaded shard
+    // plus either the vault OR the public witness.
+    const vaultShard = shards[1];
+    const witnessShard = shards[2];
+    const witnessCid = computeWitnessCid(witnessShard);
+
+    await client.query(
+      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","distribution_policy","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,'distributed_v2',NOW())`,
+      [
+        shieldId,
+        objectId,
+        title,
+        "Shamir's Secret Sharing + Ed25519",
+        SHAMIR_THRESHOLD,
+        SHAMIR_SHARDS,
+        JSON.stringify([vaultShard]),
+        signatureEd25519,
+        publicKeySpkiHex,
+        HMAC_KEY_VERSION,
+      ],
+    );
+
+    await client.query(
+      `INSERT INTO "PublicShardWitness" ("shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [
+        shieldId,
+        witnessShard.index,
+        witnessShard.sssShare,
+        witnessShard.hmac,
+        witnessShard.hmacKeyVersion,
+        witnessCid,
+      ],
+    );
+
+    await client.query(
+      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
+      [
+        certId,
+        objectId,
+        shieldId,
+        title,
+        effectiveKind,
+        description,
+        authorName,
+        authorEmail,
+        country || null,
+        city || null,
+        contentHash,
+        safeFileHash,
+        signatureHmac,
+        signatureEd25519,
+        publicKeySpkiHex,
+        SHAMIR_SHARDS,
+        SHAMIR_THRESHOLD,
+        algorithm,
+        JSON.stringify(legalBasis),
+        protectedAt,
+        signedAt,
+        HMAC_KEY_VERSION,
+        cosign?.authorPublicKey ?? null,
+        cosign?.authorSignature ?? null,
+        cosign?.authorKeyAlgo ?? null,
+      ],
+    );
+
+    await client.query("COMMIT");
+  } catch (txErr) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rbErr) {
+      console.error(
+        "[Pipeline] ROLLBACK failed:",
+        rbErr instanceof Error ? rbErr.message : String(rbErr),
+      );
+    }
+    throw txErr;
+  } finally {
+    client.release();
+  }
+
+  // Fire-and-forget Bitcoin anchor via OpenTimestamps. We don't block the
+  // response on calendar RTT (1-5s); the proof is persisted asynchronously
+  // and the client can poll /api/pipeline/verify/:id (or trigger
+  // /api/pipeline/ots/:id/upgrade) to see the bitcoin-confirmed state.
+  void (async () => {
+    try {
+      const r = await otsStampHash(contentHash);
+      if (r.otsProof) {
+        await pool.query(
+          `UPDATE "IPCertificate"
+           SET "otsProof" = $1,
+               "otsStatus" = $2,
+               "otsBitcoinBlockHeight" = $3,
+               "otsStampedAt" = NOW()
+           WHERE "id" = $4`,
+          [r.otsProof, r.status, r.bitcoinBlockHeight, certId],
+        );
+        console.log(
+          `[OT] cert=${certId} status=${r.status} height=${r.bitcoinBlockHeight ?? "pending"} proofBytes=${r.otsProof.length}`,
+        );
+      } else {
+        await pool.query(
+          `UPDATE "IPCertificate" SET "otsStatus" = 'failed', "otsStampedAt" = NOW() WHERE "id" = $1`,
+          [certId],
+        );
+        console.error(`[OT] cert=${certId} stamp failed: ${r.error}`);
+      }
+    } catch (err) {
+      console.error(
+        `[OT] cert=${certId} unexpected:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  })();
+
+  /* ── Response ── */
+  const certificate = {
+    id: certId,
+    objectId,
+    shieldId,
+    title,
+    kind: effectiveKind,
+    description,
+    author: authorName || "Anonymous",
+    email: authorEmail || null,
+    location: [city, country].filter(Boolean).join(", ") || null,
+    contentHash,
+    signatureHmac,
+    signatureEd25519: signatureEd25519.slice(0, 64) + "...",
+    publicKey: publicKeySpkiHex.slice(0, 32) + "...",
+    shards: SHAMIR_SHARDS,
+    threshold: SHAMIR_THRESHOLD,
+    algorithm,
+    legalBasis: {
+      framework: legalBasis.framework,
+      type: legalBasis.type,
+      international: (legalBasis.international as Array<{ name: string }>).map(
+        (l) => l.name,
+      ),
+      disclaimer: legalBasis.disclaimer,
+    },
+    protectedAt,
+    status: "active",
+    verifyUrl: `https://aevion.app/verify/${certId}`,
+  };
+
+  // Re-derive for response (shadowing inner scope).
+  const responseVaultShard = shards[1];
+  const responseWitnessShard = shards[2];
+  const responseWitnessCid = computeWitnessCid(responseWitnessShard);
+
+  return {
+    message: cosign
+      ? "Protected. 4 cryptographic layers active (incl. your browser-held author key) + Bitcoin anchor + international legal basis."
+      : "Protected. 3 cryptographic layers active + Bitcoin anchor + international legal basis.",
+    qright: {
+      id: objectId,
+      title,
+      contentHash,
+      createdAt: protectedAt,
+    },
+    qsign: { signature: signatureHmac, algo: "HMAC-SHA256" as const },
+    shield: {
+      id: shieldId,
+      signature: signatureEd25519.slice(0, 64) + "...",
+      publicKey: publicKeySpkiHex.slice(0, 32) + "...",
+      shards: SHAMIR_SHARDS,
+      threshold: SHAMIR_THRESHOLD,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+      distributionPolicy: "distributed_v2" as const,
+    },
+    // v3 distributed Shamir — the author shard is returned here ONCE.
+    // The client MUST save it (download JSON) because it is immediately
+    // wiped from server memory and is not persisted in our DB.
+    // Without this shard, reconstruction needs AEVION vault AND the
+    // public witness (a 2-of-3 recovery, not 1-of-3).
+    authorShard: {
+      shieldId,
+      shard: shards[0],
+      warning:
+        "Save this shard offline (downloads, USB, password manager) — AEVION never keeps a copy. With your shard plus either the AEVION vault or the public Witness Shard you can reconstruct the proof independently of AEVION. Without it, recovery falls back to the AEVION vault + public Witness — which works, but requires us to be online.",
+      recoveryPaths: [
+        "Your Author Shard + AEVION vault — offline recovery, only AEVION needed for one shard",
+        "Your Author Shard + public Witness Shard — full recovery without AEVION at all",
+        "AEVION vault + public Witness Shard — fallback if you lose your Author Shard",
+      ],
+    },
+    vaultShard: {
+      index: responseVaultShard.index,
+      location: "AEVION Platform vault",
+      stored: true,
+    },
+    witness: {
+      index: responseWitnessShard.index,
+      location: "Public Witness",
+      cid: responseWitnessCid,
+      witnessUrl: `/api/pipeline/shield/${shieldId}/witness`,
+    },
+    cosign: cosign
+      ? {
+          present: true,
+          algo: cosign.authorKeyAlgo,
+          authorKeyFingerprint: cosign.authorKeyFingerprint,
+        }
+      : { present: false },
+    certificate,
+  };
+}
+
+/**
  * POST /api/pipeline/protect
  *
  * One-click IP protection:
@@ -401,377 +809,20 @@ pipelineRouter.post("/protect", async (req, res) => {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
       return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
     }
-    await ensureTables();
-
-    // Sane caps on free-text fields — title 500c, description 10kc.
-    if (typeof req.body?.title === "string" && req.body.title.length > 500) {
-      return res.status(400).json({ error: "title must be ≤ 500 characters" });
-    }
-    if (typeof req.body?.description === "string" && req.body.description.length > 10_000) {
-      return res.status(400).json({ error: "description must be ≤ 10,000 characters" });
-    }
-
-    const {
-      title,
-      description,
-      kind,
-      ownerName,
-      ownerEmail,
-      country,
-      city,
-      authorPublicKey,
-      authorSignature,
-      fileHash,
-    } = req.body;
-
-    if (!title || !description) {
-      return res
-        .status(400)
-        .json({ error: "title and description are required" });
-    }
-    if (fileHash !== undefined && fileHash !== null && !/^[a-f0-9]{64}$/i.test(String(fileHash))) {
-      return res.status(400).json({ error: "fileHash must be a 64-character lowercase hex SHA-256" });
-    }
-    const safeFileHash: string | null = fileHash ? String(fileHash).toLowerCase() : null;
 
     const user = await resolveUser(req);
-    const authorName = ownerName || user.name || null;
-    const authorEmail = ownerEmail || user.email || null;
-    const authorUserId = user.userId || null;
-
-    // Pre-flight: проверяем env, чтобы не делать частичную запись в БД
-    // ради того, чтобы упасть на QSign-шаге.
-    getQSignSecret();
-
-    /* ── Pre-compute: canonical content hash (NFC + sorted keys) ── */
-    const effectiveKind = kind || "other";
-    const contentHash = canonicalContentHash({
-      title,
-      description,
-      kind: effectiveKind,
-      country,
-      city,
-    });
-
-    /* ── Author co-sign (optional, but verified before any DB write) ── */
-    // The user's browser holds an Ed25519 keypair; the signature on
-    // `contentHash` is sent alongside the form. We verify here so a bad
-    // payload fails before we register the work or split shards.
-    let cosign: ReturnType<typeof verifyAuthorCosign> | null = null;
-    const cosignProvided =
-      typeof authorPublicKey === "string" && authorPublicKey.length > 0;
-    if (cosignProvided) {
-      try {
-        cosign = verifyAuthorCosign(
-          {
-            authorPublicKey,
-            authorSignature: typeof authorSignature === "string" ? authorSignature : "",
-          },
-          contentHash,
-        );
-      } catch (cosErr) {
-        if (cosErr instanceof CosignError) {
-          return res.status(400).json({
-            error: cosErr.message,
-            code: `COSIGN_${cosErr.code}`,
-          });
-        }
-        throw cosErr;
-      }
-    }
-
-    /* ── Pre-compute: QSign HMAC (signedAt stored for verify re-check) ── */
-    const objectId = crypto.randomUUID();
-    const signedAt = new Date().toISOString();
-    const protectedAt = signedAt; // тот же момент; храним раздельно для ясности
-    const signatureHmac = computeQSignHmac({
-      objectId,
-      title,
-      contentHash,
-      signedAt,
-    });
-
-    /* ── Pre-compute: Ed25519 sign + Shamir split (no DB yet) ── */
-    const shieldId = "qs-" + crypto.randomBytes(8).toString("hex");
-    const { privateKeyRaw, publicKeySpkiHex, publicKeyRawHex } =
-      generateEphemeralEd25519();
-
-    const dataToProtect = JSON.stringify({
-      objectId,
-      title,
-      contentHash,
-      signatureHmac,
-      publicKeyRawHex,
-      signedAt,
-    });
-
-    const pkcs8Prefix = Buffer.from(
-      "302e020100300506032b657004220420",
-      "hex",
-    );
-    const pkcs8Signing = Buffer.concat([pkcs8Prefix, privateKeyRaw]);
-    const signingKey = crypto.createPrivateKey({
-      key: pkcs8Signing,
-      format: "der",
-      type: "pkcs8",
-    });
-    const signatureEd25519 = crypto
-      .sign(null, Buffer.from(dataToProtect), signingKey)
-      .toString("hex");
-    wipeBuffer(pkcs8Signing);
-
-    let shards: AuthenticatedShard[];
-    try {
-      shards = splitAndAuthenticate(privateKeyRaw, shieldId);
-    } finally {
-      wipeBuffer(privateKeyRaw);
-    }
-
-    /* ── All 4 DB writes in a single transaction ── */
-    const certId = "cert-" + crypto.randomBytes(8).toString("hex");
-    const legalBasis = getLegalBasis(country);
-    const algorithm =
-      "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing (2-of-3)";
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-
-      await client.query(
-        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","fileHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
-        [
-          objectId,
-          title,
-          description,
-          effectiveKind,
-          contentHash,
-          safeFileHash,
-          authorName,
-          authorEmail,
-          authorUserId,
-          country || null,
-          city || null,
-        ],
-      );
-
-      // v3 distributed Shamir:
-      //   shards[0] → author (returned in response, NOT stored)
-      //   shards[1] → AEVION vault (QuantumShield.shards = [this one only])
-      //   shards[2] → public witness (PublicShardWitness table + CID)
-      // For v3 `shards` holds a JSON array with exactly ONE element — the
-      // vault shard. Reconstruction requires the author's downloaded shard
-      // plus either the vault OR the public witness.
-      const vaultShard = shards[1];
-      const witnessShard = shards[2];
-      const witnessCid = computeWitnessCid(witnessShard);
-
-      await client.query(
-        `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","distribution_policy","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,'distributed_v2',NOW())`,
-        [
-          shieldId,
-          objectId,
-          title,
-          "Shamir's Secret Sharing + Ed25519",
-          SHAMIR_THRESHOLD,
-          SHAMIR_SHARDS,
-          JSON.stringify([vaultShard]),
-          signatureEd25519,
-          publicKeySpkiHex,
-          HMAC_KEY_VERSION,
-        ],
-      );
-
-      await client.query(
-        `INSERT INTO "PublicShardWitness" ("shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-        [
-          shieldId,
-          witnessShard.index,
-          witnessShard.sssShare,
-          witnessShard.hmac,
-          witnessShard.hmacKeyVersion,
-          witnessCid,
-        ],
-      );
-
-      await client.query(
-        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
-        [
-          certId,
-          objectId,
-          shieldId,
-          title,
-          effectiveKind,
-          description,
-          authorName,
-          authorEmail,
-          country || null,
-          city || null,
-          contentHash,
-          safeFileHash,
-          signatureHmac,
-          signatureEd25519,
-          publicKeySpkiHex,
-          SHAMIR_SHARDS,
-          SHAMIR_THRESHOLD,
-          algorithm,
-          JSON.stringify(legalBasis),
-          protectedAt,
-          signedAt,
-          HMAC_KEY_VERSION,
-          cosign?.authorPublicKey ?? null,
-          cosign?.authorSignature ?? null,
-          cosign?.authorKeyAlgo ?? null,
-        ],
-      );
-
-      await client.query("COMMIT");
-    } catch (txErr) {
-      try {
-        await client.query("ROLLBACK");
-      } catch (rbErr) {
-        console.error(
-          "[Pipeline] ROLLBACK failed:",
-          rbErr instanceof Error ? rbErr.message : String(rbErr),
-        );
-      }
-      throw txErr;
-    } finally {
-      client.release();
-    }
-
-    // Fire-and-forget Bitcoin anchor via OpenTimestamps. We don't block the
-    // response on calendar RTT (1-5s); the proof is persisted asynchronously
-    // and the client can poll /api/pipeline/verify/:id (or trigger
-    // /api/pipeline/ots/:id/upgrade) to see the bitcoin-confirmed state.
-    void (async () => {
-      try {
-        const r = await otsStampHash(contentHash);
-        if (r.otsProof) {
-          await pool.query(
-            `UPDATE "IPCertificate"
-             SET "otsProof" = $1,
-                 "otsStatus" = $2,
-                 "otsBitcoinBlockHeight" = $3,
-                 "otsStampedAt" = NOW()
-             WHERE "id" = $4`,
-            [r.otsProof, r.status, r.bitcoinBlockHeight, certId],
-          );
-          console.log(
-            `[OT] cert=${certId} status=${r.status} height=${r.bitcoinBlockHeight ?? "pending"} proofBytes=${r.otsProof.length}`,
-          );
-        } else {
-          await pool.query(
-            `UPDATE "IPCertificate" SET "otsStatus" = 'failed', "otsStampedAt" = NOW() WHERE "id" = $1`,
-            [certId],
-          );
-          console.error(`[OT] cert=${certId} stamp failed: ${r.error}`);
-        }
-      } catch (err) {
-        console.error(
-          `[OT] cert=${certId} unexpected:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    })();
-
-    /* ── Response ── */
-    const certificate = {
-      id: certId,
-      objectId,
-      shieldId,
-      title,
-      kind: effectiveKind,
-      description,
-      author: authorName || "Anonymous",
-      email: authorEmail || null,
-      location: [city, country].filter(Boolean).join(", ") || null,
-      contentHash,
-      signatureHmac,
-      signatureEd25519: signatureEd25519.slice(0, 64) + "...",
-      publicKey: publicKeySpkiHex.slice(0, 32) + "...",
-      shards: SHAMIR_SHARDS,
-      threshold: SHAMIR_THRESHOLD,
-      algorithm,
-      legalBasis: {
-        framework: legalBasis.framework,
-        type: legalBasis.type,
-        international: (legalBasis.international as Array<{ name: string }>).map(
-          (l) => l.name,
-        ),
-        disclaimer: legalBasis.disclaimer,
-      },
-      protectedAt,
-      status: "active",
-      verifyUrl: `https://aevion.app/verify/${certId}`,
-    };
-
-    // Re-derive for response (shadowing inner scope).
-    const responseVaultShard = shards[1];
-    const responseWitnessShard = shards[2];
-    const responseWitnessCid = computeWitnessCid(responseWitnessShard);
-
-    res.status(201).json({
-      success: true,
-      message: cosign
-        ? "Protected. 4 cryptographic layers active (incl. your browser-held author key) + Bitcoin anchor + international legal basis."
-        : "Protected. 3 cryptographic layers active + Bitcoin anchor + international legal basis.",
-      qright: {
-        id: objectId,
-        title,
-        contentHash,
-        createdAt: protectedAt,
-      },
-      qsign: { signature: signatureHmac, algo: "HMAC-SHA256" },
-      shield: {
-        id: shieldId,
-        signature: signatureEd25519.slice(0, 64) + "...",
-        publicKey: publicKeySpkiHex.slice(0, 32) + "...",
-        shards: SHAMIR_SHARDS,
-        threshold: SHAMIR_THRESHOLD,
-        hmacKeyVersion: HMAC_KEY_VERSION,
-        distributionPolicy: "distributed_v2",
-      },
-      // v3 distributed Shamir — the author shard is returned here ONCE.
-      // The client MUST save it (download JSON) because it is immediately
-      // wiped from server memory and is not persisted in our DB.
-      // Without this shard, reconstruction needs AEVION vault AND the
-      // public witness (a 2-of-3 recovery, not 1-of-3).
-      authorShard: {
-        shieldId,
-        shard: shards[0],
-        warning:
-          "Save this shard offline (downloads, USB, password manager) — AEVION never keeps a copy. With your shard plus either the AEVION vault or the public Witness Shard you can reconstruct the proof independently of AEVION. Without it, recovery falls back to the AEVION vault + public Witness — which works, but requires us to be online.",
-        recoveryPaths: [
-          "Your Author Shard + AEVION vault — offline recovery, only AEVION needed for one shard",
-          "Your Author Shard + public Witness Shard — full recovery without AEVION at all",
-          "AEVION vault + public Witness Shard — fallback if you lose your Author Shard",
-        ],
-      },
-      vaultShard: {
-        index: responseVaultShard.index,
-        location: "AEVION Platform vault",
-        stored: true,
-      },
-      witness: {
-        index: responseWitnessShard.index,
-        location: "Public Witness",
-        cid: responseWitnessCid,
-        witnessUrl: `/api/pipeline/shield/${shieldId}/witness`,
-      },
-      cosign: cosign
-        ? {
-            present: true,
-            algo: cosign.authorKeyAlgo,
-            authorKeyFingerprint: cosign.authorKeyFingerprint,
-          }
-        : { present: false },
-      certificate,
-    });
+    const result = await protectOne(req.body || {}, user);
+    res.status(201).json({ success: true, ...result });
   } catch (err: unknown) {
+    if (err instanceof ProtectInputError) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    if (err instanceof CosignError) {
+      return res.status(400).json({
+        error: err.message,
+        code: `COSIGN_${err.code}`,
+      });
+    }
     if (err instanceof QRightError) {
       console.error(
         `[Pipeline] protect ${err.code}: ${err.message}`,
@@ -782,6 +833,93 @@ pipelineRouter.post("/protect", async (req, res) => {
     }
     const msg = err instanceof Error ? err.message : "pipeline failed";
     console.error("[Pipeline] protect error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/protect-batch
+ *
+ * Ported from feat/bureau-v2 (commit 5d5aaa19) — confirmed absent from
+ * main. Issues many certificates in one request. Same crypto /
+ * persistence as /protect (via the shared protectOne() helper above);
+ * just loops and reports per-item ok/error.
+ *
+ * Body: { items: ProtectInput[] }   (1..25 items)
+ *
+ * Response 201 if every item succeeded, 207 Multi-Status if some failed,
+ * 400 on empty / oversized input.
+ */
+const MAX_BATCH_PROTECT = 25;
+
+pipelineRouter.post("/protect-batch", async (req, res) => {
+  try {
+    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    const rl = protectRateLimiter.check(ip);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
+
+    const items: ProtectInput[] = Array.isArray(req.body?.items)
+      ? (req.body.items as ProtectInput[])
+      : [];
+    if (items.length === 0) {
+      return res.status(400).json({ error: `items[] required (max ${MAX_BATCH_PROTECT})` });
+    }
+    if (items.length > MAX_BATCH_PROTECT) {
+      return res
+        .status(400)
+        .json({ error: `max ${MAX_BATCH_PROTECT} items per batch (got ${items.length})` });
+    }
+
+    // One auth resolution per batch — the caller can't switch identities
+    // mid-request, and avoiding N extra DB hits matters at batch=25.
+    const user = await resolveUser(req);
+
+    const results: Array<
+      | { ok: true; index: number; certificate: Awaited<ReturnType<typeof protectOne>>["certificate"] }
+      | { ok: false; index: number; error: string; code?: string; input: { title: unknown; kind: unknown } }
+    > = [];
+
+    // Sequential to keep DB connection use bounded and to give the caller
+    // deterministic ordering. 25 items × ~20-50ms each is well within a
+    // normal request timeout.
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      try {
+        const r = await protectOne(it, user);
+        results.push({ ok: true, index: i, certificate: r.certificate });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "failed";
+        const code =
+          err instanceof CosignError
+            ? `COSIGN_${err.code}`
+            : err instanceof QRightError
+              ? err.code
+              : undefined;
+        results.push({
+          ok: false,
+          index: i,
+          error: msg,
+          code,
+          input: { title: it?.title, kind: it?.kind },
+        });
+      }
+    }
+
+    const succeeded = results.filter((r) => r.ok).length;
+    const failed = results.length - succeeded;
+    res.status(failed === 0 ? 201 : 207).json({
+      success: failed === 0,
+      total: items.length,
+      succeeded,
+      failed,
+      results,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "batch protect failed";
+    console.error("[Pipeline] protect-batch error:", msg);
     res.status(500).json({ error: msg });
   }
 });
@@ -1137,6 +1275,40 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       );
     }
 
+    /* ── Audit log: record this verify event (PII-safe) ──
+     * Ported from feat/bureau-v2 (commit 0bcccbbc). Hash the IP with the
+     * QSign secret so the log lets us count unique verifiers without
+     * storing raw IPs. UA capped at 200 chars. Best-effort — a logging
+     * failure must never break the verify response. */
+    try {
+      const xff = (req.headers["x-forwarded-for"] as string | undefined)
+        ?.split(",")[0]
+        ?.trim();
+      const rawIp = xff || ip;
+      const ipHash = rawIp
+        ? crypto
+            .createHmac("sha256", getQSignSecret())
+            .update(String(rawIp))
+            .digest("hex")
+            .slice(0, 24)
+        : null;
+      const ua =
+        typeof req.headers["user-agent"] === "string"
+          ? (req.headers["user-agent"] as string).slice(0, 200)
+          : null;
+      const eventId = "ve-" + crypto.randomBytes(8).toString("hex");
+      await pool
+        .query(
+          `INSERT INTO "VerifyEvent" ("id","certId","ipHash","userAgent","at") VALUES ($1,$2,$3,$4,NOW())`,
+          [eventId, certId, ipHash, ua],
+        )
+        .catch(() => {
+          /* ignore — log is best-effort */
+        });
+    } catch {
+      // never let logging failures affect the verify outcome
+    }
+
     /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
     const hashCheck = canonicalContentHash({
       title: cert.title,
@@ -1360,6 +1532,65 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
 });
 
 /**
+ * GET /api/pipeline/verify/:certId/log
+ *
+ * Ported from feat/bureau-v2 (commit 0bcccbbc) — confirmed absent from
+ * main. Recent verify events for one certificate. Each row has a hashed
+ * IP (HMAC-SHA256(ip, QSIGN_SECRET)[:24]) so the log lets the cert owner
+ * count unique verifiers without storing raw IPs. UA truncated to 200
+ * chars. Newest first, capped at 100 rows by default (max 500).
+ */
+pipelineRouter.get("/verify/:certId/log", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const limit = Math.max(
+      1,
+      Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100),
+    );
+
+    const { rows } = await pool.query(
+      `SELECT "id","certId","ipHash","userAgent","at" FROM "VerifyEvent" WHERE "certId" = $1 ORDER BY "at" DESC LIMIT $2`,
+      [certId, limit],
+    );
+    type VerifyEventRow = {
+      id: unknown;
+      certId: unknown;
+      ipHash: string | null;
+      userAgent: string | null;
+      at: string;
+    };
+    const events: VerifyEventRow[] = rows.map((r: Record<string, unknown>) => ({
+      id: r.id,
+      certId: r.certId,
+      ipHash: (r.ipHash as string | null) ?? null,
+      userAgent: (r.userAgent as string | null) ?? null,
+      at: r.at instanceof Date ? r.at.toISOString() : String(r.at),
+    }));
+
+    // Aggregate quick stats so dashboards don't have to recompute.
+    const uniqueVerifiers = new Set(
+      events.map((e: VerifyEventRow) => e.ipHash || "").filter(Boolean),
+    ).size;
+    const last24h = events.filter(
+      (e: VerifyEventRow) => Date.parse(e.at) >= Date.now() - 86_400_000,
+    ).length;
+
+    res.setHeader("Cache-Control", "public, max-age=10, s-maxage=30");
+    res.json({
+      certId,
+      count: events.length,
+      stats: { uniqueVerifiers, last24h },
+      events,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "verify log failed";
+    console.error("[Pipeline] verify log error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/pipeline/certificates
  *
  * List all certificates (public registry).
@@ -1393,6 +1624,157 @@ pipelineRouter.get("/certificates", async (_req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list failed";
     console.error("[Pipeline] certificates error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/certificates.csv
+ *
+ * Ported from feat/bureau-v2 (commit eece389a) — confirmed absent from
+ * main (no CSV export anywhere in pipeline.ts / bureau.ts). RFC 4180 CSV
+ * export of the public registry honoring ?q, ?kind, ?sort, ?limit —
+ * independent of GET /certificates so its shape/behaviour stays unchanged.
+ */
+pipelineRouter.get("/certificates.csv", async (req, res) => {
+  try {
+    await ensureTables();
+
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const kind = typeof req.query.kind === "string" ? req.query.kind.trim() : "";
+    const sort =
+      typeof req.query.sort === "string" ? req.query.sort : "recent";
+    const limit = Math.max(
+      1,
+      Math.min(1000, parseInt(String(req.query.limit ?? "500"), 10) || 500),
+    );
+
+    const conditions: string[] = [`"status" = 'active'`];
+    const params: unknown[] = [];
+    if (q) {
+      params.push(`%${q}%`);
+      conditions.push(`("title" ILIKE $${params.length} OR "authorName" ILIKE $${params.length})`);
+    }
+    if (kind) {
+      params.push(kind);
+      conditions.push(`"kind" = $${params.length}`);
+    }
+    const orderBy =
+      sort === "popular"
+        ? `"verifiedCount" DESC`
+        : sort === "az"
+          ? `"title" ASC`
+          : `"protectedAt" DESC`;
+    params.push(limit);
+
+    const { rows } = await pool.query(
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
+       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT $${params.length}`,
+      params,
+    );
+
+    const esc = (v: unknown): string => {
+      const s = v === null || v === undefined ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = [
+      "id",
+      "title",
+      "kind",
+      "author",
+      "location",
+      "contentHash",
+      "fileHash",
+      "algorithm",
+      "protectedAt",
+      "verifiedCount",
+      "verifyUrl",
+    ];
+    const lines = [header.join(",")];
+    for (const r of rows as Record<string, unknown>[]) {
+      lines.push(
+        [
+          esc(r.id),
+          esc(r.title),
+          esc(r.kind),
+          esc(r.authorName || "Anonymous"),
+          esc([r.city, r.country].filter(Boolean).join(", ")),
+          esc(r.contentHash),
+          esc(r.fileHash || ""),
+          esc(r.algorithm),
+          esc(
+            r.protectedAt instanceof Date
+              ? r.protectedAt.toISOString()
+              : r.protectedAt,
+          ),
+          esc(r.verifiedCount || 0),
+          esc(`https://aevion.app/verify/${r.id}`),
+        ].join(","),
+      );
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="aevion-bureau-certificates.csv"`,
+    );
+    res.setHeader("Cache-Control", "public, max-age=30");
+    res.send(lines.join("\r\n") + "\r\n");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "csv export failed";
+    console.error("[Pipeline] certificates.csv error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/lookup/:hash
+ *
+ * Ported from feat/bureau-v2 (commit 20f72a7f) — confirmed absent from
+ * main. Reverse lookup: "is this SHA-256 already protected?" Matches
+ * against either contentHash or fileHash so both a pasted text hash and
+ * a locally-hashed file resolve to the same certificate.
+ */
+pipelineRouter.get("/lookup/:hash", async (req, res) => {
+  try {
+    await ensureTables();
+    const hash = String(req.params.hash || "").toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(hash)) {
+      return res
+        .status(400)
+        .json({ error: "hash must be a 64-character lowercase hex SHA-256" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
+       FROM "IPCertificate" WHERE "status" = 'active' AND ("contentHash" = $1 OR "fileHash" = $1) LIMIT 1`,
+      [hash],
+    );
+
+    if (rows.length === 0) {
+      return res.json({ protected: false, hash });
+    }
+    const r = rows[0] as Record<string, unknown>;
+    res.json({
+      protected: true,
+      hash,
+      certificate: {
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        author: r.authorName || "Anonymous",
+        location: [r.city, r.country].filter(Boolean).join(", ") || null,
+        contentHash: r.contentHash,
+        fileHash: r.fileHash || null,
+        algorithm: r.algorithm,
+        protectedAt: r.protectedAt,
+        verifiedCount: r.verifiedCount || 0,
+        verifyUrl: `https://aevion.app/verify/${r.id}`,
+      },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "lookup failed";
+    console.error("[Pipeline] lookup error:", msg);
     res.status(500).json({ error: msg });
   }
 });
@@ -1697,11 +2079,49 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
   }
 });
 
-/* GET /api/pipeline/health */
-pipelineRouter.get("/health", (_req, res) => {
-  res.json({
+/**
+ * GET /api/pipeline/health
+ *
+ * Enriched per feat/bureau-v2 (commit 71e77009) — confirmed the version on
+ * main was still a static manifest with no real signal of system state.
+ * Now does a real storage round-trip so status-page integrations can page
+ * on `ok: false` instead of trusting a constant 200. Legacy `steps` /
+ * `legalFrameworks` / `shamir` fields are kept unchanged for existing
+ * clients — no breaking changes.
+ */
+pipelineRouter.get("/health", async (_req, res) => {
+  const startedAt = Date.now();
+  let storageOk = true;
+  let certificateCount: number | null = null;
+  let lastProtectedAt: string | null = null;
+  try {
+    await ensureTables();
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS "count", MAX("protectedAt") AS "last" FROM "IPCertificate" WHERE "status" = 'active'`,
+    );
+    const row = rows?.[0];
+    certificateCount = typeof row?.count === "number" ? row.count : null;
+    lastProtectedAt =
+      row?.last instanceof Date ? row.last.toISOString() : row?.last ?? null;
+  } catch (err) {
+    storageOk = false;
+    console.error(
+      "[Pipeline] health storage probe failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  let secretConfigured = true;
+  try {
+    getQSignSecret();
+  } catch {
+    secretConfigured = false;
+  }
+
+  const ok = storageOk && secretConfigured;
+  res.status(ok ? 200 : 503).json({
     service: "AEVION IP Pipeline",
-    ok: true,
+    ok,
     steps: [
       "qright-registration",
       "qsign-hmac",
@@ -1722,6 +2142,17 @@ pipelineRouter.get("/health", (_req, res) => {
       hmacKeyVersion: HMAC_KEY_VERSION,
       field: "GF(256)",
     },
+    storage: {
+      ok: storageOk,
+      certificateCount,
+      lastProtectedAt,
+    },
+    crypto: {
+      secretConfigured,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+    },
+    uptimeSeconds: Math.round(process.uptime()),
+    responseTimeMs: Date.now() - startedAt,
     at: new Date().toISOString(),
   });
 });

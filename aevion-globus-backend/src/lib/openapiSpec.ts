@@ -1198,6 +1198,10 @@ export const openapiSpec = {
     "/api/pipeline/og.svg": { get: { summary: "Pipeline registry OG card (ETag/304)", security: [] } },
     "/api/pipeline/sitemap.xml": { get: { summary: "Pipeline certificates XML sitemap", security: [] } },
     "/api/pipeline/certificate/{certId}/og.svg": { get: { summary: "Per-IPCertificate OG card (ETag/304)", security: [] } },
+    "/api/pipeline/protect-batch": { post: { summary: "Batch IP protection — 1..25 items per request, per-item ok/error (201/207)", security: [] } },
+    "/api/pipeline/verify/{certId}/log": { get: { summary: "Per-certificate verify audit log (PII-safe, hashed IP)", security: [] } },
+    "/api/pipeline/certificates.csv": { get: { summary: "RFC 4180 CSV export of the public registry (?q, ?kind, ?sort, ?limit)", security: [] } },
+    "/api/pipeline/lookup/{hash}": { get: { summary: "Reverse SHA-256 lookup — is this content already protected?", security: [] } },
 
     "/api/quantum-shield/og.svg": { get: { summary: "Quantum Shield registry OG card (ETag/304)", security: [] } },
     "/api/quantum-shield/sitemap.xml": { get: { summary: "Quantum Shield XML sitemap", security: [] } },

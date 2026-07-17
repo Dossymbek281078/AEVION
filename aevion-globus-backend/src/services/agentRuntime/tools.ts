@@ -144,6 +144,36 @@ export const TOOL_SPECS: ToolSpec[] = [
       required: ["title"],
     },
   },
+  {
+    name: "merge_pull_request",
+    description:
+      "Merge an open pull request on the DevHub project's linked GitHub repo — e.g. one you just opened with " +
+      "create_pull_request. Only works when the project has a linked repo and carries project context. Ask the " +
+      "user to confirm before merging unless they already told you to merge it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        number: { type: "integer", description: "The pull request number to merge (returned by create_pull_request as prNumber)." },
+        mergeMethod: { type: "string", enum: ["merge", "squash", "rebase"], description: "Optional; defaults to squash." },
+      },
+      required: ["number"],
+    },
+  },
+  {
+    name: "read_project_file",
+    description:
+      "Read the current content of a specific file in the currently open DevHub project. Use this before " +
+      "generate_code when you need to see a file that isn't already inlined in your context — e.g. shared types, " +
+      "a config file, or any file you're not editing but need to match conventions with. Only works when a DevHub " +
+      "project is open.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path within the project, e.g. 'lib/types.ts'." },
+      },
+      required: ["path"],
+    },
+  },
 ];
 
 /** Map a tool name → the DevHub endpoint path that performs it. */
@@ -182,14 +212,28 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
       ...(input.branch ? { branch: input.branch } : {}),
     };
   }
+  if (name === "merge_pull_request") {
+    return { ...(input.mergeMethod ? { mergeMethod: input.mergeMethod } : {}) };
+  }
+  if (name === "read_project_file") {
+    return { path: input.path };
+  }
   return input;
 }
 
+/** GET-tools send their toBody() output as a query string with no request
+ * body; every other tool POSTs toBody() as JSON. */
+const GET_TOOLS = new Set(["read_project_file"]);
+
 /** Tools whose endpoint is scoped to the currently-open DevHub project rather
- * than a fixed path — the project id comes from ExecutorContext, not model input. */
-const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string) => string> = {
+ * than a fixed path — the project id comes from ExecutorContext, not model
+ * input. Receives the model's raw input too, since e.g. merge_pull_request
+ * needs the PR number in the URL path, not just the project id. */
+const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string, input: Record<string, unknown>) => string> = {
   generate_code: (projectId) => `/api/devhub/projects/${projectId}/generate`,
   create_pull_request: (projectId) => `/api/devhub/projects/${projectId}/github/pull-request`,
+  merge_pull_request: (projectId, input) => `/api/devhub/projects/${projectId}/github/pull-request/${Number(input.number)}/merge`,
+  read_project_file: (projectId) => `/api/devhub/projects/${projectId}/file`,
 };
 
 /** Per-request context an executor may need beyond the model's tool input. */
@@ -208,24 +252,31 @@ export interface ExecutorContext {
  */
 export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch, context: ExecutorContext = {}): ExecTool {
   return async (call: ToolCall) => {
+    const input = call.input || {};
     let path = ENDPOINT_BY_TOOL[call.name];
     const scopedPath = PROJECT_SCOPED_ENDPOINT[call.name];
     if (scopedPath) {
       if (!context.projectId) {
         return { ok: false, content: `No DevHub project is open — ${call.name} needs an open project.` };
       }
-      path = scopedPath(context.projectId);
+      path = scopedPath(context.projectId, input);
     }
     if (!path) return { ok: false, content: `Unknown tool: ${call.name}` };
+    const isGet = GET_TOOLS.has(call.name);
     try {
-      const r = await fetchImpl(`${baseUrl}${path}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(context.authHeader ? { Authorization: context.authHeader } : {}),
-        },
-        body: JSON.stringify(toBody(call.name, call.input || {})),
-      });
+      const r = isGet
+        ? await fetchImpl(`${baseUrl}${path}?${new URLSearchParams(toBody(call.name, input) as Record<string, string>).toString()}`, {
+            method: "GET",
+            headers: { ...(context.authHeader ? { Authorization: context.authHeader } : {}) },
+          })
+        : await fetchImpl(`${baseUrl}${path}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(context.authHeader ? { Authorization: context.authHeader } : {}),
+            },
+            body: JSON.stringify(toBody(call.name, input)),
+          });
       const data = await r.json().catch(() => ({}));
       return { ok: r.ok, content: data };
     } catch (e) {

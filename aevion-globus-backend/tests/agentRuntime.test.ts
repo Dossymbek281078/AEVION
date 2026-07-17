@@ -331,6 +331,105 @@ describe("makeExecutor", () => {
 
     expect(seenBody).toEqual({ title: "Add feature" });
   });
+
+  // merge_pull_request — the PR number rides in the URL path (from model
+  // input, not context), unlike the other project-scoped tools.
+  test("merge_pull_request with no projectId in context → ok:false without any fetch", async () => {
+    let called = false;
+    const fakeFetch = (async () => {
+      called = true;
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch);
+    const r = await exec({ id: "t1", name: "merge_pull_request", input: { number: 7 } });
+
+    expect(called).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(String(r.content)).toMatch(/no devhub project is open/i);
+  });
+
+  test("merge_pull_request routes to the project's merge endpoint with the PR number in the path", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true, merged: true, sha: "abc123" }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    const r = await exec({ id: "t1", name: "merge_pull_request", input: { number: 7, mergeMethod: "rebase" } });
+
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/projects/proj-1/github/pull-request/7/merge");
+    expect(seenBody).toEqual({ mergeMethod: "rebase" });
+    expect(r.ok).toBe(true);
+    expect(r.content).toEqual({ ok: true, merged: true, sha: "abc123" });
+  });
+
+  test("merge_pull_request omits mergeMethod from the body when absent (server defaults to squash)", async () => {
+    let seenBody: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: string, init?: { body?: string }) => {
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    await exec({ id: "t1", name: "merge_pull_request", input: { number: 3 } });
+
+    expect(seenBody).toEqual({});
+  });
+
+  // read_project_file — the one GET tool; no body, query-string params instead.
+  test("read_project_file with no projectId in context → ok:false without any fetch", async () => {
+    let called = false;
+    const fakeFetch = (async () => {
+      called = true;
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch);
+    const r = await exec({ id: "t1", name: "read_project_file", input: { path: "lib/types.ts" } });
+
+    expect(called).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(String(r.content)).toMatch(/no devhub project is open/i);
+  });
+
+  test("read_project_file issues a GET with the path as a query param, no request body", async () => {
+    let seenUrl = "";
+    let seenMethod = "";
+    let seenBody: unknown = undefined;
+    const fakeFetch = (async (url: string, init?: { method?: string; body?: string }) => {
+      seenUrl = url;
+      seenMethod = init?.method ?? "";
+      seenBody = init?.body;
+      return { ok: true, json: async () => ({ file: { path: "lib/types.ts", content: "export type X = 1;" } }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    const r = await exec({ id: "t1", name: "read_project_file", input: { path: "lib/types.ts" } });
+
+    expect(seenMethod).toBe("GET");
+    expect(seenBody).toBeUndefined();
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/projects/proj-1/file?path=lib%2Ftypes.ts");
+    expect(r.ok).toBe(true);
+    expect(r.content).toEqual({ file: { path: "lib/types.ts", content: "export type X = 1;" } });
+  });
+
+  test("read_project_file forwards the Authorization header like the other project-scoped tools", async () => {
+    let seenHeaders: Record<string, string> = {};
+    const fakeFetch = (async (_url: string, init?: { headers?: Record<string, string> }) => {
+      seenHeaders = init?.headers ?? {};
+      return { ok: true, json: async () => ({ file: null }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1", authHeader: "Bearer tok-1" });
+    await exec({ id: "t1", name: "read_project_file", input: { path: "x.ts" } });
+
+    expect(seenHeaders.Authorization).toBe("Bearer tok-1");
+    expect("Content-Type" in seenHeaders).toBe(false); // GET has no body, no need for it
+  });
 });
 
 // ── makeAnthropicCallModel (wire-format conversion) ──────────────────

@@ -7,6 +7,7 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
+import { validateGeneratedFiles } from "../lib/syntaxCheck";
 
 export const devhubRouter = Router();
 
@@ -532,6 +533,11 @@ const TEMPLATES = [
 interface GeneratedCodeResult {
   files: Array<{ path: string; content: string; language: string }>;
   aiGenerated: boolean; // false = no provider configured / call failed, caller got a placeholder stub
+  // Present (non-empty) only when a generated JS/TS/JSON file failed a syntax
+  // check — the file is still written (the model may have gotten close, and
+  // an empty diff is worse than a broken-but-visible one), but callers get an
+  // honest signal instead of a plain success for code that won't run.
+  syntaxErrors?: Array<{ path: string; errors: string[] }>;
 }
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -624,7 +630,8 @@ async function generateCodeWithAI(
     const path = targetFiles[0] || "output.ts";
     files = [{ path, content: result.reply, language: detectLanguage(path) }];
   }
-  return { files, aiGenerated: true };
+  const syntaxProblems = await validateGeneratedFiles(files);
+  return { files, aiGenerated: true, ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}) };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -983,7 +990,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   const resolvedStack = stack || project.stack;
   try {
     const existingFiles = await dbListFiles(project.id);
-    const { files: generatedFiles, aiGenerated } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
+    const { files: generatedFiles, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
     // Save each generated file
     for (const gf of generatedFiles) {
       const file: DevHubFile = {
@@ -1007,7 +1014,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
         }
       }
     }
-    res.json({ files: generatedFiles, aiGenerated, projectId: project.id });
+    res.json({ files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), projectId: project.id });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "generation failed" });
   }
@@ -1562,6 +1569,64 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   } catch (e: any) {
     captureException(e, { route: "devhub/github:pull-request", projectId: project.id });
     return res.json({ ok: false, message: e?.message || "GitHub pull request creation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/github/pull-request/:number/merge
+devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  const prNumber = Number(req.params.number);
+  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+    return res.status(400).json({ error: "invalid pull request number" });
+  }
+  const mergeMethodInput = typeof req.body?.mergeMethod === "string" ? req.body.mergeMethod : "squash";
+  const mergeMethod = (["merge", "squash", "rebase"] as const).includes(mergeMethodInput as any) ? mergeMethodInput : "squash";
+
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return res.json({
+      ok: false,
+      message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+      setupUrl: "https://github.com/settings/tokens",
+    });
+  }
+  if (!project.repoUrl) {
+    return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+  }
+  const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) {
+    return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+  }
+  const [, owner, repo] = match;
+  const ghHeaders = { Authorization: `Bearer ${githubToken}`, "User-Agent": "AEVION-DevHub" };
+
+  try {
+    const mergeResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
+      method: "PUT",
+      headers: { ...ghHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ merge_method: mergeMethod }),
+    });
+    const mergeData = await mergeResp.json().catch(() => ({})) as { merged?: boolean; sha?: string; message?: string };
+    // GitHub's merge endpoint can return a non-2xx (405 not mergeable, 409 sha
+    // mismatch, 404) — but even a 2xx response carries `merged: false` in some
+    // edge cases, so both must be checked, not just the HTTP status.
+    if (!mergeResp.ok || mergeData.merged !== true) {
+      return res.json({ ok: false, message: mergeData.message || `GitHub merge error: HTTP ${mergeResp.status}` });
+    }
+    return res.json({ ok: true, merged: true, sha: mergeData.sha, message: mergeData.message });
+  } catch (e: any) {
+    captureException(e, { route: "devhub/github:merge-pull-request", projectId: project.id });
+    return res.json({ ok: false, message: e?.message || "GitHub pull request merge failed" });
   }
 });
 
@@ -2777,7 +2842,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
           ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
           : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const { files, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2790,7 +2855,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated } });
+        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}) } });
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) throw new Error("OPENAI_API_KEY not set");
@@ -3020,7 +3085,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
           ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
           : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const { files, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -3033,7 +3098,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated } });
+        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}) } });
         okCount++;
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;

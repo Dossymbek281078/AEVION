@@ -602,6 +602,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setFiles(listData.files || []);
       if (data.aiGenerated === false) {
         showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");
+      } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
+        const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
+        showToast(`Generated ${newGenerated.length} file(s), but ${paths} failed a syntax check — review before deploying`, "warning");
       } else {
         showToast(`Generated ${newGenerated.length} file(s)`, "success");
       }

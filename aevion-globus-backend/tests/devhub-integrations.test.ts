@@ -533,6 +533,72 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     expect(r.body.files[0].path).toBe("pages/index.tsx");
   });
 
+  test("valid syntax → no syntaxErrors field at all", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "pages/ok.tsx", content: "export default function Ok() { return <div>hi</div>; }", language: "typescript" }] }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.syntaxErrors).toBeUndefined();
+  });
+
+  test("broken JSX syntax is written but flagged — not a silent success", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      // Unterminated JSX + unmatched brace — a real syntax error, not just a semantic one.
+      reply: JSON.stringify({ files: [{ path: "pages/broken.tsx", content: "export default function Broken() { return <div>", language: "typescript" }] }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.aiGenerated).toBe(true);
+    expect(r.body.files[0].content).toContain("<div>"); // still written — an honest-but-broken diff beats an empty one
+    expect(r.body.syntaxErrors).toHaveLength(1);
+    expect(r.body.syntaxErrors[0].path).toBe("pages/broken.tsx");
+    expect(r.body.syntaxErrors[0].errors.length).toBeGreaterThan(0);
+  });
+
+  test("broken JSON is flagged the same way", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "config.json", content: "{ invalid json,, }", language: "json" }] }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.syntaxErrors).toHaveLength(1);
+    expect(r.body.syntaxErrors[0].errors[0]).toMatch(/Invalid JSON/);
+  });
+
+  test("an unchecked language (e.g. Python) is never flagged — no false positives", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "script.py", content: "def broken(:\n    pass", language: "python" }] }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.syntaxErrors).toBeUndefined();
+  });
+
   function mockProvider() {
     vi.mocked(getProviders).mockReturnValue([
       { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any,
@@ -1289,6 +1355,106 @@ describe("POST /api/devhub/projects/:id/github/pull-request", () => {
     const putBody = JSON.parse((fetchMock.mock.calls[4][1] as any).body);
     expect(putBody.sha).toBe("existing-file-sha");
     expect(putBody.branch).toBeTruthy();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 11c. GitHub PR merge — closes the "GitHub is push+PR only" gap
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/github/pull-request/:number/merge", () => {
+  async function createProjectWithRepo(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "MergeTest" });
+    const id = cr.body.project.id;
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/owner/repo" });
+    return id;
+  }
+
+  test("400 on a non-numeric pull request number", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/not-a-number/merge`).send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("ok:false when GITHUB_TOKEN is not configured", async () => {
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/1/merge`).send({});
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/GITHUB_TOKEN/);
+  });
+
+  test("ok:false when no repo is linked yet", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoRepo" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/github/pull-request/1/merge`).send({});
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/push to GitHub first/);
+  });
+
+  test("merges with the requested method and returns the merge sha", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: true, sha: "abc123", message: "Pull Request successfully merged" }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request/7/merge`)
+      .send({ mergeMethod: "rebase" });
+
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, merged: true, sha: "abc123" });
+    expect(fetchMock.mock.calls[0][0]).toContain("/repos/owner/repo/pulls/7/merge");
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.merge_method).toBe("rebase");
+  });
+
+  test("defaults to squash when mergeMethod is omitted", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: true, sha: "def456" }));
+
+    await request(app).post(`/api/devhub/projects/${id}/github/pull-request/3/merge`).send({});
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.merge_method).toBe("squash");
+  });
+
+  test("a 2xx response with merged:false is reported as a failure, not silently ok:true", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    // GitHub's documented edge case: 200 OK but the merge didn't actually happen.
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: false, message: "Merge already in progress" }));
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/5/merge`).send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/Merge already in progress/);
+  });
+
+  test("a non-2xx GitHub response (e.g. not mergeable) is reported as a failure", async () => {
+    process.env.GITHUB_TOKEN = "tok";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(405, { message: "Pull Request is not mergeable" }));
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/9/merge`).send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/not mergeable/);
   });
 });
 

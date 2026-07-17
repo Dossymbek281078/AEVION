@@ -121,6 +121,12 @@ const SMOKES = [
   // every AI-using module eventually calls into it). Validates health,
   // providers/configuration consistency, sessions/agents/prompts shape.
   { name: "qcoreai-prod", script: "qcoreai-prod-smoke.js", readOnly: true },
+  // Paywall policy PROD — read-only probe of /api/paywall/policy. Confirms
+  // the endpoint shape is stable AND, critically, that no UNSAFE_TO_GATE
+  // module (qcoreai/qright/qsign — free-tier promise without usage metering)
+  // is showing enforced:true. Independent outside check of planGate.ts's
+  // own server-side strip; see the 2026-07-16 incident note there.
+  { name: "paywall-policy-prod", script: "paywall-policy-smoke.js", readOnly: true },
   // Planet Compliance PROD — 15 checks for the central trust layer
   // (submissions → artifact versions → certificates → activity). Stats
   // invariants (certified ≤ total), activity timestamp parseability,

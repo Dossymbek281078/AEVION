@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { useI18n } from '@/lib/i18n';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,6 +20,7 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,10 +46,10 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
         body: JSON.stringify({ message: text, userId, history: history.slice(0, -1) }),
       });
       const data = await res.json() as { reply?: string; error?: string };
-      const reply = data.reply || 'Что-то пошло не так. Попробуйте снова.';
+      const reply = data.reply || t('qgood.chat.replyFallback');
       setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }]);
     } catch {
-      setError('Не удалось получить ответ. Проверьте соединение.');
+      setError(t('qgood.chat.err'));
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setLoading(false);
@@ -57,13 +59,13 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
   return (
     <div style={{ background: '#fdf6ff', borderRadius: 16, padding: '24px', border: '1px solid #e8d5f5', display: 'flex', flexDirection: 'column', height: 420 }}>
       <h2 style={{ color: '#6b21a8', fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
-        AI-собеседник
+        {t('qgood.chat.title')}
       </h2>
 
       <div style={{ flex: 1, overflowY: 'auto', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {messages.length === 0 && (
           <div style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', marginTop: 32 }}>
-            Напишите, как вы себя чувствуете — я здесь, чтобы поддержать 💜
+            {t('qgood.chat.empty')}
           </div>
         )}
         {messages.map((msg, i) => (
@@ -87,7 +89,7 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
             >
               {msg.role === 'assistant' && (
                 <div style={{ fontSize: 11, color: '#7c3aed', marginBottom: 4, fontWeight: 600 }}>
-                  Психолог-ассистент
+                  {t('qgood.chat.assistant')}
                 </div>
               )}
               {msg.content}
@@ -97,7 +99,7 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{ padding: '10px 16px', borderRadius: '16px 16px 16px 4px', background: '#f3e8ff', color: '#7c3aed', fontSize: 14 }}>
-              <span style={{ animation: 'pulse 1s infinite' }}>Печатаю…</span>
+              <span style={{ animation: 'pulse 1s infinite' }}>{t('qgood.chat.typing')}</span>
             </div>
           </div>
         )}
@@ -110,7 +112,7 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Напишите сообщение…"
+          placeholder={t('qgood.chat.inputPh')}
           disabled={loading}
           maxLength={1000}
           style={{

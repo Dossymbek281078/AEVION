@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { useI18n } from '@/lib/i18n';
 
 interface Exercise {
   id: string;
@@ -33,6 +34,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
   const [completing, setCompleting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const color = CATEGORY_COLORS[exercise.category] || '#7c3aed';
+  const { t } = useI18n();
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -128,7 +130,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
           <div style={{ fontSize: 36, fontWeight: 700, color }}>
             {minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}с`}
           </div>
-          <div style={{ fontSize: 12, color: '#9ca3af' }}>осталось</div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('qgood.ex.left')}</div>
         </div>
       )}
 
@@ -137,12 +139,12 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
         <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
           {streak !== null && (
             <span style={{ fontSize: 12, color: '#7c3aed', background: '#ede9fe', padding: '3px 10px', borderRadius: 10 }}>
-              🔥 {streak} дн. подряд
+              {t('qgood.ex.streak', { n: streak })}
             </span>
           )}
           {totalDone !== null && (
             <span style={{ fontSize: 12, color: '#059669', background: '#d1fae5', padding: '3px 10px', borderRadius: 10 }}>
-              ✓ Всего: {totalDone}
+              {t('qgood.ex.total', { n: totalDone })}
             </span>
           )}
         </div>
@@ -159,7 +161,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
               border: 'none', cursor: 'pointer', fontSize: 14,
             }}
           >
-            Начать
+            {t('qgood.ex.start')}
           </button>
         )}
         {state === 'active' && (
@@ -171,7 +173,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
               border: 'none', cursor: 'pointer', fontSize: 14,
             }}
           >
-            Стоп
+            {t('qgood.ex.stop')}
           </button>
         )}
         {(state === 'active' || state === 'done') && (
@@ -184,7 +186,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
               border: 'none', cursor: completing ? 'wait' : 'pointer', fontSize: 14,
             }}
           >
-            {completing ? 'Сохраняю…' : '✓ Завершено'}
+            {completing ? t('qgood.ex.saving') : t('qgood.ex.done')}
           </button>
         )}
       </div>

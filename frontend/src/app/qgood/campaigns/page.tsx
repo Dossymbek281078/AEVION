@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
+
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +81,7 @@ function progressPct(raised: string | number, target: string | number): number {
 }
 
 export default async function QGoodCampaignsPage() {
-  const [campaigns, stats] = await Promise.all([loadCampaigns(), loadStats()]);
+  const [campaigns, stats, { t }] = await Promise.all([loadCampaigns(), loadStats(), getServerT()]);
 
   return (
     <main style={{ minHeight: "100vh", background: "#0f172a", color: "#f1f5f9" }}>
@@ -89,14 +92,14 @@ export default async function QGoodCampaignsPage() {
           </div>
           <div style={{ display: "inline-block", padding: "4px 12px", background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)", borderRadius: 999, fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#6ee7b7", marginBottom: 16 }}>QGOOD · CHARITY MVP</div>
           <h1 style={{ fontSize: 40, fontWeight: 900, margin: 0, lineHeight: 1.1, marginBottom: 12 }}>
-            Charity that's <span style={{ color: "#34d399" }}>transparent by default</span>
+            {t("qgood.camp.hero.pre")} <span style={{ color: "#34d399" }}>{t("qgood.camp.hero.hl")}</span>
           </h1>
           <p style={{ fontSize: 16, lineHeight: 1.55, color: "#94a3b8", maxWidth: 620, margin: "0 auto 20px" }}>
-            Запусти кампанию или поддержи. Audit-trail через QRight + VeilNetX ledger. Stripe-готовый платёжный канал.
+            {t("qgood.camp.hero.sub")}
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            <a href="#campaigns" style={{ padding: "10px 20px", background: "#10b981", color: "#062e22", fontWeight: 800, fontSize: 13, borderRadius: 10, textDecoration: "none" }}>View campaigns</a>
-            <Link href="/auth?next=/qgood/campaigns/new" style={{ padding: "10px 20px", background: "transparent", color: "#f1f5f9", fontWeight: 800, fontSize: 13, borderRadius: 10, textDecoration: "none", border: "1px solid #475569" }}>Start a campaign</Link>
+            <a href="#campaigns" style={{ padding: "10px 20px", background: "#10b981", color: "#062e22", fontWeight: 800, fontSize: 13, borderRadius: 10, textDecoration: "none" }}>{t("qgood.camp.cta.view")}</a>
+            <Link href="/auth?next=/qgood/campaigns/new" style={{ padding: "10px 20px", background: "transparent", color: "#f1f5f9", fontWeight: 800, fontSize: 13, borderRadius: 10, textDecoration: "none", border: "1px solid #475569" }}>{t("qgood.camp.cta.start")}</Link>
           </div>
         </div>
       </section>
@@ -104,25 +107,25 @@ export default async function QGoodCampaignsPage() {
       {stats && (
         <section style={{ padding: "0 24px 24px" }}>
           <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <Stat label="Active campaigns" value={String(stats.active_campaigns)} />
-            <Stat label="Total raised" value={fmtMoney(stats.total_raised_cents)} />
-            <Stat label="Total donors" value={String(stats.total_donors)} />
-            <Stat label="All campaigns" value={String(stats.total_campaigns)} />
+            <Stat label={t("qgood.camp.stat.active")} value={String(stats.active_campaigns)} />
+            <Stat label={t("qgood.camp.stat.raised")} value={fmtMoney(stats.total_raised_cents)} />
+            <Stat label={t("qgood.camp.stat.donors")} value={String(stats.total_donors)} />
+            <Stat label={t("qgood.camp.stat.all")} value={String(stats.total_campaigns)} />
           </div>
         </section>
       )}
 
       <section id="campaigns" style={{ padding: "24px 24px 64px" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>Active campaigns</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>{t("qgood.camp.activeTitle")}</h2>
           {campaigns.length === 0 ? (
             <div style={{ padding: 28, textAlign: "center", background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8" }}>
-              No active campaigns yet. <Link href="/auth?next=/qgood/campaigns/new" style={{ color: "#34d399" }}>Be the first</Link>.
+              {t("qgood.camp.empty")} <Link href="/auth?next=/qgood/campaigns/new" style={{ color: "#34d399" }}>{t("qgood.camp.beFirst")}</Link>.
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
               {campaigns.map((c) => (
-                <CampaignCard key={c.id} c={c} />
+                <CampaignCard key={c.id} c={c} t={t} />
               ))}
             </div>
           )}
@@ -141,7 +144,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CampaignCard({ c }: { c: Campaign }) {
+function CampaignCard({ c, t }: { c: Campaign; t: TFn }) {
   const pct = progressPct(c.raisedCents, c.targetCents);
   return (
     <Link href={`/qgood/campaigns/${c.id}`} style={{ display: "block", padding: 14, background: "#1e293b", border: "1px solid #334155", borderRadius: 12, textDecoration: "none", color: "#f1f5f9" }}>
@@ -156,10 +159,10 @@ function CampaignCard({ c }: { c: Campaign }) {
         <div style={{ height: "100%", width: `${pct}%`, background: "#10b981" }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8" }}>
-        <span style={{ color: "#34d399", fontWeight: 700 }}>{fmtMoney(c.raisedCents, c.currency)} raised</span>
-        <span>{c.donorCount} donor{c.donorCount === 1 ? "" : "s"}</span>
+        <span style={{ color: "#34d399", fontWeight: 700 }}>{fmtMoney(c.raisedCents, c.currency)} {t("qgood.camp.raised")}</span>
+        <span>{t("qgood.camp.donors", { n: c.donorCount })}</span>
       </div>
-      <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>of {fmtMoney(c.targetCents, c.currency)} · {pct}%</div>
+      <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>{t("qgood.camp.of", { target: fmtMoney(c.targetCents, c.currency) })} · {pct}%</div>
     </Link>
   );
 }

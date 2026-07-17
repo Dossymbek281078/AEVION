@@ -70,16 +70,32 @@ async function lsOrders(): Promise<LsOrder[] | null> {
   } catch { return null; }
 }
 
+/** Built-in permalink → appId fallback (aevion.gumroad.com/l/<permalink>).
+ *  Railway env GUMROAD_APP_*/GUMROAD_PRODUCT_* still wins; this only ensures
+ *  known products attribute correctly even if their env var isn't set. Keep in
+ *  sync with the Gumroad catalog. */
+const GUMROAD_PERMALINK_APP: Record<string, string> = {
+  orcfbo: "gratitude-book",     // Gratitude ∞ Forever Young — Book (PDF + EPUB)
+  ghvzq: "gratitude-book",      // Gratitude ∞ Forever Young — Complete Pack
+  lelzw: "gratitude-book",      // Gratitude ∞ Forever Young — Book + Audiobook
+  pyiaz: "constitution",        // Constitution Pro ($9/mo)
+  wjvquw: "constitution",       // Constitution Team ($49/mo)
+  xpxzam: "aevion-all-access",  // AEVION All-Access ($59/mo, platform bundle)
+  tmuyxw: "qrenew",             // Протокол «Анти-седина» (RU)
+  kkiavh: "qrenew",             // The Anti-Grey Protocol (EN)
+};
+
 /** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a
  *  product's sales to a specific AEVION app. Falls back to the checkout layer's
- *  GUMROAD_PRODUCT_<PERMALINK> mapping (already set on Railway) so configured
- *  products don't all collapse into "platform"; otherwise "platform". */
+ *  GUMROAD_PRODUCT_<PERMALINK> mapping (already set on Railway), then the
+ *  built-in GUMROAD_PERMALINK_APP catalog; otherwise "platform". */
 function appIdForPermalink(permalink?: string | null): string {
   if (!permalink) return "platform";
   const slug = permalink.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   return (
     process.env[`GUMROAD_APP_${slug}`]?.trim() ||
     process.env[`GUMROAD_PRODUCT_${slug}`]?.trim() ||
+    GUMROAD_PERMALINK_APP[permalink.toLowerCase()] ||
     "platform"
   );
 }

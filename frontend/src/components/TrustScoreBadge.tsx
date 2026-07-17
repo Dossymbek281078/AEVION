@@ -14,6 +14,12 @@ interface TrustScore {
   totalItems: number;
   modulesReporting: number;
   perModule: Record<string, { measuredPct: number; realPct: number; total: number }>;
+  attestation?: {
+    alg: string;
+    asOf: string;
+    keyFingerprint: string;
+    ephemeral: boolean;
+  };
 }
 
 export function TrustScoreBadge() {
@@ -31,6 +37,7 @@ export function TrustScoreBadge() {
 
   if (!ts) return null;
   const mods = Object.entries(ts.perModule);
+  const att = ts.attestation;
 
   return (
     <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
@@ -62,6 +69,25 @@ export function TrustScoreBadge() {
         <span style={{ opacity: 0.7, fontWeight: 400 }}>
           · {ts.modulesReporting} module{ts.modulesReporting === 1 ? "" : "s"} reporting
         </span>
+        {att && !att.ephemeral && (
+          <span
+            title={`Ed25519-signed · key ${att.keyFingerprint}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+              padding: "1px 7px",
+              borderRadius: 999,
+              background: "rgba(45,212,191,0.18)",
+              border: "1px solid rgba(45,212,191,0.4)",
+              color: "#2dd4bf",
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            ✓ signed
+          </span>
+        )}
         {open && (
           <span
             role="tooltip"
@@ -99,6 +125,21 @@ export function TrustScoreBadge() {
                 </span>
               ))}
             </span>
+            {att && (
+              <span style={{ display: "block", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(148,163,184,0.2)", color: "#94a3b8" }}>
+                {att.ephemeral ? "⚠ signed with an ephemeral key" : "✓ Ed25519-signed"} · key{" "}
+                <b style={{ color: "#cbd5e1", fontFamily: "monospace" }}>{att.keyFingerprint}</b>
+                <a
+                  href={apiUrl("/api/data-quality/trust-score/verify")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: "#5eead4", marginLeft: 6, textDecoration: "underline" }}
+                >
+                  verify
+                </a>
+              </span>
+            )}
           </span>
         )}
       </span>

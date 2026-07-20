@@ -373,6 +373,10 @@ export function getProviders(): Provider[] {
           configured: true,
           free: true,
           tier: "free" as ProviderTier,
+          // Marked local so the WHOLE offline pipeline (council AND debate) can
+          // run through the stub with no network — offline demos/CI don't need a
+          // real local runtime. Never in prod (stub only exists under STUB=1).
+          local: true,
         }]
       : []),
   ];

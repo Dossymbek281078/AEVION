@@ -32,7 +32,7 @@ export function UpgradeButton({
     window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
   }
 
-  const defaultLabel = tierId === "pro" ? "Начать бесплатно — 14 дней" : "Попробовать Business";
+  const defaultLabel = "Разблокировать всё";
   const text = loading ? "Открываем оплату..." : (label ?? defaultLabel);
 
   if (variant === "banner") {
@@ -41,9 +41,9 @@ export function UpgradeButton({
         <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-white">
-              {tierId === "pro" ? "AEVION Pro — $19/мес" : "AEVION Business — $49/мес"}
+              AEVION All-Access — $59/мес
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">14 дней бесплатно · Отмена в любой момент · Карта любого банка</div>
+            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · Отмена в любой момент · Карта любого банка</div>
           </div>
           <button
             onClick={handleClick}

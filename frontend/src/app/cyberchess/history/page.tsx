@@ -32,13 +32,6 @@ interface Match {
   createdAt: string;
 }
 
-const SPEED_ICON: Record<string, string> = {
-  bullet: "💨",
-  blitz: "⚡",
-  rapid: "🕐",
-  classical: "♟",
-};
-
 const SPEED_ORDER = ["bullet", "blitz", "rapid", "classical"] as const;
 const SPEED_LABEL: Record<string, string> = {
   bullet: "Пуля",
@@ -63,8 +56,8 @@ function Sparkline({ pts, w = 132, h = 34 }: { pts: number[]; w?: number; h?: nu
   const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   const fillPts = `${pad},${(h - pad).toFixed(1)} ${line} ${(w - pad).toFixed(1)},${(h - pad).toFixed(1)}`;
   const up = pts[pts.length - 1] >= pts[0];
-  const stroke = up ? "#10b981" : "#f43f5e";
-  const fillC = up ? "rgba(16,185,129,0.12)" : "rgba(244,63,94,0.12)";
+  const stroke = up ? "#2f8f5b" : "#b0453f";
+  const fillC = up ? "rgba(47,143,91,0.12)" : "rgba(176,69,63,0.12)";
   const [lx, ly] = coords[coords.length - 1];
   return (
     <svg width={w} height={h} style={{ display: "block", width: "100%" }} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
@@ -186,85 +179,64 @@ export default function CyberChessHistoryPage() {
   }, [matches, userId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
+    <div className="planet-root">
+      <div className="planet-wrap" style={{ paddingTop: 32, paddingBottom: 48 }}>
+        <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">📜 История матчей</h1>
+            <div className="planet-eyebrow" style={{ marginBottom: 6 }}>Онлайн-матчи</div>
+            <h1 className="planet-h1">История матчей</h1>
             {matches.length > 0 && (
-              <p className="mt-1 text-sm text-slate-400">
-                {matches.length} партий · <span className="text-emerald-400">{stats.w}</span> побед ·{" "}
-                <span className="text-rose-400">{stats.l}</span> поражений ·{" "}
-                <span className="text-slate-400">{stats.d}</span> ничьих
+              <p className="planet-muted" style={{ marginTop: 6, fontSize: 13.5 }}>
+                {matches.length} партий · <span style={{ color: "var(--pl-live)" }}>{stats.w}</span> побед ·{" "}
+                <span style={{ color: "var(--pl-danger)" }}>{stats.l}</span> поражений · {stats.d} ничьих
               </p>
             )}
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Link
-              href="/cyberchess/leaderboard"
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800"
-            >
-              🏆 Лидерборд
-            </Link>
-            <Link
-              href="/cyberchess"
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800"
-            >
-              ← к шахматам
-            </Link>
+          <div style={{ display: "flex", flexShrink: 0, gap: 8 }}>
+            <Link href="/cyberchess/leaderboard" className="planet-btn">Лидерборд</Link>
+            <Link href="/cyberchess" className="planet-btn">← к шахматам</Link>
           </div>
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-16 text-center text-slate-500">
-            Загрузка…
-          </div>
+          <div className="planet-card planet-empty">Загрузка…</div>
         ) : error ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-16 text-center text-rose-400">
-            {error}
-          </div>
+          <div className="planet-card planet-empty" style={{ color: "var(--pl-danger)" }}>{error}</div>
         ) : matches.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-16 text-center text-slate-500">
+          <div className="planet-card planet-empty">
             Пока нет сыгранных онлайн-матчей.
             <br />
-            <Link href="/cyberchess/matchmaking" className="mt-2 inline-block text-indigo-400 hover:underline">
+            <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
               Найти соперника →
             </Link>
           </div>
         ) : (
           <>
             {trends.length > 0 && (
-              <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div style={{ marginBottom: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
                 {trends.map((t) => {
                   const first = t.pts[0];
                   const last = t.pts[t.pts.length - 1];
                   const delta = last - first;
                   const peak = Math.max(...t.pts);
                   return (
-                    <div
-                      key={t.speed}
-                      className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-slate-300">
-                          {SPEED_ICON[t.speed] || "♟"} {SPEED_LABEL[t.speed] || t.speed}
-                        </span>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="font-mono text-lg font-black text-slate-100">{last}</span>
+                    <div key={t.speed} className="planet-card" style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{SPEED_LABEL[t.speed] || t.speed}</span>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                          <span className="planet-num" style={{ fontFamily: "var(--pl-mono)", fontSize: 17, fontWeight: 700 }}>{last}</span>
                           <span
-                            className={`font-mono text-xs font-bold ${
-                              delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-slate-500"
-                            }`}
+                            className="planet-num"
+                            style={{ fontFamily: "var(--pl-mono)", fontSize: 11, fontWeight: 700, color: delta > 0 ? "var(--pl-live)" : delta < 0 ? "var(--pl-danger)" : "var(--pl-muted)" }}
                           >
-                            {delta > 0 ? "+" : ""}
-                            {delta}
+                            {delta > 0 ? "+" : ""}{delta}
                           </span>
                         </div>
                       </div>
-                      <div className="mt-1.5">
+                      <div style={{ marginTop: 6 }}>
                         <Sparkline pts={t.pts} />
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                      <div className="planet-muted" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 10.5 }}>
                         <span>{t.pts.length} партий</span>
                         <span>пик {peak}</span>
                       </div>
@@ -273,7 +245,7 @@ export default function CyberChessHistoryPage() {
                 })}
               </div>
             )}
-            <div className="space-y-2">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {matches.map((m) => {
               const iAmWhite = m.whiteUserId === userId;
               const oppName = (iAmWhite ? m.blackName : m.whiteName) || "Соперник";
@@ -285,43 +257,36 @@ export default function CyberChessHistoryPage() {
                 m.result === "draw" ? "draw" : (m.result === "white") === iAmWhite ? "win" : "loss";
               const oc =
                 outcome === "win"
-                  ? { label: "Победа", clr: "text-emerald-400", bar: "bg-emerald-500" }
+                  ? { label: "Победа", color: "var(--pl-live)" }
                   : outcome === "loss"
-                    ? { label: "Поражение", clr: "text-rose-400", bar: "bg-rose-500" }
-                    : { label: "Ничья", clr: "text-slate-400", bar: "bg-slate-500" };
+                    ? { label: "Поражение", color: "var(--pl-danger)" }
+                    : { label: "Ничья", color: "var(--pl-muted)" };
               const sanLine = uciToSan(m.movesSan);
               return (
-                <div
-                  key={m.id}
-                  className="flex items-stretch gap-3 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50"
-                >
-                  <div className={`w-1 ${oc.bar}`} />
-                  <div className="min-w-0 flex-1 py-2.5 pr-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className={`text-sm font-bold ${oc.clr}`}>{oc.label}</span>
-                        <span className="truncate text-sm text-slate-300">vs {oppName}</span>
+                <div key={m.id} className="planet-card" style={{ display: "flex", alignItems: "stretch", gap: 0, overflow: "hidden" }}>
+                  <div style={{ width: 4, flexShrink: 0, background: oc.color }} />
+                  <div style={{ minWidth: 0, flex: 1, padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: oc.color }}>{oc.label}</span>
+                        <span className="planet-muted" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>vs {oppName}</span>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div style={{ display: "flex", flexShrink: 0, alignItems: "center", gap: 8 }}>
                         {delta != null && (
                           <span
-                            className={`font-mono text-xs font-bold ${
-                              delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-slate-500"
-                            }`}
+                            className="planet-num"
+                            style={{ fontFamily: "var(--pl-mono)", fontSize: 11, fontWeight: 700, color: delta > 0 ? "var(--pl-live)" : delta < 0 ? "var(--pl-danger)" : "var(--pl-muted)" }}
                           >
-                            {delta > 0 ? "+" : ""}
-                            {delta}
+                            {delta > 0 ? "+" : ""}{delta}
                           </span>
                         )}
                         {myAfter != null && (
-                          <span className="font-mono text-xs text-slate-400">→ {Math.round(myAfter)}</span>
+                          <span className="planet-num planet-muted" style={{ fontFamily: "var(--pl-mono)", fontSize: 11 }}>→ {Math.round(myAfter)}</span>
                         )}
                       </div>
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                      <span>
-                        {SPEED_ICON[m.speed] || "♟"} {m.timeControl}
-                      </span>
+                    <div className="planet-muted" style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+                      <span>{m.timeControl}</span>
                       <span>·</span>
                       <span>{m.ply} пол-ходов</span>
                       {m.termination && (
@@ -334,16 +299,16 @@ export default function CyberChessHistoryPage() {
                       <span>{fmtDate(m.createdAt)}</span>
                     </div>
                     {sanLine && (
-                      <div className="mt-1 truncate font-mono text-xs text-slate-600" title={sanLine}>
+                      <div className="planet-muted" style={{ marginTop: 4, fontFamily: "var(--pl-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sanLine}>
                         {sanLine}
                       </div>
                     )}
                   </div>
                   <Link
                     href={`/cyberchess/matchmaking?tc=${encodeURIComponent(m.timeControl)}`}
-                    className="flex shrink-0 items-center border-l border-slate-800 px-3 text-xs font-semibold text-indigo-400 transition hover:bg-indigo-500/10"
+                    style={{ display: "flex", flexShrink: 0, alignItems: "center", borderLeft: "1px solid var(--pl-line)", padding: "0 14px", fontSize: 11.5, fontWeight: 700, color: "var(--pl-gold)" }}
                   >
-                    ⚔ Реванш
+                    Реванш
                   </Link>
                 </div>
               );

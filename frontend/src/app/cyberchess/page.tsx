@@ -973,6 +973,7 @@ export default function CyberChessPage(){
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
   const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  const isMobileLayout=vwPx<769; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
   // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
   const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
@@ -980,12 +981,23 @@ export default function CyberChessPage(){
   // не уходили под него (баг: док наезжал на панель ходов). На мобайле (<769) док скрыт
   // (его функции есть в BottomNav/«Все разделы»/Профиле) → 0, доска забирает эти 56px.
   const dockReserve=vwPx>=769?56:0;
+  // Горизонтальный резерв под правую панель. На ДЕСКТОПЕ панель стоит рядом (inline) —
+  // резервируем её бюджет (660 с рейлом / 400 без). На МОБАЙЛЕ (<769) панель — fixed
+  // off-canvas drawer (см. .cc-right-panel @media max-width:768px в globals.css), в
+  // обычном layout-потоке места НЕ занимает ⇒ доске нужен только маленький gutter (16px),
+  // а не бюджет под несуществующую inline-панель. Раньше здесь стоял единый резерв
+  // 400/360 на всех ширинах — на телефонах uже 640px он схлопывал vwPx-360 почти в ноль,
+  // и итоговый Math.max(280,...) намертво прибивал доску к 280px на ЛЮБОМ телефоне,
+  // не давая ей расти вместе с реальной шириной экрана (баг, живой аудит 2026-07-16/20).
+  const mobileGutter=16;
+  const hReserve=railShown?660:(isMobileLayout?mobileGutter:400);
   // Кап 1600 (было 1400) — больше места для доски на высоких/больших экранах.
-  const baseBoardPx=Math.max(320,Math.min(1600,vhPx-vReserve,vwPx-(railShown?660:400)-dockReserve));
+  const baseBoardPx=Math.max(isMobileLayout?240:320,Math.min(1600,vhPx-vReserve,vwPx-hReserve-dockReserve));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
   // Потолок: при scale до 1.5 доска влезает по высоте (с запасом под контролы) и по ширине
-  // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290.
-  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-360-dockReserve));
+  // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290. hReserve тот же, что у baseBoardPx —
+  // единый источник правды вместо рассинхронизированных 400 vs 360.
+  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
   // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
@@ -2399,6 +2411,26 @@ export default function CyberChessPage(){
     sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
   };
 
+  // Full puzzle pool — грузится лениво один раз, только когда пользователь реально
+  // открывает Puzzles-таб (фильтрация/полистать пул требует всего корпуса, homepage-
+  // виджеты обходятся маленьким слайсом из mount-эффекта выше). fullPuzzlePoolRef
+  // защищает от повторной загрузки при переключении табов туда-обратно.
+  const fullPuzzlePoolRef=useRef(false);
+  useEffect(()=>{
+    if(tab!=="puzzles"||fullPuzzlePoolRef.current)return;
+    fullPuzzlePoolRef.current=true;
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
+        if(r.ok){
+          const d=await r.json();
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+        }
+      }catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{}
+    })();
+  },[tab]);
+
   // Auto-load first puzzle when category changes and we're on Puzzles tab
   useEffect(()=>{
     if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
@@ -2526,21 +2558,22 @@ export default function CyberChessPage(){
     }
     // Coach SR — surface due review reminders (1/3/7-day milestones).
     try{const due=getDueReminders();if(due.length>0)sDueReminders(due)}catch{}
-    // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
-    // Cloud API extension убрана из mount — зовём lazy только когда пользователь
-    // открывает Puzzle tab (см. отдельный useEffect ниже).
-    // Puzzle pool: сперва пробуем серверный эндпоинт (фильтрация + shuffle на бэке),
-    // при любой проблеме — падаем на bundled /puzzles.json. Zero-regression: если
-    // эндпоинт отсутствует/пуст/ошибка — поведение ровно как раньше.
+    // Small puzzle slice — грузим сразу, но лёгкую (нужна только для Daily puzzle и
+    // Quick Puzzle на главной, не для полной фильтрации в Puzzles-табе). Раньше здесь
+    // безусловно тянулось 20000 пазлов на КАЖДЫЙ заход в приложение, даже если человек
+    // ни разу не открывал Puzzles — реальный трафик/latency на каждой сессии, особенно
+    // на мобильном интернете. Полный пул теперь грузится лениво отдельным эффектом
+    // ниже, когда пользователь реально открывает вкладку Puzzles.
     (async()=>{
       try{
-        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(d.puzzles as Puzzle[]);return;}
         }
       }catch{}
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{sPuzzles([]);}
+      // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул
+      // ниже подхватит bundled-фолбэк, если сервер недоступен вообще.
     })();
     // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
     const loadOpenings=()=>{
@@ -4619,7 +4652,7 @@ export default function CyberChessPage(){
     // Roll initial die for diceblade
     if(V==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=V==="standard"?"":` · ${VARIANTS.find(v=>v.id===V)?.name||""}`;
-    showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
+    showToast(`Игра за ${cl==="w"?"белых":"чёрных"}${variantLabel}`,"info");
     // Tutorial overlay for non-standard variants — once per variant. After dismissed, the
     // smaller toast tip kicks in for the next 3 plays as a refresher.
     if(V!=="standard"&&!seenVariantTutorials.has(V)){
@@ -4691,7 +4724,7 @@ export default function CyberChessPage(){
     let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Пазл дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Пазлы ещё грузятся…","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("Нет пазлов под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);
@@ -11201,6 +11234,12 @@ ${question.trim()}`;
               const isPro=t.id==="pro";const isUlt=t.id==="ultimate";
               const owned=t.id!=="free"&&!!chessy.owned[t.id];
               const eitherOwned=!!chessy.owned.pro||!!chessy.owned.ultimate;
+              // Billing isn't wired yet (platform wallet unconfigured, see billing.ts —
+              // every real purchase attempt returns platform_wallet_not_configured today).
+              // Rather than send visitors down a dead-end payment click, show an honest
+              // "Скоро" and disable purchase outright until ops configures the wallet.
+              const billingReady=false;
+              const showComingSoon=!billingReady&&t.id!=="free"&&!owned;
               return <div key={t.id} style={{
                 background:owned?"linear-gradient(135deg,rgba(16,185,129,0.22),rgba(52,211,153,0.10))":isPro?"linear-gradient(135deg,rgba(124,58,237,0.18),rgba(167,139,250,0.10))":isUlt?"linear-gradient(135deg,rgba(217,119,6,0.18),rgba(252,211,77,0.10))":"rgba(255,255,255,0.04)",
                 border:`1px solid ${owned?"rgba(52,211,153,0.55)":isPro?"rgba(167,139,250,0.45)":isUlt?"rgba(252,211,77,0.45)":"rgba(148,163,184,0.25)"}`,
@@ -11228,10 +11267,11 @@ ${question.trim()}`;
                   </li>)}
                 </ul>
                 {/* Free tile is always disabled. Pro/Ultimate: if owned → "Активирован" disabled; if other tier owned → "Сменить" allowed; else → primary buy CTA. */}
-                <button disabled={t.disabled||owned}
+                <button disabled={t.disabled||owned||showComingSoon}
                   onClick={async()=>{
                     if(t.id==="free")return;
                     if(owned)return;
+                    if(showComingSoon)return;
                     const tier=t.id as ChessyTier;
                     const amountAev=parseInt(t.price,10)||0;
                     // 1) JWT lookup — mirror keys used elsewhere in the app
@@ -11267,19 +11307,23 @@ ${question.trim()}`;
                   }}
                   style={{
                     width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,
-                    border:"none",cursor:(t.disabled||owned)?"default":"pointer",
-                    background:owned?"rgba(16,185,129,0.18)":t.disabled?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
-                    color:owned?"#34d399":t.disabled?"#94a3b8":"#fff",
+                    border:"none",cursor:(t.disabled||owned||showComingSoon)?"default":"pointer",
+                    background:owned?"rgba(16,185,129,0.18)":(t.disabled||showComingSoon)?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
+                    color:owned?"#34d399":(t.disabled||showComingSoon)?"#94a3b8":"#fff",
                     fontSize:12,fontWeight:900,letterSpacing:0.3,
-                    boxShadow:(t.disabled||owned)?"none":"0 2px 8px rgba(0,0,0,0.2)"
-                  }}>{owned?"✓ Активирован":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
-                {/* Dev-only test activator (until real billing wires up). Skipped on Free. */}
-                {!owned&&t.id!=="free"&&<button onClick={()=>{
+                    boxShadow:(t.disabled||owned||showComingSoon)?"none":"0 2px 8px rgba(0,0,0,0.2)"
+                  }}>{owned?"✓ Активирован":showComingSoon?"Скоро":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
+                {/* Internal-only test activator — gated behind an explicit localStorage debug
+                    flag (never surfaced to real visitors) so QA can still exercise owned-tier
+                    UI paths without shipping a public self-unlock button. Previously rendered
+                    unconditionally for any visitor, letting anyone grant themselves Ultimate for
+                    free via a single confirm() dialog — closed as a launch-readiness fix. */}
+                {!owned&&t.id!=="free"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
                   if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
                   sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
                   showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
                 }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(148,163,184,0.4)",background:"transparent",color:"#94a3b8",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
-                  🧪 Тест-активация (без оплаты)
+                  🧪 Тест-активация (без оплаты · debug-режим)
                 </button>}
                 {owned&&<button onClick={()=>{
                   if(!confirm(`Отключить ${t.name}?`))return;

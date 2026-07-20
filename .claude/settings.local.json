@@ -197,7 +197,8 @@
       "Bash(cp aevion-globus-backend/src/index.ts /tmp/paywall-guard/index.ts)",
       "Bash(cp aevion-globus-backend/scripts/paywall-policy-smoke.js /tmp/paywall-guard/paywall-policy-smoke.js)",
       "Bash(cp aevion-globus-backend/scripts/all-smokes.js /tmp/paywall-guard/all-smokes.js)",
-      "Bash(./node_modules/.bin/tsc --version)"
+      "Bash(./node_modules/.bin/tsc --version)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29727965892 --job 88305365855 --log-failed)"
     ]
   }
 }

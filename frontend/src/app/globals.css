@@ -811,6 +811,7 @@ button:focus:not(:focus-visible) {
 .planet-badge.cyan{background:color-mix(in srgb,var(--pl-cyan) 16%,transparent); color:var(--pl-cyan);}
 .planet-badge.live{background:color-mix(in srgb,var(--pl-live) 16%,transparent); color:var(--pl-live);}
 .planet-badge.danger{background:color-mix(in srgb,var(--pl-danger) 16%,transparent); color:var(--pl-danger);}
+.planet-badge.muted{background:var(--pl-surface-2); color:var(--pl-muted);}
 .planet-track{height:12px; width:100%; border-radius:999px; background:var(--pl-surface-2); overflow:hidden; display:flex; gap:2px; border:1px solid var(--pl-line); padding:2px;}
 .planet-track-seg{flex:1; background:var(--pl-line); border-radius:2px;}
 .planet-track-seg.me{background:var(--pl-gold);}

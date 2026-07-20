@@ -70,10 +70,10 @@ async function lsOrders(): Promise<LsOrder[] | null> {
   } catch { return null; }
 }
 
-/** Built-in permalink → appId fallback (aevion.gumroad.com/l/<permalink>).
- *  Railway env GUMROAD_APP_*/GUMROAD_PRODUCT_* still wins; this only ensures
- *  known products attribute correctly even if their env var isn't set. Keep in
- *  sync with the Gumroad catalog. */
+/** Built-in permalink -> appId fallback (aevion.gumroad.com/l/<permalink>).
+ *  Railway env vars with the GUMROAD_APP_ or GUMROAD_PRODUCT_ prefix still win;
+ *  this only ensures known products attribute correctly even if their env var
+ *  isn't set. Keep in sync with the Gumroad catalog. */
 const GUMROAD_PERMALINK_APP: Record<string, string> = {
   orcfbo: "gratitude-book",     // Gratitude ∞ Forever Young — Book (PDF + EPUB)
   ghvzq: "gratitude-book",      // Gratitude ∞ Forever Young — Complete Pack

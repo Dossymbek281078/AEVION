@@ -71,7 +71,7 @@ async function lsOrders(): Promise<LsOrder[] | null> {
 }
 
 /** Built-in permalink → appId fallback (aevion.gumroad.com/l/<permalink>).
- *  Railway env GUMROAD_APP_*/GUMROAD_PRODUCT_* still wins; this only ensures
+ *  Railway env GUMROAD_APP_<slug> / GUMROAD_PRODUCT_<slug> still wins; this only ensures
  *  known products attribute correctly even if their env var isn't set. Keep in
  *  sync with the Gumroad catalog. */
 const GUMROAD_PERMALINK_APP: Record<string, string> = {

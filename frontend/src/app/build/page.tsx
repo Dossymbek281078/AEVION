@@ -86,20 +86,20 @@ export default function BuildHomePage() {
   }, [projects]);
 
   return (
-    <BuildShell>
+    <BuildShell theme="light">
       {hydrated && !token && <LandingHero publicStats={publicStats} />}
       {hydrated && token && <SmartSuggestions />}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Construction projects</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-[#17181a]">Construction projects</h1>
+          <p className="mt-1 text-sm text-[#74767c]">
             Browse open projects, post a vacancy, or apply directly.
           </p>
         </div>
         <Link
           href="/build/create-project"
-          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+          className="rounded-lg bg-[#0a7d72] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#075b53]"
         >
           + New project
         </Link>
@@ -121,7 +121,7 @@ export default function BuildHomePage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by title or description…"
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+          className="flex-1 rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#9a9c9f] focus:border-[#0a7d72] focus:outline-none"
         />
         {token && (
           <button
@@ -129,8 +129,8 @@ export default function BuildHomePage() {
             aria-pressed={mineOnly}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
               mineOnly
-                ? "bg-emerald-500/20 text-emerald-200"
-                : "bg-white/5 text-slate-400 hover:bg-white/10"
+                ? "bg-[#0a7d72] text-white"
+                : "border border-[#d4d3cc] bg-white text-[#45474c] hover:bg-[#efeee8]"
             }`}
           >
             {mineOnly ? "✓ Mine only" : "Mine only"}
@@ -143,8 +143,8 @@ export default function BuildHomePage() {
               onClick={() => setStatus(s)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                 status === s
-                  ? "bg-emerald-500/20 text-emerald-200"
-                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                  ? "bg-[#0a7d72] text-white"
+                  : "border border-[#d4d3cc] bg-white text-[#45474c] hover:bg-[#efeee8]"
               }`}
             >
               {s}
@@ -154,7 +154,7 @@ export default function BuildHomePage() {
       </div>
 
       {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+        <p className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {error}
         </p>
       )}
@@ -162,7 +162,7 @@ export default function BuildHomePage() {
       {loading && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div key={i} className="rounded-xl border border-[#d4d3cc] bg-white p-4">
               <Skeleton width="70%" height={16} />
               <Skeleton width="100%" height={11} className="mt-3" />
               <Skeleton width="85%" height={11} className="mt-1.5" />
@@ -180,10 +180,10 @@ export default function BuildHomePage() {
       )}
 
       {!loading && projects.length === 0 && !(mineOnly && token) && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
-          <p className="text-sm text-slate-400">
+        <div className="rounded-xl border border-[#d4d3cc] bg-white p-8 text-center">
+          <p className="text-sm text-[#45474c]">
             No projects match these filters. Try clearing the search or{" "}
-            <Link href="/build/create-project" className="text-emerald-300 underline">
+            <Link href="/build/create-project" className="text-[#075b53] underline">
               post the first one
             </Link>
             .
@@ -222,8 +222,8 @@ function SmartSuggestions() {
   if (!loaded || items.length === 0) return null;
 
   return (
-    <div className="mb-8 rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
-      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-sky-300">
+    <div className="mb-8 rounded-xl border border-[#d4d3cc] bg-white p-5">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[#075b53]">
         ✨ Suggested for you
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -231,10 +231,10 @@ function SmartSuggestions() {
           <Link
             key={v.id}
             href={`/build/vacancy/${encodeURIComponent(v.id)}`}
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-sky-500/30 hover:bg-sky-500/5"
+            className="rounded-lg border border-[#d4d3cc] bg-[#fffefb] px-4 py-3 transition hover:border-[#0a7d72]"
           >
-            <div className="font-semibold text-white text-sm">{v.title}</div>
-            <div className="mt-0.5 text-xs text-slate-400">
+            <div className="font-semibold text-[#17181a] text-sm">{v.title}</div>
+            <div className="mt-0.5 text-xs text-[#74767c]">
               {formatSalary(v.salary, v.salaryCurrency)}
               {v.city ? ` · ${v.city}` : ""}
             </div>
@@ -247,18 +247,18 @@ function SmartSuggestions() {
 
 function LandingHero({ publicStats }: { publicStats: { vacancies: number; candidates: number; projects: number } | null }) {
   return (
-    <section className="mb-10 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 px-6 py-10 sm:px-10 sm:py-14">
-      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+    <section className="mb-10 rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] px-6 py-10 sm:px-10 sm:py-14">
+      <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#075b53]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#b5241b]" />
         AEVION QBuild · Construction Recruiting
       </div>
-      <h1 className="mt-4 text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">
+      <h1 className="mt-4 font-serif text-4xl font-extrabold tracking-tight text-[#17181a] sm:text-5xl lg:text-6xl" style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif' }}>
         Нанимайте бригады.<br />
-        <span className="text-emerald-400">Платите когда нашли.</span>
+        <span className="text-[#0a7d72]">Платите когда нашли.</span>
       </h1>
-      <p className="mt-4 max-w-2xl text-base text-slate-300">
+      <p className="mt-4 max-w-2xl text-base text-[#45474c]">
         Строительная биржа нового поколения. Без платы за публикацию вакансии. База резюме на любом тарифе.
-        Комиссия Pay-per-Hire — <strong className="text-white">от 6%</strong> вместо 15–25% у агентств.
+        Комиссия Pay-per-Hire — <strong className="text-[#17181a]">от 6%</strong> вместо 15–25% у агентств.
         AI-скоринг заявок, видеорезюме, Trial Jobs.
       </p>
 
@@ -273,7 +273,7 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
         ].map((t) => (
           <span
             key={t}
-            className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-200"
+            className="rounded-full border border-[#b9b8b0] px-3 py-1 text-[#45474c]"
           >
             {t}
           </span>
@@ -291,19 +291,19 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
       <div className="mt-8 flex flex-wrap gap-3">
         <Link
           href="/build/profile"
-          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+          className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
         >
           Создать профиль бесплатно →
         </Link>
         <Link
           href="/build/vacancies"
-          className="rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+          className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
         >
           Смотреть вакансии
         </Link>
         <Link
           href="/build/why-aevion"
-          className="rounded-lg border border-white/10 px-5 py-2.5 text-sm font-medium text-slate-400 transition hover:text-white"
+          className="rounded-lg px-5 py-2.5 text-sm font-medium text-[#45474c] transition hover:text-[#17181a]"
         >
           Сравнить с HH →
         </Link>
@@ -349,21 +349,21 @@ function LiveActivityBand() {
   }
 
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04]">
-      <div className="flex items-center gap-2 border-b border-emerald-500/15 px-3 py-1.5">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200">
+    <div className="mb-6 overflow-hidden rounded-xl border border-[#d4d3cc] bg-white">
+      <div className="flex items-center gap-2 border-b border-[#d4d3cc] px-3 py-1.5">
+        <span className="inline-block h-2 w-2 rounded-full bg-[#b5241b]" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
           Live · last 20 events
         </span>
       </div>
-      <ul className="divide-y divide-white/5 max-h-48 overflow-y-auto">
+      <ul className="divide-y divide-[#ecebe5] max-h-48 overflow-y-auto">
         {items.map((e, i) => {
           const tone =
             e.kind === "HIRE"
-              ? "text-emerald-300"
+              ? "text-[#075b53]"
               : e.kind === "VACANCY"
-                ? "text-sky-300"
-                : "text-fuchsia-300";
+                ? "text-[#1f6f9f]"
+                : "text-[#8a3fb0]";
           const verb =
             e.kind === "HIRE"
               ? "✓ hired for"
@@ -373,9 +373,9 @@ function LiveActivityBand() {
           return (
             <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-xs">
               <span className={`shrink-0 font-semibold ${tone}`}>{verb}</span>
-              <span className="min-w-0 flex-1 truncate text-slate-200">{e.title}</span>
-              {e.city && <span className="shrink-0 text-slate-500">📍 {e.city}</span>}
-              <span className="shrink-0 text-slate-500">{relative(e.at)}</span>
+              <span className="min-w-0 flex-1 truncate text-[#17181a]">{e.title}</span>
+              {e.city && <span className="shrink-0 text-[#74767c]">📍 {e.city}</span>}
+              <span className="shrink-0 text-[#74767c]">{relative(e.at)}</span>
             </li>
           );
         })}
@@ -387,8 +387,8 @@ function LiveActivityBand() {
 function LiveStat({ n, label }: { n: number; label: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-2xl font-extrabold text-emerald-300">{n.toLocaleString("ru-RU")}</span>
-      <span className="text-slate-400">{label}</span>
+      <span className="text-2xl font-extrabold text-[#0a7d72]">{n.toLocaleString("ru-RU")}</span>
+      <span className="text-[#45474c]">{label}</span>
     </div>
   );
 }
@@ -396,13 +396,13 @@ function LiveStat({ n, label }: { n: number; label: string }) {
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "emerald" | "amber" }) {
   const toneCls =
     tone === "emerald"
-      ? "text-emerald-300"
+      ? "text-[#0a7d72]"
       : tone === "amber"
-        ? "text-amber-300"
-        : "text-slate-100";
+        ? "text-[#b7791f]"
+        : "text-[#17181a]";
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
+    <div className="rounded-xl border border-[#d4d3cc] bg-white px-4 py-3">
+      <div className="text-xs uppercase tracking-wider text-[#74767c]">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
@@ -435,10 +435,10 @@ function FeaturedEmployers() {
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-[#74767c]">
           Featured employers
         </h2>
-        <Link href="/build/leaderboard" className="text-[11px] text-emerald-300 hover:underline">
+        <Link href="/build/leaderboard" className="text-[11px] text-[#075b53] hover:underline">
           See all →
         </Link>
       </div>
@@ -447,7 +447,7 @@ function FeaturedEmployers() {
           <Link
             key={e.userId}
             href={`/build/employer/${encodeURIComponent(e.userId)}`}
-            className="group shrink-0 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition hover:border-emerald-500/30 hover:bg-white/[0.06]"
+            className="group shrink-0 rounded-xl border border-[#d4d3cc] bg-white p-3 transition hover:border-[#0a7d72]"
             style={{ minWidth: 200, maxWidth: 240 }}
           >
             <div className="flex items-center gap-2">
@@ -461,34 +461,34 @@ function FeaturedEmployers() {
                   className="h-9 w-9 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-bold text-emerald-200">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0a7d72]/15 text-sm font-bold text-[#075b53]">
                   {(e.name ?? "?").charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
-                  <span className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                  <span className="truncate text-sm font-semibold text-[#17181a] group-hover:text-[#075b53]">
                     {e.name ?? "Anonymous"}
                   </span>
                   {e.verifiedAt && (
-                    <span className="text-[10px] text-sky-300" title="Verified">✓</span>
+                    <span className="text-[10px] text-[#1f6f9f]" title="Verified">✓</span>
                   )}
                 </div>
-                {e.city && <div className="truncate text-[10px] text-slate-400">📍 {e.city}</div>}
+                {e.city && <div className="truncate text-[10px] text-[#74767c]">📍 {e.city}</div>}
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+            <div className="mt-2 flex items-center justify-between text-[10px] text-[#74767c]">
               <span>
                 {e.openVacancies > 0 ? (
-                  <span className="text-emerald-300">{e.openVacancies} open</span>
+                  <span className="text-[#075b53]">{e.openVacancies} open</span>
                 ) : (
-                  <span className="text-slate-500">no open roles</span>
+                  <span className="text-[#9a9c9f]">no open roles</span>
                 )}
               </span>
               <span>
                 {e.hires > 0 && <span>{e.hires} hires</span>}
                 {e.avgRating > 0 && (
-                  <span className="ml-1.5 text-amber-300">★ {e.avgRating.toFixed(1)}</span>
+                  <span className="ml-1.5 text-[#b7791f]">★ {e.avgRating.toFixed(1)}</span>
                 )}
               </span>
             </div>
@@ -501,40 +501,40 @@ function FeaturedEmployers() {
 
 function FirstProjectCta() {
   return (
-    <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-8 text-center">
+    <div className="rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] p-8 text-center">
       <div className="text-5xl">🏗</div>
-      <h2 className="mt-4 text-xl font-bold text-white">Запустите первый проект на QBuild</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-300">
+      <h2 className="mt-4 text-xl font-bold text-[#17181a]">Запустите первый проект на QBuild</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-[#45474c]">
         Проект — это контейнер для одной или нескольких вакансий. Один проект может содержать
         бригады разных специальностей: сварщики, монтажники, прорабы.
       </p>
-      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-slate-300 sm:grid-cols-3">
-        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-[#45474c] sm:grid-cols-3">
+        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">📝</div>
-          <div className="mt-1 font-semibold text-white">Опишите объект</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">Город, бюджет, сроки</p>
+          <div className="mt-1 font-semibold text-[#17181a]">Опишите объект</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">Город, бюджет, сроки</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">👥</div>
-          <div className="mt-1 font-semibold text-white">Добавьте вакансии</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">С зарплатой и навыками</p>
+          <div className="mt-1 font-semibold text-[#17181a]">Добавьте вакансии</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">С зарплатой и навыками</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">✓</div>
-          <div className="mt-1 font-semibold text-white">Получайте отклики</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">AI-скоринг + bulk-actions</p>
+          <div className="mt-1 font-semibold text-[#17181a]">Получайте отклики</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">AI-скоринг + bulk-actions</p>
         </div>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Link
           href="/build/create-project"
-          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+          className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
         >
           + Создать первый проект
         </Link>
         <Link
           href="/build/onboarding"
-          className="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+          className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
         >
           5-step онбординг
         </Link>

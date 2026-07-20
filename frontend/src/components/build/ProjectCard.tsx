@@ -8,15 +8,15 @@ const STATUS_LABEL: Record<BuildProject["status"], string> = {
 };
 
 const STATUS_TONE: Record<BuildProject["status"], string> = {
-  OPEN: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  IN_PROGRESS: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  DONE: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  OPEN: "bg-[#0a7d72]/10 text-[#075b53] border-[#0a7d72]/30",
+  IN_PROGRESS: "bg-[#b7791f]/10 text-[#8a5a12] border-[#b7791f]/30",
+  DONE: "bg-[#efeee8] text-[#74767c] border-[#d4d3cc]",
 };
 
 const STATUS_DOT: Record<BuildProject["status"], string> = {
-  OPEN: "bg-emerald-400",
-  IN_PROGRESS: "bg-amber-400",
-  DONE: "bg-slate-500",
+  OPEN: "bg-[#0a7d72]",
+  IN_PROGRESS: "bg-[#b7791f]",
+  DONE: "bg-[#9a9c9f]",
 };
 
 function formatBudget(n: number): string {
@@ -33,7 +33,7 @@ export function ProjectCard({ project }: { project: BuildProject }) {
   return (
     <Link
       href={`/build/project/${encodeURIComponent(project.id)}`}
-      className="group block rounded-xl border border-white/10 bg-white/5 p-5 transition hover:border-emerald-500/30 hover:bg-white/10"
+      className="group block rounded-xl border border-[#d4d3cc] bg-white p-5 transition hover:border-[#0a7d72] hover:shadow-[0_8px_28px_-18px_rgba(20,30,40,0.35)]"
     >
       {/* Status + city */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -42,28 +42,28 @@ export function ProjectCard({ project }: { project: BuildProject }) {
           {STATUS_LABEL[project.status]}
         </span>
         {project.city && (
-          <span className="text-[11px] text-slate-500">📍 {project.city}</span>
+          <span className="text-[11px] text-[#74767c]">📍 {project.city}</span>
         )}
         {openVacancies != null && openVacancies > 0 && (
-          <span className="text-[11px] text-emerald-400 font-medium">
+          <span className="text-[11px] text-[#075b53] font-medium">
             {openVacancies} {openVacancies === 1 ? "вакансия" : openVacancies < 5 ? "вакансии" : "вакансий"}
           </span>
         )}
       </div>
 
       {/* Title */}
-      <h3 className="line-clamp-2 text-base font-bold text-white group-hover:text-emerald-200 transition">
+      <h3 className="line-clamp-2 text-base font-bold text-[#17181a] group-hover:text-[#075b53] transition">
         {project.title}
       </h3>
 
       {/* Description */}
-      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-400">
+      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#45474c]">
         {project.description}
       </p>
 
       {/* Footer */}
-      <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-        <span className="font-semibold text-slate-300">{formatBudget(project.budget)}</span>
+      <div className="mt-4 flex items-center justify-between text-xs text-[#74767c]">
+        <span className="font-semibold text-[#17181a]">{formatBudget(project.budget)}</span>
         <span>
           {daysAgo === 0 ? "сегодня" : daysAgo === 1 ? "вчера" : `${daysAgo} дн. назад`}
         </span>

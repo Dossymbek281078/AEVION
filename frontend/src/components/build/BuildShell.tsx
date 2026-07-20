@@ -45,12 +45,65 @@ const TIER_CHIP: Record<string, { className: string; emoji: string }> = {
   PLATINUM: { className: "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-100", emoji: "💎" },
 };
 
-export function BuildShell({ children }: { children: React.ReactNode }) {
+type ShellTheme = "dark" | "light";
+
+// Светлая «газетная» тема — opt-in per page. Дефолт остаётся тёмным, чтобы
+// непеределанные страницы /build не сломались (см. feedback_aevion_light_newspaper_ui).
+const SHELL_SKIN: Record<ShellTheme, {
+  root: string; header: string; menuBtn: string; logoSub: string;
+  navActive: string; navIdle: string; moreBtn: string; gear: (active: boolean) => string;
+  footer: string; footerLink: string; drawer: string; drawerBar: string; drawerBtn: string;
+  drawerActive: string; drawerIdle: string; bottomNav: string; bottomActive: string; bottomIdle: string;
+}> = {
+  dark: {
+    root: "bg-slate-950 text-slate-100",
+    header: "border-white/10 bg-slate-950/80",
+    menuBtn: "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10",
+    logoSub: "text-slate-400",
+    navActive: "bg-white/10 text-white",
+    navIdle: "text-slate-400 hover:bg-white/5 hover:text-white",
+    moreBtn: "text-slate-400 hover:bg-white/5 hover:text-white",
+    gear: (active) => `border-white/10 text-slate-200 hover:bg-white/10 ${active ? "bg-white/10" : ""}`,
+    footer: "border-white/5 text-slate-500",
+    footerLink: "hover:text-slate-300",
+    drawer: "border-white/10 bg-slate-950",
+    drawerBar: "border-white/10",
+    drawerBtn: "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10",
+    drawerActive: "bg-emerald-500/15 text-emerald-200",
+    drawerIdle: "text-slate-300 hover:bg-white/5",
+    bottomNav: "border-white/10 bg-slate-950/95",
+    bottomActive: "text-emerald-300",
+    bottomIdle: "text-slate-400 hover:text-slate-200",
+  },
+  light: {
+    root: "bg-[#f7f6f2] text-[#17181a]",
+    header: "border-[#d4d3cc] bg-[#f7f6f2]/85",
+    menuBtn: "border-[#c2c8cf] bg-white text-[#45474c] hover:bg-[#efeee8]",
+    logoSub: "text-[#74767c]",
+    navActive: "bg-[#17181a] text-white",
+    navIdle: "text-[#45474c] hover:bg-[#efeee8] hover:text-[#17181a]",
+    moreBtn: "text-[#45474c] hover:bg-[#efeee8] hover:text-[#17181a]",
+    gear: (active) => `border-[#c2c8cf] text-[#45474c] hover:bg-[#efeee8] ${active ? "bg-[#efeee8]" : ""}`,
+    footer: "border-[#d4d3cc] text-[#74767c]",
+    footerLink: "hover:text-[#17181a]",
+    drawer: "border-[#d4d3cc] bg-[#fffefb]",
+    drawerBar: "border-[#d4d3cc]",
+    drawerBtn: "border-[#c2c8cf] bg-white text-[#45474c] hover:bg-[#efeee8]",
+    drawerActive: "bg-[#0a7d72]/12 text-[#075b53]",
+    drawerIdle: "text-[#45474c] hover:bg-[#efeee8]",
+    bottomNav: "border-[#d4d3cc] bg-[#f7f6f2]/95",
+    bottomActive: "text-[#075b53]",
+    bottomIdle: "text-[#74767c] hover:text-[#17181a]",
+  },
+};
+
+export function BuildShell({ children, theme = "dark" }: { children: React.ReactNode; theme?: ShellTheme }) {
   const pathname = usePathname();
   const user = useBuildAuth((s) => s.user);
   const logout = useBuildAuth((s) => s.logout);
   const hydrated = useBuildAuth((s) => s.hydrated);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const skin = SHELL_SKIN[theme];
 
   // Auto-close the drawer on route change so taps on a link feel instant.
   useEffect(() => {
@@ -73,8 +126,8 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur">
+    <div className={`min-h-screen ${skin.root}`}>
+      <header className={`border-b backdrop-blur ${skin.header}`}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
           <div className="flex items-center gap-2">
             <button
@@ -82,7 +135,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
               aria-label="Open menu"
               aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
-              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 sm:hidden"
+              className={`rounded-md border px-2.5 py-1.5 sm:hidden ${skin.menuBtn}`}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="4" y1="6" x2="20" y2="6" />
@@ -92,7 +145,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
             </button>
             <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
               <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-              <span className="hidden text-slate-400 sm:inline">AEVION Construction & Recruiting</span>
+              <span className={`hidden sm:inline ${skin.logoSub}`}>AEVION Construction & Recruiting</span>
             </Link>
           </div>
 
@@ -104,7 +157,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                   key={n.href}
                   href={n.href}
                   className={`rounded-md px-3 py-1.5 text-sm transition ${
-                    active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    active ? skin.navActive : skin.navIdle
                   }`}
                 >
                   {n.label}
@@ -115,7 +168,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => setDrawerOpen(true)}
-                className="rounded-md px-3 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                className={`rounded-md px-3 py-1.5 text-sm ${skin.moreBtn}`}
                 aria-label="More menu"
               >
                 More…
@@ -144,7 +197,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 <Link
                   href="/build/settings"
                   title="Account settings"
-                  className={`rounded-md border border-white/10 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 ${pathname === "/build/settings" ? "bg-white/10" : ""}`}
+                  className={`rounded-md border px-2.5 py-1.5 ${skin.gear(pathname === "/build/settings")}`}
                 >
                   ⚙
                 </Link>
@@ -163,24 +216,25 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         pathname={pathname}
         signedIn={!!user}
         onLogout={logout}
+        skin={skin}
       />
 
       <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:pb-6">{children}</main>
-      {hydrated && user && <MobileBottomNav pathname={pathname} />}
+      {hydrated && user && <MobileBottomNav pathname={pathname} skin={skin} />}
       <CompareBar />
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
-      <footer className="border-t border-white/5 mt-8">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+      <footer className={`border-t mt-8 ${skin.footer}`}>
+        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px]">
           <div className="flex flex-wrap gap-4">
-            <Link href="/build/help" className="hover:text-slate-300">Help</Link>
-            <Link href="/build/stats" className="hover:text-slate-300">Platform stats</Link>
-            <Link href="/build/leaderboard" className="hover:text-slate-300">Leaderboard</Link>
-            <Link href="/build/success-stories" className="hover:text-slate-300">Success stories</Link>
-            <Link href="/build/why-aevion" className="hover:text-slate-300">Why AEVION</Link>
-            <Link href="/build/pricing" className="hover:text-slate-300">Pricing</Link>
-            <Link href="/build/developers" className="hover:text-slate-300">Developers</Link>
-            <Link href="/build/changelog" className="hover:text-slate-300">Changelog</Link>
-            <Link href="/build/onboarding" className="hover:text-slate-300">Get started</Link>
+            <Link href="/build/help" className={skin.footerLink}>Help</Link>
+            <Link href="/build/stats" className={skin.footerLink}>Platform stats</Link>
+            <Link href="/build/leaderboard" className={skin.footerLink}>Leaderboard</Link>
+            <Link href="/build/success-stories" className={skin.footerLink}>Success stories</Link>
+            <Link href="/build/why-aevion" className={skin.footerLink}>Why AEVION</Link>
+            <Link href="/build/pricing" className={skin.footerLink}>Pricing</Link>
+            <Link href="/build/developers" className={skin.footerLink}>Developers</Link>
+            <Link href="/build/changelog" className={skin.footerLink}>Changelog</Link>
+            <Link href="/build/onboarding" className={skin.footerLink}>Get started</Link>
           </div>
           <span>© 2026 AEVION QBuild</span>
         </div>
@@ -190,7 +244,9 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MobileBottomNav({ pathname }: { pathname: string }) {
+type ShellSkin = (typeof SHELL_SKIN)[ShellTheme];
+
+function MobileBottomNav({ pathname, skin }: { pathname: string; skin: ShellSkin }) {
   const tabs: { href: string; label: string; icon: string }[] = [
     { href: "/build", label: "Home", icon: "🏠" },
     { href: "/build/vacancies", label: "Feed", icon: "📋" },
@@ -201,7 +257,7 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur sm:hidden"
+      className={`fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur sm:hidden ${skin.bottomNav}`}
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto grid max-w-md grid-cols-5">
@@ -215,7 +271,7 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
               <Link
                 href={t.href}
                 className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition ${
-                  active ? "text-emerald-300" : "text-slate-400 hover:text-slate-200"
+                  active ? skin.bottomActive : skin.bottomIdle
                 }`}
                 aria-current={active ? "page" : undefined}
               >
@@ -239,6 +295,7 @@ function NavDrawer({
   pathname,
   signedIn,
   onLogout,
+  skin,
 }: {
   open: boolean;
   onClose: () => void;
@@ -246,6 +303,7 @@ function NavDrawer({
   pathname: string;
   signedIn: boolean;
   onLogout: () => void;
+  skin: ShellSkin;
 }) {
   return (
     <>
@@ -260,20 +318,20 @@ function NavDrawer({
         role="dialog"
         aria-label="Navigation menu"
         aria-modal="true"
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-white/10 bg-slate-950 shadow-2xl transition-transform ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r shadow-2xl transition-transform ${skin.drawer} ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className={`flex items-center justify-between border-b px-4 py-3 ${skin.drawerBar}`}>
           <span className="flex items-center gap-2 text-sm font-semibold">
             <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-            <span className="text-slate-400">Menu</span>
+            <span className={skin.logoSub}>Menu</span>
           </span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close menu"
-            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-200 hover:bg-white/10"
+            className={`rounded-md border px-2.5 py-1 text-sm ${skin.drawerBtn}`}
           >
             ×
           </button>
@@ -287,7 +345,7 @@ function NavDrawer({
                 href={n.href}
                 onClick={onClose}
                 className={`block rounded-md px-3 py-2 text-sm transition ${
-                  active ? "bg-emerald-500/15 text-emerald-200" : "text-slate-300 hover:bg-white/5"
+                  active ? skin.drawerActive : skin.drawerIdle
                 }`}
               >
                 {n.label}
@@ -296,14 +354,14 @@ function NavDrawer({
           })}
         </nav>
         {signedIn && (
-          <div className="border-t border-white/10 px-4 py-3">
+          <div className={`border-t px-4 py-3 ${skin.drawerBar}`}>
             <button
               type="button"
               onClick={() => {
                 onLogout();
                 onClose();
               }}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-200"
+              className={`w-full rounded-md border px-3 py-2 text-sm transition hover:bg-rose-500/10 hover:text-rose-600 ${skin.drawerBtn}`}
             >
               Log out
             </button>

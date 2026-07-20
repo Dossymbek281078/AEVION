@@ -649,6 +649,44 @@ qventureRouter.get("/compare/pdf", async (req: Request, res: Response) => {
     doc.font("Helvetica").fillColor("#0f172a");
     doc.moveDown(1);
 
+    // Diligence signals — side by side (guarded so older records without the
+    // deeper analysis fields still render a clean, if sparser, comparison).
+    type Rec = NonNullable<Awaited<ReturnType<typeof getById>>>;
+    const diligence = (r: Rec) => {
+      const rr = r.result;
+      const coverage = typeof rr.signalCoverage === "number" ? `${Math.round(rr.signalCoverage * 100)}% company-specific` : "n/a";
+      const flags = rr.redFlags && rr.redFlags.length ? `${rr.redFlags.length} flag${rr.redFlags.length > 1 ? "s" : ""}` : "none";
+      const stress = rr.stress && rr.stress.resilience !== "insufficient-data" ? rr.stress.resilience.toUpperCase() : "n/a";
+      const tam = rr.tam && rr.tam.mode !== "insufficient" && typeof rr.tam.currentPenetrationPct === "number"
+        ? `${rr.tam.currentPenetrationPct < 0.1 ? "<0.1" : rr.tam.currentPenetrationPct.toFixed(1)}% penetration${rr.tam.flags && rr.tam.flags.length ? " (!)" : ""}`
+        : "n/a";
+      const proj = rr.projections ? rr.projections.verdict.toUpperCase() : "n/a";
+      return { coverage, flags, stress, tam, proj };
+    };
+    const da = diligence(a);
+    const db = diligence(b);
+    const hasDiligence = [da, db].some((d) => d.coverage !== "n/a" || d.flags !== "none" || d.stress !== "n/a" || d.tam !== "n/a" || d.proj !== "n/a");
+    if (hasDiligence) {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Diligence signals — side by side");
+      doc.moveDown(0.3);
+      const drow = (label: string, av: string, bv: string, flagWorse?: boolean) => {
+        const y = doc.y;
+        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#475569").text(label, col.factor, y, { width: 240 });
+        const ly = doc.y - 11;
+        doc.font("Helvetica").fillColor(flagWorse ? "#b45309" : "#0f172a").text(av, col.a, ly, { width: 120 });
+        doc.fillColor(flagWorse ? "#b45309" : "#0f172a").text(bv, col.b, ly, { width: 120 });
+        doc.fillColor("#0f172a");
+        doc.moveDown(0.15);
+      };
+      drow("Signal coverage", da.coverage, db.coverage);
+      drow("Red flags", da.flags, db.flags, da.flags !== "none" || db.flags !== "none");
+      drow("Stress resilience", da.stress, db.stress, da.stress === "UNDERWATER" || db.stress === "UNDERWATER" || da.stress === "FRAGILE" || db.stress === "FRAGILE");
+      drow("TAM triangulation", da.tam, db.tam, da.tam.includes("(!)") || db.tam.includes("(!)"));
+      drow("Revenue projection", da.proj, db.proj, da.proj.includes("HOCKEY") || db.proj.includes("HOCKEY"));
+      doc.x = 50;
+      doc.moveDown(0.8);
+    }
+
     // Per-side memo snippets
     doc.x = 50;
     for (const r of [a, b]) {

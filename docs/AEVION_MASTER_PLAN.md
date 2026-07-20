@@ -86,17 +86,19 @@ window's auto-memory `MEMORY.md`:
 |---|---|---|---|
 | `aevion-core` | `main` | monorepo root, frontend coordination | hub |
 | `aevion-backend-modules` | `main` / `feat/*` | platform backend (qright, bureau, awards, pipeline, qshield, planet, modules) | active |
-| `aevion-qsign` | `feat/qsign-v2` | QSign v2 | **shipped (PR #2)** — do nothing without checking PR list |
+| ~~`aevion-qsign`~~ | ~~`feat/qsign-v2`~~ | QSign v2 | **shipped (PR #2). Worktree removed 2026-07-20** — a later `feat/qsign-v1.1` checkout at this path was audited and found byte-for-byte redundant with main (i18n keys + language switcher already merged), then deleted. If you need QSign work, start a fresh worktree off `main`. |
 | ~~`frontend-qcore`~~ | — | QCoreAI multi-agent + Multichat Engine | **directory no longer exists (confirmed missing 2026-07-16).** Routes (`aevion-globus-backend/src/routes/{qcoreai,multichat}.ts`) live in the main monorepo checkout — work them via `aevion-core` or a dedicated isolated worktree, not an assumed `frontend-qcore` checkout. |
 | `aevion-bank` | `main` (`frontend/src/app/bank/`) | Bank UI + AEC ledger | active — branch archived, work continues on main |
 | `aevion-smeta` | `feat/smeta-trainer` | смета (construction estimates) | active |
-| `aevion-qbuild-fix` | `feat/qbuild-i18n` | qbuild (construction hiring) | active — **supersedes the old `aevion-qbuild`/`port-qbuild-v3` entry**, which no longer exists on disk. i18n live-translation fix (`<AutoTranslate observe>` on `/build` layout) already merged to main as of 2026-07-16 — don't redo it. |
+| ~~`aevion-qbuild-fix`~~ | ~~`feat/qbuild-i18n`~~ | qbuild (construction hiring) | **superseded the old `aevion-qbuild`/`port-qbuild-v3` entry, then itself removed 2026-07-20** once its i18n fix was confirmed already merged to main. If you need QBuild work, start a fresh worktree off `main` — there is currently no canonical QBuild worktree. |
 | `aevion-cyberchess` | `chess-tournaments` | CyberChess UX | active |
 | `aevion-globus` | various | globus / 27-node visualisation | active |
 
 If a window not listed above asks for work, **first** check what its
 CLAUDE.md says, then assume it's a new fork — confirm scope with the user
 before suggesting anything.
+
+**2026-07-20 worktree audit outcome** (full detail in § 6): of the ~54 non-canonical `aevion-*` scratch directories found sprawled outside this table, 34 were removed as confirmed dead (empty/non-git, or zero unique content vs `main`). 3 had real unshipped work and were ported via dedicated PRs instead of merging the stale branch wholesale: mapreality i18n (#654), qgood i18n (#667), bureau `protect-batch`/verify-log/seed-script/CSV/lookup (#672) — all merged, all 6 source worktrees then removed. `aevion-qrenew` was investigated and found to be **live third-party work** (a DevHub codegen agent actively committing to it) — left untouched, not ours to clean up. Lesson learned twice this audit: don't trust a branch's commit *message* similarity to something already on `main` — always diff actual file content, since two independently-written implementations of "the same" feature can both exist and only one may be shipped.
 
 ---
 
@@ -303,6 +305,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-07-20  #693 fix(paywall): UNSAFE_TO_GATE guard — planGate.ts now strips qcoreai/qright/qsign from enforcement server-side regardless of PAYWALL_MODULES (they promise a free quota with no metering to back a 402 fallback), plus an independent paywall-policy-smoke.js assertion wired into the daily 08:00 UTC prod cron. Written after qcoreai briefly went live-enforced for ~44min on 2026-07-16 via a manual flip that skipped this doc — see the incident callout at the top of docs/PAYWALL_FLIP_READINESS.md.
+2026-07-20  #654/#667/#672 — worktree audit cleanup: 34 stale/empty aevion-* scratch dirs removed; 3 had real unshipped work, ported via dedicated PRs instead of merging stale branches wholesale — mapreality i18n (#654), qgood i18n (#667), bureau protect-batch/verify-log/seed-script/CSV/lookup (#672). aevion-qsign + aevion-smeta-iso worktrees separately confirmed byte-identical to main (no port needed) and removed. aevion-qrenew found to be live third-party (DevHub codegen agent) work — left alone. Full detail in § 2's audit note.
 2026-07-16  #624 fix(qcoreai,multichat): Sentry capture gap-fill — captureQCoreAIError wired from 16 to 232/232 real catch blocks in qcoreai.ts, captureMultichatError from 13 to 15/15 in multichat.ts (5 previously-unbound `catch {}` blocks fixed to bind+capture). Closes the QCoreAI/Multichat Sentry ⚠ in §3. Intentional best-effort swallows (health probes, JSON-parse fallbacks) left untouched by design.
 2026-07-16  — audit: qbuild i18n live-translate (`<AutoTranslate observe>` on `/build` layout) confirmed already on main — the `feat/qbuild-i18n` branch (worktree renamed `aevion-qbuild` → `aevion-qbuild-fix`) was fully superseded. § 2 inventory reconciled with actual disk state (frontend-qcore no longer exists; several stray non-canonical worktree dirs found and flagged, not deleted).
 2026-06-25  #440 test(cyberchess): finalize→prize webhook smoke — live e2e for /api/cyberchess/tournament-finalized (sig-reject 401×2, valid 201 record, idempotent replay, malformed 400, Bearer-scoped /results + CSV) in all-smokes. CyberChess P2 backlog now fully cleared (P2P friend-play was already shipped — useP2P wired in page.tsx; the 2026-05-01 orphan note was stale).

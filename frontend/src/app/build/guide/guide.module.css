@@ -138,9 +138,9 @@
 .steps .body li { margin: 4px 0; }
 .steps .accent { color: var(--teal-deep); font-weight: 700; }
 .steps .stepCta {
-  display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 12px;
+  display: block; width: fit-content; margin-top: 12px; font-family: var(--mono); font-size: 12px;
   letter-spacing: .03em; text-transform: uppercase; color: var(--ink);
-  border-bottom: 2px solid var(--teal); padding-bottom: 1px;
+  border-bottom: 2px solid var(--teal); padding-bottom: 2px;
 }
 .steps .stepCta:hover { color: var(--teal-deep); border-bottom-color: var(--teal-deep); }
 

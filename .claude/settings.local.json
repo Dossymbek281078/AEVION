@@ -191,7 +191,13 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 672 --json mergeable,mergeStateStatus)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 672 --json state,mergedAt)",
       "Bash(echo \"---exit: $?---\")",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(mkdir -p /tmp/paywall-guard)",
+      "Bash(cp aevion-globus-backend/src/lib/planGate.ts /tmp/paywall-guard/planGate.ts)",
+      "Bash(cp aevion-globus-backend/src/index.ts /tmp/paywall-guard/index.ts)",
+      "Bash(cp aevion-globus-backend/scripts/paywall-policy-smoke.js /tmp/paywall-guard/paywall-policy-smoke.js)",
+      "Bash(cp aevion-globus-backend/scripts/all-smokes.js /tmp/paywall-guard/all-smokes.js)",
+      "Bash(./node_modules/.bin/tsc --version)"
     ]
   }
 }

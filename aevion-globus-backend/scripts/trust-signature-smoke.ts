@@ -70,6 +70,23 @@ async function main() {
   const other = verifySignedTrustScore(forged);
   check("foreign-key sig verifies but is not platform key", other.signatureValid === true && other.isPlatformKey === false, other);
 
+  // 6b. Re-encoding the free-text note must NOT break verification — the note is
+  // not part of the signed payload (transport-robustness: proxies re-encode
+  // non-ASCII). Only numbers/timestamp/module-ids are committed to.
+  const noteChanged = JSON.parse(JSON.stringify(signed));
+  noteChanged.note = "totally different description — not signed";
+  const nc = verifySignedTrustScore(noteChanged);
+  check("changed free-text note still verifies (note not signed)", nc.valid === true, nc);
+
+  // 6c. The signed payload is pure ASCII — a hash basis a proxy cannot mangle.
+  // Simulate a client whose JSON serialiser \u-escapes any non-ASCII, round-trip
+  // through parse, and confirm the hash still matches.
+  const escaped = JSON.stringify(signed).replace(/[^\x00-\x7F]/g, (c) =>
+    "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
+  const roundTripped = JSON.parse(escaped);
+  check("unicode-escaped round-trip still verifies", verifySignedTrustScore(roundTripped).valid === true);
+
   // 7. Malformed input handled gracefully.
   check("null body rejected", verifySignedTrustScore(null).valid === false);
   check("no-attestation body rejected", verifySignedTrustScore({ score: 5 }).valid === false);

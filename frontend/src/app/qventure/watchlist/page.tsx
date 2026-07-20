@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { VERDICT_COLOR, VERDICT_LABEL, SECTION, H2, type Verdict } from "../_result";
-import { getWatchlist, removeFromWatchlist, type WatchlistItem } from "../_watchlist";
+import { getWatchlist, removeFromWatchlist, syncWatchlist, type WatchlistItem } from "../_watchlist";
+import { isAuthenticated } from "@/lib/auth";
 
 type SortKey = "composite" | "savedAt" | "name";
 
@@ -13,12 +14,16 @@ export default function WatchlistPage() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [sort, setSort] = useState<SortKey>("composite");
   const [ready, setReady] = useState(false);
+  const [synced, setSynced] = useState(isAuthenticated());
 
   const refresh = useCallback(() => setItems(getWatchlist()), []);
 
   useEffect(() => {
     refresh();
     setReady(true);
+    // Pull the cross-device list and migrate any browser-only items up. On
+    // sign-out or error this resolves to the local list and updates nothing new.
+    void syncWatchlist().then((merged) => { setItems(merged); setSynced(isAuthenticated()); });
     const h = () => refresh();
     window.addEventListener("qventure:watchlist", h);
     window.addEventListener("storage", h);
@@ -131,7 +136,9 @@ export default function WatchlistPage() {
               </div>
             </div>
             <p style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 12 }}>
-              Your watchlist is stored privately in this browser. Open links share the public report for each deal.
+              {synced
+                ? "Your watchlist is saved to your account and synced across devices. Open links share the public report for each deal."
+                : "Your watchlist is stored privately in this browser. Sign in to sync it across devices. Open links share the public report for each deal."}
             </p>
           </>
         )}

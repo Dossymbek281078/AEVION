@@ -481,6 +481,22 @@ async function dbDeleteCheckpoint(id: string): Promise<void> {
   await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "id"=$1`, [id]);
 }
 
+/** Newest-first, for the checkpoint-history UI and for restore-to-a-specific-
+ * point (which walks this list from the top through the chosen entry). */
+async function dbListCheckpoints(projectId: string, limit = 20): Promise<DevHubCheckpoint[]> {
+  if (!isDevHubDbReady()) {
+    return [...memCheckpoints.values()]
+      .filter((c) => c.projectId === projectId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [projectId, limit]
+  );
+  return r.rows.map(rowToCheckpoint);
+}
+
 function rowToCheckpoint(row: any): DevHubCheckpoint {
   return {
     id: row.id, projectId: row.projectId, userId: row.userId, label: row.label,
@@ -513,6 +529,40 @@ async function createCheckpoint(
   };
   try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); }
   return checkpoint.id;
+}
+
+/** Reverts every file a single checkpoint touched to its prior content (or
+ * deletes it, if the checkpoint recorded "didn't exist before"), then
+ * consumes (deletes) the checkpoint. Shared by /generate/undo (always just
+ * the latest checkpoint) and /checkpoints/:id/restore (applies a whole run
+ * of consecutive checkpoints, newest first, so per-path writes converge on
+ * the target checkpoint's own priorContent — the correct layered result). */
+async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckpoint): Promise<string[]> {
+  const revertedFiles: string[] = [];
+  for (const f of checkpoint.files) {
+    if (f.priorContent === null) {
+      try { await dbDeleteFile(projectId, f.path); }
+      catch {
+        for (const [fid, mf] of memFiles) {
+          if (mf.projectId === projectId && mf.path === f.path) { memFiles.delete(fid); break; }
+        }
+      }
+    } else {
+      const restored: DevHubFile = {
+        id: crypto.randomUUID(), projectId, path: f.path,
+        content: f.priorContent, language: detectLanguage(f.path), updatedAt: now(),
+      };
+      try { await dbUpsertFile(restored); }
+      catch {
+        const existing = [...memFiles.values()].find((x) => x.projectId === projectId && x.path === f.path);
+        if (existing) { existing.content = restored.content; existing.updatedAt = restored.updatedAt; }
+        else memFiles.set(restored.id, restored);
+      }
+    }
+    revertedFiles.push(f.path);
+  }
+  try { await dbDeleteCheckpoint(checkpoint.id); } catch { memCheckpoints.delete(checkpoint.id); }
+  return revertedFiles;
 }
 
 // ── Built-in templates ────────────────────────────────────────────────────────
@@ -1256,34 +1306,77 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
     if (!checkpoint) {
       return res.json({ ok: false, message: "No AI change to undo for this project" });
     }
-    const revertedFiles: string[] = [];
-    for (const f of checkpoint.files) {
-      if (f.priorContent === null) {
-        try { await dbDeleteFile(project.id, f.path); }
-        catch {
-          for (const [fid, mf] of memFiles) {
-            if (mf.projectId === project.id && mf.path === f.path) { memFiles.delete(fid); break; }
-          }
-        }
-      } else {
-        const restored: DevHubFile = {
-          id: crypto.randomUUID(), projectId: project.id, path: f.path,
-          content: f.priorContent, language: detectLanguage(f.path), updatedAt: now(),
-        };
-        try { await dbUpsertFile(restored); }
-        catch {
-          const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
-          if (existing) { existing.content = restored.content; existing.updatedAt = restored.updatedAt; }
-          else memFiles.set(restored.id, restored);
-        }
-      }
-      revertedFiles.push(f.path);
-    }
-    try { await dbDeleteCheckpoint(checkpoint.id); } catch { memCheckpoints.delete(checkpoint.id); }
+    const revertedFiles = await applyCheckpointRevert(project.id, checkpoint);
     return res.json({ ok: true, revertedFiles, label: checkpoint.label });
   } catch (e: any) {
     captureException(e, { route: "devhub/generate:undo", projectId: project.id });
     return res.status(500).json({ error: e?.message || "undo failed" });
+  }
+});
+
+// GET /api/devhub/projects/:id/checkpoints — history of AI-driven writes for
+// the checkpoint-history UI (labels + timestamps + touched paths only, no
+// file content — that's only needed at restore time).
+devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || !canAccess(project, userId)) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  try {
+    const checkpoints = await dbListCheckpoints(project.id, 20);
+    return res.json({
+      checkpoints: checkpoints.map((c) => ({
+        id: c.id, label: c.label, createdAt: c.createdAt, paths: c.files.map((f) => f.path),
+      })),
+    });
+  } catch (e: any) {
+    captureException(e, { route: "devhub/checkpoints:list", projectId: project.id });
+    return res.status(500).json({ error: e?.message || "failed to list checkpoints" });
+  }
+});
+
+// POST /api/devhub/projects/:id/checkpoints/:checkpointId/restore — jumps
+// straight to a specific point in AI-change history instead of calling
+// /generate/undo N times. Applies every checkpoint from the newest down
+// through (and including) the chosen one, newest first, so per-path writes
+// converge on the target checkpoint's own priorContent — the same result
+// sequential single-step undos would reach, just in one call.
+devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || !canEdit(project, userId)) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  try {
+    const history = await dbListCheckpoints(project.id, 200);
+    const targetIndex = history.findIndex((c) => c.id === req.params.checkpointId);
+    if (targetIndex === -1) {
+      return res.json({ ok: false, message: "Checkpoint not found — it may already have been consumed by an earlier undo/restore" });
+    }
+    const toApply = history.slice(0, targetIndex + 1);
+    const targetLabel = history[targetIndex].label;
+    const revertedFiles = new Set<string>();
+    for (const checkpoint of toApply) {
+      const paths = await applyCheckpointRevert(project.id, checkpoint);
+      paths.forEach((p) => revertedFiles.add(p));
+    }
+    return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, stepsApplied: toApply.length });
+  } catch (e: any) {
+    captureException(e, { route: "devhub/checkpoints:restore", projectId: project.id });
+    return res.status(500).json({ error: e?.message || "restore failed" });
   }
 });
 

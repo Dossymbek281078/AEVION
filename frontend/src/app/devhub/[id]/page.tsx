@@ -8,6 +8,14 @@ import { apiUrl } from "@/lib/apiBase";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
+function timeAgo(iso: string): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
 
@@ -179,6 +187,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [undoing, setUndoing] = useState(false);
+
+  // AI-change history (checkpoints) — undo one step, or jump to any past point
+  type Checkpoint = { id: string; label: string; createdAt: string; paths: string[] };
+  const [showHistory, setShowHistory] = useState(false);
+  const [checkpointHistory, setCheckpointHistory] = useState<Checkpoint[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Idea planner (plan_project) state
   type ProjectPlan = {
@@ -627,6 +642,41 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Shared by undoLastGeneration and restoreToCheckpoint: reload the file
+  // list and, if the currently-open file was among the reverted paths,
+  // reload its content too (or close it, if the revert deleted it).
+  const reloadAfterRevert = async (revertedFiles: string[]) => {
+    if (!project) return;
+    const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+    const listData = await listR.json();
+    setFiles(listData.files || []);
+    if (selectedFile && revertedFiles.includes(selectedFile.path)) {
+      const stillExists = (listData.files || []).some((f: FileItem) => f.path === selectedFile.path);
+      if (stillExists) {
+        const fr = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(selectedFile.path)}`), { cache: "no-store" });
+        const fd = await fr.json();
+        if (fd.file) setEditorContent(fd.file.content);
+      } else {
+        setSelectedFile(null);
+        setEditorContent("");
+      }
+    }
+  };
+
+  const loadCheckpointHistory = async () => {
+    if (!project) return;
+    setLoadingHistory(true);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints`), { cache: "no-store" });
+      const data = await r.json();
+      setCheckpointHistory(data.checkpoints || []);
+    } catch {
+      // leave whatever history was already loaded — a stale list beats a blank one here
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const undoLastGeneration = async () => {
     if (!project) return;
     setUndoing(true);
@@ -638,26 +688,35 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(data.message || "No AI change to undo", "info");
         return;
       }
-      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
-      const listData = await listR.json();
-      setFiles(listData.files || []);
-      const reverted: string[] = Array.isArray(data.revertedFiles) ? data.revertedFiles : [];
-      if (selectedFile && reverted.includes(selectedFile.path)) {
-        const stillExists = (listData.files || []).some((f: FileItem) => f.path === selectedFile.path);
-        if (stillExists) {
-          const fr = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(selectedFile.path)}`), { cache: "no-store" });
-          const fd = await fr.json();
-          if (fd.file) setEditorContent(fd.file.content);
-        } else {
-          setSelectedFile(null);
-          setEditorContent("");
-        }
-      }
+      await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
+      if (showHistory) loadCheckpointHistory();
       showToast(`Reverted: ${data.label || "last AI change"}`, "success");
     } catch (e: any) {
       showToast(e.message || "Undo failed", "error");
     } finally {
       setUndoing(false);
+    }
+  };
+
+  const restoreToCheckpoint = async (checkpointId: string) => {
+    if (!project) return;
+    setRestoringId(checkpointId);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Restore failed");
+      if (data.ok === false) {
+        showToast(data.message || "That checkpoint is no longer available", "info");
+        loadCheckpointHistory();
+        return;
+      }
+      await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
+      loadCheckpointHistory();
+      showToast(`Restored to: ${data.restoredToLabel} (${data.stepsApplied} step${data.stepsApplied === 1 ? "" : "s"} back)`, "success");
+    } catch (e: any) {
+      showToast(e.message || "Restore failed", "error");
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -2367,18 +2426,60 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   >
                     {generating ? "Generating..." : "Generate Code (Ctrl+Enter)"}
                   </button>
-                  <button
-                    onClick={undoLastGeneration}
-                    disabled={undoing}
-                    title="Reverts the files touched by the most recent AI generation"
-                    style={{
-                      width: "100%", padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
-                      color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
-                      cursor: undoing ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {undoing ? "Undoing..." : "↩ Undo last AI change"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={undoLastGeneration}
+                      disabled={undoing}
+                      title="Reverts the files touched by the most recent AI generation"
+                      style={{
+                        flex: 1, padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
+                        color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
+                        cursor: undoing ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {undoing ? "Undoing..." : "↩ Undo last AI change"}
+                    </button>
+                    <button
+                      onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
+                      title="See every past AI change and jump straight to one of them"
+                      style={{
+                        padding: "8px 12px", background: "#fff", border: "1px solid #e2e8f0",
+                        color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
+                      }}
+                    >
+                      {showHistory ? "▾" : "▸"} History
+                    </button>
+                  </div>
+                  {showHistory && (
+                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", maxHeight: 220, overflow: "auto" }}>
+                      {loadingHistory ? (
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading...</div>
+                      ) : checkpointHistory.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>No AI changes yet for this project.</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {checkpointHistory.map((cp, i) => (
+                            <div key={cp.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 0", borderBottom: i < checkpointHistory.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cp.label}</div>
+                                <div style={{ fontSize: 11, color: "#94a3b8" }}>{timeAgo(cp.createdAt)} · {cp.paths.length} file{cp.paths.length === 1 ? "" : "s"}</div>
+                              </div>
+                              <button
+                                onClick={() => restoreToCheckpoint(cp.id)}
+                                disabled={restoringId !== null}
+                                style={{
+                                  padding: "4px 10px", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
+                                  borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: restoringId !== null ? "not-allowed" : "pointer", flexShrink: 0,
+                                }}
+                              >
+                                {restoringId === cp.id ? "Restoring..." : i === 0 ? "Revert" : "Revert to here"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

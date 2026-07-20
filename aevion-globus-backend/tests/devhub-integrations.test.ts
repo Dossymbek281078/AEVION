@@ -876,6 +876,85 @@ describe("AI-change checkpoints + undo", () => {
     expect(r.body.ok).toBe(false);
     expect(r.body.message).toMatch(/No AI change to undo/);
   });
+
+  // ── History listing + jump-to-a-specific-point restore ──────────────────
+  test("GET /checkpoints is empty for a project with no AI writes", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    const r = await request(app).get(`/api/devhub/projects/${projectId}/checkpoints`);
+
+    expect(r.status).toBe(200);
+    expect(r.body.checkpoints).toEqual([]);
+  });
+
+  test("GET /checkpoints lists AI writes newest-first with labels and touched paths", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "V1" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V2" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "first edit", targetFile: "pages/index.tsx" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V3" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "second edit", targetFile: "pages/index.tsx" });
+
+    const r = await request(app).get(`/api/devhub/projects/${projectId}/checkpoints`);
+
+    expect(r.status).toBe(200);
+    expect(r.body.checkpoints).toHaveLength(2);
+    expect(r.body.checkpoints[0].label).toMatch(/second edit/);
+    expect(r.body.checkpoints[1].label).toMatch(/first edit/);
+    expect(r.body.checkpoints[0].paths).toEqual(["pages/index.tsx"]);
+    expect(typeof r.body.checkpoints[0].createdAt).toBe("string");
+  });
+
+  test("restore to an older checkpoint walks back through every newer one in a single call", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "V1" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V2" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x", targetFile: "pages/index.tsx" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V3" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "y", targetFile: "pages/index.tsx" });
+
+    const history = await request(app).get(`/api/devhub/projects/${projectId}/checkpoints`);
+    const olderCheckpointId = history.body.checkpoints[1].id; // the V1→V2 write
+
+    const restore = await request(app).post(`/api/devhub/projects/${projectId}/checkpoints/${olderCheckpointId}/restore`).send({});
+    expect(restore.status).toBe(200);
+    expect(restore.body).toMatchObject({ ok: true, stepsApplied: 2, revertedFiles: ["pages/index.tsx"] });
+
+    const after = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/index.tsx`);
+    expect(after.body.file.content).toBe("V1");
+
+    // Both checkpoints were consumed by the jump — nothing left to undo further.
+    const remaining = await request(app).get(`/api/devhub/projects/${projectId}/checkpoints`);
+    expect(remaining.body.checkpoints).toEqual([]);
+  });
+
+  test("restoring to the newest checkpoint behaves like a single undo (stepsApplied:1)", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "V1" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V2" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x", targetFile: "pages/index.tsx" });
+
+    const history = await request(app).get(`/api/devhub/projects/${projectId}/checkpoints`);
+    const newestId = history.body.checkpoints[0].id;
+
+    const restore = await request(app).post(`/api/devhub/projects/${projectId}/checkpoints/${newestId}/restore`).send({});
+    expect(restore.body).toMatchObject({ ok: true, stepsApplied: 1 });
+  });
+
+  test("restore with an unknown checkpointId → ok:false, not a 500", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/checkpoints/does-not-exist/restore`).send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/not found/i);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

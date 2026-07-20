@@ -99,7 +99,7 @@ const APPS: App[] = [
     icon: "📜",
     name: "Constitution Design Lab",
     tagline: "AI-powered IP registration",
-    price: 29,
+    price: 9,
     href: "/constitution",
     cat: "Business",
     highlights: [
@@ -107,7 +107,8 @@ const APPS: App[] = [
       "27+ filing endpoints",
       "QSign cryptographic proof",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/a3175f68-f454-4657-8714-65d93ef95b63",
+    // Единая цена везде: Gumroad Constitution Pro $9 (та же ссылка, что на /constitution).
+    checkoutUrl: "https://aevion.gumroad.com/l/pyiaz?wanted=true",
   },
   {
     id: "bureau",
@@ -130,7 +131,7 @@ const APPS: App[] = [
     icon: "🌱",
     name: "QRenew / QMelanin",
     tagline: "Longevity & cellular renewal protocol",
-    price: 29,
+    price: 19,
     href: "/qrenew",
     cat: "Health",
     highlights: [
@@ -138,7 +139,8 @@ const APPS: App[] = [
       "12-week protocol with biomarker tracking",
       "Zn:Cu 8–15:1 melanin support guide",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/e3ed4f3f-7653-4e68-bdfb-ebb8ed0dbc7f",
+    // Единая цена везде: Gumroad Anti-Grey Protocol $19 (та же ссылка, что на /qmelanin).
+    checkoutUrl: "https://aevion.gumroad.com/l/kkiavh?wanted=true",
   },
   /* ── Education ──────────────────────────────────────────────────────── */
   {

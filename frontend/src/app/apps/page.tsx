@@ -130,7 +130,7 @@ const APPS: App[] = [
     icon: "🌱",
     name: "QRenew / QMelanin",
     tagline: "Longevity & cellular renewal protocol",
-    price: 29,
+    price: 19,
     href: "/qrenew",
     cat: "Health",
     highlights: [
@@ -138,7 +138,9 @@ const APPS: App[] = [
       "12-week protocol with biomarker tracking",
       "Zn:Cu 8–15:1 melanin support guide",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/e3ed4f3f-7653-4e68-bdfb-ebb8ed0dbc7f",
+    // Gumroad — единственный живой процессинг. LemonSqueezy-чекаут мёртв (KYC не
+    // пройдена → 404). Ведём на живой Gumroad Anti-Grey Protocol ($19).
+    checkoutUrl: "https://aevion.gumroad.com/l/kkiavh?wanted=true",
   },
   /* ── Education ──────────────────────────────────────────────────────── */
   {

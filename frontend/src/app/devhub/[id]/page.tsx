@@ -178,6 +178,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+
+  // Idea planner (plan_project) state
+  type ProjectPlan = {
+    ok: boolean; aiGenerated: boolean; summary: string; targetUsers: string; stack: string;
+    mvpFeatures: string[]; laterFeatures: string[]; milestones: Array<{ title: string; prompt: string }>; firstPrompt: string;
+  };
+  const [showPlanner, setShowPlanner] = useState(false);
+  const [planIdea, setPlanIdea] = useState("");
+  const [planning, setPlanning] = useState(false);
+  const [plan, setPlan] = useState<ProjectPlan | null>(null);
 
   // Agent workflow state
   type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
@@ -613,6 +624,63 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Generation failed", "error");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const undoLastGeneration = async () => {
+    if (!project) return;
+    setUndoing(true);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Undo failed");
+      if (data.ok === false) {
+        showToast(data.message || "No AI change to undo", "info");
+        return;
+      }
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      const reverted: string[] = Array.isArray(data.revertedFiles) ? data.revertedFiles : [];
+      if (selectedFile && reverted.includes(selectedFile.path)) {
+        const stillExists = (listData.files || []).some((f: FileItem) => f.path === selectedFile.path);
+        if (stillExists) {
+          const fr = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(selectedFile.path)}`), { cache: "no-store" });
+          const fd = await fr.json();
+          if (fd.file) setEditorContent(fd.file.content);
+        } else {
+          setSelectedFile(null);
+          setEditorContent("");
+        }
+      }
+      showToast(`Reverted: ${data.label || "last AI change"}`, "success");
+    } catch (e: any) {
+      showToast(e.message || "Undo failed", "error");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+  const planProject = async () => {
+    if (!planIdea.trim()) return;
+    setPlanning(true);
+    setPlan(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/plan"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.ok === false) throw new Error(data.error || "Planning failed");
+      setPlan(data);
+      if (data.aiGenerated === false) {
+        showToast("No AI provider configured — showing a generic outline instead of a tailored plan", "warning");
+      }
+    } catch (e: any) {
+      showToast(e.message || "Planning failed", "error");
+    } finally {
+      setPlanning(false);
     }
   };
 
@@ -2201,6 +2269,82 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                     </div>
                   )}
+                  {/* Idea planner — plan_project */}
+                  <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px" }}>
+                    <button
+                      onClick={() => setShowPlanner((s) => !s)}
+                      style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0f172a", padding: 0 }}
+                    >
+                      {showPlanner ? "▾" : "▸"} Have a rough idea? Plan it first
+                    </button>
+                    {showPlanner && (
+                      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <textarea
+                          value={planIdea}
+                          onChange={(e) => setPlanIdea(e.target.value)}
+                          placeholder={`Describe the idea in your own words...\nExample: "a marketplace where local bakers can sell to neighbors"`}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8,
+                            fontSize: 13, resize: "none", fontFamily: "inherit", boxSizing: "border-box", height: 60,
+                          }}
+                        />
+                        <button
+                          onClick={planProject}
+                          disabled={planning || !planIdea.trim()}
+                          style={{
+                            width: "100%", padding: "8px 0", background: planning ? "#e2e8f0" : "#0f172a",
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: planning ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {planning ? "Planning..." : "Plan my idea"}
+                        </button>
+                        {plan && (
+                          <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{plan.summary}</div>
+                            {plan.targetUsers && (
+                              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>👥 {plan.targetUsers}</div>
+                            )}
+                            {plan.mvpFeatures.length > 0 && (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0d9488", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>MVP first</div>
+                                <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12, color: "#334155" }}>
+                                  {plan.mvpFeatures.map((f) => <li key={f}>{f}</li>)}
+                                </ul>
+                              </>
+                            )}
+                            {plan.laterFeatures.length > 0 && (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Later — deferred on purpose</div>
+                                <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12, color: "#94a3b8" }}>
+                                  {plan.laterFeatures.map((f) => <li key={f}>{f}</li>)}
+                                </ul>
+                              </>
+                            )}
+                            {plan.milestones.length > 0 && (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Build order</div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                                  {plan.milestones.map((m, i) => (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                      <span style={{ fontSize: 12, color: "#334155" }}>{i + 1}. {m.title}</span>
+                                      <button
+                                        onClick={() => { setAiPrompt(m.prompt); setShowPlanner(false); }}
+                                        style={{ padding: "3px 10px", background: "#fff", border: "1px solid #0d9488", color: "#0d9488", borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: "pointer", flexShrink: 0 }}
+                                      >
+                                        Use prompt
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <div style={{ flex: 1 }} />
                   <textarea
                     value={aiPrompt}
@@ -2222,6 +2366,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     }}
                   >
                     {generating ? "Generating..." : "Generate Code (Ctrl+Enter)"}
+                  </button>
+                  <button
+                    onClick={undoLastGeneration}
+                    disabled={undoing}
+                    title="Reverts the files touched by the most recent AI generation"
+                    style={{
+                      width: "100%", padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
+                      color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
+                      cursor: undoing ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {undoing ? "Undoing..." : "↩ Undo last AI change"}
                   </button>
                 </div>
               )}

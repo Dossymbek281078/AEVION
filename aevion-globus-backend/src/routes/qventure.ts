@@ -726,6 +726,111 @@ qventureRouter.get("/compare/pdf", async (req: Request, res: Response) => {
   }
 });
 
+// GET /funnel/pdf?ids=<id>,<id>,... - one ranked "deal funnel" PDF over 2-20
+// stored analyses: a scored league table (score / verdict / red flags / stress)
+// plus a one-line thesis per deal, top-ranked first. Turns a batch of decks into
+// a single triage document.
+qventureRouter.get("/funnel/pdf", async (req: Request, res: Response) => {
+  try {
+    const idsRaw = typeof req.query.ids === "string" ? req.query.ids : "";
+    const ids = Array.from(new Set(idsRaw.split(",").map((s) => s.trim()).filter(Boolean))).slice(0, 20);
+    if (ids.length < 2) return badRequest(res, "ids must list at least 2 analysis ids (comma-separated)");
+
+    const fetched = await Promise.all(ids.map((id) => getById(id)));
+    const deals = (fetched.filter((d) => d !== null) as StoredAnalysis[])
+      .sort((a, b) => b.composite - a.composite);
+    if (deals.length < 2) return res.status(404).json({ ok: false, error: "not_found", hint: "fewer than 2 of those ids resolved" });
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    const W = 495;
+    const vColor = (v: string) => (v === "invest" ? "#15803d" : v === "watch" ? "#b45309" : "#b91c1c");
+    const firstSentence = (t: string) => {
+      const clean = (t || "").trim().replace(/\s+/g, " ");
+      const m = clean.match(/^.*?[.!?](\s|$)/);
+      return m ? m[0].trim() : clean.slice(0, 200);
+    };
+
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture - Deal Funnel");
+    doc.fontSize(9).font("Helvetica").fillColor("#64748b")
+      .text("Generated " + new Date().toISOString().slice(0, 10) + " | " + deals.length + " deals ranked | AEVION AI Investment Analyst | not investment advice");
+    doc.moveDown(0.6);
+
+    const invest = deals.filter((d) => d.verdict === "invest").length;
+    const watch = deals.filter((d) => d.verdict === "watch").length;
+    const top = deals[0];
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a")
+      .text("Top pick: " + top.name + " (" + top.composite + "/100). Funnel: " + invest + " invest, " + watch + " watch, " + (deals.length - invest - watch) + " pass.", { width: W });
+    doc.moveDown(0.7);
+
+    const col = { rank: 50, name: 80, score: 300, verdict: 350, flags: 420, stress: 465 };
+    const headerRow = (y: number) => {
+      doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#64748b");
+      doc.text("#", col.rank, y);
+      doc.text("Company", col.name, y);
+      doc.text("Score", col.score, y);
+      doc.text("Verdict", col.verdict, y);
+      doc.text("Flags", col.flags, y);
+      doc.text("Stress", col.stress, y);
+    };
+    headerRow(doc.y);
+    doc.moveDown(0.4);
+    doc.font("Helvetica");
+    deals.forEach((d, i) => {
+      if (doc.y > 770) { doc.addPage(); headerRow(doc.y); doc.moveDown(0.4); }
+      const rr = d.result;
+      const flags = rr.redFlags && rr.redFlags.length ? String(rr.redFlags.length) : "0";
+      const stress = rr.stress && rr.stress.resilience !== "insufficient-data"
+        ? rr.stress.resilience.slice(0, 8) : "n/a";
+      const y = doc.y;
+      doc.fillColor("#0f172a").fontSize(9.5).font("Helvetica-Bold").text(String(i + 1), col.rank, y);
+      doc.font("Helvetica").fillColor("#0f172a").text(d.name.slice(0, 34), col.name, y, { width: 210 });
+      const ly = doc.y - 11;
+      doc.fillColor("#334155").text(String(d.composite), col.score, ly);
+      doc.fillColor(vColor(d.verdict)).font("Helvetica-Bold").text(d.verdict.toUpperCase().slice(0, 6), col.verdict, ly);
+      doc.font("Helvetica").fillColor(flags !== "0" ? "#b45309" : "#94a3b8").text(flags, col.flags, ly);
+      doc.fillColor(stress === "underwat" || stress === "fragile" ? "#b45309" : "#334155").text(stress, col.stress, ly);
+      doc.fillColor("#0f172a");
+      doc.moveDown(0.25);
+    });
+
+    doc.x = 50;
+    doc.moveDown(0.8);
+
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Thesis per deal");
+    doc.moveDown(0.3);
+    deals.forEach((d, i) => {
+      if (doc.y > 760) doc.addPage();
+      doc.fontSize(10.5).font("Helvetica-Bold").fillColor(vColor(d.verdict))
+        .text((i + 1) + ". " + d.name + " - " + d.composite + "/100 - " + d.verdict.toUpperCase(), { width: W });
+      const memo = firstSentence(d.result.council ? d.result.council.memo : "");
+      if (memo) doc.fontSize(9.5).font("Helvetica").fillColor("#334155").text(memo, { width: W });
+      doc.moveDown(0.4);
+    });
+
+    doc.moveDown(0.3);
+    doc.fontSize(8).fillColor("#94a3b8")
+      .text("Generated by an AI screening tool for research purposes. Not investment advice, an offer, or a solicitation. Figures are model estimates.", { width: W });
+
+    doc.end();
+    const pdf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="qventure-funnel-' + deals.length + '-deals.pdf"');
+    return res.send(pdf);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    return res.status(500).json({ ok: false, error: "funnel_pdf_failed" });
+  }
+});
+
 qventureRouter.get("/stats", async (_req: Request, res: Response) => {
   try {
     const rows = await listRecent(500);

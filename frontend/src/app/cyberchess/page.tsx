@@ -973,6 +973,7 @@ export default function CyberChessPage(){
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
   const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  const isMobileLayout=vwPx<769; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
   // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
   const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
@@ -980,12 +981,23 @@ export default function CyberChessPage(){
   // не уходили под него (баг: док наезжал на панель ходов). На мобайле (<769) док скрыт
   // (его функции есть в BottomNav/«Все разделы»/Профиле) → 0, доска забирает эти 56px.
   const dockReserve=vwPx>=769?56:0;
+  // Горизонтальный резерв под правую панель. На ДЕСКТОПЕ панель стоит рядом (inline) —
+  // резервируем её бюджет (660 с рейлом / 400 без). На МОБАЙЛЕ (<769) панель — fixed
+  // off-canvas drawer (см. .cc-right-panel @media max-width:768px в globals.css), в
+  // обычном layout-потоке места НЕ занимает ⇒ доске нужен только маленький gutter (16px),
+  // а не бюджет под несуществующую inline-панель. Раньше здесь стоял единый резерв
+  // 400/360 на всех ширинах — на телефонах uже 640px он схлопывал vwPx-360 почти в ноль,
+  // и итоговый Math.max(280,...) намертво прибивал доску к 280px на ЛЮБОМ телефоне,
+  // не давая ей расти вместе с реальной шириной экрана (баг, живой аудит 2026-07-16/20).
+  const mobileGutter=16;
+  const hReserve=railShown?660:(isMobileLayout?mobileGutter:400);
   // Кап 1600 (было 1400) — больше места для доски на высоких/больших экранах.
-  const baseBoardPx=Math.max(320,Math.min(1600,vhPx-vReserve,vwPx-(railShown?660:400)-dockReserve));
+  const baseBoardPx=Math.max(isMobileLayout?240:320,Math.min(1600,vhPx-vReserve,vwPx-hReserve-dockReserve));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
   // Потолок: при scale до 1.5 доска влезает по высоте (с запасом под контролы) и по ширине
-  // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290.
-  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-360-dockReserve));
+  // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290. hReserve тот же, что у baseBoardPx —
+  // единый источник правды вместо рассинхронизированных 400 vs 360.
+  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
   // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела

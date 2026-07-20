@@ -751,10 +751,10 @@ button:focus:not(:focus-visible) {
    ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
-  /* Board container — fill viewport width on mobile */
-  [style*="min(calc(100vh - 120px)"] {
-    width: min(calc(100vw - 8px), calc(100vh - 180px)) !important;
-  }
+  /* Board width is fully driven by JS (page.tsx boardPx/bw, mobile-aware since
+     2026-07-20) — no CSS override needed here. A prior !important rule targeting
+     [style*="min(calc(100vh - 120px)"] was dead (that inline-style string no longer
+     exists after a refactor) and has been removed rather than left as stale bait. */
 
   /* Main flex row (board + right panel) — stack vertically */
   .cc-main-row {
@@ -936,11 +936,7 @@ button:focus:not(:focus-visible) {
 
 /* Phone portrait: board takes 100% width, right panel becomes scrollable strip */
 @media (max-width: 600px) {
-  /* Board max-width override — match screen exactly */
-  [style*="min(calc(100vh - 120px)"] {
-    width: calc(100vw - 8px) !important;
-    max-width: calc(100vw - 8px) !important;
-  }
+  /* Board sizing handled in JS (page.tsx) — see note above. */
 
   /* Sticky header — smaller padding, hide Pro badge */
   .cc-sticky-header {

@@ -173,11 +173,15 @@ function Body() {
       </ol>
 
       <p className="mt-8 text-[11px] text-slate-500">
-        Нужна помощь? Заходите в{" "}
+        Нужен разбор с механикой оплаты?{" "}
+        <Link href="/build/guide" className="text-emerald-300 underline">
+          Гайд для работодателя
+        </Link>
+        . Частые вопросы —{" "}
         <Link href="/build/help" className="text-emerald-300 underline">
           /build/help
-        </Link>{" "}
-        или напишите на{" "}
+        </Link>
+        , или напишите на{" "}
         <a href="mailto:hello@aevion.tech" className="text-emerald-300 underline">
           hello@aevion.tech
         </a>

@@ -11213,6 +11213,12 @@ ${question.trim()}`;
               const isPro=t.id==="pro";const isUlt=t.id==="ultimate";
               const owned=t.id!=="free"&&!!chessy.owned[t.id];
               const eitherOwned=!!chessy.owned.pro||!!chessy.owned.ultimate;
+              // Billing isn't wired yet (platform wallet unconfigured, see billing.ts —
+              // every real purchase attempt returns platform_wallet_not_configured today).
+              // Rather than send visitors down a dead-end payment click, show an honest
+              // "Скоро" and disable purchase outright until ops configures the wallet.
+              const billingReady=false;
+              const showComingSoon=!billingReady&&t.id!=="free"&&!owned;
               return <div key={t.id} style={{
                 background:owned?"linear-gradient(135deg,rgba(16,185,129,0.22),rgba(52,211,153,0.10))":isPro?"linear-gradient(135deg,rgba(124,58,237,0.18),rgba(167,139,250,0.10))":isUlt?"linear-gradient(135deg,rgba(217,119,6,0.18),rgba(252,211,77,0.10))":"rgba(255,255,255,0.04)",
                 border:`1px solid ${owned?"rgba(52,211,153,0.55)":isPro?"rgba(167,139,250,0.45)":isUlt?"rgba(252,211,77,0.45)":"rgba(148,163,184,0.25)"}`,
@@ -11240,10 +11246,11 @@ ${question.trim()}`;
                   </li>)}
                 </ul>
                 {/* Free tile is always disabled. Pro/Ultimate: if owned → "Активирован" disabled; if other tier owned → "Сменить" allowed; else → primary buy CTA. */}
-                <button disabled={t.disabled||owned}
+                <button disabled={t.disabled||owned||showComingSoon}
                   onClick={async()=>{
                     if(t.id==="free")return;
                     if(owned)return;
+                    if(showComingSoon)return;
                     const tier=t.id as ChessyTier;
                     const amountAev=parseInt(t.price,10)||0;
                     // 1) JWT lookup — mirror keys used elsewhere in the app
@@ -11279,19 +11286,23 @@ ${question.trim()}`;
                   }}
                   style={{
                     width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,
-                    border:"none",cursor:(t.disabled||owned)?"default":"pointer",
-                    background:owned?"rgba(16,185,129,0.18)":t.disabled?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
-                    color:owned?"#34d399":t.disabled?"#94a3b8":"#fff",
+                    border:"none",cursor:(t.disabled||owned||showComingSoon)?"default":"pointer",
+                    background:owned?"rgba(16,185,129,0.18)":(t.disabled||showComingSoon)?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
+                    color:owned?"#34d399":(t.disabled||showComingSoon)?"#94a3b8":"#fff",
                     fontSize:12,fontWeight:900,letterSpacing:0.3,
-                    boxShadow:(t.disabled||owned)?"none":"0 2px 8px rgba(0,0,0,0.2)"
-                  }}>{owned?"✓ Активирован":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
-                {/* Dev-only test activator (until real billing wires up). Skipped on Free. */}
-                {!owned&&t.id!=="free"&&<button onClick={()=>{
+                    boxShadow:(t.disabled||owned||showComingSoon)?"none":"0 2px 8px rgba(0,0,0,0.2)"
+                  }}>{owned?"✓ Активирован":showComingSoon?"Скоро":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
+                {/* Internal-only test activator — gated behind an explicit localStorage debug
+                    flag (never surfaced to real visitors) so QA can still exercise owned-tier
+                    UI paths without shipping a public self-unlock button. Previously rendered
+                    unconditionally for any visitor, letting anyone grant themselves Ultimate for
+                    free via a single confirm() dialog — closed as a launch-readiness fix. */}
+                {!owned&&t.id!=="free"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
                   if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
                   sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
                   showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
                 }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(148,163,184,0.4)",background:"transparent",color:"#94a3b8",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
-                  🧪 Тест-активация (без оплаты)
+                  🧪 Тест-активация (без оплаты · debug-режим)
                 </button>}
                 {owned&&<button onClick={()=>{
                   if(!confirm(`Отключить ${t.name}?`))return;

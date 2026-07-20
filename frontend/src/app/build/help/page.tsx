@@ -68,6 +68,13 @@ export default function HelpPage() {
         <Link href="/build" className="text-xs text-slate-400 hover:underline">← QBuild</Link>
         <h1 className="mt-3 text-3xl font-extrabold text-white">Help & FAQ</h1>
         <p className="mt-2 text-sm text-slate-400">Answers to the most common questions.</p>
+        <p className="mt-3 text-sm text-slate-300">
+          Впервые нанимаете здесь? Начните с пошагового{" "}
+          <Link href="/build/guide" className="text-emerald-300 underline">
+            гайда для работодателя
+          </Link>
+          .
+        </p>
         <HelpClient workers={FAQ_WORKERS} employers={FAQ_EMPLOYERS} />
       </div>
     </main>

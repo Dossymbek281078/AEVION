@@ -105,6 +105,22 @@ function enforcedSet(body) {
   console.log("");
   console.log(`Enforced now (${enforced.length}): ${enforced.length ? enforced.join(", ") : "<none — paywall dormant>"}`);
 
+  // Modules that must never show enforced:true — each advertises a free-tier
+  // promise (e.g. qcoreai's 100k tokens/mo) that the gate can't honor without
+  // usage metering that doesn't exist yet. planGate.ts's UNSAFE_TO_GATE strips
+  // these server-side regardless of PAYWALL_MODULES, but this assertion is the
+  // independent outside check — keep this list in sync with UNSAFE_TO_GATE in
+  // aevion-globus-backend/src/lib/planGate.ts and the "Deliberately NOT gated"
+  // section of docs/PAYWALL_FLIP_READINESS.md. See the 2026-07-16 incident note
+  // in planGate.ts for why this exists.
+  const UNSAFE_TO_GATE = ["qcoreai", "qright", "qsign"];
+  const unsafelyEnforced = enforced.filter((m) => UNSAFE_TO_GATE.includes(m));
+  if (unsafelyEnforced.length) {
+    fail(`UNSAFE_TO_GATE module(s) showing enforced:true — free-tier promise broken: ${unsafelyEnforced.join(", ")}`);
+  } else {
+    pass(`no UNSAFE_TO_GATE module is enforced`);
+  }
+
   if (EXPECT_ENFORCED.length > 0) {
     const expectedSet = new Set(EXPECT_ENFORCED);
     const actualSet = new Set(enforced);

@@ -80,14 +80,27 @@ describe("paywallEnabledFor (env-driven, dormant by default)", () => {
     expect(paywallEnabledFor("qcoreai")).toBe(false);
   });
   it("enables only listed modules", () => {
-    process.env.PAYWALL_MODULES = "qcoreai, healthai";
-    expect(paywallEnabledFor("qcoreai")).toBe(true);
+    process.env.PAYWALL_MODULES = "multichat-engine, healthai";
+    expect(paywallEnabledFor("multichat-engine")).toBe(true);
     expect(paywallEnabledFor("healthai")).toBe(true);
     expect(paywallEnabledFor("qsign")).toBe(false);
   });
-  it("'*' enables everything", () => {
+  it("'*' enables everything except UNSAFE_TO_GATE modules", () => {
     process.env.PAYWALL_MODULES = "*";
     expect(paywallEnabledFor("anything")).toBe(true);
+    expect(paywallEnabledFor("qcoreai")).toBe(false);
+  });
+  it("UNSAFE_TO_GATE modules stay off even when explicitly listed — 2026-07-16 incident regression", () => {
+    // qcoreai briefly went enforced in prod for ~44min via a manual Railway
+    // flip that listed it in PAYWALL_MODULES without checking that its free
+    // tier promises 100k tokens/mo with no usage metering to back a 402
+    // fallback. This guard strips it (and qright/qsign, same conflict)
+    // server-side regardless of what the env var says.
+    process.env.PAYWALL_MODULES = "qcoreai, qright, qsign, healthai";
+    expect(paywallEnabledFor("qcoreai")).toBe(false);
+    expect(paywallEnabledFor("qright")).toBe(false);
+    expect(paywallEnabledFor("qsign")).toBe(false);
+    expect(paywallEnabledFor("healthai")).toBe(true);
   });
   it("PAYWALL_DISABLED kill-switch overrides", () => {
     process.env.PAYWALL_MODULES = "*";
@@ -122,17 +135,25 @@ describe("requireModule middleware", () => {
   });
 
   it("402s an unentitled free caller when enforced", () => {
-    process.env.PAYWALL_MODULES = "qcoreai";
-    const r = run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
+    process.env.PAYWALL_MODULES = "healthai";
+    const r = run(requireModule("healthai"), { method: "GET", path: "/chat", headers: {} });
     expect(r.nexted).toBe(false);
     expect(r.status).toBe(402);
     expect(r.body.error).toBe("upgrade_required");
-    expect(r.body.module).toBe("qcoreai");
+    expect(r.body.module).toBe("healthai");
+  });
+  it("never 402s qcoreai even when explicitly listed in PAYWALL_MODULES", () => {
+    process.env.PAYWALL_MODULES = "qcoreai";
+    const r = run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
+    expect(r.nexted).toBe(true);
   });
 
   it("lets health/plan introspection through even when enforced", () => {
-    process.env.PAYWALL_MODULES = "qcoreai";
-    const r = run(requireModule("qcoreai"), { method: "GET", path: "/health", headers: {} });
+    // Uses healthai, not qcoreai — qcoreai is never actually enforced (see
+    // the UNSAFE_TO_GATE tests above), so this needs a module that can be
+    // to genuinely exercise the exempt-path bypass rather than the guard.
+    process.env.PAYWALL_MODULES = "healthai";
+    const r = run(requireModule("healthai"), { method: "GET", path: "/health", headers: {} });
     expect(r.nexted).toBe(true);
   });
 });

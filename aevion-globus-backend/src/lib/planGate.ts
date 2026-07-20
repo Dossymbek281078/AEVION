@@ -14,9 +14,18 @@
  * deliberately switched on (after the frontend 402 UX + pricing pages ship).
  *
  * Enabling on Railway, once the frontend can render the 402 paywall:
- *   PAYWALL_MODULES=qcoreai,qfusionai,healthai   # gate a curated set
- *   PAYWALL_MODULES=*                            # gate everything priced full-only
- *   PAYWALL_DISABLED=1                           # global kill-switch (overrides all)
+ *   PAYWALL_MODULES=qfusionai,healthai   # gate a curated set
+ *   PAYWALL_MODULES=*                    # gate everything priced full-only (blocked below for UNSAFE_TO_GATE ids)
+ *   PAYWALL_DISABLED=1                   # global kill-switch (overrides all)
+ *
+ * UNSAFE_TO_GATE — see the const below. `qcoreai` briefly went live in
+ * PAYWALL_MODULES on 2026-07-16 for ~44min via a manual Railway flip that
+ * didn't cross-check docs/PAYWALL_FLIP_READINESS.md first; it 402'd free-tier
+ * users who hadn't touched their advertised 100k-token/mo quota, since
+ * qcoreai's includedIn starts at "medium" and no token-metering exists yet
+ * to honor the free promise before falling back to a paid gate. Caught via
+ * prod smoke and reverted. `enforcedModuleSet()` now strips these ids
+ * defensively — this is a backstop, not a substitute for checking the docs.
  */
 
 import type { Request, Response, NextFunction } from "express";
@@ -25,6 +34,25 @@ import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+
+/**
+ * Modules that must NOT be gated yet, regardless of what PAYWALL_MODULES
+ * says — each advertises a free-tier promise that the current gate can't
+ * honor because `includedIn` starts above "free"/"lite" and no usage
+ * metering exists to enforce "first N free, then paywall" instead of an
+ * immediate 402. Gating one of these would break the advertised free tier
+ * for real users, not just fail closed safely.
+ *
+ * Update this list alongside docs/PAYWALL_FLIP_READINESS.md's "Deliberately
+ * NOT gated" section — they must stay in sync. Remove an id only once the
+ * underlying metering/promise conflict is actually resolved, not just when
+ * someone wants to flip it on.
+ */
+const UNSAFE_TO_GATE = new Set([
+  "qcoreai", // free tier promises 100k tokens/mo; includedIn starts at "medium"; no token-metering yet
+  "qright",  // same free-tier-promise conflict; includedIn starts at "full"
+  "qsign",   // same free-tier-promise conflict; includedIn starts at "full"
+]);
 
 const ALLOWLIST = (process.env.PAYWALL_ALLOWLIST || "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -140,20 +168,42 @@ export function isModuleEntitled(plan: ResolvedPlan, moduleId: string): boolean 
 
 /* ───── Enforcement switch ──────────────────────────────────────── */
 
+let warnedUnsafeGate = false;
+
+/** Logs once per process, not once per request — this fires on every gated call otherwise. */
+function warnUnsafeGateAttempt(ids: string[]): void {
+  if (warnedUnsafeGate || ids.length === 0) return;
+  warnedUnsafeGate = true;
+  console.error(
+    `[planGate] PAYWALL_MODULES included UNSAFE_TO_GATE module(s) [${ids.join(", ")}] — ` +
+      `stripped from enforcement. These break an advertised free-tier promise until their ` +
+      `underlying metering ships; see UNSAFE_TO_GATE in planGate.ts and ` +
+      `docs/PAYWALL_FLIP_READINESS.md. Fix the PAYWALL_MODULES env var on Railway.`
+  );
+}
+
 function enforcedModuleSet(): Set<string> | "all" | null {
   if (process.env.PAYWALL_DISABLED === "1") return null;
   const raw = (process.env.PAYWALL_MODULES || "").trim();
   if (!raw) return null;
   if (raw === "*") return "all";
-  return new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const set = new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const unsafe = [...set].filter((id) => UNSAFE_TO_GATE.has(id));
+  if (unsafe.length) {
+    warnUnsafeGateAttempt(unsafe);
+    for (const id of unsafe) set.delete(id);
+  }
+  return set;
 }
 
 /** Is the paywall actively enforced for this module right now? */
 export function paywallEnabledFor(moduleId: string): boolean {
+  const id = moduleId.toLowerCase();
+  if (UNSAFE_TO_GATE.has(id)) return false;
   const set = enforcedModuleSet();
   if (set === null) return false;
   if (set === "all") return true;
-  return set.has(moduleId.toLowerCase());
+  return set.has(id);
 }
 
 /** Sub-paths that stay open even on a gated module (introspection / health). */

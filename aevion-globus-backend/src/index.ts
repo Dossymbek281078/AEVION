@@ -267,8 +267,11 @@ app.use("/api/modules", modulesRouter);
 app.use("/api/status", statusRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
-// (see lib/planGate.ts). qcoreai is the flagship gated module (AI compute =
-// real OPEX); enforcement stays off until PAYWALL_MODULES is set on Railway.
+// (see lib/planGate.ts). qcoreai is the flagship AI-compute module (real
+// OPEX) but is in planGate's UNSAFE_TO_GATE list: its free tier promises
+// 100k tokens/mo with no metering yet to enforce that before falling back
+// to a paid gate, so requireModule() strips it from enforcement regardless
+// of PAYWALL_MODULES until that's built — see docs/PAYWALL_FLIP_READINESS.md.
 app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
 // Our own agent runtime — a real provider tool-use loop, kept separate from
 // qcoreai (owned by another work stream). Ungated: no module id in the registry.

@@ -174,6 +174,35 @@ export const TOOL_SPECS: ToolSpec[] = [
       required: ["path"],
     },
   },
+  {
+    name: "undo_last_generation",
+    description:
+      "Revert the most recent generate_code change in the currently open DevHub project — restores every file " +
+      "it touched to its content from just before that change (or deletes it, if generate_code created it fresh). " +
+      "Use this when the user asks to undo, revert, or says the last change broke something. Only reverts one " +
+      "step at a time; call it again to go further back. Only works when a DevHub project is open.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "plan_project",
+    description:
+      "Turn a raw project idea into a concrete build plan: target users, a recommended tech stack, a minimal " +
+      "MVP feature set (ranked, smallest first), explicitly deferred later features so scope doesn't creep, and " +
+      "an ordered list of milestones — each with a ready-to-use prompt for generate_code. Call this BEFORE " +
+      "generate_code when the user describes a new idea in vague or broad terms (e.g. 'I want to build a " +
+      "marketplace app') rather than a specific, scoped ask — it turns a vague idea into a sequence of concrete, " +
+      "buildable steps. If a DevHub project is already open, the plan accounts for what's already built.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        idea: { type: "string", description: "The user's raw idea, in their own words." },
+      },
+      required: ["idea"],
+    },
+  },
 ];
 
 /** Map a tool name → the DevHub endpoint path that performs it. */
@@ -186,6 +215,7 @@ const ENDPOINT_BY_TOOL: Record<string, string> = {
   generate_sound_effect: "/api/devhub/media/sfx",
   send_sms: "/api/devhub/media/sms",
   translate_text: "/api/devhub/media/translate",
+  plan_project: "/api/devhub/plan",
 };
 
 /** Rename model-facing params to the DevHub endpoint's body shape where needed. */
@@ -218,6 +248,9 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
   if (name === "read_project_file") {
     return { path: input.path };
   }
+  if (name === "plan_project") {
+    return { idea: input.idea };
+  }
   return input;
 }
 
@@ -234,6 +267,7 @@ const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string, input: Record<
   create_pull_request: (projectId) => `/api/devhub/projects/${projectId}/github/pull-request`,
   merge_pull_request: (projectId, input) => `/api/devhub/projects/${projectId}/github/pull-request/${Number(input.number)}/merge`,
   read_project_file: (projectId) => `/api/devhub/projects/${projectId}/file`,
+  undo_last_generation: (projectId) => `/api/devhub/projects/${projectId}/generate/undo`,
 };
 
 /** Per-request context an executor may need beyond the model's tool input. */
@@ -263,9 +297,16 @@ export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch, c
     }
     if (!path) return { ok: false, content: `Unknown tool: ${call.name}` };
     const isGet = GET_TOOLS.has(call.name);
+    // plan_project is the one tool that's project-AWARE but not project-SCOPED
+    // — it works standalone (greenfield planning) and gets richer (accounts for
+    // existing files) when a project happens to be open, so the project id is
+    // optional context rather than a hard requirement like the scoped tools above.
+    const body = call.name === "plan_project" && context.projectId
+      ? { ...toBody(call.name, input), projectId: context.projectId }
+      : toBody(call.name, input);
     try {
       const r = isGet
-        ? await fetchImpl(`${baseUrl}${path}?${new URLSearchParams(toBody(call.name, input) as Record<string, string>).toString()}`, {
+        ? await fetchImpl(`${baseUrl}${path}?${new URLSearchParams(body as Record<string, string>).toString()}`, {
             method: "GET",
             headers: { ...(context.authHeader ? { Authorization: context.authHeader } : {}) },
           })
@@ -275,7 +316,7 @@ export function makeExecutor(baseUrl: string, fetchImpl: typeof fetch = fetch, c
               "Content-Type": "application/json",
               ...(context.authHeader ? { Authorization: context.authHeader } : {}),
             },
-            body: JSON.stringify(toBody(call.name, input)),
+            body: JSON.stringify(body),
           });
       const data = await r.json().catch(() => ({}));
       return { ok: r.ok, content: data };

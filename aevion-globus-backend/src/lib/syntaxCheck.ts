@@ -35,7 +35,14 @@ export async function checkFileSyntax(path: string, content: string): Promise<st
     compilerOptions: {
       target: ts.ScriptTarget.Latest,
       module: ts.ModuleKind.ESNext,
-      jsx: isJsx ? ts.JsxEmit.Preserve : ts.JsxEmit.None,
+      // Omit `jsx` entirely for non-JSX files — `ts.JsxEmit.None` is NOT a
+      // valid value for this option (only preserve/react/react-native/
+      // react-jsx/react-jsxdev are) and TS reports that as an "invalid --jsx
+      // option" diagnostic on EVERY .ts/.js file, indistinguishable from a
+      // real syntax error. Caught via a Node one-liner reproducing the false
+      // positive before this shipped — not by the type checker, since
+      // `JsxEmit.None` is a legitimate enum member, just not a legal value here.
+      ...(isJsx ? { jsx: ts.JsxEmit.Preserve } : {}),
       allowJs: true,
     },
     reportDiagnostics: true,

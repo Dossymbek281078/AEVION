@@ -105,10 +105,24 @@ interface DevHubSnippet {
   updatedAt: string;
 }
 
+// One per AI-driven multi-file write (generate_code / workflow "code" step) —
+// the prior content of every file it touched (null = the file didn't exist
+// before, so reverting deletes it), so the whole write can be undone in one
+// shot without regenerating anything.
+interface DevHubCheckpoint {
+  id: string;
+  projectId: string;
+  userId: string;
+  label: string;
+  files: Array<{ path: string; priorContent: string | null }>;
+  createdAt: string;
+}
+
 const memProjects = new Map<string, DevHubProject>();
 const memFiles = new Map<string, DevHubFile>();
 const memDeployments = new Map<string, DevHubDeployment>();
 const memSnippets = new Map<string, DevHubSnippet>();
+const memCheckpoints = new Map<string, DevHubCheckpoint>();
 
 // ── Credit metering ───────────────────────────────────────────────────────────
 type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
@@ -344,7 +358,25 @@ async function dbGetFile(projectId: string, path: string): Promise<DevHubFile | 
 }
 
 async function dbUpsertFile(f: DevHubFile): Promise<void> {
-  if (!isDevHubDbReady()) { memFiles.set(f.id, f); return; }
+  if (!isDevHubDbReady()) {
+    // Same "update existing by (projectId, path), else insert" contract as the
+    // DB branch below — `f.id` is a freshly minted UUID on every call (the
+    // caller doesn't know if the file already exists), so keying memFiles by
+    // f.id here would create a duplicate entry per write instead of updating
+    // the file: a stale, superseded version would sit in the map forever, and
+    // dbGetFile's `.find()` would keep returning whichever one it inserted
+    // first — a real "write looks like it worked, next read returns the old
+    // content" bug, not just a memory-fallback formality.
+    const existing = [...memFiles.values()].find((x) => x.projectId === f.projectId && x.path === f.path);
+    if (existing) {
+      existing.content = f.content;
+      existing.language = f.language;
+      existing.updatedAt = f.updatedAt;
+    } else {
+      memFiles.set(f.id, f);
+    }
+    return;
+  }
   // try to update existing by (projectId, path)
   const existing = await pool.query(
     `SELECT "id" FROM "DevHubFile" WHERE "projectId"=$1 AND "path"=$2`,
@@ -418,6 +450,69 @@ function rowToDeployment(row: any): DevHubDeployment {
     triggeredAt: row.triggeredAt instanceof Date ? row.triggeredAt.toISOString() : row.triggeredAt,
     completedAt: row.completedAt instanceof Date ? row.completedAt.toISOString() : row.completedAt ?? null,
   };
+}
+
+// ── Checkpoint helpers ──────────────────────────────────────────────────────────
+async function dbSaveCheckpoint(c: DevHubCheckpoint): Promise<void> {
+  if (!isDevHubDbReady()) { memCheckpoints.set(c.id, c); return; }
+  await pool.query(
+    `INSERT INTO "DevHubCheckpoint" ("id","projectId","userId","label","files","createdAt")
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [c.id, c.projectId, c.userId, c.label, JSON.stringify(c.files), c.createdAt]
+  );
+}
+
+async function dbLatestCheckpoint(projectId: string): Promise<DevHubCheckpoint | null> {
+  if (!isDevHubDbReady()) {
+    const latest = [...memCheckpoints.values()]
+      .filter((c) => c.projectId === projectId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return latest ?? null;
+  }
+  const r = await pool.query(
+    `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
+    [projectId]
+  );
+  return r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+}
+
+async function dbDeleteCheckpoint(id: string): Promise<void> {
+  if (!isDevHubDbReady()) { memCheckpoints.delete(id); return; }
+  await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "id"=$1`, [id]);
+}
+
+function rowToCheckpoint(row: any): DevHubCheckpoint {
+  return {
+    id: row.id, projectId: row.projectId, userId: row.userId, label: row.label,
+    files: typeof row.files === "string" ? JSON.parse(row.files) : row.files,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+  };
+}
+
+/** Snapshot the prior content of every file a generate_code write is about to
+ * touch, so it can be undone in one shot. `existingFiles` is the same
+ * project-file list already loaded for prompt context — no extra DB round trip. */
+async function createCheckpoint(
+  projectId: string,
+  userId: string,
+  label: string,
+  targetPaths: string[],
+  existingFiles: Array<{ path: string; content: string }>
+): Promise<string | null> {
+  if (targetPaths.length === 0) return null;
+  const checkpoint: DevHubCheckpoint = {
+    id: crypto.randomUUID(),
+    projectId,
+    userId,
+    label,
+    files: targetPaths.map((path) => ({
+      path,
+      priorContent: existingFiles.find((f) => f.path === path)?.content ?? null,
+    })),
+    createdAt: now(),
+  };
+  try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); }
+  return checkpoint.id;
 }
 
 // ── Built-in templates ────────────────────────────────────────────────────────
@@ -533,12 +628,39 @@ const TEMPLATES = [
 interface GeneratedCodeResult {
   files: Array<{ path: string; content: string; language: string }>;
   aiGenerated: boolean; // false = no provider configured / call failed, caller got a placeholder stub
-  // Present (non-empty) only when a generated JS/TS/JSON file failed a syntax
-  // check — the file is still written (the model may have gotten close, and
-  // an empty diff is worse than a broken-but-visible one), but callers get an
-  // honest signal instead of a plain success for code that won't run.
+  // Present (non-empty) only when a generated JS/TS/JSON file STILL fails a
+  // syntax check after self-correction was attempted — the file is still
+  // written (the model may have gotten close, and an empty diff is worse
+  // than a broken-but-visible one), but callers get an honest signal instead
+  // of a plain success for code that won't run.
   syntaxErrors?: Array<{ path: string; errors: string[] }>;
+  // Present when the first attempt had syntax errors and a self-correction
+  // retry fixed them — an honest "it wasn't perfect on try one" signal
+  // distinct from a clean first-pass success, without being a failure either.
+  selfCorrected?: number;
 }
+
+/** Extract the {"files":[...]} shape a generation call was asked for, with
+ * the same "not valid JSON → treat the whole reply as one file" fallback on
+ * both the first attempt and any self-correction retry. */
+function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path: string; content: string; language: string }> {
+  try {
+    const raw = reply.trim();
+    const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed.files)) {
+      return parsed.files.map((f: any) => ({
+        path: String(f.path || "output.ts"),
+        content: String(f.content || ""),
+        language: String(f.language || detectLanguage(f.path || "")),
+      }));
+    }
+  } catch { /* fall through to raw-text fallback */ }
+  const path = targetFiles[0] || "output.ts";
+  return [{ path, content: reply, language: detectLanguage(path) }];
+}
+
+const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
  * model to fit in, not enough to blow the context budget on a big project. */
@@ -595,17 +717,14 @@ async function generateCodeWithAI(
 
   const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${buildFileContext(existingFiles, targetFiles)}`;
 
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userMsg },
+  ];
+
   let result;
   try {
-    result = await callProvider(
-      provider.id,
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMsg },
-      ],
-      provider.defaultModel,
-      0.2
-    );
+    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2);
   } catch {
     const path = targetFiles[0] || "generated.ts";
     return {
@@ -614,24 +733,115 @@ async function generateCodeWithAI(
     };
   }
 
-  let files: Array<{ path: string; content: string; language: string }> = [];
+  let files = parseGeneratedFiles(result.reply, targetFiles);
+  let syntaxProblems = await validateGeneratedFiles(files);
+
+  // Self-correction: a generate-then-check-then-fix loop is a well-established
+  // pattern in agentic coding systems (Claude Code, SWE-agent) — a single-shot
+  // reply is much weaker than one that gets to see its own mistakes. Capped at
+  // MAX_SYNTAX_FIX_ATTEMPTS so a stubborn model can't loop forever on our bill.
+  let selfCorrected = 0;
+  while (syntaxProblems.length > 0 && selfCorrected < MAX_SYNTAX_FIX_ATTEMPTS) {
+    messages.push({ role: "assistant", content: result.reply });
+    messages.push({
+      role: "user",
+      content:
+        `Your last output had syntax errors:\n` +
+        syntaxProblems.map((p) => `${p.path}:\n${p.errors.join("\n")}`).join("\n\n") +
+        `\n\nReturn the corrected, complete files in the same JSON format. No explanation, just JSON.`,
+    });
+    try {
+      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2);
+    } catch {
+      break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
+    }
+    files = parseGeneratedFiles(result.reply, targetFiles);
+    syntaxProblems = await validateGeneratedFiles(files);
+    selfCorrected += 1;
+  }
+
+  return {
+    files,
+    aiGenerated: true,
+    ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
+    ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
+  };
+}
+
+interface ProjectPlan {
+  ok: boolean;
+  aiGenerated: boolean;
+  summary: string;
+  targetUsers: string;
+  stack: string;
+  mvpFeatures: string[];
+  laterFeatures: string[];
+  milestones: Array<{ title: string; prompt: string }>;
+  firstPrompt: string;
+}
+
+/** Turn a raw idea into a staged build plan: MVP scope, explicitly deferred
+ * scope, and an ordered list of ready-to-use generate_code prompts — the
+ * "help me figure out what to build, in what order" layer that sits before
+ * generate_code, not a replacement for it. Works with no open project
+ * (greenfield) or accounts for an existing one's files when given. */
+async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>): Promise<ProjectPlan> {
+  const fallback: ProjectPlan = {
+    ok: true, aiGenerated: false,
+    summary: idea, targetUsers: "", stack: "next",
+    mvpFeatures: [], laterFeatures: [], milestones: [],
+    firstPrompt: `Build a first version of: ${idea}`,
+  };
+  const providers = getProviders();
+  const configured = providers.filter((p) => p.configured);
+  if (configured.length === 0) {
+    return { ...fallback, targetUsers: "Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for a real plan." };
+  }
+  const provider = configured[0];
+
+  const existingContext = existingFiles.length > 0
+    ? `\n\nThis project already has these files — build on them, don't restart from scratch:\n${existingFiles.slice(0, CONTEXT_MAX_FILES).map((f) => `- ${f.path}`).join("\n")}`
+    : "";
+  const systemPrompt =
+    `You are a pragmatic product+tech lead scoping a new build. Given a raw idea, return ONLY a JSON object ` +
+    `(no explanation) with this exact shape: {"summary": "one paragraph restating the idea clearly", ` +
+    `"targetUsers": "who this is for, one sentence", "stack": one of "next"|"express"|"static"|"react"|"python", ` +
+    `"mvpFeatures": ["smallest ranked feature list for a working v1, most important first, 3-6 items"], ` +
+    `"laterFeatures": ["explicitly deferred features, so scope doesn't creep"], ` +
+    `"milestones": [{"title": "short step name", "prompt": "a ready-to-use prompt for an AI code-generation tool ` +
+    `to build exactly this step"}], "firstPrompt": "the exact prompt to hand to a code generator right now, matching milestones[0]"}. ` +
+    `Order milestones so each is buildable and demoable on its own before the next.`;
+  const userMsg = `Idea: ${idea}${existingContext}`;
+
   try {
+    const result = await callProvider(provider.id, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMsg },
+    ], provider.defaultModel, 0.3);
     const raw = result.reply.trim();
     const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);
     const parsed = JSON.parse(jsonStr);
-    if (Array.isArray(parsed.files)) {
-      files = parsed.files.map((f: any) => ({
-        path: String(f.path || "output.ts"),
-        content: String(f.content || ""),
-        language: String(f.language || detectLanguage(f.path || "")),
-      }));
-    }
+    const milestones = Array.isArray(parsed.milestones)
+      ? parsed.milestones.map((m: any) => ({ title: String(m?.title || ""), prompt: String(m?.prompt || "") }))
+      : [];
+    return {
+      ok: true,
+      aiGenerated: true,
+      summary: String(parsed.summary || idea),
+      targetUsers: String(parsed.targetUsers || ""),
+      stack: String(parsed.stack || "next"),
+      mvpFeatures: Array.isArray(parsed.mvpFeatures) ? parsed.mvpFeatures.map(String) : [],
+      laterFeatures: Array.isArray(parsed.laterFeatures) ? parsed.laterFeatures.map(String) : [],
+      milestones,
+      firstPrompt: String(parsed.firstPrompt || milestones[0]?.prompt || `Build a first version of: ${idea}`),
+    };
   } catch {
-    const path = targetFiles[0] || "output.ts";
-    files = [{ path, content: result.reply, language: detectLanguage(path) }];
+    // A provider call failure or an unparseable reply is a real failure, not
+    // a plan with empty fields — same honesty contract as generateCodeWithAI's
+    // aiGenerated flag, just expressed as ok:false since there's no partial
+    // file output worth keeping here.
+    return { ...fallback, ok: false };
   }
-  const syntaxProblems = await validateGeneratedFiles(files);
-  return { files, aiGenerated: true, ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}) };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -990,7 +1200,8 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   const resolvedStack = stack || project.stack;
   try {
     const existingFiles = await dbListFiles(project.id);
-    const { files: generatedFiles, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
+    const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
+    const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
     // Save each generated file
     for (const gf of generatedFiles) {
       const file: DevHubFile = {
@@ -1014,9 +1225,98 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
         }
       }
     }
-    res.json({ files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), projectId: project.id });
+    res.json({
+      files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
+      checkpointId, projectId: project.id,
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "generation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/generate/undo — revert the project's most
+// recent AI-driven multi-file write in one shot (restores every file it
+// touched to its prior content, or deletes it if generate_code created it
+// fresh) without regenerating anything. Consumes the checkpoint so a second
+// undo reaches the one before it, not the same state again.
+devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || !canEdit(project, userId)) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  try {
+    const checkpoint = await dbLatestCheckpoint(project.id);
+    if (!checkpoint) {
+      return res.json({ ok: false, message: "No AI change to undo for this project" });
+    }
+    const revertedFiles: string[] = [];
+    for (const f of checkpoint.files) {
+      if (f.priorContent === null) {
+        try { await dbDeleteFile(project.id, f.path); }
+        catch {
+          for (const [fid, mf] of memFiles) {
+            if (mf.projectId === project.id && mf.path === f.path) { memFiles.delete(fid); break; }
+          }
+        }
+      } else {
+        const restored: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: f.path,
+          content: f.priorContent, language: detectLanguage(f.path), updatedAt: now(),
+        };
+        try { await dbUpsertFile(restored); }
+        catch {
+          const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
+          if (existing) { existing.content = restored.content; existing.updatedAt = restored.updatedAt; }
+          else memFiles.set(restored.id, restored);
+        }
+      }
+      revertedFiles.push(f.path);
+    }
+    try { await dbDeleteCheckpoint(checkpoint.id); } catch { memCheckpoints.delete(checkpoint.id); }
+    return res.json({ ok: true, revertedFiles, label: checkpoint.label });
+  } catch (e: any) {
+    captureException(e, { route: "devhub/generate:undo", projectId: project.id });
+    return res.status(500).json({ error: e?.message || "undo failed" });
+  }
+});
+
+// POST /api/devhub/plan — turn a raw idea into a staged build plan. NOT
+// project-scoped (no /projects/:id/ prefix): works standalone for someone
+// who hasn't created a project yet, and optionally accounts for an existing
+// project's files when `projectId` is given in the body.
+devhubRouter.post("/plan", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { idea, projectId } = req.body || {};
+  if (!idea || typeof idea !== "string" || !idea.trim()) {
+    return res.status(400).json({ error: "idea is required" });
+  }
+
+  let existingFiles: Array<{ path: string; content: string }> = [];
+  if (typeof projectId === "string" && projectId.trim()) {
+    try {
+      let project: DevHubProject | null;
+      try { project = await dbGetProject(projectId.trim()); }
+      catch { project = memProjects.get(projectId.trim()) ?? null; }
+      if (project && canAccess(project, userId)) {
+        existingFiles = await dbListFiles(projectId.trim());
+      }
+    } catch { /* planning still works without project context */ }
+  }
+
+  try {
+    const plan = await planProjectWithAI(idea.trim(), existingFiles);
+    return res.json(plan);
+  } catch (e: any) {
+    captureException(e, { route: "devhub/plan" });
+    return res.status(500).json({ error: e?.message || "planning failed" });
   }
 });
 
@@ -2842,7 +3142,8 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
           ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
           : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -2855,7 +3156,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}) } });
+        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } });
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) throw new Error("OPENAI_API_KEY not set");
@@ -3085,7 +3386,8 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
           ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
           : (step.saveAs ? [String(step.saveAs)] : []);
         const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated, syntaxErrors } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+        const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
         for (const gf of files) {
           const f: DevHubFile = {
             id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -3098,7 +3400,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
             else memFiles.set(f.id, f);
           }
         }
-        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}) } });
+        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } });
         okCount++;
       } else if (type === "image") {
         const apiKey = process.env.OPENAI_API_KEY;

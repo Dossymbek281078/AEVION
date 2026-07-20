@@ -36,17 +36,24 @@ import { MODULES_PRICING, type TierId } from "../data/pricing";
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
 /**
- * Modules that must NOT be gated yet, regardless of what PAYWALL_MODULES
- * says — each advertises a free-tier promise that the current gate can't
- * honor because `includedIn` starts above "free"/"lite" and no usage
- * metering exists to enforce "first N free, then paywall" instead of an
- * immediate 402. Gating one of these would break the advertised free tier
- * for real users, not just fail closed safely.
+ * Modules that must NEVER go behind this blanket, all-or-nothing module gate,
+ * regardless of what PAYWALL_MODULES says — each advertises a free-tier
+ * promise (a token/request quota, or "1 module of choice") that an immediate
+ * 402 on every request would break outright, rather than honoring "first N
+ * free, then upgrade".
+ *
+ * This is PERMANENT, not a placeholder — it is not lifted once some metering
+ * ships. qcoreai already has its own metering (`lib/qcoreQuota.ts`,
+ * `enforceFreeTokenQuota()`, live since PR #463 / QCOREAI_FREE_QUOTA=1 on
+ * Railway) which correctly enforces "100k tokens/mo then 402" — but that is a
+ * SEPARATE, more granular mechanism wired directly into qcoreai's routes, not
+ * this blanket per-module gate. The right fix for a quota-shaped promise is
+ * always a dedicated metering gate like qcoreQuota.ts, never adding the
+ * module here to PAYWALL_MODULES — so qcoreai/qright/qsign stay in this set
+ * even after (or especially after) proper metering exists for them.
  *
  * Update this list alongside docs/PAYWALL_FLIP_READINESS.md's "Deliberately
- * NOT gated" section — they must stay in sync. Remove an id only once the
- * underlying metering/promise conflict is actually resolved, not just when
- * someone wants to flip it on.
+ * NOT gated" section — they must stay in sync.
  */
 const UNSAFE_TO_GATE = new Set([
   "qcoreai", // free tier promises 100k tokens/mo; includedIn starts at "medium"; no token-metering yet
@@ -176,8 +183,9 @@ function warnUnsafeGateAttempt(ids: string[]): void {
   warnedUnsafeGate = true;
   console.error(
     `[planGate] PAYWALL_MODULES included UNSAFE_TO_GATE module(s) [${ids.join(", ")}] — ` +
-      `stripped from enforcement. These break an advertised free-tier promise until their ` +
-      `underlying metering ships; see UNSAFE_TO_GATE in planGate.ts and ` +
+      `stripped from enforcement. These have a quota-shaped free promise that the blanket ` +
+      `module gate can't honor — use a dedicated metering gate instead (see qcoreQuota.ts for ` +
+      `qcoreai); see UNSAFE_TO_GATE in planGate.ts and ` +
       `docs/PAYWALL_FLIP_READINESS.md. Fix the PAYWALL_MODULES env var on Railway.`
   );
 }

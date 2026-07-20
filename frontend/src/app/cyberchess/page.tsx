@@ -2411,6 +2411,26 @@ export default function CyberChessPage(){
     sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
   };
 
+  // Full puzzle pool — грузится лениво один раз, только когда пользователь реально
+  // открывает Puzzles-таб (фильтрация/полистать пул требует всего корпуса, homepage-
+  // виджеты обходятся маленьким слайсом из mount-эффекта выше). fullPuzzlePoolRef
+  // защищает от повторной загрузки при переключении табов туда-обратно.
+  const fullPuzzlePoolRef=useRef(false);
+  useEffect(()=>{
+    if(tab!=="puzzles"||fullPuzzlePoolRef.current)return;
+    fullPuzzlePoolRef.current=true;
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
+        if(r.ok){
+          const d=await r.json();
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+        }
+      }catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{}
+    })();
+  },[tab]);
+
   // Auto-load first puzzle when category changes and we're on Puzzles tab
   useEffect(()=>{
     if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
@@ -2538,21 +2558,22 @@ export default function CyberChessPage(){
     }
     // Coach SR — surface due review reminders (1/3/7-day milestones).
     try{const due=getDueReminders();if(due.length>0)sDueReminders(due)}catch{}
-    // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
-    // Cloud API extension убрана из mount — зовём lazy только когда пользователь
-    // открывает Puzzle tab (см. отдельный useEffect ниже).
-    // Puzzle pool: сперва пробуем серверный эндпоинт (фильтрация + shuffle на бэке),
-    // при любой проблеме — падаем на bundled /puzzles.json. Zero-regression: если
-    // эндпоинт отсутствует/пуст/ошибка — поведение ровно как раньше.
+    // Small puzzle slice — грузим сразу, но лёгкую (нужна только для Daily puzzle и
+    // Quick Puzzle на главной, не для полной фильтрации в Puzzles-табе). Раньше здесь
+    // безусловно тянулось 20000 пазлов на КАЖДЫЙ заход в приложение, даже если человек
+    // ни разу не открывал Puzzles — реальный трафик/latency на каждой сессии, особенно
+    // на мобильном интернете. Полный пул теперь грузится лениво отдельным эффектом
+    // ниже, когда пользователь реально открывает вкладку Puzzles.
     (async()=>{
       try{
-        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(d.puzzles as Puzzle[]);return;}
         }
       }catch{}
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{sPuzzles([]);}
+      // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул
+      // ниже подхватит bundled-фолбэк, если сервер недоступен вообще.
     })();
     // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
     const loadOpenings=()=>{
@@ -4631,7 +4652,7 @@ export default function CyberChessPage(){
     // Roll initial die for diceblade
     if(V==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=V==="standard"?"":` · ${VARIANTS.find(v=>v.id===V)?.name||""}`;
-    showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
+    showToast(`Игра за ${cl==="w"?"белых":"чёрных"}${variantLabel}`,"info");
     // Tutorial overlay for non-standard variants — once per variant. After dismissed, the
     // smaller toast tip kicks in for the next 3 plays as a refresher.
     if(V!=="standard"&&!seenVariantTutorials.has(V)){
@@ -4703,7 +4724,7 @@ export default function CyberChessPage(){
     let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Пазл дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Пазлы ещё грузятся…","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("Нет пазлов под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);

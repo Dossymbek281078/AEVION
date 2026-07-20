@@ -202,7 +202,10 @@
       "WebSearch",
       "WebFetch(domain:assets.ngc.nvidia.com)",
       "WebFetch(domain:developer.nvidia.com)",
-      "WebFetch(domain:forums.developer.nvidia.com)"
+      "WebFetch(domain:forums.developer.nvidia.com)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 706)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 709)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 709 --json state,mergedAt)"
     ]
   }
 }

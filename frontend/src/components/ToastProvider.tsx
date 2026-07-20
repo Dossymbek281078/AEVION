@@ -9,17 +9,28 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 
 export type ToastVariant = "success" | "error" | "info" | "warning";
+
+// Optional call-to-action rendered inside the toast (e.g. "Тарифы →" pointing
+// at an upgrade page). href is treated as an in-app route via next/link.
+export type ToastAction = { label: string; href: string };
 
 type ToastItem = {
   id: string;
   message: string;
   variant: ToastVariant;
+  action?: ToastAction;
 };
 
 type ToastContextValue = {
-  showToast: (message: string, variant?: ToastVariant, durationMs?: number) => void;
+  showToast: (
+    message: string,
+    variant?: ToastVariant,
+    durationMs?: number,
+    action?: ToastAction,
+  ) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -57,12 +68,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 
   const showToast = useCallback(
-    (message: string, variant: ToastVariant = "info", durationMs?: number) => {
+    (message: string, variant: ToastVariant = "info", durationMs?: number, action?: ToastAction) => {
       const id = nextId();
       const fallback =
         variant === "error" ? 7000 : variant === "warning" ? 6000 : variant === "success" ? 4800 : 5200;
-      const ms = typeof durationMs === "number" && durationMs > 0 ? durationMs : fallback;
-      setToasts((prev) => [...prev, { id, message, variant }]);
+      // A toast with an action gets a little longer on screen so it stays
+      // clickable; explicit durationMs still wins.
+      const base = action ? Math.max(fallback, 8000) : fallback;
+      const ms = typeof durationMs === "number" && durationMs > 0 ? durationMs : base;
+      setToasts((prev) => [...prev, { id, message, variant, action }]);
       const t = setTimeout(() => removeToast(id), ms);
       timers.current.set(id, t);
     },
@@ -143,7 +157,34 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 fontFamily: t.variant === "info" ? "Georgia, serif" : "system-ui",
                 fontStyle: t.variant === "info" ? "italic" : "normal",
               }}>{palette.icon}</div>
-              <span style={{ flex: 1, minWidth: 0 }}>{t.message}</span>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                <span>{t.message}</span>
+                {t.action && (
+                  <Link
+                    href={t.action.href}
+                    onClick={() => removeToast(t.id)}
+                    style={{
+                      alignSelf: "flex-start",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "5px 12px",
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.14)",
+                      border: "1px solid rgba(255,255,255,0.28)",
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                      transition: "background 120ms ease",
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.26)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.14)"; }}
+                  >
+                    {t.action.label}
+                  </Link>
+                )}
+              </div>
               <button
                 onClick={() => removeToast(t.id)}
                 aria-label="Закрыть"

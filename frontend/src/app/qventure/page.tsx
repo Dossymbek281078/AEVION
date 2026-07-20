@@ -269,6 +269,10 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
       const j = await res.json();
       if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Could not read that deck — enter the details manually."); return; }
       const d = j.data;
+      const fin = d.financials || {};
+      const num = (v: unknown) => (typeof v === "number" && isFinite(v) && v > 0 ? String(v) : "");
+      const proj: Array<{ year: number; revenueUsd: number }> = Array.isArray(d.projections) ? d.projections : [];
+      const projRev = (i: number) => (proj[i] && isFinite(proj[i].revenueUsd) ? String(proj[i].revenueUsd) : "");
       setForm({
         ...emptyForm(),
         name: d.name || "",
@@ -278,10 +282,24 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         askUsd: d.askUsd ? String(d.askUsd) : "",
         description: d.description || "",
         tractionNotes: d.tractionNotes || "",
+        finArr: num(fin.arrUsd),
+        finGrossMargin: num(fin.grossMarginPct),
+        finLtvCac: num(fin.ltvCacRatio),
+        finChurn: num(fin.churnPct),
+        finCustomers: num(fin.customers),
+        finGrowth: num(fin.growthPct),
+        finTam: num(fin.bottomUpTamUsd),
+        projY0: projRev(0),
+        projY1: projRev(1),
+        projY2: projRev(2),
       });
-      setExtractNote(d.aiUsed
-        ? "✓ Pre-filled from your deck (AI-parsed). Review the fields and run the analysis."
-        : "✓ Pre-filled from your deck (text-parsed). Review the fields and run the analysis.");
+      const gotExact = Object.values(fin).some((v) => typeof v === "number" && v) || proj.length > 0;
+      setExtractNote(
+        (d.aiUsed
+          ? "✓ Pre-filled from your deck (AI-parsed). "
+          : "✓ Pre-filled from your deck (text-parsed). ") +
+          (gotExact ? "Exact financials filled in below — review and run the analysis." : "Review the fields and run the analysis."),
+      );
     } catch {
       setExtractNote("Upload failed — check your connection and try again.");
     } finally {

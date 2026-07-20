@@ -69,9 +69,13 @@ export default function HelpPage() {
         <h1 className="mt-3 text-3xl font-extrabold text-white">Help & FAQ</h1>
         <p className="mt-2 text-sm text-slate-400">Answers to the most common questions.</p>
         <p className="mt-3 text-sm text-slate-300">
-          Впервые нанимаете здесь? Начните с пошагового{" "}
+          Пошаговые гайды:{" "}
           <Link href="/build/guide" className="text-emerald-300 underline">
-            гайда для работодателя
+            для работодателя
+          </Link>{" "}
+          ·{" "}
+          <Link href="/build/guide-worker" className="text-emerald-300 underline">
+            для соискателя
           </Link>
           .
         </p>

@@ -112,6 +112,13 @@ const OPENAI_COMPAT: Record<string, OpenAICompatCfg> = {
     baseUrl: () => (process.env.GITHUB_MODELS_BASE_URL || "https://models.github.ai/inference").replace(/\/$/, ""),
     envKey: "GITHUB_MODELS_TOKEN",
   },
+  nvidia: {
+    // NVIDIA NIM (build.nvidia.com) — OpenAI-compatible catalogue of 80+ hosted
+    // models. Free tier: `nvapi-…` key, no card, ~5000 credits + 40 req/min per
+    // model (prototyping, not production). Opt-in via NVIDIA_API_KEY.
+    baseUrl: () => (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, ""),
+    envKey: "NVIDIA_API_KEY",
+  },
   // ── Local runtimes (offline-capable) ────────────────────────────────────
   // Each exposes an OpenAI-compatible /chat/completions on localhost, so the
   // same adapter drives them. Keyless. Opt-in via their *_BASE_URL env, which
@@ -299,6 +306,25 @@ export function getProviders(): Provider[] {
       defaultModel: process.env.GITHUB_MODELS_MODEL || "openai/gpt-4o-mini",
       envKey: "GITHUB_MODELS_TOKEN",
       configured: isConfigured("GITHUB_MODELS_TOKEN"),
+      free: true,
+      tier: "free",
+    },
+    {
+      id: "nvidia",
+      name: "NVIDIA NIM (free tier)",
+      // build.nvidia.com hosted catalogue — OpenAI-compatible ids. Adds frontier
+      // free-tier breadth (NVIDIA's own Nemotron, DeepSeek R1, Llama, Qwen) to
+      // the council crowd at $0. Catalogue churns; override via NVIDIA_MODEL.
+      models: [
+        "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "deepseek-ai/deepseek-r1",
+        "meta/llama-3.3-70b-instruct",
+        "qwen/qwen2.5-72b-instruct",
+        "mistralai/mistral-large-2-instruct",
+      ],
+      defaultModel: process.env.NVIDIA_MODEL || "meta/llama-3.3-70b-instruct",
+      envKey: "NVIDIA_API_KEY",
+      configured: isConfigured("NVIDIA_API_KEY"),
       free: true,
       tier: "free",
     },

@@ -40,10 +40,16 @@ console.log("QCoreAI free-fleet + council smoke\n");
 const all = getProviders();
 ok("catalogue has >= 10 providers", all.length >= 10);
 const freeIds = all.filter((p) => p.free).map((p) => p.id);
-for (const id of ["openrouter", "groq", "cerebras", "mistral", "together", "github", "ollama"]) {
+for (const id of ["openrouter", "groq", "cerebras", "mistral", "together", "github", "nvidia", "ollama"]) {
   ok(`free fleet includes ${id}`, freeIds.includes(id));
 }
 ok("anthropic is premium (not free)", all.find((p) => p.id === "anthropic")?.tier === "premium" && all.find((p) => p.id === "anthropic")?.free === false);
+// NVIDIA NIM: cloud free-tier gateway — catalogued but INACTIVE until its key is
+// set (prod-safety: no NVIDIA_API_KEY => not configured => never joins a council).
+const nv = all.find((p) => p.id === "nvidia");
+ok("nvidia is a cloud free provider (not local)", nv?.free === true && nv?.tier === "free" && !nv?.local);
+ok("nvidia unconfigured without NVIDIA_API_KEY", nv?.configured === false);
+ok("nvidia carries frontier model ids", Array.isArray(nv?.models) && nv.models.length >= 3);
 
 // 2. Only Anthropic configured → council degrades to varied Anthropic models; synth = Opus 4.8.
 process.env.ANTHROPIC_API_KEY = "sk-test";

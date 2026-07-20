@@ -2203,7 +2203,8 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         : 1;
   // council mode: offline — convene crowd + chair from local runtimes only
   // (Ollama / LM Studio / Jan / LocalAI / llama.cpp). Accepts `offline` or
-  // `localOnly`. Ignored for non-council strategies.
+  // `localOnly`. Honored by council AND debate/parallel/sequential
+  // (each filters its agents to local providers).
   const localOnly = req.body?.offline === true || req.body?.localOnly === true;
 
   // Optional spend cap. Hard upper bound 50 USD/run prevents accidental

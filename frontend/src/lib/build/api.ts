@@ -473,12 +473,13 @@ async function call<T>(
   if (!res.ok || !parsed || parsed.success === false) {
     const err = parsed && parsed.success === false ? parsed : null;
     const code = err?.error || `http_${res.status}`;
-    // Surface plan/tier limits globally: a form that catches this thrown error
-    // without showing anything would otherwise "silently do nothing". A
+    // Surface plan/tier/quota limits globally: a form that catches this thrown
+    // error without showing anything would otherwise "silently do nothing". A
     // top-level listener (PlanLimitToastBridge) turns this into a toast.
+    // The `_limit_reached` suffix is the reliable signal regardless of HTTP
+    // status — build uses 403 (plan), 400 (portfolio cap), 409 (template cap).
     if (
       typeof window !== "undefined" &&
-      res.status === 403 &&
       (code.endsWith("_limit_reached") || (err !== null && "upgradeUrl" in err))
     ) {
       window.dispatchEvent(new CustomEvent("aevion:plan-limit", { detail: err }));

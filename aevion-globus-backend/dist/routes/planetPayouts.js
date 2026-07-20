@@ -9,6 +9,7 @@ const pagination_1 = require("../lib/pagination");
 const webhookSig_1 = require("../lib/webhookSig");
 const qsignSecret_1 = require("../lib/qsignSecret");
 const ecosystem_1 = require("./ecosystem");
+const qtrade_1 = require("./qtrade");
 function sendCsv(res, baseName, rows) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`);
@@ -41,8 +42,8 @@ exports.planetPayoutsRouter.get("/payouts.csv", authJwt_1.requireAuth, async (re
         .filter((x) => x.email === email)
         .sort((a, b) => (a.certifiedAt < b.certifiedAt ? 1 : -1));
     const rows = [
-        ["id", "artifact_version_id", "amount_aec", "certified_at"],
-        ...items.map((x) => [x.id, x.artifactVersionId, x.amount, x.certifiedAt]),
+        ["id", "artifact_version_id", "amount_aec", "certified_at", "transfer_id"],
+        ...items.map((x) => [x.id, x.artifactVersionId, x.amount, x.certifiedAt, x.transferId]),
     ];
     sendCsv(res, "planet-payouts", rows);
 });
@@ -81,12 +82,20 @@ exports.planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) =>
             eventId,
         });
     }
+    // Credit the certified artifact's owner, same pattern as the QRight
+    // royalty and CyberChess prize webhooks.
+    const credit = await (0, qtrade_1.internalCreditAccount)({
+        owner: email,
+        amount: a,
+        memo: `Planet certification · ${artifactVersionId}`,
+    });
     const cert = {
         id: `pcert_${(0, node_crypto_1.randomUUID)()}`,
         email: email.toLowerCase(),
         artifactVersionId,
         amount: a,
         certifiedAt: new Date().toISOString(),
+        transferId: credit.ok ? credit.operationId : null,
         source: "planet",
     };
     ecosystem_1.planetCerts.push(cert);
@@ -97,5 +106,8 @@ exports.planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) =>
         id: cert.id,
         eventId,
         certifiedAt: cert.certifiedAt,
+        transferId: cert.transferId,
+        accountId: credit.ok ? credit.accountId : null,
+        creditError: credit.ok ? undefined : credit.error,
     });
 });

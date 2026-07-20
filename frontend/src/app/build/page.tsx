@@ -160,7 +160,7 @@ export default function BuildHomePage() {
       )}
 
       {loading && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="rounded-xl border border-[#d4d3cc] bg-white p-4">
               <Skeleton width="70%" height={16} />
@@ -191,7 +191,7 @@ export default function BuildHomePage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {projects.map((p) => (
           <ProjectCard key={p.id} project={p} />
         ))}

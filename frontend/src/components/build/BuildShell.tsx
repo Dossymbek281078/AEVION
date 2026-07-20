@@ -128,7 +128,7 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
     <ToastProvider>
     <div className={`min-h-screen ${skin.root}`}>
       <header className={`border-b backdrop-blur ${skin.header}`}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 px-4 py-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -219,12 +219,12 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
         skin={skin}
       />
 
-      <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:pb-6">{children}</main>
+      <main className="mx-auto max-w-[1600px] px-4 pt-6 pb-24 sm:pb-6">{children}</main>
       {hydrated && user && <MobileBottomNav pathname={pathname} skin={skin} />}
       <CompareBar />
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
       <footer className={`border-t mt-8 ${skin.footer}`}>
-        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px]">
+        <div className="mx-auto max-w-[1600px] px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px]">
           <div className="flex flex-wrap gap-4">
             <Link href="/build/help" className={skin.footerLink}>Help</Link>
             <Link href="/build/stats" className={skin.footerLink}>Platform stats</Link>

@@ -216,7 +216,11 @@ export default function GuidePage() {
         </div>
 
         <p className="mt-8 text-[11px] text-slate-500">
-          Остались вопросы? Загляните в{" "}
+          Вы соискатель? Смотрите{" "}
+          <Link href="/build/guide-worker" className="text-emerald-300 underline">
+            гайд для соискателя
+          </Link>
+          . Остались вопросы? Загляните в{" "}
           <Link href="/build/help" className="text-emerald-300 underline">
             /build/help
           </Link>

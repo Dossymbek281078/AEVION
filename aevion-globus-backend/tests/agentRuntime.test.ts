@@ -417,6 +417,73 @@ describe("makeExecutor", () => {
     expect(r.content).toEqual({ file: { path: "lib/types.ts", content: "export type X = 1;" } });
   });
 
+  // undo_last_generation — project-scoped, empty input, empty POST body.
+  test("undo_last_generation with no projectId in context → ok:false without any fetch", async () => {
+    let called = false;
+    const fakeFetch = (async () => {
+      called = true;
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch);
+    const r = await exec({ id: "t1", name: "undo_last_generation", input: {} });
+
+    expect(called).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(String(r.content)).toMatch(/no devhub project is open/i);
+  });
+
+  test("undo_last_generation routes to the project's generate/undo endpoint with an empty body", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true, revertedFiles: ["a.ts"], label: "AI: add auth" }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    const r = await exec({ id: "t1", name: "undo_last_generation", input: {} });
+
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/projects/proj-1/generate/undo");
+    expect(seenBody).toEqual({});
+    expect(r.ok).toBe(true);
+    expect(r.content).toEqual({ ok: true, revertedFiles: ["a.ts"], label: "AI: add auth" });
+  });
+
+  // plan_project — project-AWARE, not project-SCOPED: works standalone, and
+  // folds context.projectId into the request BODY (not the URL) when a
+  // project happens to be open, unlike every other project-touching tool.
+  test("plan_project works with no projectId in context (fixed endpoint, no project required)", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true, aiGenerated: true, summary: "..." }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch); // no context
+    const r = await exec({ id: "t1", name: "plan_project", input: { idea: "a marketplace app" } });
+
+    expect(seenUrl).toBe("http://127.0.0.1:4001/api/devhub/plan");
+    expect(seenBody).toEqual({ idea: "a marketplace app" });
+    expect(r.ok).toBe(true);
+  });
+
+  test("plan_project folds context.projectId into the body when a project is open", async () => {
+    let seenBody: unknown = null;
+    const fakeFetch = (async (_url: string, init?: { body?: string }) => {
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-1" });
+    await exec({ id: "t1", name: "plan_project", input: { idea: "add a chat feature" } });
+
+    expect(seenBody).toEqual({ idea: "add a chat feature", projectId: "proj-1" });
+  });
+
   test("read_project_file forwards the Authorization header like the other project-scoped tools", async () => {
     let seenHeaders: Record<string, string> = {};
     const fakeFetch = (async (_url: string, init?: { headers?: Record<string, string> }) => {

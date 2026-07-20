@@ -143,6 +143,24 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+    // One row per AI-driven multi-file write (generate_code / workflow "code"
+    // step) — the prior content of every file it touched, so it can be
+    // reverted in one shot ("undo the last AI change") without re-generating.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubCheckpoint" (
+        "id"        TEXT PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "userId"    TEXT NOT NULL,
+        "label"     TEXT NOT NULL,
+        "files"     JSONB NOT NULL,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubCheckpoint_project_idx"
+        ON "DevHubCheckpoint" ("projectId", "createdAt" DESC);
+    `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

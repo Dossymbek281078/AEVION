@@ -548,6 +548,28 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     expect(r.body.syntaxErrors).toBeUndefined();
   });
 
+  // Regression: ts.transpileModule({jsx: ts.JsxEmit.None}) is NOT a valid
+  // config — TS reports an "invalid --jsx option" diagnostic on every single
+  // .ts/.js file, indistinguishable from a genuine syntax error. This would
+  // have silently forced a self-correction retry (and, with no second mock
+  // response queued in a test, an outright crash) on every non-JSX generation.
+  test("valid plain .ts (non-JSX) file is never flagged — regression for the JsxEmit.None false positive", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "lib/util.ts", content: "export function add(a: number, b: number): number { return a + b; }", language: "typescript" }] }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.syntaxErrors).toBeUndefined();
+    expect(r.body.selfCorrected).toBeUndefined();
+    expect(vi.mocked(callProvider)).toHaveBeenCalledTimes(1); // no retry triggered
+  });
+
   test("broken JSX syntax is written but flagged — not a silent success", async () => {
     const app = makeApp();
     const projectId = await createProject(app);
@@ -668,8 +690,8 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     vi.mocked(callProvider).mockResolvedValue({
       reply: JSON.stringify({
         files: [
-          { path: "pages/api/login.ts", content: "handles POST", language: "typescript" },
-          { path: "pages/login.tsx", content: "calls /api/login", language: "typescript" },
+          { path: "pages/api/login.ts", content: "// handles POST", language: "typescript" },
+          { path: "pages/login.tsx", content: "// calls /api/login", language: "typescript" },
         ],
       }),
       model: "m", usage: {},
@@ -703,6 +725,244 @@ describe("POST /api/devhub/projects/:id/generate (AI honesty)", () => {
     const systemPrompt = vi.mocked(callProvider).mock.calls[0][1][0].content as string;
     expect(systemPrompt).toContain("single file");
     expect(systemPrompt).not.toContain("MULTIPLE coordinated files");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5d. Self-correction — generate → check → fix loop (a broken first attempt
+//     should self-heal instead of just being flagged and left broken)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("generate_code self-correction", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    return cr.body.project.id as string;
+  }
+
+  test("a broken first attempt that the model fixes on retry is reported as selfCorrected, no syntaxErrors", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider)
+      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "pages/broken.tsx", content: "export default function X() { return <div>", language: "typescript" }] }), model: "m", usage: {} } as any)
+      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "pages/broken.tsx", content: "export default function X() { return <div></div>; }", language: "typescript" }] }), model: "m", usage: {} } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.selfCorrected).toBe(1);
+    expect(r.body.syntaxErrors).toBeUndefined();
+    expect(r.body.files[0].content).toContain("</div>");
+    expect(vi.mocked(callProvider)).toHaveBeenCalledTimes(2);
+    // The retry prompt must include the actual error, not just "try again".
+    const retryMsg = vi.mocked(callProvider).mock.calls[1][1].at(-1)?.content as string;
+    expect(retryMsg).toContain("syntax errors");
+  });
+
+  test("still broken after the retry → syntaxErrors present, no selfCorrected field", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({ reply: JSON.stringify({ files: [{ path: "pages/broken.tsx", content: "export default function X() { return <div>", language: "typescript" }] }), model: "m", usage: {} } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.selfCorrected).toBeUndefined();
+    expect(r.body.syntaxErrors).toHaveLength(1);
+    expect(vi.mocked(callProvider)).toHaveBeenCalledTimes(2); // one original + exactly one retry, capped
+  });
+
+  test("a clean first attempt never triggers a retry call", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValue({ reply: JSON.stringify({ files: [{ path: "pages/ok.tsx", content: "export default function Ok() { return null; }", language: "typescript" }] }), model: "m", usage: {} } as any);
+
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(vi.mocked(callProvider)).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5e. Checkpoints — "undo the last AI change" without regenerating anything
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("AI-change checkpoints + undo", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    return cr.body.project.id as string;
+  }
+  function mockProviderReturning(files: Array<{ path: string; content: string }>) {
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValueOnce({
+      reply: JSON.stringify({ files: files.map((f) => ({ ...f, language: "typescript" })) }),
+      model: "m", usage: {},
+    } as any);
+  }
+
+  test("/generate returns a checkpointId when it writes at least one file", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    mockProviderReturning([{ path: "pages/new.tsx", content: "export default function New() { return null; }" }]);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+
+    expect(r.status).toBe(200);
+    expect(typeof r.body.checkpointId).toBe("string");
+  });
+
+  test("undo restores a file's prior content", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "ORIGINAL" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "// CHANGED BY AI" }]);
+
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x", targetFile: "pages/index.tsx" });
+    const before = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/index.tsx`);
+    expect(before.body.file.content).toBe("// CHANGED BY AI");
+
+    const undo = await request(app).post(`/api/devhub/projects/${projectId}/generate/undo`).send({});
+    expect(undo.status).toBe(200);
+    expect(undo.body).toMatchObject({ ok: true, revertedFiles: ["pages/index.tsx"] });
+
+    const after = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/index.tsx`);
+    expect(after.body.file.content).toBe("ORIGINAL");
+  });
+
+  test("undo deletes a file that generate_code created fresh (no prior content)", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    mockProviderReturning([{ path: "pages/brandnew.tsx", content: "export default function New() { return null; }" }]);
+
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x" });
+    const before = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/brandnew.tsx`);
+    expect(before.status).toBe(200);
+
+    await request(app).post(`/api/devhub/projects/${projectId}/generate/undo`).send({});
+
+    const after = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/brandnew.tsx`);
+    expect(after.status).toBe(404);
+  });
+
+  test("undo consumes the checkpoint — a second undo reaches the change before it, not the same state", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "V1" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V2" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "x", targetFile: "pages/index.tsx" });
+    mockProviderReturning([{ path: "pages/index.tsx", content: "V3" }]);
+    await request(app).post(`/api/devhub/projects/${projectId}/generate`).send({ prompt: "y", targetFile: "pages/index.tsx" });
+
+    const undo1 = await request(app).post(`/api/devhub/projects/${projectId}/generate/undo`).send({});
+    expect(undo1.body.ok).toBe(true);
+    const afterFirst = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/index.tsx`);
+    expect(afterFirst.body.file.content).toBe("V2"); // back to the state right before the V3 write
+
+    const undo2 = await request(app).post(`/api/devhub/projects/${projectId}/generate/undo`).send({});
+    expect(undo2.body.ok).toBe(true);
+    const afterSecond = await request(app).get(`/api/devhub/projects/${projectId}/file?path=pages/index.tsx`);
+    expect(afterSecond.body.file.content).toBe("V1"); // and now the state right before the V2 write
+  });
+
+  test("no checkpoint to undo → ok:false, not a 500", async () => {
+    const app = makeApp();
+    const projectId = await createProject(app);
+
+    const r = await request(app).post(`/api/devhub/projects/${projectId}/generate/undo`).send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.message).toMatch(/No AI change to undo/);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5f. plan_project — idea → staged build plan, standalone or project-aware
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/plan", () => {
+  test("400 when idea is missing", async () => {
+    const r = await request(makeApp()).post("/api/devhub/plan").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("no provider configured → ok:true, aiGenerated:false, honest fallback (not empty silent success)", async () => {
+    const r = await request(makeApp()).post("/api/devhub/plan").send({ idea: "a marketplace for vintage cameras" });
+    expect(r.status).toBe(200);
+    expect(r.body.aiGenerated).toBe(false);
+    expect(r.body.targetUsers).toMatch(/Configure an AI provider/);
+  });
+
+  test("a configured provider returns the full structured plan", async () => {
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValueOnce({
+      reply: JSON.stringify({
+        summary: "A marketplace for buying and selling vintage cameras.",
+        targetUsers: "Camera collectors and hobbyist photographers.",
+        stack: "next",
+        mvpFeatures: ["Listing creation", "Browse/search", "Basic checkout"],
+        laterFeatures: ["Seller ratings", "Auctions"],
+        milestones: [
+          { title: "Listing creation", prompt: "Build a form to create a camera listing with photos and price." },
+          { title: "Browse page", prompt: "Build a page that lists all camera listings." },
+        ],
+        firstPrompt: "Build a form to create a camera listing with photos and price.",
+      }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/plan").send({ idea: "a marketplace for vintage cameras" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.aiGenerated).toBe(true);
+    expect(r.body.mvpFeatures).toHaveLength(3);
+    expect(r.body.milestones).toHaveLength(2);
+    expect(r.body.firstPrompt).toMatch(/camera listing/);
+  });
+
+  test("an unparseable reply is ok:false, not a silently empty plan", async () => {
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValueOnce({ reply: "not json at all", model: "m", usage: {} } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/plan").send({ idea: "x" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+  });
+
+  test("when projectId is given, existing project files ride in the prompt", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const projectId = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${projectId}/file`).send({ path: "pages/index.tsx", content: "existing" });
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValueOnce({
+      reply: JSON.stringify({ summary: "s", targetUsers: "u", stack: "next", mvpFeatures: [], laterFeatures: [], milestones: [], firstPrompt: "p" }),
+      model: "m", usage: {},
+    } as any);
+
+    await request(app).post("/api/devhub/plan").send({ idea: "add a feature", projectId });
+
+    const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
+    expect(userMsg).toContain("pages/index.tsx");
+  });
+
+  test("with no projectId, planning is standalone — no project lookup, no existing-files section", async () => {
+    vi.mocked(getProviders).mockReturnValue([{ id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", configured: true } as any]);
+    vi.mocked(callProvider).mockResolvedValueOnce({
+      reply: JSON.stringify({ summary: "s", targetUsers: "u", stack: "next", mvpFeatures: [], laterFeatures: [], milestones: [], firstPrompt: "p" }),
+      model: "m", usage: {},
+    } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/plan").send({ idea: "a brand new idea" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    const userMsg = vi.mocked(callProvider).mock.calls[0][1][1].content as string;
+    expect(userMsg).not.toContain("already has these files");
   });
 });
 
@@ -1123,7 +1383,7 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     ]);
     vi.mocked(callProvider)
       .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "lib/api.ts", content: "export function fetchUsers() {}", language: "typescript" }] }), model: "m", usage: {} } as any)
-      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "pages/users.tsx", content: "uses fetchUsers", language: "typescript" }] }), model: "m", usage: {} } as any);
+      .mockResolvedValueOnce({ reply: JSON.stringify({ files: [{ path: "pages/users.tsx", content: "// uses fetchUsers", language: "typescript" }] }), model: "m", usage: {} } as any);
 
     const r = await request(app)
       .post(`/api/devhub/projects/${id}/agent/workflow`)
@@ -1149,8 +1409,8 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     vi.mocked(callProvider).mockResolvedValueOnce({
       reply: JSON.stringify({
         files: [
-          { path: "pages/api/login.ts", content: "handles POST", language: "typescript" },
-          { path: "pages/login.tsx", content: "calls /api/login", language: "typescript" },
+          { path: "pages/api/login.ts", content: "// handles POST", language: "typescript" },
+          { path: "pages/login.tsx", content: "// calls /api/login", language: "typescript" },
         ],
       }),
       model: "m", usage: {},

@@ -3,9 +3,11 @@
 // QReal Studio — витрина + рабочий кабинет.
 // Стиль: светлый «газетный» эталон AEVION (serif-заголовки, тонкие линейки,
 // белая бумага, teal/red акценты). Тёмной темы нет by design.
+// Все строки — через useI18n (ключи qreal.* в i18n-data.ts, en/ru/kk).
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type Subject = { kind: string; description: string };
 type QcCriterion = { id: string; label: string; weight: number; score: number | null; note: string | null };
@@ -23,17 +25,8 @@ type Project = {
 type Engine = { id: string; label: string; modality: string[]; configured: boolean; note: string };
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
 
-const SUBJECT_RU: Record<string, string> = {
-  human: "человек", child: "ребёнок", animal: "животное",
-  bird: "птица", nature: "природа", object: "объект",
-};
-
-const STATUS_RU: Record<string, string> = {
-  draft: "черновик", prompt_ready: "промт готов", queued: "в очереди",
-  rendered: "отрендерен", failed: "ошибка",
-};
-
 export default function QRealClient() {
+  const { t } = useI18n();
   const [project, setProject] = useState<Project | null>(null);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [criteria, setCriteria] = useState<QcCriterion[]>([]);
@@ -78,15 +71,13 @@ export default function QRealClient() {
       const sd = await sb.json();
       if (sd?.project) {
         setProject(sd.project);
-        setNote(sd.storyboardMethod === "llm"
-          ? "Раскадровка собрана AI-режиссёром."
-          : "Раскадровка собрана детерминированным планировщиком (AI-провайдер не сконфигурирован).");
+        setNote(sd.storyboardMethod === "llm" ? t("qreal.note.storyboard.llm") : t("qreal.note.storyboard.stub"));
         const pr = await fetch(apiUrl(`/api/qreal/projects/${sd.project.id}/provenance`));
         const pd = await pr.json();
         if (pd?.provenance) setProvenance(pd.provenance);
       }
     } catch (e) {
-      setNote(e instanceof Error ? e.message : "Не удалось создать проект — бэкенд недоступен.");
+      setNote(e instanceof Error ? e.message : t("qreal.note.backend.down"));
     } finally { setBusy(false); }
   }
 
@@ -100,7 +91,7 @@ export default function QRealClient() {
       const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
       const pd = await pr.json();
       if (pd?.project) setProject(pd.project);
-    } catch { setNote("Рендер недоступен — бэкенд не отвечает."); }
+    } catch { setNote(t("qreal.note.backend.down")); }
     finally { setBusy(false); }
   }
 
@@ -110,36 +101,48 @@ export default function QRealClient() {
 
         {/* Шапка-манифест */}
         <header className="border-b-2 border-neutral-900 pb-6">
-          <p className="text-[11px] uppercase tracking-[0.25em] text-teal-700">AEVION · новый модуль · прототип</p>
+          <p className="text-[11px] uppercase tracking-[0.25em] text-teal-700">{t("qreal.badge")}</p>
           <h1 className="mt-2 font-serif text-5xl leading-tight">QReal Studio</h1>
-          <p className="mt-3 max-w-3xl font-serif text-xl leading-relaxed text-neutral-700">
-            Полностью живое видео без единой съёмки. Люди, дети, животные, птицы, ветер,
-            дождь и голоса — сгенерированы и неотличимы от реальности. Без актёра,
-            без референс-видео: бриф на входе — готовая сцена на выходе.
-          </p>
-          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-red-700">
-            Принцип модуля: реализм — продукт, обман — нет. Каждый кадр несёт
-            неотключаемую AI-маркировку (C2PA-style манифест, sha256, EU AI Act art. 50).
-          </p>
+          <p className="mt-3 max-w-3xl font-serif text-xl leading-relaxed text-neutral-700">{t("qreal.hero.lead")}</p>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-red-700">{t("qreal.hero.ethics")}</p>
         </header>
+
+        {/* Живое сравнение движков */}
+        <section className="mt-8 border-b border-neutral-300 pb-8">
+          <h2 className="font-serif text-2xl">{t("qreal.compare.h")}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-neutral-600">{t("qreal.compare.sub")}</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <figure className="border border-neutral-300 bg-white p-3">
+              <video controls preload="metadata" className="w-full" src="/qreal/shot2-kling.mp4" />
+              <figcaption className="mt-2 text-xs text-neutral-600">
+                <span className="font-semibold text-neutral-900">Kling 3.0 pro</span> — {t("qreal.compare.same.prompt")}
+              </figcaption>
+            </figure>
+            <figure className="border border-neutral-300 bg-white p-3">
+              <video controls preload="metadata" className="w-full" src="/qreal/shot2-seedance.mp4" />
+              <figcaption className="mt-2 text-xs text-neutral-600">
+                <span className="font-semibold text-neutral-900">Seedance 2.0</span> — {t("qreal.compare.same.prompt")}
+              </figcaption>
+            </figure>
+          </div>
+          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-neutral-500">{t("qreal.compare.note")}</p>
+        </section>
 
         {/* Бриф */}
         <section className="mt-8 border-b border-neutral-300 pb-8">
-          <h2 className="font-serif text-2xl">1 · Бриф</h2>
-          <p className="mt-1 text-sm text-neutral-600">
-            Опишите сцену словами — кто в кадре, где, что происходит, какой звук.
-          </p>
+          <h2 className="font-serif text-2xl">{t("qreal.brief.h")}</h2>
+          <p className="mt-1 text-sm text-neutral-600">{t("qreal.brief.sub")}</p>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Название (необязательно)"
+            placeholder={t("qreal.brief.title.ph")}
             className="mt-4 w-full border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-700"
           />
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
             rows={4}
-            placeholder="Например: дождливый вечер в городе, девочка кормит уличного кота под козырьком киоска, звук дождя по жести, проезжающий троллейбус…"
+            placeholder={t("qreal.brief.brief.ph")}
             className="mt-2 w-full border border-neutral-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-teal-700"
           />
           <div className="mt-3 flex items-center gap-4">
@@ -148,7 +151,7 @@ export default function QRealClient() {
               disabled={busy || brief.trim().length < 10}
               className="border border-neutral-900 bg-neutral-900 px-5 py-2 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
             >
-              {busy ? "Собираю раскадровку…" : "Разложить на кадры"}
+              {busy ? t("qreal.brief.cta.busy") : t("qreal.brief.cta")}
             </button>
             {note && <span className="text-sm text-neutral-600">{note}</span>}
           </div>
@@ -158,9 +161,9 @@ export default function QRealClient() {
         {project && (
           <section className="mt-8 border-b border-neutral-300 pb-8">
             <div className="flex items-baseline justify-between">
-              <h2 className="font-serif text-2xl">2 · Раскадровка — «{project.title}»</h2>
+              <h2 className="font-serif text-2xl">{t("qreal.storyboard.h")} — «{project.title}»</h2>
               <span className="text-xs uppercase tracking-widest text-neutral-500">
-                {project.shots.length} кадров · ~{project.shots.reduce((a, s) => a + s.durationSec, 0)} c
+                {project.shots.length} {t("qreal.storyboard.shots")} · ~{project.shots.reduce((a, s) => a + s.durationSec, 0)}s
               </span>
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -169,28 +172,28 @@ export default function QRealClient() {
                   <div className="flex items-baseline justify-between border-b border-neutral-200 pb-2">
                     <h3 className="font-serif text-lg">{s.order}. {s.title}</h3>
                     <span className={`text-[11px] uppercase tracking-wider ${s.status === "queued" ? "text-teal-700" : "text-neutral-500"}`}>
-                      {STATUS_RU[s.status] || s.status} · {s.durationSec}с
+                      {t(`qreal.status.${s.status}`)} · {s.durationSec}s
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-neutral-700">{s.description}</p>
                   <p className="mt-2 text-xs text-neutral-500">
-                    <span className="text-neutral-700">Камера:</span> {s.camera}
-                    <br /><span className="text-neutral-700">Звук:</span> {s.soundscape}
-                    {s.dialogue && (<><br /><span className="text-neutral-700">Реплика:</span> «{s.dialogue}»</>)}
+                    <span className="text-neutral-700">{t("qreal.shot.camera")}:</span> {s.camera}
+                    <br /><span className="text-neutral-700">{t("qreal.shot.sound")}:</span> {s.soundscape}
+                    {s.dialogue && (<><br /><span className="text-neutral-700">{t("qreal.shot.line")}:</span> «{s.dialogue}»</>)}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {s.subjects.map((x, i) => (
                       <span key={i} className="border border-teal-700/40 bg-teal-50 px-2 py-0.5 text-[11px] text-teal-800">
-                        {SUBJECT_RU[x.kind] || x.kind}
+                        {t(`qreal.subject.${x.kind}`)}
                       </span>
                     ))}
                   </div>
                   <div className="mt-3 flex gap-3 border-t border-neutral-200 pt-2 text-xs">
                     <button onClick={() => renderShot(s.id)} disabled={busy} className="text-teal-800 underline underline-offset-2 hover:text-teal-600 disabled:opacity-40">
-                      Рендер кадра
+                      {t("qreal.shot.render")}
                     </button>
                     <button onClick={() => setOpenPrompt(openPrompt === s.id ? null : s.id)} className="text-neutral-600 underline underline-offset-2 hover:text-neutral-900">
-                      {openPrompt === s.id ? "Скрыть промт" : "Показать render-промт"}
+                      {openPrompt === s.id ? t("qreal.shot.prompt.hide") : t("qreal.shot.prompt.show")}
                     </button>
                   </div>
                   {openPrompt === s.id && s.prompt && (
@@ -204,11 +207,8 @@ export default function QRealClient() {
 
         {/* QC реализма */}
         <section className="mt-8 border-b border-neutral-300 pb-8">
-          <h2 className="font-serif text-2xl">3 · QC-петля реализма</h2>
-          <p className="mt-1 max-w-3xl text-sm text-neutral-600">
-            Каждый рендер проходит судью по {criteria.length || 14} критериям. Кадр, заваливший
-            порог, перегенерируется автоматически — это и есть разрыв с «плавающими» генераторами.
-          </p>
+          <h2 className="font-serif text-2xl">{t("qreal.qc.h")}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-neutral-600">{t("qreal.qc.sub")}</p>
           <ol className="mt-4 grid gap-x-8 gap-y-1 text-sm leading-relaxed md:grid-cols-2">
             {criteria.map((c, i) => (
               <li key={c.id} className="flex gap-2 border-b border-dotted border-neutral-300 py-1">
@@ -221,14 +221,14 @@ export default function QRealClient() {
 
         {/* Движки */}
         <section className="mt-8 border-b border-neutral-300 pb-8">
-          <h2 className="font-serif text-2xl">4 · Движки рендера</h2>
+          <h2 className="font-serif text-2xl">{t("qreal.engines.h")}</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {engines.map((e) => (
               <div key={e.id} className="border border-neutral-300 bg-white p-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold">{e.label}</h3>
                   <span className={`text-[11px] uppercase tracking-wider ${e.configured ? "text-teal-700" : "text-red-700"}`}>
-                    {e.configured ? "подключён" : "не подключён"}
+                    {e.configured ? t("qreal.engines.on") : t("qreal.engines.off")}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-neutral-600">{e.note}</p>
@@ -240,7 +240,7 @@ export default function QRealClient() {
         {/* Provenance */}
         {provenance && (
           <section className="mt-8 pb-12">
-            <h2 className="font-serif text-2xl">5 · Провенанс</h2>
+            <h2 className="font-serif text-2xl">{t("qreal.prov.h")}</h2>
             <div className="mt-4 border-l-4 border-teal-700 bg-white p-4">
               <p className="text-sm leading-relaxed text-neutral-700">{provenance.disclosure}</p>
               <p className="mt-2 break-all font-mono text-[11px] text-neutral-500">sha256: {provenance.sha256}</p>

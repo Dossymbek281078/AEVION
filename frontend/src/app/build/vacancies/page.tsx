@@ -146,8 +146,8 @@ function VacanciesFeedInner() {
     <BuildShell theme="light">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vacancies feed</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-[#17181a]">Vacancies feed</h1>
+          <p className="mt-1 text-sm text-[#74767c]">
             All open positions across QBuild projects. Filter by status, salary, or city.
           </p>
         </div>
@@ -163,7 +163,7 @@ function VacanciesFeedInner() {
           </a>
           <Link
             href="/build/create-project"
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+            className="rounded-lg border border-[#d4d3cc] bg-white px-4 py-2 text-sm font-semibold text-[#45474c] transition hover:bg-[#efeee8]"
           >
             Post a project
           </Link>
@@ -184,12 +184,12 @@ function VacanciesFeedInner() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search title or description…"
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+            className="flex-1 rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#74767c] focus:border-emerald-500/40 focus:outline-none"
           />
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 sm:hidden"
+            className="flex items-center gap-1.5 rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#45474c] hover:bg-[#efeee8] sm:hidden"
             aria-label="Toggle filters"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
@@ -202,26 +202,26 @@ function VacanciesFeedInner() {
           value={city}
           onChange={(e) => setCity(e.target.value)}
           placeholder="City"
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-32"
+          className="w-full rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#74767c] focus:border-emerald-500/40 focus:outline-none sm:w-32"
         />
         <input
           value={minSalary}
           onChange={(e) => setMinSalary(e.target.value.replace(/[^\d]/g, ""))}
           placeholder="Min"
           inputMode="numeric"
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
+          className="w-full rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#74767c] focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
         <input
           value={maxSalary}
           onChange={(e) => setMaxSalary(e.target.value.replace(/[^\d]/g, ""))}
           placeholder="Max"
           inputMode="numeric"
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
+          className="w-full rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#74767c] focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
         <select
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
-          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+          className="rounded-lg border border-[#d4d3cc] bg-white px-2 py-2 text-sm text-[#17181a] focus:border-emerald-500/40 focus:outline-none"
           title="Salary currency"
         >
           <option value="">Any currency</option>
@@ -234,12 +234,12 @@ function VacanciesFeedInner() {
           value={skill}
           onChange={(e) => setSkill(e.target.value)}
           placeholder="Skill (e.g. AutoCAD)"
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-40"
+          className="w-full rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#74767c] focus:border-emerald-500/40 focus:outline-none sm:w-40"
         />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as "recent" | "salary" | "popular")}
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+          className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] focus:border-emerald-500/40 focus:outline-none"
         >
           <option value="recent">Recent</option>
           <option value="salary">Salary ↓</option>
@@ -252,8 +252,8 @@ function VacanciesFeedInner() {
               onClick={() => setStatus(s)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                 status === s
-                  ? "bg-emerald-500/20 text-emerald-200"
-                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                  ? "bg-[#0a7d72] text-[#17181a]"
+                  : "bg-white text-[#74767c] hover:bg-[#efeee8]"
               }`}
             >
               {s}
@@ -271,15 +271,15 @@ function VacanciesFeedInner() {
               onClick={() => setSkill(skill === s ? "" : s)}
               className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
                 skill === s
-                  ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30 hover:text-slate-200"
+                  ? "border-emerald-500/50 bg-[#0a7d72] text-[#17181a]"
+                  : "border-[#d4d3cc] bg-white text-[#74767c] hover:border-[#b9b8b0] hover:text-[#45474c]"
               }`}
             >
               {s}
             </button>
           ))}
           {skill && (
-            <button onClick={() => setSkill("")} className="rounded-full border border-white/5 px-2.5 py-0.5 text-xs text-slate-500 hover:text-slate-300">
+            <button onClick={() => setSkill("")} className="rounded-full border border-[#e4e3dd] px-2.5 py-0.5 text-xs text-[#74767c] hover:text-[#45474c]">
               ✕ clear
             </button>
           )}
@@ -315,10 +315,10 @@ function VacanciesFeedInner() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
-          <p className="text-sm text-slate-400">
+        <div className="rounded-xl border border-[#d4d3cc] bg-white p-8 text-center">
+          <p className="text-sm text-[#74767c]">
             No vacancies match these filters. Try clearing them, or{" "}
-            <Link href="/build" className="text-emerald-300 underline">
+            <Link href="/build" className="text-[#075b53] underline">
               browse projects
             </Link>
             .
@@ -356,13 +356,13 @@ function Stat({
 }) {
   const toneCls =
     tone === "emerald"
-      ? "text-emerald-300"
+      ? "text-[#075b53]"
       : tone === "amber"
         ? "text-amber-300"
-        : "text-slate-100";
+        : "text-[#17181a]";
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
+    <div className="rounded-xl border border-[#d4d3cc] bg-white px-4 py-3">
+      <div className="text-xs uppercase tracking-wider text-[#74767c]">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
@@ -382,7 +382,7 @@ function RecentlyViewedRow() {
   return (
     <div className="mb-4">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#74767c]">
           Recently viewed
         </span>
         <button
@@ -390,7 +390,7 @@ function RecentlyViewedRow() {
             clearRecentVacancies();
             setItems([]);
           }}
-          className="text-[10px] text-slate-500 hover:text-slate-300"
+          className="text-[10px] text-[#74767c] hover:text-[#45474c]"
         >
           Clear
         </button>
@@ -400,14 +400,14 @@ function RecentlyViewedRow() {
           <Link
             key={v.id}
             href={`/build/vacancy/${encodeURIComponent(v.id)}`}
-            className="group shrink-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 transition hover:border-emerald-500/30 hover:bg-white/[0.06]"
+            className="group shrink-0 rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 transition hover:border-emerald-500/30 hover:bg-white"
             style={{ minWidth: 200, maxWidth: 240 }}
           >
-            <div className="truncate text-xs font-semibold text-white group-hover:text-emerald-200">
+            <div className="truncate text-xs font-semibold text-[#17181a] group-hover:text-[#17181a]">
               {v.title}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
-              {v.salary > 0 && <span className="text-emerald-300">{formatSalary(v.salary)}</span>}
+            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[#74767c]">
+              {v.salary > 0 && <span className="text-[#075b53]">{formatSalary(v.salary)}</span>}
               {v.city && <span>📍 {v.city}</span>}
             </div>
           </Link>
@@ -491,9 +491,9 @@ function SavedSearches({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#74767c]">Saved:</span>
       {items.length === 0 && (
-        <span className="text-[11px] text-slate-500">none yet</span>
+        <span className="text-[11px] text-[#74767c]">none yet</span>
       )}
       {items.map((s) => (
         <span
@@ -519,7 +519,7 @@ function SavedSearches({
       {hasFilters && (
         <button
           onClick={save}
-          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+          className="rounded-full border border-emerald-500/30 bg-[#0a7d72]/10 px-2.5 py-0.5 text-xs font-semibold text-[#17181a] hover:bg-[#0a7d72]"
         >
           ★ Save current
         </button>

@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:qskyway": "node scripts/qskyway-smoke.js",
+    "smoke:trust-anchor": "tsx scripts/trust-anchor-smoke.ts",
     "smoke:trust-signature": "tsx scripts/trust-signature-smoke.ts",
     "smoke:build": "node scripts/build-smoke.js",
     "smoke:qcore-fleet": "node scripts/qcore-fleet-smoke.js",

@@ -46,6 +46,9 @@ export const metadata: Metadata = {
     title: "AEVION — Trust OS",
     description: "Registry · signatures · bureau · compliance · bank · awards · 37 nodes.",
   },
+  verification: {
+    google: "IVmBbcLIbs_TR7SC3TrPQkFiQOhf1wVbzSB9Q5d9_d0",
+  },
 };
 
 const organizationJsonLd = {

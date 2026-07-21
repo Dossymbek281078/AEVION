@@ -5,16 +5,21 @@
  * Читает GET /api-backend/api/cyberchess/matchmaking/leaderboard?speed=<s>.
  * Данные из персистентного Glicko-2 стора (переживают редеплой). Провизорные
  * рейтинги (RD>110, мало партий) помечаются «?», как у lichess.
+ *
+ * Визуально — на токенах .planet-* (frontend/src/app/globals.css), извлечённых
+ * из explore/page.tsx — единого места в монорепо с настоящим «полугазетным»
+ * стилем планеты. Раньше страница жила на generic dark slate/indigo палитре,
+ * не связанной ни с чем остальным на сайте (launch-readiness аудит 2026-07-20).
  */
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 const SPEEDS = [
-  { id: "bullet", label: "Пуля", icon: "💨" },
-  { id: "blitz", label: "Блиц", icon: "⚡" },
-  { id: "rapid", label: "Рапид", icon: "🕐" },
-  { id: "classical", label: "Классика", icon: "♟" },
+  { id: "bullet", label: "Пуля" },
+  { id: "blitz", label: "Блиц" },
+  { id: "rapid", label: "Рапид" },
+  { id: "classical", label: "Классика" },
 ] as const;
 
 type SpeedId = (typeof SPEEDS)[number]["id"];
@@ -38,6 +43,18 @@ interface WalletRow {
   displayName: string | null;
   balance: number;
   earnedTotal: number;
+}
+
+const RANK_DOT: Record<number, string> = { 1: "#c79236", 2: "#9aa5a2", 3: "#a9765a" };
+
+function RankCell({ rank }: { rank: number }) {
+  const color = RANK_DOT[rank];
+  return (
+    <span className="planet-num" style={{ fontWeight: 700, color: "var(--pl-muted)" }}>
+      {color && <span className="planet-rank-dot" style={{ background: color }} />}
+      {rank}
+    </span>
+  );
 }
 
 export default function CyberChessLeaderboardPage() {
@@ -108,196 +125,150 @@ export default function CyberChessLeaderboardPage() {
     if (view === "chessy" && walletRows.length === 0 && walletLoading) loadWallet();
   }, [view, walletRows.length, walletLoading, loadWallet]);
 
-  const medal = (rank: number) => (rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null);
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
+    <div className="planet-root">
+      <div className="planet-wrap" style={{ paddingTop: 32, paddingBottom: 48 }}>
+        <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">
-              {view === "rating" ? "🏆 Рейтинг-лидерборд" : "💰 Chessy-лидерборд"}
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">
+            <div className="planet-eyebrow" style={{ marginBottom: 6 }}>
+              {view === "rating" ? "Glicko-2 · онлайн-матчи" : "Серверный кошелёк"}
+            </div>
+            <h1 className="planet-h1">{view === "rating" ? "Рейтинг-лидерборд" : "Chessy-лидерборд"}</h1>
+            <p className="planet-muted" style={{ marginTop: 6, fontSize: 13.5, maxWidth: "60ch" }}>
               {view === "rating"
-                ? "Топ игроков онлайн-матчей по Glicko-2. Провизорные рейтинги (мало партий) помечены «?»."
-                : "Топ игроков по заработанным в реальных матчах Chessy — серверный кошелёк, не подделываемый через devtools."}
+                ? "Топ игроков онлайн-матчей. Провизорные рейтинги (мало партий) помечены «?»."
+                : "Топ игроков по заработанным в реальных матчах Chessy — не подделываемый через devtools."}
             </p>
           </div>
-          <Link
-            href="/cyberchess"
-            className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800"
-          >
-            ← к шахматам
-          </Link>
+          <Link href="/cyberchess" className="planet-btn">← к шахматам</Link>
         </div>
 
         {/* Rating vs Chessy view toggle */}
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button
-            onClick={() => setView("rating")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-              view === "rating"
-                ? "bg-slate-100 text-slate-900"
-                : "border border-slate-700 text-slate-300 hover:bg-slate-800"
-            }`}
-          >
-            ♟ Рейтинг
+        <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button onClick={() => setView("rating")} className={`planet-btn${view === "rating" ? " active" : ""}`}>
+            Рейтинг
           </button>
-          <button
-            onClick={() => setView("chessy")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-              view === "chessy"
-                ? "bg-amber-500 text-slate-950"
-                : "border border-slate-700 text-slate-300 hover:bg-slate-800"
-            }`}
-          >
-            💰 Chessy
+          <button onClick={() => setView("chessy")} className={`planet-btn${view === "chessy" ? " active" : ""}`}>
+            Chessy
           </button>
         </div>
 
         {view === "rating" && (
-        <>
-        {/* Speed tabs */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {SPEEDS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSpeed(s.id)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                speed === s.id
-                  ? "bg-indigo-500 text-white"
-                  : "border border-slate-700 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              {s.icon} {s.label}
-            </button>
-          ))}
-        </div>
+          <>
+            {/* Speed tabs */}
+            <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {SPEEDS.map((s) => (
+                <button key={s.id} onClick={() => setSpeed(s.id)} className={`planet-btn${speed === s.id ? " active" : ""}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50">
-          {loading ? (
-            <div className="px-4 py-16 text-center text-slate-500">Загрузка…</div>
-          ) : error ? (
-            <div className="px-4 py-16 text-center text-rose-400">{error}</div>
-          ) : rows.length === 0 ? (
-            <div className="px-4 py-16 text-center text-slate-500">
-              Пока нет рейтинговых партий в этой скорости.
-              <br />
-              <Link href="/cyberchess/matchmaking" className="mt-2 inline-block text-indigo-400 hover:underline">
-                Сыграть первым →
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2.5 font-semibold">#</th>
-                    <th className="px-3 py-2.5 font-semibold">Игрок</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Рейтинг</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Партий</th>
-                    <th className="hidden px-3 py-2.5 text-right font-semibold sm:table-cell">В/П/Н</th>
-                    <th className="hidden px-3 py-2.5 text-right font-semibold sm:table-cell">Пик</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const isMe = row.userId === myUserId && !!myUserId;
-                    const provisional = row.rd > 110;
-                    return (
-                      <tr
-                        key={row.userId}
-                        className={`border-b border-slate-800/60 transition ${
-                          isMe ? "bg-indigo-500/10" : "hover:bg-slate-800/40"
-                        }`}
-                      >
-                        <td className="px-3 py-2.5 font-bold text-slate-400">
-                          {medal(row.rank) || row.rank}
-                        </td>
-                        <td className="px-3 py-2.5 font-semibold">
-                          {row.displayName || "Игрок"}
-                          {isMe && <span className="ml-1.5 text-xs text-indigo-400">(вы)</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-mono font-bold">
-                          {row.rating}
-                          {provisional && (
-                            <span title="Провизорный — мало партий" className="text-slate-500">
-                              ?
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-slate-400">{row.games}</td>
-                        <td className="hidden px-3 py-2.5 text-right text-slate-400 sm:table-cell">
-                          <span className="text-emerald-400">{row.wins}</span>
-                          {"/"}
-                          <span className="text-rose-400">{row.losses}</span>
-                          {"/"}
-                          <span className="text-slate-400">{row.draws}</span>
-                        </td>
-                        <td className="hidden px-3 py-2.5 text-right font-mono text-slate-500 sm:table-cell">
-                          {row.peak}
-                        </td>
+            <div className="planet-card" style={{ overflow: "hidden" }}>
+              {loading ? (
+                <div className="planet-empty">Загрузка…</div>
+              ) : error ? (
+                <div className="planet-empty" style={{ color: "var(--pl-danger)" }}>{error}</div>
+              ) : rows.length === 0 ? (
+                <div className="planet-empty">
+                  Пока нет рейтинговых партий в этой скорости.
+                  <br />
+                  <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
+                    Сыграть первым →
+                  </Link>
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table className="planet-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Игрок</th>
+                        <th style={{ textAlign: "right" }}>Рейтинг</th>
+                        <th style={{ textAlign: "right" }}>Партий</th>
+                        <th style={{ textAlign: "right" }} className="planet-hide-sm">В/П/Н</th>
+                        <th style={{ textAlign: "right" }} className="planet-hide-sm">Пик</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => {
+                        const isMe = row.userId === myUserId && !!myUserId;
+                        const provisional = row.rd > 110;
+                        return (
+                          <tr key={row.userId} className={isMe ? "me" : undefined}>
+                            <td><RankCell rank={row.rank} /></td>
+                            <td style={{ fontWeight: 600 }}>
+                              {row.displayName || "Игрок"}
+                              {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>(вы)</span>}
+                            </td>
+                            <td className="planet-num" style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--pl-mono)" }}>
+                              {row.rating}
+                              {provisional && <span className="planet-muted" title="Провизорный — мало партий">?</span>}
+                            </td>
+                            <td className="planet-num planet-muted" style={{ textAlign: "right" }}>{row.games}</td>
+                            <td className="planet-num planet-muted planet-hide-sm" style={{ textAlign: "right" }}>
+                              <span style={{ color: "var(--pl-live)" }}>{row.wins}</span>
+                              {"/"}
+                              <span style={{ color: "var(--pl-danger)" }}>{row.losses}</span>
+                              {"/"}
+                              {row.draws}
+                            </td>
+                            <td className="planet-num planet-muted planet-hide-sm" style={{ textAlign: "right", fontFamily: "var(--pl-mono)" }}>
+                              {row.peak}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        </>
+          </>
         )}
 
         {view === "chessy" && (
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50">
-            <div className="border-b border-slate-800 px-4 py-3 text-xs text-slate-500">
+          <div className="planet-card" style={{ overflow: "hidden" }}>
+            <div className="planet-muted" style={{ borderBottom: "1px solid var(--pl-line)", padding: "12px 16px", fontSize: 12 }}>
               Только с реальных онлайн-матчей (не с пазлов/уроков/косметики) — серверный кошелёк, честный по конструкции.
             </div>
             {walletLoading ? (
-              <div className="px-4 py-16 text-center text-slate-500">Загрузка…</div>
+              <div className="planet-empty">Загрузка…</div>
             ) : walletError ? (
-              <div className="px-4 py-16 text-center text-rose-400">{walletError}</div>
+              <div className="planet-empty" style={{ color: "var(--pl-danger)" }}>{walletError}</div>
             ) : walletRows.length === 0 ? (
-              <div className="px-4 py-16 text-center text-slate-500">
+              <div className="planet-empty">
                 Пока никто не заработал Chessy в реальных матчах.
                 <br />
-                <Link href="/cyberchess/matchmaking" className="mt-2 inline-block text-indigo-400 hover:underline">
+                <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
                   Сыграть первым →
                 </Link>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div style={{ overflowX: "auto" }}>
+                <table className="planet-table">
                   <thead>
-                    <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-2.5 font-semibold">#</th>
-                      <th className="px-3 py-2.5 font-semibold">Игрок</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Баланс</th>
-                      <th className="hidden px-3 py-2.5 text-right font-semibold sm:table-cell">Заработано всего</th>
+                    <tr>
+                      <th>#</th>
+                      <th>Игрок</th>
+                      <th style={{ textAlign: "right" }}>Баланс</th>
+                      <th style={{ textAlign: "right" }} className="planet-hide-sm">Заработано всего</th>
                     </tr>
                   </thead>
                   <tbody>
                     {walletRows.map((row) => {
                       const isMe = row.userId === myUserId && !!myUserId;
                       return (
-                        <tr
-                          key={row.userId}
-                          className={`border-b border-slate-800/60 transition ${
-                            isMe ? "bg-amber-500/10" : "hover:bg-slate-800/40"
-                          }`}
-                        >
-                          <td className="px-3 py-2.5 font-bold text-slate-400">
-                            {medal(row.rank) || row.rank}
-                          </td>
-                          <td className="px-3 py-2.5 font-semibold">
+                        <tr key={row.userId} className={isMe ? "me" : undefined}>
+                          <td><RankCell rank={row.rank} /></td>
+                          <td style={{ fontWeight: 600 }}>
                             {row.displayName || "Игрок"}
-                            {isMe && <span className="ml-1.5 text-xs text-amber-400">(вы)</span>}
+                            {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>(вы)</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-right font-mono font-bold text-amber-400">
-                            💰 {row.balance}
+                          <td className="planet-num" style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--pl-mono)", color: "var(--pl-gold)" }}>
+                            {row.balance}
                           </td>
-                          <td className="hidden px-3 py-2.5 text-right font-mono text-slate-500 sm:table-cell">
+                          <td className="planet-num planet-muted planet-hide-sm" style={{ textAlign: "right", fontFamily: "var(--pl-mono)" }}>
                             {row.earnedTotal}
                           </td>
                         </tr>

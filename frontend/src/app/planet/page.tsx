@@ -9,6 +9,7 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import PlanetActivityFeed from "@/components/PlanetActivityFeed";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { planetNominationOptions } from "@/lib/planetNominations";
+import { useI18n } from "@/lib/i18n";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 const PLANET_FORM_DRAFT_KEY = "aevion_planet_form_draft_v1";
@@ -57,6 +58,7 @@ function safeJsonParse(s: string): any | null {
 
 export default function PlanetCompliancePage() {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [token, setToken] = useState("");
 
   const [artifactType, setArtifactType] = useState<ArtifactType>("code");
@@ -237,10 +239,10 @@ export default function PlanetCompliancePage() {
     setBusy(true);
     setRes(null);
     try {
-      if (!token) throw new Error("Please login first");
+      if (!token) throw new Error(t("planet.err.loginFirst"));
 
       if ((artifactType === "code" || artifactType === "web") && !codeFiles) {
-        throw new Error("Invalid codeFiles JSON (need array of {path, content})");
+        throw new Error(t("planet.err.invalidCodeFiles"));
       }
 
       const body: any = {
@@ -275,12 +277,12 @@ export default function PlanetCompliancePage() {
 
       if (!r.ok) {
         const data = await r.json().catch(() => null);
-        throw new Error(data?.error || "Create failed");
+        throw new Error(data?.error || t("planet.err.createFailed"));
       }
 
       setRes((await r.json()) as PlanetResponse);
     } catch (e: any) {
-      showToast(e?.message || "Submission error", "error");
+      showToast(e?.message || t("planet.err.submissionError"), "error");
     } finally {
       setBusy(false);
     }
@@ -290,7 +292,7 @@ export default function PlanetCompliancePage() {
     if (!res) return;
     setBusy(true);
     try {
-      if (!token) throw new Error("Please login first");
+      if (!token) throw new Error(t("planet.err.loginFirst"));
 
       const body: any = {
         declaredLicense,
@@ -309,7 +311,7 @@ export default function PlanetCompliancePage() {
         }
         if (Object.keys(desc).length) body.mediaDescriptor = desc;
       } else {
-        if (!codeFiles) throw new Error("Invalid codeFiles JSON");
+        if (!codeFiles) throw new Error(t("planet.err.invalidCodeFilesShort"));
         body.codeFiles = codeFiles;
       }
 
@@ -323,11 +325,11 @@ export default function PlanetCompliancePage() {
       );
       if (!r.ok) {
         const data = await r.json().catch(() => null);
-        throw new Error(data?.error || "Resubmit failed");
+        throw new Error(data?.error || t("planet.err.resubmitFailed"));
       }
       setRes((await r.json()) as PlanetResponse);
     } catch (e: any) {
-      showToast(e?.message || "Resubmission error", "error");
+      showToast(e?.message || t("planet.err.resubmissionError"), "error");
     } finally {
       setBusy(false);
     }
@@ -335,7 +337,7 @@ export default function PlanetCompliancePage() {
 
   const backendOrigin = getClientApiBase();
 
-  const createLabel = res ? "Re-run in new submission (separate)" : "Create & Run Compliance";
+  const createLabel = res ? t("planet.createLabel.rerun") : t("planet.createLabel.default");
   const awardsBackHref = awardPreset === "music" ? "/awards/music" : awardPreset === "film" ? "/awards/film" : "/awards";
 
   const renderSegments = (v: Validator) => {
@@ -343,7 +345,7 @@ export default function PlanetCompliancePage() {
     if (!Array.isArray(segs) || !segs.length) return null;
     return (
       <div style={{ marginTop: 8 }}>
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>Segments (current code)</div>
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>{t("planet.segmentsHeading")}</div>
         <pre
           style={{
             background: "#f6f6f6",
@@ -363,9 +365,9 @@ export default function PlanetCompliancePage() {
     <main>
       <ProductPageShell>
       <Wave1Nav hidePlanet />
-      <h1 style={{ fontSize: 28, marginBottom: 6 }}>Planet / Evidence / Certificate (MVP)</h1>
+      <h1 style={{ fontSize: 28, marginBottom: 6 }}>{t("planet.h1")}</h1>
       <div style={{ color: "#555", marginBottom: 16 }}>
-        Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code.
+        {t("planet.subtitle")}
       </div>
 
       <div
@@ -380,18 +382,15 @@ export default function PlanetCompliancePage() {
           lineHeight: 1.5,
         }}
       >
-        <strong>Planet is the newest, fastest-moving layer of AEVION.</strong>{" "}
-        New validators, apps, and compliance scenarios ship here on a rolling
-        basis, so expect things to keep changing — including some rough edges
-        along the way. If anything here doesn&apos;t work the way you&apos;d
-        expect,{" "}
+        <strong>{t("planet.betaBanner.strong")}</strong>{" "}
+        {t("planet.betaBanner.pre")}{" "}
         <a
           href="mailto:yahiin1978@gmail.com?subject=Planet%20feedback"
           style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}
         >
-          tell us
+          {t("planet.betaBanner.cta")}
         </a>{" "}
-        — that feedback directly shapes what we build next.
+        {t("planet.betaBanner.post")}
       </div>
 
       <PitchValueCallout moduleId="planet" variant="dark" />
@@ -408,16 +407,16 @@ export default function PlanetCompliancePage() {
             color: "#334155",
           }}
         >
-          <strong>Planet</strong>: participants with active symbol (metric Y) —{" "}
-          <strong>{planetStats.eligibleParticipants}</strong>; unique voters —{" "}
+          <strong>Planet</strong>: {t("planet.stats.participants")} —{" "}
+          <strong>{planetStats.eligibleParticipants}</strong>; {t("planet.stats.voters")} —{" "}
           <strong>{planetStats.distinctVotersAllTime}</strong>
           {typeof planetStats.shieldedObjects === "number" && (
             <>
-              ; <a href="/quantum-shield" style={{ color: "#0d9488", textDecoration: "none", fontWeight: 800 }}>🛡️ shielded objects</a>{" "}
+              ; <a href="/quantum-shield" style={{ color: "#0d9488", textDecoration: "none", fontWeight: 800 }}>🛡️ {t("planet.stats.shielded")}</a>{" "}
               — <strong>{planetStats.shieldedObjects}</strong>
             </>
           )}
-          . API:{" "}
+          . {t("planet.stats.api")}:{" "}
           <code style={{ fontSize: 12 }}>GET {backendOrigin}/api/planet/stats</code>
         </div>
       ) : null}
@@ -434,11 +433,11 @@ export default function PlanetCompliancePage() {
             color: "#334155",
           }}
         >
-          <strong>{awardPreset === "music" ? "Music Awards" : "Film Awards"}</strong> — you came from the showcase{" "}
+          <strong>{awardPreset === "music" ? t("planet.awardBanner.music") : t("planet.awardBanner.film")}</strong> — {t("planet.awardBanner.cameFrom")}{" "}
           <Link href={awardPreset === "music" ? "/awards/music" : "/awards/film"} style={{ fontWeight: 800 }}>
             AEVION Awards
           </Link>
-          . Artifact type and productKey are prefilled; after certification the work participates in Planet voting.
+          . {t("planet.awardBanner.suffix")}
         </div>
       ) : null}
 
@@ -452,7 +451,7 @@ export default function PlanetCompliancePage() {
             background: "linear-gradient(135deg, rgba(15,118,110,0.06), rgba(99,102,241,0.05))",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Quick submission mode</div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>{t("planet.quickMode.heading")}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -468,7 +467,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Music Awards preset
+              {t("planet.quickMode.musicPreset")}
             </button>
             <button
               type="button"
@@ -484,7 +483,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Film Awards preset
+              {t("planet.quickMode.filmPreset")}
             </button>
             <button
               type="button"
@@ -505,7 +504,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Reset to generic mode
+              {t("planet.quickMode.resetGeneric")}
             </button>
             <button
               type="button"
@@ -527,7 +526,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Clear saved draft
+              {t("planet.quickMode.clearDraft")}
             </button>
           </div>
         </div>
@@ -541,7 +540,7 @@ export default function PlanetCompliancePage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Nominations for this artifact type</div>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>{t("planet.nominations.heading")}</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {nominationOptions.map((n) => (
               <span
@@ -601,7 +600,7 @@ export default function PlanetCompliancePage() {
             <div style={{ fontWeight: 800, marginBottom: 6 }}>productKey</div>
             <input value={productKey} onChange={(e) => setProductKey(e.target.value)} style={{ width: "100%", padding: 10 }} />
             <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
-              Recommendation for track:{" "}
+              {t("planet.recommendationFor")}{" "}
               <code>
                 {artifactType === "music"
                   ? "aevion_award_music_v1"
@@ -660,7 +659,7 @@ export default function PlanetCompliancePage() {
                     fontSize: 12,
                   }}
                 >
-                  Apply recommended media fields
+                  {t("planet.applyMediaFields")}
                 </button>
               </div>
             </>
@@ -692,7 +691,7 @@ export default function PlanetCompliancePage() {
               opacity: busy ? 0.7 : 1,
             }}
           >
-            {busy ? "Working..." : createLabel}
+            {busy ? t("planet.working") : createLabel}
           </button>
 
           <button
@@ -709,7 +708,7 @@ export default function PlanetCompliancePage() {
               opacity: busy || !res || res.status === "passed" ? 0.55 : 1,
             }}
           >
-            Resubmit (after flagged)
+            {t("planet.resubmitBtn")}
           </button>
         </div>
       </section>
@@ -726,9 +725,9 @@ export default function PlanetCompliancePage() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>What&apos;s happening on Planet</div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>{t("planet.activity.heading")}</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              Last 10 submissions, certificates, revocations and votes — auto-refresh every 60s.
+              {t("planet.activity.subtitle")}
             </div>
           </div>
           <Link
@@ -740,15 +739,15 @@ export default function PlanetCompliancePage() {
               textDecoration: "none",
             }}
           >
-            Full activity feed →
+            {t("planet.activity.fullFeed")}
           </Link>
         </div>
-        <PlanetActivityFeed limit={10} compact heading="Recent activity" />
+        <PlanetActivityFeed limit={10} compact heading={t("planet.activity.recentHeading")} />
       </section>
 
       {res ? (
         <section style={{ marginTop: 18 }}>
-          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>Result</div>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>{t("planet.result.heading")}</div>
           <div style={{ display: "grid", gap: 10 }}>
             <div>
               <div style={{ fontSize: 12, color: "#666" }}>status</div>
@@ -771,7 +770,7 @@ export default function PlanetCompliancePage() {
                   href={`/planet/artifact/${res.artifactVersionId}`}
                   style={{ fontWeight: 800, color: "#0a5" }}
                 >
-                  Public showcase + voting →
+                  {t("planet.result.publicShowcase")}
                 </Link>
               </div>
             </div>
@@ -786,7 +785,7 @@ export default function PlanetCompliancePage() {
               padding: "10px 12px",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>Next action</div>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>{t("planet.result.nextAction")}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <Link
                 href={`/planet/artifact/${res.artifactVersionId}`}
@@ -800,7 +799,7 @@ export default function PlanetCompliancePage() {
                   background: "rgba(15,118,110,0.08)",
                 }}
               >
-                Open artifact card
+                {t("planet.result.openArtifactCard")}
               </Link>
               <Link
                 href={awardsBackHref}
@@ -814,7 +813,7 @@ export default function PlanetCompliancePage() {
                   background: "#fff",
                 }}
               >
-                Back to awards showcase
+                {t("planet.result.backToAwards")}
               </Link>
               <button
                 type="button"
@@ -829,13 +828,13 @@ export default function PlanetCompliancePage() {
                   cursor: "pointer",
                 }}
               >
-                New submission (clear result)
+                {t("planet.result.newSubmission")}
               </button>
             </div>
           </div>
 
           <div style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>validators</div>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planet.result.validatorsHeading")}</div>
             <div style={{ display: "grid", gap: 12 }}>
               {res.validators.map((v) => (
                 <article key={v.validatorId} style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
@@ -853,7 +852,7 @@ export default function PlanetCompliancePage() {
                   {renderSegments(v)}
                   {v.resubmitPolicy?.allowed ? (
                     <div style={{ marginTop: 8, fontSize: 13, color: "#333" }}>
-                      resubmit: {v.resubmitPolicy.requiredChangeDescription}
+                      {t("planet.resubmitPrefix")}: {v.resubmitPolicy.requiredChangeDescription}
                     </div>
                   ) : null}
                 </article>

@@ -367,59 +367,49 @@ export default function CyberChessMatchmakingPage() {
   }, [state]);
 
   return (
-    <main className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100">
-      <div className="mx-auto flex max-w-4xl flex-col gap-8 px-6 py-10">
-        <header className="flex flex-col gap-2">
+    <main className="planet-root">
+      <div className="planet-wrap" style={{ display: "flex", flexDirection: "column", gap: 28, paddingTop: 32, paddingBottom: 40 }}>
+        <header style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button
             type="button"
             onClick={() => router.push("/cyberchess")}
-            className="self-start text-sm text-slate-400 hover:text-slate-200"
+            className="planet-muted"
+            style={{ alignSelf: "flex-start", fontSize: 13, background: "none", border: "none", cursor: "pointer", padding: 0 }}
           >
             ← Назад в CyberChess
           </button>
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Поиск соперника
-          </h1>
-          <p className="text-slate-400">
+          <h1 className="planet-h1">Поиск соперника</h1>
+          <p className="planet-muted" style={{ fontSize: 14.5 }}>
             Подберём живого игрока с похожим рейтингом ({rating - 150}–{rating + 150}) и тем же контролем времени.
           </p>
-          <nav className="flex flex-wrap gap-2 pt-1">
-            <a
-              href="/cyberchess/leaderboard"
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              🏆 Лидерборд
-            </a>
-            <a
-              href="/cyberchess/history"
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              📜 История матчей
-            </a>
+          <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
+            <a href="/cyberchess/leaderboard" className="planet-btn">Лидерборд</a>
+            <a href="/cyberchess/history" className="planet-btn">История матчей</a>
           </nav>
         </header>
 
         {/* Settings card */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 backdrop-blur">
-          <h2 className="mb-4 text-lg font-semibold">Параметры партии</h2>
+        <section className="planet-card" style={{ padding: 24 }}>
+          <h2 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700 }}>Параметры партии</h2>
 
           {/* Display name */}
-          <div className="mb-5">
-            <label className="mb-1 block text-sm text-slate-400">Ник</label>
+          <div style={{ marginBottom: 20 }}>
+            <label className="planet-eyebrow" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>Ник</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value.slice(0, 32))}
               disabled={state.phase === "waiting" || state.phase === "joining"}
-              className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-indigo-500 disabled:opacity-50"
+              className="planet-input"
+              style={{ maxWidth: 320 }}
               placeholder="Игрок"
             />
           </div>
 
           {/* Time control */}
-          <div className="mb-5">
-            <label className="mb-2 block text-sm text-slate-400">Контроль времени</label>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div style={{ marginBottom: 20 }}>
+            <label className="planet-eyebrow" style={{ display: "block", marginBottom: 8, fontSize: 11 }}>Контроль времени</label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 }} className="planet-tc-grid">
               {TIME_CONTROLS.map((tc) => {
                 const active = timeControl === tc.value;
                 return (
@@ -428,14 +418,10 @@ export default function CyberChessMatchmakingPage() {
                     type="button"
                     onClick={() => setTimeControl(tc.value)}
                     disabled={state.phase === "waiting" || state.phase === "joining"}
-                    className={`rounded-xl border px-3 py-3 text-left transition disabled:opacity-50 ${
-                      active
-                        ? "border-indigo-500 bg-indigo-500/10 ring-1 ring-indigo-500"
-                        : "border-slate-700 bg-slate-950 hover:border-slate-500"
-                    }`}
+                    className={`planet-tile${active ? " active" : ""}`}
                   >
-                    <div className="text-base font-semibold">{tc.label}</div>
-                    <div className="text-xs text-slate-400">{tc.sub}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700 }}>{tc.label}</div>
+                    <div className="planet-muted" style={{ fontSize: 11.5 }}>{tc.sub}</div>
                   </button>
                 );
               })}
@@ -443,26 +429,24 @@ export default function CyberChessMatchmakingPage() {
           </div>
 
           {/* Rating slider */}
-          <div className="mb-2">
-            <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
-              <label className="text-sm text-slate-400">Твой рейтинг</label>
-              <div className="flex items-center gap-2">
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <label className="planet-eyebrow" style={{ fontSize: 11 }}>Твой рейтинг</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
                     title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · провизорный (мало партий)" : ""}`}
-                    className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30"
+                    className="planet-badge cyan"
                   >
-                    ♟ {speedOf(timeControl)} {serverRating.rating}
+                    {speedOf(timeControl)} {serverRating.rating}
                     {serverRating.provisional ? "?" : ""} · {serverRating.games} партий
                   </span>
                 )}
                 {fideEstimate !== null && (
-                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
-                    FIDE ~{fideEstimate}
-                  </span>
+                  <span className="planet-badge live">FIDE ~{fideEstimate}</span>
                 )}
-                <span className="text-sm font-medium">
-                  {rating} <span className="text-slate-500">(диапазон {rating - 150}–{rating + 150})</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+                  {rating} <span className="planet-muted">(диапазон {rating - 150}–{rating + 150})</span>
                 </span>
               </div>
             </div>
@@ -474,9 +458,9 @@ export default function CyberChessMatchmakingPage() {
               value={rating}
               onChange={(e) => setRating(Number(e.target.value))}
               disabled={state.phase === "waiting" || state.phase === "joining"}
-              className="w-full accent-indigo-500 disabled:opacity-50"
+              style={{ width: "100%", accentColor: "var(--pl-gold)" }}
             />
-            <div className="mt-1 flex justify-between text-xs text-slate-500">
+            <div className="planet-muted" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 11 }}>
               <span>100</span>
               <span>1000</span>
               <span>1500</span>
@@ -484,7 +468,7 @@ export default function CyberChessMatchmakingPage() {
               <span>3000</span>
             </div>
             {fideEstimate !== null && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="planet-muted" style={{ marginTop: 6, fontSize: 11.5 }}>
                 Рейтинг автоматически определён по твоим партиям (FIDE ~{fideEstimate}). Можно скорректировать вручную.
               </p>
             )}
@@ -492,121 +476,97 @@ export default function CyberChessMatchmakingPage() {
         </section>
 
         {/* Action / status card */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 backdrop-blur">
+        <section className="planet-card" style={{ padding: 24 }}>
           {state.phase === "idle" && (
-            <div className="flex flex-col items-center gap-4">
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
               <button
                 type="button"
                 onClick={onJoin}
-                className="w-full max-w-md rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-8 py-6 text-2xl font-bold text-white shadow-lg shadow-indigo-500/30 transition hover:from-indigo-400 hover:to-purple-400 active:scale-[0.98]"
+                className="planet-btn active"
+                style={{ width: "100%", maxWidth: 400, padding: "22px 32px", fontSize: 18, borderRadius: 14, justifyContent: "center" }}
               >
                 {t("match.search")}
               </button>
-              <p className="text-center text-sm text-slate-400">
+              <p className="planet-muted" style={{ textAlign: "center", fontSize: 13.5 }}>
                 Кликни — встанешь в живую очередь. Найдём пару за 5–60 секунд.
               </p>
             </div>
           )}
 
           {state.phase === "joining" && (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500" />
-              <p className="text-slate-300">Встаём в очередь…</p>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 0" }}>
+              <div className="planet-spin" />
+              <p style={{ fontSize: 14 }}>Встаём в очередь…</p>
             </div>
           )}
 
           {state.phase === "waiting" && (
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col items-center gap-2">
-                <div className="h-14 w-14 animate-pulse rounded-full bg-indigo-500/20 ring-4 ring-indigo-500/40" />
-                <p className="text-lg font-semibold">{t("match.searching")}</p>
-                <p className="text-sm text-slate-400">
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div className="planet-pulse" />
+                <p style={{ fontSize: 17, fontWeight: 700 }}>{t("match.searching")}</p>
+                <p className="planet-muted" style={{ fontSize: 13 }}>
                   Прошло: {formatDuration(state.elapsedMs)} · Ожидание ≈ {formatDuration(state.estimatedWaitMs)}
                 </p>
               </div>
 
               {/* Queue visualization */}
-              <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-400">{t("match.position")}</span>
-                  <span className="font-mono font-semibold text-indigo-300">
+              <div style={{ borderRadius: 12, border: "1px solid var(--pl-line)", background: "var(--pl-surface-2)", padding: 16 }}>
+                <div style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                  <span className="planet-muted">{t("match.position")}</span>
+                  <span className="planet-num" style={{ fontFamily: "var(--pl-mono)", fontWeight: 700, color: "var(--pl-gold)" }}>
                     {state.position} / {state.waiting}
                   </span>
                 </div>
-                <div className="flex h-3 w-full gap-1 overflow-hidden rounded-full bg-slate-800">
+                <div className="planet-track">
                   {Array.from({ length: Math.max(state.waiting, 1) }).map((_, i) => {
                     const isMe = i === state.position - 1;
-                    return (
-                      <div
-                        key={i}
-                        className={`flex-1 rounded-sm ${
-                          isMe
-                            ? "bg-indigo-400 ring-2 ring-indigo-200"
-                            : i < state.position - 1
-                              ? "bg-purple-700"
-                              : "bg-slate-700"
-                        }`}
-                      />
-                    );
+                    const past = i < state.position - 1;
+                    return <div key={i} className={`planet-track-seg${isMe ? " me" : past ? " past" : ""}`} />;
                   })}
                 </div>
-                <div className="mt-3">
-                  <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                <div style={{ marginTop: 12 }}>
+                  <div className="planet-muted" style={{ marginBottom: 4, display: "flex", justifyContent: "space-between", fontSize: 11 }}>
                     <span>Прогресс ожидания</span>
                     <span>{waitingProgressPct}%</span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                    <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-500"
-                      style={{ width: `${waitingProgressPct}%` }}
-                    />
+                  <div className="planet-bar">
+                    <div className="planet-bar-fill" style={{ width: `${waitingProgressPct}%` }} />
                   </div>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onLeave}
-                className="self-center rounded-xl border border-slate-700 bg-slate-950 px-6 py-3 text-sm font-medium text-slate-300 hover:border-rose-500 hover:text-rose-300"
-              >
+              <button type="button" onClick={onLeave} className="planet-btn" style={{ alignSelf: "center" }}>
                 {t("match.cancel")}
               </button>
             </div>
           )}
 
           {state.phase === "matched" && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <div className="rounded-full bg-emerald-500/20 px-4 py-1 text-sm font-semibold text-emerald-300">
-                {t("match.found")}
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">{state.opponent.displayName}</div>
-                <div className="text-sm text-slate-400">
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "20px 0" }}>
+              <div className="planet-badge live">{t("match.found")}</div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{state.opponent.displayName}</div>
+                <div className="planet-muted" style={{ fontSize: 13 }}>
                   Рейтинг {state.opponent.ratingInternal} · ты играешь {state.color === "white" ? "белыми" : "чёрными"}
                 </div>
               </div>
-              <p className="text-sm text-slate-400">Переходим к доске…</p>
+              <p className="planet-muted" style={{ fontSize: 13 }}>Переходим к доске…</p>
             </div>
           )}
 
           {state.phase === "error" && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <div className="rounded-full bg-rose-500/20 px-4 py-1 text-sm font-semibold text-rose-300">
-                Ошибка
-              </div>
-              <p className="max-w-md text-center text-sm text-slate-300">{state.message}</p>
-              <button
-                type="button"
-                onClick={() => setState({ phase: "idle" })}
-                className="rounded-xl border border-slate-700 bg-slate-950 px-6 py-2 text-sm hover:border-indigo-500"
-              >
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "20px 0" }}>
+              <div className="planet-badge danger">Ошибка</div>
+              <p style={{ maxWidth: 400, textAlign: "center", fontSize: 13.5 }}>{state.message}</p>
+              <button type="button" onClick={() => setState({ phase: "idle" })} className="planet-btn">
                 Попробовать снова
               </button>
             </div>
           )}
         </section>
 
-        <footer className="text-center text-xs text-slate-500">
+        <footer className="planet-muted" style={{ textAlign: "center", fontSize: 11.5 }}>
           Очередь и матчи живут в памяти бэкенда. Без активности 5 минут — выкинет из очереди.
         </footer>
       </div>

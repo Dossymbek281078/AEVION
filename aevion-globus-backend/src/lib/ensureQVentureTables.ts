@@ -50,6 +50,23 @@ export async function ensureQVentureTables(pool: PgPoolInstance): Promise<void> 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_created ON qventure_analyses(created_at DESC);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_verdict ON qventure_analyses(verdict);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_sector ON qventure_analyses(sector);`);
+    // Per-investor saved-deals list. Stores a lightweight summary snapshot so the
+    // watchlist renders without joining back to qventure_analyses (and survives
+    // even if the underlying analysis is later evicted). Keyed by (user, deal).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qventure_watchlist (
+        user_id TEXT NOT NULL,
+        analysis_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sector TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        composite NUMERIC NOT NULL DEFAULT 0,
+        verdict TEXT NOT NULL DEFAULT '',
+        saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, analysis_id)
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_watchlist_user ON qventure_watchlist(user_id, saved_at DESC);`);
     dbReady = true;
     ensured = true;
     console.log("[QVenture] Tables ready (Postgres).");

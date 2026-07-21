@@ -98,6 +98,20 @@ async function run() {
   assert("stats.total >= 3", stats.body?.data?.total >= 3, String(stats.body?.data?.total));
   assert("stats has byVerdict", !!stats.body?.data?.byVerdict);
 
+  console.log("\n7. Watchlist is auth-gated");
+  const wlGet = await req("GET", "/api/qventure/watchlist");
+  assert("GET /watchlist (no auth) → 401", wlGet.status === 401, String(wlGet.status));
+  const wlPost = await req("POST", "/api/qventure/watchlist", { id: "x", name: "X" });
+  assert("POST /watchlist (no auth) → 401", wlPost.status === 401, String(wlPost.status));
+  const wlDel = await req("DELETE", "/api/qventure/watchlist/x");
+  assert("DELETE /watchlist/:id (no auth) → 401", wlDel.status === 401, String(wlDel.status));
+
+  console.log("\n8. Funnel PDF (batch)");
+  const fn1 = await req("GET", `/api/qventure/funnel/pdf?ids=${analysisId}`);
+  assert("funnel with <2 ids → 400", fn1.status === 400, String(fn1.status));
+  const fn0 = await req("GET", "/api/qventure/funnel/pdf?ids=nope-1,nope-2");
+  assert("funnel with unknown ids → 404", fn0.status === 404, String(fn0.status));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

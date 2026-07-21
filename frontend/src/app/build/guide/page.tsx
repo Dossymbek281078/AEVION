@@ -218,6 +218,7 @@ export default function GuidePage() {
           </div>
         </div>
 
+<<<<<<< HEAD
         <div className={styles.cta}>
           <div className={styles.lead}>Начните нанимать за две минуты</div>
           <div className={styles.btns}>
@@ -237,6 +238,19 @@ export default function GuidePage() {
           <span>AEVION QBuild · площадка найма для стройки</span>
           <Link href="/build">aevion.vercel.app/build</Link>
         </div>
+=======
+        <p className="mt-8 text-[11px] text-slate-500">
+          Вы соискатель? Смотрите{" "}
+          <Link href="/build/guide-worker" className="text-emerald-300 underline">
+            гайд для соискателя
+          </Link>
+          . Остались вопросы? Загляните в{" "}
+          <Link href="/build/help" className="text-emerald-300 underline">
+            /build/help
+          </Link>
+          .
+        </p>
+>>>>>>> origin/main
       </div>
     </main>
   );

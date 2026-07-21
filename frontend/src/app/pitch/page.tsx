@@ -98,6 +98,18 @@ const TOC = [
 
 export default function PitchPage() {
   const [scrolled, setScrolled] = useState(0);
+  const [aiSavings, setAiSavings] = useState<{ savedPct: number; savedUsd: number; runs: number } | null>(null);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d.savedPct === "number" && d.runs > 0) {
+          setAiSavings({ savedPct: d.savedPct, savedUsd: d.savedUsd, runs: d.runs });
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [activeSection, setActiveSection] = useState<string>(TOC[0].id);
   const [isMobile, setIsMobile] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
@@ -961,6 +973,21 @@ export default function PitchPage() {
             ))}
           </ul>
           <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, margin: 0, fontStyle: "italic" }}>{launchGrowth.economics.honesty}</p>
+          {aiSavings && (
+            <div
+              style={{
+                marginTop: 12, padding: "10px 14px", borderRadius: 10,
+                background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.35)",
+                fontSize: 12.5, color: "#a7f3d0", lineHeight: 1.55,
+              }}
+            >
+              ⚡ Живое подтверждение прямо сейчас: смарт-роутинг уже срезал{" "}
+              <strong>−{Math.round(aiSavings.savedPct)}%</strong> AI-расходов (
+              {aiSavings.savedUsd >= 0.005 ? `$${aiSavings.savedUsd.toFixed(2)}` : "<$0.01"} на {aiSavings.runs}{" "}
+              вызовах) против «всегда полный совет» — не обещание, а публичный счётчик{" "}
+              <span style={{ fontFamily: "ui-monospace, monospace" }}>/api/qcoreai/smart/savings</span>.
+            </div>
+          )}
         </div>
       </Section>
 

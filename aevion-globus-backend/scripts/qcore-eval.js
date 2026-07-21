@@ -27,6 +27,9 @@
  *     single-fable is computed from returned usage × list price. free = $0.
  */
 
+const fs = require("fs");
+const path = require("path");
+
 const BASE = (process.env.BASE || "https://aevion.vercel.app/api-backend").replace(/\/+$/, "");
 const CHAT = `${BASE}/api/qcoreai/chat`;
 const MULTI = `${BASE}/api/qcoreai/multi-agent`;
@@ -260,11 +263,49 @@ async function compare(question, candidate, baseline) {
   }
 
   const fableAvg = avg(modes["single-fable"].cost);
+  const verdicts = {};
   for (const cand of ["council-l2-fable", "council-l2-opus"]) {
     const d = duel[cand], dec = d.win + d.loss;
     const rate = dec ? (100 * d.win) / dec : 0;
     const c = avg(modes[cand].cost);
-    const vsFlag = fableAvg ? (c / fableAvg).toFixed(1) + "×" : "—";
-    console.log(`Verdict ${cand}: win-rate ${rate.toFixed(0)}% vs flagship · $${c.toFixed(4)}/answer (${vsFlag} the single-Fable cost).`);
+    const vsFlag = fableAvg ? c / fableAvg : null;
+    console.log(`Verdict ${cand}: win-rate ${rate.toFixed(0)}% vs flagship · $${c.toFixed(4)}/answer (${vsFlag ? vsFlag.toFixed(1) + "×" : "—"} the single-Fable cost).`);
+    verdicts[cand] = { winRatePct: Math.round(rate), costUsd: c, costMultiplierVsFlagship: vsFlag };
   }
+
+  // Persist a machine-readable snapshot alongside the console report, so the
+  // numbers cited elsewhere (orchestrator.ts comments, the /qcoreai/vs
+  // comparison table) trace back to a real, reproducible artifact instead of
+  // living only as prose in source comments.
+  const perCategoryWinRate = {};
+  for (const cand of ["council-l2-fable", "council-l2-opus"]) {
+    perCategoryWinRate[cand] = {};
+    for (const cat of CATS) {
+      const d = duelCat[cand][cat];
+      if (!d) continue;
+      const decided = d.win + d.loss;
+      perCategoryWinRate[cand][cat] = { win: d.win, tie: d.tie, loss: d.loss, winRatePct: decided ? Math.round((100 * d.win) / decided) : null };
+    }
+  }
+  const snapshot = {
+    generatedAt: new Date().toISOString(),
+    source: "live-run",
+    n: N,
+    base: BASE,
+    judge: FABLE,
+    costPerAnswerUsd: Object.fromEntries(Object.keys(modes).map((m) => [m, avg(modes[m].cost)])),
+    winRateVsSingleFable: duel,
+    perCategoryWinRate,
+    verdicts,
+  };
+  const outDir = path.join(__dirname, "..", "..", "docs", "benchmarks");
+  const outPath = path.join(outDir, "qcore-eval-latest.json");
+  fs.mkdirSync(outDir, { recursive: true });
+  // Merge into `latest`, preserving any curated `historical` entries already on
+  // disk — a fresh run must never silently wipe the seeded historical numbers.
+  let existing = {};
+  try { existing = JSON.parse(fs.readFileSync(outPath, "utf8")); } catch { /* first run, or file missing */ }
+  const merged = { historical: existing.historical ?? [], latest: snapshot };
+  fs.writeFileSync(outPath, JSON.stringify(merged, null, 2) + "\n");
+  console.log(`\nSnapshot written to docs/benchmarks/qcore-eval-latest.json`);
 })();

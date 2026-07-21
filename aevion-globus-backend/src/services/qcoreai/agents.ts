@@ -12,6 +12,7 @@
  */
 
 import { getProviders, getFreeProviders, Provider } from "./providers";
+import { healthScore } from "./providerHealth";
 
 export type AgentRole = "analyst" | "writer" | "critic";
 
@@ -519,7 +520,15 @@ function enumerateCandidateModels(
       out.push({ provider: p.id, model: m });
     }
   }
-  return out;
+  // De-prioritise (never remove) pairs with a poor recent track record this
+  // session — a stable sort keeps healthy/unknown pairs in their original
+  // vendor-diversity order and only sinks observed-flaky ones to the bottom,
+  // so a provider that's been failing repeatedly stops eating equal priority
+  // with a healthy one instead of silently degrading council quality.
+  return out
+    .map((slot, i) => ({ slot, i, unhealthy: healthScore(slot.provider, slot.model) < 0.5 }))
+    .sort((a, b) => (a.unhealthy === b.unhealthy ? a.i - b.i : a.unhealthy ? 1 : -1))
+    .map((x) => x.slot);
 }
 
 /**

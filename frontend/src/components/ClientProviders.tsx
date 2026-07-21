@@ -6,6 +6,7 @@ import { PlanLimitToastBridge } from "@/components/PlanLimitToastBridge";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AppShellLanguagePill } from "@/components/AppShellLanguagePill";
+import { AppShellRevenueBadge } from "@/components/AppShellRevenueBadge";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
@@ -24,6 +25,9 @@ const APP_PREFIXES = [
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isApp = APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  // CyberChess is a separate session/branch (see aevion-globus-backend/CLAUDE.md) —
+  // no new UI gets added to that shell from here, goal badge included.
+  const isCyberchess = pathname === "/cyberchess" || pathname.startsWith("/cyberchess/");
 
   return (
     <I18nProvider>
@@ -33,6 +37,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
       <AutoTranslate observe={!isApp}>
         {!isApp && <SiteHeader />}
         {isApp && <AppShellLanguagePill />}
+        {isApp && !isCyberchess && <AppShellRevenueBadge />}
         <ToastProvider>
           <PlanLimitToastBridge />
           <div style={{ flex: 1 }}>{children}</div>

@@ -138,6 +138,13 @@ export function TrustScoreBadge() {
                 >
                   verify
                 </a>
+                <a
+                  href="/explore/trust"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: "#5eead4", marginLeft: 8, textDecoration: "underline" }}
+                >
+                  anchor to Bitcoin →
+                </a>
               </span>
             )}
           </span>

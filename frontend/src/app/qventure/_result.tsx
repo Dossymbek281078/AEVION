@@ -20,6 +20,7 @@ export interface ScoreFactor {
   weight: number;
   score: number;
   rationale: string;
+  basis?: "company-evidence" | "sector-prior" | "no-evidence";
 }
 
 export interface Lens {

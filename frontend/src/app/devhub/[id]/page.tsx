@@ -31,24 +31,47 @@ const VISUAL_EDIT_OVERLAY_SCRIPT = `
     if (hovered) { hovered.style.outline = '2px solid #0d9488'; hovered.style.outlineOffset = '1px'; }
   }
   function onOut(){ if (hovered) { hovered.style.outline = ''; hovered = null; } }
+  function brief(el){ return { vid: el.getAttribute('data-vid'), tagName: el.tagName }; }
+  function select(el){
+    var cs = getComputedStyle(el);
+    // Ancestor chain (nearest first) and tagged direct children let the IDE
+    // render a breadcrumb for retargeting nested markup without re-clicking.
+    var ancestors = [];
+    for (var p = el.parentElement; p && ancestors.length < 6; p = p.parentElement) {
+      if (p.getAttribute && p.getAttribute('data-vid')) ancestors.push(brief(p));
+    }
+    var children = [];
+    for (var i = 0; i < el.children.length && children.length < 8; i++) {
+      if (el.children[i].getAttribute('data-vid')) children.push(brief(el.children[i]));
+    }
+    parent.postMessage({
+      source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
+      styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign },
+      ancestors: ancestors, children: children
+    }, '*');
+  }
   function onClick(e){
     var el = withVid(e.target);
     if (!el) return;
     e.preventDefault(); e.stopPropagation();
-    var cs = getComputedStyle(el);
-    parent.postMessage({
-      source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
-      styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign }
-    }, '*');
+    select(el);
   }
-  // Live style preview: the IDE pushes { vid, styles } and we paint the element
-  // in place, so the user sees the change before committing it with Save.
   window.addEventListener('message', function(e){
     var d = e.data;
-    if (!d || d.source !== 'devhub-visual-edit-apply') return;
-    var el = document.querySelector('[data-vid="' + d.vid + '"]');
-    if (!el) return;
-    for (var k in (d.styles || {})) el.style[k] = d.styles[k];
+    if (!d) return;
+    // Live style preview: the IDE pushes { vid, styles } and we paint the
+    // element in place, so the user sees the change before committing it.
+    if (d.source === 'devhub-visual-edit-apply') {
+      var el = document.querySelector('[data-vid="' + d.vid + '"]');
+      if (!el) return;
+      for (var k in (d.styles || {})) el.style[k] = d.styles[k];
+    }
+    // Breadcrumb retarget: the IDE asks to select a specific vid (an ancestor
+    // or child of the current selection) — reply with the full select payload.
+    if (d.source === 'devhub-visual-edit-select') {
+      var target = document.querySelector('[data-vid="' + d.vid + '"]');
+      if (target) select(target);
+    }
   });
   document.addEventListener('mouseover', onOver, true);
   document.addEventListener('mouseout', onOut, true);
@@ -312,7 +335,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Visual Edit — Static-stack only (renders client-side, no live dev server needed)
   const [visualEditHtmlPath, setVisualEditHtmlPath] = useState<string | null>(null);
   const [visualEditSrcdoc, setVisualEditSrcdoc] = useState<string | null>(null);
-  const [visualEditSelected, setVisualEditSelected] = useState<{ vid: string; tagName: string; text: string } | null>(null);
+  const [visualEditSelected, setVisualEditSelected] = useState<{
+    vid: string; tagName: string; text: string;
+    ancestors?: Array<{ vid: string; tagName: string }>;
+    children?: Array<{ vid: string; tagName: string }>;
+  } | null>(null);
   const [visualEditText, setVisualEditText] = useState("");
   const [visualEditSaving, setVisualEditSaving] = useState(false);
   // Computed styles of the selected element (prefills the controls) vs. the
@@ -886,7 +913,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     const onMessage = (e: MessageEvent) => {
       const data = e.data;
       if (!data || data.source !== "devhub-visual-edit") return;
-      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text });
+      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text, ancestors: data.ancestors, children: data.children });
       setVisualEditText(data.text);
       setVisualEditStyleBase(data.styles || null);
       setVisualEditStyleEdits({});
@@ -894,6 +921,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  // Retarget the selection to an ancestor/child via the overlay, which replies
+  // with the full select payload (text, styles, fresh ancestor/child chains).
+  const retargetVisualSelection = (vid: string) => {
+    visualEditIframeRef.current?.contentWindow?.postMessage({ source: "devhub-visual-edit-select", vid }, "*");
+  };
 
   // Record a style override and paint it live in the preview iframe.
   const setVisualStyle = (key: keyof VisualStyles, value: string) => {
@@ -2757,8 +2790,36 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
-                        Selected: <span style={{ fontFamily: "monospace", color: "#0d9488" }}>{"<" + visualEditSelected.tagName.toLowerCase() + ">"}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12 }}>
+                        <span style={{ fontWeight: 700, color: "#0f172a" }}>Selected:</span>
+                        {[...(visualEditSelected.ancestors || [])].reverse().map((a) => (
+                          <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <button
+                              onClick={() => retargetVisualSelection(a.vid)}
+                              title="Select this parent element"
+                              style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
+                            >
+                              {"<" + a.tagName.toLowerCase() + ">"}
+                            </button>
+                            <span style={{ color: "#cbd5e1" }}>›</span>
+                          </span>
+                        ))}
+                        <span style={{ fontFamily: "monospace", color: "#0d9488", fontWeight: 700 }}>{"<" + visualEditSelected.tagName.toLowerCase() + ">"}</span>
+                        {(visualEditSelected.children || []).length > 0 && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ color: "#cbd5e1" }}>›</span>
+                            {(visualEditSelected.children || []).map((c) => (
+                              <button
+                                key={c.vid}
+                                onClick={() => retargetVisualSelection(c.vid)}
+                                title="Select this child element"
+                                style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
+                              >
+                                {"<" + c.tagName.toLowerCase() + ">"}
+                              </button>
+                            ))}
+                          </span>
+                        )}
                       </div>
                       <textarea
                         value={visualEditText}
@@ -2840,6 +2901,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           }}
                         >
                           {visualEditAiBusy ? "Applying AI edit..." : "AI Edit"}
+                        </button>
+                        <button
+                          onClick={undoLastGeneration}
+                          disabled={undoing}
+                          title="Revert the most recent AI change (same undo as the AI Generate tab)"
+                          style={{
+                            padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
+                            border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
+                            cursor: undoing ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {undoing ? "Undoing..." : "↩ Undo last AI change"}
                         </button>
                       </div>
                     </>

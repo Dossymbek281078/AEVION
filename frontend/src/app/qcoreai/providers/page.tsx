@@ -42,6 +42,11 @@ type ProviderLiveStatus = {
   status: "ok" | "degraded" | "down" | "unknown";
   latencyMs: number;
   checkedAt: string;
+  /** Session-level success rate across real orchestrator/council calls this
+   *  process has made to this provider — distinct from `status` above, which
+   *  is just a synthetic "Say: OK" ping. 1 = healthy or no data yet. */
+  sessionHealthScore?: number;
+  sessionSamples?: number;
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -179,12 +184,23 @@ export default function ProvidersPage() {
               <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
                 {liveStatuses.map((s) => {
                   const dot = s.status === "ok" ? "#10b981" : s.status === "degraded" ? "#f59e0b" : "#ef4444";
+                  const hasSessionData = (s.sessionSamples ?? 0) > 0;
+                  const sessionPct = Math.round((s.sessionHealthScore ?? 1) * 100);
+                  const sessionColor = sessionPct >= 80 ? "#10b981" : sessionPct >= 50 ? "#f59e0b" : "#ef4444";
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 10, border: `1px solid ${dot}33`, background: `${dot}0a` }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block", flexShrink: 0 }} />
                       <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{s.name}</span>
                       <span style={{ fontSize: 11, color: "#64748b" }}>{s.latencyMs}ms</span>
                       <span style={{ fontSize: 10, fontWeight: 700, color: dot }}>{s.status}</span>
+                      {hasSessionData && (
+                        <span
+                          title={`Session track record: ${sessionPct}% success over ${s.sessionSamples} recent calls (from real Council/orchestrator runs, not this ping)`}
+                          style={{ fontSize: 10, fontWeight: 700, color: sessionColor, borderLeft: "1px solid #e2e8f0", paddingLeft: 8 }}
+                        >
+                          {sessionPct}% session
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -229,10 +245,23 @@ export default function ProvidersPage() {
                         const live = liveStatuses.find((s) => s.id === p.id);
                         if (!live) return null;
                         const dot = live.status === "ok" ? "#10b981" : live.status === "degraded" ? "#f59e0b" : "#ef4444";
+                        const hasSessionData = (live.sessionSamples ?? 0) > 0;
+                        const sessionPct = Math.round((live.sessionHealthScore ?? 1) * 100);
+                        const sessionColor = sessionPct >= 80 ? "#10b981" : sessionPct >= 50 ? "#f59e0b" : "#ef4444";
                         return (
-                          <span style={{ position: "absolute", top: 10, left: 10, display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
-                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, display: "inline-block" }} />
-                            <span style={{ color: dot, fontWeight: 700 }}>{live.latencyMs}ms</span>
+                          <span style={{ position: "absolute", top: 10, left: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, display: "inline-block" }} />
+                              <span style={{ color: dot, fontWeight: 700 }}>{live.latencyMs}ms</span>
+                            </span>
+                            {hasSessionData && (
+                              <span
+                                title={`Session track record: ${sessionPct}% success over ${live.sessionSamples} recent calls`}
+                                style={{ color: sessionColor, fontWeight: 700 }}
+                              >
+                                {sessionPct}%↺
+                              </span>
+                            )}
                           </span>
                         );
                       })()}

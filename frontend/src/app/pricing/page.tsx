@@ -181,6 +181,9 @@ export default function PricingPage() {
   const [copiedPromo, setCopiedPromo] = useState<string | null>(null);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [trust, setTrust] = useState<TrustPayload | null>(null);
+  const [aiSavings, setAiSavings] = useState<{
+    runs: number; totalCostUsd: number; estAlwaysCouncilUsd: number; savedUsd: number; savedPct: number;
+  } | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState<"idle" | "submitting" | "ok" | "error">("idle");
   const [newsletterError, setNewsletterError] = useState<string | null>(null);
@@ -308,6 +311,12 @@ export default function PricingPage() {
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && j) setTrust(j);
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j && typeof j.runs === "number" && j.runs > 0) setAiSavings(j);
       })
       .catch(() => {});
     track({
@@ -577,6 +586,40 @@ export default function PricingPage() {
               </div>
             </div>
           ))}
+        </section>
+      )}
+
+      {/* Live AI-cost rationality strip — real routed-savings tally, shown
+          where the buying decision happens. Numbers come from the shared
+          /api/qcoreai/smart/savings counter, not marketing copy. */}
+      {aiSavings && (
+        <section
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: 12, marginBottom: 32, padding: "14px 18px",
+            background: "rgba(16,185,129,0.06)", borderRadius: 14,
+            border: "1px solid rgba(16,185,129,0.25)",
+          }}
+        >
+          <div style={{ maxWidth: 620 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#065f46", marginBottom: 2 }}>
+              ⚡ AI spend optimizes itself: {aiSavings.savedUsd >= 0.005 ? `$${aiSavings.savedUsd.toFixed(2)}` : "<$0.01"} saved across {aiSavings.runs} smart call{aiSavings.runs === 1 ? "" : "s"}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+              Every module routes AI calls to the cheapest tier that can do the job — {Math.round(aiSavings.savedPct)}%
+              below always running the full council. Your plan price buys features, not wasted tokens.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 18, textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#0d9488" }}>${aiSavings.totalCostUsd.toFixed(2)}</div>
+              <div style={{ fontSize: 9.5, color: "#64748b", fontWeight: 700 }}>ACTUAL</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#94a3b8", textDecoration: "line-through" }}>${aiSavings.estAlwaysCouncilUsd.toFixed(2)}</div>
+              <div style={{ fontSize: 9.5, color: "#64748b", fontWeight: 700 }}>UNROUTED</div>
+            </div>
+          </div>
         </section>
       )}
 

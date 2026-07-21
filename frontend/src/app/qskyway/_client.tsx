@@ -26,6 +26,19 @@ interface CityData {
 }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
+interface VertiportRow { id: string; suitability: number; cls: string; }
+interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
+
+const VP_CLASS_LABEL: Record<string, string> = {
+  "candidate-pad": "кандидат на площадку",
+  "needs-infrastructure": "нужна инфраструктура",
+  unsuitable: "непригодна",
+};
+const VP_CLASS_COLOR: Record<string, string> = {
+  "candidate-pad": "#2dd4bf",
+  "needs-infrastructure": "#fbbf24",
+  unsuitable: "#fb7185",
+};
 
 const FLOOR = 50, CLEAR = 15, BAND = 25, ALT_MIN = 50;
 // Phase 5: extra safety clearance by height-data confidence (measured/derived/guessed).
@@ -61,6 +74,8 @@ export default function QSkywayClient() {
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [cityId, setCityId] = useState<string>("astana");
   const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
+  const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
+  const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -174,6 +189,12 @@ export default function QSkywayClient() {
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
       });
+      const scoreOf = new Map<string, { suitability: number; cls: string }>();
+      for (const s of city.vertiportScores ?? []) scoreOf.set(s.c + "," + s.r, { suitability: s.suitability, cls: s.class });
+      setVpRows(city.vertiports.map((v, i) => {
+        const s = scoreOf.get(v.c + "," + v.r);
+        return { id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.cls ?? "unscored" };
+      }).sort((a, b) => b.suitability - a.suitability));
       setLoaded(true);
       newHero();
       for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
@@ -189,6 +210,7 @@ export default function QSkywayClient() {
         if (r.ok) { const j = await r.json(); setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))); }
       } catch { /* selector optional */ }
       loadCity("astana");
+      fetchSlots();
     })();
     return () => { cancelAnimationFrame(rafRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -346,6 +368,16 @@ export default function QSkywayClient() {
     ctx.beginPath(); ctx.moveTo(mx, padT); ctx.lineTo(mx, h - padB); ctx.stroke(); ctx.setLineDash([]);
   }
 
+  // ── slots market (real backend) ──────────────────────────────────────────────
+  const fetchSlots = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl("/api/qskyway/slots"));
+      if (!res.ok) return;
+      const j = await res.json();
+      setSlots({ list: j.slots ?? [], count: j.count ?? 0, capacityPerRoute: j.capacityPerRoute ?? 0, store: j.store ?? "" });
+    } catch { /* market panel is best-effort */ }
+  }, []);
+
   // ── slot booking (real backend) ──────────────────────────────────────────────
   const bookSlot = useCallback(async () => {
     const hero = heroRef.current;
@@ -359,8 +391,9 @@ export default function QSkywayClient() {
       });
       const j = await res.json();
       setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
+      if (j.ok) fetchSlots();
     } catch (e) { setBooking("ошибка сети: " + String(e)); }
-  }, [cityId]);
+  }, [cityId, fetchSlots]);
 
   const wrap: React.CSSProperties = { maxWidth: 1180, margin: "0 auto", padding: "24px 18px 48px", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", color: "#e8eef7" };
   const card: React.CSSProperties = { background: "#0e141f", border: "1px solid #1e2836", borderRadius: 12, overflow: "hidden" };
@@ -395,7 +428,8 @@ export default function QSkywayClient() {
         {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
 
         {!err && (
-          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr", ...(typeof window !== "undefined" && window.innerWidth >= 900 ? { gridTemplateColumns: "1.55fr 1fr" } : {}) }}>
+          <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>
+            <style>{`.qsky-grid { grid-template-columns: 1fr; } @media (min-width: 900px) { .qsky-grid { grid-template-columns: 1.55fr 1fr; } }`}</style>
             <section style={card}>
               <div style={cardH}>Аэрокарта · реальные здания{stats.city ? " · " + stats.city : ""}</div>
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />
@@ -439,6 +473,44 @@ export default function QSkywayClient() {
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
+                </div>
+              </section>
+
+              {vpRows.length > 0 && (
+                <section style={card}>
+                  <div style={cardH}>Пригодность площадок · {vpRows.length}</div>
+                  <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                    {vpRows.map((v) => (
+                      <div key={v.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
+                        <span style={{ color: "#9fb0c4" }}>{v.id}</span>
+                        <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{VP_CLASS_LABEL[v.cls] ?? "не оценена"} · {v.suitability}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontSize: 10.5, color: "#5f7086" }}>
+                    Алгоритмические кандидаты по открытому радиусу и просвету — не утверждённые муниципальные площадки.
+                  </div>
+                </section>
+              )}
+
+              <section style={card}>
+                <div style={cardH}>Рынок 4D-слотов (QRight) · {slots.count}{slots.store ? " · " + slots.store : ""}</div>
+                {slots.list.length === 0 ? (
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>Слотов пока не забронировано.</div>
+                ) : (
+                  <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                    {[...slots.list].reverse().slice(0, 20).map((s) => (
+                      <div key={s.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", color: "#9fb0c4" }}>
+                          <span>{s.id}</span><span>{s.holder}</span>
+                        </div>
+                        <div style={{ color: "#5f7086", fontSize: 10.5, wordBreak: "break-all" }}>{s.routeId} · {s.receipt}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontSize: 10.5, color: "#5f7086" }}>
+                  Ёмкость на маршрут: {slots.capacityPerRoute || "—"}. Право фиксируется SHA-256-якорем (receipt).
                 </div>
               </section>
             </aside>

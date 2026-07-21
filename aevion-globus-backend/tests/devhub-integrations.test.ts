@@ -57,7 +57,7 @@ afterEach(() => {
     "CLOUDFLARE_R2_ACCOUNT_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID",
     "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
     "DEEPL_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME",
-    "GOOGLE_DRIVE_ACCESS_TOKEN",
+    "GOOGLE_DRIVE_ACCESS_TOKEN", "TOGETHER_API_KEY",
   ]) {
     delete process.env[key];
   }
@@ -289,6 +289,201 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(body.model).toBe("gpt-image-1");
     // gpt-image-1 uses low/medium/high/auto; route maps "hd" → "high"
     expect(body.quality).toBe("high");
+  });
+
+  test("b64 result without Cloudflare configured falls back to inline data: URI", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toMatch(/^data:image\/png;base64,/);
+    expect(r.body.storage).toBe("inline");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no upload attempt without creds
+  });
+
+  test("b64 result with Cloudflare configured uploads the bytes and returns a permanent URL", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, {
+        data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
+      }))
+      .mockResolvedValueOnce(jsonResp(200, {
+        result: { variants: ["https://imagedelivery.example/acc/img-1/public"] },
+      }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toBe("https://imagedelivery.example/acc/img-1/public");
+    expect(r.body.storage).toBe("cloudflare");
+    const uploadCall = fetchMock.mock.calls[1];
+    expect(String(uploadCall[0])).toContain("/images/v1");
+    // File upload (raw bytes), not the URL-import form used for hosted results
+    expect(String(uploadCall[1].body)).toContain('name="file"');
+  });
+
+  test("hosted-url result with Cloudflare configured is imported for permanence; upload failure falls back to the upstream url", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/tmp.png" }] }))
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["nope"] }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toBe("https://oai.example/tmp.png");
+    expect(r.body.storage).toBe("upstream");
+  });
+
+  test("OpenAI failure falls back to Cloudflare Workers AI (flux-1-schnell) when CF creds exist", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(400, { error: { message: "Billing hard limit has been reached." } })) // openai
+      .mockResolvedValueOnce(jsonResp(200, { result: { image: Buffer.from("flux-bytes").toString("base64") } })) // workers ai
+      .mockResolvedValueOnce(jsonResp(200, { result: { variants: ["https://imagedelivery.example/acc/img-2/public"] } })); // cf images upload
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toBe("workers-ai");
+    expect(r.body.fallbackFrom).toEqual(["openai"]);
+    expect(r.body.url).toBe("https://imagedelivery.example/acc/img-2/public");
+    expect(r.body.storage).toBe("cloudflare");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
+    const fluxBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+    expect(fluxBody).toMatchObject({ prompt: "a cat", width: 1024, height: 1024 });
+  });
+
+  test("Together FLUX free tier serves when it is the only configured provider", async () => {
+    process.env.TOGETHER_API_KEY = "tg-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: [{ b64_json: Buffer.from("flux-free-bytes").toString("base64") }],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toBe("together");
+    expect(r.body.storage).toBe("inline"); // no CF creds — honest data: URI fallback
+    expect(String(fetchMock.mock.calls[0][0])).toContain("api.together.xyz");
+    const tgBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(tgBody.model).toBe("black-forest-labs/FLUX.1-schnell-Free");
+  });
+
+  test("all configured providers failing returns 502 with the per-provider attempt list", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(400, { error: { message: "billing" } }))
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/All image providers failed/);
+    expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
+  });
+});
+
+describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing CF Pages project", () => {
+  test("'already exists' create error under a non-8000000 code proceeds to upload instead of 500", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const id = cr.body.project.id as string;
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=index.html`)
+      .send({ content: "<h1>hi</h1>" });
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(400, {
+        success: false,
+        // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
+        errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
+      }))
+      .mockResolvedValueOnce(jsonResp(200, { success: true, result: { id: "dep-1", url: "t-abc123.pages.dev" } }));
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+
+    expect(r.status).toBe(200);
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/deployments");
+    expect(r.body.pagesUrl ?? r.body.liveUrl ?? r.body.deployUrl).toContain("pages.dev");
+  });
+});
+
+describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed stacks)", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    expect(cr.status).toBe(201);
+    return cr.body.project.id as string;
+  }
+
+  test("404 for unknown project", async () => {
+    const r = await request(makeApp()).get("/api/devhub/projects/nope/preview-proxy");
+    expect(r.status).toBe(404);
+  });
+
+  test("409 when the project has no https deployment", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    const r = await request(app).get(`/api/devhub/projects/${id}/preview-proxy`);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/no https deployment/);
+  });
+
+  test("proxies the project's own deployUrl, injecting <base> and the tagging overlay", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ deployUrl: "https://myapp.example" });
+    fetchMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      text: async () => "<html><head><title>t</title></head><body><h1>Hi</h1></body></html>",
+    });
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/preview-proxy`);
+
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toContain("text/html");
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://myapp.example");
+    expect(r.text).toContain('<base href="https://myapp.example/">');
+    expect(r.text).toContain("devhub-visual-edit"); // overlay contract injected
+    expect(r.text).toContain("setAttribute('data-vid'"); // runtime tagger
+  });
+
+  test("normalizes a legacy doubled-scheme deployUrl before fetching (and never accepts a caller URL)", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ deployUrl: "https://https://legacy.example" });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => "<body>x</body>" });
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/preview-proxy?url=https://evil.example`);
+
+    expect(r.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://legacy.example");
   });
 });
 

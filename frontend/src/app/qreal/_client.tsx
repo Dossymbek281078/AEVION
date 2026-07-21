@@ -22,7 +22,7 @@ type Project = {
   id: string; title: string; brief: string; format: string; language: string;
   targetDurationSec: number; status: string; shots: Shot[]; createdAt: string;
 };
-type Engine = { id: string; label: string; modality: string[]; configured: boolean; note: string };
+type Engine = { id: string; label: string; modality: string[]; configured: boolean; note: string; usdPerSecond?: number | null };
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
 
 export default function QRealClient() {
@@ -55,6 +55,23 @@ export default function QRealClient() {
     fetch(apiUrl("/api/qreal/engines")).then((r) => r.json()).then((d) => setEngines(d?.engines || [])).catch(() => {});
     fetch(apiUrl("/api/qreal/realism-criteria")).then((r) => r.json()).then((d) => setCriteria(d?.criteria || [])).catch(() => {});
   }, [loadDemo]);
+
+  // Кадры в очереди на рендер — автопул статуса раз в 10с, пока не готово.
+  useEffect(() => {
+    if (!project || !project.shots.some((s) => s.status === "queued")) return;
+    const timer = setInterval(async () => {
+      try {
+        const queued = project.shots.filter((s) => s.status === "queued");
+        await Promise.all(queued.map((s) =>
+          fetch(apiUrl(`/api/qreal/projects/${project.id}/shots/${s.id}/render-status`)).catch(() => null)
+        ));
+        const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
+        const pd = await pr.json();
+        if (pd?.project) setProject(pd.project);
+      } catch { /* следующий тик */ }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [project]);
 
   async function createFromBrief() {
     if (brief.trim().length < 10 || busy) return;
@@ -175,6 +192,9 @@ export default function QRealClient() {
                       {t(`qreal.status.${s.status}`)} · {s.durationSec}s
                     </span>
                   </div>
+                  {s.resultUrl && (
+                    <video controls preload="metadata" className="mt-2 w-full border border-neutral-200" src={s.resultUrl} />
+                  )}
                   <p className="mt-2 text-sm leading-relaxed text-neutral-700">{s.description}</p>
                   <p className="mt-2 text-xs text-neutral-500">
                     <span className="text-neutral-700">{t("qreal.shot.camera")}:</span> {s.camera}
@@ -232,6 +252,9 @@ export default function QRealClient() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-neutral-600">{e.note}</p>
+                {typeof e.usdPerSecond === "number" && e.usdPerSecond > 0 && (
+                  <p className="mt-1 font-mono text-[11px] text-teal-800">~${e.usdPerSecond.toFixed(3)}/s</p>
+                )}
               </div>
             ))}
           </div>

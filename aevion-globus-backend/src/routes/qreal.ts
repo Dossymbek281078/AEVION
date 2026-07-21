@@ -24,6 +24,7 @@ import crypto from "node:crypto";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { callProvider, pickConfiguredProvider } from "../services/qcoreai/providers";
+import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 
 const captureQRealError = makeServiceCapture("qreal");
 
@@ -61,6 +62,7 @@ type Shot = {
   durationSec: number;
   prompt: string | null;
   engine: string | null;
+  engineRequestId: string | null;
   status: ShotStatus;
   resultUrl: string | null;
   qc: QcReport | null;
@@ -88,33 +90,7 @@ const memProjects = new Map<string, Project>();
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
-/* ── Реестр движков (честные флаги: что реально сконфигурировано) ── */
-
-function engineRegistry() {
-  return [
-    {
-      id: "higgsfield",
-      label: "Higgsfield (Veo 3 / Kling 2.5 / Minimax Hailuo)",
-      modality: ["video", "audio"],
-      configured: Boolean(process.env.HIGGSFIELD_API_KEY),
-      note: "видео с нативным звуком; мост — MCP/DevHub",
-    },
-    {
-      id: "elevenlabs",
-      label: "ElevenLabs (голос, диалоги, фоли)",
-      modality: ["voice", "sfx"],
-      configured: Boolean(process.env.ELEVENLABS_API_KEY),
-      note: "речь и звуковой дизайн, если движок видео без нативного аудио",
-    },
-    {
-      id: "local-ffmpeg",
-      label: "FFmpeg-сборка (склейка, грейд, лауднесс)",
-      modality: ["assembly"],
-      configured: true,
-      note: "финальная сборка кадров и дорожек",
-    },
-  ];
-}
+/* ── Движки: собственный слой прямых интеграций (services/qreal/engines) ── */
 
 /* ── QC: 14 критериев реализма (ядро know-how модуля) ── */
 
@@ -179,7 +155,7 @@ function stubStoryboard(p: Project): Shot[] {
     id: uid(), order, title, description,
     subjects: [{ kind: "nature", description: "environment from the brief" }],
     camera, dialogue: null, soundscape, durationSec,
-    prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+    prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
   });
   return [
     mk(1, "Establishing", `Wide establishing shot. ${base}`, "slow push-in, eye level", "wind, distant ambient bed", 6),
@@ -219,7 +195,7 @@ async function aiStoryboard(p: Project): Promise<Shot[] | null> {
       dialogue: s.dialogue ? String(s.dialogue).slice(0, 500) : null,
       soundscape: String(s.soundscape || "natural ambient bed").slice(0, 300),
       durationSec: Number(s.durationSec) > 0 ? Math.min(20, Number(s.durationSec)) : 5,
-      prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+      prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     }));
   } catch {
     return null; // честный fallback на stub, без маскировки под AI
@@ -259,7 +235,7 @@ function seedDemo() {
       subjects: [{ kind: "nature", description: "steppe, feather grass, dawn light, wind" }],
       camera: "slow aerial push-in, 21mm", dialogue: null,
       soundscape: "steady steppe wind, skylark far away, grass rustle",
-      durationSec: 7, prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+      durationSec: 7, prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     },
     {
       id: "demo-shot-2", order: 2, title: "Мальчик и собака",
@@ -270,7 +246,7 @@ function seedDemo() {
       ],
       camera: "handheld tracking, 35mm, knee height", dialogue: "Айда, Ақтөс!",
       soundscape: "boy's laughter with open-air acoustics, dog paws on dirt, morning birds",
-      durationSec: 6, prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+      durationSec: 6, prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     },
     {
       id: "demo-shot-3", order: 3, title: "Бабушка у очага",
@@ -281,7 +257,7 @@ function seedDemo() {
       ],
       camera: "static 50mm, table level, shallow DOF", dialogue: "Шай ішіп ал, балам.",
       soundscape: "pouring tea, fire crackle, muffled wind outside — dense room tone",
-      durationSec: 5, prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+      durationSec: 5, prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     },
     {
       id: "demo-shot-4", order: 4, title: "Беркут взлетает",
@@ -289,7 +265,7 @@ function seedDemo() {
       subjects: [{ kind: "bird", description: "golden eagle, accurate wing mechanics, feather detail" }],
       camera: "pan with subject, 135mm, slight lag behind motion", dialogue: null,
       soundscape: "heavy wing beats close-up, wind gust, single eagle cry with natural echo",
-      durationSec: 6, prompt: null, engine: null, status: "draft", resultUrl: null, qc: null,
+      durationSec: 6, prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     },
   ];
   const demo: Project = {
@@ -320,7 +296,7 @@ qrealRouter.get("/health", (_req, res) => {
 });
 
 qrealRouter.get("/engines", (_req, res) => {
-  res.json({ engines: engineRegistry() });
+  res.json({ engines: renderEngines() });
 });
 
 qrealRouter.get("/realism-criteria", (_req, res) => {
@@ -394,29 +370,57 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "storyboard failed" }); }
 });
 
-qrealRouter.post("/projects/:id/shots/:sid/render", (req, res) => {
+qrealRouter.post("/projects/:id/shots/:sid/render", async (req, res) => {
   try {
     const p = memProjects.get(req.params.id);
     const s = p?.shots.find((x) => x.id === req.params.sid);
     if (!p || !s) return res.status(404).json({ error: "not found" });
     s.prompt = buildRenderPrompt(p, s);
-    const engines = engineRegistry().filter((e) => e.modality.includes("video"));
-    const ready = engines.find((e) => e.configured);
-    if (ready) {
-      s.engine = ready.id;
-      s.status = "queued";
-    } else {
+    const preferred = typeof req.body?.engine === "string" ? req.body.engine : undefined;
+    const engine = pickVideoEngine(preferred);
+    if (!engine) {
       s.engine = null;
-      s.status = "prompt_ready"; // честно: промт собран, движок не подключён
+      s.status = "prompt_ready"; // честно: промт собран, FAL_KEY не задан
+      p.updatedAt = nowIso();
+      return res.json({
+        shot: s,
+        note: "Render-промт готов. Прямой видеодвижок не сконфигурирован (env FAL_KEY) — задайте ключ fal.ai, и рендер пойдёт без посредников.",
+      });
+    }
+    const sub = await falSubmit(engine, s.prompt, s.durationSec);
+    if (!sub.ok) {
+      s.engine = engine.id;
+      s.status = "failed";
+      p.updatedAt = nowIso();
+      return res.status(502).json({ shot: s, note: `Движок ${engine.label} отклонил задачу: ${sub.error}` });
+    }
+    s.engine = engine.id;
+    s.engineRequestId = sub.requestId;
+    s.status = "queued";
+    p.updatedAt = nowIso();
+    const estUsd = engine.usdPerSecond != null ? (engine.usdPerSecond * s.durationSec).toFixed(2) : "?";
+    res.json({ shot: s, note: `Кадр в очереди: ${engine.label}, ~$${estUsd}. Статус — /render-status.` });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render failed" }); }
+});
+
+qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    const s = p?.shots.find((x) => x.id === req.params.sid);
+    if (!p || !s) return res.status(404).json({ error: "not found" });
+    if (s.status === "rendered" || !s.engineRequestId) return res.json({ shot: s });
+    const engine = renderEngines().find((e) => e.id === s.engine);
+    if (!engine) return res.json({ shot: s });
+    const poll = await falPoll(engine, s.engineRequestId);
+    if (poll.state === "completed") {
+      s.resultUrl = poll.videoUrl;
+      s.status = poll.videoUrl ? "rendered" : "failed";
+    } else if (poll.state === "failed") {
+      s.status = "failed";
     }
     p.updatedAt = nowIso();
-    res.json({
-      shot: s,
-      note: ready
-        ? `Кадр поставлен в очередь на ${ready.label}.`
-        : "Render-промт готов. Видеодвижок не сконфигурирован (HIGGSFIELD_API_KEY) — подключение движка = следующий этап.",
-    });
-  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render failed" }); }
+    res.json({ shot: s, engineState: poll.state });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-status failed" }); }
 });
 
 qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {

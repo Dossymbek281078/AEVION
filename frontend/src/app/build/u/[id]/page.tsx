@@ -8,6 +8,7 @@ import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
 import { ShareProfileButton } from "@/components/build/ShareProfileButton";
 import { ProfileShareQR } from "@/components/build/ProfileShareQR";
 import { ProfileExtras } from "@/components/build/ProfileExtras";
+import { fixDoubledScheme } from "@/lib/urls";
 
 export const dynamic = "force-dynamic";
 
@@ -362,7 +363,7 @@ export default async function PublicProfilePage({ params }: Props) {
               {data.portfolio.map((p, i) => (
                 <li key={i}>
                   <a
-                    href={p.url}
+                    href={fixDoubledScheme(p.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 hover:bg-white/5"

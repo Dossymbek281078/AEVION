@@ -5,15 +5,11 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
+import { fixDoubledScheme } from "@/lib/urls";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
 
-/** Legacy deploy records may carry a doubled scheme ("https://https://x") —
- * the constructor was fixed, but stored URLs written before the fix remain. */
-function fixDoubledScheme(u: string): string {
-  return u.replace(/^(https?:\/\/)+(?=https?:\/\/)/, "");
-}
 
 interface Project {
   id: string;

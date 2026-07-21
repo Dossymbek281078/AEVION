@@ -46,6 +46,18 @@ interface GumroadBalance {
   setupGuide?: string;
 }
 
+interface RevenueGoals {
+  primaryUsd: number;
+  stretchUsd: number;
+  deadline: string;
+}
+
+interface RevenuePace {
+  change?: { grossUsd: number };
+  windowDays: number;
+  points: number;
+}
+
 const CHANNEL_LABELS: Record<string, string> = {
   gumroad_onetime: "Gumroad Pay",
   gumroad_membership: "Gumroad Sub",
@@ -78,35 +90,53 @@ const CHANNEL_COLORS: Record<string, string> = {
   marketplace: "bg-pink-500/20 text-pink-300 border-pink-500/30",
 };
 
+// Fallback if /api/revenue/goals is unreachable — matches the backend defaults.
+const DEFAULT_GOALS: RevenueGoals = { primaryUsd: 1_000_000, stretchUsd: 20_000_000, deadline: "2027-01-01" };
+
+function daysUntil(deadline: string): number {
+  const target = Date.parse(`${deadline}T00:00:00Z`);
+  if (Number.isNaN(target)) return 0;
+  return Math.max(0, Math.ceil((target - Date.now()) / 86_400_000));
+}
+
+/** ETA at the current pace (last-30-days gross Δ/day). Null if flat/shrinking or not enough data. */
+function etaLabel(target: number, current: number, pace: RevenuePace | null): string | null {
+  if (current >= target) return "🎉 цель достигнута";
+  if (!pace?.change || pace.points < 2) return null;
+  const perDay = pace.change.grossUsd / pace.windowDays;
+  if (perDay <= 0) return "нет роста за 30 дней";
+  const days = Math.ceil((target - current) / perDay);
+  return `в темпе — ~${days.toLocaleString("en-US")} дн.`;
+}
+
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [lsBalance, setLsBalance] = useState<GumroadBalance | null>(null);
+  const [lsLoading, setLsLoading] = useState(true);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
+  const [pace, setPace] = useState<RevenuePace | null>(null);
 
+  // Each channel fetches independently — a slow/stuck one no longer blocks
+  // the whole page; every section renders as soon as its own data lands.
   useEffect(() => {
-    Promise.all([
-      fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null),
-    ]).then(([ov, bal, rec, ls]) => {
-      setOverview(ov);
-      setBalance(bal);
-      setRecent(rec);
-      setLsBalance(ls);
-      setLoading(false);
-    });
+    fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setOverview(d); setOverviewLoading(false); });
+    fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setBalance(d); setBalanceLoading(false); });
+    fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setRecent(d); setRecentLoading(false); });
+    fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setLsBalance(d); setLsLoading(false); });
+    fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
+      .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
+    fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
+      .then((d) => setPace(d));
   }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400 text-sm animate-pulse">Загружаем Revenue Hub...</div>
-      </div>
-    );
-  }
 
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;
@@ -118,6 +148,7 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
+  const daysLeft = daysUntil(goals.deadline);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -142,30 +173,62 @@ export default function RevenuePage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
+        {/* Цели до Нового года */}
+        <section>
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+            <span>Цели до Нового года</span>
+            <span className="text-xs text-amber-400 normal-case">{daysLeft} дн. осталось</span>
+          </h2>
+          {balanceLoading || lsLoading ? (
+            <SkeletonGrid cols={2} />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <GoalBar
+                label="$1M — первая цель"
+                target={goals.primaryUsd}
+                current={totalGross}
+                colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
+                eta={etaLabel(goals.primaryUsd, totalGross, pace)}
+              />
+              <GoalBar
+                label="$20M — стретч-цель"
+                target={goals.stretchUsd}
+                current={totalGross}
+                colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
+                eta={etaLabel(goals.stretchUsd, totalGross, pace)}
+              />
+            </div>
+          )}
+        </section>
+
         {/* Всего по всем каналам (Gumroad + LemonSqueezy) */}
         <section>
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Всего · все чекауты <span className="ml-2 text-xs text-emerald-400 normal-case">(live)</span>
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
-              <div className="text-3xl font-semibold text-white">
-                ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+          {balanceLoading || lsLoading ? (
+            <SkeletonGrid cols={3} />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+                <div className="text-3xl font-semibold text-white">
+                  ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+                </div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
+                <div className="text-3xl font-semibold text-white">{totalCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
+                <div className="text-sm text-gray-300 mt-1 space-y-0.5">
+                  <div>Gumroad: <span className="text-white font-semibold">${gGross.toFixed(2)}</span> · {gCount}</div>
+                  <div>LemonSqueezy: <span className="text-white font-semibold">${lsGross.toFixed(2)}</span> · {lsCount}</div>
+                </div>
               </div>
             </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
-              <div className="text-3xl font-semibold text-white">{totalCount}</div>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
-              <div className="text-sm text-gray-300 mt-1 space-y-0.5">
-                <div>Gumroad: <span className="text-white font-semibold">${gGross.toFixed(2)}</span> · {gCount}</div>
-                <div>LemonSqueezy: <span className="text-white font-semibold">${lsGross.toFixed(2)}</span> · {lsCount}</div>
-              </div>
-            </div>
-          </div>
+          )}
         </section>
 
         {/* Gumroad Balance */}
@@ -173,7 +236,9 @@ export default function RevenuePage() {
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Gumroad Balance <span className="ml-2 text-xs text-pink-400 normal-case">(live)</span>
           </h2>
-          {balance?.stub ? (
+          {balanceLoading ? (
+            <SkeletonGrid cols={4} />
+          ) : balance?.stub ? (
             <GumroadSetupCard />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -207,10 +272,12 @@ export default function RevenuePage() {
         <RevenueTrend />
 
         {/* Recent Sales */}
-        {gumroadConfigured && (
+        {(overviewLoading || gumroadConfigured) && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние продажи</h2>
-            {recent?.stub ? (
+            {overviewLoading || recentLoading ? (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем продажи…</div>
+            ) : recent?.stub ? (
               <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Gumroad не настроен</div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -270,13 +337,17 @@ export default function RevenuePage() {
         {/* Apps Registry */}
         <section>
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Реестр приложений ({overview?.apps.length ?? 0})
+            {overviewLoading ? "Реестр приложений" : `Реестр приложений (${overview?.apps.length ?? 0})`}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(overview?.apps ?? []).map((app) => (
-              <AppCard key={app.appId} app={app} />
-            ))}
-          </div>
+          {overviewLoading ? (
+            <SkeletonGrid cols={3} />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(overview?.apps ?? []).map((app) => (
+                <AppCard key={app.appId} app={app} />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Channel coverage */}
@@ -295,7 +366,7 @@ export default function RevenuePage() {
         )}
 
         {/* Setup Guide */}
-        {!gumroadConfigured && <GumroadSetupCard full />}
+        {!overviewLoading && !gumroadConfigured && <GumroadSetupCard full />}
       </div>
     </div>
   );
@@ -445,6 +516,47 @@ function Sparkline({ points }: { points: number[] }) {
         <circle key={i} cx={x} cy={y} r="2" fill="rgb(16 185 129)" />
       ))}
     </svg>
+  );
+}
+
+// Literal class names (not interpolated) so Tailwind's scanner always picks them up.
+const SKELETON_GRID_COLS: Record<number, string> = {
+  2: "grid grid-cols-1 sm:grid-cols-2 gap-4",
+  3: "grid grid-cols-2 sm:grid-cols-3 gap-4",
+  4: "grid grid-cols-2 sm:grid-cols-4 gap-4",
+};
+
+function SkeletonGrid({ cols }: { cols: number }) {
+  return (
+    <div className={SKELETON_GRID_COLS[cols] ?? SKELETON_GRID_COLS[3]}>
+      {Array.from({ length: cols }).map((_, i) => (
+        <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-[88px] animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
+  const pct = Math.min(100, (current / target) * 100);
+  const remaining = Math.max(0, target - current);
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="text-sm font-medium text-gray-300">{label}</div>
+        <div className="text-xs text-gray-500 font-mono">{pct >= 0.1 ? pct.toFixed(1) : pct.toFixed(4)}%</div>
+      </div>
+      <div className="h-2.5 rounded-full bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${pct > 0 ? Math.max(pct, 0.6) : 0}%` }}
+        />
+      </div>
+      <div className="flex items-baseline justify-between mt-2 text-xs text-gray-500">
+        <span>${current.toLocaleString("en-US", { maximumFractionDigits: 2 })} собрано</span>
+        <span>осталось ${remaining.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+      </div>
+      {eta && <div className="mt-1.5 text-[11px] text-emerald-400/80">{eta}</div>}
+    </div>
   );
 }
 

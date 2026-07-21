@@ -141,6 +141,17 @@ async function run() {
   assert("non-pass has no re-entry conditions", d?.result?.strategy?.reEntryConditions === undefined,
     String(d?.result?.strategy?.reEntryConditions));
 
+  // The analysed plan is retained server-side so a verdict stays reproducible when
+  // the rubric changes, but it is confidential and analyses are public by default —
+  // it must not survive serialisation on any read path.
+  console.log("\n10. Retained plan never leaves the API");
+  assert("POST /analyze does not echo the plan", d?.input === undefined, JSON.stringify(d?.input || "").slice(0, 80));
+  const fetched = await req("GET", `/api/qventure/analyses/${analysisId}`);
+  assert("GET /analyses/:id does not expose the plan", fetched.body?.data?.input === undefined,
+    JSON.stringify(fetched.body?.data?.input || "").slice(0, 80));
+  assert("no description leaks in the serialised record",
+    !/"description"\s*:/.test(JSON.stringify(fetched.body?.data ?? {})));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

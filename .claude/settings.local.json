@@ -203,7 +203,10 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 739 --json title,commits,additions,deletions,files,baseRefName,headRefName,isDraft)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api repos/Dossymbek281078/AEVION/actions/runs --paginate -q '.workflow_runs[] | select\\(.head_branch==\"feat/qbuild-ai-multiagent\"\\) | {name, status, conclusion, created_at, event}')",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run list --branch feat/qbuild-ai-multiagent --limit 10)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" workflow list)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" workflow list)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe workflow *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29826641640)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe api *)"
     ]
   }
 }

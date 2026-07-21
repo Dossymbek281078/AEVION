@@ -3208,6 +3208,204 @@ devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
   }
 });
 
+// ── Agent workflow step execution ───────────────────────────────────────────
+//
+// One step-runner shared by the sync and SSE workflow routes (previously two
+// ~200-line copies of the same if/else chain). Each step catches its own
+// error and RETURNS a result rather than throwing, so callers can run a batch
+// of independent steps through Promise.all without one failure aborting the
+// others (matches the existing "report per-step errors, don't abort" contract).
+type WorkflowStepResult = { step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string };
+
+async function executeWorkflowStep(
+  project: DevHubProject,
+  userId: string,
+  step: any,
+  i: number
+): Promise<WorkflowStepResult> {
+  const type = String(step?.type || "");
+  try {
+    if (type === "code") {
+      const prompt = String(step.prompt || "");
+      if (!prompt) throw new Error("prompt required for code step");
+      const stack = String(step.stack || project.stack);
+      const targetFiles: string[] = Array.isArray(step.saveAs)
+        ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
+        : (step.saveAs ? [String(step.saveAs)] : []);
+      const existingFiles = await dbListFiles(project.id);
+      const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+      const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+      for (const gf of files) {
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: gf.path,
+          content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); }
+        catch {
+          const existing = [...memFiles.values()].find((x) => x.projectId === project.id && x.path === gf.path);
+          if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
+          else memFiles.set(f.id, f);
+        }
+      }
+      return { step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } };
+    }
+    if (type === "image") {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+      const prompt = String(step.prompt || "");
+      if (!prompt) throw new Error("prompt required for image step");
+      const dResp = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
+      });
+      if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
+      const d = await dResp.json() as { data: Array<{ url: string }> };
+      const oaiUrl = d.data?.[0]?.url;
+      if (!oaiUrl) throw new Error("no image url returned");
+      const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
+      const url = permanentUrl || oaiUrl;
+      const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+      const f: DevHubFile = {
+        id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+        content: url, language: detectLanguage(savedAs), updatedAt: now(),
+      };
+      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      return { step: i, type, ok: true, output: { url }, savedAs };
+    }
+    if (type === "tts") {
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+      const text = String(step.text || "");
+      if (!text) throw new Error("text required for tts step");
+      const VOICE_IDS: Record<string, string> = {
+        Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
+        Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
+      };
+      const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+      const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+      });
+      if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+      const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+      const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
+      const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+      if (cdnUrl) {
+        const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: cdnUrl, language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+      }
+      const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+      const f: DevHubFile = {
+        id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+        content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+      };
+      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+    }
+    if (type === "sfx") {
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+      const text = String(step.text || "");
+      if (!text) throw new Error("text required for sfx step");
+      const body: Record<string, unknown> = { text };
+      const dur = Number(step.durationSeconds);
+      if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+      const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+        method: "POST",
+        headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify(body),
+      });
+      if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+      const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+      const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
+      const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+      if (cdnUrl) {
+        const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: cdnUrl, language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+      }
+      const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+      const f: DevHubFile = {
+        id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+        content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+      };
+      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+    }
+    if (type === "music") {
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+      const prompt = String(step.prompt || step.text || "");
+      if (!prompt) throw new Error("prompt required for music step");
+      const body: Record<string, unknown> = { prompt };
+      const lenSec = Number(step.lengthSeconds);
+      if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+        body.music_length_ms = Math.round(lenSec * 1000);
+      }
+      const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+        method: "POST",
+        headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify(body),
+      });
+      if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+      const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+      const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+      const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+      if (cdnUrl) {
+        const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: cdnUrl, language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+      }
+      const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+      const f: DevHubFile = {
+        id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+        content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+      };
+      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+    }
+    return { step: i, type, ok: false, error: `unknown step type: ${type}` };
+  } catch (e: any) {
+    return { step: i, type, ok: false, error: e?.message || "step failed" };
+  }
+}
+
+/** Groups step indices for execution: a "code" step always runs alone (each
+ * one reads dbListFiles fresh, so a later code step must see an earlier
+ * code step's write — they cannot run concurrently with each other). Runs of
+ * consecutive non-code steps (image/tts/sfx/music) are batched together,
+ * since none of them read another step's output — safe to run via
+ * Promise.all instead of paying their latency sequentially. */
+function groupWorkflowSteps(steps: any[]): number[][] {
+  const groups: number[][] = [];
+  let batch: number[] = [];
+  for (let i = 0; i < steps.length; i++) {
+    if (String(steps[i]?.type || "") === "code") {
+      if (batch.length) { groups.push(batch); batch = []; }
+      groups.push([i]);
+    } else {
+      batch.push(i);
+    }
+  }
+  if (batch.length) groups.push(batch);
+  return groups;
+}
+
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
 devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -3221,170 +3419,17 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
   if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "steps array required" });
   if (steps.length > 20) return res.status(400).json({ error: "max 20 steps per workflow" });
 
-  const results: Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }> = [];
-
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    const type = String(step?.type || "");
-    try {
-      if (type === "code") {
-        const prompt = String(step.prompt || "");
-        if (!prompt) throw new Error("prompt required for code step");
-        const stack = String(step.stack || project.stack);
-        const targetFiles: string[] = Array.isArray(step.saveAs)
-          ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
-          : (step.saveAs ? [String(step.saveAs)] : []);
-        const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
-        const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
-        for (const gf of files) {
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
-            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); }
-          catch {
-            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
-            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
-            else memFiles.set(f.id, f);
-          }
-        }
-        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } });
-      } else if (type === "image") {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
-        const prompt = String(step.prompt || "");
-        if (!prompt) throw new Error("prompt required for image step");
-        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
-        });
-        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
-        const d = await dResp.json() as { data: Array<{ url: string }> };
-        const oaiUrl = d.data?.[0]?.url;
-        if (!oaiUrl) throw new Error("no image url returned");
-        // Auto-upload to Cloudflare Images for permanent URL (if env set)
-        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
-        const url = permanentUrl || oaiUrl;
-        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
-        const f: DevHubFile = {
-          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-          content: url, language: detectLanguage(savedAs), updatedAt: now(),
-        };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-        results.push({ step: i, type, ok: true, output: { url }, savedAs });
-      } else if (type === "tts") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const text = String(step.text || "");
-        if (!text) throw new Error("text required for tts step");
-        const VOICE_IDS: Record<string, string> = {
-          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
-          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
-        };
-        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
-        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
-        });
-        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-      } else if (type === "sfx") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const text = String(step.text || "");
-        if (!text) throw new Error("text required for sfx step");
-        const body: Record<string, unknown> = { text };
-        const dur = Number(step.durationSeconds);
-        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
-        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify(body),
-        });
-        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-      } else if (type === "music") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const prompt = String(step.prompt || step.text || "");
-        if (!prompt) throw new Error("prompt required for music step");
-        const body: Record<string, unknown> = { prompt };
-        const lenSec = Number(step.lengthSeconds);
-        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
-          body.music_length_ms = Math.round(lenSec * 1000);
-        }
-        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify(body),
-        });
-        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-      } else {
-        results.push({ step: i, type, ok: false, error: `unknown step type: ${type}` });
-      }
-    } catch (e: any) {
-      results.push({ step: i, type, ok: false, error: e?.message || "step failed" });
+  const results: WorkflowStepResult[] = new Array(steps.length);
+  for (const group of groupWorkflowSteps(steps)) {
+    if (group.length === 1) {
+      const i = group[0];
+      results[i] = await executeWorkflowStep(project, userId, steps[i], i);
+    } else {
+      // Independent non-code steps (image/tts/sfx/music) — none reads
+      // another's output, so run them concurrently instead of paying their
+      // latency one after another.
+      const settled = await Promise.all(group.map((i) => executeWorkflowStep(project, userId, steps[i], i)));
+      for (const r of settled) results[r.step] = r;
     }
   }
 
@@ -3465,175 +3510,25 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
   emit({ type: "start", totalSteps: steps.length });
 
   let okCount = 0;
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    const type = String(step?.type || "");
-    emit({ type: "step-start", index: i, stepType: type });
+  const emitStepDone = (r: WorkflowStepResult) => {
+    emit(r.ok
+      ? { type: "step-done", index: r.step, ok: true, output: r.output, ...(r.savedAs ? { savedAs: r.savedAs } : {}) }
+      : { type: "step-done", index: r.step, ok: false, error: r.error });
+    if (r.ok) okCount++;
+  };
 
-    try {
-      if (type === "code") {
-        const prompt = String(step.prompt || "");
-        if (!prompt) throw new Error("prompt required for code step");
-        const stack = String(step.stack || project.stack);
-        const targetFiles: string[] = Array.isArray(step.saveAs)
-          ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
-          : (step.saveAs ? [String(step.saveAs)] : []);
-        const existingFiles = await dbListFiles(project.id);
-        const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
-        const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
-        for (const gf of files) {
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
-            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); }
-          catch {
-            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
-            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
-            else memFiles.set(f.id, f);
-          }
-        }
-        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } });
-        okCount++;
-      } else if (type === "image") {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
-        const prompt = String(step.prompt || "");
-        if (!prompt) throw new Error("prompt required for image step");
-        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
-        });
-        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
-        const d = await dResp.json() as { data: Array<{ url: string }> };
-        const oaiUrl = d.data?.[0]?.url;
-        if (!oaiUrl) throw new Error("no image url returned");
-        // Auto-upload to Cloudflare Images for permanent URL (if env set)
-        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
-        const url = permanentUrl || oaiUrl;
-        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
-        const f: DevHubFile = {
-          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-          content: url, language: detectLanguage(savedAs), updatedAt: now(),
-        };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-        emit({ type: "step-done", index: i, ok: true, output: { url }, savedAs });
-        okCount++;
-      } else if (type === "tts") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const text = String(step.text || "");
-        if (!text) throw new Error("text required for tts step");
-        const VOICE_IDS: Record<string, string> = {
-          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
-          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
-        };
-        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
-        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
-        });
-        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-        okCount++;
-      } else if (type === "sfx") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const text = String(step.text || "");
-        if (!text) throw new Error("text required for sfx step");
-        const body: Record<string, unknown> = { text };
-        const dur = Number(step.durationSeconds);
-        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
-        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify(body),
-        });
-        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-        okCount++;
-      } else if (type === "music") {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
-        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-        const prompt = String(step.prompt || step.text || "");
-        if (!prompt) throw new Error("prompt required for music step");
-        const body: Record<string, unknown> = { prompt };
-        const lenSec = Number(step.lengthSeconds);
-        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
-          body.music_length_ms = Math.round(lenSec * 1000);
-        }
-        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify(body),
-        });
-        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
-        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
-        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
-        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
-        if (cdnUrl) {
-          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: cdnUrl, language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
-        } else {
-          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
-          const f: DevHubFile = {
-            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-          };
-          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
-        }
-        okCount++;
-      } else {
-        emit({ type: "step-done", index: i, ok: false, error: `unknown step type: ${type}` });
-      }
-    } catch (e: any) {
-      emit({ type: "step-done", index: i, ok: false, error: e?.message || "step failed" });
+  for (const group of groupWorkflowSteps(steps)) {
+    group.forEach((i) => emit({ type: "step-start", index: i, stepType: String(steps[i]?.type || "") }));
+    if (group.length === 1) {
+      const i = group[0];
+      emitStepDone(await executeWorkflowStep(project, userId, steps[i], i));
+    } else {
+      // Independent non-code steps — emit each step-done the moment IT
+      // finishes rather than waiting for the whole batch, so the client sees
+      // genuinely concurrent progress instead of a fake sequential trickle.
+      await Promise.all(group.map((i) =>
+        executeWorkflowStep(project, userId, steps[i], i).then(emitStepDone)
+      ));
     }
   }
 

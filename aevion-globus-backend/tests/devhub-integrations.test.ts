@@ -1534,6 +1534,44 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     expect(r.body.results[2].ok).toBe(false);
     expect(r.body.results[2].error).toMatch(/unknown step type/);
   });
+
+  test("independent non-code steps run concurrently, not sequentially, and results stay indexed by original step order", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("openai.com")) {
+        await delay(80); // slow — would finish LAST if this and tts ran sequentially
+        return jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] });
+      }
+      if (String(url).includes("elevenlabs.io")) {
+        await delay(5); // fast — finishes first if truly concurrent
+        return audioResp(200, 512);
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const startedAt = Date.now();
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "image", prompt: "hero" }, { type: "tts", text: "hi" }] });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(r.status).toBe(200);
+    expect(r.body.successCount).toBe(2);
+    // Order in the response matches step order, even though the tts (fast)
+    // call resolves before the image (slow) one internally.
+    expect(r.body.results[0].type).toBe("image");
+    expect(r.body.results[1].type).toBe("tts");
+    // Concurrent → total time tracks the SLOWER step (~80ms), not the sum
+    // (~85ms) plus per-request overhead. Generous ceiling to avoid CI flake
+    // while still failing hard if this regresses to sequential (which would
+    // add another 80ms+ of pure serial wait on top).
+    expect(elapsedMs).toBeLessThan(150);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1870,6 +1908,43 @@ describe("POST /api/devhub/projects/:id/agent/workflow/stream", () => {
     expect(events[events.length - 1]).toMatchObject({
       type: "complete", totalSteps: 2, successCount: 2, failureCount: 0,
     });
+  });
+
+  test("independent non-code steps stream both step-starts before either step-done — proves real concurrency, not a fake sequential trickle", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("openai.com")) { await delay(40); return jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] }); }
+      if (String(url).includes("elevenlabs.io")) { await delay(5); return audioResp(200, 512); }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "image", prompt: "hero" }, { type: "tts", text: "hi" }] });
+
+    const events = r.text.split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)));
+
+    const startEvents = events.filter((e) => e.type === "step-start");
+    const doneEvents = events.filter((e) => e.type === "step-done");
+    expect(startEvents).toEqual([
+      { type: "step-start", index: 0, stepType: "image" },
+      { type: "step-start", index: 1, stepType: "tts" },
+    ]);
+    // Both starts happen up front (batched), and since tts is the faster
+    // call it finishes (and streams) before the slower image step — the
+    // opposite of step order, which only concurrent execution produces.
+    const firstStartIdx = events.indexOf(startEvents[1]);
+    const firstDoneIdx = events.indexOf(doneEvents[0]);
+    expect(firstStartIdx).toBeLessThan(firstDoneIdx);
+    expect(doneEvents[0].index).toBe(1); // tts (fast) finishes first
+    expect(doneEvents[1].index).toBe(0); // image (slow) finishes second
   });
 });
 

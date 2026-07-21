@@ -40,6 +40,7 @@ export interface Strategy {
   returns: { baseMoic: number; lossProbability: number; expectedMoic: number; targetIrrPct: number; horizonYears: number };
   portfolioNote: string;
   reasoning: string[];
+  reEntryConditions?: string[];
 }
 
 export interface SectorSource {
@@ -206,10 +207,28 @@ export function StrategyPanel({ s }: { s: Strategy }) {
       {sub && <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 1 }}>{sub}</div>}
     </div>
   );
+  // On a pass the sizing grid is a reference for a hypothetical re-score, not a
+  // recommendation — label it so, and lead with what would have to change instead.
+  const isPass = s.verdict === "pass";
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
-        {cell("Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
+      {isPass && s.reEntryConditions && s.reEntryConditions.length > 0 && (
+        <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 6 }}>
+            Not investable as presented — what would have to change
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+            {s.reEntryConditions.map((c, i) => <li key={i} style={{ marginBottom: 3 }}>{c}</li>)}
+          </ol>
+        </div>
+      )}
+      {isPass && (
+        <div style={{ fontSize: 12, color: "#92400e", marginBottom: 8 }}>
+          The figures below are the terms this deal would have to earn on a re-score — not an offer.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14, opacity: isPass ? 0.62 : 1 }}>
+        {cell(isPass ? "Ticket (indicative)" : "Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
         {cell("Target ownership", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
         {cell("Valuation (pre)", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
         {cell("Expected return", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
@@ -226,7 +245,11 @@ export function StrategyPanel({ s }: { s: Strategy }) {
           ))}
         </div>
       </div>
-      <div style={{ fontSize: 13, color: "#334155", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px" }}>
+      <div style={{
+        fontSize: 13, color: "#334155", borderRadius: 10, padding: "10px 14px",
+        background: isPass ? "#fffbeb" : "#f0fdf4",
+        border: `1px solid ${isPass ? "#fde68a" : "#bbf7d0"}`,
+      }}>
         <strong>Portfolio:</strong> {s.portfolioNote}
       </div>
     </div>

@@ -62,6 +62,8 @@ export interface EntryStrategy {
   };
   portfolioNote: string;
   reasoning: string[];
+  /** Only set on a "pass": what must change before this deal is worth re-opening. */
+  reEntryConditions?: string[];
 }
 
 export interface AnalysisResult {
@@ -430,7 +432,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     redFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
   }
 
-  const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput });
+  const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput, factors, redFlags });
 
   const citedSource = sector.sources[0];
   const assumptions = [
@@ -453,8 +455,9 @@ function buildStrategy(args: {
   composite: number; stage: Stage;
   norms: (typeof STAGE_NORMS)[Stage];
   sector: SectorProfile; input: AnalysisInput;
+  factors: ScoreFactor[]; redFlags: string[];
 }): EntryStrategy {
-  const { composite, stage, norms, sector, input } = args;
+  const { composite, stage, norms, sector, input, factors, redFlags } = args;
 
   const verdict: EntryStrategy["verdict"] = composite >= 72 ? "invest" : composite >= 55 ? "watch" : "pass";
   const conviction: EntryStrategy["conviction"] = composite >= 78 ? "high" : composite >= 62 ? "medium" : "low";
@@ -510,16 +513,31 @@ function buildStrategy(args: {
     ? `Pass for now. If re-scored ≥55 after new traction, size at ~${portfolioPct}% of a diversified venture book — never single-name concentration at this stage.`
     : `Size at ~${portfolioPct}% of a diversified venture portfolio (fractional-Kelly, conviction-scaled). Reserve ${round(ticketUsd.target * 1.5, 0).toLocaleString("en-US")} USD for pro-rata follow-on.`;
 
+  // On a pass the cheque size is not the decision — what would have to change is.
+  // Naming a ticket for a deal you are declining reads as a recommendation, so
+  // that line is replaced with the gap that has to close first.
+  const gapPoints = round(55 - composite, 1);
+  const weakest = [...factors].sort((a, b) => a.score - b.score).slice(0, 3);
+  const reEntryConditions = verdict !== "pass" ? undefined : [
+    `Re-score must reach 55 — currently ${composite}, a ${gapPoints}-point gap.`,
+    ...weakest.map((f) => `Lift "${f.label}" (${f.score}/100, ${Math.round(f.weight * 100)}% of the score): ${f.rationale}`),
+    ...redFlags.slice(0, 3).map((r) => `Resolve or disprove: ${r}`),
+    `Bring evidence, not narrative — the score only moves on disclosed, checkable metrics.`,
+  ];
+
   const reasoning = [
     `Composite ${composite}/100 → verdict "${verdict.toUpperCase()}" (${conviction} conviction).`,
     `Valuation anchor: ~$${(valuationBandUsd.base / 1e6).toFixed(1)}M pre-money base case for a ${stage} ${sector.label} deal.`,
-    `Lead with $${targetTicket.toLocaleString("en-US")} for ~${ownershipTargetPct}% target ownership; cap exposure at $${ticketUsd.max.toLocaleString("en-US")}.`,
+    verdict === "pass"
+      ? `No ticket recommended. The figures below are the terms this deal would have to earn on a re-score, not an offer.`
+      : `Lead with $${targetTicket.toLocaleString("en-US")} for ~${ownershipTargetPct}% target ownership; cap exposure at $${ticketUsd.max.toLocaleString("en-US")}.`,
     `Base-case ${baseMoic}x on success; probability-weighted ${expectedMoic}x after a ${round(lossProbability * 100)}% loss rate → ~${targetIrrPct}% target IRR over ${norms.horizonYears}yr.`,
   ];
 
   return {
     verdict, conviction, ticketUsd, valuationBandUsd, ownershipTargetPct,
     tranches, returns, portfolioNote, reasoning,
+    ...(reEntryConditions ? { reEntryConditions } : {}),
   };
 }
 

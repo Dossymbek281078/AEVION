@@ -2366,6 +2366,13 @@ export const translations = {
     "constitution.pricing.waitlist.subscribe": "Subscribe →",
     "constitution.pricing.waitlist.done": "✓ Done. A confirmation email will arrive in a minute or two.",
     "constitution.pricing.waitlist.close": "Okay, close",
+    /* Constitution — batch i18n rollout */
+    "constitution.blog.post.openSimulator": "→ Open the simulator",
+    "constitution.blog.post.takeAcademy": "→ Take Academy",
+    "constitution.blog.post.othersScenarios": "→ Others' scenarios",
+    "constitution.status.pingSubtitle": "6 endpoints · ping every 30s · auto-refresh 30s",
+    "constitution.status.loading": "Loading…",
+    "constitution.status.footer": "In-memory ring buffer (last 5000 pings per service) + Postgres when available. Checks target the Railway instance, not the Vercel edge.",
   },
 
   ru: {
@@ -4532,6 +4539,13 @@ export const translations = {
     "constitution.pricing.waitlist.subscribe": "Подписаться →",
     "constitution.pricing.waitlist.done": "✓ Готово. Письмо с подтверждением придёт через минуту-две.",
     "constitution.pricing.waitlist.close": "Окей, закрыть",
+    /* Constitution — batch i18n rollout */
+    "constitution.blog.post.openSimulator": "→ Открыть симулятор",
+    "constitution.blog.post.takeAcademy": "→ Пройти Academy",
+    "constitution.blog.post.othersScenarios": "→ Чужие сценарии",
+    "constitution.status.pingSubtitle": "6 endpoints · ping каждые 30с · auto-refresh 30с",
+    "constitution.status.loading": "Загрузка…",
+    "constitution.status.footer": "In-memory ring buffer (last 5000 pings per service) + Postgres когда доступен. Checks target Railway instance, not Vercel edge.",
   },
 
   kk: {
@@ -6690,6 +6704,13 @@ export const translations = {
     "constitution.pricing.waitlist.subscribe": "Жазылу →",
     "constitution.pricing.waitlist.done": "✓ Дайын. Растау хаты бір-екі минутта келеді.",
     "constitution.pricing.waitlist.close": "Жарайды, жабу",
+    /* Constitution — batch i18n rollout */
+    "constitution.blog.post.openSimulator": "→ Симуляторды ашу",
+    "constitution.blog.post.takeAcademy": "→ Academy-ден өту",
+    "constitution.blog.post.othersScenarios": "→ Басқалардың сценарийлері",
+    "constitution.status.pingSubtitle": "6 endpoint · әр 30 секунд сайын ping · auto-refresh 30с",
+    "constitution.status.loading": "Жүктелуде…",
+    "constitution.status.footer": "In-memory ring buffer (әр қызмет үшін соңғы 5000 ping) + қолжетімді болғанда Postgres. Тексерулер Vercel edge-ті емес, Railway instance-ті нысанаға алады.",
   },
 };
 

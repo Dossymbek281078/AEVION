@@ -26,20 +26,13 @@ import {
 } from "@/lib/constitution";
 
 type TourStep = {
-  era: string;
-  year: string;
-  title: string;
-  narrative: string;
+  // era/year/title/narrative text lives in i18n-data.ts under
+  // "constitution.tour.<index>.*" — looked up via t() at render time.
   sliders: Sliders;
 };
 
 const TOUR: TourStep[] = [
   {
-    era: "Феодализм",
-    year: "≈1200",
-    title: "Точка отсчёта",
-    narrative:
-      "Власть наследственная, закон формальный — для бедных одно, для знати другое. Низ привязан к земле. Бунт раз в поколение, обычно ничего не меняет. Пирог не растёт. Силуэт — узкий шип по skin-in-the-game и полицентричности (каждый барон сам себе король), всё остальное в подвале.",
     sliders: {
       floor: 15,
       ruleOfLaw: 35,
@@ -52,11 +45,6 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Магна Карта + ранние парламенты",
-    year: "1215–1700",
-    title: "Закон начинает связывать верх",
-    narrative:
-      "Король впервые обязан жить по правилам — Magna Carta 1215, потом английский Habeas Corpus, потом Голландия с её регентами. Сословные собрания превращаются в зачатки парламента. Это первый и главный сдвиг: закон поднимается над верховной властью. Ползунок ruleOfLaw +15.",
     sliders: {
       floor: 18,
       ruleOfLaw: 50,
@@ -69,11 +57,6 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Промышленная революция",
-    year: "1750–1850",
-    title: "Пирог начинает расти",
-    narrative:
-      "Впервые в истории экономика растёт быстрее, чем население. Появляется буржуа — новая ось статуса, не наследственная. Города накапливают капитал и автономию. positiveSum +25 — главное событие модерна. Без растущего пирога ни одна следующая реформа не была бы политически возможной.",
     sliders: {
       floor: 22,
       ruleOfLaw: 55,
@@ -86,11 +69,6 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Всеобщее избирательное право",
-    year: "1900–1950",
-    title: "Низ получает голос",
-    narrative:
-      "Сначала мужчины без ценза, потом женщины. Жребий старых афинян возвращается в виде регулярных выборов и парламентской ротации. Закон постепенно становится одинаковым для всех — это уже Acemoglu/Robinson «inclusive institutions». rotation +20, ruleOfLaw +15.",
     sliders: {
       floor: 35,
       ruleOfLaw: 70,
@@ -103,11 +81,6 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Послевоенный социал-контракт",
-    year: "1945–1980",
-    title: "Появляется пол снизу",
-    narrative:
-      "Бесплатное образование, всеобщая медицина, пенсии, пособия. Большой шаг: низ перестаёт быть прижатым к стене → исчезает экзистенциальная мотивация отнимать. Прозрачность государства растёт — налоговые системы, бюджеты. Несколько осей статуса легитимны. floor +30 — самое дорогое и самое стабилизирующее изменение.",
     sliders: {
       floor: 65,
       ruleOfLaw: 80,
@@ -120,11 +93,6 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Цифровая прозрачность + Open Access",
-    year: "2000-сейчас (и дальше)",
-    title: "Все четыре опоры собраны",
-    narrative:
-      "Открытые декларации, доступ к данным, портабельные права, конкуренция юрисдикций. Полная картина по North/Wallis/Weingast: положительная сумма + закон над верхом + пол снизу + множественные статусы + ротация + прозрачность. Силуэт превращается в почти правильный восьмиугольник большого радиуса. Элита больше не боится низа — между ними правила и общий растущий пирог. Это путь, который прошли скандинавы, частично прошли континентальная Европа и Канада. Открытый вопрос — устойчиво ли это в кризис.",
     sliders: {
       floor: 75,
       ruleOfLaw: 85,
@@ -150,8 +118,8 @@ type ShockId = "war" | "pandemic" | "crisis" | "tech";
 type Shock = {
   id: ShockId;
   icon: string;
-  name: string;
-  desc: string;
+  // name/desc text lives in i18n-data.ts under "constitution.shock.<id>.*"
+  // — looked up via t() at render time.
   delta: Partial<Record<keyof Sliders, number>>;
 };
 
@@ -159,8 +127,6 @@ const SHOCKS: Shock[] = [
   {
     id: "war",
     icon: "🪖",
-    name: "Война",
-    desc: "Концентрация власти, цензура, мобилизация. Ломает прозрачность и полицентричность.",
     delta: {
       transparency: -30,
       multiStatus: -25,
@@ -175,8 +141,6 @@ const SHOCKS: Shock[] = [
   {
     id: "pandemic",
     icon: "🦠",
-    name: "Пандемия",
-    desc: "Чрезвычайные полномочия центра, режут локальную автономию и плюрализм статусов.",
     delta: {
       polycentricity: -20,
       multiStatus: -15,
@@ -189,8 +153,6 @@ const SHOCKS: Shock[] = [
   {
     id: "crisis",
     icon: "💸",
-    name: "Финансовый кризис",
-    desc: "Пирог резко сжимается. Падают пол снизу и доверие. Возрастает напряжение.",
     delta: {
       positiveSum: -35,
       floor: -15,
@@ -202,8 +164,6 @@ const SHOCKS: Shock[] = [
   {
     id: "tech",
     icon: "🚀",
-    name: "Техскачок",
-    desc: "Растёт пирог и децентрализация, но регуляция отстаёт и неравенство растёт.",
     delta: {
       positiveSum: +30,
       polycentricity: +15,
@@ -1203,7 +1163,7 @@ export default function ConstitutionPage() {
           <WorldMapScatter
             sliders={sliders}
             shockedSliders={shockedSliders}
-            shockLabel={activeShockObj ? `${activeShockObj.icon} ${activeShockObj.name}` : null}
+            shockLabel={activeShockObj ? `${activeShockObj.icon} ${t(`constitution.shock.${activeShockObj.id}.name`)}` : null}
           />
         </section>
 

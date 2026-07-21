@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 type Bucket = { t: string; avgMs: number; ok: boolean };
 type Service = {
@@ -54,6 +55,7 @@ function Sparkline({ data }: { data: Bucket[] }) {
 }
 
 export default function ConstitutionStatusPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -95,11 +97,11 @@ export default function ConstitutionStatusPage() {
             </div>
           )}
           <p className="text-[#9aa3c0] text-xs mt-2">
-            6 endpoints · ping каждые 30с · auto-refresh 30с
+            {t("constitution.status.pingSubtitle")}
           </p>
         </header>
 
-        {loading && <div className="text-center text-[#9aa3c0] py-8">Загрузка…</div>}
+        {loading && <div className="text-center text-[#9aa3c0] py-8">{t("constitution.status.loading")}</div>}
 
         {data && (
           <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl overflow-hidden">
@@ -156,8 +158,7 @@ export default function ConstitutionStatusPage() {
         )}
 
         <footer className="mt-6 text-xs text-[#9aa3c0] text-center">
-          In-memory ring buffer (last 5000 pings per service) + Postgres когда доступен.
-          Checks target Railway instance, not Vercel edge.
+          {t("constitution.status.footer")}
         </footer>
       </div>
     </div>

@@ -31,6 +31,17 @@ const NEGATORS = [
 /** How far back to look for a negator, in characters. */
 const LOOKBEHIND = 40;
 
+/**
+ * A contrastive conjunction closes the negation it follows: in "no revenue yet,
+ * but revenue starts in Q3" the second clause is a claim, not part of the denial.
+ *
+ * Without this the scope ended only at the lookbehind limit, so whether a claim
+ * survived depended on how many words sat between the denial and it — "no revenue
+ * in year one, but revenue reached $40k" was credited while the shorter "no
+ * revenue yet, but revenue starts in Q3" was not. Length is not meaning.
+ */
+const CONTRAST_RE = /\b(but|however|although|though|whereas|nevertheless|instead)\b/gi;
+
 const NEGATOR_RE = new RegExp(
   String.raw`\b(${NEGATORS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\b[^.;!?]{0,30}$`,
   "i"
@@ -49,7 +60,14 @@ export function mentionsUnnegated(text: string, pattern: RegExp): boolean {
   const re = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
   for (const m of text.matchAll(re)) {
     if (m.index === undefined) continue;
-    const before = text.slice(Math.max(0, m.index - LOOKBEHIND), m.index);
+    let before = text.slice(Math.max(0, m.index - LOOKBEHIND), m.index);
+    // Keep only what follows the last contrastive turn — anything before it
+    // belongs to the clause being contradicted, not to this claim.
+    const contrasts = [...before.matchAll(CONTRAST_RE)];
+    const lastContrast = contrasts[contrasts.length - 1];
+    if (lastContrast?.index !== undefined) {
+      before = before.slice(lastContrast.index + lastContrast[0].length);
+    }
     if (!NEGATOR_RE.test(before)) return true;
   }
   return false;

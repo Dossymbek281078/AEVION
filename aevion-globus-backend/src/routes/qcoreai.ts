@@ -17,7 +17,7 @@ import {
   type Provider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
-import { providerHealthSummary, latencySummary } from "../services/qcoreai/providerHealth";
+import { providerHealthSummary, latencySummary, providerLatencySummary } from "../services/qcoreai/providerHealth";
 import { getModelPrice, type UsdPer1M } from "../services/qcoreai/pricing";
 import {
   runMultiAgent,
@@ -6012,7 +6012,10 @@ qcoreaiRouter.get("/providers/health", async (_req, res) => {
       // this ping) -- a provider can ping "ok" right now yet have been
       // flaky across actual usage this session, or vice-versa.
       const { score: sessionHealthScore, samples: sessionSamples } = providerHealthSummary(p.id);
-      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString(), sessionHealthScore, sessionSamples };
+      // Median full-request latency over this instance's real (non-ping)
+      // successful calls -- a steadier speed signal than the single ping above.
+      const { p50Ms: sessionLatencyP50Ms, samples: sessionLatencySamples } = providerLatencySummary(p.id);
+      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString(), sessionHealthScore, sessionSamples, sessionLatencyP50Ms, sessionLatencySamples };
       providerHealthCache.set(p.id, { result, cachedAt: now });
       return result;
     })

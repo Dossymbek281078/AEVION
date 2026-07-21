@@ -11,6 +11,7 @@ vi.mock("../src/lib/dbPool", () => ({
 import {
   recordOutcome,
   latencySummary,
+  providerLatencySummary,
   healthScore,
   resetProviderHealth,
 } from "../src/services/qcoreai/providerHealth";
@@ -44,5 +45,15 @@ describe("providerHealth latency tracking", () => {
 
   test("unknown pair is neutral: no samples, null p50", () => {
     expect(latencySummary("grok", "grok-3")).toEqual({ p50Ms: null, samples: 0 });
+  });
+
+  test("providerLatencySummary pools timed samples across models", () => {
+    recordOutcome("gemini", "gemini-2.5-flash", true, 1000);
+    recordOutcome("gemini", "gemini-2.5-pro", true, 3000);
+    recordOutcome("gemini", "gemini-2.5-flash", true, 2000);
+    recordOutcome("gemini", "gemini-2.5-pro", false, 9000); // failure ignored
+    expect(providerLatencySummary("gemini")).toEqual({ p50Ms: 2000, samples: 3 });
+    // Provider prefix must not leak into look-alike names.
+    expect(providerLatencySummary("gem")).toEqual({ p50Ms: null, samples: 0 });
   });
 });

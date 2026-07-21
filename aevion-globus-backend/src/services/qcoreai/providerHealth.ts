@@ -82,11 +82,22 @@ let hydrated = false;
 /** Warm-start the in-memory map from the durable log's last WINDOW rows per
  *  pair. Runs once, kicked off (fire-and-forget) at module load; anything
  *  read before it resolves just sees the neutral default. */
+const PRUNE_DAYS = 30;
+
 async function hydrate(): Promise<void> {
   if (hydrated) return;
   hydrated = true;
   try {
     if (!(await ensureTable())) return;
+    // Boot-time prune: hydration only ever reads the last WINDOW rows per
+    // pair, so anything older than PRUNE_DAYS is dead weight. Best-effort,
+    // before the read so a long-running deployment's backlog doesn't slow
+    // the window query down forever.
+    try {
+      await getPool().query(`DELETE FROM "provider_health_log" WHERE "ts" < NOW() - INTERVAL '${PRUNE_DAYS} days'`);
+    } catch {
+      /* best-effort — skip pruning on any failure */
+    }
     const result = await getPool().query(`
       SELECT provider, model, ok, ms FROM (
         SELECT provider, model, ok, ms, ts,
@@ -143,6 +154,27 @@ export function latencySummary(
 ): { p50Ms: number | null; samples: number } {
   const list = outcomes.get(key(provider, model)) ?? [];
   const ms = list.filter((o) => o.ok && typeof o.ms === "number").map((o) => o.ms as number);
+  if (ms.length < minSamples) return { p50Ms: null, samples: ms.length };
+  const sorted = [...ms].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const p50 = sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  return { p50Ms: p50, samples: ms.length };
+}
+
+/** Provider-level median latency across every model tracked for one provider
+ *  (pooled successful timed samples), or null under `minSamples` — the
+ *  per-provider companion to latencySummary() for surfaces that only ask
+ *  per-provider (e.g. /providers/health). */
+export function providerLatencySummary(
+  provider: string,
+  minSamples = 3
+): { p50Ms: number | null; samples: number } {
+  const prefix = `${provider}:`;
+  const ms: number[] = [];
+  for (const [k, list] of outcomes) {
+    if (!k.startsWith(prefix)) continue;
+    for (const o of list) if (o.ok && typeof o.ms === "number") ms.push(o.ms);
+  }
   if (ms.length < minSamples) return { p50Ms: null, samples: ms.length };
   const sorted = [...ms].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);

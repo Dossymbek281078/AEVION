@@ -47,6 +47,10 @@ type ProviderLiveStatus = {
    *  is just a synthetic "Say: OK" ping. 1 = healthy or no data yet. */
   sessionHealthScore?: number;
   sessionSamples?: number;
+  /** Median full-request latency over real successful non-streaming calls
+   *  this instance has made (null under 3 samples). */
+  sessionLatencyP50Ms?: number | null;
+  sessionLatencySamples?: number;
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -201,6 +205,14 @@ export default function ProvidersPage() {
                           {sessionPct}% session
                         </span>
                       )}
+                      {typeof s.sessionLatencyP50Ms === "number" && (
+                        <span
+                          title={`Median full-request latency over ${s.sessionLatencySamples} real successful calls this session (not this ping)`}
+                          style={{ fontSize: 10, fontWeight: 700, color: "#0284c7", borderLeft: "1px solid #e2e8f0", paddingLeft: 8 }}
+                        >
+                          ⏱ {(s.sessionLatencyP50Ms / 1000).toFixed(1)}s
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -260,6 +272,14 @@ export default function ProvidersPage() {
                                 style={{ color: sessionColor, fontWeight: 700 }}
                               >
                                 {sessionPct}%↺
+                              </span>
+                            )}
+                            {typeof live.sessionLatencyP50Ms === "number" && (
+                              <span
+                                title={`Median latency over ${live.sessionLatencySamples} real successful calls this session`}
+                                style={{ color: "#0284c7", fontWeight: 700 }}
+                              >
+                                ⏱{(live.sessionLatencyP50Ms / 1000).toFixed(1)}s
                               </span>
                             )}
                           </span>

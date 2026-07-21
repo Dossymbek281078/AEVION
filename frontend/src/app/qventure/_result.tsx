@@ -145,24 +145,29 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
   );
 }
 
-// Provenance of the composite score: how much of it reflects THIS startup's own
-// disclosed evidence vs. sector-level priors. Only the execution factor is scored
-// from the founder's traction input; the other seven are sector-benchmark derived
-// (from SectorProfile, which carries cited sources). Honest by the engine's design.
+// Provenance of the composite: how much of it rests on this startup's own
+// disclosed evidence rather than sector priors.
+//
+// This used to infer provenance by string-matching the rationale text for
+// "cited" / "no traction", and to assume exactly one factor could ever come from
+// the founder. Both had gone stale: a submission with real metrics produces
+// "Quantified traction: $12M revenue…", which contains none of those words and so
+// was miscounted as a sector benchmark — and market, moat and economics can all
+// be company-scored when the plan discloses figures. The engine now states the
+// provenance of each factor directly, so read that instead of guessing from prose.
 export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
   let measured = 0, derived = 0, guessed = 0;
   for (const f of factors) {
-    if (f.key === "execution") {
-      const r = f.rationale.toLowerCase();
-      if (r.includes("cited")) measured++;               // founder cited concrete metrics
-      else if (r.includes("no traction") || r.includes("unproven")) guessed++;
-      else derived++;                                     // qualitative traction only
-    } else {
-      derived++;                                          // sector benchmark (sourced)
+    // Records predating the basis field fall back to sector-benchmark, which is
+    // what five of eight factors always were.
+    switch (f.basis ?? "sector-prior") {
+      case "company-evidence": measured++; break;
+      case "no-evidence": guessed++; break;
+      default: derived++; break;
     }
   }
   return dataQualityFromCounts(measured, derived, guessed, {
-    source: "QVenture engine — 1 execution factor from startup input, 7 from sector benchmarks",
+    source: `QVenture engine — ${measured} of ${factors.length} factors scored from this startup's disclosed metrics, the rest from sector benchmarks`,
     note: "из данных стартапа — фактор оценён по раскрытым метрикам основателя; секторный бенчмарк — из отраслевых норм (с источниками); нет данных — трэкшн не раскрыт. Скор — секторный скрининг, не глубокий DD.",
   });
 }

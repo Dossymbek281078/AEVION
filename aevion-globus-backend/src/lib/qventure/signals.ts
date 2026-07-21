@@ -16,6 +16,9 @@
  * score is company-specific vs sector-derived (surfaced as signal coverage).
  */
 
+import { mentionsUnnegated } from "../textNegation";
+
+
 export interface PlanSignals {
   revenueUsd: number | null;
   /** How revenue was stated (MRR is annualized ×12 into revenueUsd). */
@@ -229,7 +232,9 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
 
   // ── Patents / proprietary IP ──
-  s.mentionsPatent = /\b(patent|patented|proprietary technology|proprietary algorithm|patent[- ]pending)\b/i.test(t);
+  // "We have no patents and no proprietary technology" used to set this true,
+  // and the engine then credited +0.1 moat realization for the patents it denied.
+  s.mentionsPatent = mentionsUnnegated(t, /(patent|patented|proprietary technology|proprietary algorithm|patent[- ]pending)/i);
 
   // ── Count concrete quantitative fields for coverage ──
   const quant: Array<number | null> = [

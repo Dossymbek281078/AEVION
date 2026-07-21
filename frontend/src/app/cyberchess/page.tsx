@@ -520,8 +520,63 @@ function loadResume():ResumeSnap|null{try{const s=localStorage.getItem(RSK);if(!
 function saveResume(s:ResumeSnap){try{localStorage.setItem(RSK,JSON.stringify(s))}catch{}}
 function clearResume(){try{localStorage.removeItem(RSK)}catch{}}
 
-/* ═══ Timer ═══ */
-function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini]),setTime:useCallback((v:number)=>sT(v),[])}}
+/* ═══ Timer ═══
+   Deadline-ref model (same technique as the puzzle countdown, see pzDeadlineRef)
+   instead of a per-second `useState`. The old version called `setState` every
+   1000ms from inside the interval, which — since useTimer is invoked twice
+   directly inside the ~14k-line CyberChessPage body (pT/aT) — forced a full
+   re-render of the whole page once a second for the ENTIRE duration of every
+   timed game, not just an optional mode like puzzles. Consumers that need a
+   live-updating display now read `getSeconds()` themselves (TurnClock polls it
+   locally; the two inline board/HUD readouts paint imperatively via refs) —
+   nothing here calls setState on a tick, only on the rare explicit events
+   (reset/addInc/setTime/ini change). */
+function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){
+  const deadlineRef=useRef<number>(0); // >0 while ticking: Date.now() deadline; 0 while paused/stopped
+  const remainingRef=useRef<number>(ini); // authoritative seconds while paused/stopped
+  const intervalRef=useRef<ReturnType<typeof setInterval>|null>(null);
+  const onTRef=useRef(onT);
+  onTRef.current=onT;
+
+  const getSeconds=useCallback(():number=>{
+    if(deadlineRef.current<=0)return remainingRef.current;
+    return Math.max(0,(deadlineRef.current-Date.now())/1000);
+  },[]);
+
+  useEffect(()=>{remainingRef.current=ini;deadlineRef.current=0;},[ini]);
+
+  useEffect(()=>{
+    if(intervalRef.current){clearInterval(intervalRef.current);intervalRef.current=null;}
+    if(act&&ini>0){
+      deadlineRef.current=Date.now()+remainingRef.current*1000;
+      intervalRef.current=setInterval(()=>{
+        if(getSeconds()<=0){
+          if(intervalRef.current){clearInterval(intervalRef.current);intervalRef.current=null;}
+          deadlineRef.current=0;remainingRef.current=0;
+          onTRef.current();
+        }
+      },200);
+    }else{
+      remainingRef.current=getSeconds();
+      deadlineRef.current=0;
+    }
+    return()=>{if(intervalRef.current){clearInterval(intervalRef.current);intervalRef.current=null;}};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[act,ini>0]);
+
+  return{
+    getSeconds,
+    addInc:useCallback(()=>{
+      if(inc<=0)return;
+      if(deadlineRef.current>0)deadlineRef.current+=inc*1000;else remainingRef.current+=inc;
+    },[inc]),
+    reset:useCallback(()=>{remainingRef.current=ini;deadlineRef.current=0;},[ini]),
+    setTime:useCallback((v:number)=>{
+      remainingRef.current=v;
+      if(deadlineRef.current>0)deadlineRef.current=Date.now()+v*1000;
+    },[]),
+  };
+}
 function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`}
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
@@ -2360,7 +2415,7 @@ export default function CyberChessPage(){
     if(boost<=0)return;
     if(timeBoostAppliedRef.current===bk)return;
     timeBoostAppliedRef.current=bk;
-    pT.setTime(pT.time+boost);
+    pT.setTime(pT.getSeconds()+boost);
     sChessy(c=>({...c,ach:{...c.ach,time_boost:0}}));
     showToast(`⏱ +${boost}s времени применено`,"success");
   },[setup,on,hist.length,bk,chessy.ach,pT,showToast]);
@@ -4032,7 +4087,7 @@ export default function CyberChessPage(){
   /* ── Autosave in-progress game ── */
   useEffect(()=>{
     if(tab!=="play"||!on||over||setup||hist.length===0)return;
-    const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:pT.time,timeA:aT.time,capW,capB,ts:Date.now()};
+    const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:Math.round(pT.getSeconds()),timeA:Math.round(aT.getSeconds()),capW,capB,ts:Date.now()};
     saveResume(snap);
   },[bk,tab,on,over,setup,hist.length]);
   useEffect(()=>{if(over)clearResume()},[over]);
@@ -5294,6 +5349,31 @@ export default function CyberChessPage(){
   const ghostSizeRef = _bi.ghostSizeRef;
   const ghostFrom = _bi.ghostFrom;
   const dragHover = _bi.dragHover;
+
+  // Board low-time glow + bottom digital clock readout — painted imperatively
+  // from pT.getSeconds() so the once-a-second tick (see useTimer above) never
+  // forces a re-render of this component; only these two DOM nodes are touched.
+  const bottomClockElRef=useRef<HTMLDivElement|null>(null);
+  const paintPlayerClock=useCallback(()=>{
+    const secs=Math.max(0,Math.ceil(pT.getSeconds()));
+    const active=myT&&on&&!over&&tc.ini>0;
+    const low=active&&secs<30&&secs>0;
+    const boardEl=boardRef.current;
+    if(boardEl)boardEl.classList.toggle("cc-clock-pressure",low);
+    const clockEl=bottomClockElRef.current;
+    if(clockEl){
+      clockEl.textContent=fmt(secs);
+      clockEl.style.color=low?"#e04040":active?CC.brand:CC.textMute;
+      clockEl.style.background=active?"rgba(255,255,255,0.04)":"transparent";
+      clockEl.style.animation=low?"cc-clock-pulse 1s ease-in-out infinite":"";
+    }
+  },[pT,myT,on,over,tc.ini,boardRef,CC.brand,CC.textMute]);
+  useEffect(()=>{
+    paintPlayerClock();
+    if(!(on&&!over&&tc.ini>0))return;
+    const iv=setInterval(paintPlayerClock,250);
+    return()=>clearInterval(iv);
+  },[on,over,tc.ini,paintPlayerClock]);
   const recentDragRef = _bi.recentDragRef;
   const bDownHandledRef = _bi.bDownHandledRef;
   const onBoardDown = _bi.onBoardDown;
@@ -6863,7 +6943,7 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
+            const PRow=({isAI,getSeconds,isActive,captures,advantage}:{isAI:boolean;getSeconds:()=>number;isActive:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
               return <div style={{
@@ -6906,18 +6986,15 @@ export default function CyberChessPage(){
                   </div>
                 </div>
                 {/* Realtime turn clock — circular ring + sub-second tick + 3-color zones */}
-                {tc.ini>0&&<TurnClock time={time} ini={tc.ini} isActive={isActive} brand={CC.brand} textMute={CC.textMute}/>}
+                {tc.ini>0&&<TurnClock getSeconds={getSeconds} ini={tc.ini} isActive={isActive} brand={CC.brand} textMute={CC.textMute}/>}
               </div>;
             };
             // Верхняя строка (противник) + нижняя (игрок)
             const topIsAI=pCol==="w"; // белые играют снизу
-            // lowTime threshold: 30 секунд (не 30000 — был bug с миллисекундами)
-            const aiLow=aT.time<30&&on&&!over;
-            const myLow=pT.time<30&&on&&!over;
             return <div style={{display:"flex",flexDirection:"column",gap:1,marginBottom:4}}>
               {topIsAI
-                ?<PRow isAI={true} time={aT.time} isActive={game.turn()===aiC&&on&&!over} lowTime={aiLow} captures={capW} advantage={bMat-wMat>0?bMat-wMat:0}/>
-                :<PRow isAI={false} time={pT.time} isActive={myT&&on&&!over} lowTime={myLow} captures={capB} advantage={wMat-bMat>0?wMat-bMat:0}/>}
+                ?<PRow isAI={true} getSeconds={aT.getSeconds} isActive={game.turn()===aiC&&on&&!over} captures={capW} advantage={bMat-wMat>0?bMat-wMat:0}/>
+                :<PRow isAI={false} getSeconds={pT.getSeconds} isActive={myT&&on&&!over} captures={capB} advantage={wMat-bMat>0?wMat-bMat:0}/>}
             </div>;
           })()}
 
@@ -7044,7 +7121,7 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}${pT.time<30&&pT.time>0&&myT&&on&&!over&&tc.ini>0?" cc-clock-pressure":""}`}
+              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
@@ -7550,7 +7627,7 @@ export default function CyberChessPage(){
             const bottomIsMe=pCol==="w";
             const myCaptures=bottomIsMe?capB:capW;
             const myAdvantage=bottomIsMe?Math.max(0,wMat2-bMat2):Math.max(0,bMat2-wMat2);
-            const myLow=pT.time<30&&pT.time>0&&on&&!over&&tc.ini>0;
+            const myActive=myT&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
               width:bw,
@@ -7575,13 +7652,12 @@ export default function CyberChessPage(){
                   </div>
                 </div>
               </div>
-              {tc.ini>0&&<div style={{
+              {tc.ini>0&&<div ref={bottomClockElRef} style={{
                 fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
-                color:myLow?"#e04040":myT&&on&&!over?CC.brand:CC.textMute,
+                color:myActive?CC.brand:CC.textMute,
                 padding:"4px 10px",borderRadius:6,
-                background:myT&&on&&!over?"rgba(255,255,255,0.04)":"transparent",
-                animation:myLow&&myT&&on&&!over?"cc-clock-pulse 1s ease-in-out infinite":undefined,
-              }}>{fmt(pT.time)}</div>}
+                background:myActive?"rgba(255,255,255,0.04)":"transparent",
+              }}/>}
             </div>;
           })()}
 

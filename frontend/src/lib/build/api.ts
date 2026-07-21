@@ -2,6 +2,7 @@
 
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "./auth";
+import type { WorkMode, EducationLevel } from "./geo";
 
 // ── Domain types ─────────────────────────────────────────────────────
 
@@ -145,6 +146,10 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
+  region: string | null;
+  country: string | null;
+  workMode: WorkMode | null;
+  educationLevel: EducationLevel | null;
   iin?: string | null;
   bin?: string | null;
   bankAccount?: string | null;
@@ -204,6 +209,10 @@ export type TalentRow = {
   openToWork: boolean;
   verifiedAt: string | null;
   updatedAt: string;
+  region?: string | null;
+  country?: string | null;
+  workMode?: WorkMode | null;
+  educationLevel?: EducationLevel | null;
   avgRating?: number;
   reviewCount?: number;
 };
@@ -223,6 +232,8 @@ export type BuildProject = {
   budget: number;
   status: ProjectStatus;
   city: string | null;
+  region?: string | null;
+  country?: string | null;
   clientId: string;
   createdAt: string;
   updatedAt: string;
@@ -248,6 +259,11 @@ export type BuildVacancy = {
   questions?: string[];
   viewCount?: number;
   expiresAt?: string | null;
+  region?: string | null;
+  country?: string | null;
+  workMode?: WorkMode | null;
+  minExperienceYears?: number | null;
+  educationLevel?: EducationLevel | null;
 };
 
 export type ApplicationAiScores = {
@@ -536,6 +552,10 @@ export const buildApi = {
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
     introVideoUrl?: string | null;
+    region?: string | null;
+    country?: string | null;
+    workMode?: WorkMode | null;
+    educationLevel?: EducationLevel | null;
     iin?: string | null;
     bin?: string | null;
     bankAccount?: string | null;
@@ -553,6 +573,9 @@ export const buildApi = {
     q?: string;
     skill?: string;
     city?: string;
+    region?: string;
+    workMode?: WorkMode;
+    educationLevel?: EducationLevel;
     role?: BuildRole;
     minExp?: number;
     openToWork?: boolean;
@@ -562,6 +585,9 @@ export const buildApi = {
     if (q?.q) params.set("q", q.q);
     if (q?.skill) params.set("skill", q.skill);
     if (q?.city) params.set("city", q.city);
+    if (q?.region) params.set("region", q.region);
+    if (q?.workMode) params.set("workMode", q.workMode);
+    if (q?.educationLevel) params.set("educationLevel", q.educationLevel);
     if (q?.role) params.set("role", q.role);
     if (q?.minExp != null) params.set("minExp", String(q.minExp));
     if (q?.openToWork) params.set("openToWork", "1");
@@ -620,7 +646,7 @@ export const buildApi = {
       { auth: !!q?.mine },
     );
   },
-  createProject: (input: { title: string; description: string; budget?: number; city?: string | null }) =>
+  createProject: (input: { title: string; description: string; budget?: number; city?: string | null; region?: string | null; country?: string | null }) =>
     call<BuildProject>("POST", "/api/build/projects", input),
   getProject: (id: string) =>
     call<{
@@ -650,7 +676,7 @@ export const buildApi = {
       applications: { total: number; accepted: number; pending: number; rejected: number; conversionRate: number };
       reviews: { avgRating: number; count: number };
     }>("GET", `/api/build/projects/${encodeURIComponent(id)}/analytics`),
-  updateProject: (id: string, patch: Partial<{ title: string; description: string; budget: number; status: ProjectStatus; city: string | null }>) =>
+  updateProject: (id: string, patch: Partial<{ title: string; description: string; budget: number; status: ProjectStatus; city: string | null; region: string | null; country: string | null }>) =>
     call<BuildProject>("PATCH", `/api/build/projects/${encodeURIComponent(id)}`, patch),
 
   // Vacancies
@@ -659,6 +685,10 @@ export const buildApi = {
     projectStatus?: ProjectStatus;
     q?: string;
     city?: string;
+    region?: string;
+    workMode?: WorkMode;
+    educationLevel?: EducationLevel;
+    maxExperience?: number;
     minSalary?: number;
     maxSalary?: number;
     currency?: string;
@@ -671,6 +701,10 @@ export const buildApi = {
     if (q?.projectStatus) params.set("projectStatus", q.projectStatus);
     if (q?.q) params.set("q", q.q);
     if (q?.city) params.set("city", q.city);
+    if (q?.region) params.set("region", q.region);
+    if (q?.workMode) params.set("workMode", q.workMode);
+    if (q?.educationLevel) params.set("educationLevel", q.educationLevel);
+    if (q?.maxExperience != null) params.set("maxExperience", String(q.maxExperience));
     if (q?.minSalary != null) params.set("minSalary", String(q.minSalary));
     if (q?.maxSalary != null) params.set("maxSalary", String(q.maxSalary));
     if (q?.currency) params.set("currency", q.currency);
@@ -694,6 +728,11 @@ export const buildApi = {
     city?: string | null;
     salaryCurrency?: string;
     questions?: string[];
+    region?: string | null;
+    country?: string | null;
+    workMode?: WorkMode | null;
+    minExperienceYears?: number | null;
+    educationLevel?: EducationLevel | null;
   }) => call<BuildVacancy>("POST", "/api/build/vacancies", input),
   vacanciesByProject: (projectId: string) =>
     call<{ items: BuildVacancy[]; total: number }>(

@@ -16,6 +16,8 @@ import {
   isUnlimited,
   VACANCY_STATUSES,
   PROJECT_STATUSES,
+  WORK_MODES,
+  EDUCATION_LEVELS,
   excludeTestUsers,
 } from "../../lib/build";
 
@@ -71,6 +73,17 @@ vacanciesRouter.post("/", async (req, res) => {
     const questions = Array.isArray(req.body?.questions)
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
+    const region = req.body?.region == null ? null : String(req.body.region).trim().slice(0, 60) || null;
+    const country = typeof req.body?.country === "string" && req.body.country.trim()
+      ? req.body.country.trim().slice(0, 8) : "KZ";
+    const workMode =
+      typeof req.body?.workMode === "string" && (WORK_MODES as readonly string[]).includes(req.body.workMode)
+        ? (req.body.workMode as typeof WORK_MODES[number]) : null;
+    const educationLevel =
+      typeof req.body?.educationLevel === "string" && (EDUCATION_LEVELS as readonly string[]).includes(req.body.educationLevel)
+        ? (req.body.educationLevel as typeof EDUCATION_LEVELS[number]) : null;
+    const minExperienceYears = req.body?.minExperienceYears == null
+      ? null : Math.max(0, Math.min(80, Math.round(Number(req.body.minExperienceYears) || 0)));
 
     // Optional expiry date (ISO string). Default: 60 days if not provided.
     let expiresAt: Date | null = null;
@@ -83,9 +96,12 @@ vacanciesRouter.post("/", async (req, res) => {
 
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","expiresAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), expiresAt],
+      `INSERT INTO "BuildVacancy"
+         ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","expiresAt",
+          "region","country","workMode","minExperienceYears","educationLevel")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), expiresAt,
+        region, country, workMode, minExperienceYears, educationLevel],
     );
     const row = result.rows[0];
     // Fire job alerts asynchronously — non-blocking
@@ -145,6 +161,29 @@ vacanciesRouter.get("/", async (req, res) => {
       params.push(`%"${req.query.skill.trim().toLowerCase()}"%`);
       where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
     }
+    if (typeof req.query.region === "string" && req.query.region.trim()) {
+      params.push(req.query.region.trim().slice(0, 60));
+      where.push(`v."region" = $${params.length}`);
+    }
+    if (typeof req.query.workMode === "string") {
+      const wm = vEnum(req.query.workMode, "workMode", WORK_MODES);
+      if (!wm.ok) return fail(res, 400, wm.error);
+      params.push(wm.value);
+      where.push(`v."workMode" = $${params.length}`);
+    }
+    if (typeof req.query.educationLevel === "string") {
+      const ed = vEnum(req.query.educationLevel, "educationLevel", EDUCATION_LEVELS);
+      if (!ed.ok) return fail(res, 400, ed.error);
+      params.push(ed.value);
+      where.push(`v."educationLevel" = $${params.length}`);
+    }
+    if (req.query.maxExperience !== undefined) {
+      // Candidate-side use: "I have N years, show me vacancies I qualify for."
+      const v = vNumber(req.query.maxExperience, "maxExperience", { min: 0, max: 80 });
+      if (!v.ok) return fail(res, 400, v.error);
+      params.push(Math.round(v.value));
+      where.push(`(v."minExperienceYears" IS NULL OR v."minExperienceYears" <= $${params.length})`);
+    }
 
     // Keep smoke/E2E throwaway vacancies (test-domain owners) off the public feed.
     where.push(excludeTestUsers("u"));
@@ -162,6 +201,7 @@ vacanciesRouter.get("/", async (req, res) => {
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
               v."skillsJson", v."expiresAt",
+              v."region", v."country", v."workMode", v."minExperienceYears", v."educationLevel",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"

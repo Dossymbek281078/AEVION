@@ -6,6 +6,16 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type TalentRow, type BuildRole } from "@/lib/build/api";
 import { BookmarkButton } from "@/components/build/BookmarkButton";
 import { StarsDisplay } from "@/components/build/StarRating";
+import {
+  WORK_MODES,
+  WORK_MODE_LABELS,
+  EDUCATION_LEVELS,
+  EDUCATION_LEVEL_LABELS,
+  WORK_REGIONS_KZ,
+  regionLabel,
+  type WorkMode,
+  type EducationLevel,
+} from "@/lib/build/geo";
 
 const ROLE_FILTERS: { value: BuildRole | "ALL"; label: string }[] = [
   { value: "ALL", label: "Any role" },
@@ -37,6 +47,9 @@ function TalentBody() {
   const [q, setQ] = useState("");
   const [skill, setSkill] = useState("");
   const [city, setCity] = useState("");
+  const [region, setRegion] = useState("");
+  const [workMode, setWorkMode] = useState<WorkMode | "">("");
+  const [educationLevel, setEducationLevel] = useState<EducationLevel | "">("");
   const [role, setRole] = useState<BuildRole | "ALL">("ALL");
   const [minExp, setMinExp] = useState<string>("");
   const [openOnly, setOpenOnly] = useState(true);
@@ -71,6 +84,9 @@ function TalentBody() {
           q: q.trim() || undefined,
           skill: skill.trim() || undefined,
           city: city.trim() || undefined,
+          region: region || undefined,
+          workMode: workMode || undefined,
+          educationLevel: educationLevel || undefined,
           role: role === "ALL" ? undefined : role,
           minExp: Number.isFinite(exp) ? (exp as number) : undefined,
           openToWork: openOnly,
@@ -103,7 +119,7 @@ function TalentBody() {
       };
     }, 250);
     return () => clearTimeout(handle);
-  }, [q, skill, city, role, minExp, openOnly]);
+  }, [q, skill, city, region, workMode, educationLevel, role, minExp, openOnly]);
 
   return (
     <>
@@ -150,14 +166,47 @@ function TalentBody() {
           placeholder="Min years experience"
           className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
         />
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any region</option>
+          {WORK_REGIONS_KZ.map((r) => (
+            <option key={r.slug} value={r.slug}>{r.label}</option>
+          ))}
+        </select>
+        <select
+          value={workMode}
+          onChange={(e) => setWorkMode(e.target.value as WorkMode | "")}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any work mode</option>
+          {WORK_MODES.map((m) => (
+            <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+          ))}
+        </select>
+        <select
+          value={educationLevel}
+          onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any education</option>
+          {EDUCATION_LEVELS.map((lvl) => (
+            <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+          ))}
+        </select>
       </div>
 
       <TalentSavedSearches
-        current={{ q, skill, city, role, minExp, openOnly, verifiedOnly, withRatingOnly }}
+        current={{ q, skill, city, region, workMode, educationLevel, role, minExp, openOnly, verifiedOnly, withRatingOnly }}
         onApply={(s) => {
           setQ(s.q);
           setSkill(s.skill);
           setCity(s.city);
+          setRegion(s.region ?? "");
+          setWorkMode(s.workMode ?? "");
+          setEducationLevel(s.educationLevel ?? "");
           setRole(s.role);
           setMinExp(s.minExp);
           setOpenOnly(s.openOnly);
@@ -326,7 +375,8 @@ function TalentCard({ talent }: { talent: TalentRow }) {
             <div className="mt-0.5 truncate text-sm text-emerald-200/80">{talent.title}</div>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
-            {talent.city && <span>📍 {talent.city}</span>}
+            {talent.city && <span>📍 {talent.city}{talent.region ? `, ${regionLabel(talent.region)}` : ""}</span>}
+            {talent.workMode && <span>{WORK_MODE_LABELS[talent.workMode]}</span>}
             {talent.experienceYears > 0 && <span>⏱ {talent.experienceYears}y</span>}
             <span>{talent.buildRole}</span>
             {typeof talent.reviewCount === "number" && talent.reviewCount > 0 && (
@@ -378,6 +428,11 @@ type TalentSearchState = {
   q: string;
   skill: string;
   city: string;
+  // Optional: saved searches created before these filters existed won't
+  // have them in localStorage — callers must fall back with `?? ""`.
+  region?: string;
+  workMode?: WorkMode | "";
+  educationLevel?: EducationLevel | "";
   role: BuildRole | "ALL";
   minExp: string;
   openOnly: boolean;
@@ -417,6 +472,9 @@ function TalentSavedSearches({
     if (c.q) parts.push(`"${c.q}"`);
     if (c.skill) parts.push(`skill:${c.skill}`);
     if (c.city) parts.push(`city:${c.city}`);
+    if (c.region) parts.push(`region:${regionLabel(c.region)}`);
+    if (c.workMode) parts.push(`mode:${WORK_MODE_LABELS[c.workMode]}`);
+    if (c.educationLevel) parts.push(`edu:${EDUCATION_LEVEL_LABELS[c.educationLevel]}`);
     if (c.role !== "ALL") parts.push(`role:${c.role}`);
     if (c.minExp) parts.push(`≥${c.minExp}y`);
     if (!c.openOnly) parts.push("any-availability");
@@ -441,6 +499,7 @@ function TalentSavedSearches({
 
   const hasFilters =
     current.q || current.city || current.minExp || current.skill ||
+    current.region || current.workMode || current.educationLevel ||
     current.role !== "ALL" || !current.openOnly || current.verifiedOnly || current.withRatingOnly;
 
   if (items.length === 0 && !hasFilters) return null;

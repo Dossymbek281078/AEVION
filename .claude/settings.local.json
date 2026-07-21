@@ -34,7 +34,8 @@
       "Bash(curl *)",
       "Bash(jobs *)",
       "PowerShell(Get-CimInstance *)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Stop-Process *)"
     ]
   }
 }

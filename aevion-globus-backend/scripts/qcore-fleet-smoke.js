@@ -26,12 +26,17 @@ function ok(name, cond) {
   else { fail++; console.log(`  ✗ ${name}`); }
 }
 
+// Capture a real NVIDIA key (if the operator set one) BEFORE the env wipe below,
+// so section 6 can make one real network call against build.nvidia.com. Every
+// other section stays fully offline/synthetic.
+const REAL_NVIDIA_KEY = process.env.NVIDIA_API_KEY || "";
+
 // Clean provider env so "configured" reflects only what each case sets.
 for (const k of Object.keys(process.env)) {
   if (/_(API_KEY|TOKEN|BASE_URL)$/.test(k)) delete process.env[k];
 }
 
-const { getProviders, getFreeProviders, getLocalProviders } = require(providersPath);
+const { getProviders, getFreeProviders, getLocalProviders, callProvider } = require(providersPath);
 const { buildCouncil, buildSynthesizer } = require(agentsPath);
 
 console.log("QCoreAI free-fleet + council smoke\n");
@@ -116,5 +121,42 @@ ok("offline chair uses a discovered model", (() => {
 // Empty discovery (runtime unreachable) falls back to the static catalogue.
 ok("offline council falls back to static when discovery empty", buildCouncil(3, undefined, { localOnly: true, localModels: {} }).length >= 2);
 
-console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
-process.exit(fail === 0 ? 0 : 1);
+// 6. Provider health tracking — repeated failures on one pair sink it below
+//    healthy pairs in council member selection (never remove it entirely).
+const providerHealthPath = path.join(__dirname, "..", "dist", "services", "qcoreai", "providerHealth.js");
+const { recordOutcome, healthScore } = require(providerHealthPath);
+const orDefault = all.find((p) => p.id === "openrouter").defaultModel;
+ok("healthScore starts neutral with no recorded history", healthScore("openrouter", orDefault) === 1);
+for (let i = 0; i < 5; i++) recordOutcome("openrouter", orDefault, false);
+ok("healthScore drops after 5 consecutive failures", healthScore("openrouter", orDefault) < 0.5);
+const cHealthAware = buildCouncil(3);
+ok("unhealthy pair sinks out of a 3-member council", !cHealthAware.some((m) => m.provider === "openrouter" && m.model === orDefault));
+ok("healthy vendors still fill the council", cHealthAware.some((m) => m.provider === "groq") && cHealthAware.some((m) => m.provider === "cerebras"));
+for (let i = 0; i < 20; i++) recordOutcome("openrouter", orDefault, true);
+ok("healthScore recovers after sustained successes", healthScore("openrouter", orDefault) === 1);
+
+// 7. NVIDIA NIM — one real network call, opt-in only. Skipped (not failed) when
+//    no NVIDIA_API_KEY is set in the invoking shell, matching how the other
+//    live/prod smokes gate on optional env rather than requiring it.
+(async () => {
+  if (!REAL_NVIDIA_KEY) {
+    console.log("  – nvidia live call (skip — set NVIDIA_API_KEY to exercise integrate.api.nvidia.com)");
+  } else {
+    process.env.NVIDIA_API_KEY = REAL_NVIDIA_KEY;
+    try {
+      const res = await callProvider(
+        "nvidia",
+        [{ role: "user", content: "Reply with exactly one word: pong" }],
+        "meta/llama-3.3-70b-instruct",
+        0.2
+      );
+      ok("nvidia live call returns a non-empty reply", typeof res?.reply === "string" && res.reply.trim().length > 0);
+    } catch (e) {
+      fail++;
+      console.log(`  ✗ nvidia live call — ${e?.message || e}`);
+    }
+  }
+
+  console.log(`\n${fail === 0 ? "PASS" : "FAIL"} — ${pass} passed, ${fail} failed`);
+  process.exit(fail === 0 ? 0 : 1);
+})();

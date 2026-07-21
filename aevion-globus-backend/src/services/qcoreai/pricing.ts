@@ -73,6 +73,13 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
     "meta/Meta-Llama-3.1-70B-Instruct",
     "microsoft/Phi-3.5-MoE-instruct",
   ),
+  nvidia: freeModels(
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "deepseek-ai/deepseek-r1",
+    "meta/llama-3.3-70b-instruct",
+    "qwen/qwen2.5-72b-instruct",
+    "mistralai/mistral-large-2-instruct",
+  ),
   ollama: freeModels("llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"),
 };
 

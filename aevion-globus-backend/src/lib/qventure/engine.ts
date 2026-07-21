@@ -18,6 +18,21 @@ import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
 import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
 
+/**
+ * Rubric version — bump on any change that moves a composite for unchanged input.
+ *
+ * Scores are only comparable within a version. The gallery, /benchmark percentiles
+ * and the watchlist all rank stored analyses against each other, so mixing scores
+ * produced by different weightings silently compares numbers that do not mean the
+ * same thing. Stamping it lets a reader see which rules produced a given verdict.
+ *
+ * v1  original rubric (additive only; "pass" was unreachable)
+ * v2  adverse disclosures penalised; pass reachable
+ * v3  negation fixes, moat no longer inherited from stage, weights moved to
+ *     company evidence (execution 0.12 -> 0.28); orphan metric flags weighted
+ */
+export const RUBRIC_VERSION = 3;
+
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -78,6 +93,8 @@ export interface EntryStrategy {
 }
 
 export interface AnalysisResult {
+  /** Rubric generation that produced this score — see RUBRIC_VERSION. */
+  rubricVersion: number;
   composite: number; // 0–100
   verdict: EntryStrategy["verdict"];
   factors: ScoreFactor[];
@@ -514,7 +531,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const tam = triangulateTam(signals, sector);
   const projections = analyzeProjections(rawInput.projections, sector);
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
+  return { rubricVersion: RUBRIC_VERSION, composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
 }
 
 function buildStrategy(args: {

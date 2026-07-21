@@ -213,7 +213,8 @@
       "Bash(curl -s http://127.0.0.1:4001/api/data-quality/trust-score)",
       "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \\\\\"name='node.exe'\\\\\" | Where-Object { \\\\$_.CommandLine -match 'aevion-qskyway' } | ForEach-Object { Write-Output \\(\\\\$_.ProcessId.ToString\\(\\) + ' ' + \\\\$_.CommandLine\\) }\" 2>&1)",
       "Bash(powershell -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -match '\\\\''aevion-qskyway'\\\\'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }')",
-      "Bash(cd /c/Users/user/aevion-qskyway)"
+      "Bash(cd /c/Users/user/aevion-qskyway)",
+      "Bash(echo \"---status---\")"
     ]
   }
 }

@@ -87,6 +87,14 @@ type Project = {
 
 const memProjects = new Map<string, Project>();
 
+// Кэш готовых рендеров: hash(движок|промт|длительность) → resultUrl.
+// Повторный рендер того же кадра не тратит деньги («дешевле» на практике).
+const memRenderCache = new Map<string, string>();
+
+function renderCacheKey(engineId: string, prompt: string, durationSec: number): string {
+  return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}`).digest("hex");
+}
+
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
@@ -370,37 +378,88 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "storyboard failed" }); }
 });
 
+/** Один кадр: кэш → мгновенно; иначе submit в движок с одним ретраем. */
+async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): Promise<string> {
+  s.prompt = buildRenderPrompt(p, s);
+  if (!engine) {
+    s.engine = null;
+    s.status = "prompt_ready"; // честно: промт собран, FAL_KEY не задан
+    return "Render-промт готов. Прямой видеодвижок не сконфигурирован (env FAL_KEY) — задайте ключ fal.ai, и рендер пойдёт без посредников.";
+  }
+  const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
+  const cached = memRenderCache.get(cacheKey);
+  if (cached) {
+    s.engine = engine.id;
+    s.engineRequestId = null;
+    s.resultUrl = cached;
+    s.status = "rendered";
+    return "Кадр взят из кэша рендеров — $0.";
+  }
+  let sub = await falSubmit(engine, s.prompt, s.durationSec);
+  if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec); // один ретрай (fal бывает 5xx)
+  if (!sub.ok) {
+    s.engine = engine.id;
+    s.status = "failed";
+    return `Движок ${engine.label} отклонил задачу: ${sub.error}`;
+  }
+  s.engine = engine.id;
+  s.engineRequestId = sub.requestId;
+  s.status = "queued";
+  const estUsd = engine.usdPerSecond != null ? (engine.usdPerSecond * s.durationSec).toFixed(2) : "?";
+  return `Кадр в очереди: ${engine.label}, ~$${estUsd}.`;
+}
+
+qrealRouter.get("/projects/:id/estimate", (req, res) => {
+  const p = memProjects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  const totalSec = p.shots.reduce((a, s) => a + s.durationSec, 0);
+  const cachedSec = p.shots.reduce((a, s) => {
+    const engine = pickVideoEngine() || renderEngines().find((e) => e.modality.includes("video"))!;
+    const prompt = s.prompt || buildRenderPrompt(p, s);
+    return a + (memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec)) ? s.durationSec : 0);
+  }, 0);
+  const engines = renderEngines()
+    .filter((e) => e.modality.includes("video") && e.usdPerSecond != null)
+    .map((e) => ({
+      id: e.id,
+      label: e.label,
+      configured: e.configured,
+      usdPerSecond: e.usdPerSecond,
+      usdTotal: Number(((totalSec - cachedSec) * (e.usdPerSecond as number)).toFixed(2)),
+    }));
+  res.json({ shots: p.shots.length, totalSec, cachedSec, engines });
+});
+
 qrealRouter.post("/projects/:id/shots/:sid/render", async (req, res) => {
   try {
     const p = memProjects.get(req.params.id);
     const s = p?.shots.find((x) => x.id === req.params.sid);
     if (!p || !s) return res.status(404).json({ error: "not found" });
-    s.prompt = buildRenderPrompt(p, s);
     const preferred = typeof req.body?.engine === "string" ? req.body.engine : undefined;
     const engine = pickVideoEngine(preferred);
-    if (!engine) {
-      s.engine = null;
-      s.status = "prompt_ready"; // честно: промт собран, FAL_KEY не задан
-      p.updatedAt = nowIso();
-      return res.json({
-        shot: s,
-        note: "Render-промт готов. Прямой видеодвижок не сконфигурирован (env FAL_KEY) — задайте ключ fal.ai, и рендер пойдёт без посредников.",
-      });
-    }
-    const sub = await falSubmit(engine, s.prompt, s.durationSec);
-    if (!sub.ok) {
-      s.engine = engine.id;
-      s.status = "failed";
-      p.updatedAt = nowIso();
-      return res.status(502).json({ shot: s, note: `Движок ${engine.label} отклонил задачу: ${sub.error}` });
-    }
-    s.engine = engine.id;
-    s.engineRequestId = sub.requestId;
-    s.status = "queued";
+    const note = await submitShot(p, s, engine);
     p.updatedAt = nowIso();
-    const estUsd = engine.usdPerSecond != null ? (engine.usdPerSecond * s.durationSec).toFixed(2) : "?";
-    res.json({ shot: s, note: `Кадр в очереди: ${engine.label}, ~$${estUsd}. Статус — /render-status.` });
+    if (s.status === "failed") return res.status(502).json({ shot: s, note });
+    res.json({ shot: s, note });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render failed" }); }
+});
+
+// «Бриф → фильм без кликов»: последовательная очередь всех кадров.
+qrealRouter.post("/projects/:id/render-all", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    const preferred = typeof req.body?.engine === "string" ? req.body.engine : undefined;
+    const engine = pickVideoEngine(preferred);
+    const notes: Array<{ shotId: string; note: string }> = [];
+    for (const s of p.shots) {
+      if (s.status === "rendered" || s.status === "queued") continue;
+      notes.push({ shotId: s.id, note: await submitShot(p, s, engine) });
+    }
+    p.status = engine ? "rendering" : p.status;
+    p.updatedAt = nowIso();
+    res.json({ project: p, notes });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-all failed" }); }
 });
 
 qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
@@ -415,6 +474,9 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
     if (poll.state === "completed") {
       s.resultUrl = poll.videoUrl;
       s.status = poll.videoUrl ? "rendered" : "failed";
+      if (poll.videoUrl && s.prompt) {
+        memRenderCache.set(renderCacheKey(engine.id, s.prompt, s.durationSec), poll.videoUrl);
+      }
     } else if (poll.state === "failed") {
       s.status = "failed";
     }

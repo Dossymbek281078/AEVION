@@ -23,6 +23,10 @@ type Project = {
   targetDurationSec: number; status: string; shots: Shot[]; createdAt: string;
 };
 type Engine = { id: string; label: string; modality: string[]; configured: boolean; note: string; usdPerSecond?: number | null };
+type Estimate = {
+  shots: number; totalSec: number; cachedSec: number;
+  engines: Array<{ id: string; label: string; configured: boolean; usdPerSecond: number; usdTotal: number }>;
+};
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
 
 export default function QRealClient() {
@@ -31,6 +35,7 @@ export default function QRealClient() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [criteria, setCriteria] = useState<QcCriterion[]>([]);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [brief, setBrief] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,6 +60,28 @@ export default function QRealClient() {
     fetch(apiUrl("/api/qreal/engines")).then((r) => r.json()).then((d) => setEngines(d?.engines || [])).catch(() => {});
     fetch(apiUrl("/api/qreal/realism-criteria")).then((r) => r.json()).then((d) => setCriteria(d?.criteria || [])).catch(() => {});
   }, [loadDemo]);
+
+  // Смета проекта (пересчитывается при каждой смене раскадровки/статусов).
+  useEffect(() => {
+    if (!project) return;
+    fetch(apiUrl(`/api/qreal/projects/${project.id}/estimate`))
+      .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
+      .catch(() => {});
+  }, [project]);
+
+  async function renderAll() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/render-all`), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const d = await r.json();
+      if (d?.project) setProject(d.project);
+      if (Array.isArray(d?.notes) && d.notes.length) setNote(d.notes[0].note);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
 
   // Кадры в очереди на рендер — автопул статуса раз в 10с, пока не готово.
   useEffect(() => {
@@ -183,6 +210,30 @@ export default function QRealClient() {
                 {project.shots.length} {t("qreal.storyboard.shots")} · ~{project.shots.reduce((a, s) => a + s.durationSec, 0)}s
               </span>
             </div>
+            {estimate && estimate.engines.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-4 border border-neutral-300 bg-white px-4 py-2">
+                <span className="text-sm text-neutral-700">
+                  {t("qreal.estimate.prefix")}{" "}
+                  {estimate.engines.map((e, i) => (
+                    <span key={e.id}>
+                      {i > 0 && " / "}
+                      <span className="font-mono font-semibold text-teal-800">${e.usdTotal.toFixed(2)}</span>
+                      {" "}<span className="text-neutral-500">({e.id})</span>
+                    </span>
+                  ))}
+                  {estimate.cachedSec > 0 && (
+                    <span className="text-neutral-500"> · {estimate.cachedSec}s {t("qreal.estimate.cached")}</span>
+                  )}
+                </span>
+                <button
+                  onClick={renderAll}
+                  disabled={busy}
+                  className="ml-auto border border-teal-800 bg-white px-4 py-1.5 text-sm text-teal-800 transition hover:bg-teal-800 hover:text-white disabled:opacity-40"
+                >
+                  {t("qreal.render.all")}
+                </button>
+              </div>
+            )}
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {project.shots.map((s) => (
                 <article key={s.id} className="border border-neutral-300 bg-white p-4">

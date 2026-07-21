@@ -9,6 +9,7 @@ interface RevenueOverview {
   channelCoverage: Record<string, number>;
   providers: {
     gumroad?: { configured: boolean; primary: boolean };
+    lemonsqueezy?: { configured: boolean; primary: boolean };
     paddle: { configured: boolean; sandbox: boolean };
     youtube: { configured: boolean };
     twitch: { configured: boolean };
@@ -80,6 +81,7 @@ const CHANNEL_COLORS: Record<string, string> = {
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
+  const [lsBalance, setLsBalance] = useState<GumroadBalance | null>(null);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -88,10 +90,12 @@ export default function RevenuePage() {
       fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null),
       fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null),
       fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null),
-    ]).then(([ov, bal, rec]) => {
+      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null),
+    ]).then(([ov, bal, rec, ls]) => {
       setOverview(ov);
       setBalance(bal);
       setRecent(rec);
+      setLsBalance(ls);
       setLoading(false);
     });
   }, []);
@@ -107,6 +111,14 @@ export default function RevenuePage() {
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;
 
+  // Совокупная выручка по всем живым чекаутам (Gumroad + LemonSqueezy).
+  const gGross = balance?.grossUsd ?? 0;
+  const lsGross = lsBalance?.grossUsd ?? 0;
+  const gCount = balance?.saleCount ?? 0;
+  const lsCount = lsBalance?.saleCount ?? 0;
+  const totalGross = gGross + lsGross;
+  const totalCount = gCount + lsCount;
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
@@ -115,11 +127,12 @@ export default function RevenuePage() {
           <div>
             <h1 className="text-xl font-semibold text-white">AEVION Revenue Hub</h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              Gumroad · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
+              Gumroad · LemonSqueezy · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
             <ProviderBadge name="Gumroad" ok={providers?.gumroad?.configured} primary />
+            <ProviderBadge name="LemonSqueezy" ok={providers?.lemonsqueezy?.configured} />
             <ProviderBadge name="PayBox" ok={providers?.paybox?.configured} />
             <ProviderBadge name="YouTube" ok={providers?.youtube?.configured} />
             <ProviderBadge name="Twitch" ok={providers?.twitch?.configured} />
@@ -128,6 +141,32 @@ export default function RevenuePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+        {/* Всего по всем каналам (Gumroad + LemonSqueezy) */}
+        <section>
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+            Всего · все чекауты <span className="ml-2 text-xs text-emerald-400 normal-case">(live)</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
+              <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+              <div className="text-3xl font-semibold text-white">
+                ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+              </div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
+              <div className="text-3xl font-semibold text-white">{totalCount}</div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
+              <div className="text-sm text-gray-300 mt-1 space-y-0.5">
+                <div>Gumroad: <span className="text-white font-semibold">${gGross.toFixed(2)}</span> · {gCount}</div>
+                <div>LemonSqueezy: <span className="text-white font-semibold">${lsGross.toFixed(2)}</span> · {lsCount}</div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Gumroad Balance */}
         <section>

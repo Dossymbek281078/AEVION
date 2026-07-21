@@ -408,6 +408,33 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing CF Pages project", () => {
+  test("'already exists' create error under a non-8000000 code proceeds to upload instead of 500", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const id = cr.body.project.id as string;
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=index.html`)
+      .send({ content: "<h1>hi</h1>" });
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(400, {
+        success: false,
+        // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
+        errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
+      }))
+      .mockResolvedValueOnce(jsonResp(200, { success: true, result: { id: "dep-1", url: "t-abc123.pages.dev" } }));
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+
+    expect(r.status).toBe(200);
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/deployments");
+    expect(r.body.pagesUrl ?? r.body.liveUrl ?? r.body.deployUrl).toContain("pages.dev");
+  });
+});
+
 describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed stacks)", () => {
   async function createProject(app: express.Express) {
     const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });

@@ -4720,7 +4720,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       body: JSON.stringify({ name: pageName, production_branch: "main" }),
     });
     const createData = await createResp.json() as { success: boolean; errors?: Array<{ code: number; message: string }> };
-    const alreadyExists = createData.errors?.some((e) => e.code === 8000000);
+    // CF has reported "already exists" under more than one error code over
+    // time — match the message too, or every REdeploy 500s (hit live 2026-07-21).
+    const alreadyExists = createData.errors?.some((e) => e.code === 8000000 || /already exists/i.test(e.message || ""));
     if (!createResp.ok && !alreadyExists) {
       const errMsg = createData.errors?.map((e) => e.message).join("; ") || "CF Pages project creation failed";
       return res.status(500).json({ error: errMsg });

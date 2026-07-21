@@ -78,6 +78,14 @@ const CHANNEL_COLORS: Record<string, string> = {
   marketplace: "bg-pink-500/20 text-pink-300 border-pink-500/30",
 };
 
+const NEW_YEAR_UTC = Date.UTC(2027, 0, 1);
+const GOAL_1M = 1_000_000;
+const GOAL_20M = 20_000_000;
+
+function daysUntilNewYear(): number {
+  return Math.max(0, Math.ceil((NEW_YEAR_UTC - Date.now()) / 86_400_000));
+}
+
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
@@ -118,6 +126,7 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
+  const daysLeft = daysUntilNewYear();
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -141,6 +150,28 @@ export default function RevenuePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+        {/* Цели до Нового года */}
+        <section>
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+            <span>Цели до Нового года</span>
+            <span className="text-xs text-amber-400 normal-case">{daysLeft} дн. осталось</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <GoalBar
+              label="$1M — первая цель"
+              target={GOAL_1M}
+              current={totalGross}
+              colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
+            />
+            <GoalBar
+              label="$20M — стретч-цель"
+              target={GOAL_20M}
+              current={totalGross}
+              colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
+            />
+          </div>
+        </section>
 
         {/* Всего по всем каналам (Gumroad + LemonSqueezy) */}
         <section>
@@ -445,6 +476,29 @@ function Sparkline({ points }: { points: number[] }) {
         <circle key={i} cx={x} cy={y} r="2" fill="rgb(16 185 129)" />
       ))}
     </svg>
+  );
+}
+
+function GoalBar({ label, target, current, colorClass }: { label: string; target: number; current: number; colorClass: string }) {
+  const pct = Math.min(100, (current / target) * 100);
+  const remaining = Math.max(0, target - current);
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="text-sm font-medium text-gray-300">{label}</div>
+        <div className="text-xs text-gray-500 font-mono">{pct >= 0.1 ? pct.toFixed(1) : pct.toFixed(4)}%</div>
+      </div>
+      <div className="h-2.5 rounded-full bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${pct > 0 ? Math.max(pct, 0.6) : 0}%` }}
+        />
+      </div>
+      <div className="flex items-baseline justify-between mt-2 text-xs text-gray-500">
+        <span>${current.toLocaleString("en-US", { maximumFractionDigits: 2 })} собрано</span>
+        <span>осталось ${remaining.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+      </div>
+    </div>
   );
 }
 

@@ -18,6 +18,15 @@ import {
   type BuildFile,
   type ProjectStatus,
 } from "@/lib/build/api";
+import {
+  WORK_MODES,
+  WORK_MODE_LABELS,
+  EDUCATION_LEVELS,
+  EDUCATION_LEVEL_LABELS,
+  WORK_REGIONS_KZ,
+  type WorkMode,
+  type EducationLevel,
+} from "@/lib/build/geo";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
@@ -600,6 +609,10 @@ function NewVacancyButton({
   const [popularSkills, setPopularSkills] = useState<string[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
   const [questionInput, setQuestionInput] = useState("");
+  const [region, setRegion] = useState("");
+  const [workMode, setWorkMode] = useState<WorkMode | "">("");
+  const [minExperienceYears, setMinExperienceYears] = useState("");
+  const [educationLevel, setEducationLevel] = useState<EducationLevel | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -676,6 +689,10 @@ function NewVacancyButton({
         salary: salary ? Number(salary) : undefined,
         skills,
         questions,
+        region: region || null,
+        workMode: workMode || null,
+        minExperienceYears: minExperienceYears ? Number(minExperienceYears) : null,
+        educationLevel: educationLevel || null,
       });
       setOpen(false);
       setTitle("");
@@ -683,6 +700,10 @@ function NewVacancyButton({
       setSalary("");
       setSkills([]);
       setQuestions([]);
+      setRegion("");
+      setWorkMode("");
+      setMinExperienceYears("");
+      setEducationLevel("");
       onCreated();
     } catch (e) {
       const apiErr = e as { code?: string; payload?: Record<string, unknown> };
@@ -768,6 +789,47 @@ function NewVacancyButton({
         placeholder="Monthly salary (USD, optional)"
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
+        >
+          <option value="">Region (any)</option>
+          {WORK_REGIONS_KZ.map((r) => (
+            <option key={r.slug} value={r.slug}>{r.label}</option>
+          ))}
+        </select>
+        <select
+          value={workMode}
+          onChange={(e) => setWorkMode(e.target.value as WorkMode | "")}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
+        >
+          <option value="">Work mode (any)</option>
+          {WORK_MODES.map((m) => (
+            <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+          ))}
+        </select>
+        <input
+          type="number"
+          min={0}
+          max={80}
+          value={minExperienceYears}
+          onChange={(e) => setMinExperienceYears(e.target.value.replace(/[^\d]/g, ""))}
+          placeholder="Min years exp."
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white placeholder:text-slate-500"
+        />
+        <select
+          value={educationLevel}
+          onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
+        >
+          <option value="">Education req. (any)</option>
+          {EDUCATION_LEVELS.map((lvl) => (
+            <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+          ))}
+        </select>
+      </div>
       <div className="rounded-md border border-white/10 bg-white/5 p-2">
         <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
         <div className="flex flex-wrap gap-1.5">

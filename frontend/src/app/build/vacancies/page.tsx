@@ -10,6 +10,15 @@ import { CompareToggleButton } from "@/components/build/CompareToggleButton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
 import { formatSalary } from "@/lib/build/format";
 import { getRecentVacancies, clearRecentVacancies, type RecentVacancy } from "@/lib/build/recentlyViewed";
+import {
+  WORK_MODES,
+  WORK_MODE_LABELS,
+  EDUCATION_LEVELS,
+  EDUCATION_LEVEL_LABELS,
+  WORK_REGIONS_KZ,
+  type WorkMode,
+  type EducationLevel,
+} from "@/lib/build/geo";
 
 const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
 
@@ -32,6 +41,14 @@ function VacanciesFeedInner() {
   const [maxSalary, setMaxSalary] = useState<string>(searchParams.get("maxSalary") || "");
   const [currency, setCurrency] = useState<string>(searchParams.get("currency") || "");
   const [skill, setSkill] = useState(searchParams.get("skill") || "");
+  const [region, setRegion] = useState(searchParams.get("region") || "");
+  const [workMode, setWorkMode] = useState<WorkMode | "">(
+    (searchParams.get("workMode") as WorkMode | "") || "",
+  );
+  const [educationLevel, setEducationLevel] = useState<EducationLevel | "">(
+    (searchParams.get("educationLevel") as EducationLevel | "") || "",
+  );
+  const [maxExperience, setMaxExperience] = useState<string>(searchParams.get("maxExperience") || "");
   const [sort, setSort] = useState<"recent" | "salary" | "popular">(
     (searchParams.get("sort") as "recent" | "salary" | "popular") || "recent",
   );
@@ -52,6 +69,10 @@ function VacanciesFeedInner() {
       if (maxSalary.trim()) next.set("maxSalary", maxSalary.trim());
       if (currency.trim()) next.set("currency", currency.trim());
       if (skill.trim()) next.set("skill", skill.trim());
+      if (region) next.set("region", region);
+      if (workMode) next.set("workMode", workMode);
+      if (educationLevel) next.set("educationLevel", educationLevel);
+      if (maxExperience.trim()) next.set("maxExperience", maxExperience.trim());
       if (sort !== "recent") next.set("sort", sort);
       if (status !== "OPEN") next.set("status", status);
       const qs = next.toString();
@@ -59,7 +80,7 @@ function VacanciesFeedInner() {
       router.replace(url, { scroll: false });
     }, 300);
     return () => clearTimeout(handle);
-  }, [q, city, minSalary, maxSalary, currency, skill, sort, status, router]);
+  }, [q, city, minSalary, maxSalary, currency, skill, region, workMode, educationLevel, maxExperience, sort, status, router]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -67,11 +88,16 @@ function VacanciesFeedInner() {
       setLoading(true);
       const min = minSalary.trim() ? Number(minSalary) : undefined;
       const max = maxSalary.trim() ? Number(maxSalary) : undefined;
+      const maxExp = maxExperience.trim() ? Number(maxExperience) : undefined;
       buildApi
         .listVacancies({
           status: status === "ALL" ? undefined : status,
           q: q.trim() || undefined,
           city: city.trim() || undefined,
+          region: region || undefined,
+          workMode: workMode || undefined,
+          educationLevel: educationLevel || undefined,
+          maxExperience: Number.isFinite(maxExp) ? (maxExp as number) : undefined,
           minSalary: Number.isFinite(min) ? (min as number) : undefined,
           maxSalary: Number.isFinite(max) ? (max as number) : undefined,
           currency: currency.trim() || undefined,
@@ -93,7 +119,7 @@ function VacanciesFeedInner() {
       };
     }, 250);
     return () => clearTimeout(handle);
-  }, [status, q, city, minSalary, maxSalary, currency, skill, sort]);
+  }, [status, q, city, minSalary, maxSalary, currency, skill, region, workMode, educationLevel, maxExperience, sort]);
 
   const stats = useMemo(() => {
     const openItems = items.filter((v) => v.status === "OPEN");
@@ -235,6 +261,44 @@ function VacanciesFeedInner() {
           onChange={(e) => setSkill(e.target.value)}
           placeholder="Skill (e.g. AutoCAD)"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-40"
+        />
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any region</option>
+          {WORK_REGIONS_KZ.map((r) => (
+            <option key={r.slug} value={r.slug}>{r.label}</option>
+          ))}
+        </select>
+        <select
+          value={workMode}
+          onChange={(e) => setWorkMode(e.target.value as WorkMode | "")}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any work mode</option>
+          {WORK_MODES.map((m) => (
+            <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+          ))}
+        </select>
+        <select
+          value={educationLevel}
+          onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="">Any education req.</option>
+          {EDUCATION_LEVELS.map((lvl) => (
+            <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+          ))}
+        </select>
+        <input
+          value={maxExperience}
+          onChange={(e) => setMaxExperience(e.target.value.replace(/[^\d]/g, ""))}
+          placeholder="My years exp."
+          title="Show only vacancies that don't require more experience than this"
+          inputMode="numeric"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-28"
         />
         <select
           value={sort}

@@ -15,7 +15,7 @@ type Step = {
 
 export default function OnboardingPage() {
   return (
-    <BuildShell>
+    <BuildShell theme="light">
       <RequireAuth>
         <Body />
       </RequireAuth>
@@ -100,7 +100,7 @@ function Body() {
   }, []);
 
   if (!steps) {
-    return <p className="text-sm text-slate-400">Loading…</p>;
+    return <p className="text-sm text-[#74767c]">Loading…</p>;
   }
 
   const completed = steps.filter((s) => s.done).length;
@@ -109,27 +109,27 @@ function Body() {
   return (
     <>
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Welcome to QBuild</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-[#17181a]">Welcome to QBuild</h1>
+        <p className="mt-1 text-sm text-[#74767c]">
           5 шагов от регистрации до первого найма. Можно пропускать и возвращаться позже.
         </p>
       </header>
 
-      <div className="mb-6 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-4">
+      <div className="mb-6 rounded-xl border border-[#0a7d72]/25 bg-[#0a7d72]/[0.06] p-4">
         <div className="mb-1.5 flex items-baseline justify-between">
-          <div className="font-semibold text-emerald-100">
+          <div className="font-semibold text-[#075b53]">
             {completed} of {steps.length} steps complete
           </div>
-          <div className="text-xs text-emerald-200/70">{pct}%</div>
+          <div className="text-xs text-[#0a7d72]/80">{pct}%</div>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-emerald-900/40">
+        <div className="h-2 overflow-hidden rounded-full bg-[#0a7d72]/15">
           <div
-            className="h-full bg-emerald-400 transition-all"
+            className="h-full bg-[#0a7d72] transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
         {completed === steps.length && (
-          <p className="mt-2 text-xs text-emerald-200">
+          <p className="mt-2 text-xs text-[#075b53]">
             🎉 Все шаги пройдены — вы готовы нанимать на QBuild!
           </p>
         )}
@@ -141,27 +141,27 @@ function Body() {
             key={s.key}
             className={`rounded-xl border p-4 transition ${
               s.done
-                ? "border-emerald-400/20 bg-emerald-500/5"
-                : "border-white/10 bg-white/[0.02]"
+                ? "border-[#0a7d72]/25 bg-[#0a7d72]/[0.04]"
+                : "border-[#d4d3cc] bg-[#fffefb]"
             }`}
           >
             <div className="flex items-start gap-3">
               <div
                 className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                   s.done
-                    ? "bg-emerald-500 text-emerald-950"
-                    : "bg-white/10 text-slate-300"
+                    ? "bg-[#0a7d72] text-white"
+                    : "bg-[#efeee8] text-[#45474c]"
                 }`}
               >
                 {s.done ? "✓" : i + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-white">{s.title}</h2>
-                <p className="mt-0.5 text-sm text-slate-300">{s.body}</p>
+                <h2 className="text-base font-semibold text-[#17181a]">{s.title}</h2>
+                <p className="mt-0.5 text-sm text-[#45474c]">{s.body}</p>
                 {!s.done && (
                   <Link
                     href={s.cta.href}
-                    className="mt-2 inline-flex rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
+                    className="mt-2 inline-flex rounded-md border border-[#0a7d72]/40 bg-[#0a7d72]/10 px-2.5 py-1 text-xs font-semibold text-[#075b53] transition hover:bg-[#0a7d72]/20"
                   >
                     {s.cta.label}
                   </Link>
@@ -172,17 +172,17 @@ function Body() {
         ))}
       </ol>
 
-      <p className="mt-8 text-[11px] text-slate-500">
+      <p className="mt-8 text-[11px] text-[#9a9c9f]">
         Нужен разбор с механикой оплаты?{" "}
-        <Link href="/build/guide" className="text-emerald-300 underline">
+        <Link href="/build/guide" className="text-[#075b53] underline">
           Гайд для работодателя
         </Link>
         . Частые вопросы —{" "}
-        <Link href="/build/help" className="text-emerald-300 underline">
+        <Link href="/build/help" className="text-[#075b53] underline">
           /build/help
         </Link>
         , или напишите на{" "}
-        <a href="mailto:hello@aevion.tech" className="text-emerald-300 underline">
+        <a href="mailto:hello@aevion.tech" className="text-[#075b53] underline">
           hello@aevion.tech
         </a>
         .

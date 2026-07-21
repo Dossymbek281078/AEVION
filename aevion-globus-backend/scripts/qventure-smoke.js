@@ -112,6 +112,27 @@ async function run() {
   const fn0 = await req("GET", "/api/qventure/funnel/pdf?ids=nope-1,nope-2");
   assert("funnel with unknown ids → 404", fn0.status === 404, String(fn0.status));
 
+  // Regression guard: before adverse-disclosure penalties existed the engine could
+  // only add points, so the composite bottomed out around 59 and the "pass" verdict
+  // (<55) was unreachable — 55 live analyses had produced zero passes.
+  console.log("\n9. Adverse disclosures reach a 'pass' verdict");
+  const dead = await req("POST", "/api/qventure/analyze", {
+    name: "Adverse Co", sector: "ecommerce", stage: "growth", geography: "US", askUsd: 40000000,
+    description: "No revenue in 3 years, two of four founders left, incumbent Shopify ships the same feature free, and our only patent lapsed. We lose money on every order.",
+  });
+  assert("adverse deal → 200", dead.status === 200, String(dead.status));
+  const dr = dead.body?.data?.result;
+  assert("adverse deal scores 'pass'", dr?.strategy?.verdict === "pass", String(dr?.strategy?.verdict));
+  assert("adverse deal composite < 55", dr?.composite < 55, String(dr?.composite));
+  assert("adverse disclosures surfaced as red flags", Array.isArray(dr?.redFlags) && dr.redFlags.length >= 4,
+    String(dr?.redFlags?.length));
+  assert("penalties are explained in factor rationales",
+    dr.factors.some((f) => /adverse disclosures/i.test(f.rationale)));
+  // Reuses the healthy deal from group 4 rather than spending another analyze
+  // call — /analyze is limited to 6/min and the suite already sits at that ceiling.
+  assert("clean deal is not penalised", d?.result?.redFlags?.length === 0,
+    String(d?.result?.redFlags?.length));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

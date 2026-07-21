@@ -74,6 +74,27 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* QBuild "newspaper" light theme — single source of truth for the
+     palette that was previously duplicated as raw hex across
+     BuildShell.tsx, guide.module.css, and several /build pages
+     (see feedback in memory: project_qbuild_lighten_and_ai_multiagent).
+     Registering these as real theme colors means `bg-paper-ink` etc. are
+     ordinary Tailwind utilities — no arbitrary-value bracket syntax, and
+     one place to change the palette. */
+  --color-paper: #f7f6f2;
+  --color-paper-2: #efeee8;
+  --color-paper-card: #fffefb;
+  --color-paper-ink: #17181a;
+  --color-paper-ink-soft: #45474c;
+  --color-paper-ink-faint: #74767c;
+  --color-paper-ink-faint-2: #9a9c9f;
+  --color-paper-rule: #d4d3cc;
+  --color-paper-rule-mid: #b9b8b0;
+  --color-paper-rule-soft: #c2c8cf;
+  --color-paper-teal: #0a7d72;
+  --color-paper-teal-deep: #075b53;
+  --color-paper-red: #b5241b;
 }
 
 body {

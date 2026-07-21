@@ -494,7 +494,14 @@ export default function QSkywayClient() {
               )}
 
               <section style={card}>
-                <div style={cardH}>Рынок 4D-слотов (QRight) · {slots.count}{slots.store ? " · " + slots.store : ""}</div>
+                <div style={{ ...cardH, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span>Рынок 4D-слотов (QRight) · {slots.count}</span>
+                  {slots.store && (
+                    <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? "Слоты сохраняются в Postgres — переживут рестарт" : "Слоты только в памяти процесса — теряются при рестарте бэкенда"}>
+                      {slots.store === "postgres" ? "● persist" : "● ephemeral"}
+                    </span>
+                  )}
+                </div>
                 {slots.list.length === 0 ? (
                   <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>Слотов пока не забронировано.</div>
                 ) : (

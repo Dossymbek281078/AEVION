@@ -428,7 +428,8 @@ export default function QSkywayClient() {
         {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
 
         {!err && (
-          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr", ...(typeof window !== "undefined" && window.innerWidth >= 900 ? { gridTemplateColumns: "1.55fr 1fr" } : {}) }}>
+          <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>
+            <style>{`.qsky-grid { grid-template-columns: 1fr; } @media (min-width: 900px) { .qsky-grid { grid-template-columns: 1.55fr 1fr; } }`}</style>
             <section style={card}>
               <div style={cardH}>Аэрокарта · реальные здания{stats.city ? " · " + stats.city : ""}</div>
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />

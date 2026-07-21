@@ -165,12 +165,30 @@ export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
   });
 }
 
+// Five of the eight factors are sector constants — the same number for every
+// company in that market. Labelling the source stops a reader assuming all eight
+// were assessed about this specific company, and explains a low execution score.
+const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: string; fg: string; title: string }> = {
+  "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Scored from metrics disclosed in this submission." },
+  "sector-prior": { text: "sector average", bg: "#f1f5f9", fg: "#475569", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
+  "no-evidence": { text: "not disclosed", bg: "#fef2f2", fg: "#b91c1c", title: "Nothing was submitted for this factor, so it scores low rather than neutral. Add traction metrics to move it." },
+};
+
 export function FactorBar({ f }: { f: ScoreFactor }) {
   const color = f.score >= 70 ? "#16a34a" : f.score >= 50 ? "#d97706" : "#dc2626";
+  const tag = f.basis ? BASIS_TAG[f.basis] : null;
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-        <span style={{ color: "#0f172a", fontWeight: 600 }}>{f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span></span>
+        <span style={{ color: "#0f172a", fontWeight: 600 }}>
+          {f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span>
+          {tag && (
+            <span title={tag.title} style={{
+              marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "1px 6px",
+              borderRadius: 999, background: tag.bg, color: tag.fg, whiteSpace: "nowrap",
+            }}>{tag.text}</span>
+          )}
+        </span>
         <span style={{ fontWeight: 700, color }}>{f.score}</span>
       </div>
       <div style={{ height: 7, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>

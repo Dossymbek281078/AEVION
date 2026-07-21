@@ -57,7 +57,7 @@ interface LsOrder {
  * if a later page errors, and a maxPages cap stops a huge history from
  * hanging the request (logged, never silently truncated).
  */
-async function lsOrders(maxPages = 10): Promise<LsOrder[] | null> {
+async function lsOrdersUncached(maxPages = 10): Promise<LsOrder[] | null> {
   const key = LS_KEY();
   if (!key) return null;
   const store = LS_STORE();
@@ -97,6 +97,24 @@ async function lsOrders(maxPages = 10): Promise<LsOrder[] | null> {
   } catch {
     return all.length ? all : null;
   }
+}
+
+/**
+ * In-process cache for the LS orders walk (same TTL/shape as Gumroad's
+ * salesCache). Without this, every hit to /lemonsqueezy/*, /summary, or the
+ * header goal badge (polled sitewide every 60s) would re-walk the full LS
+ * order history on every request — this bounds it to one fetch per window.
+ */
+const LS_ORDERS_TTL_MS = 60_000;
+let lsOrdersCache: { at: number; data: LsOrder[] } | null = null;
+
+async function lsOrders(force = false): Promise<LsOrder[] | null> {
+  if (!force && lsOrdersCache && Date.now() - lsOrdersCache.at < LS_ORDERS_TTL_MS) {
+    return lsOrdersCache.data;
+  }
+  const fresh = await lsOrdersUncached();
+  if (fresh) lsOrdersCache = { at: Date.now(), data: fresh };
+  return fresh;
 }
 
 /** Built-in permalink -> appId fallback (aevion.gumroad.com/l/<permalink>).

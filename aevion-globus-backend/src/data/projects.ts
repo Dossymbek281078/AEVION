@@ -334,6 +334,19 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "qreal",
+    code: "QREAL",
+    name: "QReal Studio — Fully-Alive AI Video",
+    description:
+      "Полностью живое AI-видео без съёмки актёра и без референс-видео: люди, дети, животные, птицы, природа и звук — по одному брифу. Пайплайн: бриф → AI-раскадровка → render-промты с директивами реализма (микромимика, моргание, SSS кожи, руки, room tone, фоли, 24fps/180°) → движок (Higgsfield/Veo) → QC-петля из 14 взвешенных критериев реализма с авто-перегенерацией. Каждый кадр несёт неотключаемую AI-маркировку (C2PA-style манифест, sha256, EU AI Act art. 50) — реализм как продукт, без обмана. P1 MVP 2026-07-21 — /api/qreal, демо «Утро в степи».",
+    kind: "product",
+    status: "mvp",
+    priority: 3,
+    tags: ["ai-video", "generative", "photorealistic", "provenance", "studio"],
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ===== OTHER PROJECTS (IDEA STAGE) =====
   {

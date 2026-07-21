@@ -13,22 +13,35 @@ export function falKey(): string {
 
 export type FalSubmitResult = { ok: true; requestId: string } | { ok: false; error: string };
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** «User is locked. Reason: Exhausted balance» держится ещё ~2 мин ПОСЛЕ
+ *  пополнения кредитов (лаг биллинга fal, воспроизведено 2026-07-21) —
+ *  поэтому lock-ошибку ретраим с бэкоффом, а не хороним задачу сразу. */
+function isBalanceLagError(msg: string): boolean {
+  return /locked|exhausted balance/i.test(msg);
+}
+
 export async function falQueueSubmit(modelId: string, input: Record<string, unknown>): Promise<FalSubmitResult> {
   const key = falKey();
   if (!key) return { ok: false, error: "FAL_KEY not configured" };
-  try {
-    const r = await fetch(`https://queue.fal.run/${modelId}`, {
-      method: "POST",
-      headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const data = (await r.json().catch(() => ({}))) as any;
-    if (!r.ok || !data?.request_id) {
-      return { ok: false, error: String(data?.detail || data?.error || `fal ${r.status}`).slice(0, 300) };
+  const backoffsMs = [20_000, 40_000];
+  for (let attempt = 0; ; attempt++) {
+    let error: string;
+    try {
+      const r = await fetch(`https://queue.fal.run/${modelId}`, {
+        method: "POST",
+        headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = (await r.json().catch(() => ({}))) as any;
+      if (r.ok && data?.request_id) return { ok: true, requestId: String(data.request_id) };
+      error = String(data?.detail || data?.error || `fal ${r.status}`).slice(0, 300);
+    } catch (err) {
+      error = err instanceof Error ? err.message : "fal submit failed";
     }
-    return { ok: true, requestId: String(data.request_id) };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "fal submit failed" };
+    if (attempt >= backoffsMs.length || !isBalanceLagError(error)) return { ok: false, error };
+    await sleep(backoffsMs[attempt]);
   }
 }
 

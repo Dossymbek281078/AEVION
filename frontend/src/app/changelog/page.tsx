@@ -11,6 +11,14 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-07-21",
+    highlight: "QReal Studio is born — fully-alive AI video without an actor, first film rendered same day",
+    body:
+      "New planet module /qreal: a text brief becomes a finished scene — people, children, animals, birds, nature and sound, no actor and no reference footage. Pipeline: AI storyboard → render prompts with built-in realism directives → direct engine APIs (Seedance 2.0 / Kling v3 via fal.ai, no middleman) → 14-criterion realism QC → FFmpeg assembly with loudness normalization. Every frame carries a non-removable AI mark (C2PA-style manifest, sha256, EU AI Act art. 50) — realism is the product, deception is not. The seeded demo «Morning in the Steppe» (dawn steppe, a boy with an Alabai dog, a grandmother pouring tea in a yurt, a golden eagle take-off) was rendered end-to-end the same day for $2.52 in engine costs, with the AI disclosure embedded in the file metadata. Transparent unit economics on the page: per-engine $/s and a full-film estimate before you click render.",
+    modules: ["QReal"],
+    kind: "feat",
+  },
+  {
     date: "2026-04-27",
     highlight: "Bank story pages · Trust deep-dive · Receipts · Wallet card · Security model",
     body:

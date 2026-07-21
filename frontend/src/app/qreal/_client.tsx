@@ -36,6 +36,7 @@ export default function QRealClient() {
   const [criteria, setCriteria] = useState<QcCriterion[]>([]);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [filmUrl, setFilmUrl] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -79,6 +80,18 @@ export default function QRealClient() {
       const d = await r.json();
       if (d?.project) setProject(d.project);
       if (Array.isArray(d?.notes) && d.notes.length) setNote(d.notes[0].note);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
+  async function assembleFilm() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/assemble`), { method: "POST" });
+      const d = await r.json();
+      if (r.ok && d?.filmUrl) setFilmUrl(apiUrl(d.filmUrl));
+      else setNote(d?.message || d?.error || t("qreal.note.backend.down"));
     } catch { setNote(t("qreal.note.backend.down")); }
     finally { setBusy(false); }
   }
@@ -225,13 +238,32 @@ export default function QRealClient() {
                     <span className="text-neutral-500"> · {estimate.cachedSec}s {t("qreal.estimate.cached")}</span>
                   )}
                 </span>
-                <button
-                  onClick={renderAll}
-                  disabled={busy}
-                  className="ml-auto border border-teal-800 bg-white px-4 py-1.5 text-sm text-teal-800 transition hover:bg-teal-800 hover:text-white disabled:opacity-40"
-                >
-                  {t("qreal.render.all")}
-                </button>
+                <span className="ml-auto flex gap-2">
+                  <button
+                    onClick={renderAll}
+                    disabled={busy}
+                    className="border border-teal-800 bg-white px-4 py-1.5 text-sm text-teal-800 transition hover:bg-teal-800 hover:text-white disabled:opacity-40"
+                  >
+                    {t("qreal.render.all")}
+                  </button>
+                  {project.shots.length > 0 && project.shots.every((s) => s.status === "rendered") && !filmUrl && (
+                    <button
+                      onClick={assembleFilm}
+                      disabled={busy}
+                      className="border border-neutral-900 bg-neutral-900 px-4 py-1.5 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
+                    >
+                      {t("qreal.film.assemble")}
+                    </button>
+                  )}
+                  {filmUrl && (
+                    <a
+                      href={filmUrl}
+                      className="border border-neutral-900 bg-neutral-900 px-4 py-1.5 text-sm text-white transition hover:bg-teal-800"
+                    >
+                      {t("qreal.film.download")}
+                    </a>
+                  )}
+                </span>
               </div>
             )}
             <div className="mt-4 grid gap-4 md:grid-cols-2">

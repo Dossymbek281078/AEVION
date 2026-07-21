@@ -273,11 +273,16 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 | Creator Royalties | ✅ Automatic | ❌ | ❌ | Partial | ❌ |
 | Compliance/Certification | ✅ Planet | ❌ | ❌ | ❌ | ❌ |
 | Chess/Gaming | ✅ CyberChess | ✅ Core | ❌ | ❌ | ❌ |
-| AI Content Creation | ✅ Planned | ❌ | ❌ | ❌ | ✅ Copilot |
+| AI Content Creation | ✅ Live — QCoreAI multi-agent | ❌ | ❌ | ❌ | ✅ Copilot |
 | Social Layer | ✅ Planned | ✅ Basic | ✅ Core | ✅ Basic | ✅ Basic |
 | Trust Score | ✅ Trust Graph | ❌ | ❌ | ❌ | ❌ |
 | Global (no censorship) | ✅ | ✅ | ❌ China only | ✅ | ✅ |
 | All-in-one ecosystem | ✅ 29 modules | ❌ Chess only | ✅ But regional | ❌ Music only | ❌ Code only |
+
+QCoreAI itself — auto cost-routing, a built-in free-tier model fleet, offline
+mode, and a published Council-vs-single-flagship benchmark — goes head-to-head
+with AutoGen, CrewAI, LangGraph, OpenAI Agents SDK and MetaGPT in a dedicated,
+source-cited comparison: **[aevion.app/qcoreai/vs](https://aevion.app/qcoreai/vs)**.
 
 ---
 

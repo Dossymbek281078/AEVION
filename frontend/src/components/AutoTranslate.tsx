@@ -473,6 +473,30 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       // DOM translation so "Medium" never becomes "Средне".
       if (el.getAttribute("translate") === "no" || el.classList?.contains("notranslate")) return;
       applyEl(el);
+      // Fragmented phrase: JSX like `smart call{n === 1 ? "" : "s"}` renders
+      // ONE phrase as sibling text nodes; translating each alone produces
+      // hybrids like "умный вызовs". When an element's children are all text
+      // nodes, translate the joined phrase instead — the result goes into the
+      // first node and the rest are blanked (node identities stay untouched,
+      // so React reconciliation is safe).
+      const kids = Array.from(el.childNodes);
+      if (kids.length > 1 && kids.every((n) => n.nodeType === Node.TEXT_NODE)) {
+        const joined = kids.map((n) => n.textContent || "").join("");
+        const s = joined.trim();
+        if (s) {
+          const tr = map[s];
+          if (tr && tr !== s) {
+            kids.forEach((n, i) => {
+              n.textContent = i === 0
+                ? (joined.match(WS_LEAD)?.[0] ?? "") + tr + (joined.match(WS_TRAIL)?.[0] ?? "")
+                : "";
+            });
+          } else if (!tr && !translatedValues.has(s) && shouldTranslate(s, lang)) {
+            pending.add(s);
+          }
+        }
+        return; // handled as one phrase — don't also queue the fragments
+      }
       node.childNodes.forEach(walk);
     };
 

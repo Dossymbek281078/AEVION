@@ -962,9 +962,10 @@ export async function callProviderResilient(
   const candidates = fallbackCandidates(providerId, model);
   let lastErr: unknown;
   for (let i = 0; i < candidates.length; i++) {
+    const t0 = Date.now();
     try {
       const res = await callProvider(providerId, messages, candidates[i], temperature);
-      recordOutcome(providerId, candidates[i], true);
+      recordOutcome(providerId, candidates[i], true, Date.now() - t0);
       return res;
     } catch (e) {
       recordOutcome(providerId, candidates[i], false);

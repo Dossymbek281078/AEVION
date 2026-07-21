@@ -3913,6 +3913,19 @@ devhubRouter.post("/media/upload-image", async (req, res) => {
 });
 
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
+/** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
+ * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
+export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const check = await fetch(url, { method: "GET", redirect: "follow" });
+      if (check.ok) return true;
+    } catch { /* network — retry */ }
+    if (attempt < 4) await new Promise((r) => setTimeout(r, attemptDelayMs));
+  }
+  return false;
+}
+
 /** Same Cloudflare Images upload as tryAutoUploadToCloudflare, but for raw
  * bytes (gpt-image-1 returns b64_json — there is no upstream URL to import). */
 async function tryAutoUploadImageBufferToCloudflare(buf: Buffer, filename: string): Promise<string | null> {
@@ -4823,12 +4836,25 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       }
     }
 
-    // 5. Mark live + update project record
+    // 5. Verify the page actually SERVES before calling it live. CF's create
+    // API reports deploy:success even when the uploaded assets never stored
+    // (the raw multipart flow is deprecated in favor of wrangler) — the page
+    // then 500s forever while our records said "live" (found live 2026-07-21:
+    // every CF Pages deploy ever made had this). Degraded-convention: a
+    // deploy that doesn't serve is FAILED, not live.
     setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
-      d.status = "live"; d.completedAt = now();
+      const serves = await verifyDeploymentServes(pagesUrl);
+      if (serves) {
+        d.status = "live"; d.completedAt = now();
+      } else {
+        d.status = "failed";
+        d.buildLog = (d.buildLog || "") +
+          " | verify: deployed assets are not serving (upstream accepted the upload but the page returns non-2xx — CF direct-upload via raw REST is deprecated, wrangler-based upload needed)";
+        d.completedAt = now();
+      }
       try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
-      if (project) {
+      if (project && serves) {
         project.status = "live";
         project.deployUrl = pagesUrl;
         if (customDomain) project.customDomain = customDomain;
@@ -4846,8 +4872,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       domainUrl,
       liveUrl: domainUrl ?? pagesUrl,
       message: customDomain
-        ? `Live at ${domainUrl} (and ${pagesUrl})`
-        : `Live at ${pagesUrl} — add CLOUDFLARE_ZONE_ID to enable aevion.build domain`,
+        ? `Deployed to ${domainUrl} (and ${pagesUrl}) — verifying it serves before marking live`
+        : `Deployed to ${pagesUrl} — verifying it serves before marking live (add CLOUDFLARE_ZONE_ID to enable aevion.build domain)`,
     });
   } catch (e: any) {
     deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";

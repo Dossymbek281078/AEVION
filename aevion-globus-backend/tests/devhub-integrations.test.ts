@@ -441,6 +441,24 @@ describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
   });
 });
 
+describe("verifyDeploymentServes — post-deploy serve check", () => {
+  test("recovers when the page starts serving after a warm-up 500", async () => {
+    const { verifyDeploymentServes } = await import("../src/routes/devhub");
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    await expect(verifyDeploymentServes("https://x.pages.dev", 1)).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("reports false after 5 non-2xx attempts (assets never stored — the live CF bug)", async () => {
+    const { verifyDeploymentServes } = await import("../src/routes/devhub");
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    await expect(verifyDeploymentServes("https://x.pages.dev", 1)).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing CF Pages project", () => {
   test("'already exists' create error under a non-8000000 code proceeds to upload instead of 500", async () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";

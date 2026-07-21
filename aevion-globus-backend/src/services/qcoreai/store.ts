@@ -720,6 +720,108 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsSumm
   };
 }
 
+/* ─── Platform-wide OPEX (P2-5) ──────────────────────────────────────────
+   Unlike getAnalytics (per-user), this aggregates EVERY user's recorded
+   calls — the operator's per-provider spend view. Aggregate-only: no user
+   ids, session titles, or content ever leave this function. */
+
+export type OpexSummary = {
+  totals: { calls: number; tokensIn: number; tokensOut: number; costUsd: number };
+  byProvider: Array<{ provider: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  byModel: Array<{ provider: string; model: string; calls: number; tokens: number; costUsd: number }>;
+  daily: Array<{ date: string; calls: number; costUsd: number }>;
+  source: "db" | "memory";
+};
+
+export async function getOpexSummary(days = 30): Promise<OpexSummary> {
+  await ensureQCoreTables(pool);
+  const n = Math.max(1, Math.min(90, Math.floor(days)));
+
+  if (!isDbReady()) return opexFromMemory();
+
+  const providerQ = await pool.query(
+    `SELECT m."provider" AS provider,
+            COUNT(*)::int AS calls,
+            COALESCE(SUM(m."tokensIn"),0)::bigint AS "tokensIn",
+            COALESCE(SUM(m."tokensOut"),0)::bigint AS "tokensOut",
+            COALESCE(SUM(m."costUsd"),0)::float8 AS "costUsd"
+       FROM "QCoreMessage" m
+      WHERE m."provider" IS NOT NULL
+      GROUP BY m."provider" ORDER BY "costUsd" DESC`
+  );
+  const modelQ = await pool.query(
+    `SELECT m."provider" AS provider, m."model" AS model,
+            COUNT(*)::int AS calls,
+            COALESCE(SUM(COALESCE(m."tokensIn",0)+COALESCE(m."tokensOut",0)),0)::bigint AS tokens,
+            COALESCE(SUM(m."costUsd"),0)::float8 AS "costUsd"
+       FROM "QCoreMessage" m
+      WHERE m."provider" IS NOT NULL AND m."model" IS NOT NULL
+      GROUP BY m."provider", m."model" ORDER BY "costUsd" DESC LIMIT 20`
+  );
+  const dailyQ = await pool.query(
+    `SELECT to_char(date_trunc('day', r."startedAt"), 'YYYY-MM-DD') AS date,
+            COUNT(m."id")::int AS calls,
+            COALESCE(SUM(m."costUsd"),0)::float8 AS "costUsd"
+       FROM "QCoreMessage" m JOIN "QCoreRun" r ON r."id"=m."runId"
+      WHERE r."startedAt" >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY 1 ORDER BY 1`,
+    [n]
+  );
+  const byProvider = providerQ.rows.map((r: any) => ({
+    provider: r.provider, calls: r.calls,
+    tokensIn: Number(r.tokensIn), tokensOut: Number(r.tokensOut),
+    costUsd: Number(r.costUsd),
+  }));
+  const totals = byProvider.reduce(
+    (a, p) => {
+      a.calls += p.calls; a.tokensIn += p.tokensIn; a.tokensOut += p.tokensOut; a.costUsd += p.costUsd;
+      return a;
+    },
+    { calls: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 }
+  );
+  return {
+    totals,
+    byProvider,
+    byModel: modelQ.rows.map((r: any) => ({
+      provider: r.provider, model: r.model, calls: r.calls,
+      tokens: Number(r.tokens), costUsd: Number(r.costUsd),
+    })),
+    daily: dailyQ.rows.map((r: any) => ({ date: r.date, calls: r.calls, costUsd: Number(r.costUsd) })),
+    source: "db",
+  };
+}
+
+function opexFromMemory(): OpexSummary {
+  const byProviderMap = new Map<string, { provider: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>();
+  const byModelMap = new Map<string, { provider: string; model: string; calls: number; tokens: number; costUsd: number }>();
+  const totals = { calls: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+  for (const ms of memMessagesByRun.values()) {
+    for (const m of ms) {
+      if (!m.provider) continue;
+      totals.calls += 1;
+      totals.tokensIn += m.tokensIn ?? 0;
+      totals.tokensOut += m.tokensOut ?? 0;
+      totals.costUsd += m.costUsd ?? 0;
+      const pe = byProviderMap.get(m.provider) || { provider: m.provider, calls: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+      pe.calls += 1; pe.tokensIn += m.tokensIn ?? 0; pe.tokensOut += m.tokensOut ?? 0; pe.costUsd += m.costUsd ?? 0;
+      byProviderMap.set(m.provider, pe);
+      if (m.model) {
+        const mk = `${m.provider}:${m.model}`;
+        const me = byModelMap.get(mk) || { provider: m.provider, model: m.model, calls: 0, tokens: 0, costUsd: 0 };
+        me.calls += 1; me.tokens += (m.tokensIn ?? 0) + (m.tokensOut ?? 0); me.costUsd += m.costUsd ?? 0;
+        byModelMap.set(mk, me);
+      }
+    }
+  }
+  return {
+    totals,
+    byProvider: Array.from(byProviderMap.values()).sort((a, b) => b.costUsd - a.costUsd),
+    byModel: Array.from(byModelMap.values()).sort((a, b) => b.costUsd - a.costUsd).slice(0, 20),
+    daily: [],
+    source: "memory",
+  };
+}
+
 function analyticsFromMemory(userId: string | null, scope: "mine" | "anonymous"): AnalyticsSummary {
   const sessions = Array.from(memSessions.values()).filter((s) =>
     userId ? s.userId === userId : s.userId == null

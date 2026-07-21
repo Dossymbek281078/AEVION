@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import styles from "./guide.module.css";
+import { getServerT } from "@/lib/i18n-server";
 
 export const metadata: Metadata = {
   title: "QBuild — гайд для работодателя",
@@ -15,96 +16,6 @@ type Step = {
   cta?: { label: string; href: string };
 };
 
-const STEPS: Step[] = [
-  {
-    n: 1,
-    title: "Заполните профиль работодателя",
-    body: (
-      <>
-        Укажите название компании или бригады, город и коротко о себе. Профиль — это
-        лицо на витрине: чем полнее, тем выше доверие кандидата к вашим вакансиям.
-        Значок <span className={styles.accent}>✓ Verified</span> можно запросить
-        в профиле — проверяем за 1–2 рабочих дня.
-      </>
-    ),
-    cta: { label: "К профилю →", href: "/build/profile" },
-  },
-  {
-    n: 2,
-    title: "Создайте проект",
-    body: (
-      <>
-        Проект — это контейнер под одну или несколько вакансий (например «Отделка
-        офиса 180 м²»). Указываете название, описание объёма работ, город и бюджет.
-        Публикация проекта — <b>бесплатно</b>.
-      </>
-    ),
-    cta: { label: "Создать проект →", href: "/build/create-project" },
-  },
-  {
-    n: 3,
-    title: "Опубликуйте вакансию",
-    body: (
-      <>
-        Внутри проекта нажмите <b>«+ Добавить вакансию»</b>: роль, требования,
-        зарплата, навыки. Можно добавить вопросы к кандидату — по ответам сработает
-        AI-скоринг (шаг 4). Чем конкретнее описание, тем выше отклик. Публикация
-        вакансии — <b>0 ₽ на любом тарифе</b>.
-      </>
-    ),
-  },
-  {
-    n: 4,
-    title: "Отсмотрите отклики",
-    body: (
-      <>
-        По каждому отклику видно:
-        <ul>
-          <li>
-            <b>AI-скоринг 0–100</b> — Claude оценивает ответы кандидата на ваши
-            вопросы, показывает балл и красные флаги прямо на карточке.
-          </li>
-          <li>
-            <b>Видеорезюме</b> — если кандидат его записал, смотрите до звонка.
-          </li>
-          <li>
-            <b>Пробное задание (Trial)</b> — предложите небольшую <i>оплачиваемую</i>{" "}
-            задачу, чтобы проверить навык в деле, а не на словах.
-          </li>
-          <li>
-            Всю воронку заявок можно выгрузить в <b>CSV</b> (имя, город, AI-score,
-            статус).
-          </li>
-        </ul>
-      </>
-    ),
-    cta: { label: "Поиск кандидатов →", href: "/build/talent" },
-  },
-  {
-    n: 5,
-    title: "Общайтесь напрямую",
-    body: (
-      <>
-        Прямые сообщения с кандидатом — <b>без премиум-стены</b>. Не нужно платить,
-        чтобы «открыть контакт»: написать можно любому откликнувшемуся.
-      </>
-    ),
-    cta: { label: "Сообщения →", href: "/build/messages" },
-  },
-  {
-    n: 6,
-    title: "Наймите — и заплатите только за найм",
-    body: (
-      <>
-        Никакого аванса агентству. Комиссия <b>Pay-per-Hire</b> берётся только когда
-        вы реально нанимаете. Базово это <b>12%</b>, и она <b>падает с ростом числа
-        наймов</b> — до <b>4%</b> на верхнем уровне лояльности. Плюс на каждый
-        оплаченный заказ начисляется <b>AEV-кэшбэк</b> (2% → 5% по тирам).
-      </>
-    ),
-  },
-];
-
 const TIERS = [
   { tier: "Default", hires: "0", fee: "12%", cashback: "2%" },
   { tier: "Bronze", hires: "3", fee: "10%", cashback: "2.5%" },
@@ -113,7 +24,109 @@ const TIERS = [
   { tier: "Platinum", hires: "50", fee: "4%", cashback: "5%" },
 ];
 
-export default function GuidePage() {
+export default async function GuidePage() {
+  const { t } = await getServerT();
+
+  const STEPS: Step[] = [
+    {
+      n: 1,
+      title: t("build.guide.step1Title"),
+      body: (
+        <>
+          {t("build.guide.step1Body1")}
+          <span className={styles.accent}>{t("build.guide.step1Badge")}</span>
+          {t("build.guide.step1Body2")}
+        </>
+      ),
+      cta: { label: t("build.guide.step1Cta"), href: "/build/profile" },
+    },
+    {
+      n: 2,
+      title: t("build.guide.step2Title"),
+      body: (
+        <>
+          {t("build.guide.step2Body1")}
+          <b>{t("build.guide.step2Free")}</b>.
+        </>
+      ),
+      cta: { label: t("build.guide.step2Cta"), href: "/build/create-project" },
+    },
+    {
+      n: 3,
+      title: t("build.guide.step3Title"),
+      body: (
+        <>
+          {t("build.guide.step3Body1")}
+          <b>{t("build.guide.step3AddVacancy")}</b>
+          {t("build.guide.step3Body2")}
+          <b>{t("build.guide.step3FreeAnyPlan")}</b>.
+        </>
+      ),
+    },
+    {
+      n: 4,
+      title: t("build.guide.step4Title"),
+      body: (
+        <>
+          {t("build.guide.step4Intro")}
+          <ul>
+            <li>
+              <b>{t("build.guide.step4Item1Bold")}</b>
+              {t("build.guide.step4Item1Text")}
+            </li>
+            <li>
+              <b>{t("build.guide.step4Item2Bold")}</b>
+              {t("build.guide.step4Item2Text")}
+            </li>
+            <li>
+              <b>{t("build.guide.step4Item3Bold")}</b>
+              {t("build.guide.step4Item3Text1")}
+              <i>{t("build.guide.step4Item3Italic")}</i>
+              {t("build.guide.step4Item3Text2")}
+            </li>
+            <li>
+              {t("build.guide.step4Item4Text1")}
+              <b>{t("build.guide.step4Item4Bold")}</b>
+              {t("build.guide.step4Item4Text2")}
+            </li>
+          </ul>
+        </>
+      ),
+      cta: { label: t("build.guide.step4Cta"), href: "/build/talent" },
+    },
+    {
+      n: 5,
+      title: t("build.guide.step5Title"),
+      body: (
+        <>
+          {t("build.guide.step5Body1")}
+          <b>{t("build.guide.step5NoWall")}</b>
+          {t("build.guide.step5Body2")}
+        </>
+      ),
+      cta: { label: t("build.guide.step5Cta"), href: "/build/messages" },
+    },
+    {
+      n: 6,
+      title: t("build.guide.step6Title"),
+      body: (
+        <>
+          {t("build.guide.step6Body1")}
+          <b>{t("build.guide.step6PayPerHire")}</b>
+          {t("build.guide.step6Body2")}
+          <b>{t("build.guide.step6BaseFee")}</b>
+          {t("build.guide.step6Body3")}
+          <b>{t("build.guide.step6Falls")}</b>
+          {t("build.guide.step6Body4")}
+          <b>{t("build.guide.step6MinFee")}</b>
+          {t("build.guide.step6Body5")}
+          <b>{t("build.guide.step6Cashback")}</b>
+          {t("build.guide.step6Body6")}
+        </>
+      ),
+    },
+  ];
+
   return (
     <main className={styles.guide}>
       <div className={styles.sheet}>
@@ -122,48 +135,46 @@ export default function GuidePage() {
           <Link href="/build" className={styles.back}>
             ← QBuild
           </Link>
-          <span className={styles.live}>Портал живой</span>
-          <span>Издание для стройки · Астана</span>
+          <span className={styles.live}>{t("build.guide.live")}</span>
+          <span>{t("build.guide.edition")}</span>
         </div>
 
         <div className={styles.nameplate}>
-          <div className={styles.kicker}>Гид работодателя</div>
-          <h1>Как нанимать на QBuild</h1>
-          <div className={styles.subhead}>
-            От регистрации до первого найма — и как устроена оплата
-          </div>
+          <div className={styles.kicker}>{t("build.guide.kicker")}</div>
+          <h1>{t("build.guide.title")}</h1>
+          <div className={styles.subhead}>{t("build.guide.subhead")}</div>
         </div>
         <div className={styles.ruleDouble} />
 
         <div className={styles.ledeBand}>
           <div className={styles.dateline}>
             <div className={styles.place}>
-              <span>АСТАНА</span> — площадка найма для стройки
+              <span>{t("build.guide.cityLabel")}</span> {t("build.guide.placeTagline")}
             </div>
             <p className={styles.lede}>
-              Разместить проект и вакансию — <b>бесплатно</b>, без аванса агентству.
-              AI помогает отсеять отклики, а пробное задание проверяет навык в деле, а
-              не на словах. Платите <b>только за найм</b>: комиссия начинается с 12% и
-              снижается до 4% по мере того, как вы нанимаете, плюс кэшбэк в токенах AEV.
-              Ниже — весь путь по шагам, от профиля до оплаты.
+              {t("build.guide.ledePart1")}
+              <b>{t("build.guide.ledeFree")}</b>
+              {t("build.guide.ledePart2")}
+              <b>{t("build.guide.ledeOnlyHire")}</b>
+              {t("build.guide.ledePart3")}
             </p>
           </div>
           <div className={styles.numbers}>
-            <div className={styles.cap}>Условия коротко</div>
+            <div className={styles.cap}>{t("build.guide.termsCap")}</div>
             <div className={styles.row}>
-              <span>Публикация вакансии</span>
+              <span>{t("build.guide.termVacancyPost")}</span>
               <span className={styles.free}>0&#8202;₽</span>
             </div>
             <div className={styles.row}>
-              <span>Hire-fee, база</span>
+              <span>{t("build.guide.termHireFeeBase")}</span>
               <span>12%</span>
             </div>
             <div className={styles.row}>
-              <span>Hire-fee, минимум</span>
+              <span>{t("build.guide.termHireFeeMin")}</span>
               <span className={styles.free}>4%</span>
             </div>
             <div className={styles.row}>
-              <span>AEV-кэшбэк, до</span>
+              <span>{t("build.guide.termCashbackUpTo")}</span>
               <span>5%</span>
             </div>
           </div>
@@ -171,7 +182,7 @@ export default function GuidePage() {
 
         <div className={styles.stepsHead}>
           <span className={styles.mark}>№</span>
-          <h2>Шесть шагов до найма</h2>
+          <h2>{t("build.guide.stepsHeading")}</h2>
         </div>
         <ol className={styles.steps}>
           {STEPS.map((s) => (
@@ -190,27 +201,25 @@ export default function GuidePage() {
         </ol>
 
         <div className={styles.ratesBand}>
-          <div className={styles.ratesCap}>Лояльность</div>
-          <p className={styles.ratesSub}>
-            Чем больше наймов — тем дешевле. Уровень поднимается автоматически.
-          </p>
+          <div className={styles.ratesCap}>{t("build.guide.loyaltyCap")}</div>
+          <p className={styles.ratesSub}>{t("build.guide.loyaltySub")}</p>
           <div className={styles.tblWrap}>
             <table className={styles.rates}>
               <thead>
                 <tr>
-                  <th>Уровень</th>
-                  <th>Наймов</th>
+                  <th>{t("build.guide.thTier")}</th>
+                  <th>{t("build.guide.thHires")}</th>
                   <th>Hire-fee</th>
-                  <th>AEV-кэшбэк</th>
+                  <th>{t("build.guide.thCashback")}</th>
                 </tr>
               </thead>
               <tbody>
-                {TIERS.map((t) => (
-                  <tr key={t.tier}>
-                    <th>{t.tier}</th>
-                    <td className={styles.num}>{t.hires}</td>
-                    <td className={styles.fee}>{t.fee}</td>
-                    <td className={styles.num}>{t.cashback}</td>
+                {TIERS.map((t2) => (
+                  <tr key={t2.tier}>
+                    <th>{t2.tier}</th>
+                    <td className={styles.num}>{t2.hires}</td>
+                    <td className={styles.fee}>{t2.fee}</td>
+                    <td className={styles.num}>{t2.cashback}</td>
                   </tr>
                 ))}
               </tbody>
@@ -219,25 +228,25 @@ export default function GuidePage() {
         </div>
 
         <div className={styles.cta}>
-          <div className={styles.lead}>Начните нанимать за две минуты</div>
+          <div className={styles.lead}>{t("build.guide.finalCtaLead")}</div>
           <div className={styles.btns}>
             <Link href="/build/create-project" className={`${styles.btn} ${styles.btnPrimary}`}>
-              Создать проект →
+              {t("build.guide.finalCtaProject")}
             </Link>
             <Link href="/build/onboarding" className={`${styles.btn} ${styles.btnGhost}`}>
-              Интерактивный чек-лист
+              {t("build.guide.finalCtaChecklist")}
             </Link>
             <Link href="/build/help" className={`${styles.btn} ${styles.btnGhost}`}>
-              FAQ и помощь
+              {t("build.guide.finalCtaFaq")}
             </Link>
           </div>
         </div>
 
         <div className={styles.colophon}>
-          <span>AEVION QBuild · площадка найма для стройки</span>
+          <span>{t("build.guide.colophonTagline")}</span>
           <span>
-            Вы соискатель? Смотрите{" "}
-            <Link href="/build/guide-worker">гайд для соискателя</Link>
+            {t("build.guide.colophonAskWorker")}
+            <Link href="/build/guide-worker">{t("build.guide.colophonWorkerGuideLink")}</Link>
           </span>
           <Link href="/build">aevion.vercel.app/build</Link>
         </div>

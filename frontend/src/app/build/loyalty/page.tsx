@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, type TierKey } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type TiersCatalogItem = Awaited<ReturnType<typeof buildApi.loyaltyTiers>>["items"][number];
 type LoyaltyMe = Awaited<ReturnType<typeof buildApi.loyaltyMe>>;
@@ -51,6 +52,7 @@ const TIER_THEME: Record<TierKey, { bg: string; ring: string; text: string; chip
 };
 
 export default function LoyaltyPage() {
+  const { t } = useI18n();
   const token = useBuildAuth((s) => s.token);
   const [tiers, setTiers] = useState<TiersCatalogItem[]>([]);
   const [me, setMe] = useState<LoyaltyMe | null>(null);
@@ -96,10 +98,9 @@ export default function LoyaltyPage() {
 
       {!loading && tiers.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-lg font-bold text-white">Все 5 уровней</h2>
+          <h2 className="text-lg font-bold text-white">{t("build.loyalty.tiersHeading")}</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Все benefits применяются автоматически. Никаких отдельных подписок —
-            один раз достигли уровня, скидки уже работают.
+            {t("build.loyalty.tiersSubheading")}
           </p>
           <div className="mt-5 grid gap-4 lg:grid-cols-5 md:grid-cols-2 sm:grid-cols-1">
             {tiers.map((t) => (
@@ -121,28 +122,32 @@ export default function LoyaltyPage() {
 }
 
 function Hero() {
+  const { t } = useI18n();
   return (
     <section className="rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-emerald-500/5 to-slate-900 px-6 py-10 sm:px-10 sm:py-14">
       <div className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">
         AEV · Loyalty Program
       </div>
       <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">
-        Чем больше нанимаете — тем меньше платите. И больше получаете обратно.
+        {t("build.loyalty.heroHeadline")}
       </h1>
       <p className="mt-3 max-w-3xl text-sm text-slate-300 sm:text-base">
-        5 уровней лояльности — от Default до Platinum. Каждый шаг повышает 4
-        вещи разом: <span className="font-semibold text-fuchsia-200">снижается hire-fee</span>,
-        растёт <span className="font-semibold text-emerald-200">AEV cashback</span>,
-        даётся <span className="font-semibold text-cyan-200">скидка на подписку</span> и
-        дополнительные <span className="font-semibold text-amber-200">boost-слоты</span>.
-        У HH такого нет — нет ни цены, ни обратной выплаты в токене.
+        {t("build.loyalty.heroBodyPre")}
+        <span className="font-semibold text-fuchsia-200">{t("build.loyalty.heroBodyHighlight1")}</span>
+        {t("build.loyalty.heroBodyMid1")}
+        <span className="font-semibold text-emerald-200">{t("build.loyalty.heroBodyHighlight2")}</span>
+        {t("build.loyalty.heroBodyMid2")}
+        <span className="font-semibold text-cyan-200">{t("build.loyalty.heroBodyHighlight3")}</span>
+        {t("build.loyalty.heroBodyMid3")}
+        <span className="font-semibold text-amber-200">{t("build.loyalty.heroBodyHighlight4")}</span>
+        {t("build.loyalty.heroBodyEnd")}
       </p>
       <div className="mt-5 flex flex-wrap gap-2 text-xs">
         <Badge>5 tiers · automatic</Badge>
-        <Badge>Cashback rate растёт 2% → 5%</Badge>
-        <Badge>Hire-fee падает 12% → 4%</Badge>
-        <Badge>Скидка на подписку до −25%</Badge>
-        <Badge>+12 boost-слотов на Platinum</Badge>
+        <Badge>{t("build.loyalty.badgeCashback")}</Badge>
+        <Badge>{t("build.loyalty.badgeHireFee")}</Badge>
+        <Badge>{t("build.loyalty.badgeSubDiscount")}</Badge>
+        <Badge>{t("build.loyalty.badgeBoostSlots")}</Badge>
       </div>
     </section>
   );
@@ -157,6 +162,7 @@ function Badge({ children }: { children: React.ReactNode }) {
 }
 
 function CurrentStatus({ me, cashback }: { me: LoyaltyMe; cashback: CashbackData | null }) {
+  const { t } = useI18n();
   const theme = TIER_THEME[me.tier.key];
 
   return (
@@ -166,20 +172,21 @@ function CurrentStatus({ me, cashback }: { me: LoyaltyMe; cashback: CashbackData
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex-1 min-w-[240px]">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Ваш текущий уровень
+            {t("build.loyalty.currentTierLabel")}
           </div>
           <div className="mt-1 flex items-baseline gap-3">
             <span className="text-5xl">{theme.emoji}</span>
             <h2 className={`text-3xl font-bold ${theme.text}`}>{me.tier.label}</h2>
-            <span className="text-xs text-slate-400">{me.hires} наймов</span>
+            <span className="text-xs text-slate-400">{t("build.loyalty.hiresCount", { hires: me.hires })}</span>
           </div>
 
           {me.next ? (
             <div className="mt-5">
               <div className="flex items-end justify-between text-xs">
                 <span className="text-slate-400">
-                  До {me.next.label}: ещё{" "}
-                  <span className="font-semibold text-white">{me.next.hiresToNext}</span> найма
+                  {t("build.loyalty.toNextTierPrefix", { label: me.next.label })}{" "}
+                  <span className="font-semibold text-white">{me.next.hiresToNext}</span>{" "}
+                  {t("build.loyalty.toNextTierSuffix")}
                 </span>
                 <span className="text-slate-400">{me.next.progressPct}%</span>
               </div>
@@ -190,22 +197,27 @@ function CurrentStatus({ me, cashback }: { me: LoyaltyMe; cashback: CashbackData
                 />
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                На {me.next.label}: hire-fee {me.next.hireFeePct}%, cashback {(me.next.cashbackBps / 100).toFixed(1)}%
-                {me.next.subDiscountBps > 0 && `, скидка на подписку −${me.next.subDiscountBps / 100}%`}
+                {t("build.loyalty.nextTierStats", {
+                  label: me.next.label,
+                  hireFeePct: me.next.hireFeePct,
+                  cashback: (me.next.cashbackBps / 100).toFixed(1),
+                })}
+                {me.next.subDiscountBps > 0 &&
+                  t("build.loyalty.nextTierSubDiscount", { pct: me.next.subDiscountBps / 100 })}
               </p>
             </div>
           ) : (
             <p className="mt-5 text-xs text-fuchsia-200">
-              Вы на максимальном уровне. Платиновые benefits активны без срока действия.
+              {t("build.loyalty.maxTierReached")}
             </p>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Hire-fee" value={`${me.tier.hireFeePct}%`} hint="Pay-per-Hire" />
-          <Stat label="Cashback" value={`${(me.tier.cashbackBps / 100).toFixed(1)}%`} hint="на каждый PAID" />
-          <Stat label="Sub. discount" value={me.tier.subDiscountBps > 0 ? `−${me.tier.subDiscountBps / 100}%` : "—"} hint="к подписке" />
-          <Stat label="Boost +" value={me.tier.boostSlotsBonus > 0 ? `+${me.tier.boostSlotsBonus}` : "—"} hint="слотов / мес" />
+          <Stat label="Cashback" value={`${(me.tier.cashbackBps / 100).toFixed(1)}%`} hint={t("build.loyalty.statHintCashback")} />
+          <Stat label="Sub. discount" value={me.tier.subDiscountBps > 0 ? `−${me.tier.subDiscountBps / 100}%` : "—"} hint={t("build.loyalty.statHintSubDiscount")} />
+          <Stat label="Boost +" value={me.tier.boostSlotsBonus > 0 ? `+${me.tier.boostSlotsBonus}` : "—"} hint={t("build.loyalty.statHintBoost")} />
         </div>
       </div>
 
@@ -213,28 +225,28 @@ function CurrentStatus({ me, cashback }: { me: LoyaltyMe; cashback: CashbackData
         <div className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <div className="text-xs uppercase tracking-wider text-emerald-300">Накоплено AEV</div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">{t("build.loyalty.cashbackAccrued")}</div>
               <div className="mt-1 text-2xl font-bold text-emerald-200">
                 {cashback.totalAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV
               </div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-emerald-300">Заказов</div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">{t("build.loyalty.cashbackOrders")}</div>
               <div className="mt-1 text-2xl font-bold text-emerald-200">{cashback.entries}</div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-emerald-300">Текущая ставка</div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">{t("build.loyalty.cashbackCurrentRate")}</div>
               <div className="mt-1 text-2xl font-bold text-emerald-200">
                 {(cashback.cashbackBps / 100).toFixed(1)}%
               </div>
             </div>
           </div>
           <p className="mt-3 text-xs text-emerald-200/70">
-            Чтобы вывести AEV в кошелёк → перейдите на{" "}
+            {t("build.loyalty.cashbackWithdrawPre")}{" "}
             <Link href="/build/pricing" className="underline">
               /build/pricing
             </Link>
-            , блок Loyalty внизу.
+            {t("build.loyalty.cashbackWithdrawPost")}
           </p>
         </div>
       )}
@@ -253,14 +265,15 @@ function Stat({ label, value, hint }: { label: string; value: string; hint: stri
 }
 
 function UnauthHint() {
+  const { t } = useI18n();
   return (
     <section className="mt-8 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5 text-sm text-slate-200">
       <p>
-        Уровень рассчитывается автоматически после первого найма.{" "}
+        {t("build.loyalty.unauthPre")}{" "}
         <Link href="/build/profile" className="font-semibold text-emerald-300 underline">
-          Войдите или зарегистрируйтесь
+          {t("build.loyalty.unauthLinkText")}
         </Link>
-        , чтобы видеть свой прогресс и применять скидки.
+        {t("build.loyalty.unauthPost")}
       </p>
     </section>
   );
@@ -275,6 +288,7 @@ function TierCard({
   isCurrent: boolean;
   isReached: boolean;
 }) {
+  const { t } = useI18n();
   const theme = TIER_THEME[tier.key];
   return (
     <div
@@ -290,17 +304,17 @@ function TierCard({
         <div className="text-2xl">{theme.emoji}</div>
         {isCurrent && (
           <span className="rounded-full bg-fuchsia-500 px-2 py-1 text-xs font-bold uppercase tracking-wider text-white">
-            Ваш
+            {t("build.loyalty.tierBadgeCurrent")}
           </span>
         )}
         {!isCurrent && isReached && (
           <span className="rounded-full bg-emerald-500/30 px-2 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200">
-            Достигнут
+            {t("build.loyalty.tierBadgeReached")}
           </span>
         )}
       </div>
       <div className={`mt-2 text-lg font-bold ${theme.text}`}>{tier.label}</div>
-      <div className="text-xs text-slate-400">от {tier.minHires} наймов</div>
+      <div className="text-xs text-slate-400">{t("build.loyalty.tierMinHires", { minHires: tier.minHires })}</div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-center">
         <div className="rounded-md bg-black/30 px-2 py-1.5">
@@ -328,41 +342,42 @@ function TierCard({
 }
 
 function Investors() {
+  const { t } = useI18n();
   return (
     <section className="mt-12 rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-900 px-6 py-8 sm:px-10">
       <div className="text-xs font-bold uppercase tracking-wider text-cyan-300">
         Why this is a moat — investor view
       </div>
       <h2 className="mt-2 text-2xl font-bold text-white">
-        Tokenomics что HH не повторит
+        {t("build.loyalty.investorsTitle")}
       </h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Insight
           icon="🧩"
-          title="Closed-loop экономика"
-          body="Recruiter платит — получает AEV — расходует на boost / sub — мы получаем процент. Нет утечки в external payment provider beyond раз в год; cashback закольцован."
+          title={t("build.loyalty.insight1Title")}
+          body={t("build.loyalty.insight1Body")}
         />
         <Insight
           icon="🚀"
-          title="Network effect через tier"
-          body="Чем дольше recruiter с нами — тем выгоднее остаться. Лимитный churn встроен в продукт, не в retention-программу."
+          title={t("build.loyalty.insight2Title")}
+          body={t("build.loyalty.insight2Body")}
         />
         <Insight
           icon="🛡️"
           title="Defensible data"
-          body="Каждый ACCEPTED hire обогащает match-engine. Через 12 мес у нас будет signal-плотность по строй-вертикали, которой нет у HH."
+          body={t("build.loyalty.insight3Body")}
         />
         <Insight
           icon="💸"
-          title="Маржа"
-          body="Default: 12% hire-fee + 0% cashback-cost. Platinum: 4% hire-fee + 5% cashback. Маржа на Platinum уровне = 4% − 5% × usage_share — компенсируется sub-fee и boost-add-ons."
+          title={t("build.loyalty.insight4Title")}
+          body={t("build.loyalty.insight4Body")}
         />
       </div>
       <Link
         href="/build/why-aevion"
         className="mt-5 inline-flex items-center gap-2 rounded-md bg-cyan-500 px-4 py-2 text-sm font-bold text-cyan-950 hover:bg-cyan-400"
       >
-        Полный pitch deck → /why-aevion
+        {t("build.loyalty.investorsCta")}
       </Link>
     </section>
   );
@@ -379,26 +394,27 @@ function Insight({ icon, title, body }: { icon: string; title: string; body: str
 }
 
 function Faq() {
+  const { t } = useI18n();
   const items: { q: string; a: string }[] = [
     {
-      q: "Как считаются hires?",
-      a: "Каждое ACCEPTED-application на вакансии вашего проекта = 1 hire. Плюс APPROVED trial-task. Без double-count: одна и та же application учитывается один раз.",
+      q: t("build.loyalty.faqQ1"),
+      a: t("build.loyalty.faqA1"),
     },
     {
-      q: "Можно ли потерять уровень?",
-      a: "Нет. Уровни не сгорают — это пожизненный счётчик. Однажды достигли Gold — навсегда Gold (или выше).",
+      q: t("build.loyalty.faqQ2"),
+      a: t("build.loyalty.faqA2"),
     },
     {
-      q: "Когда применяется sub-discount?",
-      a: "В момент создания order через POST /subscriptions/start. Дисконт фиксируется в order — даже если позже вы перешли на следующий tier, текущая подписка считается по «старой» цене до перевыпуска.",
+      q: t("build.loyalty.faqQ3"),
+      a: t("build.loyalty.faqA3"),
     },
     {
-      q: "Cashback идёт в реальную крипту?",
-      a: "В AEV — нативный токен AEVION. Хранится в встроенном AEV-кошельке (модуль /aev). Может быть погашен на функции AEVION или сконвертирован при появлении DEX-листинга (roadmap Q4 2026).",
+      q: t("build.loyalty.faqQ4"),
+      a: t("build.loyalty.faqA4"),
     },
     {
-      q: "Платиновый уровень требует 50 наймов — это реально?",
-      a: "Для крупного агентства / подрядчика с 5–10 активными проектами — 6–12 месяцев. На Platinum hire-fee становится 4% — это уже втрое дешевле HH-агентства. Окупаемость очевидна на первой же средней сделке.",
+      q: t("build.loyalty.faqQ5"),
+      a: t("build.loyalty.faqA5"),
     },
   ];
   return (

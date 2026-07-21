@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getServerT } from "@/lib/i18n-server";
 
 export const metadata: Metadata = {
   title: "QBuild — гайд для соискателя",
@@ -14,103 +15,93 @@ type Step = {
   cta?: { label: string; href: string };
 };
 
-const STEPS: Step[] = [
-  {
-    n: 1,
-    title: "Заполните профиль",
-    body: (
-      <>
-        Минимум: должность, короткое summary и <b>2+ навыка</b> — тогда вы
-        попадаете в рекомендации и поиск работодателей. Хотите больше доверия —
-        запросите значок <span className="text-emerald-300">✓ Verified</span> в
-        профиле (ссылка на LinkedIn/портфолио/сертификаты, проверяем 1–2 рабочих
-        дня). Ваш публичный профиль — <code className="text-slate-400">/build/u/…</code>.
-      </>
-    ),
-    cta: { label: "К профилю →", href: "/build/profile" },
-  },
-  {
-    n: 2,
-    title: "Найдите вакансии",
-    body: (
-      <>
-        В разделе «Вакансии» — фильтры по городу, навыку и зарплате. Для соискателя
-        всё <b>бесплатно</b>: ни платы за отклик, ни премиум-стены на контакты.
-      </>
-    ),
-    cta: { label: "К вакансиям →", href: "/build/vacancies" },
-  },
-  {
-    n: 3,
-    title: "Откликнитесь",
-    body: (
-      <>
-        Кнопка <b>«Quick apply»</b> прямо из списка, либо откройте вакансию для
-        полной формы с вопросами. Если работодатель добавил вопросы — отвечайте
-        вдумчиво: <b>AI оценивает ответы по 100-балльной шкале</b>, и хороший балл
-        поднимает вас в его списке.
-      </>
-    ),
-  },
-  {
-    n: 4,
-    title: "Запишите видеорезюме (по желанию)",
-    body: (
-      <>
-        Короткое видео выделяет вас: работодатель видит вас «вживую» ещё до звонка.
-        Особенно помогает, если опыт сложно уместить в текст.
-      </>
-    ),
-  },
-  {
-    n: 5,
-    title: "Пройдите пробное задание (Trial)",
-    body: (
-      <>
-        После одобрения отклика работодатель может предложить <b>Trial</b> —
-        небольшую <i>оплачиваемую</i> задачу, чтобы проверить навык в деле. Выполнили —
-        получили оплату, и работодатель убедился в вас без долгих собеседований.
-      </>
-    ),
-  },
-  {
-    n: 6,
-    title: "Общайтесь и получайте найм",
-    body: (
-      <>
-        Прямые сообщения с работодателем — без премиум-стены с обеих сторон.
-        Договорились — вас нанимают. После завершения работы обе стороны оставляют
-        отзывы: репутация растёт и открывает лучшие заказы.
-      </>
-    ),
-    cta: { label: "Сообщения →", href: "/build/messages" },
-  },
-];
+export default async function WorkerGuidePage() {
+  const { t } = await getServerT();
 
-export default function WorkerGuidePage() {
+  const STEPS: Step[] = [
+    {
+      n: 1,
+      title: t("build.guideWorker.step1Title"),
+      body: (
+        <>
+          {t("build.guideWorker.step1Intro")}<b>{t("build.guideWorker.step1Skill")}</b>
+          {t("build.guideWorker.step1Trust")}
+          <span className="text-emerald-300">{t("build.guideWorker.step1VerifiedBadge")}</span>
+          {t("build.guideWorker.step1Note")}{" "}
+          <code className="text-slate-400">/build/u/…</code>.
+        </>
+      ),
+      cta: { label: t("build.guideWorker.step1CtaLabel"), href: "/build/profile" },
+    },
+    {
+      n: 2,
+      title: t("build.guideWorker.step2Title"),
+      body: (
+        <>
+          {t("build.guideWorker.step2Intro")}<b>{t("build.guideWorker.step2Free")}</b>
+          {t("build.guideWorker.step2End")}
+        </>
+      ),
+      cta: { label: t("build.guideWorker.step2CtaLabel"), href: "/build/vacancies" },
+    },
+    {
+      n: 3,
+      title: t("build.guideWorker.step3Title"),
+      body: (
+        <>
+          {t("build.guideWorker.step3Intro")}<b>{t("build.guideWorker.step3QuickApply")}</b>
+          {t("build.guideWorker.step3Middle")}
+          <b>{t("build.guideWorker.step3AiScore")}</b>
+          {t("build.guideWorker.step3End")}
+        </>
+      ),
+    },
+    {
+      n: 4,
+      title: t("build.guideWorker.step4Title"),
+      body: <>{t("build.guideWorker.step4Body")}</>,
+    },
+    {
+      n: 5,
+      title: t("build.guideWorker.step5Title"),
+      body: (
+        <>
+          {t("build.guideWorker.step5Intro")}<b>{t("build.guideWorker.step5Trial")}</b>
+          {t("build.guideWorker.step5Middle")}<i>{t("build.guideWorker.step5Paid")}</i>
+          {t("build.guideWorker.step5End")}
+        </>
+      ),
+    },
+    {
+      n: 6,
+      title: t("build.guideWorker.step6Title"),
+      body: <>{t("build.guideWorker.step6Body")}</>,
+      cta: { label: t("build.guideWorker.step6CtaLabel"), href: "/build/messages" },
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
       <div className="mx-auto max-w-3xl">
         <Link href="/build" className="text-xs text-slate-400 hover:underline">
-          ← QBuild
+          {t("build.guideWorker.backToBuild")}
         </Link>
         <h1 className="mt-3 text-3xl font-extrabold text-white">
-          Гайд для соискателя
+          {t("build.guideWorker.pageTitle")}
         </h1>
         <p className="mt-2 text-sm text-slate-400">
-          От профиля до найма — и почему для вас это бесплатно.
+          {t("build.guideWorker.pageSubtitle")}
         </p>
 
         {/* How it works in 30 seconds */}
         <section className="mt-6 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-5">
           <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-200">
-            Как это работает за 30 секунд
+            {t("build.guideWorker.howItWorksTitle")}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-200">
-            Для соискателя QBuild <b>бесплатен</b>: заполняете профиль, откликаетесь
-            на вакансии, при желании — видеорезюме и оплачиваемое пробное задание.
-            За оплаченные заказы (например Trial) капает <b>2% AEV-кэшбэка</b>.
-            Никакой платы за «открыть контакт».
+            {t("build.guideWorker.howItWorksIntro")}<b>{t("build.guideWorker.howItWorksFree")}</b>
+            {t("build.guideWorker.howItWorksBody")}<b>{t("build.guideWorker.howItWorksCashback")}</b>
+            {t("build.guideWorker.howItWorksNoFee")}
           </p>
         </section>
 
@@ -146,10 +137,9 @@ export default function WorkerGuidePage() {
 
         {/* Job alerts tip */}
         <section className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-          <h2 className="text-base font-semibold text-white">💡 Совет: Job Alerts</h2>
+          <h2 className="text-base font-semibold text-white">{t("build.guideWorker.tipTitle")}</h2>
           <p className="mt-1 text-sm text-slate-300">
-            В профиле → «Job alerts» задайте ключевые слова и навыки. Как появится
-            подходящая вакансия — придёт письмо, и вы откликнетесь первым.
+            {t("build.guideWorker.tipBody")}
           </p>
         </section>
 
@@ -159,22 +149,22 @@ export default function WorkerGuidePage() {
             href="/build/vacancies"
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
           >
-            Найти вакансии →
+            {t("build.guideWorker.ctaFindJobs")}
           </Link>
           <Link
             href="/build/profile"
             className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
           >
-            Заполнить профиль
+            {t("build.guideWorker.ctaFillProfile")}
           </Link>
         </div>
 
         <p className="mt-8 text-[11px] text-slate-500">
-          Вы работодатель? Смотрите{" "}
+          {t("build.guideWorker.footerIntro")}{" "}
           <Link href="/build/guide" className="text-emerald-300 underline">
-            гайд для работодателя
+            {t("build.guideWorker.footerEmployerGuideLink")}
           </Link>
-          . Частые вопросы —{" "}
+          {t("build.guideWorker.footerFaqIntro")}{" "}
           <Link href="/build/help" className="text-emerald-300 underline">
             /build/help
           </Link>

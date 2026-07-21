@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,7 @@ function Sparkline({
 }
 
 export default async function StatsPage() {
+  const { t } = await getServerT();
   const [s, ts] = await Promise.all([load(), loadSeries()]);
   return (
     <main className="min-h-screen bg-[#06070b] px-6 py-16 text-white sm:px-10">
@@ -93,26 +95,26 @@ export default async function StatsPage() {
           AEVION QBuild · public dashboard
         </div>
         <h1 className="mt-3 text-4xl font-bold sm:text-5xl">
-          Метрики платформы — в реальном времени
+          {t("build.stats.heading")}
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-slate-300">
-          Все цифры обновляются с каждым запросом. Без приукрашивания, без VC-метрик. Если стало интересно — <Link href="/build/why-aevion" className="text-emerald-300 hover:text-emerald-200">почему AEVION QBuild лучше HH</Link>.
+          {t("build.stats.descriptionPrefix")} <Link href="/build/why-aevion" className="text-emerald-300 hover:text-emerald-200">{t("build.stats.whyLinkText")}</Link>.
         </p>
 
         {!s ? (
           <p className="mt-10 rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-sm text-rose-200">
-            Не удалось загрузить статистику. Попробуйте позже.
+            {t("build.stats.loadError")}
           </p>
         ) : (
           <>
             <section className="mt-10 grid gap-4 sm:grid-cols-3">
-              <Tile label="Открытых вакансий" big={s.vacancies.open} sub={`${s.vacancies.total} всего`} accent="emerald" />
-              <Tile label="Кандидатов в базе" big={s.candidates} accent="sky" />
-              <Tile label="Активных проектов" big={s.projects.open} sub={`${s.projects.total} всего`} accent="fuchsia" />
+              <Tile label={t("build.stats.tileOpenVacancies")} big={s.vacancies.open} sub={t("build.stats.tileTotalSuffix", { total: s.vacancies.total })} accent="emerald" />
+              <Tile label={t("build.stats.tileCandidates")} big={s.candidates} accent="sky" />
+              <Tile label={t("build.stats.tileActiveProjects")} big={s.projects.open} sub={t("build.stats.tileTotalSuffix", { total: s.projects.total })} accent="fuchsia" />
             </section>
             <section className="mt-6 grid gap-4 sm:grid-cols-3">
               <Tile
-                label="Откликов всего"
+                label={t("build.stats.tileTotalApplications")}
                 big={s.applications.total}
                 sub={`${s.applications.accepted} ACCEPTED · ${s.applications.acceptRate}% acceptance rate`}
               />
@@ -124,40 +126,46 @@ export default async function StatsPage() {
               <Tile
                 label="AEV cashback minted"
                 big={s.cashback.totalAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })}
-                sub={`${s.cashback.entries} PAID-заказов`}
+                sub={t("build.stats.cashbackSub", { entries: s.cashback.entries })}
                 accent="emerald"
               />
             </section>
             {ts && (
               <section className="mt-10">
                 <div className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Последние 14 дней
+                  {t("build.stats.last14Days")}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <SparkTile
-                    label="Новые вакансии"
+                    label={t("build.stats.sparkNewVacancies")}
                     series={ts.vacancies}
                     stroke="#34d399"
                     fill="rgba(52,211,153,0.15)"
+                    totalSuffix={t("build.stats.sparkTotalSuffix")}
+                    trendSuffix={t("build.stats.sparkTrendSuffix")}
                   />
                   <SparkTile
-                    label="Отклики"
+                    label={t("build.stats.sparkApplications")}
                     series={ts.applications}
                     stroke="#7dd3fc"
                     fill="rgba(125,211,252,0.15)"
+                    totalSuffix={t("build.stats.sparkTotalSuffix")}
+                    trendSuffix={t("build.stats.sparkTrendSuffix")}
                   />
                   <SparkTile
-                    label="Новые проекты"
+                    label={t("build.stats.sparkNewProjects")}
                     series={ts.projects}
                     stroke="#f0abfc"
                     fill="rgba(240,171,252,0.15)"
+                    totalSuffix={t("build.stats.sparkTotalSuffix")}
+                    trendSuffix={t("build.stats.sparkTrendSuffix")}
                   />
                 </div>
               </section>
             )}
 
             <p className="mt-8 text-[11px] text-slate-500">
-              Обновлено: {new Date(s.timestamp).toLocaleString("ru-RU")}
+              {t("build.stats.updatedAt", { timestamp: new Date(s.timestamp).toLocaleString("ru-RU") })}
             </p>
           </>
         )}
@@ -167,7 +175,7 @@ export default async function StatsPage() {
             href="/build"
             className="rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-300"
           >
-            Открыть QBuild →
+            {t("build.stats.openQBuild")}
           </Link>
           <Link
             href="/build/leaderboard"
@@ -185,7 +193,7 @@ export default async function StatsPage() {
             href="/build/pricing"
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/5"
           >
-            Тарифы
+            {t("build.stats.pricingLink")}
           </Link>
         </div>
       </div>
@@ -198,11 +206,15 @@ function SparkTile({
   series,
   stroke,
   fill,
+  totalSuffix,
+  trendSuffix,
 }: {
   label: string;
   series: Series;
   stroke: string;
   fill: string;
+  totalSuffix: string;
+  trendSuffix: string;
 }) {
   const total = series.reduce((s, p) => s + p.n, 0);
   const last = series[series.length - 1]?.n ?? 0;
@@ -213,10 +225,10 @@ function SparkTile({
       <div className="text-[11px] uppercase tracking-wider text-slate-400">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-bold text-white">{total}</span>
-        <span className="text-[11px] text-slate-500">за 14д</span>
+        <span className="text-[11px] text-slate-500">{totalSuffix}</span>
         {trend !== 0 && (
           <span className={`text-[11px] font-semibold ${trend > 0 ? "text-emerald-300" : "text-rose-300"}`}>
-            {trend > 0 ? "▲" : "▼"} {Math.abs(trend)} за день
+            {trend > 0 ? "▲" : "▼"} {Math.abs(trend)} {trendSuffix}
           </span>
         )}
       </div>

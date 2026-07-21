@@ -8,6 +8,7 @@ import { buildApi } from "@/lib/build/api";
 import { useToast } from "@/components/build/Toast";
 import { rowsToCsv, downloadCsv } from "@/lib/build/csv";
 import { SavedSearchAlerts } from "@/components/build/SavedSearchAlerts";
+import { useI18n } from "@/lib/i18n";
 
 type Row = Awaited<ReturnType<typeof buildApi.myVacanciesFunnel>>["items"][number];
 
@@ -420,6 +421,7 @@ function DashboardSkeleton() {
 }
 
 function OnboardingNudge() {
+  const { t } = useI18n();
   const KEY = "qbuild.onboarding.nudgeDismissedUntil.v1";
   const [done, setDone] = useState<number | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -473,7 +475,7 @@ function OnboardingNudge() {
       <div className="flex items-center gap-2 text-emerald-100">
         <span>🎯</span>
         <span>
-          <span className="font-semibold">{done}/5</span> шагов онбординга пройдено
+          <span className="font-semibold">{done}/5</span> {t("build.dashboard.onboardingStepsDone")}
         </span>
         <div className="h-1.5 w-24 overflow-hidden rounded-full bg-emerald-900/40">
           <div
@@ -493,7 +495,7 @@ function OnboardingNudge() {
           type="button"
           onClick={dismiss}
           className="text-[10px] text-emerald-200/60 hover:text-emerald-100"
-          title="Скрыть на 2 недели"
+          title={t("build.dashboard.hideForTwoWeeks")}
         >
           Hide
         </button>
@@ -503,6 +505,7 @@ function OnboardingNudge() {
 }
 
 function FirstHireCelebrationBanner({ items }: { items: Row[] }) {
+  const { t } = useI18n();
   const KEY = "qbuild.firstHire.dismissed.v1";
   const [dismissed, setDismissed] = useState(false);
 
@@ -553,25 +556,25 @@ function FirstHireCelebrationBanner({ items }: { items: Row[] }) {
         <div className="text-3xl">🎉</div>
         <div className="min-w-0 flex-1">
           <div className="text-base font-bold text-white">
-            Поздравляем — {totalAccepted === 1 ? "первый найм" : `${totalAccepted} найма`} на QBuild!
+            {totalAccepted === 1
+              ? t("build.dashboard.firstHireTitleSingle")
+              : t("build.dashboard.firstHireTitleMulti", { count: totalAccepted })}
           </div>
           <p className="mt-1 text-sm text-slate-200">
-            Вы только что превратили QBuild в работающий рекрутинг-канал.
-            Теперь самое время масштабировать — постите ещё вакансии, делитесь ref-ссылкой и
-            копите AEV-кэшбэк за каждого нанятого.
+            {t("build.dashboard.firstHireBody")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             <Link
               href="/build/loyalty"
               className="rounded-md border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 hover:bg-amber-300/25"
             >
-              💎 Лояльность & кэшбэк
+              {t("build.dashboard.loyaltyCashbackLink")}
             </Link>
             <Link
               href="/build/referrals"
               className="rounded-md border border-fuchsia-300/40 bg-fuchsia-300/15 px-2.5 py-1 font-semibold text-fuchsia-100 hover:bg-fuchsia-300/25"
             >
-              🎯 Реферальная программа
+              {t("build.dashboard.referralProgramLink")}
             </Link>
           </div>
         </div>
@@ -579,7 +582,7 @@ function FirstHireCelebrationBanner({ items }: { items: Row[] }) {
           type="button"
           onClick={dismiss}
           className="text-[11px] text-slate-300 hover:text-white"
-          title="Скрыть это сообщение навсегда"
+          title={t("build.dashboard.hideForever")}
         >
           Hide
         </button>

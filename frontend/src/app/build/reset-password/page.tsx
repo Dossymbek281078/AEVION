@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { requestPasswordReset, completePasswordReset, BuildApiError } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 export default function ResetPasswordPage() {
   return (
@@ -17,6 +18,7 @@ export default function ResetPasswordPage() {
 }
 
 function ResetPasswordBody() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const router = useRouter();
 
@@ -52,8 +54,8 @@ function ResetPasswordBody() {
 
   async function handleComplete(e: React.FormEvent) {
     e.preventDefault();
-    if (newPass !== newPass2) { setErr("Пароли не совпадают"); return; }
-    if (newPass.length < 6) { setErr("Пароль должен быть минимум 6 символов"); return; }
+    if (newPass !== newPass2) { setErr(t("build.resetPassword.errorMismatch")); return; }
+    if (newPass.length < 6) { setErr(t("build.resetPassword.errorTooShort")); return; }
     setBusy(true);
     setErr(null);
     try {
@@ -62,7 +64,7 @@ function ResetPasswordBody() {
       setTimeout(() => router.push("/build"), 2000);
     } catch (ex) {
       const msg = ex instanceof BuildApiError ? ex.message : (ex as Error).message;
-      setErr(msg === "invalid_or_expired_token" ? "Ссылка устарела или неверна. Запросите новую." : msg);
+      setErr(msg === "invalid_or_expired_token" ? t("build.resetPassword.errorExpiredToken") : msg);
     } finally {
       setBusy(false);
     }
@@ -74,7 +76,7 @@ function ResetPasswordBody() {
         <div className="mb-6 text-center">
           <div className="text-3xl">🔑</div>
           <h1 className="mt-2 text-xl font-bold text-white">
-            {step === "request" ? "Забыли пароль?" : "Новый пароль"}
+            {step === "request" ? t("build.resetPassword.titleRequest") : t("build.resetPassword.titleComplete")}
           </h1>
         </div>
 
@@ -82,22 +84,22 @@ function ResetPasswordBody() {
           <div className="text-center space-y-3">
             {step === "request" ? (
               <>
-                <p className="text-emerald-300 text-lg">✓ Письмо отправлено</p>
+                <p className="text-emerald-300 text-lg">✓ {t("build.resetPassword.emailSent")}</p>
                 <p className="text-sm text-slate-400">
-                  Проверьте почту <strong>{email}</strong> и перейдите по ссылке в письме.
+                  {t("build.resetPassword.checkInboxPrefix")} <strong>{email}</strong> {t("build.resetPassword.checkInboxSuffix")}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-emerald-300 text-lg">✓ Пароль изменён</p>
-                <p className="text-sm text-slate-400">Перенаправляем…</p>
+                <p className="text-emerald-300 text-lg">✓ {t("build.resetPassword.passwordChanged")}</p>
+                <p className="text-sm text-slate-400">{t("build.resetPassword.redirecting")}</p>
               </>
             )}
           </div>
         ) : step === "request" ? (
           <form onSubmit={handleRequest} className="space-y-4">
             <p className="text-sm text-slate-400">
-              Введите email — пришлём ссылку для сброса пароля.
+              {t("build.resetPassword.requestIntro")}
             </p>
             <input
               type="email"
@@ -113,25 +115,25 @@ function ResetPasswordBody() {
               disabled={busy}
               className="w-full rounded-md bg-emerald-500 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
             >
-              {busy ? "Отправляем…" : "Отправить ссылку"}
+              {busy ? t("build.resetPassword.sending") : t("build.resetPassword.sendLink")}
             </button>
             <div className="text-center text-xs text-slate-500">
-              Вспомнили?{" "}
+              {t("build.resetPassword.rememberedPrompt")}{" "}
               <Link href="/build" className="text-emerald-400 hover:underline">
-                Войти
+                {t("build.resetPassword.signInLink")}
               </Link>
             </div>
           </form>
         ) : (
           <form onSubmit={handleComplete} className="space-y-4">
-            <p className="text-sm text-slate-400">Введите новый пароль.</p>
+            <p className="text-sm text-slate-400">{t("build.resetPassword.completeIntro")}</p>
             {!initEmail && (
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="Email"
+                placeholder={t("build.resetPassword.emailPlaceholder")}
                 className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
             )}
@@ -140,7 +142,7 @@ function ResetPasswordBody() {
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 required
-                placeholder="Код из письма"
+                placeholder={t("build.resetPassword.tokenPlaceholder")}
                 className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
             )}
@@ -150,7 +152,7 @@ function ResetPasswordBody() {
               onChange={(e) => setNewPass(e.target.value)}
               required
               minLength={6}
-              placeholder="Новый пароль (мин. 6 символов)"
+              placeholder={t("build.resetPassword.newPasswordPlaceholder")}
               className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
             />
             <input
@@ -158,7 +160,7 @@ function ResetPasswordBody() {
               value={newPass2}
               onChange={(e) => setNewPass2(e.target.value)}
               required
-              placeholder="Повторите пароль"
+              placeholder={t("build.resetPassword.confirmPasswordPlaceholder")}
               className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
             />
             {err && <p className="text-sm text-rose-300">{err}</p>}
@@ -167,14 +169,14 @@ function ResetPasswordBody() {
               disabled={busy}
               className="w-full rounded-md bg-emerald-500 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
             >
-              {busy ? "Сохраняем…" : "Сохранить пароль"}
+              {busy ? t("build.resetPassword.saving") : t("build.resetPassword.savePassword")}
             </button>
             <button
               type="button"
               onClick={() => setStep("request")}
               className="w-full text-xs text-slate-500 hover:text-slate-300"
             >
-              ← Запросить новую ссылку
+              ← {t("build.resetPassword.requestNewLink")}
             </button>
           </form>
         )}

@@ -5,8 +5,10 @@ import Link from "next/link";
 import { buildApi, type BuildPaymentEvent, type PaymentEventStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { HelpTip } from "@/components/build/HelpTip";
+import { useI18n } from "@/lib/i18n";
 
 export default function PaymentCalendarPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState<BuildPaymentEvent[] | null>(null);
   const [summary, setSummary] = useState<{ due: number; paid: number; overdue: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -38,34 +40,34 @@ export default function PaymentCalendarPage() {
     <main className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-5">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-white">💸 Платёжный календарь</h1>
+          <h1 className="text-2xl font-bold text-white">{t("build.paymentCalendar.title")}</h1>
           <HelpTip>
-            <p className="mb-1 font-semibold text-white">Как это работает?</p>
-            <p>Работодатель добавляет ожидаемые выплаты — когда и сколько. Работник видит тот же календарь и подтверждает получение кнопкой «Оплачено».</p>
-            <p className="mt-1.5">Статусы: <br/>
-              🟡 PENDING — ждёт оплаты <br/>
-              🔴 OVERDUE — просрочено <br/>
-              ✅ PAID — подтверждено
+            <p className="mb-1 font-semibold text-white">{t("build.paymentCalendar.helpHowTitle")}</p>
+            <p>{t("build.paymentCalendar.helpHowBody")}</p>
+            <p className="mt-1.5">{t("build.paymentCalendar.helpStatusesLabel")} <br/>
+              {t("build.paymentCalendar.helpStatusPending")} <br/>
+              {t("build.paymentCalendar.helpStatusOverdue")} <br/>
+              {t("build.paymentCalendar.helpStatusPaid")}
             </p>
           </HelpTip>
         </div>
-        <p className="text-sm text-slate-400">Когда и сколько вам платят (или вы платите) — без сюрпризов.</p>
+        <p className="text-sm text-slate-400">{t("build.paymentCalendar.subtitle")}</p>
       </div>
 
       {summary && (
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SummaryCard label="К оплате" amount={summary.due} tone="amber" />
-          <SummaryCard label="Просрочено" amount={summary.overdue} tone="rose" />
-          <SummaryCard label="Оплачено" amount={summary.paid} tone="emerald" />
+          <SummaryCard label={t("build.paymentCalendar.summaryDue")} amount={summary.due} tone="amber" />
+          <SummaryCard label={t("build.paymentCalendar.summaryOverdue")} amount={summary.overdue} tone="rose" />
+          <SummaryCard label={t("build.paymentCalendar.summaryPaid")} amount={summary.paid} tone="emerald" />
         </div>
       )}
 
       {err && <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{err}</p>}
 
-      {items === null && <p className="text-sm text-slate-500">Загружаю…</p>}
+      {items === null && <p className="text-sm text-slate-500">{t("build.paymentCalendar.loading")}</p>}
       {items && items.length === 0 && (
         <p className="rounded-lg border border-white/10 bg-white/[0.02] p-6 text-center text-sm text-slate-500">
-          Платежей пока нет. Когда клиент создаст график — он появится здесь.
+          {t("build.paymentCalendar.emptyState")}
         </p>
       )}
 
@@ -73,11 +75,11 @@ export default function PaymentCalendarPage() {
         {groups.map(([month, rows]) => (
           <section key={month}>
             <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-              {monthLabel(month)}
+              {monthLabel(month, t)}
             </div>
             <div className="space-y-2">
               {rows.map((row) => (
-                <PaymentRow key={row.id} row={row} myId={me?.id ?? null} onChanged={refresh} />
+                <PaymentRow key={row.id} row={row} myId={me?.id ?? null} onChanged={refresh} t={t} />
               ))}
             </div>
           </section>
@@ -102,7 +104,7 @@ function SummaryCard({ label, amount, tone }: { label: string; amount: number; t
   );
 }
 
-function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: string | null; onChanged: () => void }) {
+function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId: string | null; onChanged: () => void; t: (key: string, vars?: Record<string, string | number>) => string }) {
   const [busy, setBusy] = useState(false);
   const due = row.status === "PENDING" && !!row.dueDate && row.dueDate < new Date().toISOString().slice(0, 10);
   const tone =
@@ -143,7 +145,7 @@ function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: st
             onClick={() => update({ status: "PAID" })}
             className="rounded-md bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
           >
-            Оплачено
+            {t("build.paymentCalendar.markPaidButton")}
           </button>
           {row.clientId === myId && (
             <button
@@ -151,7 +153,7 @@ function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: st
               onClick={() => update({ status: "CANCELED" })}
               className="rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/25 disabled:opacity-50"
             >
-              Отменить
+              {t("build.paymentCalendar.cancelButton")}
             </button>
           )}
         </div>
@@ -160,9 +162,22 @@ function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: st
   );
 }
 
-function monthLabel(ym: string): string {
+function monthLabel(ym: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   if (!ym) return "";
   const [y, m] = ym.split("-").map(Number);
-  const months = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  return `${months[(m || 1) - 1]} ${y}`;
+  const monthKeys = [
+    "build.paymentCalendar.month01",
+    "build.paymentCalendar.month02",
+    "build.paymentCalendar.month03",
+    "build.paymentCalendar.month04",
+    "build.paymentCalendar.month05",
+    "build.paymentCalendar.month06",
+    "build.paymentCalendar.month07",
+    "build.paymentCalendar.month08",
+    "build.paymentCalendar.month09",
+    "build.paymentCalendar.month10",
+    "build.paymentCalendar.month11",
+    "build.paymentCalendar.month12",
+  ];
+  return `${t(monthKeys[(m || 1) - 1])} ${y}`;
 }

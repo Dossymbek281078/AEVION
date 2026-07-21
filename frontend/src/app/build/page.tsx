@@ -8,10 +8,12 @@ import { Skeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
 import { formatSalary } from "@/lib/build/format";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
 
 export default function BuildHomePage() {
+  const { t } = useI18n();
   const token = useBuildAuth((s) => s.token);
   const hydrated = useBuildAuth((s) => s.hydrated);
   const [projects, setProjects] = useState<BuildProject[]>([]);
@@ -246,6 +248,7 @@ function SmartSuggestions() {
 }
 
 function LandingHero({ publicStats }: { publicStats: { vacancies: number; candidates: number; projects: number } | null }) {
+  const { t } = useI18n();
   return (
     <section className="mb-10 rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] px-6 py-10 sm:px-10 sm:py-14">
       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#075b53]">
@@ -253,38 +256,36 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
         AEVION QBuild · Construction Recruiting
       </div>
       <h1 className="mt-4 font-serif text-4xl font-extrabold tracking-tight text-[#17181a] sm:text-5xl lg:text-6xl" style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif' }}>
-        Нанимайте бригады.<br />
-        <span className="text-[#0a7d72]">Платите когда нашли.</span>
+        {t("build.home.heroTitleLine1")}<br />
+        <span className="text-[#0a7d72]">{t("build.home.heroTitleLine2")}</span>
       </h1>
       <p className="mt-4 max-w-2xl text-base text-[#45474c]">
-        Строительная биржа нового поколения. Без платы за публикацию вакансии. База резюме на любом тарифе.
-        Комиссия Pay-per-Hire — <strong className="text-[#17181a]">от 6%</strong> вместо 15–25% у агентств.
-        AI-скоринг заявок, видеорезюме, Trial Jobs.
+        {t("build.home.heroSubtitlePrefix")} <strong className="text-[#17181a]">{t("build.home.heroSubtitleRate")}</strong> {t("build.home.heroSubtitleSuffix")}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2 text-xs">
         {[
-          "0 ₽ за вакансию",
-          "AI-скоринг кандидатов",
-          "Видеорезюме",
-          "Trial Jobs",
-          "2% AEV cashback",
-          "Прямые сообщения без премиума",
-        ].map((t) => (
+          t("build.home.chipFreePost"),
+          t("build.home.chipAiScoring"),
+          t("build.home.chipVideoResume"),
+          t("build.home.chipTrialJobs"),
+          t("build.home.chipCashback"),
+          t("build.home.chipDirectMessages"),
+        ].map((chip) => (
           <span
-            key={t}
+            key={chip}
             className="rounded-full border border-[#b9b8b0] px-3 py-1 text-[#45474c]"
           >
-            {t}
+            {chip}
           </span>
         ))}
       </div>
 
       {publicStats && (
         <div className="mt-6 flex flex-wrap gap-6 text-sm">
-          <LiveStat n={publicStats.projects} label="открытых проектов" />
-          <LiveStat n={publicStats.vacancies} label="вакансий сейчас" />
-          <LiveStat n={publicStats.candidates} label="резюме в базе" />
+          <LiveStat n={publicStats.projects} label={t("build.home.statOpenProjects")} />
+          <LiveStat n={publicStats.vacancies} label={t("build.home.statVacanciesNow")} />
+          <LiveStat n={publicStats.candidates} label={t("build.home.statResumesInBase")} />
         </div>
       )}
 
@@ -293,19 +294,19 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
           href="/build/profile"
           className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
         >
-          Создать профиль бесплатно →
+          {t("build.home.createProfileFree")}
         </Link>
         <Link
           href="/build/vacancies"
           className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
         >
-          Смотреть вакансии
+          {t("build.home.viewVacancies")}
         </Link>
         <Link
           href="/build/why-aevion"
           className="rounded-lg px-5 py-2.5 text-sm font-medium text-[#45474c] transition hover:text-[#17181a]"
         >
-          Сравнить с HH →
+          {t("build.home.compareWithHh")}
         </Link>
       </div>
     </section>
@@ -500,29 +501,29 @@ function FeaturedEmployers() {
 }
 
 function FirstProjectCta() {
+  const { t } = useI18n();
   return (
     <div className="rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] p-8 text-center">
       <div className="text-5xl">🏗</div>
-      <h2 className="mt-4 text-xl font-bold text-[#17181a]">Запустите первый проект на QBuild</h2>
+      <h2 className="mt-4 text-xl font-bold text-[#17181a]">{t("build.home.ctaTitle")}</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-[#45474c]">
-        Проект — это контейнер для одной или нескольких вакансий. Один проект может содержать
-        бригады разных специальностей: сварщики, монтажники, прорабы.
+        {t("build.home.ctaDescription")}
       </p>
       <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-[#45474c] sm:grid-cols-3">
         <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">📝</div>
-          <div className="mt-1 font-semibold text-[#17181a]">Опишите объект</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">Город, бюджет, сроки</p>
+          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep1Title")}</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep1Desc")}</p>
         </div>
         <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">👥</div>
-          <div className="mt-1 font-semibold text-[#17181a]">Добавьте вакансии</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">С зарплатой и навыками</p>
+          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep2Title")}</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep2Desc")}</p>
         </div>
         <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
           <div className="text-base">✓</div>
-          <div className="mt-1 font-semibold text-[#17181a]">Получайте отклики</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">AI-скоринг + bulk-actions</p>
+          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep3Title")}</div>
+          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep3Desc")}</p>
         </div>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -530,13 +531,13 @@ function FirstProjectCta() {
           href="/build/create-project"
           className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
         >
-          + Создать первый проект
+          {t("build.home.ctaCreateFirst")}
         </Link>
         <Link
           href="/build/onboarding"
           className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
         >
-          5-step онбординг
+          {t("build.home.ctaOnboarding")}
         </Link>
       </div>
     </div>

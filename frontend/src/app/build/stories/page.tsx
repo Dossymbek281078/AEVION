@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi, type BuildStory } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 export default function StoriesPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState<BuildStory[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -65,15 +67,14 @@ export default function StoriesPage() {
             </div>
             <h1 className="text-2xl font-bold text-white">Site Stories</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Короткие обновления прямо с объекта — прогресс, фото, находки дня.
-              Работники строят портфолио, работодатели видят живую активность.
+              {t("build.stories.heroSubtitle")}
             </p>
           </div>
           <button
             onClick={() => setComposeOpen((o) => !o)}
             className="shrink-0 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
           >
-            {composeOpen ? "Свернуть" : "+ История"}
+            {composeOpen ? t("build.stories.collapse") : t("build.stories.newStory")}
           </button>
         </div>
 
@@ -87,7 +88,7 @@ export default function StoriesPage() {
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Что нового на объекте? Опиши прогресс, поделись находкой или фото."
+                placeholder={t("build.stories.composePlaceholder")}
                 rows={4}
                 maxLength={1000}
                 className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none"
@@ -103,25 +104,25 @@ export default function StoriesPage() {
             <input
               value={mediaUrl}
               onChange={(e) => setMediaUrl(e.target.value)}
-              placeholder="URL фото или видео (опционально)"
+              placeholder={t("build.stories.mediaUrlPlaceholder")}
               className="w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none"
             />
             <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-              <span>Поддерживаются jpg, png, gif, mp4, webm, mov</span>
+              <span>{t("build.stories.mediaFormats")}</span>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setComposeOpen(false)}
                   className="rounded-lg border border-white/10 px-3 py-1.5 text-slate-300 hover:bg-white/5"
                 >
-                  Отмена
+                  {t("build.stories.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={busy || charCount < 3}
                   className="rounded-lg bg-emerald-500 px-4 py-1.5 font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
                 >
-                  {busy ? "Публикую…" : "Опубликовать"}
+                  {busy ? t("build.stories.publishing") : t("build.stories.publish")}
                 </button>
               </div>
             </div>
@@ -151,17 +152,15 @@ export default function StoriesPage() {
         {items && items.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
             <p className="text-4xl">📣</p>
-            <p className="mt-3 text-base font-semibold text-slate-200">Лента пока пуста</p>
+            <p className="mt-3 text-base font-semibold text-slate-200">{t("build.stories.emptyTitle")}</p>
             <p className="mt-1.5 max-w-sm mx-auto text-xs text-slate-500 leading-relaxed">
-              Site Stories — это короткие обновления прямо с объекта: фото сварки, прогресс
-              монтажа, находки дня. Работодатели используют как сигнал активности.
-              Работники — как живое портфолио.
+              {t("build.stories.emptyBody")}
             </p>
             <button
               onClick={() => setComposeOpen(true)}
               className="mt-5 rounded-xl bg-emerald-500/20 px-5 py-2.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/30 transition"
             >
-              Поделиться первым →
+              {t("build.stories.shareFirst")}
             </button>
           </div>
         )}
@@ -178,9 +177,9 @@ export default function StoriesPage() {
         {/* Bottom link */}
         {items && items.length > 0 && (
           <p className="mt-8 text-center text-xs text-slate-600">
-            Посмотрите{" "}
+            {t("build.stories.seeMoreLabel")}{" "}
             <Link href="/build/success-stories" className="text-emerald-400 hover:underline">
-              истории успешных наймов →
+              {t("build.stories.successStoriesLink")}
             </Link>
           </p>
         )}
@@ -196,10 +195,11 @@ function StoryCard({
   story: BuildStory;
   onChanged: () => void;
 }) {
+  const { t } = useI18n();
   const [likeCount, setLikeCount] = useState(story.likeCount);
   const [liked, setLiked] = useState(story.likedByMe ?? false);
   const [liking, setLiking] = useState(false);
-  const ago = relativeTime(story.createdAt);
+  const ago = relativeTime(story.createdAt, t);
 
   // Prefer the userName field; fall back to authorName for older API responses
   const displayName = story.userName || story.authorName || "No name";
@@ -302,23 +302,23 @@ function StoryCard({
           href={`/build/u/${story.userId}`}
           className="ml-auto text-slate-500 hover:text-slate-300 transition"
         >
-          Профиль →
+          {t("build.stories.profileLink")}
         </Link>
       </div>
     </article>
   );
 }
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const s = Math.floor(ms / 1000);
-  if (s < 60) return "только что";
+  if (s < 60) return t("build.stories.timeJustNow");
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} мин назад`;
+  if (m < 60) return t("build.stories.timeMinutesAgo", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} ч назад`;
+  if (h < 24) return t("build.stories.timeHoursAgo", { count: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d} дн назад`;
+  if (d < 30) return t("build.stories.timeDaysAgo", { count: d });
   const mo = Math.floor(d / 30);
-  return `${mo} мес назад`;
+  return t("build.stories.timeMonthsAgo", { count: mo });
 }

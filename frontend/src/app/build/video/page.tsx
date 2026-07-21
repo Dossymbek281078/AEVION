@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type VideoRoom = {
   id: string;
@@ -27,6 +28,7 @@ export default function VideoPage() {
 }
 
 function VideoInner() {
+  const { t } = useI18n();
   const [rooms, setRooms] = useState<VideoRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -66,7 +68,7 @@ function VideoInner() {
       await buildApi.inviteToVideoRoom(inviteRoomId, inviteGuestId.trim());
       setInviteRoomId("");
       setInviteGuestId("");
-      alert("Приглашение отправлено в чат!");
+      alert(t("build.video.inviteSent"));
     } catch {/**/} finally { setBusy(false); }
   }
 
@@ -79,39 +81,39 @@ function VideoInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">🎥 Видеозвонки</h1>
+          <h1 className="text-2xl font-bold text-white">🎥 {t("build.video.title")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Интервью, знакомство с объектом, плановые встречи — всё внутри QBuild
+            {t("build.video.subtitle")}
           </p>
         </div>
         <button
           onClick={() => setCreating(true)}
           className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400"
         >
-          + Создать комнату
+          + {t("build.video.createRoomBtn")}
         </button>
       </div>
 
       {/* New room created banner */}
       {newRoom && (
         <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
-          <p className="text-sm font-semibold text-sky-300">✅ Комната создана!</p>
-          <p className="mt-1 text-xs text-slate-400">Ссылка для подключения:</p>
+          <p className="text-sm font-semibold text-sky-300">✅ {t("build.video.roomCreated")}</p>
+          <p className="mt-1 text-xs text-slate-400">{t("build.video.connectionLink")}</p>
           <a
             href={newRoom.roomUrl}
             target="_blank"
             rel="noreferrer"
             className="mt-2 inline-block rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400"
           >
-            🎥 Войти в комнату
+            🎥 {t("build.video.enterRoom")}
           </a>
           <button
             onClick={() => { void navigator.clipboard.writeText(newRoom.roomUrl); }}
             className="ml-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/5"
           >
-            Скопировать ссылку
+            {t("build.video.copyLink")}
           </button>
-          <button onClick={() => setNewRoom(null)} className="ml-2 text-xs text-slate-500 hover:text-slate-400">Закрыть</button>
+          <button onClick={() => setNewRoom(null)} className="ml-2 text-xs text-slate-500 hover:text-slate-400">{t("build.video.close")}</button>
         </div>
       )}
 
@@ -119,14 +121,14 @@ function VideoInner() {
       {creating && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-5">
           <form onSubmit={(e) => void createRoom(e)} className="space-y-4 text-sm">
-            <h3 className="font-semibold text-white">Новая видео-комната</h3>
+            <h3 className="font-semibold text-white">{t("build.video.newRoomTitle")}</h3>
             <p className="text-xs text-slate-400">
-              Powered by Daily.co — работает в браузере, без установки приложений.
+              {t("build.video.poweredBy")}
             </p>
             <input
               value={guestId}
               onChange={(e) => setGuestId(e.target.value)}
-              placeholder="ID гостя (необязательно)"
+              placeholder={t("build.video.guestIdPlaceholder")}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
             />
             <input
@@ -137,9 +139,9 @@ function VideoInner() {
             />
             <div className="flex gap-3">
               <button type="submit" disabled={busy} className="rounded-lg bg-sky-500 px-5 py-2 font-bold text-white hover:bg-sky-400 disabled:opacity-50">
-                {busy ? "Создаём…" : "Создать комнату"}
+                {busy ? t("build.video.creating") : t("build.video.createRoomBtn2")}
               </button>
-              <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/10 px-4 py-2 text-slate-300">Отмена</button>
+              <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/10 px-4 py-2 text-slate-300">{t("build.video.cancel")}</button>
             </div>
           </form>
         </div>
@@ -153,9 +155,9 @@ function VideoInner() {
       ) : rooms.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
           <p className="text-4xl">📹</p>
-          <p className="mt-3 text-slate-300">Видеозвонков пока нет</p>
+          <p className="mt-3 text-slate-300">{t("build.video.empty")}</p>
           <button onClick={() => setCreating(true)} className="mt-4 rounded-lg bg-sky-500/20 px-4 py-2 text-sm text-sky-200 hover:bg-sky-500/30">
-            Создать первый
+            {t("build.video.createFirst")}
           </button>
         </div>
       ) : (
@@ -165,7 +167,7 @@ function VideoInner() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-medium ${STATUS_COLOR[room.status] ?? "text-slate-400"}`}>
-                    {room.status === "ENDED" ? "Завершён" : "Активная комната"}
+                    {room.status === "ENDED" ? t("build.video.status.ended") : t("build.video.status.active")}
                   </span>
                   {room.scheduledAt && (
                     <span className="text-xs text-slate-500">
@@ -174,7 +176,7 @@ function VideoInner() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-slate-300">
-                  {room.hostName ?? "Вы"} ↔ {room.guestName ?? "без гостя"}
+                  {room.hostName ?? t("build.video.defaultHost")} ↔ {room.guestName ?? t("build.video.noGuest")}
                 </p>
                 <p className="text-xs text-slate-500">{new Date(room.createdAt).toLocaleDateString("ru")}</p>
               </div>
@@ -185,7 +187,7 @@ function VideoInner() {
                   rel="noreferrer"
                   className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400"
                 >
-                  🎥 Войти
+                  🎥 {t("build.video.enter")}
                 </a>
               )}
             </div>
@@ -196,23 +198,23 @@ function VideoInner() {
       {/* Invite form */}
       <div className="rounded-xl border border-white/10 bg-white/5 p-5">
         <form onSubmit={(e) => void invite(e)} className="space-y-3 text-sm">
-          <h3 className="font-semibold text-white">Пригласить в комнату</h3>
-          <p className="text-xs text-slate-400">Гость получит ссылку через DM внутри QBuild</p>
+          <h3 className="font-semibold text-white">{t("build.video.inviteTitle")}</h3>
+          <p className="text-xs text-slate-400">{t("build.video.inviteSubtitle")}</p>
           <div className="flex gap-3">
             <input
               value={inviteRoomId}
               onChange={(e) => setInviteRoomId(e.target.value)}
-              placeholder="ID комнаты"
+              placeholder={t("build.video.roomIdPlaceholder")}
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
             />
             <input
               value={inviteGuestId}
               onChange={(e) => setInviteGuestId(e.target.value)}
-              placeholder="ID пользователя"
+              placeholder={t("build.video.userIdPlaceholder")}
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
             />
             <button type="submit" disabled={busy || !inviteRoomId || !inviteGuestId} className="rounded-lg bg-sky-500/20 px-4 py-2 text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
-              Пригласить
+              {t("build.video.inviteBtn")}
             </button>
           </div>
         </form>

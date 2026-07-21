@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { LeadForm } from "@/components/build/LeadForm";
+import { getServerT } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
 
@@ -285,7 +286,7 @@ export default async function WhyAevionPage({
 }) {
   const sp = await searchParams;
   const lang = pickLang(sp?.lang);
-  const t = COPY[lang];
+  const { t } = await getServerT();
   const counters = await loadCounters();
   return (
     <main className="min-h-screen bg-[#06070b] text-white">
@@ -304,7 +305,7 @@ export default async function WhyAevionPage({
   );
 }
 
-type T = CopyT;
+type T = (key: string, vars?: Record<string, string | number>) => string;
 
 function LangSwitcher({ lang }: { lang: Lang }) {
   return (
@@ -331,30 +332,30 @@ function Hero({ t }: { t: T }) {
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(217,70,239,0.15),transparent_60%)]" />
       <div className="mx-auto max-w-5xl">
         <div className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">
-          {t.eyebrow}
+          {t("build.whyAevion.eyebrow")}
         </div>
         <h1 className="mt-4 text-4xl font-bold tracking-tight text-white sm:text-6xl">
-          {t.heroTitleA}{" "}
+          {t("build.whyAevion.heroTitleA")}{" "}
           <span className="bg-gradient-to-r from-emerald-300 to-fuchsia-300 bg-clip-text text-transparent">
-            {t.heroTitleB}
+            {t("build.whyAevion.heroTitleB")}
           </span>
         </h1>
-        <p className="mt-5 max-w-2xl text-base text-slate-300 sm:text-lg">{t.heroBody}</p>
+        <p className="mt-5 max-w-2xl text-base text-slate-300 sm:text-lg">{t("build.whyAevion.heroBody")}</p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
             href="/build"
             className="rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-300"
           >
-            {t.heroCtaPrimary}
+            {t("build.whyAevion.heroCtaPrimary")}
           </Link>
           <Link
             href="/build/pricing"
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/5"
           >
-            {t.heroCtaSecondary}
+            {t("build.whyAevion.heroCtaSecondary")}
           </Link>
         </div>
-        <p className="mt-3 text-xs text-slate-500">{t.heroNote}</p>
+        <p className="mt-3 text-xs text-slate-500">{t("build.whyAevion.heroNote")}</p>
       </div>
     </section>
   );
@@ -377,12 +378,12 @@ function CountersBlock({
   return (
     <section className="border-b border-white/5 px-6 py-10 sm:px-10">
       <div className="mx-auto grid max-w-5xl gap-6 sm:grid-cols-3">
-        <Stat label={t.countersA} value={vacancies} accent="emerald" locale={locale} />
-        <Stat label={t.countersB} value={candidates} accent="sky" locale={locale} />
-        <Stat label={t.countersC} value={projects} accent="fuchsia" locale={locale} />
+        <Stat label={t("build.whyAevion.countersA")} value={vacancies} accent="emerald" locale={locale} />
+        <Stat label={t("build.whyAevion.countersB")} value={candidates} accent="sky" locale={locale} />
+        <Stat label={t("build.whyAevion.countersC")} value={projects} accent="fuchsia" locale={locale} />
       </div>
       <p className="mx-auto mt-3 max-w-5xl text-center text-[11px] text-slate-500">
-        {t.countersFooter}
+        {t("build.whyAevion.countersFooter")}
       </p>
     </section>
   );
@@ -413,23 +414,34 @@ function Stat({
   );
 }
 
+const KILLER_FEATURES = [
+  { icon: "🧠", titleKey: "build.whyAevion.feature1Title", bodyKey: "build.whyAevion.feature1Body" },
+  { icon: "✨", titleKey: "build.whyAevion.feature2Title", bodyKey: "build.whyAevion.feature2Body" },
+  { icon: "🎬", titleKey: "build.whyAevion.feature3Title", bodyKey: "build.whyAevion.feature3Body" },
+  { icon: "🎯", titleKey: "build.whyAevion.feature4Title", bodyKey: "build.whyAevion.feature4Body" },
+  { icon: "🛠", titleKey: "build.whyAevion.feature5Title", bodyKey: "build.whyAevion.feature5Body" },
+  { icon: "📞", titleKey: "build.whyAevion.feature6Title", bodyKey: "build.whyAevion.feature6Body" },
+  { icon: "🔍", titleKey: "build.whyAevion.feature7Title", bodyKey: "build.whyAevion.feature7Body" },
+  { icon: "💎", titleKey: "build.whyAevion.feature8Title", bodyKey: "build.whyAevion.feature8Body" },
+];
+
 function KillerFeatures({ t }: { t: T }) {
   return (
     <section className="border-b border-white/5 px-6 py-16 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <h2 className="text-xs font-bold uppercase tracking-[0.25em] text-fuchsia-300">
-          {t.killerEyebrow}
+          {t("build.whyAevion.killerEyebrow")}
         </h2>
-        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.killerTitle}</h3>
+        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t("build.whyAevion.killerTitle")}</h3>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {t.features.map(([icon, title, body]) => (
+          {KILLER_FEATURES.map((f) => (
             <div
-              key={title}
+              key={f.titleKey}
               className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-emerald-500/40 hover:bg-white/[0.05]"
             >
-              <div className="text-3xl">{icon}</div>
-              <div className="mt-3 text-base font-bold text-white">{title}</div>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{body}</p>
+              <div className="text-3xl">{f.icon}</div>
+              <div className="mt-3 text-base font-bold text-white">{t(f.titleKey)}</div>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{t(f.bodyKey)}</p>
             </div>
           ))}
         </div>
@@ -438,34 +450,49 @@ function KillerFeatures({ t }: { t: T }) {
   );
 }
 
+const COMPARE_COLS = ["build.whyAevion.compareColFeature", "build.whyAevion.compareColHh", "build.whyAevion.compareColQb"];
+
+const COMPARE_ROWS = [
+  { feature: "build.whyAevion.compareRow1Feature", hh: "build.whyAevion.compareRow1Hh", qb: "build.whyAevion.compareRow1Qb" },
+  { feature: "build.whyAevion.compareRow2Feature", hh: "build.whyAevion.compareRow2Hh", qb: "build.whyAevion.compareRow2Qb" },
+  { feature: "build.whyAevion.compareRow3Feature", hh: "build.whyAevion.compareRow3Hh", qb: "build.whyAevion.compareRow3Qb" },
+  { feature: "build.whyAevion.compareRow4Feature", hh: "build.whyAevion.compareRow4Hh", qb: "build.whyAevion.compareRow4Qb" },
+  { feature: "build.whyAevion.compareRow5Feature", hh: "build.whyAevion.compareRow5Hh", qb: "build.whyAevion.compareRow5Qb" },
+  { feature: "build.whyAevion.compareRow6Feature", hh: "build.whyAevion.compareRow6Hh", qb: "build.whyAevion.compareRow6Qb" },
+  { feature: "build.whyAevion.compareRow7Feature", hh: "build.whyAevion.compareRow7Hh", qb: "build.whyAevion.compareRow7Qb" },
+  { feature: "build.whyAevion.compareRow8Feature", hh: "build.whyAevion.compareRow8Hh", qb: "build.whyAevion.compareRow8Qb" },
+  { feature: "build.whyAevion.compareRow9Feature", hh: "build.whyAevion.compareRow9Hh", qb: "build.whyAevion.compareRow9Qb" },
+  { feature: "build.whyAevion.compareRow10Feature", hh: "build.whyAevion.compareRow10Hh", qb: "build.whyAevion.compareRow10Qb" },
+];
+
 function CompareTable({ t }: { t: T }) {
   return (
     <section className="border-b border-white/5 px-6 py-16 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <h2 className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">
-          {t.compareEyebrow}
+          {t("build.whyAevion.compareEyebrow")}
         </h2>
-        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.compareTitle}</h3>
+        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t("build.whyAevion.compareTitle")}</h3>
         <div className="mt-8 overflow-hidden rounded-2xl border border-white/10">
           <table className="w-full text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-wider text-slate-400">
               <tr>
-                {t.compareCols.map((c, i) => (
+                {COMPARE_COLS.map((c, i) => (
                   <th
                     key={i}
                     className={`px-4 py-3 text-left font-semibold ${i === 2 ? "text-emerald-200" : ""}`}
                   >
-                    {c}
+                    {t(c)}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {t.compareRows.map(([f, hh, qb]) => (
-                <tr key={f}>
-                  <td className="px-4 py-3 text-slate-200">{f}</td>
-                  <td className="px-4 py-3 text-slate-400">{hh}</td>
-                  <td className="px-4 py-3 font-medium text-emerald-200">{qb}</td>
+              {COMPARE_ROWS.map((row) => (
+                <tr key={row.feature}>
+                  <td className="px-4 py-3 text-slate-200">{t(row.feature)}</td>
+                  <td className="px-4 py-3 text-slate-400">{t(row.hh)}</td>
+                  <td className="px-4 py-3 font-medium text-emerald-200">{t(row.qb)}</td>
                 </tr>
               ))}
             </tbody>
@@ -478,55 +505,59 @@ function CompareTable({ t }: { t: T }) {
 
 function Loyalty({ t }: { t: T }) {
   const tiers = [
-    { hires: 0, pct: 12 },
-    { hires: 3, pct: 10 },
-    { hires: 10, pct: 8 },
-    { hires: 25, pct: 6 },
+    { hires: 0, pct: 12, label: "Default", hintKey: "build.whyAevion.loyaltyTier1Hint" },
+    { hires: 3, pct: 10, label: "Bronze", hintKey: "build.whyAevion.loyaltyTier2Hint" },
+    { hires: 10, pct: 8, label: "Silver", hintKey: "build.whyAevion.loyaltyTier3Hint" },
+    { hires: 25, pct: 6, label: "Gold", hintKey: "build.whyAevion.loyaltyTier4Hint" },
   ];
   return (
     <section className="border-b border-white/5 px-6 py-16 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <h2 className="text-xs font-bold uppercase tracking-[0.25em] text-fuchsia-300">
-          {t.loyaltyEyebrow}
+          {t("build.whyAevion.loyaltyEyebrow")}
         </h2>
-        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.loyaltyTitle}</h3>
-        <p className="mt-3 max-w-2xl text-sm text-slate-300">{t.loyaltyBody}</p>
+        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t("build.whyAevion.loyaltyTitle")}</h3>
+        <p className="mt-3 max-w-2xl text-sm text-slate-300">{t("build.whyAevion.loyaltyBody")}</p>
         <div className="mt-8 grid gap-3 sm:grid-cols-4">
-          {tiers.map((tier, i) => {
-            const [label, hint] = t.loyaltyTiers[i];
-            return (
-              <div
-                key={tier.hires}
-                className="rounded-2xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-5 text-center"
-              >
-                <div className="text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
-                  {label}
-                </div>
-                <div className="mt-2 text-4xl font-bold text-white">{tier.pct}%</div>
-                <div className="mt-1 text-xs text-slate-400">{hint}</div>
+          {tiers.map((tier) => (
+            <div
+              key={tier.hires}
+              className="rounded-2xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-5 text-center"
+            >
+              <div className="text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
+                {tier.label}
               </div>
-            );
-          })}
+              <div className="mt-2 text-4xl font-bold text-white">{tier.pct}%</div>
+              <div className="mt-1 text-xs text-slate-400">{t(tier.hintKey)}</div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
+const WORKFLOW_STEPS = [
+  { n: "01", titleKey: "build.whyAevion.step1Title", bodyKey: "build.whyAevion.step1Body" },
+  { n: "02", titleKey: "build.whyAevion.step2Title", bodyKey: "build.whyAevion.step2Body" },
+  { n: "03", titleKey: "build.whyAevion.step3Title", bodyKey: "build.whyAevion.step3Body" },
+  { n: "04", titleKey: "build.whyAevion.step4Title", bodyKey: "build.whyAevion.step4Body" },
+];
+
 function Workflow({ t }: { t: T }) {
   return (
     <section className="border-b border-white/5 px-6 py-16 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <h2 className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">
-          {t.workflowEyebrow}
+          {t("build.whyAevion.workflowEyebrow")}
         </h2>
-        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.workflowTitle}</h3>
+        <h3 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t("build.whyAevion.workflowTitle")}</h3>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {t.steps.map(([n, title, body]) => (
-            <div key={n} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="text-xs font-bold text-emerald-300">{n}</div>
-              <div className="mt-2 text-base font-bold text-white">{title}</div>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{body}</p>
+          {WORKFLOW_STEPS.map((step) => (
+            <div key={step.n} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <div className="text-xs font-bold text-emerald-300">{step.n}</div>
+              <div className="mt-2 text-base font-bold text-white">{t(step.titleKey)}</div>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{t(step.bodyKey)}</p>
             </div>
           ))}
         </div>
@@ -540,10 +571,10 @@ function FounderNote({ t }: { t: T }) {
     <section className="border-b border-white/5 px-6 py-16 sm:px-10">
       <div className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent p-8">
         <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-          {t.founderEyebrow}
+          {t("build.whyAevion.founderEyebrow")}
         </div>
-        <p className="mt-4 text-base leading-relaxed text-slate-200">{t.founderText}</p>
-        <div className="mt-4 text-xs text-slate-400">{t.founderName}</div>
+        <p className="mt-4 text-base leading-relaxed text-slate-200">{t("build.whyAevion.founderText")}</p>
+        <div className="mt-4 text-xs text-slate-400">{t("build.whyAevion.founderName")}</div>
       </div>
     </section>
   );
@@ -553,20 +584,20 @@ function CTA({ t }: { t: T }) {
   return (
     <section className="px-6 py-20 sm:px-10">
       <div className="mx-auto max-w-3xl rounded-3xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent p-10 text-center">
-        <h2 className="text-3xl font-bold text-white sm:text-4xl">{t.ctaTitle}</h2>
-        <p className="mt-3 text-sm text-slate-300">{t.ctaBody}</p>
+        <h2 className="text-3xl font-bold text-white sm:text-4xl">{t("build.whyAevion.ctaTitle")}</h2>
+        <p className="mt-3 text-sm text-slate-300">{t("build.whyAevion.ctaBody")}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/build/profile"
             className="rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-300"
           >
-            {t.ctaPrimary}
+            {t("build.whyAevion.ctaPrimary")}
           </Link>
           <Link
             href="/build"
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/5"
           >
-            {t.ctaSecondary}
+            {t("build.whyAevion.ctaSecondary")}
           </Link>
         </div>
       </div>
@@ -578,13 +609,13 @@ function Footer({ t }: { t: T }) {
   return (
     <footer className="border-t border-white/5 px-6 py-8 text-xs text-slate-500 sm:px-10">
       <div className="mx-auto max-w-5xl">
-        {t.footerLine}
+        {t("build.whyAevion.footerLine")}
         <Link href="/build/pricing" className="hover:text-slate-300">
-          {t.footerPricing}
+          {t("build.whyAevion.footerPricing")}
         </Link>{" "}
         ·{" "}
         <Link href="/" className="hover:text-slate-300">
-          {t.footerHome}
+          {t("build.whyAevion.footerHome")}
         </Link>
       </div>
     </footer>

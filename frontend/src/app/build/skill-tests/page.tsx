@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BuildShell } from "@/components/build/BuildShell";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 
 interface TestInfo {
   id: string; title: string; description: string; passingScore: number; questionCount: number;
@@ -25,6 +26,7 @@ const TEST_ICONS: Record<string, string> = {
 };
 
 export default function SkillTestsPage() {
+  const { t } = useI18n();
   const [tests, setTests] = useState<TestInfo[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [active, setActive] = useState<TestDetail | null>(null);
@@ -61,7 +63,7 @@ export default function SkillTestsPage() {
 
   async function submit() {
     if (!active || !token) return;
-    if (answers.some((a) => a === -1)) { setError("Ответьте на все вопросы"); return; }
+    if (answers.some((a) => a === -1)) { setError(t("build.skillTests.answerAllQuestions")); return; }
     setSubmitting(true); setError("");
     try {
       const r = await fetch(apiUrl(`/api/build/skill-tests/${active.id}/submit`), {
@@ -70,7 +72,7 @@ export default function SkillTestsPage() {
         body: JSON.stringify({ answers }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Ошибка");
+      if (!r.ok) throw new Error(d.error ?? t("build.skillTests.genericError"));
       const res = d.data ?? d;
       setResult(res);
       if (res.passed) {
@@ -81,7 +83,7 @@ export default function SkillTestsPage() {
         });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
+      setError(e instanceof Error ? e.message : t("build.skillTests.genericError"));
     } finally {
       setSubmitting(false);
     }
@@ -97,16 +99,16 @@ export default function SkillTestsPage() {
           }`}>
             <div className="text-5xl mb-3">{result.passed ? "🏅" : "📚"}</div>
             <h1 className="text-2xl font-black text-white mb-1">
-              {result.passed ? "Тест пройден!" : "Попробуйте ещё раз"}
+              {result.passed ? t("build.skillTests.result.passed") : t("build.skillTests.result.tryAgain")}
             </h1>
             <p className="text-4xl font-black mt-3" style={{ color: result.passed ? "#10b981" : "#ef4444" }}>
               {result.score}%
             </p>
             <p className="text-slate-400 text-sm mt-1">
-              {result.correct} из {result.total} правильных · Порог {result.passingScore}%
+              {t("build.skillTests.result.scoreLine", { correct: result.correct, total: result.total, passingScore: result.passingScore })}
             </p>
             {result.passed && (
-              <p className="text-emerald-400 text-sm font-semibold mt-3">✓ Значок «{active.title}» добавлен в профиль</p>
+              <p className="text-emerald-400 text-sm font-semibold mt-3">{t("build.skillTests.result.badgeAdded", { title: active.title })}</p>
             )}
           </div>
 
@@ -119,10 +121,10 @@ export default function SkillTestsPage() {
                 }`}>
                   <p className="text-sm font-medium text-white mb-2">{i + 1}. {q.text}</p>
                   <p className={`text-xs ${fb?.isCorrect ? "text-emerald-400" : "text-red-400"}`}>
-                    {fb?.isCorrect ? "✓" : "✗"} Ваш ответ: {q.options[fb?.chosen ?? 0]}
+                    {fb?.isCorrect ? "✓" : "✗"} {t("build.skillTests.result.yourAnswer", { answer: q.options[fb?.chosen ?? 0] })}
                   </p>
                   {!fb?.isCorrect && (
-                    <p className="text-xs text-emerald-400 mt-0.5">Правильно: {q.options[fb?.correct ?? 0]}</p>
+                    <p className="text-xs text-emerald-400 mt-0.5">{t("build.skillTests.result.correctAnswer", { answer: q.options[fb?.correct ?? 0] })}</p>
                   )}
                 </div>
               );
@@ -134,14 +136,14 @@ export default function SkillTestsPage() {
               onClick={() => { setActive(null); setResult(null); }}
               className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-sm"
             >
-              ← К тестам
+              ← {t("build.skillTests.backToTests")}
             </button>
             {!result.passed && (
               <button
                 onClick={() => { setAnswers(new Array(active.questions.length).fill(-1)); setResult(null); }}
                 className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-sm"
               >
-                Попробовать снова
+                {t("build.skillTests.tryAgainBtn")}
               </button>
             )}
           </div>
@@ -159,7 +161,7 @@ export default function SkillTestsPage() {
       <BuildShell>
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-2">
-            <button onClick={() => setActive(null)} className="text-slate-400 hover:text-white text-sm">← Назад</button>
+            <button onClick={() => setActive(null)} className="text-slate-400 hover:text-white text-sm">← {t("build.skillTests.back")}</button>
             <span className="text-xs text-slate-500">{answered}/{active.questions.length}</span>
           </div>
           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-6">
@@ -199,12 +201,12 @@ export default function SkillTestsPage() {
             disabled={submitting || answered < active.questions.length || !token}
             className="mt-6 w-full py-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-colors"
           >
-            {!token ? "Войдите чтобы сдать тест" :
-             submitting ? "Проверяем…" :
-             answered < active.questions.length ? `Ответьте на все ${active.questions.length} вопросов` :
-             "Сдать тест →"}
+            {!token ? t("build.skillTests.loginToSubmit") :
+             submitting ? t("build.skillTests.checking") :
+             answered < active.questions.length ? t("build.skillTests.answerRemaining", { count: active.questions.length }) :
+             t("build.skillTests.submitBtn")}
           </button>
-          <p className="mt-2 text-xs text-slate-600 text-center">Порог сдачи: {active.passingScore}%</p>
+          <p className="mt-2 text-xs text-slate-600 text-center">{t("build.skillTests.passingThreshold", { passingScore: active.passingScore })}</p>
         </div>
       </BuildShell>
     );
@@ -215,16 +217,16 @@ export default function SkillTestsPage() {
     <BuildShell>
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-white">Тесты навыков</h1>
+          <h1 className="text-xl font-bold text-white">{t("build.skillTests.title")}</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Подтвердите свою компетентность — значки отображаются на вашем профиле
+            {t("build.skillTests.subtitle")}
           </p>
         </div>
 
         {/* My badges */}
         {badges.length > 0 && (
           <div className="mb-6 bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Мои значки</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">{t("build.skillTests.myBadges")}</p>
             <div className="flex gap-2 flex-wrap">
               {badges.map((b) => (
                 <div key={b.id} className="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800/40 rounded-xl px-3 py-2">
@@ -241,26 +243,26 @@ export default function SkillTestsPage() {
 
         {/* Test cards */}
         <div className="space-y-3">
-          {tests.map((t) => {
-            const hasBadge = badges.some((b) => b.testId === t.id);
+          {tests.map((t2) => {
+            const hasBadge = badges.some((b) => b.testId === t2.id);
             return (
               <button
-                key={t.id}
-                onClick={() => startTest(t.id)}
+                key={t2.id}
+                onClick={() => startTest(t2.id)}
                 className="w-full text-left bg-slate-900 border border-slate-700 hover:border-violet-600/50 rounded-2xl p-5 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-2xl">{TEST_ICONS[t.id] ?? "🎓"}</span>
+                  <span className="text-2xl">{TEST_ICONS[t2.id] ?? "🎓"}</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h2 className="font-bold text-white">{t.title}</h2>
-                      {hasBadge && <span className="text-xs bg-emerald-900/40 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-800/40">✓ Сдан</span>}
+                      <h2 className="font-bold text-white">{t2.title}</h2>
+                      {hasBadge && <span className="text-xs bg-emerald-900/40 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-800/40">✓ {t("build.skillTests.passed")}</span>}
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{t.description}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{t2.description}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs text-slate-500">{t.questionCount} вопросов</p>
-                    <p className="text-xs text-slate-500">Порог {t.passingScore}%</p>
+                    <p className="text-xs text-slate-500">{t("build.skillTests.questionCount", { count: t2.questionCount })}</p>
+                    <p className="text-xs text-slate-500">{t("build.skillTests.passingScoreShort", { passingScore: t2.passingScore })}</p>
                   </div>
                 </div>
               </button>

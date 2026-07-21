@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type Community = {
   id: string;
@@ -27,6 +28,7 @@ const SPECIALTY_EMOJI: Record<string, string> = {
 };
 
 export default function CommunitiesPage() {
+  const { t } = useI18n();
   const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,9 +43,9 @@ export default function CommunitiesPage() {
     <BuildShell>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Профессиональные комьюнити</h1>
+          <h1 className="text-2xl font-bold text-white">{t("build.communities.title")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Живые чаты по специальностям — вакансии, советы, нетворкинг
+            {t("build.communities.subtitle")}
           </p>
         </div>
 
@@ -76,7 +78,7 @@ export default function CommunitiesPage() {
                 )}
 
                 <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>👥 {c.memberCount.toLocaleString()} участников</span>
+                  <span>👥 {t("build.communities.memberCount", { count: c.memberCount.toLocaleString() })}</span>
                   {c.lastMessageAt && (
                     <span>{new Date(c.lastMessageAt).toLocaleDateString("ru")}</span>
                   )}

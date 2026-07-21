@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
 
@@ -43,63 +44,55 @@ async function fetchHires(): Promise<HireRow[]> {
 // ── Hardcoded case studies shown above the live feed ──────────────────────────
 
 type CaseStudy = {
-  quote: string;
-  name: string;
-  role: string;
-  city: string;
-  detail: string;
+  quoteKey: string;
+  nameKey: string;
+  roleKey: string;
+  cityKey: string;
+  detailKey: string;
   metric: string;
-  metricLabel: string;
+  metricLabelKey: string;
   accent: "emerald" | "sky" | "fuchsia";
 };
 
 const CASE_STUDIES: CaseStudy[] = [
   {
-    quote:
-      "Раньше на поиск сварщика уходило 3 недели. Через QBuild — нашёл и нанял за 4 дня. AI-коуч ещё на этапе отклика отметил, что кандидат прошёл ТБ и имеет все допуски.",
-    name: "Сергей Нурмагамбетов",
-    role: "Прораб, ТОО «СтройПартнёр»",
-    city: "Алматы",
-    detail:
-      "Три Trial Job за один день отбора — кандидат показал точечный шов на фрагменте трубы ДУ100. Сейчас ведёт монтаж тепловых сетей на объекте ЖК «Новый Горизонт».",
+    quoteKey: "build.successStories.case1Quote",
+    nameKey: "build.successStories.case1Name",
+    roleKey: "build.successStories.case1Role",
+    cityKey: "build.successStories.case1City",
+    detailKey: "build.successStories.case1Detail",
     metric: "4",
-    metricLabel: "дня до найма",
+    metricLabelKey: "build.successStories.case1MetricLabel",
     accent: "emerald",
   },
   {
-    quote:
-      "Я каменщик из Шымкента. Никогда не верил, что смогу найти работу в Астане через сайт. Загрузил фото удостоверения и голосовое резюме — Claude сам собрал профиль. Через неделю уже был на объекте.",
-    name: "Акбар Усманов",
-    role: "Каменщик 5-го разряда",
-    city: "Шымкент → Астана",
-    detail:
-      "Откликнулся на 2 вакансии, прошёл видеоинтервью прямо с телефона. Работодатель увидел в AI-скоринге 87/100 — вызвал на Trial. Первый день — монтаж перегородок в бизнес-центре «Экспо».",
+    quoteKey: "build.successStories.case2Quote",
+    nameKey: "build.successStories.case2Name",
+    roleKey: "build.successStories.case2Role",
+    cityKey: "build.successStories.case2City",
+    detailKey: "build.successStories.case2Detail",
     metric: "87",
-    metricLabel: "AI-скор отклика",
+    metricLabelKey: "build.successStories.case2MetricLabel",
     accent: "sky",
   },
   {
-    quote:
-      "У нас агентство, мы размещаем по 15–20 вакансий в месяц. Pay-per-Hire 6% вместо агентских 20% — экономия вышла значительной. Плюс Match-score сам сортирует кандидатов.",
-    name: "Айгуль Джаксыбекова",
-    role: "HR-директор, «КазСтройГрупп»",
-    city: "Алматы",
-    detail:
-      "За квартал закрыли 47 вакансий: 12 электриков, 18 сварщиков, 17 бетонщиков. Средний срок закрытия — 6 дней. Накопили Silver-тир по Loyalty — комиссия снизилась с 12% до 8%.",
+    quoteKey: "build.successStories.case3Quote",
+    nameKey: "build.successStories.case3Name",
+    roleKey: "build.successStories.case3Role",
+    cityKey: "build.successStories.case3City",
+    detailKey: "build.successStories.case3Detail",
     metric: "47",
-    metricLabel: "наймов за квартал",
+    metricLabelKey: "build.successStories.case3MetricLabel",
     accent: "fuchsia",
   },
   {
-    quote:
-      "Зарегистрировался в пятницу вечером. В субботу прошёл Trial — поставил 2 розеточных блока по фото-заданию. В понедельник уже получил оффер. Сайт реально работает.",
-    name: "Дмитрий Ли",
-    role: "Электрик, 4-й разряд",
-    city: "Павлодар",
-    detail:
-      "Нашёл вакансию по фильтру «Есть допуск к 1000В». Видео-резюме записал за 3 минуты. Работодатель смотрел вместо 20 кандидатов всего 4 — платформа отфильтровала по Match-score.",
+    quoteKey: "build.successStories.case4Quote",
+    nameKey: "build.successStories.case4Name",
+    roleKey: "build.successStories.case4Role",
+    cityKey: "build.successStories.case4City",
+    detailKey: "build.successStories.case4Detail",
     metric: "3",
-    metricLabel: "дня от резюме до оффера",
+    metricLabelKey: "build.successStories.case4MetricLabel",
     accent: "emerald",
   },
 ];
@@ -126,6 +119,7 @@ const ACCENT_STYLES: Record<CaseStudy["accent"], { border: string; bg: string; b
 };
 
 export default async function SuccessStoriesPage() {
+  const { t } = await getServerT();
   const hires = await fetchHires();
 
   return (
@@ -142,16 +136,15 @@ export default async function SuccessStoriesPage() {
         </div>
         <h1 className="text-3xl font-extrabold text-white">Success stories</h1>
         <p className="mt-2 text-sm text-slate-400 max-w-xl">
-          Реальные люди, реальные найм. Каждая история — работник, который нашёл работу,
-          и работодатель, который нашёл свою команду.
+          {t("build.successStories.heroSubtitle")}
         </p>
 
         {/* Stats strip */}
         <div className="mt-6 grid grid-cols-3 gap-3">
           {[
-            { value: "72 ч", label: "до первого дня" },
-            { value: "6%", label: "Pay-per-Hire мин." },
-            { value: "100%", label: "без скрытых платежей" },
+            { value: t("build.successStories.statHoursValue"), label: t("build.successStories.statDays") },
+            { value: "6%", label: t("build.successStories.statPayPerHireMin") },
+            { value: "100%", label: t("build.successStories.statNoHiddenFees") },
           ].map((s) => (
             <div
               key={s.label}
@@ -167,14 +160,14 @@ export default async function SuccessStoriesPage() {
 
         {/* ── Case Studies ── */}
         <h2 className="mt-12 mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
-          Истории клиентов
+          {t("build.successStories.caseStudiesHeading")}
         </h2>
         <div className="space-y-5">
           {CASE_STUDIES.map((cs) => {
             const s = ACCENT_STYLES[cs.accent];
             return (
               <article
-                key={cs.name}
+                key={cs.nameKey}
                 className={`rounded-2xl border ${s.border} ${s.bg} p-6`}
               >
                 <div className="flex items-start gap-4">
@@ -184,26 +177,26 @@ export default async function SuccessStoriesPage() {
                       {cs.metric}
                     </div>
                     <div className="mt-0.5 text-[10px] uppercase leading-tight text-slate-500">
-                      {cs.metricLabel}
+                      {t(cs.metricLabelKey)}
                     </div>
                   </div>
 
                   {/* Text */}
                   <div className="flex-1 min-w-0">
                     <blockquote className="text-sm leading-relaxed text-slate-200 italic">
-                      &ldquo;{cs.quote}&rdquo;
+                      &ldquo;{t(cs.quoteKey)}&rdquo;
                     </blockquote>
                     <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-white">{cs.name}</span>
+                      <span className="text-sm font-semibold text-white">{t(cs.nameKey)}</span>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${s.badge}`}
                       >
-                        {cs.city}
+                        {t(cs.cityKey)}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">{cs.role}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">{t(cs.roleKey)}</div>
                     <p className="mt-3 text-xs leading-relaxed text-slate-400 border-l-2 border-white/10 pl-3">
-                      {cs.detail}
+                      {t(cs.detailKey)}
                     </p>
                   </div>
                 </div>
@@ -214,20 +207,20 @@ export default async function SuccessStoriesPage() {
 
         {/* ── Live hires feed ── */}
         <h2 className="mt-12 mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
-          Последние найм на платформе
+          {t("build.successStories.liveFeedHeading")}
         </h2>
 
         {hires.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
             <div className="text-4xl">🏗</div>
             <p className="mt-3 text-sm text-slate-400">
-              Первые найм появятся здесь. Просматривайте вакансии и откликайтесь прямо сейчас.
+              {t("build.successStories.emptyFeedText")}
             </p>
             <Link
               href="/build/vacancies"
               className="mt-4 inline-block rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400"
             >
-              Смотреть вакансии →
+              {t("build.successStories.viewVacancies")}
             </Link>
           </div>
         ) : (
@@ -240,7 +233,7 @@ export default async function SuccessStoriesPage() {
                 <span className="text-xl mt-0.5">✅</span>
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold text-white text-sm">{h.workerName}</div>
-                  <div className="mt-0.5 text-xs text-emerald-200">нанят как {h.vacancyTitle}</div>
+                  <div className="mt-0.5 text-xs text-emerald-200">{t("build.successStories.hiredAs", { vacancyTitle: h.vacancyTitle })}</div>
                   <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-400">
                     {h.projectTitle && <span>{h.projectTitle}</span>}
                     {h.projectCity && <span>📍 {h.projectCity}</span>}
@@ -259,23 +252,22 @@ export default async function SuccessStoriesPage() {
 
         {/* ── Your story CTA ── */}
         <div className="mt-12 rounded-2xl border border-white/10 bg-white/[0.02] p-7">
-          <h2 className="text-lg font-bold text-white">Ваш найм — следующим</h2>
+          <h2 className="text-lg font-bold text-white">{t("build.successStories.ctaHeading")}</h2>
           <p className="mt-1 text-sm text-slate-400 max-w-lg">
-            Бесплатная публикация. Pay-per-Hire от 6%. AI-коуч и Match-score включены в
-            каждый тариф.
+            {t("build.successStories.ctaSubtitle")}
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link
               href="/build/create-project"
               className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 transition"
             >
-              Разместить вакансию →
+              {t("build.successStories.postVacancy")}
             </Link>
             <Link
               href="/build/vacancies"
               className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition"
             >
-              Найти работу
+              {t("build.successStories.findWork")}
             </Link>
             <Link
               href="/build/stories"

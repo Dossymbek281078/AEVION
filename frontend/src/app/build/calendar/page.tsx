@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type Item = Awaited<ReturnType<typeof buildApi.myInterviews>>["items"][number];
 
@@ -18,6 +19,7 @@ export default function CalendarPage() {
 }
 
 function Body() {
+  const { t } = useI18n();
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,11 +74,11 @@ function Body() {
         <div>
           <h1 className="text-2xl font-bold text-white">Interview calendar</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Кандидаты с лейблом{" "}
+            {t("build.calendar.subtitlePrefix")}{" "}
             <span className="rounded bg-emerald-400/15 px-1.5 py-1 text-[11px] font-semibold text-emerald-200">
               💬 Interview
             </span>{" "}
-            в ваших вакансиях, сгруппированные по дню. Нажмите для перехода в review-режим.
+            {t("build.calendar.subtitleSuffix")}
           </p>
         </div>
         <Link
@@ -97,9 +99,9 @@ function Body() {
 
       {items && upcomingTotal === 0 && pastWeek.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-400">
-          <p>Нет кандидатов с лейблом «Interview».</p>
+          <p>{t("build.calendar.emptyTitle")}</p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Проставьте лейбл в review-режиме клавишей «3», чтобы они появились здесь.
+            {t("build.calendar.emptyHint")}
           </p>
         </div>
       )}
@@ -133,8 +135,7 @@ function Body() {
       )}
 
       <p className="mt-8 text-[11px] text-slate-500">
-        Время лейблирования = последнее обновление заявки. Полноценный interview-scheduler
-        придёт позже — пока используйте 📅 в чате для отправки слотов.
+        {t("build.calendar.footerNote")}
       </p>
     </>
   );

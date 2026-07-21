@@ -5,6 +5,7 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { SafetyBriefingModal } from "@/components/build/SafetyBriefingModal";
 import { HelpTip } from "@/components/build/HelpTip";
+import { useI18n } from "@/lib/i18n";
 
 type Shift = {
   id: string;
@@ -28,12 +29,15 @@ const STATUS_STYLE: Record<string, string> = {
   MISSED: "border-rose-500/30 bg-rose-500/10 text-rose-300",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  PLANNED: "Запланирована",
-  STARTED: "В процессе",
-  DONE: "Выполнена",
-  MISSED: "Пропущена",
-};
+function statusLabel(status: string, t: (key: string) => string): string {
+  switch (status) {
+    case "PLANNED": return t("build.shifts.status.planned");
+    case "STARTED": return t("build.shifts.status.started");
+    case "DONE": return t("build.shifts.status.done");
+    case "MISSED": return t("build.shifts.status.missed");
+    default: return status;
+  }
+}
 
 function fmt(t: string | null) {
   if (!t) return "—";
@@ -51,6 +55,7 @@ export default function ShiftsPage() {
 }
 
 function ShiftsInner() {
+  const { t } = useI18n();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,18 +106,18 @@ function ShiftsInner() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-white">📅 Смены</h1>
+          <h1 className="text-2xl font-bold text-white">📅 {t("build.shifts.title")}</h1>
           <HelpTip>
-            <p className="mb-1 font-semibold text-white">Как работают смены?</p>
-            <p>Работодатель добавляет смены после принятия вашего отклика.</p>
-            <p className="mt-1.5">Перед началом смены:</p>
-            <p>1. Нажмите ⛑️ <strong>ТБ</strong> — прочитайте и подпишите инструктаж по безопасности</p>
-            <p>2. Нажмите <strong>✓ Пришёл</strong> — GPS фиксирует время и место</p>
-            <p>3. По окончании — <strong>⏹ Ушёл</strong></p>
+            <p className="mb-1 font-semibold text-white">{t("build.shifts.help.title")}</p>
+            <p>{t("build.shifts.help.intro")}</p>
+            <p className="mt-1.5">{t("build.shifts.help.beforeShift")}</p>
+            <p>1. {t("build.shifts.help.step1")}</p>
+            <p>2. {t("build.shifts.help.step2")}</p>
+            <p>3. {t("build.shifts.help.step3")}</p>
           </HelpTip>
         </div>
         <p className="mt-1 text-sm text-slate-400">
-          Расписание, отметка прихода и ухода на объекте
+          {t("build.shifts.subtitle")}
         </p>
       </div>
 
@@ -123,15 +128,15 @@ function ShiftsInner() {
       ) : shifts.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/5 p-10 text-center">
           <p className="text-4xl">📅</p>
-          <p className="mt-3 text-base font-semibold text-slate-200">Смен пока нет</p>
-          <p className="mt-1 text-sm text-slate-400">Смены добавляет работодатель после того, как принял ваш отклик.</p>
+          <p className="mt-3 text-base font-semibold text-slate-200">{t("build.shifts.empty.title")}</p>
+          <p className="mt-1 text-sm text-slate-400">{t("build.shifts.empty.description")}</p>
           <div className="mt-4 space-y-1 text-xs text-slate-500">
-            <p>1. Откликнитесь на вакансию → работодатель принимает отклик</p>
-            <p>2. Работодатель создаёт смены в системе</p>
-            <p>3. Вы подписываете инструктаж ТБ (⛑️) и нажимаете «✓ Пришёл»</p>
+            <p>{t("build.shifts.empty.step1")}</p>
+            <p>{t("build.shifts.empty.step2")}</p>
+            <p>{t("build.shifts.empty.step3")}</p>
           </div>
           <a href="/build/vacancies" className="mt-4 inline-block rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30">
-            Найти вакансию →
+            {t("build.shifts.empty.findVacancy")}
           </a>
         </div>
       ) : null}
@@ -152,7 +157,7 @@ function ShiftsInner() {
               <div key={date}>
                 <div className="mb-3 flex items-center gap-2">
                   <h2 className="text-sm font-semibold text-slate-300">
-                    {date === today ? "🟢 Сегодня" : new Date(date + "T12:00").toLocaleDateString("ru", { weekday: "long", day: "numeric", month: "long" })}
+                    {date === today ? `🟢 ${t("build.shifts.today")}` : new Date(date + "T12:00").toLocaleDateString("ru", { weekday: "long", day: "numeric", month: "long" })}
                   </h2>
                   <div className="h-px flex-1 bg-white/10" />
                 </div>
@@ -162,16 +167,16 @@ function ShiftsInner() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${STATUS_STYLE[s.status] ?? STATUS_STYLE.PLANNED}`}>
-                            {STATUS_LABEL[s.status] ?? s.status}
+                            {statusLabel(s.status, t)}
                           </span>
                           {s.startTime && <span className="text-xs text-slate-400">{s.startTime}–{s.endTime ?? "?"}</span>}
                         </div>
                         <p className="mt-1 text-sm text-white">
-                          {s.workerName ?? "Работник"} → {s.clientName ?? "Работодатель"}
+                          {s.workerName ?? t("build.shifts.defaultWorker")} → {s.clientName ?? t("build.shifts.defaultClient")}
                         </p>
                         {(s.checkInAt || s.checkOutAt) && (
                           <p className="text-xs text-slate-500">
-                            Приход: {fmt(s.checkInAt)} / Уход: {fmt(s.checkOutAt)}
+                            {t("build.shifts.checkTimes", { checkIn: fmt(s.checkInAt), checkOut: fmt(s.checkOutAt) })}
                           </p>
                         )}
                       </div>
@@ -182,14 +187,14 @@ function ShiftsInner() {
                               onClick={() => setBriefingShift(s.id)}
                               className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
                             >
-                              ⛑️ ТБ
+                              ⛑️ {t("build.shifts.safetyBtn")}
                             </button>
                             <button
                               disabled={busy === s.id}
                               onClick={() => void checkin(s.id)}
                               className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
                             >
-                              {busy === s.id ? "…" : "✓ Пришёл"}
+                              {busy === s.id ? "…" : `✓ ${t("build.shifts.checkinBtn")}`}
                             </button>
                           </>
                         )}
@@ -199,7 +204,7 @@ function ShiftsInner() {
                             onClick={() => void checkout(s.id)}
                             className="rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-300 hover:bg-rose-500/30 disabled:opacity-50"
                           >
-                            {busy === s.id ? "…" : "⏹ Ушёл"}
+                            {busy === s.id ? "…" : `⏹ ${t("build.shifts.checkoutBtn")}`}
                           </button>
                         )}
                       </div>

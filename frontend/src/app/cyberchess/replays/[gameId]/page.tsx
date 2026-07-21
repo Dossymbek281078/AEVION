@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -107,13 +108,25 @@ function resultLabel(r: string): string {
   return r || "—";
 }
 
-function resultColor(r: string): string {
+function resultBadgeClass(r: string): string {
   const cls = classifyResult(r);
-  if (cls === "win") return "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
-  if (cls === "loss") return "text-rose-300 border-rose-500/40 bg-rose-500/10";
-  if (cls === "draw") return "text-amber-200 border-amber-500/40 bg-amber-500/10";
-  return "text-slate-300 border-slate-500/40 bg-slate-500/10";
+  if (cls === "win") return "planet-badge live";
+  if (cls === "loss") return "planet-badge danger";
+  if (cls === "draw") return "planet-badge gold";
+  return "planet-badge muted";
 }
+
+// Board square + piece colors — tie into the planet palette instead of a
+// generic slate board, so the viewer matches the rest of the reskinned
+// CyberChess pages (leaderboard/matchmaking/history/replay-hub).
+const LIGHT_SQUARE = "var(--pl-surface)";
+const DARK_SQUARE = "color-mix(in srgb, var(--pl-gold) 30%, var(--pl-surface-2))";
+const WHITE_PIECE_STYLE: CSSProperties = {
+  color: "var(--pl-surface)",
+  textShadow:
+    "0 1px 1px var(--pl-text), 0 -1px 1px var(--pl-text), 1px 0 1px var(--pl-text), -1px 0 1px var(--pl-text)",
+};
+const BLACK_PIECE_STYLE: CSSProperties = { color: "var(--pl-text)" };
 
 // Eval bar height % for white-perspective.
 function evalToWhitePct(cp: number): number {
@@ -292,18 +305,13 @@ export default function ReplayViewerPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="mx-auto max-w-3xl px-4 py-16">
-          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-rose-200">
-            <div className="text-sm font-medium">Replay недоступен</div>
-            <div className="mt-1 text-xs text-rose-300/80">{error}</div>
-            <div className="mt-4">
-              <Link
-                href="/cyberchess/replays"
-                className="inline-flex items-center gap-1.5 rounded-md border border-rose-400/40 px-3 py-1.5 text-xs text-rose-100 hover:bg-rose-500/20"
-              >
-                ← Назад к архиву
-              </Link>
+      <main className="planet-root">
+        <div className="planet-wrap" style={{ paddingTop: 36, paddingBottom: 48, maxWidth: 640 }}>
+          <div className="planet-card" style={{ padding: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--pl-danger)" }}>Replay недоступен</div>
+            <div className="planet-muted" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>
+            <div style={{ marginTop: 16 }}>
+              <Link href="/cyberchess/replays" className="planet-btn">← Назад к архиву</Link>
             </div>
           </div>
         </div>
@@ -313,9 +321,9 @@ export default function ReplayViewerPage() {
 
   if (!replay) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="mx-auto max-w-6xl px-4 py-10">
-          <div className="h-72 animate-pulse rounded-xl border border-slate-800 bg-slate-900/40" />
+      <main className="planet-root">
+        <div className="planet-wrap" style={{ paddingTop: 36, paddingBottom: 48 }}>
+          <div className="planet-card" style={{ height: 288, opacity: 0.5 }} />
         </div>
       </main>
     );
@@ -324,253 +332,183 @@ export default function ReplayViewerPage() {
   const moves = replay.hist;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <div className="mx-auto max-w-6xl px-4 py-8">
+    <main className="planet-root">
+      <div className="planet-wrap" style={{ paddingTop: 36, paddingBottom: 48 }}>
         {/* Header */}
-        <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-              Replay · CyberChess
-            </div>
-            <h1 className="mt-1 truncate text-2xl font-semibold sm:text-3xl">
+        <header style={{ marginBottom: 24, display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="planet-eyebrow">Replay · CyberChess</div>
+            <h1 className="planet-h1" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {replay.hostName || "Аноним"}{" "}
-              <span className="text-slate-500">vs</span>{" "}
+              <span className="planet-muted" style={{ fontWeight: 400 }}>vs</span>{" "}
               {replay.aiLevel ? `AI ${replay.aiLevel}` : "AI"}
             </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <span
-                className={[
-                  "rounded-md border px-2 py-0.5",
-                  resultColor(replay.result),
-                ].join(" ")}
-              >
-                {resultLabel(replay.result)} · {replay.result}
-              </span>
+            <div className="planet-muted" style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, fontSize: 12 }}>
+              <span className={resultBadgeClass(replay.result)}>{resultLabel(replay.result)} · {replay.result}</span>
               <span>Длительность: {fmtDuration(replay.duration)}</span>
               <span>Ходы: {moves.length}</span>
               {replay.rating ? <span>Rating: {replay.rating}</span> : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onShare}
-              className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-500/20"
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button onClick={onShare} className="planet-btn active">
               {copied ? "Скопировано ✓" : "Поделиться replay"}
             </button>
-            <Link
-              href="/cyberchess/replays"
-              className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
-            >
-              ← Архив
-            </Link>
+            <Link href="/cyberchess/replays" className="planet-btn">← Архив</Link>
           </div>
         </header>
 
         {/* Main grid */}
-        <div className="grid gap-6 lg:grid-cols-[auto_1fr_320px]">
-          {/* Eval bar */}
-          <div className="hidden lg:flex">
-            <div className="relative h-[480px] w-6 overflow-hidden rounded-md border border-slate-700 bg-slate-900">
-              <div
-                className="absolute inset-x-0 top-0 bg-slate-200 transition-all duration-300"
-                style={{ height: `${100 - evalToWhitePct(currentEval)}%` }}
-              />
-              <div
-                className="absolute inset-x-0 bottom-0 bg-slate-700 transition-all duration-300"
-                style={{ height: `${evalToWhitePct(currentEval)}%` }}
-              />
-              <div className="absolute inset-x-0 top-1/2 h-px bg-cyan-400/60" />
-              <div className="absolute inset-x-0 -bottom-px py-1 text-center text-[10px] text-slate-400">
-                {currentEval > 0 ? "+" : ""}
-                {(currentEval / 100).toFixed(2)}
-              </div>
-            </div>
-          </div>
+        <div style={{ display: "grid", gap: 20, gridTemplateColumns: "1fr", alignItems: "start" }}>
+          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", alignItems: "start" }}>
+            {/* Board + eval bar + controls */}
+            <section style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", gap: 12 }}>
+                {/* Eval bar */}
+                <div className="planet-card" style={{ position: "relative", width: 22, height: 480, overflow: "hidden", flexShrink: 0 }}>
+                  <div style={{ position: "absolute", inset: "0 0 auto 0", background: "var(--pl-text)", height: `${100 - evalToWhitePct(currentEval)}%`, transition: "height .3s ease" }} />
+                  <div style={{ position: "absolute", inset: "auto 0 0 0", background: "var(--pl-surface)", height: `${evalToWhitePct(currentEval)}%`, transition: "height .3s ease" }} />
+                  <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 1, background: "var(--pl-gold)", opacity: 0.6 }} />
+                  <div className="planet-muted" style={{ position: "absolute", left: 0, right: 0, bottom: -18, textAlign: "center", fontSize: 10, fontFamily: "var(--pl-mono)" }}>
+                    {currentEval > 0 ? "+" : ""}{(currentEval / 100).toFixed(2)}
+                  </div>
+                </div>
 
-          {/* Board + controls */}
-          <section className="flex flex-col">
-            <div className="aspect-square w-full max-w-[560px] self-center overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
-              <div className="grid h-full w-full grid-cols-8 grid-rows-8">
-                {board.map((row, rIdx) =>
-                  row.map((piece, cIdx) => {
-                    const dark = (rIdx + cIdx) % 2 === 1;
-                    return (
-                      <div
-                        key={`${rIdx}-${cIdx}`}
-                        className={[
-                          "flex items-center justify-center text-3xl sm:text-4xl md:text-5xl",
-                          dark ? "bg-slate-700/70" : "bg-slate-300/90",
-                        ].join(" ")}
-                      >
-                        {piece ? (
-                          <span
-                            className={
-                              piece.color === "white"
-                                ? "text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.5)]"
-                                : "text-slate-900"
-                            }
+                <div className="planet-card" style={{ flex: 1, aspectRatio: "1 / 1", maxWidth: 560, overflow: "hidden" }}>
+                  <div style={{ display: "grid", height: "100%", width: "100%", gridTemplateColumns: "repeat(8,1fr)", gridTemplateRows: "repeat(8,1fr)" }}>
+                    {board.map((row, rIdx) =>
+                      row.map((piece, cIdx) => {
+                        const dark = (rIdx + cIdx) % 2 === 1;
+                        return (
+                          <div
+                            key={`${rIdx}-${cIdx}`}
+                            style={{
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: "clamp(20px,4.5vw,40px)",
+                              background: dark ? DARK_SQUARE : LIGHT_SQUARE,
+                            }}
                           >
-                            {piece.glyph}
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  }),
-                )}
-              </div>
-            </div>
-
-            {/* Playback bar */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-              <button
-                onClick={() => setCurrentPly(0)}
-                className="rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 hover:border-slate-500"
-                title="К началу (Home)"
-              >
-                ◀◀
-              </button>
-              <button
-                onClick={() => setCurrentPly((p) => Math.max(0, p - 1))}
-                className="rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 hover:border-slate-500"
-                title="Назад (←)"
-              >
-                ◀
-              </button>
-              <button
-                onClick={() => setIsPlaying((x) => !x)}
-                className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20"
-                title="Play / Pause (Space)"
-              >
-                {isPlaying ? "⏸ Пауза" : "▶ Играть"}
-              </button>
-              <button
-                onClick={() => setCurrentPly((p) => Math.min(maxPly, p + 1))}
-                className="rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 hover:border-slate-500"
-                title="Вперёд (→)"
-              >
-                ▶
-              </button>
-              <button
-                onClick={() => setCurrentPly(maxPly)}
-                className="rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 hover:border-slate-500"
-                title="В конец (End)"
-              >
-                ▶▶
-              </button>
-
-              <div className="ml-3 flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900/60 p-0.5">
-                {([0.5, 1, 2, 4] as Speed[]).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSpeed(s)}
-                    className={[
-                      "rounded px-2 py-0.5 text-xs transition",
-                      speed === s
-                        ? "bg-cyan-500/20 text-cyan-200"
-                        : "text-slate-400 hover:text-slate-200",
-                    ].join(" ")}
-                  >
-                    ×{s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Scrubber */}
-            <div className="mt-3">
-              <input
-                type="range"
-                min={0}
-                max={maxPly}
-                value={currentPly}
-                onChange={(e) => setCurrentPly(Number(e.target.value))}
-                className="w-full accent-cyan-500"
-              />
-              <div className="mt-1 flex justify-between text-[11px] text-slate-500">
-                <span>Ход {currentPly} / {maxPly}</span>
-                <span>
-                  {currentEval > 0 ? "+" : ""}
-                  {(currentEval / 100).toFixed(2)} cp
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* Move list */}
-          <aside className="flex h-[560px] flex-col rounded-xl border border-slate-800 bg-slate-900/40">
-            <div className="border-b border-slate-800 px-3 py-2 text-xs uppercase tracking-wider text-slate-400">
-              Ходы
-            </div>
-            <div
-              ref={moveListRef}
-              className="flex-1 overflow-y-auto px-2 py-2"
-            >
-              <button
-                data-active={currentPly === 0 ? "true" : "false"}
-                onClick={() => setCurrentPly(0)}
-                className={[
-                  "block w-full rounded px-2 py-1 text-left text-xs transition",
-                  currentPly === 0
-                    ? "bg-cyan-500/15 text-cyan-200"
-                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
-                ].join(" ")}
-              >
-                Начальная позиция
-              </button>
-              {/* Pair moves into numbered rows */}
-              {Array.from({ length: Math.ceil(moves.length / 2) }).map((_, pairIdx) => {
-                const whitePly = pairIdx * 2 + 1;
-                const blackPly = pairIdx * 2 + 2;
-                const whiteSan = moves[pairIdx * 2];
-                const blackSan = moves[pairIdx * 2 + 1];
-                return (
-                  <div
-                    key={pairIdx}
-                    className="mt-0.5 grid grid-cols-[2.2rem_1fr_1fr] items-center gap-1 px-1 py-0.5 text-xs"
-                  >
-                    <span className="text-slate-500">{pairIdx + 1}.</span>
-                    <button
-                      data-active={currentPly === whitePly ? "true" : "false"}
-                      onClick={() => setCurrentPly(whitePly)}
-                      className={[
-                        "rounded px-2 py-1 text-left transition",
-                        currentPly === whitePly
-                          ? "bg-cyan-500/15 text-cyan-200"
-                          : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100",
-                      ].join(" ")}
-                    >
-                      {whiteSan}
-                    </button>
-                    {blackSan ? (
-                      <button
-                        data-active={currentPly === blackPly ? "true" : "false"}
-                        onClick={() => setCurrentPly(blackPly)}
-                        className={[
-                          "rounded px-2 py-1 text-left transition",
-                          currentPly === blackPly
-                            ? "bg-cyan-500/15 text-cyan-200"
-                            : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100",
-                        ].join(" ")}
-                      >
-                        {blackSan}
-                      </button>
-                    ) : (
-                      <span />
+                            {piece ? <span style={piece.color === "white" ? WHITE_PIECE_STYLE : BLACK_PIECE_STYLE}>{piece.glyph}</span> : null}
+                          </div>
+                        );
+                      }),
                     )}
                   </div>
-                );
-              })}
-              {moves.length === 0 && (
-                <div className="px-2 py-4 text-center text-xs text-slate-500">
-                  В этой партии нет ходов.
                 </div>
-              )}
-            </div>
-            <div className="border-t border-slate-800 px-3 py-2 text-[10px] text-slate-500">
-              Подсказки: ← → перемотка, Space — play/pause, Home/End — границы.
-            </div>
-          </aside>
+              </div>
+
+              {/* Playback bar */}
+              <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <button onClick={() => setCurrentPly(0)} className="planet-btn" title="К началу (Home)">◀◀</button>
+                <button onClick={() => setCurrentPly((p) => Math.max(0, p - 1))} className="planet-btn" title="Назад (←)">◀</button>
+                <button onClick={() => setIsPlaying((x) => !x)} className="planet-btn active" title="Play / Pause (Space)">
+                  {isPlaying ? "⏸ Пауза" : "▶ Играть"}
+                </button>
+                <button onClick={() => setCurrentPly((p) => Math.min(maxPly, p + 1))} className="planet-btn" title="Вперёд (→)">▶</button>
+                <button onClick={() => setCurrentPly(maxPly)} className="planet-btn" title="В конец (End)">▶▶</button>
+
+                <div style={{ marginLeft: 8, display: "flex", alignItems: "center", gap: 2, borderRadius: 9, border: "1px solid var(--pl-line)", padding: 2 }}>
+                  {([0.5, 1, 2, 4] as Speed[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSpeed(s)}
+                      className="planet-btn"
+                      style={{
+                        border: "none", padding: "4px 8px",
+                        background: speed === s ? "var(--pl-gold)" : "transparent",
+                        color: speed === s ? "#1a1205" : "var(--pl-muted)",
+                      }}
+                    >
+                      ×{s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scrubber */}
+              <div style={{ marginTop: 14 }}>
+                <input
+                  type="range"
+                  min={0}
+                  max={maxPly}
+                  value={currentPly}
+                  onChange={(e) => setCurrentPly(Number(e.target.value))}
+                  style={{ width: "100%", accentColor: "var(--pl-gold)" }}
+                />
+                <div className="planet-muted" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                  <span>Ход {currentPly} / {maxPly}</span>
+                  <span>{currentEval > 0 ? "+" : ""}{(currentEval / 100).toFixed(2)} cp</span>
+                </div>
+              </div>
+            </section>
+
+            {/* Move list */}
+            <aside className="planet-card" style={{ display: "flex", flexDirection: "column", height: 560 }}>
+              <div className="planet-eyebrow" style={{ padding: "10px 14px", borderBottom: "1px solid var(--pl-line)" }}>Ходы</div>
+              <div ref={moveListRef} style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
+                <button
+                  data-active={currentPly === 0 ? "true" : "false"}
+                  onClick={() => setCurrentPly(0)}
+                  className="planet-btn"
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", border: "none", padding: "6px 8px",
+                    background: currentPly === 0 ? "color-mix(in srgb,var(--pl-gold) 15%,transparent)" : "transparent",
+                    color: currentPly === 0 ? "var(--pl-gold)" : "var(--pl-muted)",
+                  }}
+                >
+                  Начальная позиция
+                </button>
+                {/* Pair moves into numbered rows */}
+                {Array.from({ length: Math.ceil(moves.length / 2) }).map((_, pairIdx) => {
+                  const whitePly = pairIdx * 2 + 1;
+                  const blackPly = pairIdx * 2 + 2;
+                  const whiteSan = moves[pairIdx * 2];
+                  const blackSan = moves[pairIdx * 2 + 1];
+                  return (
+                    <div key={pairIdx} style={{ marginTop: 2, display: "grid", gridTemplateColumns: "2.2rem 1fr 1fr", alignItems: "center", gap: 4, padding: "2px 4px", fontSize: 12.5 }}>
+                      <span className="planet-muted">{pairIdx + 1}.</span>
+                      <button
+                        data-active={currentPly === whitePly ? "true" : "false"}
+                        onClick={() => setCurrentPly(whitePly)}
+                        className="planet-btn"
+                        style={{
+                          border: "none", textAlign: "left", padding: "4px 8px",
+                          background: currentPly === whitePly ? "color-mix(in srgb,var(--pl-gold) 15%,transparent)" : "transparent",
+                          color: currentPly === whitePly ? "var(--pl-gold)" : "var(--pl-text)",
+                        }}
+                      >
+                        {whiteSan}
+                      </button>
+                      {blackSan ? (
+                        <button
+                          data-active={currentPly === blackPly ? "true" : "false"}
+                          onClick={() => setCurrentPly(blackPly)}
+                          className="planet-btn"
+                          style={{
+                            border: "none", textAlign: "left", padding: "4px 8px",
+                            background: currentPly === blackPly ? "color-mix(in srgb,var(--pl-gold) 15%,transparent)" : "transparent",
+                            color: currentPly === blackPly ? "var(--pl-gold)" : "var(--pl-text)",
+                          }}
+                        >
+                          {blackSan}
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                    </div>
+                  );
+                })}
+                {moves.length === 0 && (
+                  <div className="planet-muted" style={{ padding: "16px 8px", textAlign: "center", fontSize: 12 }}>
+                    В этой партии нет ходов.
+                  </div>
+                )}
+              </div>
+              <div className="planet-muted" style={{ borderTop: "1px solid var(--pl-line)", padding: "8px 14px", fontSize: 10 }}>
+                Подсказки: ← → перемотка, Space — play/pause, Home/End — границы.
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
     </main>

@@ -1000,7 +1000,7 @@ export default function CyberChessPage(){
     }catch{}
   },[hist, game, bk]);
   const[think,sThink]=useState(false);
-  const[thinkSecs,sThinkSecs]=useState(0);
+  const thinkSecsElRef=useRef<HTMLElement|null>(null); // "AI Ns" badge — painted imperatively, see AI think-time ticker below
   const thinkStartRef=useRef<number>(0);
   const[hintLoading,sHintLoading]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
@@ -1794,8 +1794,26 @@ export default function CyberChessPage(){
   const[coordSession,sCoordSession]=useState<CoordSession|null>(null);
   const[coordResult,sCoordResult]=useState<CoordResult|null>(null);
   const[coordLB,sCoordLB]=useState<CoordLeaderboardEntry[]>([]);
-  const[coordTick,sCoordTick]=useState(0); // forces re-render for timer
   const[coordFlash,sCoordFlash]=useState<{sq:string;ok:boolean;ts:number}|null>(null);
+  // Round countdown display — painted imperatively (see paintCoordTick below).
+  // Used to be a dummy `coordTick` state bumped every 100ms just to force a
+  // re-render of the whole page so this JSX would recompute time-left from
+  // coordSession.endsAt; that's the highest-frequency instance of the
+  // setState-per-tick bug found across the whole file (10x/sec while a round
+  // is active). coordSession.endsAt is already a real deadline, so the fix is
+  // the same deadline-ref/imperative-paint pattern used for the puzzle and
+  // game clocks — no new state needed at all here.
+  const coordSecElRef=useRef<HTMLElement|null>(null);
+  const coordBarElRef=useRef<HTMLElement|null>(null);
+  const paintCoordTick=useCallback((s:CoordSession)=>{
+    const ms=coordTimeLeft(s);
+    const sec=Math.ceil(ms/1000);
+    const pct=Math.max(0,Math.min(100,(ms/s.durationMs)*100));
+    const secEl=coordSecElRef.current;
+    if(secEl){secEl.textContent=`${sec}s`;secEl.style.color=sec<=5?CC.danger:CC.text;}
+    const barEl=coordBarElRef.current;
+    if(barEl){barEl.style.width=`${pct}%`;barEl.style.background=`linear-gradient(90deg,${CC.brand},${sec<=5?CC.danger:CC.brand})`;}
+  },[CC.danger,CC.text,CC.brand]);
   // Personality Quiz (killer #14)
   const[showQuiz,sShowQuiz]=useState(false);
   const[quizAnswers,sQuizAnswers]=useState<number[]>([]);
@@ -2261,8 +2279,9 @@ export default function CyberChessPage(){
   // Coord trainer tick (defined here so addChessy is in scope)
   useEffect(()=>{
     if(!coordSession||coordResult)return;
+    paintCoordTick(coordSession);
     const id=setInterval(()=>{
-      sCoordTick(x=>x+1);
+      paintCoordTick(coordSession);
       if(coordExpired(coordSession)){
         const res=coordSummarize(coordSession);
         sCoordResult(res);
@@ -2273,7 +2292,7 @@ export default function CyberChessPage(){
       }
     },100);
     return()=>clearInterval(id);
-  },[coordSession,coordResult,addChessy]);
+  },[coordSession,coordResult,addChessy,paintCoordTick]);
   // Clipboard auto-load (Ctrl+V) — works in Analysis OR on the home setup screen.
   // Three input formats handled, in priority order:
   //   1. Lichess game URL (https://lichess.org/abc12345 or with /white|/black/orient suffix) →
@@ -3449,12 +3468,16 @@ export default function CyberChessPage(){
   // Board overlay is now the primary post-game UX; full modal opens on demand via 📊 button
   useEffect(()=>{if(over){sAiReview({text:"",loading:false});}},[over]);
 
-  /* ── AI think-time ticker ── */
+  /* ── AI think-time ticker — imperative paint, no setState per tick (same
+     technique as the puzzle/clock timer fixes: this ran inside the same
+     ~14k-line component, so a per-second setState here re-rendered the
+     whole page for the duration of every single AI move). ── */
   useEffect(()=>{
-    if(!think){sThinkSecs(0);return;}
+    const paint=(sec:number)=>{if(thinkSecsElRef.current)thinkSecsElRef.current.textContent=`AI ${sec}s`;};
+    if(!think){paint(0);return;}
     thinkStartRef.current=Date.now();
-    sThinkSecs(0);
-    const iv=setInterval(()=>sThinkSecs(Math.floor((Date.now()-thinkStartRef.current)/1000)),1000);
+    paint(0);
+    const iv=setInterval(()=>paint(Math.floor((Date.now()-thinkStartRef.current)/1000)),1000);
     return()=>clearInterval(iv);
   },[think]);
 
@@ -7419,7 +7442,7 @@ export default function CyberChessPage(){
                 whiteSpace:"nowrap" as const,
               }}>
                 <span style={{animation:"cc-dots 1.2s ease-in-out infinite",letterSpacing:1}}>●</span>
-                <span>AI {thinkSecs}s</span>
+                <span ref={thinkSecsElRef as any}>AI 0s</span>
               </div>}
               {/* Move-streak counter — bottom-right corner, ≥3 consecutive good/great/brilliant */}
               {on&&!over&&tab==="play"&&(()=>{
@@ -13343,11 +13366,8 @@ ${question.trim()}`;
           </div>
         </div>;
       })():(()=>{
-        // Active session
-        const ms=coordTimeLeft(coordSession);
-        const sec=Math.ceil(ms/1000);
+        // Active session — sec/pct are painted imperatively (paintCoordTick), not derived here
         const target=coordSession.round.target;
-        const pct=Math.max(0,Math.min(100,(ms/coordSession.durationMs)*100));
         const grid:string[][]=[];
         for(let r=0;r<8;r++){const row:string[]=[];for(let f=0;f<8;f++)row.push(`${"abcdefgh"[f]}${8-r}`);grid.push(row);}
         const flipBoard=!coordSession.asWhite;
@@ -13361,11 +13381,11 @@ ${question.trim()}`;
             </div>
             <div style={{textAlign:"right"}}>
               <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Осталось</div>
-              <div style={{fontSize:32,fontWeight:900,color:sec<=5?CC.danger:CC.text,fontFamily:"ui-monospace, monospace",lineHeight:1}}>{sec}s</div>
+              <div ref={coordSecElRef as any} style={{fontSize:32,fontWeight:900,color:CC.text,fontFamily:"ui-monospace, monospace",lineHeight:1}}>{Math.ceil(coordTimeLeft(coordSession)/1000)}s</div>
             </div>
           </div>
           <div style={{height:8,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3}}>
-            <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${CC.brand},${sec<=5?CC.danger:CC.brand})`,transition:"width 0.1s linear"}}/>
+            <div ref={coordBarElRef as any} style={{width:`${Math.max(0,Math.min(100,(coordTimeLeft(coordSession)/coordSession.durationMs)*100))}%`,height:"100%",background:`linear-gradient(90deg,${CC.brand},${CC.brand})`,transition:"width 0.1s linear"}}/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:0,width:"100%",maxWidth:480,aspectRatio:"1",margin:"0 auto",border:`2px solid ${CC.borderStrong}`,borderRadius:RADIUS.md,overflow:"hidden"}}>
             {dispRows.flatMap((row,rIdx)=>row.map((sq,fIdx)=>{

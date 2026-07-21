@@ -52,6 +52,10 @@ function TalentBody() {
   const [educationLevel, setEducationLevel] = useState<EducationLevel | "">("");
   const [role, setRole] = useState<BuildRole | "ALL">("ALL");
   const [minExp, setMinExp] = useState<string>("");
+  const [nlQuery, setNlQuery] = useState("");
+  const [nlBusy, setNlBusy] = useState(false);
+  const [nlExplanation, setNlExplanation] = useState<string | null>(null);
+  const [nlError, setNlError] = useState<string | null>(null);
   const [openOnly, setOpenOnly] = useState(true);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [withRatingOnly, setWithRatingOnly] = useState(false);
@@ -121,6 +125,37 @@ function TalentBody() {
     return () => clearTimeout(handle);
   }, [q, skill, city, region, workMode, educationLevel, role, minExp, openOnly]);
 
+  async function runNlSearch() {
+    const text = nlQuery.trim();
+    if (!text || nlBusy) return;
+    setNlBusy(true);
+    setNlError(null);
+    setNlExplanation(null);
+    try {
+      const r = await buildApi.aiParseSearch({ text, mode: "talent" });
+      const f = r.filters as Record<string, unknown>;
+      if (typeof f.q === "string") setQ(f.q);
+      if (typeof f.skill === "string") setSkill(f.skill);
+      if (typeof f.city === "string") setCity(f.city);
+      if (typeof f.region === "string") setRegion(f.region);
+      if (typeof f.workMode === "string" && (WORK_MODES as string[]).includes(f.workMode)) {
+        setWorkMode(f.workMode as WorkMode);
+      }
+      if (typeof f.educationLevel === "string" && (EDUCATION_LEVELS as string[]).includes(f.educationLevel)) {
+        setEducationLevel(f.educationLevel as EducationLevel);
+      }
+      if (typeof f.role === "string" && ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"].includes(f.role)) {
+        setRole(f.role as BuildRole);
+      }
+      if (typeof f.minExp === "number") setMinExp(String(Math.round(f.minExp)));
+      setNlExplanation(r.explanation || null);
+    } catch (e) {
+      setNlError((e as Error).message);
+    } finally {
+      setNlBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -137,6 +172,34 @@ function TalentBody() {
           Free vs HH →
         </Link>
       </div>
+
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          value={nlQuery}
+          onChange={(e) => setNlQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              runNlSearch();
+            }
+          }}
+          placeholder="💬 Опишите, кого ищете — «сварщик в Алматы вахтой, от 3 лет опыта»…"
+          className="flex-1 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-fuchsia-400/60 focus:outline-none"
+        />
+        <button
+          onClick={runNlSearch}
+          disabled={nlBusy || !nlQuery.trim()}
+          className="rounded-lg bg-fuchsia-500/20 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/30 disabled:opacity-50"
+        >
+          {nlBusy ? "…" : "AI search"}
+        </button>
+      </div>
+      {nlExplanation && (
+        <p className="mb-3 text-xs text-fuchsia-200/80">🔎 {nlExplanation}</p>
+      )}
+      {nlError && (
+        <p className="mb-3 text-xs text-rose-300">{nlError}</p>
+      )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <input

@@ -249,6 +249,58 @@ export const RESUME_VALIDATOR_SYSTEM_PROMPT = `Ты — контролёр ка�
 
 Если поле нельзя проверить по переписке — оставь как есть, не обнуляй просто из осторожности.`;
 
+// Natural-language search — another 2-agent pipeline (see routes/build/ai.ts
+// POST /parse-search): a PARSER turns free text ("сварщик в Алматы вахтой,
+// от 3 лет опыта") into the structured filter params /profiles/search and
+// /vacancies already accept (added alongside the region/workMode/education
+// fields), then a CHECKER cross-reads the original text against the parsed
+// filters to catch wrong role/region/enum guesses before we run the query.
+const ROLE_UNION = `"CLIENT" | "CONTRACTOR" | "WORKER" | "ADMIN"`;
+
+export const NL_SEARCH_PARSER_SYSTEM_PROMPT = `Ты — парсер поисковых запросов для AEVION QBuild (маркетплейс найма в строительстве).
+
+Получаешь запрос на естественном языке (RU/EN/KZ) и режим поиска ("talent" — работодатель ищет кандидатов, "vacancy" — соискатель ищет вакансии). Извлеки структурированные фильтры.
+
+Верни СТРОГО JSON, без markdown:
+{
+  "filters": {
+    "q": "string | null (свободный поиск по названию/описанию, если явно не сводится к другим полям)",
+    "skill": "string | null (одна ключевая специализация/навык)",
+    "city": "string | null (город, если назван)",
+    "region": "string | null — один из слагов: ${KZ_REGION_SLUGS}, или null",
+    "workMode": ${WORK_MODES_UNION} | null,
+    "educationLevel": ${EDUCATION_LEVELS_UNION} | null,
+    "role": ${ROLE_UNION} | null (только для mode=talent; "работник/рабочий"→WORKER, "подрядчик/бригада"→CONTRACTOR, "заказчик"→CLIENT),
+    "minExp": "number | null (только для mode=talent — минимальный опыт в годах)",
+    "maxExperience": "number | null (только для mode=vacancy — 'у меня N лет опыта, что мне подходит')",
+    "minSalary": "number | null (только для mode=vacancy)",
+    "maxSalary": "number | null (только для mode=vacancy)"
+  },
+  "explanation": "string — 1 короткое предложение на языке запроса, объясняющее что ищем (для показа пользователю над результатами)"
+}
+
+Правила:
+- "вахта"/"вахтой"/"fly-in-fly-out"/"FIFO" → workMode = FLY_IN_FLY_OUT. "удалённо"/"remote" → REMOTE. "на объекте"/"on-site" → ON_SITE.
+- Не заполняй поле, если запрос его явно не подразумевает — оставляй null.
+- Никогда не выдумывай регион по городу, которого нет в запросе.`;
+
+export const NL_SEARCH_CHECKER_SYSTEM_PROMPT = `Ты — контролёр качества для AI-парсера поисковых запросов AEVION QBuild.
+
+Тебе присылают: исходный запрос пользователя и JSON фильтров, который извлёк парсер. Проверь:
+- Каждое поле фильтра реально следует из текста запроса (не додумано).
+- region — один из известных слагов (${KZ_REGION_SLUGS}) и соответствует упомянутому городу/региону.
+- workMode — один из: ${WORK_MODES.join(", ")}.
+- educationLevel — один из: ${EDUCATION_LEVELS.join(", ")}.
+- role — один из: CLIENT, CONTRACTOR, WORKER, ADMIN.
+- Числовые поля (minExp, maxExperience, minSalary, maxSalary) — реалистичные (0-80 лет, зарплата > 0).
+
+Верни СТРОГО JSON, без markdown:
+{
+  "filters": { ...исправленный тот же формат... },
+  "explanation": "string — исправленное объяснение, если поменял поля",
+  "issues": ["string", ...] (что исправил; [] если всё чисто)
+}`;
+
 export const APPLICATION_SCORER_SYSTEM_PROMPT = `Ты — рекрутер-ассистент на платформе AEVION QBuild.
 
 Тебе придёт:

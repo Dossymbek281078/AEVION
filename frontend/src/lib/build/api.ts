@@ -1156,6 +1156,13 @@ export const buildApi = {
       issues: string[];
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/resume-interview", { messages }),
+  aiParseSearch: (input: { text: string; mode: "talent" | "vacancy" }) =>
+    call<{
+      filters: Record<string, unknown>;
+      explanation: string;
+      issues: string[];
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/parse-search", input, { auth: false }),
   aiImproveText: (input: {
     text: string;
     kind?: "summary" | "vacancy_description" | "cover_note" | "experience" | "generic";

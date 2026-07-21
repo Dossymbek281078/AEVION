@@ -334,6 +334,70 @@ aiRouter.post("/resume-interview", aiRateLimiter, async (req, res) => {
   }
 });
 
+// POST /api/build/ai/parse-search
+// Body: { text: string, mode: "talent" | "vacancy" }
+// 2-agent pipeline: PARSER extracts structured filters from free text, then
+// CHECKER cross-reads them against the original query before the frontend
+// applies them to /profiles/search or /vacancies. No auth requirement beyond
+// the rate limiter — this only produces filter params, it doesn't run the
+// search itself (the frontend calls the existing search endpoints with the
+// returned filters, same as if the user had picked them from the dropdowns).
+aiRouter.post("/parse-search", aiRateLimiter, async (req, res) => {
+  try {
+    const text = vString(req.body?.text, "text", { min: 3, max: 500 });
+    if (!text.ok) return fail(res, 400, text.error);
+    const mode = req.body?.mode === "vacancy" ? "vacancy" : "talent";
+
+    const { callClaude, NL_SEARCH_PARSER_SYSTEM_PROMPT, NL_SEARCH_CHECKER_SYSTEM_PROMPT } =
+      await import("../../lib/build/ai");
+
+    const parserReply = await callClaude({
+      systemPrompt: NL_SEARCH_PARSER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: `mode=${mode}\nquery: ${text.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+    const parserJson = parseJsonFence(parserReply.text) as
+      | { filters?: unknown; explanation?: unknown }
+      | null;
+    if (!parserJson) {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: parserReply.text.slice(0, 200),
+      });
+    }
+
+    const checkerReply = await callClaude({
+      systemPrompt: NL_SEARCH_CHECKER_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Исходный запрос (mode=${mode}): ${text.value}\n\nИзвлечённые фильтры:\n${JSON.stringify(parserJson.filters ?? {}, null, 2)}`,
+        },
+      ],
+      maxTokens: 700,
+      cacheSystem: true,
+    });
+    const checkerJson = parseJsonFence(checkerReply.text) as
+      | { filters?: unknown; explanation?: unknown; issues?: unknown }
+      | null;
+
+    return ok(res, {
+      filters: checkerJson?.filters ?? parserJson.filters ?? {},
+      explanation:
+        (typeof checkerJson?.explanation === "string" && checkerJson.explanation) ||
+        (typeof parserJson.explanation === "string" && parserJson.explanation) ||
+        "",
+      issues: Array.isArray(checkerJson?.issues) ? checkerJson.issues : [],
+      usage: {
+        input: parserReply.inputTokens + checkerReply.inputTokens,
+        output: parserReply.outputTokens + checkerReply.outputTokens,
+      },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_parse_search_failed");
+  }
+});
+
 // POST /api/build/ai/improve-text
 aiRouter.post("/improve-text", aiRateLimiter, async (req, res) => {
   try {

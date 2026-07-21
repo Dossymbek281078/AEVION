@@ -134,10 +134,17 @@ const STAGE_MOAT_REALIZATION: Record<Stage, number> = {
 
 /** Fraction of a moat archetype's mature ceiling a company has plausibly earned,
  *  from stage maturity ± disclosed traction evidence. */
-function moatRealization(stage: Stage, tractionScore: number): number {
+function moatRealization(stage: Stage, tractionScore: number, hasQuantifiedTraction: boolean): number {
   const base = STAGE_MOAT_REALIZATION[stage];
   const tractionAdj = ((tractionScore - 50) / 50) * 0.2; // ±0.2 around a neutral 50
-  return clamp01(base + tractionAdj);
+  const realized = clamp01(base + tractionAdj);
+  // Stage is a proxy for maturity, not evidence of it. Taken alone it let a
+  // pre-launch Series A inherit a 0.75 realization — and so outscore a seed
+  // company with real adoption on moat, purely for having raised a later round.
+  // Without disclosed numbers the claim is unevidenced, so it is capped at the
+  // seed level however late the round.
+  if (!hasQuantifiedTraction) return Math.min(realized, STAGE_MOAT_REALIZATION.seed);
+  return realized;
 }
 
 function clamp(n: number, lo = 0, hi = 100): number {
@@ -149,17 +156,41 @@ function round(n: number, dp = 0): number {
   return Math.round(n * f) / f;
 }
 
-/** Heuristic "execution signal" from the presence/richness of traction text. */
+/**
+ * Qualitative execution signal, used only when no quantitative traction parsed.
+ *
+ * This used to credit a keyword wherever it appeared, so "Pre-launch. No revenue,
+ * no users." scored +18 for "revenue/customers cited" — the rubric read a denial
+ * as an achievement, and pre-launch companies outscored ones with real adoption.
+ * Each cue now has to survive a negation check on the words immediately before it.
+ */
 function tractionSignal(input: AnalysisInput): { score: number; note: string } {
   const t = (input.tractionNotes || "").toLowerCase();
   if (!t.trim()) return { score: 38, note: "no traction disclosed — execution unproven" };
+
+  const NEGATED = /\b(no|not|zero|without|pre-?launch|pre-?revenue|none|yet to|lacks?|awaiting)\b[^.]{0,25}$/;
+  const cited = (re: RegExp): boolean => {
+    for (const m of t.matchAll(new RegExp(re.source, "g"))) {
+      if (m.index === undefined) continue;
+      if (!NEGATED.test(t.slice(Math.max(0, m.index - 30), m.index))) return true;
+    }
+    return false;
+  };
+
   let s = 50;
   const notes: string[] = [];
-  if (/\b(revenue|arr|mrr|\$|paying|customers?)\b/.test(t)) { s += 18; notes.push("revenue/customers cited"); }
-  if (/\b(growth|mom|wow|yoy|%|x\b|doubl|tripl)\b/.test(t)) { s += 12; notes.push("growth metric cited"); }
-  if (/\b(retention|churn|nps|cohort|ltv|cac|payback)\b/.test(t)) { s += 12; notes.push("unit-economics metric cited"); }
-  if (/\b(pilot|loi|partnership|contract|enterprise)\b/.test(t)) { s += 8; notes.push("commercial validation cited"); }
+  if (cited(/\b(revenue|arr|mrr|\$|paying|customers?)\b/)) { s += 18; notes.push("revenue/customers cited"); }
+  if (cited(/\b(growth|mom|wow|yoy|%|x\b|doubl|tripl)\b/)) { s += 12; notes.push("growth metric cited"); }
+  if (cited(/\b(retention|churn|nps|cohort|ltv|cac|payback)\b/)) { s += 12; notes.push("unit-economics metric cited"); }
+  if (cited(/\b(pilot|loi|partnership|contract|enterprise)\b/)) { s += 8; notes.push("commercial validation cited"); }
   if (t.length > 240) s += 4;
+  // Explicitly pre-launch at a stage that is supposed to have shipped is the
+  // strongest negative execution signal there is; do not let length credit mask it.
+  if (/\bpre-?launch\b|\bnot (yet )?launched\b|\bno (users?|customers?|revenue)\b/.test(t)) {
+    s = Math.min(s, 30);
+    notes.length = 0;
+    notes.push("plan states the product has not launched / has no users");
+  }
   return { score: clamp(s), note: notes.length ? notes.join("; ") : "qualitative traction only" };
 }
 
@@ -355,7 +386,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // ── Moat: archetype ceiling × realization (from stage & the now-company-
   //    specific traction), nudged up if the plan asserts patents. ──────────
   const moatCeiling = MOAT_STRENGTH[moat];
-  let moatRealized = moatRealization(stage, traction.score);
+  let moatRealized = moatRealization(stage, traction.score, execCompany);
   if (signals.mentionsPatent && moat === "ip-patents") moatRealized = clamp01(moatRealized + 0.1);
   const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
   const moatCompany = execCompany || signals.mentionsPatent;
@@ -365,25 +396,25 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
 
   const factors: ScoreFactor[] = [
-    { key: "market", label: "Market size & growth", weight: 0.20, score: round(marketScore),
+    { key: "market", label: "Market size & growth", weight: 0.14, score: round(marketScore),
       rationale: marketCompany
         ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
         : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
-    { key: "timing", label: "Timing / tailwinds", weight: 0.10, score: round(timing),
+    { key: "timing", label: "Timing / tailwinds", weight: 0.05, score: round(timing),
       rationale: `Sector growth ${round(sector.cagr * 100)}% vs. 12% neutral baseline.` },
-    { key: "moat", label: "Moat / defensibility", weight: 0.15, score: round(moatScore),
+    { key: "moat", label: "Moat / defensibility", weight: 0.16, score: round(moatScore),
       rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${execCompany ? " given disclosed traction" : (rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"}${signals.mentionsPatent && moat === "ip-patents" ? " (patent claim credited)" : ""} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
     { key: "economics", label: "Unit economics potential", weight: 0.15, score: round(econScore),
       rationale: econCompany
         ? `Company metrics: ${econNotes.join(", ")} (capital intensity ${round(sector.capitalIntensity * 100)}%).`
         : `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}% (sector reference).` },
-    { key: "execution", label: "Team / execution signal", weight: 0.12, score: round(traction.score),
+    { key: "execution", label: "Team / execution signal", weight: 0.28, score: round(traction.score),
       rationale: traction.note },
-    { key: "science", label: "Scientific / tech feasibility", weight: 0.10, score: round(scienceScore),
+    { key: "science", label: "Scientific / tech feasibility", weight: 0.07, score: round(scienceScore),
       rationale: sector.scienceFrontier },
-    { key: "legal", label: "Regulatory / legal headroom", weight: 0.09, score: round(legalScore),
+    { key: "legal", label: "Regulatory / legal headroom", weight: 0.07, score: round(legalScore),
       rationale: `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
-    { key: "competition", label: "Competitive headroom", weight: 0.09, score: round(competitionScore),
+    { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
 
@@ -406,8 +437,8 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
 
   // ── Signal coverage: share of the composite weight backed by company data. ──
   const companyWeight =
-    (marketCompany ? 0.20 : 0) + (econCompany ? 0.15 : 0) +
-    (execCompany ? 0.12 : 0) + (moatCompany ? 0.15 : 0);
+    (marketCompany ? 0.14 : 0) + (econCompany ? 0.15 : 0) +
+    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0);
   const signalCoverage = round(companyWeight, 2);
 
   // ── Deterministic red flags: inconsistencies / weak disclosed metrics. ──

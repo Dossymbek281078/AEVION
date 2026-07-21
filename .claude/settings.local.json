@@ -30,7 +30,11 @@
       "Bash(netstat -ano)",
       "Bash(PORT=4099 nohup npx ts-node-dev --respawn --transpile-only src/index.ts)",
       "Bash(echo \"started pid $!\")",
-      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:4099/api/revenue/goals)"
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:4099/api/revenue/goals)",
+      "Bash(curl *)",
+      "Bash(jobs *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

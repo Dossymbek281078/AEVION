@@ -208,7 +208,9 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 709 --json state,mergedAt)",
       "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/trust-page-anchor-ui --title 'feat\\(trust\\): public /explore/trust page — Ed25519 + Bitcoin anchor UI' --body ' *)",
       "Bash(grep -v \"^$\")",
-      "Bash(disown)"
+      "Bash(disown)",
+      "Bash(rm -f \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-user-aevion-build\\\\777cd456-fdd1-45b4-ac2f-094a9e34840e\\\\scratchpad\\\\qskyway-backend.log\")",
+      "Bash(curl -s http://127.0.0.1:4001/api/data-quality/trust-score)"
     ]
   }
 }

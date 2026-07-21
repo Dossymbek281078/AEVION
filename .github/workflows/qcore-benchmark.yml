@@ -1,10 +1,9 @@
 # Council-vs-single-flagship quality benchmark (scripts/qcore-eval.js).
 #
-# Manual-trigger only (workflow_dispatch) -- NOT on a schedule yet. This is
-# the first CI job that would spend real LLM API money, so it stays opt-in
-# until ANTHROPIC_API_KEY / a free-tier key are actually provisioned as repo
-# secrets and someone deliberately decides to turn the cron on (uncomment the
-# `schedule:` block below once that's done).
+# Weekly cron + manual trigger. This is the first CI job that spends real LLM
+# API money -- the job body is a no-op (see the `if:` guard below) until
+# ANTHROPIC_API_KEY / OPENROUTER_API_KEY actually exist as repo secrets, so
+# enabling the schedule here is safe even before those are provisioned.
 #
 # On a successful run it opens a PR with the refreshed docs/benchmarks/
 # qcore-eval-latest.json (`latest` key only -- `historical` is untouched) so
@@ -19,8 +18,8 @@ on:
         description: "Number of benchmark questions (max 40)"
         required: false
         default: "40"
-  # schedule:
-  #   - cron: "0 3 * * 1" # Mon 03:00 UTC -- uncomment once secrets are set
+  schedule:
+    - cron: "0 3 * * 1" # Mon 03:00 UTC
 
 permissions:
   contents: write
@@ -80,11 +79,14 @@ jobs:
         if: always()
         run: kill $(cat /tmp/backend.pid) 2>/dev/null || true
 
+      - name: Sync historical benchmark into frontend
+        run: node scripts/sync-qcore-benchmark.js
+
       - name: Detect changes
         id: diff
         run: |
           cd ..
-          git add docs/benchmarks/qcore-eval-latest.json
+          git add docs/benchmarks/qcore-eval-latest.json frontend/src/app/qcoreai/vs/benchmark.json
           if git diff --staged --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -98,7 +100,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: chore/qcore-benchmark-refresh
           delete-branch: true
-          add-paths: docs/benchmarks/qcore-eval-latest.json
+          add-paths: |
+            docs/benchmarks/qcore-eval-latest.json
+            frontend/src/app/qcoreai/vs/benchmark.json
           commit-message: "chore(qcoreai): refresh Council-vs-flagship benchmark snapshot"
           title: "chore(qcoreai): refresh Council-vs-flagship benchmark snapshot"
           body: |

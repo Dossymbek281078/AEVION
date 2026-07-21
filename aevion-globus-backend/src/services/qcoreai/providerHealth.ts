@@ -48,3 +48,22 @@ export function healthScore(provider: string, model: string): number {
 export function resetProviderHealth(): void {
   outcomes.clear();
 }
+
+/** Aggregate score across every model tracked for one provider this session
+ *  (mean of each model's recent success rate) — for surfacing on a provider
+ *  list where the API only asks per-provider, not per-model. 1/0 samples when
+ *  nothing has been recorded yet (still neutral/healthy, per healthScore()). */
+export function providerHealthSummary(provider: string): { score: number; samples: number } {
+  let sum = 0;
+  let modelsTracked = 0;
+  let samples = 0;
+  const prefix = `${provider}:`;
+  for (const [key, list] of outcomes) {
+    if (!key.startsWith(prefix)) continue;
+    const ok = list.filter((o) => o.ok).length;
+    sum += ok / list.length;
+    modelsTracked += 1;
+    samples += list.length;
+  }
+  return { score: modelsTracked > 0 ? sum / modelsTracked : 1, samples };
+}

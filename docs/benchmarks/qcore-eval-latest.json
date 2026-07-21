@@ -32,44 +32,130 @@
     }
   ],
   "latest": {
-    "generatedAt": "2026-07-21T06:48:51.621Z",
+    "generatedAt": "2026-07-21T10:21:50.697Z",
     "source": "live-run",
-    "n": 8,
+    "n": 40,
     "base": "http://127.0.0.1:4001",
     "judge": "claude-fable-5",
-    "caveat": "Small sanity-check run (N=8) against a local dev server with NO free-tier provider configured — the Council degraded to Anthropic-only members, so its cost multiplier here (~5-7x) is inflated versus a normally-configured environment and is NOT comparable to the historical N=40 entry's ~2.8x (which assumes the free fleet is active). This run exists to prove the eval script + JSON-persistence pipeline end-to-end, not to supersede the curated historical benchmark. Re-run with at least one free-tier key (OPENROUTER_API_KEY, GROQ_API_KEY, etc.) set for a representative cost read.",
+    "caveat": "Local dev server, only ONE free-tier provider configured (OpenRouter) -- not the full free fleet the historical entry assumes, which is why the cost multiplier here (~6.2-6.4x) is roughly double the historical ~2.8x. Also notable: 'knowledge' (pure factual recall) won 67-80% here, not the ~50% tie the historical entry reports -- with only 5-6 samples per category, this could be per-category variance rather than a real shift, but it's worth a properly free-fleet-configured re-run before revising the 'auto' router's FACT-vs-Council routing rationale in orchestrator.ts on the strength of this run alone.",
     "costPerAnswerUsd": {
-      "single-fable": 0.028044285714285713,
-      "council-l2-fable": 0.1943264285714286,
-      "council-l2-opus": 0.14402399999999999
+      "single-fable": 0.027739487179487182,
+      "council-l2-fable": 0.17684723684210524,
+      "council-l2-opus": 0.1719244736842105
     },
     "winRateVsSingleFable": {
-      "council-l2-fable": { "win": 4, "tie": 2, "loss": 1 },
-      "council-l2-opus": { "win": 5, "tie": 1, "loss": 1 }
+      "council-l2-fable": {
+        "win": 29,
+        "tie": 4,
+        "loss": 5
+      },
+      "council-l2-opus": {
+        "win": 29,
+        "tie": 4,
+        "loss": 5
+      }
     },
     "perCategoryWinRate": {
       "council-l2-fable": {
-        "reasoning": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "math": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "coding": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "knowledge": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null },
-        "writing": { "win": 0, "tie": 0, "loss": 1, "winRatePct": 0 },
-        "advice": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "analysis": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null }
+        "reasoning": {
+          "win": 5,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 83
+        },
+        "math": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "coding": {
+          "win": 4,
+          "tie": 0,
+          "loss": 2,
+          "winRatePct": 67
+        },
+        "knowledge": {
+          "win": 4,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 80
+        },
+        "writing": {
+          "win": 6,
+          "tie": 0,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "advice": {
+          "win": 3,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "analysis": {
+          "win": 2,
+          "tie": 2,
+          "loss": 1,
+          "winRatePct": 67
+        }
       },
       "council-l2-opus": {
-        "reasoning": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "math": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "coding": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "knowledge": { "win": 0, "tie": 0, "loss": 1, "winRatePct": 0 },
-        "writing": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "advice": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
-        "analysis": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null }
+        "reasoning": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "math": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "coding": {
+          "win": 4,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 80
+        },
+        "knowledge": {
+          "win": 2,
+          "tie": 2,
+          "loss": 1,
+          "winRatePct": 67
+        },
+        "writing": {
+          "win": 5,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 83
+        },
+        "advice": {
+          "win": 5,
+          "tie": 0,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "analysis": {
+          "win": 3,
+          "tie": 0,
+          "loss": 2,
+          "winRatePct": 60
+        }
       }
     },
     "verdicts": {
-      "council-l2-fable": { "winRatePct": 80, "costUsd": 0.1943264285714286, "costMultiplierVsFlagship": 6.9292700320921 },
-      "council-l2-opus": { "winRatePct": 83, "costUsd": 0.14402399999999999, "costMultiplierVsFlagship": 5.135591666242168 }
+      "council-l2-fable": {
+        "winRatePct": 85,
+        "costUsd": 0.17684723684210524,
+        "costMultiplierVsFlagship": 6.375288616470184
+      },
+      "council-l2-opus": {
+        "winRatePct": 85,
+        "costUsd": 0.1719244736842105,
+        "costMultiplierVsFlagship": 6.197824515348119
+      }
     }
   }
 }

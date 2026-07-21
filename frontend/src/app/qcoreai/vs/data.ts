@@ -4,9 +4,13 @@
  * Every "yes" here maps to a real, checkable code path in this repo (see the
  * `source` field). Where a competitor plausibly does something too, that's
  * marked "partial", not "no" — the point is a defensible technical
- * comparison, not a marketing sweep. Update alongside docs/benchmarks/ when
- * a fresh qcore-eval.js run changes the cited numbers.
+ * comparison, not a marketing sweep. The quality-benchmark row's numbers come
+ * from benchmark.json (synced from docs/benchmarks/qcore-eval-latest.json via
+ * `node scripts/sync-qcore-benchmark.js`) rather than being typed by hand, so
+ * they can't silently drift from the curated historical entry.
  */
+
+import benchmarkHistory from "./benchmark.json";
 
 export type SystemId = "qcoreai" | "autogen" | "crewai" | "langgraph" | "openai-agents" | "metagpt";
 
@@ -35,6 +39,39 @@ export type Row = {
   source?: string;
   values: Record<SystemId, { verdict: Verdict; note?: string }>;
 };
+
+type HistoricalCouncilBenchmark = {
+  id: string;
+  date: string;
+  n: number;
+  costMultiplierVsFlagship: number;
+  perCategoryWinRatePct: Record<string, number>;
+};
+
+const councilBenchmark = (benchmarkHistory as HistoricalCouncilBenchmark[]).find((e) =>
+  e.id?.startsWith("council-vs-flagship")
+);
+
+/** Builds the quality-benchmark row's copy from the synced historical entry
+ *  instead of hand-typed prose, so it can't silently drift from the JSON. */
+function summarizeCouncilBenchmark(b?: HistoricalCouncilBenchmark): { detail: string; note: string } {
+  if (!b) {
+    return {
+      detail: "No benchmark data synced yet — run `node scripts/qcore-eval.js` then `node scripts/sync-qcore-benchmark.js`.",
+      note: "no data",
+    };
+  }
+  const entries = Object.entries(b.perCategoryWinRatePct);
+  const wins = entries.filter(([, pct]) => pct >= 60).map(([cat]) => cat);
+  const ties = entries.filter(([, pct]) => pct < 60).map(([cat]) => cat);
+  const detail = `N=${b.n} pairwise-judged (order-randomised) benchmark: Council beats a single flagship on ${wins.join("/")}${
+    ties.length ? `, ties only on ${ties.join("/")}` : ""
+  } — with a reproducible script, not a claim.`;
+  const note = `N=${b.n}, ${b.date} — ${b.costMultiplierVsFlagship}× cost — see docs/benchmarks/`;
+  return { detail, note };
+}
+
+const benchmarkSummary = summarizeCouncilBenchmark(councilBenchmark);
 
 export const ROWS: Row[] = [
   {
@@ -124,10 +161,10 @@ export const ROWS: Row[] = [
   {
     id: "quality-benchmark",
     label: "Published Council-vs-single-model benchmark",
-    detail: "N=40 pairwise-judged (order-randomised) benchmark: Council beats a single flagship on reasoning/writing/advice/analysis, ties only on pure factual recall — with a reproducible script, not a claim.",
+    detail: benchmarkSummary.detail,
     source: "scripts/qcore-eval.js — see docs/benchmarks/",
     values: {
-      qcoreai: { verdict: "yes", note: "N=40, 2026-07-12 — see docs/benchmarks/" },
+      qcoreai: { verdict: "yes", note: benchmarkSummary.note },
       autogen: { verdict: "no" },
       crewai: { verdict: "no" },
       langgraph: { verdict: "no" },

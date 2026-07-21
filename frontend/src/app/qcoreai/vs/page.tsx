@@ -14,6 +14,7 @@ const LABEL_COL = "minmax(240px, 1.7fr)";
 const SYS_COLS = `repeat(${SYSTEMS.length}, minmax(108px, 1fr))`;
 
 export default function QCoreAiVsPage() {
+  const benchmarkRow = ROWS.find((r) => r.id === "quality-benchmark");
   return (
     <main
       style={{
@@ -177,13 +178,14 @@ export default function QCoreAiVsPage() {
           </li>
         </ul>
         <p style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
-          Quality benchmark methodology and the underlying numbers: N=40 pairwise-judged questions
-          across 7 categories, order-randomised A/B to cancel position bias, judged by Claude Fable 5.
-          Council beats a single flagship 80–100% on reasoning/math/writing/advice/analysis, ties (50%)
-          on pure factual recall — which is exactly why the auto-router sends factual queries to a
-          single model instead of paying the Council premium there. Reproduce it with
+          Quality benchmark methodology: questions across 7 categories, order-randomised A/B to cancel
+          position bias, judged by Claude Fable 5. {benchmarkRow?.detail} Reproduce it with
           <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, margin: "0 4px" }}>
             node scripts/qcore-eval.js
+          </code>
+          then
+          <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, margin: "0 4px" }}>
+            node scripts/sync-qcore-benchmark.js
           </code>
           in the backend.
         </p>

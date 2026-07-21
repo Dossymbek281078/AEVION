@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -35,6 +36,7 @@ type Metrics = {
 };
 
 export default function ConstitutionAdminPage() {
+  const { t } = useI18n();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,7 +69,7 @@ export default function ConstitutionAdminPage() {
         headers: authHeaders(),
       });
       if (r.status === 403) {
-        setError("Доступ запрещён — требуется admin-токен.");
+        setError(t("constitution.admin.forbidden"));
         return;
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -77,7 +79,7 @@ export default function ConstitutionAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, [authHeaders, t]);
 
   useEffect(() => {
     void load();
@@ -129,21 +131,21 @@ export default function ConstitutionAdminPage() {
               onClick={load}
               className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
             >
-              ↻ Обновить
+              {t("constitution.admin.refresh")}
             </button>
           </div>
           <p className="text-[#9aa3c0] text-sm mt-2">
-            24h rolling stats per endpoint and per IP. Авто-обновление каждые 30с.
+            {t("constitution.admin.rollingStatsSubtitle")}
           </p>
         </header>
 
         {!hasToken && (
           <div className="mb-4 border border-amber-500/40 rounded p-3 bg-amber-500/5 text-amber-300 text-sm">
-            ⚠ Auth токен не найден в localStorage. Сначала авторизуйся через{" "}
+            {t("constitution.admin.noTokenBefore")}{" "}
             <Link href="/auth" className="underline">
               /auth
             </Link>
-            . Доступ только для admin-юзеров.
+            {t("constitution.admin.noTokenAfter")}
           </div>
         )}
 
@@ -154,15 +156,17 @@ export default function ConstitutionAdminPage() {
         )}
 
         {loading && !metrics && (
-          <div className="text-center text-[#9aa3c0] py-8">Загрузка…</div>
+          <div className="text-center text-[#9aa3c0] py-8">
+            {t("constitution.admin.loading")}
+          </div>
         )}
 
         {metrics && (
           <div className="space-y-5">
             <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Stat label="Запросов за 24h" value={metrics.totalRequests.toLocaleString()} />
-                <Stat label="Ошибок" value={metrics.totalErrors.toString()} bad={metrics.totalErrors > 0} />
+                <Stat label={t("constitution.admin.requests24h")} value={metrics.totalRequests.toLocaleString()} />
+                <Stat label={t("constitution.admin.errorsLabel")} value={metrics.totalErrors.toString()} bad={metrics.totalErrors > 0} />
                 <Stat label="Error rate" value={`${metrics.errorRatePct}%`} bad={metrics.errorRatePct > 5} />
                 <Stat label="Banned IPs" value={metrics.bans.length.toString()} bad={metrics.bans.length > 0} />
               </div>
@@ -280,7 +284,7 @@ export default function ConstitutionAdminPage() {
             <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <h2 className="text-lg font-semibold text-[#f5d27a] mb-3">Active bans</h2>
               {metrics.bans.length === 0 ? (
-                <p className="text-sm text-[#9aa3c0] italic">Нет активных банов.</p>
+                <p className="text-sm text-[#9aa3c0] italic">{t("constitution.admin.noActiveBans")}</p>
               ) : (
                 <ul className="space-y-1">
                   {metrics.bans.map((b) => (

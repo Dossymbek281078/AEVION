@@ -839,14 +839,14 @@ export default function ConstitutionPage() {
                 href="/constitution/stats"
                 className="px-4 py-2 rounded border border-cyan-400/60 text-cyan-300 font-semibold hover:bg-cyan-500/10"
               >
-                📊 Аналитика →
+                📊 {t("constitution.nav.analytics")} →
               </Link>
               <button
                 type="button"
                 onClick={() => setAiOpen(true)}
                 className="px-4 py-2 rounded border border-fuchsia-400/60 text-fuchsia-300 font-semibold hover:bg-fuchsia-500/10"
               >
-                🤖 Спросить ИИ
+                🤖 {t("constitution.nav.askAi")}
               </button>
               <Link
                 href="/constitution/api"
@@ -886,13 +886,13 @@ export default function ConstitutionPage() {
           )}
           {aiExplanation && (
             <div className="mt-3 max-w-3xl text-sm text-fuchsia-200 border border-fuchsia-500/30 rounded px-3 py-2 bg-fuchsia-500/5">
-              <span className="font-semibold">🤖 ИИ:</span> {aiExplanation}
+              <span className="font-semibold">🤖 {t("constitution.ai.label")}</span> {aiExplanation}
               <button
                 type="button"
                 onClick={() => setAiExplanation(null)}
                 className="ml-3 text-xs text-fuchsia-300 hover:underline"
               >
-                закрыть
+                {t("constitution.button.close")}
               </button>
             </div>
           )}
@@ -1071,18 +1071,18 @@ export default function ConstitutionPage() {
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
                 {t("constitution.metrics.heading")}
               </h3>
-              <MetricBar label="Страх элит перед низом" value={metrics.eliteFear} invert />
-              <MetricBar label="Грызня внутри элит" value={metrics.intraConflict} invert />
-              <MetricBar label="Обида низа на верх" value={metrics.resentment} invert />
-              <MetricBar label="Инновация / драйв" value={metrics.innovation} />
-              <MetricBar label="Устойчивость" value={metrics.stability} />
-              <MetricBar label="Легитимность" value={metrics.legitimacy} />
+              <MetricBar label={t("constitution.metrics.eliteFear")} value={metrics.eliteFear} invert />
+              <MetricBar label={t("constitution.metrics.intraConflict")} value={metrics.intraConflict} invert />
+              <MetricBar label={t("constitution.metrics.resentment")} value={metrics.resentment} invert />
+              <MetricBar label={t("constitution.metrics.innovation")} value={metrics.innovation} />
+              <MetricBar label={t("constitution.metrics.stability")} value={metrics.stability} />
+              <MetricBar label={t("constitution.metrics.legitimacy")} value={metrics.legitimacy} />
             </div>
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-1">Отпечаток конституции</h3>
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-1">{t("constitution.spider.heading")}</h3>
               <div className="text-xs text-[#9aa3c0] mb-2">
-                Восьмиугольник 0-100 по каждому ползунку. Сравнивай силуэты пресетов и стран.
+                {t("constitution.spider.description")}
               </div>
               <SpiderChart sliders={sliders} shockedSliders={shockedSliders} />
             </div>
@@ -1091,7 +1091,8 @@ export default function ConstitutionPage() {
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
-                Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
+                {t("constitution.save.heading")}
+                {savedTotal > 0 ? ` (${t("constitution.save.total", { count: savedTotal })})` : ""}
                 {plan === "pro" && (
                   <span className="ml-2 text-xs px-2 py-0.5 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold align-middle">
                     PRO
@@ -1102,7 +1103,7 @@ export default function ConstitutionPage() {
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Название (например, «Казахстан-2050»)"
+                  placeholder={t("constitution.save.titlePlaceholder")}
                   className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}
                 />
@@ -1112,34 +1113,34 @@ export default function ConstitutionPage() {
                   disabled={busy || !title.trim()}
                   className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold disabled:opacity-40"
                 >
-                  {busy ? "..." : "Сохранить"}
+                  {busy ? "..." : t("constitution.button.save")}
                 </button>
                 <button
                   type="button"
                   onClick={signAndDownload}
                   disabled={signing}
-                  title="QSign HMAC-SHA256: подписать текущий сценарий и скачать как .signed.json"
+                  title={t("constitution.qsign.signTooltip")}
                   className="px-4 py-2 rounded border border-[#d4af37] text-[#d4af37] font-semibold hover:bg-[#d4af37]/10 disabled:opacity-40"
                 >
-                  {signing ? "..." : "QSign + скачать"}
+                  {signing ? "..." : t("constitution.button.qsignDownload")}
                 </button>
                 <button
                   type="button"
                   onClick={publishToPlanet}
                   disabled={publishing}
-                  title="QSign sign → POST в Planet artifacts"
+                  title={t("constitution.qsign.publishTooltip")}
                   className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10 disabled:opacity-40"
                 >
-                  {publishing ? "..." : "🌍 Опубликовать на Planet"}
+                  {publishing ? "..." : `🌍 ${t("constitution.button.publishPlanet")}`}
                 </button>
                 <button
                   type="button"
                   onClick={downloadPdf}
                   disabled={pdfBusy}
-                  title="Брендированный PDF с радаром, метриками и QR-кодом проверки подписи"
+                  title={t("constitution.pdf.tooltip")}
                   className="px-4 py-2 rounded border border-orange-400/60 text-orange-300 font-semibold hover:bg-orange-500/10 disabled:opacity-40"
                 >
-                  {pdfBusy ? "..." : "📄 Скачать PDF"}
+                  {pdfBusy ? "..." : `📄 ${t("constitution.button.downloadPdf")}`}
                 </button>
               </div>
               {pdfError && (
@@ -1149,7 +1150,7 @@ export default function ConstitutionPage() {
               )}
               {signError && (
                 <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
-                  Ошибка подписи: {signError}
+                  {t("constitution.error.signPrefix", { error: signError ?? "" })}
                 </div>
               )}
               {publishError && (
@@ -1159,14 +1160,14 @@ export default function ConstitutionPage() {
               )}
               {publishedId && (
                 <div className="mt-2 text-xs text-emerald-300 border border-emerald-500/40 rounded px-2 py-1 bg-emerald-500/5">
-                  ✓ Опубликовано как Planet-артефакт{" "}
+                  ✓ {t("constitution.publish.success")}{" "}
                   <code className="font-mono">{publishedId.slice(0, 8)}</code>{" "}
-                  <span className="text-[#9aa3c0]">(in-memory stub — переживёт сервер до рестарта)</span>
+                  <span className="text-[#9aa3c0]">{t("constitution.publish.stubNote")}</span>
                 </div>
               )}
               {saved.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-xs text-[#9aa3c0] mb-2">Недавние сценарии:</div>
+                  <div className="text-xs text-[#9aa3c0] mb-2">{t("constitution.save.recentHeading")}</div>
                   <ul className="space-y-1 text-sm">
                     {saved.slice(0, 8).map((it) => (
                       <li
@@ -1234,9 +1235,7 @@ export default function ConstitutionPage() {
 
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
-            Теоретическая основа: North / Wallis / Weingast «Violence and Social Orders»,
-            Acemoglu / Robinson «Why Nations Fail», Elinor Ostrom «Governing the Commons»,
-            Nassim Taleb «Skin in the Game».
+            {t("constitution.footer.theoreticalBasis")}
           </p>
         </footer>
       </div>
@@ -1251,6 +1250,7 @@ function SpiderChart({
   sliders: Sliders;
   shockedSliders?: Sliders | null;
 }) {
+  const { t } = useI18n();
   const W = 360;
   const H = 360;
   const cx = W / 2;
@@ -1278,13 +1278,13 @@ function SpiderChart({
 
   // Short axis labels for radial layout (full names too long)
   const SHORT_LABELS: Record<keyof Sliders, string> = {
-    floor: "Пол",
-    ruleOfLaw: "Закон",
-    rotation: "Ротация",
-    transparency: "Прозр.",
+    floor: t("constitution.spider.short.floor"),
+    ruleOfLaw: t("constitution.spider.short.ruleOfLaw"),
+    rotation: t("constitution.spider.short.rotation"),
+    transparency: t("constitution.spider.short.transparency"),
     multiStatus: "Multi-status",
     skinInGame: "Skin",
-    polycentricity: "Полицентр.",
+    polycentricity: t("constitution.spider.short.polycentricity"),
     positiveSum: "Pos-sum",
   };
 
@@ -1415,6 +1415,7 @@ function WorldMapScatter({
   shockedSliders?: Sliders | null;
   shockLabel?: string | null;
 }) {
+  const { t } = useI18n();
   const currentMetrics = computeMetrics(sliders);
   const shockedMetrics = shockedSliders ? computeMetrics(shockedSliders) : null;
   const W = 720;
@@ -1437,10 +1438,10 @@ function WorldMapScatter({
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-lg font-semibold text-[#f5d27a]">
-          Где ты на карте мира
+          {t("constitution.map.heading")}
         </h3>
         <div className="text-xs text-[#9aa3c0]">
-          ось X — страх элит перед низом (←&nbsp;выше) · ось Y — инновация / драйв (↑&nbsp;выше)
+          {t("constitution.map.axesLegend")}
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -1457,16 +1458,16 @@ function WorldMapScatter({
           <line x1={PAD} y1={yFor(50)} x2={W - PAD} y2={yFor(50)} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
           {/* quadrant labels */}
           <text x={W - PAD - 8} y={PAD + 14} textAnchor="end" fill="#10b981" fontSize="11" opacity={0.7}>
-            ↗ свобода + рост
+            ↗ {t("constitution.map.quadrant.freedomGrowth")}
           </text>
           <text x={PAD + 8} y={PAD + 14} fill="#f97316" fontSize="11" opacity={0.7}>
-            страх + рост
+            {t("constitution.map.quadrant.fearGrowth")}
           </text>
           <text x={W - PAD - 8} y={H - PAD - 8} textAnchor="end" fill="#9aa3c0" fontSize="11" opacity={0.7}>
-            свобода + застой
+            {t("constitution.map.quadrant.freedomStagnation")}
           </text>
           <text x={PAD + 8} y={H - PAD - 8} fill="#ef4444" fontSize="11" opacity={0.7}>
-            ↙ страх + застой
+            ↙ {t("constitution.map.quadrant.fearStagnation")}
           </text>
           {/* axis ticks */}
           <text x={PAD} y={H - PAD + 18} fill="#9aa3c0" fontSize="10">100</text>
@@ -1474,7 +1475,7 @@ function WorldMapScatter({
           <text x={PAD - 6} y={PAD + 4} textAnchor="end" fill="#9aa3c0" fontSize="10">100</text>
           <text x={PAD - 6} y={H - PAD} textAnchor="end" fill="#9aa3c0" fontSize="10">0</text>
           <text x={W / 2} y={H - PAD + 32} textAnchor="middle" fill="#d4af37" fontSize="12">
-            страх элит перед низом ←
+            {t("constitution.map.xAxisLabel")}
           </text>
           <text
             x={PAD - 28}
@@ -1484,7 +1485,7 @@ function WorldMapScatter({
             fontSize="12"
             transform={`rotate(-90 ${PAD - 28} ${H / 2})`}
           >
-            ↑ инновация / драйв
+            ↑ {t("constitution.map.yAxisLabel")}
           </text>
 
           {/* country points */}
@@ -1515,7 +1516,7 @@ function WorldMapScatter({
           </circle>
           <circle cx={cx} cy={cy} r={7} fill="#22d3ee" stroke="#0b1736" strokeWidth={2} />
           <text x={cx + 12} y={cy + 4} fill="#22d3ee" fontSize="12" fontWeight="bold">
-            ты сейчас
+            {t("constitution.map.youAreHere")}
           </text>
 
           {/* shocked scenario — magenta dot with arrow */}
@@ -1550,16 +1551,14 @@ function WorldMapScatter({
               </circle>
               <circle cx={sx} cy={sy} r={7} fill="#f472b6" stroke="#0b1736" strokeWidth={2} />
               <text x={sx + 12} y={sy + 4} fill="#f472b6" fontSize="12" fontWeight="bold">
-                после: {shockLabel ?? "шок"}
+                {t("constitution.map.afterPrefix")} {shockLabel ?? t("constitution.map.shockFallback")}
               </text>
             </g>
           )}
         </svg>
       </div>
       <p className="text-xs text-[#9aa3c0] mt-3">
-        Точка «ты сейчас» считается из текущих ползунков. Чем правее — тем меньше элиты боятся низа.
-        Чем выше — тем больше драйва и инновации. Страны — приближённая оценка по шкале 0-100; не научный
-        рейтинг, а инструмент для интуиции.
+        {t("constitution.map.description")}
       </p>
     </div>
   );
@@ -1580,6 +1579,7 @@ function ComparePanel({
   onPickB: (id: string | null) => void;
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   const pickable = saved.filter((s) => s.sliders);
   const slidersA = compareA?.sliders ?? null;
   const slidersB = compareB?.sliders ?? null;
@@ -1592,22 +1592,21 @@ function ComparePanel({
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-        <h3 className="text-lg font-semibold text-[#f5d27a]">Сравнить два сценария</h3>
+        <h3 className="text-lg font-semibold text-[#f5d27a]">{t("constitution.compare.heading")}</h3>
         <div className="text-xs text-[#9aa3c0]">
-          Выбери два сохранённых, увидишь ползунки + метрики + режимы рядом. URL ?compare=A,B можно
-          поделиться
+          {t("constitution.compare.description")}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
         <div>
-          <div className="text-xs uppercase text-[#22d3ee] mb-1">A — синий</div>
+          <div className="text-xs uppercase text-[#22d3ee] mb-1">{t("constitution.compare.slotA")}</div>
           <select
             value={compareA?.id ?? ""}
             onChange={(e) => onPickA(e.target.value || null)}
             className="w-full bg-[#050a1a] border border-[#22d3ee]/40 rounded px-3 py-2 text-sm"
           >
-            <option value="">— выбрать сценарий —</option>
+            <option value="">{t("constitution.compare.selectPlaceholder")}</option>
             {pickable.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.title} {s.regime ? `· ${s.regime}` : ""}
@@ -1616,13 +1615,13 @@ function ComparePanel({
           </select>
         </div>
         <div>
-          <div className="text-xs uppercase text-[#f472b6] mb-1">B — розовый</div>
+          <div className="text-xs uppercase text-[#f472b6] mb-1">{t("constitution.compare.slotB")}</div>
           <select
             value={compareB?.id ?? ""}
             onChange={(e) => onPickB(e.target.value || null)}
             className="w-full bg-[#050a1a] border border-[#f472b6]/40 rounded px-3 py-2 text-sm"
           >
-            <option value="">— выбрать сценарий —</option>
+            <option value="">{t("constitution.compare.selectPlaceholder")}</option>
             {pickable.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.title} {s.regime ? `· ${s.regime}` : ""}
@@ -1634,7 +1633,7 @@ function ComparePanel({
 
       {pickable.length === 0 && (
         <div className="text-sm text-[#9aa3c0] italic">
-          Пока нет сохранённых сценариев с полными данными. Сохрани пару выше, и они появятся здесь.
+          {t("constitution.compare.emptyState")}
         </div>
       )}
 
@@ -1645,7 +1644,7 @@ function ComparePanel({
             onClick={onClear}
             className="text-xs px-3 py-1 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
           >
-            Сбросить выбор
+            {t("constitution.compare.clearSelection")}
           </button>
         </div>
       )}
@@ -1678,7 +1677,7 @@ function ComparePanel({
           </div>
 
           <div className="mb-5">
-            <div className="text-xs text-[#9aa3c0] mb-2">Ползунки (A vs B):</div>
+            <div className="text-xs text-[#9aa3c0] mb-2">{t("constitution.compare.slidersHeading")}</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
               {SLIDER_META.map((m) => {
                 const va = slidersA[m.key];
@@ -1709,16 +1708,16 @@ function ComparePanel({
           </div>
 
           <div className="mb-5">
-            <div className="text-xs text-[#9aa3c0] mb-2">Индексы — дельта B минус A:</div>
+            <div className="text-xs text-[#9aa3c0] mb-2">{t("constitution.compare.indexDeltaHeading")}</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2 text-xs">
               {(
                 [
-                  ["eliteFear", "Страх элит перед низом", true],
-                  ["intraConflict", "Грызня внутри элит", true],
-                  ["resentment", "Обида низа на верх", true],
-                  ["innovation", "Инновация / драйв", false],
-                  ["stability", "Устойчивость", false],
-                  ["legitimacy", "Легитимность", false],
+                  ["eliteFear", t("constitution.metrics.eliteFear"), true],
+                  ["intraConflict", t("constitution.metrics.intraConflict"), true],
+                  ["resentment", t("constitution.metrics.resentment"), true],
+                  ["innovation", t("constitution.metrics.innovation"), false],
+                  ["stability", t("constitution.metrics.stability"), false],
+                  ["legitimacy", t("constitution.metrics.legitimacy"), false],
                 ] as Array<[keyof Metrics, string, boolean]>
               ).map(([key, label, invert]) => {
                 const va = metricsA[key];
@@ -1760,6 +1759,7 @@ function MiniCompareScatter({
   slidersA: Sliders;
   slidersB: Sliders;
 }) {
+  const { t } = useI18n();
   const ma = computeMetrics(slidersA);
   const mb = computeMetrics(slidersB);
   const W = 560;
@@ -1774,7 +1774,7 @@ function MiniCompareScatter({
   return (
     <div>
       <div className="text-xs text-[#9aa3c0] mb-1">
-        A → B на карте мира (X — страх элит, Y — инновация)
+        {t("constitution.compare.miniMapCaption")}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-full">
         <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
@@ -1863,12 +1863,12 @@ function StressTestPanel({
         <div className="border-t border-[#d4af37]/20 pt-4">
           <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <div className="text-sm">
-              <span className="text-[#9aa3c0]">было: </span>
+              <span className="text-[#9aa3c0]">{t("constitution.stress.before")} </span>
               <span className="text-[#22d3ee] font-semibold">
                 {t(`constitution.regime.${currentRegime.id}.name`)}
               </span>
               <span className="text-[#9aa3c0] mx-2">→</span>
-              <span className="text-[#9aa3c0]">стало: </span>
+              <span className="text-[#9aa3c0]">{t("constitution.stress.after")} </span>
               <span className="text-[#f472b6] font-semibold">
                 {t(`constitution.regime.${shockedRegime.id}.name`)}
               </span>
@@ -1879,14 +1879,14 @@ function StressTestPanel({
                 onClick={onClear}
                 className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
               >
-                Отменить
+                {t("constitution.stress.undo")}
               </button>
               <button
                 type="button"
                 onClick={onApply}
                 className="text-xs px-3 py-1 rounded bg-[#f472b6] text-[#0b1736] font-semibold hover:bg-[#f472b6]/80"
               >
-                Применить к ползункам
+                {t("constitution.stress.apply")}
               </button>
             </div>
           </div>
@@ -1968,6 +1968,7 @@ function AiAdvisorModal({
   onClose: () => void;
   onApply: (sliders: Sliders, explanation: string) => void;
 }) {
+  const { t } = useI18n();
   const [description, setDescription] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -1982,7 +1983,7 @@ function AiAdvisorModal({
 
   const submit = async () => {
     if (description.trim().length < 8) {
-      setError("Опиши хотя бы одним предложением — что за общество?");
+      setError(t("constitution.ai.errorTooShort"));
       return;
     }
     setBusy(true);
@@ -2053,7 +2054,7 @@ function AiAdvisorModal({
         setHistory(pushAiHistory(entry));
         onApply(finalSliders, finalExplanation);
       } else if (!error) {
-        setError("AI не вернул ползунки — попробуй переформулировать описание.");
+        setError(t("constitution.ai.errorNoSliders"));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "ai_failed");
@@ -2087,21 +2088,19 @@ function AiAdvisorModal({
       <div className="bg-[#0b1736] border border-fuchsia-400/40 rounded-xl p-5 max-w-2xl w-full shadow-2xl">
         <div className="flex justify-between items-baseline mb-3">
           <h3 className="text-xl font-bold text-fuchsia-300">
-            🤖 AI-советник по конституции
+            🤖 {t("constitution.ai.modalHeading")}
           </h3>
           <button
             type="button"
             onClick={onClose}
             className="text-[#9aa3c0] hover:text-white text-xl leading-none"
-            aria-label="Закрыть"
+            aria-label={t("constitution.button.close")}
           >
             ×
           </button>
         </div>
         <p className="text-sm text-[#9aa3c0] mb-3">
-          Опиши страну/общество/гипотетический строй в свободной форме —
-          ИИ подберёт 8 ползунков и объяснит выбор. Streaming через
-          QCoreAI: ответ приходит токенами по мере генерации.
+          {t("constitution.ai.description")}
         </p>
         {history.length > 0 && (
           <div className="mb-3 border border-[#d4af37]/20 rounded">
@@ -2110,7 +2109,7 @@ function AiAdvisorModal({
               onClick={() => setShowHistory((v) => !v)}
               className="w-full text-left px-3 py-2 text-xs text-[#9aa3c0] hover:bg-[#d4af37]/5 flex justify-between"
             >
-              <span>📜 Прошлые ИИ-сценарии ({history.length})</span>
+              <span>📜 {t("constitution.ai.historyHeading", { count: history.length })}</span>
               <span>{showHistory ? "▴" : "▾"}</span>
             </button>
             {showHistory && (
@@ -2132,7 +2131,7 @@ function AiAdvisorModal({
                       onClick={() => applyFromHistory(h)}
                       className="text-fuchsia-300 hover:underline whitespace-nowrap"
                     >
-                      Применить →
+                      {t("constitution.button.applyArrow")}
                     </button>
                   </div>
                 ))}
@@ -2141,7 +2140,7 @@ function AiAdvisorModal({
                   onClick={clearHistory}
                   className="w-full px-3 py-1.5 text-[10px] text-rose-400 hover:bg-rose-500/10"
                 >
-                  Очистить историю
+                  {t("constitution.ai.clearHistory")}
                 </button>
               </div>
             )}
@@ -2150,7 +2149,7 @@ function AiAdvisorModal({
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Например: «общество размером с город-государство, где главный приоритет — стабильность через сильную бюрократию, экономика быстро растёт за счёт торговли, но политические права ограничены»"
+          placeholder={t("constitution.ai.placeholderExample")}
           rows={5}
           className="w-full bg-[#050a1a] border border-fuchsia-400/30 rounded px-3 py-2 text-sm resize-y"
           maxLength={4000}
@@ -2180,7 +2179,7 @@ function AiAdvisorModal({
             onClick={onClose}
             className="text-sm px-4 py-2 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
           >
-            Отмена
+            {t("constitution.button.cancel")}
           </button>
           <button
             type="button"
@@ -2188,7 +2187,7 @@ function AiAdvisorModal({
             disabled={busy || description.trim().length < 8}
             className="text-sm px-4 py-2 rounded bg-fuchsia-500 text-[#0b1736] font-semibold hover:bg-fuchsia-400 disabled:opacity-40"
           >
-            {busy ? "Думает…" : "Подобрать ползунки →"}
+            {busy ? t("constitution.ai.thinking") : t("constitution.ai.submitButton")}
           </button>
         </div>
       </div>
@@ -2203,6 +2202,7 @@ function ProPaywallBanner({
   savedTotal: number;
   limit: number;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mb-4 bg-gradient-to-r from-fuchsia-900/40 via-purple-900/30 to-cyan-900/40 border border-fuchsia-400/40 rounded-xl p-4">
       <div className="flex justify-between items-start flex-wrap gap-3">
@@ -2212,18 +2212,18 @@ function ProPaywallBanner({
               PRO
             </span>
             <span className="text-fuchsia-200 font-semibold">
-              Constitution Pro · $9 / мес
+              {t("constitution.pro.banner.title")}
             </span>
           </div>
           <div className="text-sm text-[#e7ecf8] mt-1">
-            Ты использовал {savedTotal} из {limit} бесплатных сохранений. Pro даёт:
+            {t("constitution.pro.usage", { used: savedTotal, limit })}
           </div>
           <ul className="text-xs text-[#9aa3c0] mt-2 space-y-0.5 list-disc list-inside">
-            <li>Безлимит сохранений в облаке</li>
-            <li>AI-советник без дневного лимита</li>
-            <li>PDF без водяных знаков «unsigned»</li>
-            <li>Цветовые темы (dark gold, monokai, lichess)</li>
-            <li>Embed-виджет для встройки на свой сайт</li>
+            <li>{t("constitution.pro.feature.unlimited")}</li>
+            <li>{t("constitution.pro.feature.aiNoLimit")}</li>
+            <li>{t("constitution.pro.feature.pdfNoWatermark")}</li>
+            <li>{t("constitution.pro.feature.themes")}</li>
+            <li>{t("constitution.pro.feature.embed")}</li>
           </ul>
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
@@ -2262,6 +2262,7 @@ function SimilarPanel({
   artifactId: string;
   onApply: (sliders: Sliders) => void;
 }) {
+  const { t } = useI18n();
   const [items, setItems] = useState<SimilarItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -2293,10 +2294,10 @@ function SimilarPanel({
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-lg font-semibold text-[#f5d27a]">
-          🪞 Похожие сценарии
+          🪞 {t("constitution.similar.heading")}
         </h3>
         <div className="text-xs text-[#9aa3c0]">
-          cosine similarity по 8-мерным ползункам
+          {t("constitution.similar.description")}
         </div>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -2327,7 +2328,7 @@ function SimilarPanel({
               disabled={!it.sliders}
               className="mt-2 w-full px-2 py-1 rounded bg-[#d4af37]/20 border border-[#d4af37]/40 text-[#f5d27a] text-xs hover:bg-[#d4af37]/30 disabled:opacity-40"
             >
-              Применить →
+              {t("constitution.button.applyArrow")}
             </button>
           </div>
         ))}
@@ -2349,6 +2350,7 @@ type SocialData = {
 };
 
 function SocialPanel({ artifactId }: { artifactId: string }) {
+  const { t } = useI18n();
   const [data, setData] = useState<SocialData | null>(null);
   const [text, setText] = useState<string>("");
   const [authorName, setAuthorName] = useState<string>("");
@@ -2428,10 +2430,10 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-lg font-semibold text-[#f5d27a]">
-          💬 Голосование и обсуждение
+          💬 {t("constitution.social.heading")}
         </h3>
         <div className="text-xs text-[#9aa3c0]">
-          Артефакт <code className="font-mono">{artifactId.slice(0, 8)}</code>
+          {t("constitution.social.artifactLabel")} <code className="font-mono">{artifactId.slice(0, 8)}</code>
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -2458,7 +2460,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
           👎 {data?.votes.down ?? 0}
         </button>
         <div className="px-3 py-1.5 text-sm text-[#9aa3c0]">
-          Итог:{" "}
+          {t("constitution.social.totalLabel")}{" "}
           <span
             className={`font-semibold ${
               (data?.votes.total ?? 0) > 0
@@ -2478,7 +2480,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
           <input
             value={authorName}
             onChange={(e) => setAuthorName(e.target.value)}
-            placeholder="Имя (необязательно)"
+            placeholder={t("constitution.social.namePlaceholder")}
             maxLength={60}
             className="flex-shrink-0 w-40 bg-[#050a1a] border border-[#d4af37]/30 rounded px-2 py-1.5 text-xs"
           />
@@ -2491,7 +2493,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
                 void submitComment();
               }
             }}
-            placeholder="Комментарий (Enter — отправить)"
+            placeholder={t("constitution.social.commentPlaceholder")}
             maxLength={800}
             className="flex-1 min-w-[200px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-2 py-1.5 text-sm"
           />
@@ -2530,7 +2532,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
           </ul>
         ) : (
           <div className="text-xs text-[#9aa3c0] italic py-2">
-            Пока нет комментариев. Будь первым.
+            {t("constitution.social.noComments")}
           </div>
         )}
       </div>

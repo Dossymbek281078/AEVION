@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { listPosts } from "@/lib/constitution-blog";
+import { getServerT } from "@/lib/i18n-server";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
@@ -17,7 +18,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BlogIndexPage() {
+export default async function BlogIndexPage() {
+  const { t } = await getServerT();
   const posts = listPosts();
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
@@ -30,7 +32,7 @@ export default function BlogIndexPage() {
             Constitution Blog
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-2xl">
-            Research-длинноформат: как восемь ползунков объясняют столетия политэкономии.
+            {t("constitution.blog.subtitle")}
           </p>
         </header>
 
@@ -51,7 +53,7 @@ export default function BlogIndexPage() {
               <h2 className="text-xl font-bold text-[#f5d27a]">{post.title}</h2>
               <p className="text-sm text-[#e7ecf8] mt-2">{post.excerpt}</p>
               <div className="text-[#d4af37] text-xs mt-3 hover:underline">
-                Читать дальше →
+                {t("constitution.blog.readMore")}
               </div>
             </Link>
           ))}

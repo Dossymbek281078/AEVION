@@ -392,18 +392,34 @@ function LessonModal({
     if (meetsThreshold && regimeMatches) {
       setCheckResult({
         ok: true,
-        message: `✓ Идеально. Режим: ${regime.name}. ${lesson.task.target} = ${value}.`,
+        message: t("constitution.learn.check_success", {
+          regime: regime.name,
+          target: lesson.task.target,
+          value,
+        }),
       });
       onComplete();
     } else if (regimeMatches) {
+      const direction = lesson.task.expectedAboveOrBelow === "above"
+        ? t("constitution.learn.direction_above")
+        : t("constitution.learn.direction_below");
       setCheckResult({
         ok: false,
-        message: `Режим совпал (${regime.name}), но ${lesson.task.target}=${value} — на грани. Подвинь ${lesson.task.expectedAboveOrBelow === "above" ? "повыше" : "пониже"} ${lesson.task.expectedThreshold}.`,
+        message: t("constitution.learn.check_close", {
+          regime: regime.name,
+          target: lesson.task.target,
+          value,
+          direction,
+          threshold: lesson.task.expectedThreshold,
+        }),
       });
     } else {
       setCheckResult({
         ok: false,
-        message: `Пока ${regime.name}, ожидаем другой режим. ${lesson.task.hint}`,
+        message: t("constitution.learn.check_fail", {
+          regime: regime.name,
+          hint: t(`constitution.lesson.${lesson.id}.hint`),
+        }),
       });
     }
   };
@@ -483,7 +499,7 @@ function LessonModal({
             </div>
           </div>
           <div className="text-xs text-[#9aa3c0] mb-3">
-            Текущий режим: <span className="text-[#f5d27a] font-semibold">{regime.name}</span>
+            {t("constitution.learn.current_regime")} <span className="text-[#f5d27a] font-semibold">{regime.name}</span>
             {" "}(id: <code>{regime.id}</code>)
           </div>
           <div className="flex justify-between items-center flex-wrap gap-2">

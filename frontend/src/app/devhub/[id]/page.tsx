@@ -1024,18 +1024,25 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // pipeline as the IDE button (checkpoints, undo, syntax check, self-correct
   // all apply), just with the prompt anchored to what the user clicked.
   const aiEditVisual = async () => {
-    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditAiPrompt.trim()) return;
+    if (!project || !visualEditSelected || !visualEditAiPrompt.trim()) return;
+    if (!visualEditHtmlPath && project.stack === "static") return;
     setVisualEditAiBusy(true);
     try {
       const sel = visualEditSelected;
-      const prompt =
-        `In ${visualEditHtmlPath}, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
-        (sel.text.trim() ? ` whose current text is: "${sel.text.trim().slice(0, 200)}"` : "") +
-        `. Apply this change to that element (and its related styles if needed), keeping the rest of the page intact: ${visualEditAiPrompt.trim()}`;
+      // Static mode pins the edit to the page's HTML file. Proxy mode (deployed
+      // Next/React/etc.) can't map a rendered element to one source file, so
+      // the model gets the element context and picks the file itself.
+      const prompt = visualEditHtmlPath
+        ? `In ${visualEditHtmlPath}, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
+          (sel.text.trim() ? ` whose current text is: "${sel.text.trim().slice(0, 200)}"` : "") +
+          `. Apply this change to that element (and its related styles if needed), keeping the rest of the page intact: ${visualEditAiPrompt.trim()}`
+        : `On the deployed preview of this project, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
+          (sel.text.trim() ? ` whose rendered text is: "${sel.text.trim().slice(0, 200)}"` : "") +
+          `. Find the source file(s) that produce this element and apply this change there, keeping everything else intact: ${visualEditAiPrompt.trim()}`;
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, stack: project.stack, targetFiles: [visualEditHtmlPath] }),
+        body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "AI edit failed");
@@ -1044,7 +1051,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         showToast("AI edit applied, but the result failed a syntax check — review before deploying", "warning");
       } else {
-        showToast("AI edit applied — preview refreshed (Undo in AI Generate tab if it's wrong)", "success");
+        showToast(
+          visualEditHtmlPath
+            ? "AI edit applied — preview refreshed (↩ Undo below if it's wrong)"
+            : "AI edit applied to the source files — redeploy to see it in this preview (↩ Undo below if it's wrong)",
+          "success"
+        );
       }
       setVisualEditAiPrompt("");
       // Refreshing the file list retriggers the preview rebuild effect.
@@ -2571,17 +2583,29 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
             {activeTab === "visual" ? (
               project?.stack !== "static" ? (
+                project?.deployUrl ? (
+                  // Deployed non-static stacks render through the backend
+                  // preview proxy, which injects the same overlay contract.
+                  <iframe
+                    ref={visualEditIframeRef}
+                    src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
+                    sandbox="allow-scripts"
+                    style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                    title="Visual Edit preview"
+                  />
+                ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                   <div style={{ maxWidth: 420 }}>
                     <div style={{ fontSize: 32, marginBottom: 12 }}>🖱️</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Visual Edit works on Static projects</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Deploy this project to use Visual Edit</div>
                     <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-                      This project uses <b>{project?.stack}</b>, which needs a running dev server to render. Visual Edit
-                      only supports the Static stack (plain HTML/CSS/JS) for now, since that renders directly in the
-                      browser with no build step.
+                      This project uses <b>{project?.stack}</b>, which needs a built page to render. Deploy it once —
+                      the deployed page then loads here and you can click elements and describe changes for AI to apply
+                      to the source.
                     </div>
                   </div>
                 </div>
+                )
               ) : !visualEditSrcdoc ? (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8" }}>
                   <div style={{ fontSize: 15 }}>No index.html found — create one to use Visual Edit.</div>
@@ -2828,10 +2852,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Visual Edit Tab */}
               {activeTab === "visual" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {project?.stack !== "static" ? (
+                  {project?.stack !== "static" && !project?.deployUrl ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
-                      Create a new project with the <b>Static</b> stack to use Visual Edit — it renders the page
-                      directly in the browser, which only plain HTML/CSS/JS supports without a live dev server.
+                      Deploy this project once to use Visual Edit — the deployed page renders above, and clicked
+                      elements become context for AI edits to the source.
                     </div>
                   ) : !visualEditSelected ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
@@ -2870,7 +2894,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </span>
                         )}
                       </div>
-                      {visualEditSelected.tagName === "IMG" ? (
+                      {project?.stack !== "static" ? (
+                        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                          Proxied preview of the deployed page — direct text/style editing needs source mapping, so
+                          describe the change below and AI will apply it to the right source file.
+                        </div>
+                      ) : visualEditSelected.tagName === "IMG" ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {visualEditSelected.src ? (
                             <div style={{ fontSize: 12, color: "#64748b", wordBreak: "break-all" }}>
@@ -2906,7 +2935,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         style={{ width: "100%", minHeight: 90, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
                       />
                       )}
-                      {visualEditSelected.tagName !== "IMG" && visualEditStyleBase && (
+                      {project?.stack === "static" && visualEditSelected.tagName !== "IMG" && visualEditStyleBase && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <input
                             type="color"
@@ -2952,7 +2981,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ))}
                         </div>
                       )}
-                      {visualEditSelected.tagName !== "IMG" && (
+                      {project?.stack === "static" && visualEditSelected.tagName !== "IMG" && (
                       <button
                         onClick={saveVisualEdit}
                         disabled={visualEditSaving}
@@ -2987,7 +3016,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                     </>
                   )}
-                  {project?.stack === "static" && (
+                  {(project?.stack === "static" || !!project?.deployUrl) && (
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}

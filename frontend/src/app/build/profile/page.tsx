@@ -15,6 +15,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 import { VoiceInput } from "@/components/build/VoiceInput";
 import { ResumeImporter } from "@/components/build/ResumeImporter";
+import { AiResumeBuilder } from "@/components/build/AiResumeBuilder";
 import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
@@ -125,8 +126,15 @@ function ProfileBody() {
 
           {me?.id && <ShareLinkBlock userId={me.id} />}
 
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             <ResumeImporter
+              onApplied={async () => {
+                const m = await buildApi.me().catch(() => ({ profile: null }));
+                setProfile(m.profile);
+                loadResume();
+              }}
+            />
+            <AiResumeBuilder
               onApplied={async () => {
                 const m = await buildApi.me().catch(() => ({ profile: null }));
                 setProfile(m.profile);

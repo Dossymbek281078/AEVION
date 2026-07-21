@@ -1008,6 +1008,46 @@ async function _doEnsureBuildTables(): Promise<void> {
     ],
   );
 
+  await backfillRegionsFromCity();
+}
+
+// One-time (idempotent, WHERE region IS NULL) best-effort backfill: infer
+// `region` from the free-text `city` column for rows created before the
+// region field existed. Only covers KZ oblast administrative centers — city
+// is free text with no fixed vocabulary, so this can't be exhaustive, but it
+// unblocks region-filtered search for the common cases without forcing every
+// existing user to re-edit their profile.
+const CITY_TO_REGION_KZ: [pattern: string, slug: string][] = [
+  ["алмат", "almaty-city"], ["almaty", "almaty-city"],
+  ["астана", "astana-city"], ["astana", "astana-city"], ["нур-султан", "astana-city"],
+  ["шымкент", "shymkent-city"], ["shymkent", "shymkent-city"],
+  ["семей", "abai"], ["semey", "abai"],
+  ["кокшетау", "akmola"], ["kokshetau", "akmola"],
+  ["актобе", "aktobe"], ["aktobe", "aktobe"],
+  ["талдыкорган", "zhetysu"], ["taldykorgan", "zhetysu"],
+  ["атырау", "atyrau"], ["atyrau", "atyrau"],
+  ["усть-каменогорск", "east-kazakhstan"], ["оскемен", "east-kazakhstan"],
+  ["тараз", "zhambyl"], ["taraz", "zhambyl"],
+  ["уральск", "west-kazakhstan"], ["oral", "west-kazakhstan"],
+  ["караганда", "karaganda"], ["karaganda", "karaganda"],
+  ["костанай", "kostanay"], ["kostanay", "kostanay"],
+  ["кызылорда", "kyzylorda"], ["kyzylorda", "kyzylorda"],
+  ["актау", "mangystau"], ["aktau", "mangystau"],
+  ["павлодар", "pavlodar"], ["pavlodar", "pavlodar"],
+  ["петропавловск", "north-kazakhstan"], ["petropavl", "north-kazakhstan"],
+  ["туркестан", "turkestan"], ["turkistan", "turkestan"],
+  ["жезказган", "ulytau"], ["zhezkazgan", "ulytau"],
+];
+
+async function backfillRegionsFromCity(): Promise<void> {
+  for (const table of ["BuildProfile", "BuildVacancy", "BuildProject"] as const) {
+    for (const [pattern, slug] of CITY_TO_REGION_KZ) {
+      await pool.query(
+        `UPDATE "${table}" SET "region" = $1 WHERE "region" IS NULL AND "city" ILIKE $2`,
+        [slug, `%${pattern}%`],
+      );
+    }
+  }
 }
 
 export const buildPool = pool;

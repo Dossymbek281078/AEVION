@@ -237,6 +237,167 @@ aiRouter.post("/parse-resume", aiRateLimiter, async (req, res) => {
   }
 });
 
+function parseJsonFence(raw: string): unknown | null {
+  const stripped = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    return null;
+  }
+}
+
+// POST /api/build/ai/resume-interview
+// Body: { messages: ChatTurn[] } — same shape as /consult (last 20 turns).
+// A 2-agent pipeline: an INTERVIEWER asks the next short question and
+// extracts a running best-guess profile from the whole transcript, then a
+// VALIDATOR cross-checks that extraction against the transcript before it
+// reaches the client (catches hallucinated fields / invalid enums / bad
+// ranges). Every other AI endpoint here is one Claude call; this one is two
+// on purpose — see the comment on RESUME_INTERVIEWER_SYSTEM_PROMPT.
+aiRouter.post("/resume-interview", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const messagesRaw = req.body?.messages;
+    if (!Array.isArray(messagesRaw) || messagesRaw.length === 0) {
+      return fail(res, 400, "messages_required");
+    }
+    const messages = messagesRaw
+      .filter(
+        (m: unknown) =>
+          typeof m === "object" &&
+          m !== null &&
+          (m as { role?: string }).role &&
+          typeof (m as { content?: string }).content === "string",
+      )
+      .map((m: unknown) => {
+        const obj = m as { role: string; content: string };
+        return {
+          role: obj.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: obj.content.slice(0, 4000),
+        };
+      })
+      .slice(-20);
+
+    if (messages.length === 0) return fail(res, 400, "messages_empty");
+    if (messages[messages.length - 1].role !== "user") {
+      return fail(res, 400, "last_message_must_be_user");
+    }
+
+    const { callClaude, RESUME_INTERVIEWER_SYSTEM_PROMPT, RESUME_VALIDATOR_SYSTEM_PROMPT } =
+      await import("../../lib/build/ai");
+
+    const interviewerReply = await callClaude({
+      systemPrompt: RESUME_INTERVIEWER_SYSTEM_PROMPT,
+      messages,
+      maxTokens: 1500,
+      cacheSystem: true,
+    });
+    const interviewerJson = parseJsonFence(interviewerReply.text) as
+      | { question?: unknown; done?: unknown; collected?: unknown }
+      | null;
+    if (!interviewerJson) {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: interviewerReply.text.slice(0, 200),
+      });
+    }
+
+    const transcriptText = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+    const validatorReply = await callClaude({
+      systemPrompt: RESUME_VALIDATOR_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Собранный JSON от интервьюера:\n${JSON.stringify(interviewerJson.collected ?? {}, null, 2)}\n\nПереписка:\n${transcriptText}`,
+        },
+      ],
+      maxTokens: 1200,
+      cacheSystem: true,
+    });
+    const validatorJson = parseJsonFence(validatorReply.text) as
+      | { collected?: unknown; issues?: unknown }
+      | null;
+
+    return ok(res, {
+      question: typeof interviewerJson.question === "string" ? interviewerJson.question : null,
+      done: interviewerJson.done === true,
+      collected: validatorJson?.collected ?? interviewerJson.collected ?? {},
+      issues: Array.isArray(validatorJson?.issues) ? validatorJson.issues : [],
+      usage: {
+        input: interviewerReply.inputTokens + validatorReply.inputTokens,
+        output: interviewerReply.outputTokens + validatorReply.outputTokens,
+      },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_resume_interview_failed");
+  }
+});
+
+// POST /api/build/ai/parse-search
+// Body: { text: string, mode: "talent" | "vacancy" }
+// 2-agent pipeline: PARSER extracts structured filters from free text, then
+// CHECKER cross-reads them against the original query before the frontend
+// applies them to /profiles/search or /vacancies. No auth requirement beyond
+// the rate limiter — this only produces filter params, it doesn't run the
+// search itself (the frontend calls the existing search endpoints with the
+// returned filters, same as if the user had picked them from the dropdowns).
+aiRouter.post("/parse-search", aiRateLimiter, async (req, res) => {
+  try {
+    const text = vString(req.body?.text, "text", { min: 3, max: 500 });
+    if (!text.ok) return fail(res, 400, text.error);
+    const mode = req.body?.mode === "vacancy" ? "vacancy" : "talent";
+
+    const { callClaude, NL_SEARCH_PARSER_SYSTEM_PROMPT, NL_SEARCH_CHECKER_SYSTEM_PROMPT } =
+      await import("../../lib/build/ai");
+
+    const parserReply = await callClaude({
+      systemPrompt: NL_SEARCH_PARSER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: `mode=${mode}\nquery: ${text.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+    const parserJson = parseJsonFence(parserReply.text) as
+      | { filters?: unknown; explanation?: unknown }
+      | null;
+    if (!parserJson) {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: parserReply.text.slice(0, 200),
+      });
+    }
+
+    const checkerReply = await callClaude({
+      systemPrompt: NL_SEARCH_CHECKER_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Исходный запрос (mode=${mode}): ${text.value}\n\nИзвлечённые фильтры:\n${JSON.stringify(parserJson.filters ?? {}, null, 2)}`,
+        },
+      ],
+      maxTokens: 700,
+      cacheSystem: true,
+    });
+    const checkerJson = parseJsonFence(checkerReply.text) as
+      | { filters?: unknown; explanation?: unknown; issues?: unknown }
+      | null;
+
+    return ok(res, {
+      filters: checkerJson?.filters ?? parserJson.filters ?? {},
+      explanation:
+        (typeof checkerJson?.explanation === "string" && checkerJson.explanation) ||
+        (typeof parserJson.explanation === "string" && parserJson.explanation) ||
+        "",
+      issues: Array.isArray(checkerJson?.issues) ? checkerJson.issues : [],
+      usage: {
+        input: parserReply.inputTokens + checkerReply.inputTokens,
+        output: parserReply.outputTokens + checkerReply.outputTokens,
+      },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_parse_search_failed");
+  }
+});
+
 // POST /api/build/ai/improve-text
 aiRouter.post("/improve-text", aiRateLimiter, async (req, res) => {
   try {

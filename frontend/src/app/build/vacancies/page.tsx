@@ -49,6 +49,10 @@ function VacanciesFeedInner() {
     (searchParams.get("educationLevel") as EducationLevel | "") || "",
   );
   const [maxExperience, setMaxExperience] = useState<string>(searchParams.get("maxExperience") || "");
+  const [nlQuery, setNlQuery] = useState("");
+  const [nlBusy, setNlBusy] = useState(false);
+  const [nlExplanation, setNlExplanation] = useState<string | null>(null);
+  const [nlError, setNlError] = useState<string | null>(null);
   const [sort, setSort] = useState<"recent" | "salary" | "popular">(
     (searchParams.get("sort") as "recent" | "salary" | "popular") || "recent",
   );
@@ -120,6 +124,36 @@ function VacanciesFeedInner() {
     }, 250);
     return () => clearTimeout(handle);
   }, [status, q, city, minSalary, maxSalary, currency, skill, region, workMode, educationLevel, maxExperience, sort]);
+
+  async function runNlSearch() {
+    const text = nlQuery.trim();
+    if (!text || nlBusy) return;
+    setNlBusy(true);
+    setNlError(null);
+    setNlExplanation(null);
+    try {
+      const r = await buildApi.aiParseSearch({ text, mode: "vacancy" });
+      const f = r.filters as Record<string, unknown>;
+      if (typeof f.q === "string") setQ(f.q);
+      if (typeof f.skill === "string") setSkill(f.skill);
+      if (typeof f.city === "string") setCity(f.city);
+      if (typeof f.region === "string") setRegion(f.region);
+      if (typeof f.workMode === "string" && (WORK_MODES as string[]).includes(f.workMode)) {
+        setWorkMode(f.workMode as WorkMode);
+      }
+      if (typeof f.educationLevel === "string" && (EDUCATION_LEVELS as string[]).includes(f.educationLevel)) {
+        setEducationLevel(f.educationLevel as EducationLevel);
+      }
+      if (typeof f.maxExperience === "number") setMaxExperience(String(Math.round(f.maxExperience)));
+      if (typeof f.minSalary === "number") setMinSalary(String(Math.round(f.minSalary)));
+      if (typeof f.maxSalary === "number") setMaxSalary(String(Math.round(f.maxSalary)));
+      setNlExplanation(r.explanation || null);
+    } catch (e) {
+      setNlError((e as Error).message);
+    } finally {
+      setNlBusy(false);
+    }
+  }
 
   const stats = useMemo(() => {
     const openItems = items.filter((v) => v.status === "OPEN");
@@ -202,6 +236,30 @@ function VacanciesFeedInner() {
         <Stat label="Avg salary" value={stats.avgSalary > 0 ? formatSalary(stats.avgSalary, stats.avgCurrency) : "—"} />
         <Stat label="Cities" value={stats.cities} />
       </div>
+
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          value={nlQuery}
+          onChange={(e) => setNlQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              runNlSearch();
+            }
+          }}
+          placeholder="💬 Опишите, что ищете — «вахта в Мангистау, до 5 лет опыта»…"
+          className="flex-1 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-fuchsia-400/60 focus:outline-none"
+        />
+        <button
+          onClick={runNlSearch}
+          disabled={nlBusy || !nlQuery.trim()}
+          className="rounded-lg bg-fuchsia-500/20 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/30 disabled:opacity-50"
+        >
+          {nlBusy ? "…" : "AI search"}
+        </button>
+      </div>
+      {nlExplanation && <p className="mb-3 text-xs text-fuchsia-200/80">🔎 {nlExplanation}</p>}
+      {nlError && <p className="mb-3 text-xs text-rose-300">{nlError}</p>}
 
       <div className="mb-5 flex flex-col gap-3">
         {/* Search + filter toggle row (always visible) */}

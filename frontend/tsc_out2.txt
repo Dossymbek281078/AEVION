@@ -1,9 +1,0 @@
-src/app/devhub/[id]/page.tsx(9,43): error TS2307: Cannot find module '@monaco-editor/react' or its corresponding type declarations.
-src/app/devhub/[id]/page.tsx(203,7): error TS2769: No overload matches this call.
-  Overload 1 of 2, '(props: {}, context?: any): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | Promise<...> | Component<...> | null | undefined', gave the following error.
-    Type '{ height: number; language: string; value: string; onChange: (v: any) => void; theme: string; options: { minimap: { enabled: boolean; }; fontSize: number; fontFamily: string; lineNumbers: string; scrollBeyondLastLine: boolean; ... 9 more ...; lineDecorationsWidth: number; }; }' is not assignable to type 'IntrinsicAttributes'.
-      Property 'height' does not exist on type 'IntrinsicAttributes'.
-  Overload 2 of 2, '(props: {}): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | Promise<...> | Component<...> | null | undefined', gave the following error.
-    Type '{ height: number; language: string; value: string; onChange: (v: any) => void; theme: string; options: { minimap: { enabled: boolean; }; fontSize: number; fontFamily: string; lineNumbers: string; scrollBeyondLastLine: boolean; ... 9 more ...; lineDecorationsWidth: number; }; }' is not assignable to type 'IntrinsicAttributes'.
-      Property 'height' does not exist on type 'IntrinsicAttributes'.
-src/app/devhub/[id]/page.tsx(206,18): error TS7006: Parameter 'v' implicitly has an 'any' type.

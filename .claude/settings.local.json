@@ -211,7 +211,8 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 728 --json state,mergedAt)",
       "Bash(awk '/^  en: \\\\{/{a=1} /^  ru: \\\\{/{a=2} /^  kk: \\\\{/{a=3} a==1 && /constitution\\\\.lesson\\\\./{c1++} a==2 && /constitution\\\\.lesson\\\\./{c2++} a==3 && /constitution\\\\.lesson\\\\./{c3++} END{print \"en=\"c1, \"ru=\"c2, \"kk=\"c3}' frontend/src/lib/i18n-data.ts)",
       "Bash(grep -n \"constitution\\\\.tour\\\\.\\\\${\" frontend/src/app/constitution/page.tsx)",
-      "Bash(grep -v \"t\\(\\\\`constitution\\\\|t\\(\\\\\"constitution\")"
+      "Bash(grep -v \"t\\(\\\\`constitution\\\\|t\\(\\\\\"constitution\")",
+      "Bash(grep -rl *)"
     ]
   }
 }

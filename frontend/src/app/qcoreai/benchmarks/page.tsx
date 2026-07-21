@@ -11,6 +11,8 @@ interface ModelBenchmark {
   qualityScore: number;
   costScore: number;
   contextWindow: number;
+  measuredLatencyMs?: number | null;
+  latencySamples?: number;
 }
 
 interface BenchmarkData {
@@ -77,8 +79,9 @@ export default function BenchmarksPage() {
         <div className="mb-6">
           <h1 className="text-xl font-bold">Сравнение моделей</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Экономность считается вживую по реальным ценам провайдеров. Скорость и качество — иллюстративные оценки,
-            не измеренный тест — за реальным измеренным бенчмарком Council см.{" "}
+            Экономность считается вживую по реальным ценам провайдеров; где есть значок ⏱ — показана
+            медианная задержка по реальным вызовам этого сервера. Полосы «скорость» и «качество» — иллюстративные
+            оценки, не измеренный тест — за реальным измеренным бенчмарком Council см.{" "}
             <Link href="/qcoreai/vs" className="text-teal-400 hover:text-teal-300 underline">
               /qcoreai/vs
             </Link>
@@ -126,7 +129,14 @@ export default function BenchmarksPage() {
                         <ScoreBar value={m.qualityScore} color="#10b981" />
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Скорость</p>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Скорость</p>
+                          {typeof m.measuredLatencyMs === "number" && (
+                            <span className="text-[10px] text-sky-400" title={`Медиана полного ответа по ${m.latencySamples} реальным вызовам этого инстанса`}>
+                              ⏱ {(m.measuredLatencyMs / 1000).toFixed(1)}s · N={m.latencySamples}
+                            </span>
+                          )}
+                        </div>
                         <ScoreBar value={m.speedScore} color="#3b82f6" />
                       </div>
                       <div>
@@ -140,7 +150,7 @@ export default function BenchmarksPage() {
             </div>
 
             <p className="text-xs text-slate-600 text-center mt-4" title={data.note}>
-              💰 экономность — живой расчёт по ценам · 🎯⚡ качество/скорость — иллюстративные оценки · {data.lastUpdated}
+              💰 экономность — живой расчёт по ценам · ⏱ — измеренная медиана реальных вызовов · 🎯⚡ полосы качество/скорость — иллюстративные оценки · {data.lastUpdated}
             </p>
           </>
         )}

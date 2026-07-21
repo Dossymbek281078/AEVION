@@ -6,19 +6,20 @@ import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { useI18n } from "@/lib/i18n";
 
 type IndustryId = "banks" | "startups" | "government" | "creators" | "law-firms";
 
 interface IndustryConfig {
   id: IndustryId;
-  name: string;
-  hero: string;
-  problem: string;
-  whyAevion: string[];
+  nameKey: string;
+  heroKey: string;
+  problemKey: string;
+  whyAevionKeys: string[];
   recommendedTier: "free" | "lite" | "medium" | "full" | "enterprise";
   recommendedModules: string[];
-  caseStudy: { title: string; result: string };
-  metrics: { label: string; value: string }[];
+  caseStudy: { titleKey: string; resultKey: string };
+  metrics: { labelKey: string; value: string; valueKey?: string }[];
   primaryColor: string;
   accentColor: string;
 }
@@ -26,16 +27,15 @@ interface IndustryConfig {
 const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
   banks: {
     id: "banks",
-    name: "Банки и финтех",
-    hero: "Подпись, аудит и платежи в одной инфраструктуре",
-    problem:
-      "Банкам приходится склеивать DocuSign + аудит-системы + платёжный шлюз + AI-чат поддержки. Каждая интеграция — отдельный проект на 6 месяцев и сторонний compliance-риск.",
-    whyAevion: [
-      "QSign + QRight + QPayNet под одним SOC2/ISO27001 контуром",
-      "Локализация данных в KZ / RU / EU без миграции стека",
-      "Аудит-лог на каждый шаг операции — единая запись в реестре",
-      "AI-агент QCoreAI обучен на ваших регламентах через Multichat",
-      "VPC / on-prem развёртывание, выделенный SLA до 1 часа",
+    nameKey: "pricing.forIndustry.banks.name",
+    heroKey: "pricing.forIndustry.banks.hero",
+    problemKey: "pricing.forIndustry.banks.problem",
+    whyAevionKeys: [
+      "pricing.forIndustry.banks.why1",
+      "pricing.forIndustry.banks.why2",
+      "pricing.forIndustry.banks.why3",
+      "pricing.forIndustry.banks.why4",
+      "pricing.forIndustry.banks.why5",
     ],
     recommendedTier: "enterprise",
     recommendedModules: [
@@ -47,61 +47,57 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "qcontract",
     ],
     caseStudy: {
-      title: "Тинькофф-стиль bank: KYC + ePodpis + аудит",
-      result:
-        "Сокращение time-to-onboard клиента с 3 дней до 12 минут. Один аудит-лог вместо четырёх систем.",
+      titleKey: "pricing.forIndustry.banks.caseTitle",
+      resultKey: "pricing.forIndustry.banks.caseResult",
     },
     metrics: [
-      { label: "Сокращение time-to-deploy", value: "−68%" },
-      { label: "Снижение compliance-затрат", value: "−40%" },
-      { label: "SLA отклика", value: "1h" },
-      { label: "Регионов локализации", value: "3" },
+      { labelKey: "pricing.forIndustry.banks.metric1Label", value: "−68%" },
+      { labelKey: "pricing.forIndustry.banks.metric2Label", value: "−40%" },
+      { labelKey: "pricing.forIndustry.banks.metric3Label", value: "1h" },
+      { labelKey: "pricing.forIndustry.banks.metric4Label", value: "3" },
     ],
     primaryColor: "#1e3a8a",
     accentColor: "#3b82f6",
   },
   startups: {
     id: "startups",
-    name: "Стартапы и инди-фаундеры",
-    hero: "От идеи до защищённого продукта без юристов и интеграторов",
-    problem:
-      "Защитить идею, подписать договор с фрилансером, собрать AI-помощника, принять платёж — это 4 разных подписки и 2 недели бюрократии. Параллельно нужно строить продукт.",
-    whyAevion: [
-      "QRight: регистрация идеи за 30 секунд, certified PDF",
-      "QSign: подпись NDA / договоров без DocuSign",
-      "QCoreAI: 5M токенов на Pro — хватает на MVP-чат",
-      "AEVION IP Bureau: pre-validation идеи перед патентным поверенным",
-      "Startup Exchange: монетизируйте идею, даже если не строите продукт",
+    nameKey: "pricing.forIndustry.startups.name",
+    heroKey: "pricing.forIndustry.startups.hero",
+    problemKey: "pricing.forIndustry.startups.problem",
+    whyAevionKeys: [
+      "pricing.forIndustry.startups.why1",
+      "pricing.forIndustry.startups.why2",
+      "pricing.forIndustry.startups.why3",
+      "pricing.forIndustry.startups.why4",
+      "pricing.forIndustry.startups.why5",
     ],
     recommendedTier: "medium",
     recommendedModules: ["qright", "qsign", "qcoreai", "aevion-ip-bureau"],
     caseStudy: {
-      title: "AI-стартап MVP за 14 дней",
-      result:
-        "Регистрация 12 идей, 8 подписанных контрактов, AI-чат с памятью на основе QCoreAI. Стоимость стека: $19/мес вместо ~$120/мес у конкурентов.",
+      titleKey: "pricing.forIndustry.startups.caseTitle",
+      resultKey: "pricing.forIndustry.startups.caseResult",
     },
     metrics: [
-      { label: "Time-to-protect идею", value: "30s" },
-      { label: "Экономия vs DocuSign+OpenAI+Patently", value: "84%" },
-      { label: "Месяцев на Free до апгрейда", value: "≈3" },
-      { label: "Подписей в день", value: "50" },
+      { labelKey: "pricing.forIndustry.startups.metric1Label", value: "30s" },
+      { labelKey: "pricing.forIndustry.startups.metric2Label", value: "84%" },
+      { labelKey: "pricing.forIndustry.startups.metric3Label", value: "≈3" },
+      { labelKey: "pricing.forIndustry.startups.metric4Label", value: "50" },
     ],
     primaryColor: "#7c3aed",
     accentColor: "#a78bfa",
   },
   government: {
     id: "government",
-    name: "Государственный сектор",
-    hero: "Цифровое государство без vendor lock-in",
-    problem:
-      "Гражданам нужны электронные услуги, ведомствам — реестр операций с аудит-следом, регуляторам — compliance-отчётность. Импортные SaaS не проходят локализацию данных.",
-    whyAevion: [
-      "On-prem развёртывание в дата-центре ведомства",
-      "Открытый исходный код модулей под аудит",
-      "QRight как национальный реестр цифровой собственности",
-      "Planet Compliance: certified-сертификаты с verifiable proof",
-      "Voice of Earth для гражданского участия и петиций",
-      "Локализация UI на казахский / русский / английский",
+    nameKey: "pricing.forIndustry.government.name",
+    heroKey: "pricing.forIndustry.government.hero",
+    problemKey: "pricing.forIndustry.government.problem",
+    whyAevionKeys: [
+      "pricing.forIndustry.government.why1",
+      "pricing.forIndustry.government.why2",
+      "pricing.forIndustry.government.why3",
+      "pricing.forIndustry.government.why4",
+      "pricing.forIndustry.government.why5",
+      "pricing.forIndustry.government.why6",
     ],
     recommendedTier: "enterprise",
     recommendedModules: [
@@ -113,61 +109,57 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "voice-of-earth",
     ],
     caseStudy: {
-      title: "Электронное бюро авторства для KZ",
-      result:
-        "Полный пайплайн: гражданин → QRight регистрация → IP Bureau ревью → Planet certified-сертификат. Экономия 70% бумажного оборота.",
+      titleKey: "pricing.forIndustry.government.caseTitle",
+      resultKey: "pricing.forIndustry.government.caseResult",
     },
     metrics: [
-      { label: "Локализация регулятор-готова", value: "100%" },
-      { label: "Open-source аудитируемых модулей", value: "27" },
-      { label: "Сокращение бумажного оборота", value: "70%" },
-      { label: "Регионов pilot", value: "3" },
+      { labelKey: "pricing.forIndustry.government.metric1Label", value: "100%" },
+      { labelKey: "pricing.forIndustry.government.metric2Label", value: "27" },
+      { labelKey: "pricing.forIndustry.government.metric3Label", value: "70%" },
+      { labelKey: "pricing.forIndustry.government.metric4Label", value: "3" },
     ],
     primaryColor: "#065f46",
     accentColor: "#10b981",
   },
   creators: {
     id: "creators",
-    name: "Создатели контента",
-    hero: "Защита авторства, AI-помощник и монетизация — без посредников",
-    problem:
-      "Контент копируют за минуты, авторские права доказать сложно. AI-генерация снижает порог копирования. Платформы забирают 30% дохода. Нужен независимый стек.",
-    whyAevion: [
-      "QRight: timestamp каждого черновика, доказательство авторства",
-      "QSign: подпись медиа-файлов, цепочка передачи прав",
-      "Kids AI Content: монетизация образовательного контента",
-      "QPersona: цифровой аватар для масштабирования",
-      "Startup Exchange: продажа лицензий на готовый контент",
+    nameKey: "pricing.forIndustry.creators.name",
+    heroKey: "pricing.forIndustry.creators.hero",
+    problemKey: "pricing.forIndustry.creators.problem",
+    whyAevionKeys: [
+      "pricing.forIndustry.creators.why1",
+      "pricing.forIndustry.creators.why2",
+      "pricing.forIndustry.creators.why3",
+      "pricing.forIndustry.creators.why4",
+      "pricing.forIndustry.creators.why5",
     ],
     recommendedTier: "medium",
     recommendedModules: ["qright", "qsign", "kids-ai-content", "qpersona", "startup-exchange"],
     caseStudy: {
-      title: "Инди-блогер: 1000 защищённых статей за год",
-      result:
-        "Все черновики автоматически в QRight. Цепочка timestamp от черновика до публикации. 3 случая копирования — все доказаны через certified PDF.",
+      titleKey: "pricing.forIndustry.creators.caseTitle",
+      resultKey: "pricing.forIndustry.creators.caseResult",
     },
     metrics: [
-      { label: "Стоимость защиты статьи", value: "$0" },
-      { label: "Доказательная сила", value: "Crypto-grade" },
-      { label: "Платформ интеграции", value: "5+" },
-      { label: "Комиссия за лицензирование", value: "0%" },
+      { labelKey: "pricing.forIndustry.creators.metric1Label", value: "$0" },
+      { labelKey: "pricing.forIndustry.creators.metric2Label", value: "Crypto-grade" },
+      { labelKey: "pricing.forIndustry.creators.metric3Label", value: "5+" },
+      { labelKey: "pricing.forIndustry.creators.metric4Label", value: "0%" },
     ],
     primaryColor: "#be185d",
     accentColor: "#ec4899",
   },
   "law-firms": {
     id: "law-firms",
-    name: "Юридические фирмы",
-    hero: "Полный IP-контур клиента под одной подпиской",
-    problem:
-      "Юристы используют 4–5 систем: DocuSign для подписей, Patently для патентов, отдельный реестр объектов, AI-помощник для черновиков. Биллинг и аудит — везде разный.",
-    whyAevion: [
-      "Все клиентские объекты в одном QRight registry",
-      "QSign: цифровая подпись с full chain of custody",
-      "AEVION IP Bureau: pre-validation перед подачей в Роспатент / KazPatent",
-      "QContract: smart-документы с истекающим сроком",
-      "Multichat-агенты на ваших шаблонах договоров",
-      "Аудит-лог под export для регулятора одной кнопкой",
+    nameKey: "pricing.forIndustry.lawFirms.name",
+    heroKey: "pricing.forIndustry.lawFirms.hero",
+    problemKey: "pricing.forIndustry.lawFirms.problem",
+    whyAevionKeys: [
+      "pricing.forIndustry.lawFirms.why1",
+      "pricing.forIndustry.lawFirms.why2",
+      "pricing.forIndustry.lawFirms.why3",
+      "pricing.forIndustry.lawFirms.why4",
+      "pricing.forIndustry.lawFirms.why5",
+      "pricing.forIndustry.lawFirms.why6",
     ],
     recommendedTier: "full",
     recommendedModules: [
@@ -179,15 +171,22 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       "qcoreai",
     ],
     caseStudy: {
-      title: "Практика IP-фирмы 12 юристов",
-      result:
-        "Замена связки DocuSign+Patently+Notion+ChatGPT на единый AEVION Business. Экономия $480/мес × 12 seats. Audit-export к ФАС в 1 клик.",
+      titleKey: "pricing.forIndustry.lawFirms.caseTitle",
+      resultKey: "pricing.forIndustry.lawFirms.caseResult",
     },
     metrics: [
-      { label: "Экономия на стеке", value: "$480/мес" },
-      { label: "Seats в Business", value: "12" },
-      { label: "Audit-export время", value: "1 клик" },
-      { label: "Замена систем", value: "4→1" },
+      {
+        labelKey: "pricing.forIndustry.lawFirms.metric1Label",
+        value: "$480/мес",
+        valueKey: "pricing.forIndustry.lawFirms.metric1Value",
+      },
+      { labelKey: "pricing.forIndustry.lawFirms.metric2Label", value: "12" },
+      {
+        labelKey: "pricing.forIndustry.lawFirms.metric3Label",
+        value: "1 клик",
+        valueKey: "pricing.forIndustry.lawFirms.metric3Value",
+      },
+      { labelKey: "pricing.forIndustry.lawFirms.metric4Label", value: "4→1" },
     ],
     primaryColor: "#92400e",
     accentColor: "#f59e0b",
@@ -200,6 +199,7 @@ interface PricingPayload {
 }
 
 export default function IndustryLandingPage() {
+  const { t } = useI18n();
   const params = useParams<{ industry: string }>();
   const industry = INDUSTRIES[params?.industry as IndustryId];
   const [data, setData] = useState<PricingPayload | null>(null);
@@ -225,24 +225,24 @@ export default function IndustryLandingPage() {
     return (
       <ProductPageShell>
         <div style={{ padding: 60, textAlign: "center" }}>
-          <h1>Индустрия не найдена</h1>
+          <h1>{t("pricing.forIndustry.notFound.title")}</h1>
           <p style={{ color: "#64748b" }}>
-            Доступные:{" "}
+            {t("pricing.forIndustry.notFound.available")}{" "}
             {Object.keys(INDUSTRIES).map((k) => (
               <Link key={k} href={`/pricing/for/${k}`} style={{ color: "#0d9488", marginRight: 12 }}>
-                {INDUSTRIES[k as IndustryId].name}
+                {t(INDUSTRIES[k as IndustryId].nameKey)}
               </Link>
             ))}
           </p>
           <Link href="/pricing" style={{ color: "#0d9488", fontWeight: 700 }}>
-            ← Все тарифы
+            {t("pricing.forIndustry.backToPricing")}
           </Link>
         </div>
       </ProductPageShell>
     );
   }
 
-  const recommendedTier = data?.tiers.find((t) => t.id === industry.recommendedTier);
+  const recommendedTier = data?.tiers.find((tier) => tier.id === industry.recommendedTier);
   const moduleNames = (data?.modules ?? [])
     .filter((m) => industry.recommendedModules.includes(m.id))
     .map((m) => ({ ...m }));
@@ -259,7 +259,7 @@ export default function IndustryLandingPage() {
             textDecoration: "none",
           }}
         >
-          ← Все тарифы
+          {t("pricing.forIndustry.backToPricing")}
         </Link>
       </div>
 
@@ -285,7 +285,7 @@ export default function IndustryLandingPage() {
             marginBottom: 16,
           }}
         >
-          ИНДУСТРИЯ · {industry.name.toUpperCase()}
+          {t("pricing.forIndustry.badge", { name: t(industry.nameKey).toUpperCase() })}
         </div>
         <h1
           style={{
@@ -297,10 +297,10 @@ export default function IndustryLandingPage() {
             maxWidth: 800,
           }}
         >
-          {industry.hero}
+          {t(industry.heroKey)}
         </h1>
         <p style={{ fontSize: 16, lineHeight: 1.6, opacity: 0.92, maxWidth: 720 }}>
-          {industry.problem}
+          {t(industry.problemKey)}
         </p>
       </section>
 
@@ -332,10 +332,10 @@ export default function IndustryLandingPage() {
                 color: industry.primaryColor,
               }}
             >
-              {m.value}
+              {m.valueKey ? t(m.valueKey) : m.value}
             </div>
             <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginTop: 4 }}>
-              {m.label}
+              {t(m.labelKey)}
             </div>
           </div>
         ))}
@@ -344,7 +344,7 @@ export default function IndustryLandingPage() {
       {/* Why AEVION */}
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-          Почему AEVION
+          {t("pricing.forIndustry.whyHeading")}
         </h2>
         <div
           style={{
@@ -353,7 +353,7 @@ export default function IndustryLandingPage() {
             gap: 12,
           }}
         >
-          {industry.whyAevion.map((w, i) => (
+          {industry.whyAevionKeys.map((key, i) => (
             <div
               key={i}
               style={{
@@ -384,7 +384,7 @@ export default function IndustryLandingPage() {
               >
                 {i + 1}
               </span>
-              <span>{w}</span>
+              <span>{t(key)}</span>
             </div>
           ))}
         </div>
@@ -394,7 +394,7 @@ export default function IndustryLandingPage() {
       {moduleNames.length > 0 && (
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-            Рекомендованные модули
+            {t("pricing.forIndustry.modulesHeading")}
           </h2>
           <div
             style={{
@@ -444,13 +444,13 @@ export default function IndustryLandingPage() {
             marginBottom: 12,
           }}
         >
-          КЕЙС
+          {t("pricing.forIndustry.caseLabel")}
         </div>
         <h3 style={{ fontSize: 24, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-          {industry.caseStudy.title}
+          {t(industry.caseStudy.titleKey)}
         </h3>
         <p style={{ fontSize: 15, color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>
-          {industry.caseStudy.result}
+          {t(industry.caseStudy.resultKey)}
         </p>
       </section>
 
@@ -478,7 +478,7 @@ export default function IndustryLandingPage() {
             marginBottom: 12,
           }}
         >
-          РЕКОМЕНДОВАННЫЙ ТАРИФ ДЛЯ ВАС
+          {t("pricing.forIndustry.recommendedTierLabel")}
         </div>
         <h2
           style={{
@@ -496,12 +496,14 @@ export default function IndustryLandingPage() {
             <span style={{ fontSize: 36, fontWeight: 900, color: industry.primaryColor }}>
               ${recommendedTier.priceMonthly}
             </span>
-            <span style={{ fontSize: 14, color: "#64748b", marginLeft: 4 }}>/мес</span>
+            <span style={{ fontSize: 14, color: "#64748b", marginLeft: 4 }}>
+              {t("pricing.forIndustry.perMonth")}
+            </span>
           </div>
         )}
         <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
           <Link
-            href={`/pricing/contact?tier=${industry.recommendedTier}&industry=${encodeURIComponent(industry.name)}`}
+            href={`/pricing/contact?tier=${industry.recommendedTier}&industry=${encodeURIComponent(t(industry.nameKey))}`}
             style={{
               padding: "12px 28px",
               fontSize: 14,
@@ -512,7 +514,7 @@ export default function IndustryLandingPage() {
               textDecoration: "none",
             }}
           >
-            Связаться с продажами
+            {t("pricing.forIndustry.ctaContact")}
           </Link>
           <Link
             href={`/pricing/${industry.recommendedTier}`}
@@ -526,7 +528,7 @@ export default function IndustryLandingPage() {
               textDecoration: "none",
             }}
           >
-            Подробнее о тарифе
+            {t("pricing.forIndustry.ctaLearnMore")}
           </Link>
         </div>
       </section>
@@ -534,7 +536,7 @@ export default function IndustryLandingPage() {
       {/* Other industries */}
       <section style={{ marginBottom: 24 }}>
         <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 12, color: "#475569" }}>
-          Другие индустрии
+          {t("pricing.forIndustry.otherIndustries")}
         </h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {Object.values(INDUSTRIES)
@@ -554,7 +556,7 @@ export default function IndustryLandingPage() {
                   textDecoration: "none",
                 }}
               >
-                {i.name} →
+                {t(i.nameKey)} →
               </Link>
             ))}
         </div>

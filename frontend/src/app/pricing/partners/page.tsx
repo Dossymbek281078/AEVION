@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type PartnerType = "reseller" | "system_integrator" | "agency";
 
@@ -26,16 +27,17 @@ const PARTNER_TIERS: Array<{
 ];
 
 const COMPARE_ROWS = [
-  ["partners.compare.who", "Перепродаёт лицензии", "Внедряет и кастомизирует", "White-label, ребрендинг"],
-  ["partners.compare.fee", "30% маржа на каждой подписке", "20% revenue share + project fee", "Custom (от 40%)"],
-  ["partners.compare.commitment", "Quarterly target $5k+", "Active deal pipeline", "Ребрендинг + custom domain"],
-  ["partners.compare.support", "Sales-deck + demo-account", "Tech-onboarding + Slack-канал", "Co-marketing fund"],
-  ["partners.compare.training", "8h sales certification", "40h technical certification", "Brand kit + dev access"],
-  ["partners.compare.payouts", "NET-30 после оплаты клиентом", "Quarterly settle", "Monthly invoice"],
+  ["partners.compare.who", "pricing.partners.compareRow.who.reseller", "pricing.partners.compareRow.who.si", "pricing.partners.compareRow.who.agency"],
+  ["partners.compare.fee", "pricing.partners.compareRow.fee.reseller", "pricing.partners.compareRow.fee.si", "pricing.partners.compareRow.fee.agency"],
+  ["partners.compare.commitment", "pricing.partners.compareRow.commitment.reseller", "pricing.partners.compareRow.commitment.si", "pricing.partners.compareRow.commitment.agency"],
+  ["partners.compare.support", "pricing.partners.compareRow.support.reseller", "pricing.partners.compareRow.support.si", "pricing.partners.compareRow.support.agency"],
+  ["partners.compare.training", "pricing.partners.compareRow.training.reseller", "pricing.partners.compareRow.training.si", "pricing.partners.compareRow.training.agency"],
+  ["partners.compare.payouts", "pricing.partners.compareRow.payouts.reseller", "pricing.partners.compareRow.payouts.si", "pricing.partners.compareRow.payouts.agency"],
 ];
 
 export default function PricingPartnersPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState("");
@@ -259,7 +261,7 @@ export default function PricingPartnersPage() {
                     <td style={{ padding: "12px 14px", fontWeight: 700, color: "#0f172a" }}>{tp(row[0])}</td>
                     {row.slice(1).map((c, j) => (
                       <td key={j} style={{ padding: "12px 14px", textAlign: "center", color: "#475569" }}>
-                        {c}
+                        {t(c)}
                       </td>
                     ))}
                   </tr>

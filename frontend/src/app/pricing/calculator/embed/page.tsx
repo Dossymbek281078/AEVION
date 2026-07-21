@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { useI18n } from "@/lib/i18n";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -58,6 +59,7 @@ const SITE_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
 
 export default function PricingCalculatorEmbedPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<PricingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tier, setTier] = useState<TierId>("medium");
@@ -216,19 +218,19 @@ export default function PricingCalculatorEmbedPage() {
               textDecoration: "none",
             }}
           >
-            Открыть полностью →
+            {t("pricing.calculatorEmbed.openFull")} →
           </a>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Inputs */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Field label="ТАРИФ">
+            <Field label={t("pricing.calculatorEmbed.fieldTier")}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {data.tiers.map((t) => (
+                {data.tiers.map((tr) => (
                   <button
-                    key={t.id}
-                    onClick={() => setTier(t.id)}
+                    key={tr.id}
+                    onClick={() => setTier(tr.id)}
                     style={{
                       padding: "5px 10px",
                       fontSize: 11,
@@ -236,16 +238,16 @@ export default function PricingCalculatorEmbedPage() {
                       borderRadius: 6,
                       border: "none",
                       cursor: "pointer",
-                      background: tier === t.id ? "#0d9488" : "rgba(255,255,255,0.08)",
+                      background: tier === tr.id ? "#0d9488" : "rgba(255,255,255,0.08)",
                       color: "#fff",
                     }}
                   >
-                    {t.name}
+                    {tr.name}
                   </button>
                 ))}
               </div>
             </Field>
-            <Field label="ПЕРИОД">
+            <Field label={t("pricing.calculatorEmbed.fieldPeriod")}>
               <div style={{ display: "inline-flex", background: "rgba(255,255,255,0.06)", borderRadius: 6, padding: 2 }}>
                 {(["monthly", "annual"] as BillingPeriod[]).map((p) => (
                   <button
@@ -262,7 +264,7 @@ export default function PricingCalculatorEmbedPage() {
                       color: period === p ? "#0f172a" : "#cbd5e1",
                     }}
                   >
-                    {p === "monthly" ? "Месяц" : "Год −16%"}
+                    {p === "monthly" ? t("pricing.calculatorEmbed.periodMonthly") : t("pricing.calculatorEmbed.periodAnnual")}
                   </button>
                 ))}
               </div>
@@ -285,7 +287,7 @@ export default function PricingCalculatorEmbedPage() {
                 }}
               />
             </Field>
-            <Field label="ВАЛЮТА">
+            <Field label={t("pricing.calculatorEmbed.fieldCurrency")}>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
@@ -305,7 +307,7 @@ export default function PricingCalculatorEmbedPage() {
                 ))}
               </select>
             </Field>
-            <Field label="МОДУЛИ">
+            <Field label={t("pricing.calculatorEmbed.fieldModules")}>
               <div
                 style={{
                   display: "flex",
@@ -356,13 +358,13 @@ export default function PricingCalculatorEmbedPage() {
             }}
           >
             <div style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 8 }}>
-              СМЕТА
+              {t("pricing.calculatorEmbed.quoteHeading")}
             </div>
             {quote ? (
               <>
                 <div style={{ marginBottom: 10 }}>
                   {quote.lines.length === 0 ? (
-                    <div style={{ color: "#94a3b8", fontSize: 11 }}>Free tier — оплата не требуется</div>
+                    <div style={{ color: "#94a3b8", fontSize: 11 }}>{t("pricing.calculatorEmbed.freeTierNote")}</div>
                   ) : (
                     quote.lines.map((l, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11 }}>
@@ -377,7 +379,7 @@ export default function PricingCalculatorEmbedPage() {
                 </div>
                 {quote.discount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#34d399", paddingBottom: 6 }}>
-                    <span>Скидка</span>
+                    <span>{t("pricing.calculatorEmbed.discount")}</span>
                     <span>
                       −{symbol}
                       {quote.discount.toLocaleString("ru-RU")}
@@ -394,7 +396,7 @@ export default function PricingCalculatorEmbedPage() {
                   }}
                 >
                   <span style={{ fontSize: 9, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.04em" }}>
-                    {period === "annual" ? "ИТОГО / год" : "ИТОГО / мес"}
+                    {period === "annual" ? t("pricing.calculatorEmbed.totalYear") : t("pricing.calculatorEmbed.totalMonth")}
                   </span>
                   <span style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.02em" }}>
                     {symbol}
@@ -421,7 +423,7 @@ export default function PricingCalculatorEmbedPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    Купить на AEVION →
+                    {t("pricing.calculatorEmbed.buyOnAevion")} →
                   </a>
                 )}
                 {tier === "enterprise" && (
@@ -445,12 +447,12 @@ export default function PricingCalculatorEmbedPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    Связаться с продажами →
+                    {t("pricing.calculatorEmbed.contactSales")} →
                   </a>
                 )}
               </>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: 11 }}>Загружаем…</div>
+              <div style={{ color: "#94a3b8", fontSize: 11 }}>{t("pricing.calculatorEmbed.loadingQuote")}</div>
             )}
           </div>
         </div>
@@ -470,7 +472,7 @@ export default function PricingCalculatorEmbedPage() {
             padding: 0,
           }}
         >
-          {showSnippet ? "Скрыть embed-код ↑" : "Получить embed-код для блога ↓"}
+          {showSnippet ? t("pricing.calculatorEmbed.hideSnippet") : t("pricing.calculatorEmbed.getSnippet")}
         </button>
       </div>
       {showSnippet && (
@@ -504,7 +506,7 @@ export default function PricingCalculatorEmbedPage() {
               border: copied ? "none" : "1px solid rgba(13,148,136,0.3)",
             }}
           >
-            {copied ? "✓ Скопировано" : "Копировать"}
+            {copied ? t("pricing.calculatorEmbed.copiedLabel") : t("pricing.calculatorEmbed.copyButton")}
           </button>
           <pre
             style={{
@@ -522,8 +524,7 @@ export default function PricingCalculatorEmbedPage() {
             {snippet}
           </pre>
           <div style={{ marginTop: 8, fontSize: 10, color: "#94a3b8" }}>
-            Замените <code>YOUR_SITE</code> на имя вашего блога — для трекинга. Скрипт ниже автоматически
-            подгоняет высоту iframe под содержимое.
+            {t("pricing.calculatorEmbed.snippetHintBefore")} <code>YOUR_SITE</code> {t("pricing.calculatorEmbed.snippetHintAfter")}
           </div>
         </div>
       )}

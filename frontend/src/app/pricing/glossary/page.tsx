@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 interface Term {
   id: string;
@@ -60,20 +61,41 @@ const TERMS: Term[] = [
   { id: "saas", abbr: "SaaS", full: "Software as a Service", category: "billing", ru: "Программное обеспечение как услуга. AEVION — multi-product SaaS с 37 модулями.", en: "Software as a Service. AEVION is a multi-product SaaS with 37 modules." },
 ];
 
-const CATEGORY_META: Record<Term["category"], { ru: string; en: string; color: string; bg: string }> = {
-  legal: { ru: "Право и IP", en: "Legal & IP", color: "#7c3aed", bg: "#f5f3ff" },
-  compliance: { ru: "Compliance", en: "Compliance", color: "#0d9488", bg: "#ecfdf5" },
-  tech: { ru: "Технологии", en: "Tech", color: "#0ea5e9", bg: "#e0f2fe" },
-  auth: { ru: "Аутентификация", en: "Authentication", color: "#be185d", bg: "#fdf2f8" },
-  ops: { ru: "Операции", en: "Operations", color: "#475569", bg: "#f1f5f9" },
-  billing: { ru: "Биллинг и метрики", en: "Billing & metrics", color: "#f59e0b", bg: "#fefce8" },
+const CATEGORY_META: Record<Term["category"], { color: string; bg: string }> = {
+  legal: { color: "#7c3aed", bg: "#f5f3ff" },
+  compliance: { color: "#0d9488", bg: "#ecfdf5" },
+  tech: { color: "#0ea5e9", bg: "#e0f2fe" },
+  auth: { color: "#be185d", bg: "#fdf2f8" },
+  ops: { color: "#475569", bg: "#f1f5f9" },
+  billing: { color: "#f59e0b", bg: "#fefce8" },
 };
+
+/** i18n key for each category's display label. */
+const CATEGORY_LABEL_KEY: Record<Term["category"], string> = {
+  legal: "pricing.glossary.category.legal",
+  compliance: "pricing.glossary.category.compliance",
+  tech: "pricing.glossary.category.tech",
+  auth: "pricing.glossary.category.auth",
+  ops: "pricing.glossary.category.ops",
+  billing: "pricing.glossary.category.billing",
+};
+
+/** Terms whose `full` (spelled-out) form is itself Russian prose, not a Latin abbreviation expansion. */
+const TERM_FULL_KEY: Partial<Record<string, string>> = {
+  fz152: "pricing.glossary.full.fz152",
+};
+
+/** i18n key for a term's localized definition. */
+function termDefKey(id: string): string {
+  return `pricing.glossary.def.${id}`;
+}
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
 export default function PricingGlossaryPage() {
   const tp = usePricingT();
+  const { t: gt } = useI18n();
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<Term["category"] | null>(null);
   const [filterLetter, setFilterLetter] = useState<string | null>(null);
@@ -205,7 +227,7 @@ export default function PricingGlossaryPage() {
                 key={c}
                 active={filterCategory === c}
                 onClick={() => setFilterCategory(filterCategory === c ? null : c)}
-                label={`${meta.ru} · ${counts[c] ?? 0}`}
+                label={`${gt(CATEGORY_LABEL_KEY[c])} · ${counts[c] ?? 0}`}
                 color={meta.color}
               />
             );
@@ -283,7 +305,7 @@ export default function PricingGlossaryPage() {
                     </h2>
                   </a>
                   <span style={{ fontSize: 14, color: "#475569", fontWeight: 600 }}>
-                    {t.full}
+                    {TERM_FULL_KEY[t.id] ? gt(TERM_FULL_KEY[t.id]!) : t.full}
                   </span>
                   <span
                     style={{
@@ -297,11 +319,11 @@ export default function PricingGlossaryPage() {
                       letterSpacing: "0.04em",
                     }}
                   >
-                    {meta.ru.toUpperCase()}
+                    {gt(CATEGORY_LABEL_KEY[t.category]).toUpperCase()}
                   </span>
                 </header>
                 <p style={{ fontSize: 14, color: "#0f172a", lineHeight: 1.6, margin: 0, marginBottom: 8 }}>
-                  {t.ru}
+                  {gt(termDefKey(t.id))}
                 </p>
                 <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.55, margin: 0, fontStyle: "italic" }}>
                   EN: {t.en}

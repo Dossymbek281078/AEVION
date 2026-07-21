@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 const TOKEN_KEY = "aevion_admin_token";
 
@@ -73,16 +74,17 @@ interface ByVariantPayload {
   variants: Record<string, Record<string, Record<FunnelType, number>>>;
 }
 
-const TAB_META: Record<Tab, { label: string; color: string }> = {
-  overview: { label: "Обзор", color: "#0d9488" },
-  leads: { label: "Sales-лиды", color: "#0ea5e9" },
-  affiliate: { label: "Affiliate", color: "#be185d" },
-  partners: { label: "Partners", color: "#7c3aed" },
-  edu: { label: "Education", color: "#065f46" },
-  newsletter: { label: "Newsletter", color: "#f59e0b" },
+const TAB_META: Record<Tab, { labelKey: string; color: string }> = {
+  overview: { labelKey: "pricing.admin.tabs.overview", color: "#0d9488" },
+  leads: { labelKey: "pricing.admin.tabs.leads", color: "#0ea5e9" },
+  affiliate: { labelKey: "pricing.admin.tabs.affiliate", color: "#be185d" },
+  partners: { labelKey: "pricing.admin.tabs.partners", color: "#7c3aed" },
+  edu: { labelKey: "pricing.admin.tabs.edu", color: "#065f46" },
+  newsletter: { labelKey: "pricing.admin.tabs.newsletter", color: "#f59e0b" },
 };
 
 export default function PricingAdminPage() {
+  const { t } = useI18n();
   const [token, setToken] = useState<string>("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
@@ -111,14 +113,14 @@ export default function PricingAdminPage() {
     }
   }, []);
 
-  async function tryAuth(t: string) {
+  async function tryAuth(token: string) {
     setAuthError(null);
     try {
       const r = await fetch(apiUrl("/api/pricing/leads") + "?limit=1", {
-        headers: { "x-admin-token": t },
+        headers: { "x-admin-token": token },
       });
       if (r.status === 401) {
-        setAuthError("Неверный или несконфигурированный токен");
+        setAuthError(t("pricing.admin.auth.invalidToken"));
         return false;
       }
       if (!r.ok) {
@@ -195,7 +197,7 @@ export default function PricingAdminPage() {
       const responses = [leadsR, affR, prtR, eduR, nlR, summaryR, eventsR, byVariantR];
       if (responses.some((r) => r.status === 401)) {
         logout();
-        setError("Сессия истекла или токен сменился");
+        setError(t("pricing.admin.error.sessionExpired"));
         return;
       }
 
@@ -240,7 +242,7 @@ export default function PricingAdminPage() {
       <ProductPageShell maxWidth={460}>
         <div style={{ marginTop: 40 }}>
           <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-            ← Все тарифы
+            {t("pricing.admin.nav.allPricing")}
           </Link>
         </div>
         <form
@@ -260,8 +262,8 @@ export default function PricingAdminPage() {
             Pricing Dashboard
           </h1>
           <p style={{ fontSize: 13, color: "#94a3b8", margin: 0, marginBottom: 24, lineHeight: 1.5 }}>
-            Введите ADMIN_TOKEN из <code>aevion-globus-backend/.env</code>. Токен сохраняется в
-            localStorage этого браузера.
+            {t("pricing.admin.auth.tokenHintPre")} <code>aevion-globus-backend/.env</code>
+            {t("pricing.admin.auth.tokenHintPost")}
           </p>
           <input
             type="password"
@@ -301,7 +303,7 @@ export default function PricingAdminPage() {
               color: "#fff",
             }}
           >
-            Войти
+            {t("pricing.admin.auth.submit")}
           </button>
         </form>
       </ProductPageShell>
@@ -335,7 +337,7 @@ export default function PricingAdminPage() {
         Pricing Admin
       </h1>
       <p style={{ color: "#64748b", margin: 0, marginBottom: 20, fontSize: 14 }}>
-        GTM-метрики, лиды, заявки и подписки. Все JSONL-источники в одном месте.
+        {t("pricing.admin.subtitle")}
       </p>
 
       {/* Tabs */}
@@ -350,19 +352,19 @@ export default function PricingAdminPage() {
           flexWrap: "wrap",
         }}
       >
-        {(Object.keys(TAB_META) as Tab[]).map((t) => {
-          const meta = TAB_META[t];
+        {(Object.keys(TAB_META) as Tab[]).map((tabKey) => {
+          const meta = TAB_META[tabKey];
           const count =
-            t === "overview" ? null
-              : t === "leads" ? counts.leads
-                : t === "affiliate" ? counts.affiliate
-                  : t === "partners" ? counts.partners
-                    : t === "edu" ? counts.edu
+            tabKey === "overview" ? null
+              : tabKey === "leads" ? counts.leads
+                : tabKey === "affiliate" ? counts.affiliate
+                  : tabKey === "partners" ? counts.partners
+                    : tabKey === "edu" ? counts.edu
                       : counts.newsletter;
           return (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              onClick={() => setTab(tabKey)}
               style={{
                 padding: "8px 14px",
                 fontSize: 13,
@@ -370,23 +372,23 @@ export default function PricingAdminPage() {
                 borderRadius: 8,
                 border: "none",
                 cursor: "pointer",
-                background: tab === t ? "#fff" : "transparent",
-                color: tab === t ? meta.color : "#64748b",
-                boxShadow: tab === t ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
+                background: tab === tabKey ? "#fff" : "transparent",
+                color: tab === tabKey ? meta.color : "#64748b",
+                boxShadow: tab === tabKey ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
               }}
             >
-              {meta.label}
+              {t(meta.labelKey)}
               {count !== null && (
                 <span
                   style={{
                     fontSize: 10,
                     fontWeight: 800,
                     padding: "1px 6px",
-                    background: tab === t ? meta.color : "rgba(15,23,42,0.08)",
-                    color: tab === t ? "#fff" : "#475569",
+                    background: tab === tabKey ? meta.color : "rgba(15,23,42,0.08)",
+                    color: tab === tabKey ? "#fff" : "#475569",
                     borderRadius: 999,
                   }}
                 >
@@ -411,20 +413,20 @@ export default function PricingAdminPage() {
             marginLeft: "auto",
           }}
         >
-          {loading ? "Обновление..." : "↻ Обновить"}
+          {loading ? t("pricing.admin.refresh.loading") : t("pricing.admin.refresh.button")}
         </button>
       </div>
 
       {error && (
         <div style={{ padding: 12, marginBottom: 20, background: "#fee2e2", color: "#991b1b", borderRadius: 8, fontSize: 13 }}>
-          Ошибка: {error}
+          {t("pricing.admin.error.label", { error })}
         </div>
       )}
 
       {tab === "overview" && (
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>ОКНО АНАЛИТИКИ:</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>{t("pricing.admin.overview.windowLabel")}</span>
             {[1, 24, 168, 720].map((h) => (
               <button
                 key={h}
@@ -440,7 +442,13 @@ export default function PricingAdminPage() {
                   cursor: "pointer",
                 }}
               >
-                {h === 1 ? "1ч" : h === 24 ? "24ч" : h === 168 ? "7д" : "30д"}
+                {h === 1
+                  ? t("pricing.admin.overview.hours1")
+                  : h === 24
+                    ? t("pricing.admin.overview.hours24")
+                    : h === 168
+                      ? t("pricing.admin.overview.days7")
+                      : t("pricing.admin.overview.days30")}
               </button>
             ))}
           </div>
@@ -454,8 +462,8 @@ export default function PricingAdminPage() {
                 marginBottom: 24,
               }}
             >
-              <Tile label="ВСЕГО СОБЫТИЙ" value={summary.total.toLocaleString("ru-RU")} />
-              <Tile label="СЕССИЙ" value={summary.sessionCount.toLocaleString("ru-RU")} />
+              <Tile label={t("pricing.admin.tiles.totalEvents")} value={summary.total.toLocaleString("ru-RU")} />
+              <Tile label={t("pricing.admin.tiles.sessions")} value={summary.sessionCount.toLocaleString("ru-RU")} />
               <Tile label="PAGE VIEWS" value={(summary.byType.page_view ?? 0).toLocaleString("ru-RU")} />
               <Tile label="CHECKOUT START" value={(summary.byType.checkout_start ?? 0).toLocaleString("ru-RU")} />
               <Tile label="CHECKOUT SUCCESS" value={(summary.byType.checkout_success ?? 0).toLocaleString("ru-RU")} accent="#0d9488" />
@@ -481,21 +489,20 @@ export default function PricingAdminPage() {
 
           {summary && (
             <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 32 }}>
-              <Breakdown title="По типам событий" data={summary.byType} />
-              <Breakdown title="По tier" data={summary.byTier} />
-              <Breakdown title="По индустриям" data={summary.byIndustry} />
-              <Breakdown title="По источникам" data={summary.bySource} />
+              <Breakdown title={t("pricing.admin.breakdown.byType")} data={summary.byType} />
+              <Breakdown title={t("pricing.admin.breakdown.byTier")} data={summary.byTier} />
+              <Breakdown title={t("pricing.admin.breakdown.byIndustry")} data={summary.byIndustry} />
+              <Breakdown title={t("pricing.admin.breakdown.bySource")} data={summary.bySource} />
             </section>
           )}
 
           {byVariant && byVariant.keys.length > 0 && (
             <section style={{ marginBottom: 32 }}>
               <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 4, letterSpacing: "-0.02em" }}>
-                A/B конверсия
+                {t("pricing.admin.abTest.title")}
               </h2>
               <p style={{ fontSize: 12, color: "#64748b", margin: 0, marginBottom: 12 }}>
-                Воронка page_view → cta_click → lead_submit / checkout_start → checkout_success в разрезе вариантов.
-                Окно: последние {byVariant.windowHours}ч.
+                {t("pricing.admin.abTest.description", { hours: byVariant.windowHours })}
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 }}>
                 {byVariant.keys.map((k) => (
@@ -508,16 +515,16 @@ export default function PricingAdminPage() {
           {/* Recent events */}
           <section style={{ marginBottom: 24 }}>
             <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-              Последние события
+              {t("pricing.admin.recentEvents.title")}
             </h2>
             {events.length === 0 ? (
-              <Empty text="Событий пока нет." />
+              <Empty text={t("pricing.admin.recentEvents.empty")} />
             ) : (
               <Table>
                 <thead>
                   <tr style={{ background: "#f8fafc" }}>
-                    <th style={th}>Время</th>
-                    <th style={th}>Тип</th>
+                    <th style={th}>{t("pricing.admin.table.time")}</th>
+                    <th style={th}>{t("pricing.admin.table.type")}</th>
                     <th style={th}>Tier / Industry</th>
                     <th style={th}>Path</th>
                     <th style={th}>Value</th>
@@ -572,19 +579,19 @@ export default function PricingAdminPage() {
             />
           </div>
           {leads.length === 0 ? (
-            <Empty text="Sales-лидов пока нет." />
+            <Empty text={t("pricing.admin.leads.empty")} />
           ) : (
             <Table>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  <th style={th}>Время</th>
-                  <th style={th}>Имя</th>
+                  <th style={th}>{t("pricing.admin.table.time")}</th>
+                  <th style={th}>{t("pricing.admin.table.name")}</th>
                   <th style={th}>Email</th>
-                  <th style={th}>Компания</th>
-                  <th style={th}>Индустрия</th>
+                  <th style={th}>{t("pricing.admin.table.company")}</th>
+                  <th style={th}>{t("pricing.admin.table.industry")}</th>
                   <th style={th}>Tier</th>
                   <th style={th}>Seats</th>
-                  <th style={th}>Источник</th>
+                  <th style={th}>{t("pricing.admin.table.source")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -638,9 +645,9 @@ export default function PricingAdminPage() {
           </div>
           <ApplicationTable
             items={affiliate}
-            empty="Заявок на affiliate-программу пока нет."
+            empty={t("pricing.admin.affiliateTab.empty")}
             extraColumns={[
-              { label: "Канал", get: (a) => a.channel ?? "—" },
+              { label: t("pricing.admin.affiliateTab.channelColumn"), get: (a) => a.channel ?? "—" },
             ]}
           />
         </section>
@@ -670,10 +677,10 @@ export default function PricingAdminPage() {
           </div>
           <ApplicationTable
             items={partners}
-            empty="Заявок на partner-программу пока нет."
+            empty={t("pricing.admin.partnersTab.empty")}
             extraColumns={[
               {
-                label: "Тип",
+                label: t("pricing.admin.table.type"),
                 get: (a) =>
                   a.partnerType ? (
                     <Pill
@@ -712,9 +719,9 @@ export default function PricingAdminPage() {
           </div>
           <ApplicationTable
             items={edu}
-            empty="Заявок на edu-программу пока нет."
+            empty={t("pricing.admin.eduTab.empty")}
             extraColumns={[
-              { label: "Домен", get: (a) => a.institutionDomain ?? "—" },
+              { label: t("pricing.admin.eduTab.domainColumn"), get: (a) => a.institutionDomain ?? "—" },
             ]}
           />
         </section>
@@ -735,14 +742,14 @@ export default function PricingAdminPage() {
             />
           </div>
           {newsletter.length === 0 ? (
-            <Empty text="Подписчиков пока нет." />
+            <Empty text={t("pricing.admin.newsletterTab.empty")} />
           ) : (
             <Table>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  <th style={th}>Время</th>
+                  <th style={th}>{t("pricing.admin.table.time")}</th>
                   <th style={th}>Email</th>
-                  <th style={th}>Источник</th>
+                  <th style={th}>{t("pricing.admin.table.source")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -817,22 +824,23 @@ function ApplicationTable({
   empty: string;
   extraColumns: Array<{ label: string; get: (a: Application) => React.ReactNode }>;
 }) {
+  const { t } = useI18n();
   if (items.length === 0) return <Empty text={empty} />;
   return (
     <Table>
       <thead>
         <tr style={{ background: "#f8fafc" }}>
-          <th style={th}>Время</th>
-          <th style={th}>Имя</th>
+          <th style={th}>{t("pricing.admin.table.time")}</th>
+          <th style={th}>{t("pricing.admin.table.name")}</th>
           <th style={th}>Email</th>
-          <th style={th}>Компания</th>
-          <th style={th}>Страна</th>
+          <th style={th}>{t("pricing.admin.table.company")}</th>
+          <th style={th}>{t("pricing.admin.table.country")}</th>
           {extraColumns.map((c) => (
             <th key={c.label} style={th}>
               {c.label}
             </th>
           ))}
-          <th style={th}>Детали</th>
+          <th style={th}>{t("pricing.admin.table.details")}</th>
         </tr>
       </thead>
       <tbody>
@@ -966,6 +974,7 @@ function ABFunnelCard({
   variantKey: string;
   data: Record<string, Record<FunnelType, number>>;
 }) {
+  const { t } = useI18n();
   const variants = Object.keys(data).sort();
   const FUNNEL: { key: FunnelType; label: string; color: string }[] = [
     { key: "page_view", label: "Page views", color: "#0ea5e9" },
@@ -991,12 +1000,12 @@ function ABFunnelCard({
     >
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.06em" }}>
-          ВАРИАНТ: {variantKey.toUpperCase()}
+          {t("pricing.admin.abTest.variantLabel", { variant: variantKey.toUpperCase() })}
         </div>
         <div style={{ fontSize: 10, color: "#94a3b8" }}>n = {variants.length}</div>
       </div>
       {variants.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#94a3b8" }}>Нет данных за окно.</div>
+        <div style={{ fontSize: 12, color: "#94a3b8" }}>{t("pricing.admin.abTest.noData")}</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>

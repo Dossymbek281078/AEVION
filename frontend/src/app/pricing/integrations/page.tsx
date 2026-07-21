@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type Category = "communication" | "productivity" | "crm" | "automation" | "payments" | "developer";
 type Status = "live" | "beta" | "soon";
@@ -17,42 +18,42 @@ interface Integration {
   modules: string[];
   initials: string;
   color: string;
-  oneLiner: string;
+  oneLinerKey: string;
   setupUrl?: string;
 }
 
 const INTEGRATIONS: Integration[] = [
   // Communication
-  { id: "slack", name: "Slack", category: "communication", status: "live", modules: ["qsign", "qright"], initials: "Sl", color: "#4a154b", oneLiner: "Уведомления о подписях, новых регистрациях IP, alerts по compliance.", setupUrl: "/api/integrations/slack/install" },
-  { id: "discord", name: "Discord", category: "communication", status: "beta", modules: ["qright", "qsign"], initials: "Dc", color: "#5865f2", oneLiner: "Webhook-нотификации в каналы команд для creator-сообществ.", setupUrl: "/api/integrations/discord/install" },
-  { id: "telegram", name: "Telegram Bot", category: "communication", status: "live", modules: ["qsign", "qright", "multichat-engine"], initials: "Tg", color: "#0088cc", oneLiner: "Подпись и регистрация прямо из Telegram через @aevionbot.", setupUrl: "/api/integrations/telegram" },
-  { id: "msteams", name: "Microsoft Teams", category: "communication", status: "soon", modules: ["qsign", "qright"], initials: "MT", color: "#5059c9", oneLiner: "Approval-flow для подписей внутри Teams-чата.", },
+  { id: "slack", name: "Slack", category: "communication", status: "live", modules: ["qsign", "qright"], initials: "Sl", color: "#4a154b", oneLinerKey: "slack", setupUrl: "/api/integrations/slack/install" },
+  { id: "discord", name: "Discord", category: "communication", status: "beta", modules: ["qright", "qsign"], initials: "Dc", color: "#5865f2", oneLinerKey: "discord", setupUrl: "/api/integrations/discord/install" },
+  { id: "telegram", name: "Telegram Bot", category: "communication", status: "live", modules: ["qsign", "qright", "multichat-engine"], initials: "Tg", color: "#0088cc", oneLinerKey: "telegram", setupUrl: "/api/integrations/telegram" },
+  { id: "msteams", name: "Microsoft Teams", category: "communication", status: "soon", modules: ["qsign", "qright"], initials: "MT", color: "#5059c9", oneLinerKey: "msteams", },
 
   // Productivity
-  { id: "google-workspace", name: "Google Workspace", category: "productivity", status: "live", modules: ["qsign", "qright"], initials: "GW", color: "#4285f4", oneLiner: "Подпись Docs / Sheets / Drive файлов в один клик.", setupUrl: "/api/integrations/google/install" },
-  { id: "notion", name: "Notion", category: "productivity", status: "beta", modules: ["qright", "multichat-engine"], initials: "No", color: "#000", oneLiner: "Регистрация авторства Notion-страниц и баз данных в QRight.", },
-  { id: "linear", name: "Linear", category: "productivity", status: "live", modules: ["qcoreai", "multichat-engine"], initials: "Li", color: "#5e6ad2", oneLiner: "AI-агент QCoreAI создаёт issues и triage из багрепортов.", },
-  { id: "obsidian", name: "Obsidian", category: "productivity", status: "soon", modules: ["qright", "lifebox"], initials: "Ob", color: "#6c31e3", oneLiner: "Plugin для регистрации vault-snapshot в LifeBox.", },
+  { id: "google-workspace", name: "Google Workspace", category: "productivity", status: "live", modules: ["qsign", "qright"], initials: "GW", color: "#4285f4", oneLinerKey: "googleWorkspace", setupUrl: "/api/integrations/google/install" },
+  { id: "notion", name: "Notion", category: "productivity", status: "beta", modules: ["qright", "multichat-engine"], initials: "No", color: "#000", oneLinerKey: "notion", },
+  { id: "linear", name: "Linear", category: "productivity", status: "live", modules: ["qcoreai", "multichat-engine"], initials: "Li", color: "#5e6ad2", oneLinerKey: "linear", },
+  { id: "obsidian", name: "Obsidian", category: "productivity", status: "soon", modules: ["qright", "lifebox"], initials: "Ob", color: "#6c31e3", oneLinerKey: "obsidian", },
 
   // CRM
-  { id: "salesforce", name: "Salesforce", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Sf", color: "#00a1e0", oneLiner: "Подпись контрактов из Opportunity, AI-агент анализирует сделки.", setupUrl: "/api/integrations/salesforce/install" },
-  { id: "hubspot", name: "HubSpot", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Hs", color: "#ff7a59", oneLiner: "Auto-sign контрактов из deal-flow и lead-нотифации.", setupUrl: "/api/integrations/hubspot/install" },
-  { id: "pipedrive", name: "Pipedrive", category: "crm", status: "beta", modules: ["qsign"], initials: "Pd", color: "#1a1a1a", oneLiner: "Подпись proposal'ов и quote'ов прямо из pipeline.", },
+  { id: "salesforce", name: "Salesforce", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Sf", color: "#00a1e0", oneLinerKey: "salesforce", setupUrl: "/api/integrations/salesforce/install" },
+  { id: "hubspot", name: "HubSpot", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Hs", color: "#ff7a59", oneLinerKey: "hubspot", setupUrl: "/api/integrations/hubspot/install" },
+  { id: "pipedrive", name: "Pipedrive", category: "crm", status: "beta", modules: ["qsign"], initials: "Pd", color: "#1a1a1a", oneLinerKey: "pipedrive", },
 
   // Automation
-  { id: "zapier", name: "Zapier", category: "automation", status: "live", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLiner: "5000+ триггеров и actions: AEVION в любой workflow без кода.", setupUrl: "https://zapier.com/apps/aevion" },
-  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "live", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLiner: "Visual-builder для AEVION-флоу и интеграций.", setupUrl: "https://www.make.com/en/integrations/aevion" },
-  { id: "n8n", name: "n8n", category: "automation", status: "beta", modules: ["qsign", "qright", "qcoreai"], initials: "n8", color: "#ea4b71", oneLiner: "Self-hosted automation для enterprise-клиентов с on-prem AEVION.", },
+  { id: "zapier", name: "Zapier", category: "automation", status: "live", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLinerKey: "zapier", setupUrl: "https://zapier.com/apps/aevion" },
+  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "live", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLinerKey: "make", setupUrl: "https://www.make.com/en/integrations/aevion" },
+  { id: "n8n", name: "n8n", category: "automation", status: "beta", modules: ["qsign", "qright", "qcoreai"], initials: "n8", color: "#ea4b71", oneLinerKey: "n8n", },
 
   // Payments
-  { id: "stripe", name: "Stripe", category: "payments", status: "live", modules: ["qpaynet-embedded", "qsign"], initials: "St", color: "#635bff", oneLiner: "Биллинг подписок AEVION + Stripe Connect для аффилиатов.", },
-  { id: "paypal", name: "PayPal", category: "payments", status: "soon", modules: ["qpaynet-embedded"], initials: "Pp", color: "#003087", oneLiner: "Альтернативный биллинг для регионов без Stripe.", },
-  { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "beta", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLiner: "Локальные платежи в Казахстане через Kaspi.", },
+  { id: "stripe", name: "Stripe", category: "payments", status: "live", modules: ["qpaynet-embedded", "qsign"], initials: "St", color: "#635bff", oneLinerKey: "stripe", },
+  { id: "paypal", name: "PayPal", category: "payments", status: "soon", modules: ["qpaynet-embedded"], initials: "Pp", color: "#003087", oneLinerKey: "paypal", },
+  { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "beta", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLinerKey: "kaspi", },
 
   // Developer
-  { id: "github", name: "GitHub", category: "developer", status: "live", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLiner: "QRight регистрация commit-snapshot, QSign для releases.", setupUrl: "https://github.com/marketplace/aevion" },
-  { id: "gitlab", name: "GitLab", category: "developer", status: "beta", modules: ["qright", "qsign"], initials: "Gl", color: "#fc6d26", oneLiner: "CI-job для подписи артефактов и регистрации релизов.", },
-  { id: "vscode", name: "VS Code", category: "developer", status: "soon", modules: ["qsign", "qcoreai"], initials: "Vs", color: "#007acc", oneLiner: "Extension для подписи коммитов и AI-агента в редакторе.", },
+  { id: "github", name: "GitHub", category: "developer", status: "live", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github", setupUrl: "https://github.com/marketplace/aevion" },
+  { id: "gitlab", name: "GitLab", category: "developer", status: "beta", modules: ["qright", "qsign"], initials: "Gl", color: "#fc6d26", oneLinerKey: "gitlab", },
+  { id: "vscode", name: "VS Code", category: "developer", status: "soon", modules: ["qsign", "qcoreai"], initials: "Vs", color: "#007acc", oneLinerKey: "vscode", },
 ];
 
 const CATEGORY_LABEL: Record<Category, { ru: string; en: string; color: string }> = {
@@ -75,6 +76,7 @@ const BORDER = "1px solid rgba(15,23,42,0.08)";
 
 export default function PricingIntegrationsPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [filterCategory, setFilterCategory] = useState<Category | null>(null);
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [search, setSearch] = useState("");
@@ -195,7 +197,7 @@ export default function PricingIntegrationsPage() {
             key={k}
             active={filterCategory === k}
             onClick={() => setFilterCategory(filterCategory === k ? null : k)}
-            label={`${CATEGORY_LABEL[k].ru} · ${counts[k] ?? 0}`}
+            label={`${t(`pricing.integrations.category.${k}`)} · ${counts[k] ?? 0}`}
             color={CATEGORY_LABEL[k].color}
           />
         ))}
@@ -285,7 +287,7 @@ export default function PricingIntegrationsPage() {
                       {i.name}
                     </h3>
                     <div style={{ fontSize: 10, fontWeight: 700, color: cat.color, marginTop: 2, letterSpacing: "0.04em" }}>
-                      {cat.ru.toUpperCase()}
+                      {t(`pricing.integrations.category.${i.category}`).toUpperCase()}
                     </div>
                   </div>
                   <span
@@ -302,7 +304,7 @@ export default function PricingIntegrationsPage() {
                     {status.label}
                   </span>
                 </header>
-                <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.5, flex: 1 }}>{i.oneLiner}</p>
+                <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.5, flex: 1 }}>{t(`pricing.integrations.oneLiner.${i.oneLinerKey}`)}</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {i.modules.map((m) => (
                     <span

@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type Phase = "A" | "B" | "C" | "D" | "E";
 
@@ -37,6 +38,7 @@ interface RoadmapPayload {
 
 export default function PricingRoadmapPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [data, setData] = useState<RoadmapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filterPhase, setFilterPhase] = useState<Phase | null>(null);
@@ -102,8 +104,7 @@ export default function PricingRoadmapPage() {
             lineHeight: 1.5,
           }}
         >
-          Открытый план по всем 37 модулям. Сроки указаны при 1 разработчике + AI-ассистент;
-          реальность даёт +25–40% запас на параллельные задачи.
+          {t("pricing.roadmap.subtitle")}
         </p>
       </section>
 
@@ -132,7 +133,7 @@ export default function PricingRoadmapPage() {
                 color: filterPhase === null ? "#fff" : "#475569",
               }}
             >
-              Все ({data.items.length})
+              {t("pricing.roadmap.filterAll", { count: data.items.length })}
             </button>
             {(Object.keys(data.phases) as Phase[]).map((p) => {
               const count = data.items.filter((x) => x.phase === p).length;
@@ -182,8 +183,10 @@ export default function PricingRoadmapPage() {
                         {meta.label}
                       </h2>
                       <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginTop: 2 }}>
-                        {meta.period} · {g.items.length}{" "}
-                        {g.items.length === 1 ? "модуль" : "модулей"}
+                        {meta.period} ·{" "}
+                        {g.items.length === 1
+                          ? t("pricing.roadmap.moduleCountOne", { count: g.items.length })
+                          : t("pricing.roadmap.moduleCountMany", { count: g.items.length })}
                       </div>
                       <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>{meta.description}</div>
                     </div>
@@ -243,7 +246,7 @@ export default function PricingRoadmapPage() {
                               marginBottom: 4,
                             }}
                           >
-                            <span>ПРОГРЕСС</span>
+                            <span>{t("pricing.roadmap.progressLabel")}</span>
                             <span>{it.progress}%</span>
                           </div>
                           <div
@@ -272,7 +275,7 @@ export default function PricingRoadmapPage() {
 
                         {it.remaining && (
                           <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
-                            <span style={{ color: "#475569", fontWeight: 700 }}>Осталось:</span> {it.remaining}
+                            <span style={{ color: "#475569", fontWeight: 700 }}>{t("pricing.roadmap.remainingLabel")}</span> {it.remaining}
                           </div>
                         )}
                       </div>
@@ -296,10 +299,10 @@ export default function PricingRoadmapPage() {
         }}
       >
         <h3 style={{ fontSize: 20, fontWeight: 900, margin: 0, marginBottom: 8, letterSpacing: "-0.02em" }}>
-          Хотите ускорить какой-то модуль?
+          {t("pricing.roadmap.ctaTitle")}
         </h3>
         <p style={{ color: "#94a3b8", margin: 0, marginBottom: 16, fontSize: 14 }}>
-          Enterprise-клиенты могут влиять на roadmap-приоритеты. Свяжитесь с продажами.
+          {t("pricing.roadmap.ctaSubtitle")}
         </p>
         <Link
           href="/pricing/contact?tier=enterprise"

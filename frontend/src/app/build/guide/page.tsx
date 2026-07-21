@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import styles from "./guide.module.css";
 
 export const metadata: Metadata = {
   title: "QBuild — гайд для работодателя",
@@ -20,9 +21,9 @@ const STEPS: Step[] = [
     title: "Заполните профиль работодателя",
     body: (
       <>
-        Укажите название компании/бригады, город и коротко о себе. Профиль — это
+        Укажите название компании или бригады, город и коротко о себе. Профиль — это
         лицо на витрине: чем полнее, тем выше доверие кандидата к вашим вакансиям.
-        Значок <span className="text-emerald-300">✓ Verified</span> можно запросить
+        Значок <span className={styles.accent}>✓ Verified</span> можно запросить
         в профиле — проверяем за 1–2 рабочих дня.
       </>
     ),
@@ -58,7 +59,7 @@ const STEPS: Step[] = [
     body: (
       <>
         По каждому отклику видно:
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-300">
+        <ul>
           <li>
             <b>AI-скоринг 0–100</b> — Claude оценивает ответы кандидата на ваши
             вопросы, показывает балл и красные флаги прямо на карточке.
@@ -114,118 +115,132 @@ const TIERS = [
 
 export default function GuidePage() {
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="mx-auto max-w-3xl">
-        <Link href="/build" className="text-xs text-slate-400 hover:underline">
-          ← QBuild
-        </Link>
-        <h1 className="mt-3 text-3xl font-extrabold text-white">
-          Гайд для работодателя
-        </h1>
-        <p className="mt-2 text-sm text-slate-400">
-          От регистрации до первого найма — и как устроена оплата.
-        </p>
+    <main className={styles.guide}>
+      <div className={styles.sheet}>
+        <div className={styles.topRule} />
+        <div className={styles.folio}>
+          <Link href="/build" className={styles.back}>
+            ← QBuild
+          </Link>
+          <span className={styles.live}>Портал живой</span>
+          <span>Издание для стройки · Астана</span>
+        </div>
 
-        {/* How it works in 30 seconds */}
-        <section className="mt-6 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-200">
-            Как это работает за 30 секунд
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-slate-200">
-            Разместить проект и вакансию — <b>бесплатно</b>, без аванса агентству.
-            AI помогает отсеять отклики, пробное задание проверяет навык в деле.
-            Платите <b>только за найм</b>: комиссия начинается с 12% и снижается до
-            4% по мере того, как вы нанимаете, плюс кэшбэк в токенах AEV.
-          </p>
-        </section>
+        <div className={styles.nameplate}>
+          <div className={styles.kicker}>Гид работодателя</div>
+          <h1>Как нанимать на QBuild</h1>
+          <div className={styles.subhead}>
+            От регистрации до первого найма — и как устроена оплата
+          </div>
+        </div>
+        <div className={styles.ruleDouble} />
 
-        {/* Steps */}
-        <ol className="mt-8 space-y-4">
+        <div className={styles.ledeBand}>
+          <div className={styles.dateline}>
+            <div className={styles.place}>
+              <span>АСТАНА</span> — площадка найма для стройки
+            </div>
+            <p className={styles.lede}>
+              Разместить проект и вакансию — <b>бесплатно</b>, без аванса агентству.
+              AI помогает отсеять отклики, а пробное задание проверяет навык в деле, а
+              не на словах. Платите <b>только за найм</b>: комиссия начинается с 12% и
+              снижается до 4% по мере того, как вы нанимаете, плюс кэшбэк в токенах AEV.
+              Ниже — весь путь по шагам, от профиля до оплаты.
+            </p>
+          </div>
+          <div className={styles.numbers}>
+            <div className={styles.cap}>Условия коротко</div>
+            <div className={styles.row}>
+              <span>Публикация вакансии</span>
+              <span className={styles.free}>0&#8202;₽</span>
+            </div>
+            <div className={styles.row}>
+              <span>Hire-fee, база</span>
+              <span>12%</span>
+            </div>
+            <div className={styles.row}>
+              <span>Hire-fee, минимум</span>
+              <span className={styles.free}>4%</span>
+            </div>
+            <div className={styles.row}>
+              <span>AEV-кэшбэк, до</span>
+              <span>5%</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.stepsHead}>
+          <span className={styles.mark}>№</span>
+          <h2>Шесть шагов до найма</h2>
+        </div>
+        <ol className={styles.steps}>
           {STEPS.map((s) => (
-            <li
-              key={s.n}
-              className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
-            >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-emerald-950">
-                  {s.n}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-base font-semibold text-white">{s.title}</h3>
-                  <div className="mt-1 text-sm leading-relaxed text-slate-300">
-                    {s.body}
-                  </div>
-                  {s.cta && (
-                    <Link
-                      href={s.cta.href}
-                      className="mt-3 inline-flex rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
-                    >
-                      {s.cta.label}
-                    </Link>
-                  )}
-                </div>
+            <li key={s.n}>
+              <h3>{s.title}</h3>
+              <div className={styles.body}>
+                {s.body}
+                {s.cta && (
+                  <Link href={s.cta.href} className={styles.stepCta}>
+                    {s.cta.label}
+                  </Link>
+                )}
               </div>
             </li>
           ))}
         </ol>
 
-        {/* Loyalty table */}
-        <section className="mt-8">
-          <h2 className="text-lg font-bold text-white">Лояльность: чем больше наймов, тем дешевле</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Уровень поднимается автоматически по числу успешных наймов.
+        <div className={styles.ratesBand}>
+          <div className={styles.ratesCap}>Лояльность</div>
+          <p className={styles.ratesSub}>
+            Чем больше наймов — тем дешевле. Уровень поднимается автоматически.
           </p>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse text-sm">
+          <div className={styles.tblWrap}>
+            <table className={styles.rates}>
               <thead>
-                <tr className="border-b border-white/10 text-left text-slate-400">
-                  <th className="py-2 pr-4 font-medium">Уровень</th>
-                  <th className="py-2 pr-4 font-medium">Наймов</th>
-                  <th className="py-2 pr-4 font-medium">Hire-fee</th>
-                  <th className="py-2 font-medium">AEV-кэшбэк</th>
+                <tr>
+                  <th>Уровень</th>
+                  <th>Наймов</th>
+                  <th>Hire-fee</th>
+                  <th>AEV-кэшбэк</th>
                 </tr>
               </thead>
               <tbody>
                 {TIERS.map((t) => (
-                  <tr key={t.tier} className="border-b border-white/5">
-                    <td className="py-2 pr-4 font-semibold text-white">{t.tier}</td>
-                    <td className="py-2 pr-4 text-slate-300">{t.hires}</td>
-                    <td className="py-2 pr-4 text-emerald-300">{t.fee}</td>
-                    <td className="py-2 text-slate-300">{t.cashback}</td>
+                  <tr key={t.tier}>
+                    <th>{t.tier}</th>
+                    <td className={styles.num}>{t.hires}</td>
+                    <td className={styles.fee}>{t.fee}</td>
+                    <td className={styles.num}>{t.cashback}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
-
-        {/* CTA */}
-        <div className="mt-10 flex flex-wrap gap-3">
-          <Link
-            href="/build/onboarding"
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
-          >
-            Интерактивный чек-лист →
-          </Link>
-          <Link
-            href="/build/create-project"
-            className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
-          >
-            Создать проект
-          </Link>
         </div>
 
-        <p className="mt-8 text-[11px] text-slate-500">
-          Вы соискатель? Смотрите{" "}
-          <Link href="/build/guide-worker" className="text-emerald-300 underline">
-            гайд для соискателя
-          </Link>
-          . Остались вопросы? Загляните в{" "}
-          <Link href="/build/help" className="text-emerald-300 underline">
-            /build/help
-          </Link>
-          .
-        </p>
+        <div className={styles.cta}>
+          <div className={styles.lead}>Начните нанимать за две минуты</div>
+          <div className={styles.btns}>
+            <Link href="/build/create-project" className={`${styles.btn} ${styles.btnPrimary}`}>
+              Создать проект →
+            </Link>
+            <Link href="/build/onboarding" className={`${styles.btn} ${styles.btnGhost}`}>
+              Интерактивный чек-лист
+            </Link>
+            <Link href="/build/help" className={`${styles.btn} ${styles.btnGhost}`}>
+              FAQ и помощь
+            </Link>
+          </div>
+        </div>
+
+        <div className={styles.colophon}>
+          <span>AEVION QBuild · площадка найма для стройки</span>
+          <span>
+            Вы соискатель? Смотрите{" "}
+            <Link href="/build/guide-worker">гайд для соискателя</Link>
+          </span>
+          <Link href="/build">aevion.vercel.app/build</Link>
+        </div>
       </div>
     </main>
   );

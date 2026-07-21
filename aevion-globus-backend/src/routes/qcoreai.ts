@@ -17,6 +17,7 @@ import {
   type Provider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
+import { providerHealthSummary } from "../services/qcoreai/providerHealth";
 import {
   runMultiAgent,
   OrchestratorEvent,
@@ -5985,7 +5986,11 @@ qcoreaiRouter.get("/providers/health", async (_req, res) => {
         latencyMs = Date.now() - start;
         status = "down";
       }
-      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString() };
+      // Session-level track record from real orchestrator/council calls (not
+      // this ping) -- a provider can ping "ok" right now yet have been
+      // flaky across actual usage this session, or vice-versa.
+      const { score: sessionHealthScore, samples: sessionSamples } = providerHealthSummary(p.id);
+      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString(), sessionHealthScore, sessionSamples };
       providerHealthCache.set(p.id, { result, cachedAt: now });
       return result;
     })

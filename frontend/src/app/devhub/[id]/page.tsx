@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { fixDoubledScheme } from "@/lib/urls";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -135,12 +136,6 @@ type VisualStyles = { color: string; fontSize: string; fontWeight: string; textA
 const VISUAL_STYLE_TO_CSS: Record<keyof VisualStyles, string> = {
   color: "color", fontSize: "font-size", fontWeight: "font-weight", textAlign: "text-align",
 };
-
-/** Legacy deploy records may carry a doubled scheme ("https://https://x") —
- * the constructor was fixed, but stored URLs written before the fix remain. */
-function fixDoubledScheme(u: string): string {
-  return u.replace(/^(https?:\/\/)+(?=https?:\/\/)/, "");
-}
 
 /** getComputedStyle reports colors as rgb(a); <input type="color"> only accepts #rrggbb. */
 function cssColorToHex(css: string): string {

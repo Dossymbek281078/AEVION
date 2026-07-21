@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { fixDoubledScheme } from "@/lib/urls";
 import {
   ldWallet, svWallet,
   recordPlay, recordCompute,
@@ -1954,7 +1955,7 @@ function CurationWall({ wallet, setWallet, pins, setPins, owned }: {
                   <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" as const }}>
                     <span>{meta.label}</span>
                     <span>· {ago}</span>
-                    {p.link && <a href={p.link} style={{ color: meta.color, textDecoration: "underline", fontFamily: "ui-monospace, monospace" }}>↗ ссылка</a>}
+                    {p.link && <a href={fixDoubledScheme(p.link)} style={{ color: meta.color, textDecoration: "underline", fontFamily: "ui-monospace, monospace" }}>↗ ссылка</a>}
                   </div>
                 </div>
                 <div style={{ textAlign: "center" as const, minWidth: 36 }}>

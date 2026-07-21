@@ -20,6 +20,7 @@ import {
   WISHLIST_EVENT,
 } from "../_lib/wishlist";
 import { InfoTooltip } from "./InfoTooltip";
+import { fixDoubledScheme } from "@/lib/urls";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -271,7 +272,7 @@ function WishTile({
           </div>
           {item.url ? (
             <a
-              href={item.url}
+              href={fixDoubledScheme(item.url)}
               target="_blank"
               rel="noopener noreferrer"
               style={{

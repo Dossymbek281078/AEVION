@@ -210,7 +210,8 @@
       "Bash(grep -v \"^$\")",
       "Bash(disown)",
       "Bash(rm -f \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-user-aevion-build\\\\777cd456-fdd1-45b4-ac2f-094a9e34840e\\\\scratchpad\\\\qskyway-backend.log\")",
-      "Bash(curl -s http://127.0.0.1:4001/api/data-quality/trust-score)"
+      "Bash(curl -s http://127.0.0.1:4001/api/data-quality/trust-score)",
+      "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \\\\\"name='node.exe'\\\\\" | Where-Object { \\\\$_.CommandLine -match 'aevion-qskyway' } | ForEach-Object { Write-Output \\(\\\\$_.ProcessId.ToString\\(\\) + ' ' + \\\\$_.CommandLine\\) }\" 2>&1)"
     ]
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { fixDoubledScheme } from "@/lib/urls";
 
 type Policy = {
   id: string;
@@ -300,7 +301,7 @@ export default function PoliciesPage() {
                       {p.termsText}
                     </p>
                     {p.url && (
-                      <a href={p.url} target="_blank" rel="noopener noreferrer"
+                      <a href={fixDoubledScheme(p.url)} target="_blank" rel="noopener noreferrer"
                         style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 4 }}>
                         {p.url}
                       </a>

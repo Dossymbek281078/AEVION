@@ -6,6 +6,7 @@ import { getApiBase } from "@/lib/apiBase";
 import { revokeReasonLabel } from "@/lib/qrightRevokeReasons";
 import { pickLang, tString } from "@/lib/qrightServerI18n";
 import { CopyHash } from "./CopyHash";
+import { fixDoubledScheme } from "@/lib/urls";
 
 export const dynamic = "force-dynamic";
 
@@ -621,7 +622,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                       {p.validUntil && <span style={{ fontSize: 11, color: "#94a3b8" }}>until {new Date(p.validUntil).toLocaleDateString()}</span>}
                     </div>
                     <p style={{ fontSize: 13, color: "#334155", margin: 0, lineHeight: 1.5 }}>{p.termsText}</p>
-                    {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 4 }}>{p.url}</a>}
+                    {p.url && <a href={fixDoubledScheme(p.url)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 4 }}>{p.url}</a>}
                   </div>
                 );
               })}

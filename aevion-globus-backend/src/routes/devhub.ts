@@ -2774,10 +2774,22 @@ devhubRouter.post("/media/image", async (req, res) => {
     const data = await r.json() as { data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
     const first = data.data?.[0];
     if (!first) return res.status(500).json({ error: "no image returned" });
-    const imageUrl = first.url ?? (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null);
+    // Prefer a permanent Cloudflare Images URL: upstream URLs expire within
+    // hours and b64 becomes a multi-megabyte data: URI if saved into a page.
+    let imageUrl: string | null = null;
+    let storage: "cloudflare" | "upstream" | "inline" = "upstream";
+    if (first.url) {
+      const permanent = await tryAutoUploadToCloudflare(first.url);
+      imageUrl = permanent ?? first.url;
+      storage = permanent ? "cloudflare" : "upstream";
+    } else if (first.b64_json) {
+      const permanent = await tryAutoUploadImageBufferToCloudflare(Buffer.from(first.b64_json, "base64"), `devhub-image-${Date.now()}.png`);
+      imageUrl = permanent ?? `data:image/png;base64,${first.b64_json}`;
+      storage = permanent ? "cloudflare" : "inline";
+    }
     if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
     await debitCredit(imgUserId, "image").catch(() => {});
-    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null, creditsUsed: 1, creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1 });
+    res.json({ ok: true, url: imageUrl, storage, revisedPrompt: first.revised_prompt || null, creditsUsed: 1, creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1 });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image generation failed" });
   }
@@ -3709,6 +3721,31 @@ devhubRouter.post("/media/upload-image", async (req, res) => {
 });
 
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
+/** Same Cloudflare Images upload as tryAutoUploadToCloudflare, but for raw
+ * bytes (gpt-image-1 returns b64_json — there is no upstream URL to import). */
+async function tryAutoUploadImageBufferToCloudflare(buf: Buffer, filename: string): Promise<string | null> {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) return null;
+  try {
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: image/png\r\n\r\n`, "utf8"),
+      buf,
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+    ];
+    const body = Buffer.concat(parts);
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) return null;
+    const data = await r.json() as { result?: { variants?: string[] } };
+    return data.result?.variants?.[0] ?? null;
+  } catch { return null; }
+}
+
 async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | null> {
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;

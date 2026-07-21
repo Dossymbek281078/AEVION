@@ -290,6 +290,64 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     // gpt-image-1 uses low/medium/high/auto; route maps "hd" → "high"
     expect(body.quality).toBe("high");
   });
+
+  test("b64 result without Cloudflare configured falls back to inline data: URI", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toMatch(/^data:image\/png;base64,/);
+    expect(r.body.storage).toBe("inline");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no upload attempt without creds
+  });
+
+  test("b64 result with Cloudflare configured uploads the bytes and returns a permanent URL", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, {
+        data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
+      }))
+      .mockResolvedValueOnce(jsonResp(200, {
+        result: { variants: ["https://imagedelivery.example/acc/img-1/public"] },
+      }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toBe("https://imagedelivery.example/acc/img-1/public");
+    expect(r.body.storage).toBe("cloudflare");
+    const uploadCall = fetchMock.mock.calls[1];
+    expect(String(uploadCall[0])).toContain("/images/v1");
+    // File upload (raw bytes), not the URL-import form used for hosted results
+    expect(String(uploadCall[1].body)).toContain('name="file"');
+  });
+
+  test("hosted-url result with Cloudflare configured is imported for permanence; upload failure falls back to the upstream url", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/tmp.png" }] }))
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["nope"] }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/image")
+      .send({ prompt: "a cat" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.url).toBe("https://oai.example/tmp.png");
+    expect(r.body.storage).toBe("upstream");
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

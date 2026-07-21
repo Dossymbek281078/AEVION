@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { requestEmailVerification, completeEmailVerification, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 
 export default function VerifyEmailPage() {
   return (
@@ -18,6 +19,7 @@ export default function VerifyEmailPage() {
 }
 
 function VerifyEmailBody() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const router = useRouter();
   const setUser = useBuildAuth((s) => s.setUser);
@@ -58,24 +60,24 @@ function VerifyEmailBody() {
     <div className="mx-auto max-w-md py-16">
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <div className="mb-4 text-4xl">📧</div>
-        <h1 className="mb-2 text-xl font-bold text-white">Подтверждение email</h1>
+        <h1 className="mb-2 text-xl font-bold text-white">{t("build.verifyEmail.title")}</h1>
 
         {status === "done" ? (
           <div className="space-y-3">
-            <p className="text-emerald-300 text-lg">✓ Email подтверждён!</p>
-            <p className="text-sm text-slate-400">Перенаправляем в профиль…</p>
+            <p className="text-emerald-300 text-lg">{t("build.verifyEmail.verifiedBanner")}</p>
+            <p className="text-sm text-slate-400">{t("build.verifyEmail.redirecting")}</p>
           </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-400">
-              Введите код из письма или вставьте ссылку целиком.
+              {t("build.verifyEmail.instructions")}
             </p>
 
             <div className="flex gap-2">
               <input
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Код подтверждения"
+                placeholder={t("build.verifyEmail.codePlaceholder")}
                 className="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
               <button
@@ -83,22 +85,22 @@ function VerifyEmailBody() {
                 onClick={() => verify(token.trim())}
                 className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
               >
-                {status === "verifying" ? "…" : "Подтвердить"}
+                {status === "verifying" ? "…" : t("build.verifyEmail.confirmButton")}
               </button>
             </div>
 
             {msg && (
               <p className="text-sm text-rose-300">
                 {msg === "invalid_or_expired_token"
-                  ? "Код неверный или истёк. Запросите новое письмо."
+                  ? t("build.verifyEmail.invalidOrExpired")
                   : msg}
               </p>
             )}
 
             <div className="border-t border-white/10 pt-4">
-              <p className="mb-2 text-xs text-slate-500">Письмо не пришло?</p>
+              <p className="mb-2 text-xs text-slate-500">{t("build.verifyEmail.emailNotArrived")}</p>
               {sent ? (
-                <p className="text-xs text-emerald-300">✓ Письмо отправлено повторно</p>
+                <p className="text-xs text-emerald-300">{t("build.verifyEmail.resentBanner")}</p>
               ) : (
                 <button
                   disabled={sending}
@@ -112,13 +114,13 @@ function VerifyEmailBody() {
                   }}
                   className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
                 >
-                  {sending ? "Отправляем…" : "Отправить повторно"}
+                  {sending ? t("build.verifyEmail.sending") : t("build.verifyEmail.resendButton")}
                 </button>
               )}
             </div>
 
             <Link href="/build" className="block text-xs text-slate-500 hover:text-slate-300">
-              ← Вернуться на главную
+              {t("build.verifyEmail.backHome")}
             </Link>
           </div>
         )}

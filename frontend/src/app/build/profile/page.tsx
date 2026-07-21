@@ -20,6 +20,7 @@ import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
 import { ProfileCompletenessMeter } from "@/components/build/ProfileCompletenessMeter";
 import { ProfileSkeleton } from "@/components/build/Skeleton";
+import { useI18n } from "@/lib/i18n";
 
 export default function ProfilePage() {
   return (
@@ -217,6 +218,7 @@ function ExperienceEditor({
   items: BuildExperience[];
   onChange: () => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
@@ -342,7 +344,7 @@ function ExperienceEditor({
             value={description}
             onAccept={(v) => setDescription(v)}
             kind="experience"
-            hint="Сделать описание роли конкретнее (объёмы, сроки, бюджет)"
+            hint={t("build.profile.experienceAiHintDetailed")}
           />
           {err && <p className="text-xs text-rose-300">{err}</p>}
           <div className="flex justify-end gap-2">
@@ -395,6 +397,7 @@ function ExperienceRow({
   onChanged: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [desc, setDesc] = useState(item.description ?? "");
   const [busy, setBusy] = useState(false);
@@ -438,7 +441,7 @@ function ExperienceRow({
                 value={desc}
                 onAccept={(v) => setDesc(v)}
                 kind="experience"
-                hint="Сделать описание роли конкретнее"
+                hint={t("build.profile.experienceAiHintShort")}
               />
               <div className="flex gap-2">
                 <button
@@ -447,7 +450,7 @@ function ExperienceRow({
                   disabled={busy}
                   className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
                 >
-                  {busy ? "…" : "Сохранить"}
+                  {busy ? "…" : t("build.profile.saveButton")}
                 </button>
                 <button
                   type="button"
@@ -457,7 +460,7 @@ function ExperienceRow({
                   }}
                   className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
                 >
-                  Отмена
+                  {t("build.profile.cancelButton")}
                 </button>
               </div>
             </div>
@@ -833,6 +836,7 @@ function VerificationWidget() {
 }
 
 function ShareLinkBlock({ userId }: { userId: string }) {
+  const { t } = useI18n();
   const toast = useToast();
   const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.tech";
   const url = `${origin}/build/r/${encodeURIComponent(userId)}`;
@@ -850,9 +854,9 @@ function ShareLinkBlock({ userId }: { userId: string }) {
         Your personal share-link
       </div>
       <p className="mb-2 text-xs text-slate-400">
-        Анонсируешь вакансии в чат / Telegram / WhatsApp? Используй эту ссылку — каждый
-        отклик автоматически тегируется как пришедший от тебя (sourceTag <code className="text-slate-300">ref:&lt;userId&gt;</code>),
-        и ты видишь это в Application sources на dashboard.
+        {t("build.profile.shareLinkBodyPre")}
+        <code className="text-slate-300">ref:&lt;userId&gt;</code>
+        {t("build.profile.shareLinkBodyPost")}
       </p>
       <div className="flex items-center gap-2">
         <code className="flex-1 truncate rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-slate-200">

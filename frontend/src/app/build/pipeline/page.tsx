@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type ApplicationLabel } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type Item = Awaited<ReturnType<typeof buildApi.myPipeline>>["items"][number];
 
@@ -32,6 +33,7 @@ export default function PipelinePage() {
 }
 
 function Body() {
+  const { t } = useI18n();
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,10 +71,7 @@ function Body() {
       <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Pipeline</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Все pending-кандидаты по этапам. Лейблы проставляются в review-режиме (клавиши 1–5).
-            Карточка → review screen.
-          </p>
+          <p className="mt-1 text-sm text-slate-400">{t("build.pipeline.description")}</p>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-slate-300">
@@ -94,7 +93,7 @@ function Body() {
 
       {items && total === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-400">
-          Нет pending-кандидатов. Когда появятся — отобразятся здесь по колонкам.
+          {t("build.pipeline.empty")}
         </div>
       )}
 

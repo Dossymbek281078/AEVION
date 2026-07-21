@@ -1315,6 +1315,28 @@ export default function CyberChessPage(){
   const[pzTimer,sPzTimer]=useState(0);
   const pzTimerRef=useRef<number>(0);
   const pzTimerIntervalRef=useRef<ReturnType<typeof setInterval>|null>(null);
+  // Imperative display refs for the puzzle countdown/stopwatch badges — painted directly via
+  // DOM (textContent/style), bypassing setState, so the 250ms/500ms ticks below don't force a
+  // full re-render of this 14k-line component on every frame (same technique as the hover-hints
+  // fix at paintHoverHints — see comment there). pzTimer/pzTimeLeft REACT STATE still exists and
+  // is still set at the rare moments other code needs it (initial mount paint, and — for
+  // pzTimeLeft — the exact zero-crossing, since two other effects key off pzTimeLeft to fire
+  // end-of-session logic exactly once). Nothing about the failed-count/streak-reset/session-end
+  // LOGIC below changes — only how the on-screen numbers get updated every tick.
+  const pzTimerBadgeRef=useRef<HTMLElement|null>(null); // "⏱ Сейчас" raw-seconds badge (ScoreCard)
+  const pzTimerStopwatchRef=useRef<HTMLElement|null>(null); // mm:ss stopwatch badge (current-puzzle card)
+  const pzTimeLeftBadgeRef=useRef<HTMLElement|null>(null); // countdown badge (current-puzzle card)
+  const pzTimeLeftValueRef=useRef<number>(0); // last-known remaining seconds, for zero-crossing detection
+  const paintPzTimer=useCallback((sec:number)=>{
+    const a=pzTimerBadgeRef.current;
+    if(a)a.textContent=`${sec}с`;
+    const b=pzTimerStopwatchRef.current;
+    if(b){
+      b.textContent=`⏱ ${Math.floor(sec/60)>0?`${Math.floor(sec/60)}:`:""}${String(sec%60).padStart(2,"0")}`;
+      (b as HTMLElement).style.color=sec<10?"#065f46":sec<30?"#92400e":"#6b7280";
+      (b as HTMLElement).style.background=sec<10?"#d1fae5":sec<30?"#fef3c7":"#f3f4f6";
+    }
+  },[]);
   // Per-puzzle wrong-attempt tracking (keyed by fen so it resets on puzzle change).
   // Used to reveal the expected best move as a hint after 2 wrong tries (lichess-style).
   const pzWrongTriesRef=useRef<{fen:string;n:number}>({fen:"",n:0});

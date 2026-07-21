@@ -18,6 +18,7 @@ import {
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
 import { providerHealthSummary } from "../services/qcoreai/providerHealth";
+import { getModelPrice, type UsdPer1M } from "../services/qcoreai/pricing";
 import {
   runMultiAgent,
   OrchestratorEvent,
@@ -5769,20 +5770,40 @@ qcoreaiRouter.get("/me/audit-log", async (req, res) => {
    GET /benchmarks
    ═══════════════════════════════════════════════════════════════════════ */
 
-const BENCHMARK_DATA = {
-  models: [
-    { provider: "anthropic", model: "claude-sonnet-4-6", speedScore: 88, qualityScore: 95, costScore: 72, contextWindow: 200000 },
-    { provider: "openai", model: "gpt-4o", speedScore: 85, qualityScore: 92, costScore: 70, contextWindow: 128000 },
-    { provider: "gemini", model: "gemini-2.5-flash", speedScore: 92, qualityScore: 88, costScore: 95, contextWindow: 1000000 },
-    { provider: "deepseek", model: "deepseek-chat", speedScore: 80, qualityScore: 85, costScore: 98, contextWindow: 64000 },
-    { provider: "grok", model: "grok-3", speedScore: 82, qualityScore: 87, costScore: 78, contextWindow: 131072 },
-  ],
-  lastUpdated: "2026-05-10",
-  note: "Scores based on QCoreAI internal benchmarks",
-};
+// speedScore/qualityScore are illustrative estimates, NOT measured -- unlike
+// the real Council-vs-single-flagship benchmark (N=40, pairwise-judged,
+// reproducible via scripts/qcore-eval.js -- see docs/benchmarks/ and
+// /qcoreai/vs), nothing here re-runs a timing/quality test. costScore is
+// computed live below from pricing.ts's real list prices, so at least that
+// column is verifiable and can't silently go stale.
+const BENCHMARK_MODELS = [
+  { provider: "anthropic", model: "claude-sonnet-4-6", speedScore: 88, qualityScore: 95, contextWindow: 200000 },
+  { provider: "openai", model: "gpt-4o", speedScore: 85, qualityScore: 92, contextWindow: 128000 },
+  { provider: "gemini", model: "gemini-2.5-flash", speedScore: 92, qualityScore: 88, contextWindow: 1000000 },
+  { provider: "deepseek", model: "deepseek-chat", speedScore: 80, qualityScore: 85, contextWindow: 64000 },
+  { provider: "grok", model: "grok-3", speedScore: 82, qualityScore: 87, contextWindow: 131072 },
+];
+
+/** Output-weighted blended $/1M price (typical answers have more output than
+ *  input tokens) -- used only to rank cost, not shown directly. */
+function blendedPrice(p: UsdPer1M): number {
+  return p.input * 0.3 + p.output * 0.7;
+}
 
 qcoreaiRouter.get("/benchmarks", (_req, res) => {
-  res.json(BENCHMARK_DATA);
+  const priced = BENCHMARK_MODELS.map((m) => ({ ...m, price: getModelPrice(m.provider, m.model) }));
+  const blends = priced.map((m) => (m.price ? blendedPrice(m.price) : 0)).filter((b) => b > 0);
+  const cheapest = blends.length ? Math.min(...blends) : 0;
+  const models = priced.map(({ price, ...m }) => {
+    const blend = price ? blendedPrice(price) : 0;
+    const costScore = blend <= 0 ? 100 : Math.round(Math.min(100, (cheapest / blend) * 100));
+    return { ...m, costScore };
+  });
+  res.json({
+    models,
+    lastUpdated: new Date().toISOString().slice(0, 10),
+    note: "costScore is computed live from pricing.ts's real list prices (cheaper = higher score). speedScore/qualityScore are illustrative estimates, not measured -- for an actual measured multi-agent quality benchmark (N=40, pairwise-judged, reproducible), see /qcoreai/vs and docs/benchmarks/.",
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

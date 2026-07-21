@@ -76,7 +76,14 @@ export default function BenchmarksPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-xl font-bold">Сравнение моделей</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Скорость, качество и стоимость по внутренним тестам QCoreAI</p>
+          <p className="text-slate-400 text-sm mt-0.5">
+            Экономность считается вживую по реальным ценам провайдеров. Скорость и качество — иллюстративные оценки,
+            не измеренный тест — за реальным измеренным бенчмарком Council см.{" "}
+            <Link href="/qcoreai/vs" className="text-teal-400 hover:text-teal-300 underline">
+              /qcoreai/vs
+            </Link>
+            .
+          </p>
         </div>
 
         {loading && <div className="text-center py-16 text-slate-500 animate-pulse text-sm">Загрузка…</div>}
@@ -132,8 +139,8 @@ export default function BenchmarksPage() {
               })}
             </div>
 
-            <p className="text-xs text-slate-600 text-center mt-4">
-              {data.note} · Обновлено {data.lastUpdated}
+            <p className="text-xs text-slate-600 text-center mt-4" title={data.note}>
+              💰 экономность — живой расчёт по ценам · 🎯⚡ качество/скорость — иллюстративные оценки · {data.lastUpdated}
             </p>
           </>
         )}

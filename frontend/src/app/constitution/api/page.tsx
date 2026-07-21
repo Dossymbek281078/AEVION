@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   classify,
   computeMetrics,
@@ -13,30 +14,31 @@ import {
 type Tab = "curl" | "ts" | "py";
 
 const ENDPOINTS = [
-  { method: "GET",    path: "/api/constitution/public/regimes",                     title: "Регимы — стабильный каталог 10 классов",          cached: true },
-  { method: "GET",    path: "/api/constitution/public/presets",                     title: "Пресеты — 10 исторических шаблонов",              cached: true },
-  { method: "GET",    path: "/api/constitution/public/countries",                   title: "Страны — 15 калибровок",                          cached: true },
-  { method: "GET",    path: "/api/constitution/public/sliders-spec",                title: "Спека 8 ползунков с весами",                      cached: true },
-  { method: "POST",   path: "/api/constitution/scenarios",                          title: "Сохранить сценарий в общую БД",                   cached: false },
-  { method: "GET",    path: "/api/constitution/scenarios?limit=20",                 title: "Список последних сценариев",                      cached: false },
-  { method: "POST",   path: "/api/constitution/ai-suggest",                         title: "AI-совет: описание → 8 ползунков (non-stream)",   cached: false },
-  { method: "POST",   path: "/api/constitution/ai-suggest-stream",                  title: "AI-совет SSE-stream",                             cached: false },
-  { method: "POST",   path: "/api/constitution/pdf",                                title: "Брендированный PDF с радаром и QR",               cached: false },
-  { method: "GET",    path: "/api/constitution/me/plan",                            title: "Текущий план (free/pro)",                         cached: false },
-  { method: "POST",   path: "/api/planet/constitution-artifacts",                   title: "Опубликовать подписанный артефакт",               cached: false },
-  { method: "GET",    path: "/api/planet/constitution-artifacts?regime=open-access",title: "Список артефактов с фильтром",                    cached: false },
-  { method: "GET",    path: "/api/planet/constitution-artifacts/:id",               title: "Один артефакт по id",                             cached: false },
-  { method: "GET",    path: "/api/planet/constitution-artifacts/:id/similar",       title: "6 похожих сценариев по cosine sim",               cached: false },
-  { method: "GET",    path: "/api/planet/constitution-artifacts/stats",             title: "Агрегаты: регимы, ползунки, 30d trend",           cached: false },
-  { method: "POST",   path: "/api/planet/constitution-artifacts/:id/vote",          title: "Голос +1 / -1 (toggle)",                          cached: false },
-  { method: "DELETE", path: "/api/planet/constitution-artifacts/:id/vote",          title: "Снять свой голос",                                cached: false },
-  { method: "POST",   path: "/api/planet/constitution-artifacts/:id/comment",       title: "Добавить комментарий",                            cached: false },
-  { method: "GET",    path: "/api/planet/constitution-artifacts/:id/social",        title: "Сводка по голосам + комменты",                    cached: false },
+  { method: "GET",    path: "/api/constitution/public/regimes",                     titleKey: "constitution.api.ep.regimes",           cached: true },
+  { method: "GET",    path: "/api/constitution/public/presets",                     titleKey: "constitution.api.ep.presets",           cached: true },
+  { method: "GET",    path: "/api/constitution/public/countries",                   titleKey: "constitution.api.ep.countries",         cached: true },
+  { method: "GET",    path: "/api/constitution/public/sliders-spec",                titleKey: "constitution.api.ep.slidersSpec",       cached: true },
+  { method: "POST",   path: "/api/constitution/scenarios",                          titleKey: "constitution.api.ep.scenariosSave",     cached: false },
+  { method: "GET",    path: "/api/constitution/scenarios?limit=20",                 titleKey: "constitution.api.ep.scenariosList",     cached: false },
+  { method: "POST",   path: "/api/constitution/ai-suggest",                         titleKey: "constitution.api.ep.aiSuggest",         cached: false },
+  { method: "POST",   path: "/api/constitution/ai-suggest-stream",                  titleKey: "constitution.api.ep.aiSuggestStream",   cached: false },
+  { method: "POST",   path: "/api/constitution/pdf",                                titleKey: "constitution.api.ep.pdf",               cached: false },
+  { method: "GET",    path: "/api/constitution/me/plan",                            titleKey: "constitution.api.ep.mePlan",            cached: false },
+  { method: "POST",   path: "/api/planet/constitution-artifacts",                   titleKey: "constitution.api.ep.artifactsPublish",  cached: false },
+  { method: "GET",    path: "/api/planet/constitution-artifacts?regime=open-access",titleKey: "constitution.api.ep.artifactsList",     cached: false },
+  { method: "GET",    path: "/api/planet/constitution-artifacts/:id",               titleKey: "constitution.api.ep.artifactById",      cached: false },
+  { method: "GET",    path: "/api/planet/constitution-artifacts/:id/similar",       titleKey: "constitution.api.ep.artifactsSimilar",  cached: false },
+  { method: "GET",    path: "/api/planet/constitution-artifacts/stats",             titleKey: "constitution.api.ep.artifactsStats",    cached: false },
+  { method: "POST",   path: "/api/planet/constitution-artifacts/:id/vote",          titleKey: "constitution.api.ep.artifactVote",      cached: false },
+  { method: "DELETE", path: "/api/planet/constitution-artifacts/:id/vote",          titleKey: "constitution.api.ep.artifactVoteRemove",cached: false },
+  { method: "POST",   path: "/api/planet/constitution-artifacts/:id/comment",       titleKey: "constitution.api.ep.artifactComment",   cached: false },
+  { method: "GET",    path: "/api/planet/constitution-artifacts/:id/social",        titleKey: "constitution.api.ep.artifactSocial",    cached: false },
 ];
 
 const BASE_URL_PUBLIC = "https://aevion.app/api-backend";
 
 export default function ConstitutionApiPlaygroundPage() {
+  const { t } = useI18n();
   const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
   const [title, setTitle] = useState<string>("My-Scenario");
   const [tab, setTab] = useState<Tab>("curl");
@@ -152,9 +154,7 @@ export default function ConstitutionApiPlaygroundPage() {
             Constitution — Developer Playground
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">
-            Крути ползунки слева — справа в реальном времени обновляется код
-            запроса. Жми «Try now» — выполняется через тот же прокси, что
-            фронт-сайт. Внизу — каталог 22 endpoints с try-now кнопками.
+            {t("constitution.api.intro")}
           </p>
           <div className="mt-3 text-xs">
             <a
@@ -163,7 +163,7 @@ export default function ConstitutionApiPlaygroundPage() {
               rel="noreferrer"
               className="text-cyan-300 hover:underline"
             >
-              📖 Полная docs-документация
+              {t("constitution.api.docsLink")}
             </a>
           </div>
         </header>
@@ -171,7 +171,7 @@ export default function ConstitutionApiPlaygroundPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
             <h2 className="text-lg font-semibold text-[#f5d27a] mb-3">
-              Тело запроса (live)
+              {t("constitution.api.requestBodyHeading")}
             </h2>
             <div className="mb-3">
               <label className="text-xs text-[#9aa3c0]">title</label>
@@ -217,7 +217,7 @@ export default function ConstitutionApiPlaygroundPage() {
           <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
             <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
               <h2 className="text-lg font-semibold text-[#f5d27a]">
-                Код запроса
+                {t("constitution.api.requestCodeHeading")}
               </h2>
               <div className="flex gap-1">
                 {(["curl", "ts", "py"] as Tab[]).map((tab_) => (
@@ -238,7 +238,7 @@ export default function ConstitutionApiPlaygroundPage() {
                   type="button"
                   onClick={copy}
                   className="ml-2 px-3 py-1 rounded text-xs border border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/10"
-                  title="Скопировать в буфер"
+                  title={t("constitution.api.copyTitle")}
                 >
                   📋
                 </button>
@@ -272,7 +272,7 @@ export default function ConstitutionApiPlaygroundPage() {
                 onClick={() => setResponse(null)}
                 className="text-xs text-[#9aa3c0] hover:underline"
               >
-                Закрыть
+                {t("constitution.api.closeBtn")}
               </button>
             </div>
             <pre className="bg-[#050a1a] border border-cyan-400/20 rounded p-3 text-xs font-mono overflow-x-auto max-h-96 whitespace-pre-wrap">
@@ -283,7 +283,7 @@ export default function ConstitutionApiPlaygroundPage() {
 
         <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
           <h2 className="text-lg font-semibold text-[#f5d27a] mb-3">
-            Каталог endpoints ({ENDPOINTS.length})
+            {t("constitution.api.endpointsCatalogHeading", { count: ENDPOINTS.length })}
           </h2>
           <div className="space-y-1">
             {ENDPOINTS.map((ep, i) => (
@@ -304,7 +304,7 @@ export default function ConstitutionApiPlaygroundPage() {
                 </span>
                 <code className="flex-1 min-w-0 text-xs truncate">{ep.path}</code>
                 <span className="text-xs text-[#9aa3c0] hidden md:block truncate max-w-[260px]">
-                  {ep.title}
+                  {t(ep.titleKey)}
                 </span>
                 {ep.cached && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#d4af37]/20 text-[#d4af37]">
@@ -327,7 +327,7 @@ export default function ConstitutionApiPlaygroundPage() {
 
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
-            v1. Стабильные slider keys и regime IDs (см.{" "}
+            {t("constitution.api.footerPre")}{" "}
             <a
               href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/constitution-public-api.md"
               target="_blank"
@@ -336,7 +336,7 @@ export default function ConstitutionApiPlaygroundPage() {
             >
               docs/constitution-public-api.md
             </a>
-            ). Breaking changes → /v2/* с 6mo deprecation v1.
+            {t("constitution.api.footerPost")}
           </p>
         </footer>
       </div>

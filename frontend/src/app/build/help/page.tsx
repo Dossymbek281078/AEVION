@@ -63,18 +63,18 @@ const FAQ_EMPLOYERS = [
 
 export default function HelpPage() {
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
+    <main className="min-h-screen bg-[#f7f6f2] px-4 py-10 text-[#17181a]">
       <div className="mx-auto max-w-3xl">
-        <Link href="/build" className="text-xs text-slate-400 hover:underline">← QBuild</Link>
-        <h1 className="mt-3 text-3xl font-extrabold text-white">Help & FAQ</h1>
-        <p className="mt-2 text-sm text-slate-400">Answers to the most common questions.</p>
-        <p className="mt-3 text-sm text-slate-300">
+        <Link href="/build" className="text-xs text-[#74767c] hover:underline">← QBuild</Link>
+        <h1 className="mt-3 text-3xl font-extrabold text-[#17181a]">Help & FAQ</h1>
+        <p className="mt-2 text-sm text-[#74767c]">Answers to the most common questions.</p>
+        <p className="mt-3 text-sm text-[#45474c]">
           Пошаговые гайды:{" "}
-          <Link href="/build/guide" className="text-emerald-300 underline">
+          <Link href="/build/guide" className="text-[#075b53] underline">
             для работодателя
           </Link>{" "}
           ·{" "}
-          <Link href="/build/guide-worker" className="text-emerald-300 underline">
+          <Link href="/build/guide-worker" className="text-[#075b53] underline">
             для соискателя
           </Link>
           .

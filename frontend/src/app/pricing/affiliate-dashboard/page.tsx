@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { useI18n } from "@/lib/i18n";
 
 interface AffiliateApplication {
   id: string;
@@ -48,6 +49,7 @@ export default function AffiliateDashboardPage() {
 }
 
 function Inner() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const emailFromUrl = params?.get("email") ?? "";
   const tokenFromUrl = params?.get("token") ?? "";
@@ -75,8 +77,8 @@ function Inner() {
         `?email=${encodeURIComponent(emailFromUrl)}&token=${encodeURIComponent(tokenFromUrl)}`,
     )
       .then(async (r) => {
-        if (r.status === 401) throw new Error("Ссылка устарела или некорректна");
-        if (r.status === 404) throw new Error("Заявка не найдена. Сначала подайте заявку на /pricing/affiliate.");
+        if (r.status === 401) throw new Error(t("pricing.affiliateDashboard.error.linkExpired"));
+        if (r.status === 404) throw new Error(t("pricing.affiliateDashboard.error.notFound"));
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
@@ -96,7 +98,7 @@ function Inner() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: emailInput.trim() }),
       });
-      if (r.status === 429) throw new Error("Слишком много попыток. Попробуйте через 10 минут.");
+      if (r.status === 429) throw new Error(t("pricing.affiliateDashboard.error.tooManyAttempts"));
       if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
       setLinkSent(true);
     } catch (err) {
@@ -140,7 +142,7 @@ function Inner() {
             {error}
             <div style={{ marginTop: 10 }}>
               <Link href="/pricing/affiliate-dashboard" style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", textDecoration: "none" }}>
-                ← Запросить новый magic-link
+                {t("pricing.affiliateDashboard.nav.requestNewLink")}
               </Link>
             </div>
           </div>
@@ -177,10 +179,10 @@ function Inner() {
           AFFILIATE DASHBOARD
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.025em" }}>
-          Войти в affiliate-кабинет
+          {t("pricing.affiliateDashboard.login.title")}
         </h1>
         <p style={{ fontSize: 14, color: "#475569", maxWidth: 440, margin: "0 auto", lineHeight: 1.5 }}>
-          Введите email с которым вы подавали заявку. Мы отправим magic-link на ваш ящик. Ссылка действительна для текущей сессии.
+          {t("pricing.affiliateDashboard.login.description")}
         </p>
       </section>
 
@@ -196,9 +198,9 @@ function Inner() {
           }}
         >
           <div style={{ fontSize: 28, marginBottom: 8 }}>✉</div>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Ссылка отправлена</div>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>{t("pricing.affiliateDashboard.login.sentTitle")}</div>
           <div style={{ fontSize: 13, color: "#047857", lineHeight: 1.5 }}>
-            Если email есть в системе — magic-link будет в вашем ящике через минуту. Проверьте папку «Спам».
+            {t("pricing.affiliateDashboard.login.sentDescription")}
           </div>
         </div>
       ) : (
@@ -251,12 +253,12 @@ function Inner() {
               color: "#fff",
             }}
           >
-            {linkSubmitting ? "Отправка…" : "Прислать ссылку"}
+            {linkSubmitting ? t("pricing.affiliateDashboard.login.submitLoading") : t("pricing.affiliateDashboard.login.submit")}
           </button>
           <div style={{ marginTop: 14, fontSize: 12, color: "#64748b", textAlign: "center" }}>
-            Ещё нет заявки?{" "}
+            {t("pricing.affiliateDashboard.login.noApplicationYet")}{" "}
             <Link href="/pricing/affiliate" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
-              Подать на /pricing/affiliate →
+              {t("pricing.affiliateDashboard.login.applyLink")}
             </Link>
           </div>
         </form>
@@ -274,6 +276,7 @@ function DashboardContent({
   copied: boolean;
   onCopy: () => void;
 }) {
+  const { t } = useI18n();
   const { application, refLink, refCode, stats } = data;
 
   return (
@@ -283,10 +286,14 @@ function DashboardContent({
           AFFILIATE DASHBOARD
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
-          Привет, {application.name}
+          {t("pricing.affiliateDashboard.dashboard.greeting", { name: application.name })}
         </h1>
         <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
-          Заявка #{application.id} · {new Date(application.ts).toLocaleDateString("ru-RU")} · статус: {application.status}
+          {t("pricing.affiliateDashboard.dashboard.meta", {
+            id: application.id,
+            date: new Date(application.ts).toLocaleDateString("ru-RU"),
+            status: application.status,
+          })}
         </p>
       </section>
 
@@ -300,7 +307,7 @@ function DashboardContent({
         }}
       >
         <div style={{ fontSize: 11, fontWeight: 800, color: "#fcd34d", letterSpacing: "0.06em", marginBottom: 8 }}>
-          ВАШ РЕФЕРАЛЬНЫЙ КОД
+          {t("pricing.affiliateDashboard.dashboard.refCodeLabel")}
         </div>
         <div style={{ fontSize: 26, fontWeight: 900, fontFamily: "ui-monospace, monospace", marginBottom: 10 }}>
           {refCode}
@@ -333,12 +340,14 @@ function DashboardContent({
               minWidth: 80,
             }}
           >
-            {copied ? "Скопировано ✓" : "Копировать"}
+            {copied ? t("pricing.affiliateDashboard.dashboard.copied") : t("pricing.affiliateDashboard.dashboard.copy")}
           </button>
         </div>
         <p style={{ margin: "12px 0 0", fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-          Делитесь ссылкой в блогах, рассылках, соцсетях. Cookie работает {stats.cookie_days} дней.
-          Комиссия — {stats.commission_percent}% recurring lifetime от всех подписок приведённых клиентов.
+          {t("pricing.affiliateDashboard.dashboard.shareHint", {
+            days: stats.cookie_days,
+            percent: stats.commission_percent,
+          })}
         </p>
       </section>
 
@@ -350,11 +359,11 @@ function DashboardContent({
           marginBottom: 24,
         }}
       >
-        <Stat label="КЛИКИ" value={stats.clicks.toLocaleString("ru-RU")} accent="#0ea5e9" />
+        <Stat label={t("pricing.affiliateDashboard.stats.clicks")} value={stats.clicks.toLocaleString("ru-RU")} accent="#0ea5e9" />
         <Stat label="SIGNUPS" value={stats.signups.toLocaleString("ru-RU")} accent="#7c3aed" />
         <Stat label="MRR" value={`$${stats.mrr_usd.toLocaleString("en-US")}`} accent="#0d9488" />
-        <Stat label="PAYOUT (ОЖИДАЕТ)" value={`$${stats.pending_payout_usd.toLocaleString("en-US")}`} accent="#f59e0b" />
-        <Stat label="PAYOUT (ВЫПЛАЧЕНО)" value={`$${stats.paid_payout_usd.toLocaleString("en-US")}`} accent="#0f172a" />
+        <Stat label={t("pricing.affiliateDashboard.stats.pendingPayout")} value={`$${stats.pending_payout_usd.toLocaleString("en-US")}`} accent="#f59e0b" />
+        <Stat label={t("pricing.affiliateDashboard.stats.paidPayout")} value={`$${stats.paid_payout_usd.toLocaleString("en-US")}`} accent="#0f172a" />
       </section>
 
       {stats.clicks === 0 && (
@@ -370,10 +379,8 @@ function DashboardContent({
             marginBottom: 24,
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Трекинг ожидает первого клика</div>
-          Метрики начнут обновляться автоматически после первого перехода по вашей ссылке.
-          Cookie держится {stats.cookie_days} дней — даже если регистрация произойдёт через несколько недель,
-          конверсия будет засчитана.
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>{t("pricing.affiliateDashboard.emptyState.title")}</div>
+          {t("pricing.affiliateDashboard.emptyState.description", { days: stats.cookie_days })}
         </div>
       )}
 
@@ -388,14 +395,14 @@ function DashboardContent({
         }}
       >
         <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.01em" }}>
-          Как работает программа
+          {t("pricing.affiliateDashboard.howItWorks.title")}
         </h2>
         <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: "#475569", lineHeight: 1.8 }}>
-          <li>Делитесь реферальной ссылкой в любых каналах (блог, email, соцсети).</li>
-          <li>Когда кто-то переходит — ставится cookie на {stats.cookie_days} дней.</li>
-          <li>Если он/она оформит платную подписку — фиксируется конверсия.</li>
-          <li>Каждый месяц получаете {stats.commission_percent}% от MRR этого клиента (lifetime, пока он подписчик).</li>
-          <li>Минимум для payout — $50. Выплата через Stripe Connect раз в месяц.</li>
+          <li>{t("pricing.affiliateDashboard.howItWorks.step1")}</li>
+          <li>{t("pricing.affiliateDashboard.howItWorks.step2", { days: stats.cookie_days })}</li>
+          <li>{t("pricing.affiliateDashboard.howItWorks.step3")}</li>
+          <li>{t("pricing.affiliateDashboard.howItWorks.step4", { percent: stats.commission_percent })}</li>
+          <li>{t("pricing.affiliateDashboard.howItWorks.step5")}</li>
         </ol>
       </section>
 
@@ -413,7 +420,7 @@ function DashboardContent({
             textDecoration: "none",
           }}
         >
-          Документация программы
+          {t("pricing.affiliateDashboard.actions.docs")}
         </Link>
         <a
           href={`mailto:hello@aevion.io?subject=Affiliate%20${encodeURIComponent(application.email)}`}
@@ -427,7 +434,7 @@ function DashboardContent({
             textDecoration: "none",
           }}
         >
-          Связаться с менеджером
+          {t("pricing.affiliateDashboard.actions.contactManager")}
         </a>
       </section>
     </>

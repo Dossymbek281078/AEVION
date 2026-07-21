@@ -5,11 +5,13 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
 type Endpoint = {
+  id: string;
   group: "qsign" | "qright" | "bureau" | "qcore" | "core";
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
@@ -19,41 +21,125 @@ type Endpoint = {
 };
 
 const ENDPOINTS: Endpoint[] = [
-  { group: "qsign", method: "POST", path: "/api/qsign/sign", name: "Создать подпись", freeQuota: "100/мес", pricePer1k: "$3.00" },
-  { group: "qsign", method: "POST", path: "/api/qsign/verify", name: "Проверить подпись", freeQuota: "1 000/мес", pricePer1k: "$0.30" },
-  { group: "qsign", method: "POST", path: "/api/qsign/batch", name: "Batch-подпись (до 100)", freeQuota: "10/мес", pricePer1k: "$30.00" },
-  { group: "qsign", method: "GET", path: "/api/qsign/audit/:id", name: "Audit-trail записи", freeQuota: "Unlimited", pricePer1k: "Free" },
-  { group: "qright", method: "POST", path: "/api/qright/register", name: "Зарегистрировать объект", freeQuota: "10/мес", pricePer1k: "$15.00" },
-  { group: "qright", method: "GET", path: "/api/qright/:id", name: "Получить объект", freeQuota: "Unlimited", pricePer1k: "Free" },
-  { group: "qright", method: "GET", path: "/api/qright/embed/:id", name: "Embed JSON для widget", freeQuota: "Unlimited", pricePer1k: "Free" },
-  { group: "qright", method: "GET", path: "/api/qright/badge/:id.svg", name: "SVG-бейдж", freeQuota: "Unlimited", pricePer1k: "Free" },
-  { group: "bureau", method: "POST", path: "/api/bureau/protect", name: "Защитить артефакт", freeQuota: "5/мес", pricePer1k: "$25.00" },
-  { group: "bureau", method: "POST", path: "/api/bureau/protect-batch", name: "Batch-защита (до 50)", freeQuota: "1/мес", pricePer1k: "$200.00" },
-  { group: "bureau", method: "GET", path: "/api/bureau/certificate/:id.pdf", name: "PDF-сертификат", freeQuota: "10/мес", pricePer1k: "$5.00" },
-  { group: "qcore", method: "POST", path: "/api/qcore/chat", name: "LLM chat completion", freeQuota: "100k токенов", pricePer1k: "$0.50/1k tok" },
-  { group: "qcore", method: "POST", path: "/api/qcore/agent", name: "Agent-вызов с tool-use", freeQuota: "1k вызовов", pricePer1k: "$5.00" },
-  { group: "qcore", method: "POST", path: "/api/qcore/embed", name: "Embeddings", freeQuota: "1M токенов", pricePer1k: "$0.05/1k tok" },
-  { group: "core", method: "GET", path: "/api/openapi.json", name: "OpenAPI-спецификация", freeQuota: "Unlimited", pricePer1k: "Free" },
-  { group: "core", method: "POST", path: "/api/webhooks/stripe", name: "Webhook listener", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "qsignSign", group: "qsign", method: "POST", path: "/api/qsign/sign", name: "Создать подпись", freeQuota: "100/мес", pricePer1k: "$3.00" },
+  { id: "qsignVerify", group: "qsign", method: "POST", path: "/api/qsign/verify", name: "Проверить подпись", freeQuota: "1 000/мес", pricePer1k: "$0.30" },
+  { id: "qsignBatch", group: "qsign", method: "POST", path: "/api/qsign/batch", name: "Batch-подпись (до 100)", freeQuota: "10/мес", pricePer1k: "$30.00" },
+  { id: "qsignAudit", group: "qsign", method: "GET", path: "/api/qsign/audit/:id", name: "Audit-trail записи", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "qrightRegister", group: "qright", method: "POST", path: "/api/qright/register", name: "Зарегистрировать объект", freeQuota: "10/мес", pricePer1k: "$15.00" },
+  { id: "qrightGet", group: "qright", method: "GET", path: "/api/qright/:id", name: "Получить объект", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "qrightEmbed", group: "qright", method: "GET", path: "/api/qright/embed/:id", name: "Embed JSON для widget", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "qrightBadge", group: "qright", method: "GET", path: "/api/qright/badge/:id.svg", name: "SVG-бейдж", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "bureauProtect", group: "bureau", method: "POST", path: "/api/bureau/protect", name: "Защитить артефакт", freeQuota: "5/мес", pricePer1k: "$25.00" },
+  { id: "bureauProtectBatch", group: "bureau", method: "POST", path: "/api/bureau/protect-batch", name: "Batch-защита (до 50)", freeQuota: "1/мес", pricePer1k: "$200.00" },
+  { id: "bureauCertificate", group: "bureau", method: "GET", path: "/api/bureau/certificate/:id.pdf", name: "PDF-сертификат", freeQuota: "10/мес", pricePer1k: "$5.00" },
+  { id: "qcoreChat", group: "qcore", method: "POST", path: "/api/qcore/chat", name: "LLM chat completion", freeQuota: "100k токенов", pricePer1k: "$0.50/1k tok" },
+  { id: "qcoreAgent", group: "qcore", method: "POST", path: "/api/qcore/agent", name: "Agent-вызов с tool-use", freeQuota: "1k вызовов", pricePer1k: "$5.00" },
+  { id: "qcoreEmbed", group: "qcore", method: "POST", path: "/api/qcore/embed", name: "Embeddings", freeQuota: "1M токенов", pricePer1k: "$0.05/1k tok" },
+  { id: "coreOpenapi", group: "core", method: "GET", path: "/api/openapi.json", name: "OpenAPI-спецификация", freeQuota: "Unlimited", pricePer1k: "Free" },
+  { id: "coreWebhook", group: "core", method: "POST", path: "/api/webhooks/stripe", name: "Webhook listener", freeQuota: "Unlimited", pricePer1k: "Free" },
 ];
 
-const GROUP_META: Record<Endpoint["group"], { label: string; color: string; bg: string }> = {
-  qsign: { label: "QSign · Подписи", color: "#0d9488", bg: "rgba(13,148,136,0.06)" },
-  qright: { label: "QRight · Цифровая собственность", color: "#0ea5e9", bg: "rgba(14,165,233,0.06)" },
-  bureau: { label: "IP Bureau · Бюро авторства", color: "#7c3aed", bg: "rgba(124,58,237,0.06)" },
-  qcore: { label: "QCoreAI · LLM и агенты", color: "#f59e0b", bg: "rgba(245,158,11,0.06)" },
-  core: { label: "Core · Спецификация и webhooks", color: "#475569", bg: "rgba(71,85,105,0.06)" },
+/** Endpoint names that are (partly) Russian prose; look up the i18n key instead of the raw literal. */
+const ENDPOINT_NAME_KEY: Partial<Record<string, string>> = {
+  qsignSign: "pricing.apiPricing.endpoint.qsignSign.name",
+  qsignVerify: "pricing.apiPricing.endpoint.qsignVerify.name",
+  qsignBatch: "pricing.apiPricing.endpoint.qsignBatch.name",
+  qsignAudit: "pricing.apiPricing.endpoint.qsignAudit.name",
+  qrightRegister: "pricing.apiPricing.endpoint.qrightRegister.name",
+  qrightGet: "pricing.apiPricing.endpoint.qrightGet.name",
+  qrightEmbed: "pricing.apiPricing.endpoint.qrightEmbed.name",
+  qrightBadge: "pricing.apiPricing.endpoint.qrightBadge.name",
+  bureauProtect: "pricing.apiPricing.endpoint.bureauProtect.name",
+  bureauProtectBatch: "pricing.apiPricing.endpoint.bureauProtectBatch.name",
+  bureauCertificate: "pricing.apiPricing.endpoint.bureauCertificate.name",
+  qcoreAgent: "pricing.apiPricing.endpoint.qcoreAgent.name",
+  coreOpenapi: "pricing.apiPricing.endpoint.coreOpenapi.name",
 };
 
-const VOLUME_TIERS = [
-  { name: "Developer", quota: "до 10k вызовов/мес", price: "$0", perCall: "по rate-card", note: "Для прототипов и SDK-тестов" },
-  { name: "Build", quota: "до 100k вызовов/мес", price: "$49/мес", perCall: "−15% от rate-card", note: "Для запуска и MVP" },
-  { name: "Scale", quota: "до 1M вызовов/мес", price: "$249/мес", perCall: "−30% от rate-card", note: "Для production-нагрузки" },
-  { name: "Enterprise", quota: "1M+/мес или dedicated", price: "по запросу", perCall: "−50% и выше", note: "SLA, on-prem, BYO-key" },
+/** Raw freeQuota strings (Russian units) mapped to their i18n key. Values shared across endpoints reuse one key. */
+const QUOTA_KEY: Record<string, string> = {
+  "100/мес": "pricing.apiPricing.quota.per100Month",
+  "1 000/мес": "pricing.apiPricing.quota.per1000Month",
+  "10/мес": "pricing.apiPricing.quota.per10Month",
+  "5/мес": "pricing.apiPricing.quota.per5Month",
+  "1/мес": "pricing.apiPricing.quota.per1Month",
+  "100k токенов": "pricing.apiPricing.quota.per100kTokens",
+  "1k вызовов": "pricing.apiPricing.quota.per1kCalls",
+  "1M токенов": "pricing.apiPricing.quota.per1mTokens",
+};
+
+const GROUP_META: Record<Endpoint["group"], { color: string; bg: string }> = {
+  qsign: { color: "#0d9488", bg: "rgba(13,148,136,0.06)" },
+  qright: { color: "#0ea5e9", bg: "rgba(14,165,233,0.06)" },
+  bureau: { color: "#7c3aed", bg: "rgba(124,58,237,0.06)" },
+  qcore: { color: "#f59e0b", bg: "rgba(245,158,11,0.06)" },
+  core: { color: "#475569", bg: "rgba(71,85,105,0.06)" },
+};
+
+const GROUP_LABEL_KEY: Record<Endpoint["group"], string> = {
+  qsign: "pricing.apiPricing.group.qsign",
+  qright: "pricing.apiPricing.group.qright",
+  bureau: "pricing.apiPricing.group.bureau",
+  qcore: "pricing.apiPricing.group.qcore",
+  core: "pricing.apiPricing.group.core",
+};
+
+type VolumeTier = {
+  id: string;
+  name: string;
+  quotaKey: string;
+  /** Raw currency amount (not translated), e.g. "$49". Omitted when priceAmountKey is used instead. */
+  priceAmount?: string;
+  /** i18n key for the whole price label, used when it's prose rather than a currency amount (e.g. "by request"). */
+  priceAmountKey?: string;
+  /** i18n key for a suffix appended after priceAmount, e.g. "/mo". */
+  priceSuffixKey?: string;
+  perCallKey: string;
+  /** i18n key for the note. Omitted (with `note` literal) when the note has no Cyrillic to translate. */
+  noteKey?: string;
+  note?: string;
+};
+
+const VOLUME_TIERS: VolumeTier[] = [
+  {
+    id: "dev",
+    name: "Developer",
+    quotaKey: "pricing.apiPricing.tier.dev.quota",
+    priceAmount: "$0",
+    perCallKey: "pricing.apiPricing.tier.dev.perCall",
+    noteKey: "pricing.apiPricing.tier.dev.note",
+  },
+  {
+    id: "build",
+    name: "Build",
+    quotaKey: "pricing.apiPricing.tier.build.quota",
+    priceAmount: "$49",
+    priceSuffixKey: "tier.perMonth",
+    perCallKey: "pricing.apiPricing.tier.build.perCall",
+    noteKey: "pricing.apiPricing.tier.build.note",
+  },
+  {
+    id: "scale",
+    name: "Scale",
+    quotaKey: "pricing.apiPricing.tier.scale.quota",
+    priceAmount: "$249",
+    priceSuffixKey: "tier.perMonth",
+    perCallKey: "pricing.apiPricing.tier.scale.perCall",
+    noteKey: "pricing.apiPricing.tier.scale.note",
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    quotaKey: "pricing.apiPricing.tier.enterprise.quota",
+    priceAmountKey: "pricing.apiPricing.tier.enterprise.price",
+    perCallKey: "pricing.apiPricing.tier.enterprise.perCall",
+    note: "SLA, on-prem, BYO-key",
+  },
 ];
 
 export default function PricingApiPage() {
   const tp = usePricingT();
+  const { t: gt } = useI18n();
   const [filterGroup, setFilterGroup] = useState<Endpoint["group"] | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
@@ -77,28 +163,30 @@ export default function PricingApiPage() {
     return m;
   }, []);
 
-  const snippet = `# Установить SDK
-npm install @aevion-io/fintech-sdk
-
-# В коде
-import { QPayNet, signWebhookPayload } from "@aevion-io/fintech-sdk";
-const qpaynet = new QPayNet({ apiKey: process.env.AEVION_API_KEY });
-
-// Перевод между кошельками
-const tx = await qpaynet.transfer({
-  fromWalletId: "wlt_alice",
-  toWalletId: "wlt_bob",
-  amount: 5000,            // KZT в тийинах (×100)
-  description: "Order #123",
-});
-
-// Запрос на оплату (генерирует pay-link)
-const req = await qpaynet.requests.create({
-  toWalletId: "wlt_alice",
-  amount: 12500,
-  description: "Invoice #456",
-});
-console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
+  const snippet = [
+    gt("pricing.apiPricing.snippet.installSdk"),
+    `npm install @aevion-io/fintech-sdk`,
+    ``,
+    gt("pricing.apiPricing.snippet.inCode"),
+    `import { QPayNet, signWebhookPayload } from "@aevion-io/fintech-sdk";`,
+    `const qpaynet = new QPayNet({ apiKey: process.env.AEVION_API_KEY });`,
+    ``,
+    gt("pricing.apiPricing.snippet.transferComment"),
+    `const tx = await qpaynet.transfer({`,
+    `  fromWalletId: "wlt_alice",`,
+    `  toWalletId: "wlt_bob",`,
+    `  amount: 5000,            // ${gt("pricing.apiPricing.snippet.tiyinComment")}`,
+    `  description: "Order #123",`,
+    `});`,
+    ``,
+    gt("pricing.apiPricing.snippet.requestComment"),
+    `const req = await qpaynet.requests.create({`,
+    `  toWalletId: "wlt_alice",`,
+    `  amount: 12500,`,
+    `  description: "Invoice #456",`,
+    `});`,
+    `console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`,
+  ].join("\n");
 
   return (
     <ProductPageShell maxWidth={1080}>
@@ -190,7 +278,7 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                   borderRadius: 999,
                 }}
               >
-                ПОПУЛЯРНО
+                {gt("pricing.apiPricing.popular")}
               </div>
             )}
             <div
@@ -205,10 +293,11 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
               {t.name.toUpperCase()}
             </div>
             <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em", marginBottom: 6 }}>
-              {t.price}
+              {t.priceAmountKey ? gt(t.priceAmountKey) : t.priceAmount}
+              {t.priceSuffixKey ? tp(t.priceSuffixKey) : ""}
             </div>
             <div style={{ fontSize: 12, color: i === 1 ? "#94a3b8" : "#64748b", marginBottom: 8 }}>
-              {t.quota}
+              {gt(t.quotaKey)}
             </div>
             <div
               style={{
@@ -218,10 +307,10 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                 marginBottom: 8,
               }}
             >
-              {t.perCall}
+              {gt(t.perCallKey)}
             </div>
             <div style={{ fontSize: 11, color: i === 1 ? "#cbd5e1" : "#475569", lineHeight: 1.4 }}>
-              {t.note}
+              {t.noteKey ? gt(t.noteKey) : t.note}
             </div>
           </div>
         ))}
@@ -337,7 +426,7 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                 color: filterGroup === g ? "#fff" : meta.color,
               }}
             >
-              {meta.label} · {c}
+              {gt(GROUP_LABEL_KEY[g])} · {c}
             </button>
           );
         })}
@@ -360,7 +449,7 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                   textTransform: "uppercase",
                 }}
               >
-                {meta.label}
+                {gt(GROUP_LABEL_KEY[g.group])}
               </h2>
               <div
                 style={{
@@ -410,7 +499,9 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                       >
                         {e.path}
                       </code>
-                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{e.name}</div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        {ENDPOINT_NAME_KEY[e.id] ? gt(ENDPOINT_NAME_KEY[e.id]!) : e.name}
+                      </div>
                     </div>
                     <span
                       style={{
@@ -420,7 +511,7 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {e.freeQuota}
+                      {QUOTA_KEY[e.freeQuota] ? gt(QUOTA_KEY[e.freeQuota]) : e.freeQuota}
                     </span>
                     <span
                       style={{
@@ -502,7 +593,7 @@ console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
               border: "1px solid rgba(14,165,233,0.3)",
             }}
           >
-            Embed калькулятор →
+            {gt("pricing.apiPricing.embedCalculator")}
           </Link>
         </div>
       </section>

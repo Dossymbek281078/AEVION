@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useFunnel } from "@/lib/useFunnel";
+import { useI18n } from "@/lib/i18n";
 
 type Tier = {
   id: "free" | "pro" | "team";
@@ -16,111 +17,112 @@ type Tier = {
   highlight?: boolean;
 };
 
-const TIERS: Tier[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    tagline: "Для исследования и первых сценариев",
-    features: [
-      "До 5 сохранённых сценариев",
-      "AI-советник — 10 запросов в день",
-      "Базовый PDF (с водяным знаком unsigned)",
-      "Все ползунки, режимы, scatter, Globus",
-      "Academy — все 8 уроков",
-      "Сохранение в localStorage (черновик)",
-    ],
-    cta: "Открыть редактор →",
-    ctaHref: "/constitution",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$9",
-    period: "/ мес",
-    tagline: "Безлимит + AI без cap + clean PDF",
-    features: [
-      "♾ Безлимитные сохранения в облаке",
-      "♾ AI-советник без дневного лимита",
-      "🎨 PDF без водяных знаков, кастомные темы",
-      "🌐 Embed-виджет на свой сайт",
-      "📊 Личная аналитика моих сценариев",
-      "🎯 Priority support через email",
-      "Всё из Free",
-    ],
-    cta: "Upgrade to Pro →",
-    ctaHref: "https://aevion.gumroad.com/l/pyiaz",
-    highlight: true,
-  },
-  {
-    id: "team",
-    name: "Team",
-    price: "$49",
-    period: "/ мес",
-    tagline: "Для классов, think-tanks, исследовательских групп",
-    features: [
-      "👥 5 seats (доп. seat — $7/mo)",
-      "🔐 Admin dashboard (роли + биллинг)",
-      "🤝 Shared scenarios между seats",
-      "📥 CSV-экспорт всех scenarios команды",
-      "🔗 Privately-branded embed (свой логотип)",
-      "🎓 Academy с прогрессом по seat'ам",
-      "🎯 Priority support через Slack",
-      "Всё из Pro × 5",
-    ],
-    cta: "Get Team →",
-    ctaHref: "https://aevion.gumroad.com/l/wjvquw",
-  },
-];
-
-const FAQS: Array<{ q: string; a: string }> = [
-  {
-    q: "Чем Pro отличается от Free?",
-    a: "Free ограничен 5 сохранёнными сценариями и 10 AI-запросами в день. PDF в Free имеет водяной знак «unsigned draft», если не подписан через QSign. Pro снимает все эти лимиты, добавляет кастомные темы, embed-виджет без watermark, и личную аналитику.",
-  },
-  {
-    q: "Можно ли отменить подписку в любой момент?",
-    a: "Да. Оплата идёт через Gumroad, в личном кабинете в любой момент можно отменить — доступ к Pro/Team сохраняется до конца оплаченного периода. Никаких автопродлений без подтверждения, никаких скрытых периодов.",
-  },
-  {
-    q: "Что значит «5 seats» в Team?",
-    a: "Один Team-аккаунт даёт 5 индивидуальных Pro-логинов с общим биллингом и админкой. Идеально для университетского класса (преподаватель + 4 ассистента), think-tank или 5-человечной исследовательской группы. Дополнительный seat стоит $7/mo.",
-  },
-  {
-    q: "Что такое QSign и зачем подписывать сценарий?",
-    a: "QSign — это HMAC-SHA256 подпись от AEVION-инфраструктуры. Подписанный сценарий получает уникальный signature hex, который можно перепроверить через /api/qsign/verify в любой момент. Это значит, что один и тот же сценарий у двух разных пользователей получает одинаковую подпись — артефакт становится верифицируемым.",
-  },
-  {
-    q: "Можно ли использовать Constitution в учебных курсах?",
-    a: "Да. Team-план специально для этого. У преподавателя и студентов отдельные аккаунты, общие сценарии, прогресс по Academy на каждого. Если есть особые требования (large class, white-label), напишите на support@aevion.app — посчитаем кастомно.",
-  },
-  {
-    q: "Что делать если AI-советник не работает?",
-    a: "Constitution использует QCoreAI с настройкой 5 провайдеров (Claude, GPT-4, Gemini, DeepSeek, Grok). Если ни один не настроен — возвращается эвристический stub. На Pro доступны все провайдеры с приоритетом скорости и качества.",
-  },
-  {
-    q: "Какие данные хранятся?",
-    a: "Сценарии: title, sliders (8 чисел), вычисленный regime, метрики, timestamp. Никаких персональных данных мы не запрашиваем. Опубликованные на Planet артефакты добавляют QSign-подпись (HMAC-SHA256) и публичный publishedAt. Анонимные голоса хешируются через fingerprint(IP+UA) — мы не храним сырой IP.",
-  },
-  {
-    q: "Есть ли образовательный grant?",
-    a: "Да. Для университетов, исследовательских центров и некоммерческих организаций мы даём Team-план бесплатно при подтверждении через .edu/.org email. Заявка: support@aevion.app с темой «Education grant».",
-  },
-  {
-    q: "Можно ли self-host Constitution?",
-    a: "Код открыт — backend на Express + Postgres, frontend на Next.js. Развернуть на своём Railway/Vercel — около часа. Hosted SaaS даёт: Pro-фичи, поддержку, авто-обновления, общий Planet leaderboard со всеми пользователями. Self-host подойдёт если у тебя >100 seats или нужен on-prem.",
-  },
-  {
-    q: "Как работает embed на чужом сайте?",
-    a: "На Free доступен base embed с AEVION watermark. На Pro/Team — clean embed без бренда, можно даже свой логотип на Team. Iframe-snippet: <iframe src=\"https://aevion.app/constitution/embed?preset=nordic&theme=light\" width=580 height=500>. URL-params: ?artifact, ?sliders, ?preset, ?country, ?theme, ?compact.",
-  },
-];
-
 export default function ConstitutionPricingPage() {
+  const { t } = useI18n();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [showWaitlist, setShowWaitlist] = useState<boolean>(false);
   const { track } = useFunnel();
+
+  const TIERS: Tier[] = [
+    {
+      id: "free",
+      name: "Free",
+      price: "$0",
+      period: "forever",
+      tagline: t("constitution.pricing.tier.free.tagline"),
+      features: [
+        t("constitution.pricing.tier.free.feature.saved"),
+        t("constitution.pricing.tier.free.feature.aiAdvisor"),
+        t("constitution.pricing.tier.free.feature.pdf"),
+        t("constitution.pricing.tier.free.feature.controls"),
+        t("constitution.pricing.tier.free.feature.academy"),
+        t("constitution.pricing.tier.free.feature.localStorage"),
+      ],
+      cta: t("constitution.pricing.tier.free.cta"),
+      ctaHref: "/constitution",
+    },
+    {
+      id: "pro",
+      name: "Pro",
+      price: "$9",
+      period: t("constitution.pricing.tier.period.monthly"),
+      tagline: t("constitution.pricing.tier.pro.tagline"),
+      features: [
+        t("constitution.pricing.tier.pro.feature.saves"),
+        t("constitution.pricing.tier.pro.feature.aiAdvisor"),
+        t("constitution.pricing.tier.pro.feature.pdf"),
+        t("constitution.pricing.tier.pro.feature.embed"),
+        t("constitution.pricing.tier.pro.feature.analytics"),
+        t("constitution.pricing.tier.pro.feature.support"),
+        t("constitution.pricing.tier.pro.feature.allFree"),
+      ],
+      cta: "Upgrade to Pro →",
+      ctaHref: "https://aevion.gumroad.com/l/pyiaz",
+      highlight: true,
+    },
+    {
+      id: "team",
+      name: "Team",
+      price: "$49",
+      period: t("constitution.pricing.tier.period.monthly"),
+      tagline: t("constitution.pricing.tier.team.tagline"),
+      features: [
+        t("constitution.pricing.tier.team.feature.seats"),
+        t("constitution.pricing.tier.team.feature.admin"),
+        t("constitution.pricing.tier.team.feature.shared"),
+        t("constitution.pricing.tier.team.feature.csv"),
+        t("constitution.pricing.tier.team.feature.embed"),
+        t("constitution.pricing.tier.team.feature.academy"),
+        t("constitution.pricing.tier.team.feature.support"),
+        t("constitution.pricing.tier.team.feature.allPro"),
+      ],
+      cta: "Get Team →",
+      ctaHref: "https://aevion.gumroad.com/l/wjvquw",
+    },
+  ];
+
+  const FAQS: Array<{ q: string; a: string }> = [
+    {
+      q: t("constitution.pricing.faq.diffProFree.q"),
+      a: t("constitution.pricing.faq.diffProFree.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.cancelAnytime.q"),
+      a: t("constitution.pricing.faq.cancelAnytime.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.teamSeats.q"),
+      a: t("constitution.pricing.faq.teamSeats.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.qsign.q"),
+      a: t("constitution.pricing.faq.qsign.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.education.q"),
+      a: t("constitution.pricing.faq.education.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.aiNotWorking.q"),
+      a: t("constitution.pricing.faq.aiNotWorking.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.dataStored.q"),
+      a: t("constitution.pricing.faq.dataStored.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.grant.q"),
+      a: t("constitution.pricing.faq.grant.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.selfHost.q"),
+      a: t("constitution.pricing.faq.selfHost.a"),
+    },
+    {
+      q: t("constitution.pricing.faq.embed.q"),
+      a: t("constitution.pricing.faq.embed.a"),
+    },
+  ];
 
   useEffect(() => { track("page_view", { source: "pricing" }); }, [track]);
 
@@ -160,8 +162,7 @@ export default function ConstitutionPricingPage() {
             Constitution Pricing
           </h1>
           <p className="text-[#9aa3c0] mt-3 max-w-2xl mx-auto">
-            Free на старт. $9/мес — безлимит. $49/мес — для команды. Отмена в любой момент,
-            без скрытых периодов.
+            {t("constitution.pricing.header.subtitle")}
           </p>
         </header>
 
@@ -232,18 +233,18 @@ export default function ConstitutionPricingPage() {
                 </tr>
               </thead>
               <tbody className="text-[#e7ecf8]">
-                <CompareRow feature="Сохранённые сценарии" free="5" pro="♾" team="♾" />
-                <CompareRow feature="AI-советник (запросов/день)" free="10" pro="♾" team="♾" />
-                <CompareRow feature="PDF без watermark" free="—" pro="✓" team="✓" />
-                <CompareRow feature="Custom темы" free="—" pro="✓" team="✓" />
-                <CompareRow feature="Embed-виджет" free="watermarked" pro="clean" team="branded" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.saved")} free="5" pro="♾" team="♾" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.aiAdvisor")} free="10" pro="♾" team="♾" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.pdfWatermark")} free="—" pro="✓" team="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.themes")} free="—" pro="✓" team="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.embed")} free="watermarked" pro="clean" team="branded" />
                 <CompareRow feature="Seats" free="1" pro="1" team="5+" />
                 <CompareRow feature="Admin dashboard" free="—" pro="—" team="✓" />
                 <CompareRow feature="Shared scenarios" free="—" pro="—" team="✓" />
-                <CompareRow feature="CSV-экспорт" free="—" pro="✓" team="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.csv")} free="—" pro="✓" team="✓" />
                 <CompareRow feature="Priority support" free="—" pro="Email" team="Slack" />
                 <CompareRow feature="Real-time collab" free="✓" pro="✓" team="✓" />
-                <CompareRow feature="Academy + сертификат" free="✓" pro="✓" team="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.certificate")} free="✓" pro="✓" team="✓" />
                 <CompareRow feature="Planet publish" free="✓" pro="✓" team="✓" />
                 <CompareRow feature="Public REST API" free="✓ (240/min)" pro="✓ (240/min)" team="✓ (1200/min)" />
               </tbody>
@@ -284,7 +285,7 @@ export default function ConstitutionPricingPage() {
 
         <footer className="mt-12 text-center text-xs text-[#9aa3c0]">
           <p>
-            Платежи через Gumroad. Cancel anytime. 14-day money-back guarantee. Вопросы —{" "}
+            {t("constitution.pricing.footer.disclaimer")}{" "}
             <a href="mailto:support@aevion.app" className="text-[#d4af37] hover:underline">
               support@aevion.app
             </a>
@@ -298,6 +299,7 @@ export default function ConstitutionPricingPage() {
 }
 
 function WaitlistModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [email, setEmail] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [done, setDone] = useState<boolean>(false);
@@ -306,7 +308,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const submit = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setError("Email не похож на email");
+      setError(t("constitution.pricing.waitlist.emailInvalid"));
       return;
     }
     setBusy(true);
@@ -318,8 +320,8 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ email: trimmed, source: "pricing-modal" }),
       });
       if (!r.ok) {
-        const t = await r.text().catch(() => "");
-        throw new Error(`HTTP ${r.status}: ${t.slice(0, 120)}`);
+        const bodyText = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${bodyText.slice(0, 120)}`);
       }
       setDone(true);
     } catch (err) {
@@ -341,7 +343,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
           <div>
             <div className="text-3xl mb-2">📨</div>
             <h3 className="text-xl font-bold text-fuchsia-300">
-              Подпишись на лонч Pro
+              {t("constitution.pricing.waitlist.title")}
             </h3>
           </div>
           <button
@@ -356,8 +358,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
         {!done ? (
           <>
             <p className="text-sm text-[#9aa3c0] mb-4">
-              Получишь letter с 30% early-bird скидкой за первый месяц + weekly
-              digest «топ-5 конституций недели». Anti-spam: 1 письмо в неделю максимум.
+              {t("constitution.pricing.waitlist.body")}
             </p>
             <input
               type="email"
@@ -382,7 +383,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
                 onClick={onClose}
                 className="text-sm px-3 py-1.5 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
               >
-                Не сейчас
+                {t("constitution.pricing.waitlist.notNow")}
               </button>
               <button
                 type="button"
@@ -390,21 +391,21 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
                 disabled={busy || !email.includes("@")}
                 className="px-4 py-1.5 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold text-sm disabled:opacity-40"
               >
-                {busy ? "..." : "Подписаться →"}
+                {busy ? "..." : t("constitution.pricing.waitlist.subscribe")}
               </button>
             </div>
           </>
         ) : (
           <>
             <p className="text-emerald-300 mb-3">
-              ✓ Готово. Письмо с подтверждением придёт через минуту-две.
+              {t("constitution.pricing.waitlist.done")}
             </p>
             <button
               type="button"
               onClick={onClose}
               className="w-full px-4 py-2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm"
             >
-              Окей, закрыть
+              {t("constitution.pricing.waitlist.close")}
             </button>
           </>
         )}

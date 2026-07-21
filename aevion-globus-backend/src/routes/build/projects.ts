@@ -32,12 +32,15 @@ projectsRouter.post("/", async (req, res) => {
       ? { ok: true as const, value: null }
       : vString(req.body.city, "city", { max: 100, allowEmpty: true });
     if (city.ok === false) return fail(res, 400, city.error);
+    const region = req.body?.region == null ? null : String(req.body.region).trim().slice(0, 60) || null;
+    const country = typeof req.body?.country === "string" && req.body.country.trim()
+      ? req.body.country.trim().slice(0, 8) : "KZ";
 
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildProject" ("id","title","description","budget","status","city","clientId")
-       VALUES ($1,$2,$3,$4,'OPEN',$5,$6) RETURNING *`,
-      [id, title.value, description.value, budget.value, city.value || null, auth.sub],
+      `INSERT INTO "BuildProject" ("id","title","description","budget","status","city","clientId","region","country")
+       VALUES ($1,$2,$3,$4,'OPEN',$5,$6,$7,$8) RETURNING *`,
+      [id, title.value, description.value, budget.value, city.value || null, auth.sub, region, country],
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
@@ -195,6 +198,14 @@ projectsRouter.patch("/:id", async (req, res) => {
       const v = vString(req.body.city, "city", { max: 100, allowEmpty: true });
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value || null); sets.push(`"city" = $${params.length}`);
+    }
+    if (req.body?.region !== undefined) {
+      params.push(req.body.region == null ? null : String(req.body.region).trim().slice(0, 60) || null);
+      sets.push(`"region" = $${params.length}`);
+    }
+    if (req.body?.country !== undefined) {
+      params.push(typeof req.body.country === "string" && req.body.country.trim() ? req.body.country.trim().slice(0, 8) : "KZ");
+      sets.push(`"country" = $${params.length}`);
     }
     if (sets.length === 0) return fail(res, 400, "no_fields_to_update");
 

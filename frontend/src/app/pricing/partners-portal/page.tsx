@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { useI18n } from "@/lib/i18n";
 
 interface PartnerApplication {
   id: string;
@@ -75,6 +76,7 @@ export default function PartnersPortalPage() {
 }
 
 function Inner() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const emailFromUrl = params?.get("email") ?? "";
   const tokenFromUrl = params?.get("token") ?? "";
@@ -104,8 +106,8 @@ function Inner() {
         apiUrl("/api/pricing/partners/dashboard") +
           `?email=${encodeURIComponent(emailFromUrl)}&token=${encodeURIComponent(tokenFromUrl)}`,
       );
-      if (r.status === 401) throw new Error("Ссылка устарела или некорректна");
-      if (r.status === 404) throw new Error("Заявка не найдена. Сначала подайте на /pricing/partners.");
+      if (r.status === 401) throw new Error(t("pricing.partnersPortal.error.linkInvalid"));
+      if (r.status === 404) throw new Error(t("pricing.partnersPortal.error.applicationNotFound"));
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = (await r.json()) as PortalPayload;
       setData(j);
@@ -133,7 +135,7 @@ function Inner() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: emailInput.trim() }),
       });
-      if (r.status === 429) throw new Error("Слишком много попыток. Попробуйте через 10 минут.");
+      if (r.status === 429) throw new Error(t("pricing.partnersPortal.error.tooManyAttempts"));
       if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
       setLinkSent(true);
     } catch (err) {
@@ -153,12 +155,12 @@ function Inner() {
     const modules = MODULE_OPTIONS.filter((m) => fd.get(`mod_${m}`) === "on");
 
     if (!customer) {
-      setDealError("Укажите имя клиента");
+      setDealError(t("pricing.partnersPortal.error.customerNameRequired"));
       setDealStatus("err");
       return;
     }
     if (modules.length === 0) {
-      setDealError("Выберите хотя бы один модуль");
+      setDealError(t("pricing.partnersPortal.error.selectModule"));
       setDealStatus("err");
       return;
     }
@@ -180,7 +182,7 @@ function Inner() {
           notes,
         }),
       });
-      if (r.status === 401) throw new Error("Сессия истекла. Запросите новый magic-link.");
+      if (r.status === 401) throw new Error(t("pricing.partnersPortal.error.sessionExpired"));
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setDealStatus("ok");
       form.reset();
@@ -216,7 +218,7 @@ function Inner() {
             {error}
             <div style={{ marginTop: 10 }}>
               <Link href="/pricing/partners-portal" style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed", textDecoration: "none" }}>
-                ← Запросить новый magic-link
+                ← {t("pricing.partnersPortal.requestNewLink")}
               </Link>
             </div>
           </div>
@@ -260,10 +262,10 @@ function Inner() {
           PARTNERS PORTAL
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.025em" }}>
-          Войти в partner-портал
+          {t("pricing.partnersPortal.login.title")}
         </h1>
         <p style={{ fontSize: 14, color: "#475569", maxWidth: 440, margin: "0 auto", lineHeight: 1.5 }}>
-          Введите email с которым вы подавали заявку. Мы отправим magic-link на ваш ящик.
+          {t("pricing.partnersPortal.login.subtitle")}
         </p>
       </section>
 
@@ -279,9 +281,9 @@ function Inner() {
           }}
         >
           <div style={{ fontSize: 28, marginBottom: 8 }}>✉</div>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Ссылка отправлена</div>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>{t("pricing.partnersPortal.linkSent.title")}</div>
           <div style={{ fontSize: 13, color: "#047857", lineHeight: 1.5 }}>
-            Если email есть в системе — magic-link будет в вашем ящике через минуту.
+            {t("pricing.partnersPortal.linkSent.body")}
           </div>
         </div>
       ) : (
@@ -334,12 +336,12 @@ function Inner() {
               color: "#fff",
             }}
           >
-            {linkSubmitting ? "Отправка…" : "Прислать ссылку"}
+            {linkSubmitting ? t("pricing.partnersPortal.sendingLink") : t("pricing.partnersPortal.sendLink")}
           </button>
           <div style={{ marginTop: 14, fontSize: 12, color: "#64748b", textAlign: "center" }}>
-            Ещё нет заявки?{" "}
+            {t("pricing.partnersPortal.noApplicationYet")}{" "}
             <Link href="/pricing/partners" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
-              Подать на /pricing/partners →
+              {t("pricing.partnersPortal.applyLink")}
             </Link>
           </div>
         </form>
@@ -363,6 +365,7 @@ function PortalContent({
   dealStatus: "idle" | "submitting" | "ok" | "err";
   dealError: string | null;
 }) {
+  const { t } = useI18n();
   const { application, deals, totals, margin_percent } = data;
 
   return (
@@ -377,7 +380,11 @@ function PortalContent({
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
             {application.partnerType ? `${application.partnerType} · ` : ""}
-            заявка #{application.id} · {new Date(application.ts).toLocaleDateString("ru-RU")} · margin {margin_percent}%
+            {t("pricing.partnersPortal.applicationLine", {
+              id: application.id,
+              date: new Date(application.ts).toLocaleDateString("ru-RU"),
+              margin: margin_percent,
+            })}
           </p>
         </div>
         <button
@@ -394,7 +401,7 @@ function PortalContent({
             ...(showDealForm ? { boxShadow: CARD, border: BORDER } : {}),
           }}
         >
-          {showDealForm ? "Скрыть форму" : "+ Зарегистрировать сделку"}
+          {showDealForm ? t("pricing.partnersPortal.hideForm") : t("pricing.partnersPortal.registerDeal")}
         </button>
       </section>
 
@@ -406,7 +413,7 @@ function PortalContent({
           marginBottom: 24,
         }}
       >
-        <Stat label="ВСЕГО СДЕЛОК" value={totals.count.toString()} accent="#0f172a" />
+        <Stat label={t("pricing.partnersPortal.stat.totalDeals")} value={totals.count.toString()} accent="#0f172a" />
         <Stat label="PIPELINE" value={`$${totals.pipeline_usd.toLocaleString("en-US")}`} accent="#0ea5e9" />
         <Stat label="WON" value={`$${totals.won_usd.toLocaleString("en-US")}`} accent="#0d9488" />
         <Stat label="LOST" value={`$${totals.lost_usd.toLocaleString("en-US")}`} accent="#dc2626" />
@@ -424,7 +431,7 @@ function PortalContent({
           }}
         >
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, marginBottom: 14, letterSpacing: "-0.01em" }}>
-            Регистрация сделки
+            {t("pricing.partnersPortal.dealForm.title")}
           </h2>
           <form
             onSubmit={(e) => {
@@ -433,19 +440,19 @@ function PortalContent({
             }}
             style={{ display: "flex", flexDirection: "column", gap: 14 }}
           >
-            <Field label="Клиент *">
-              <input name="customer" required type="text" placeholder="ООО «Пример»" style={inputStyle} />
+            <Field label={t("pricing.partnersPortal.field.customer")}>
+              <input name="customer" required type="text" placeholder={t("pricing.partnersPortal.placeholder.customer")} style={inputStyle} />
             </Field>
-            <Field label="Email клиента (опционально)">
+            <Field label={t("pricing.partnersPortal.field.customerEmail")}>
               <input name="customerEmail" type="email" placeholder="contact@example.com" style={inputStyle} />
             </Field>
-            <Field label="Размер сделки (USD)">
+            <Field label={t("pricing.partnersPortal.field.dealSize")}>
               <input name="dealSizeUsd" type="number" min="0" step="100" placeholder="50000" style={inputStyle} />
             </Field>
-            <Field label="Ожидаемое закрытие">
+            <Field label={t("pricing.partnersPortal.field.expectedClose")}>
               <input name="expectedClose" type="date" style={inputStyle} />
             </Field>
-            <Field label="Модули AEVION *">
+            <Field label={t("pricing.partnersPortal.field.modules")}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
                 {MODULE_OPTIONS.map((m) => (
                   <label
@@ -468,8 +475,8 @@ function PortalContent({
                 ))}
               </div>
             </Field>
-            <Field label="Заметки">
-              <textarea name="notes" rows={4} placeholder="Контекст сделки, decision-makers, конкуренты, риски" style={{ ...inputStyle, resize: "vertical" as const, fontFamily: "inherit" }} />
+            <Field label={t("pricing.partnersPortal.field.notes")}>
+              <textarea name="notes" rows={4} placeholder={t("pricing.partnersPortal.placeholder.notes")} style={{ ...inputStyle, resize: "vertical" as const, fontFamily: "inherit" }} />
             </Field>
             {dealError && (
               <div style={{ padding: 10, background: "#fef2f2", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: "#991b1b", fontSize: 12 }}>
@@ -490,7 +497,7 @@ function PortalContent({
                 color: "#fff",
               }}
             >
-              {dealStatus === "submitting" ? "Регистрация…" : "Зарегистрировать сделку"}
+              {dealStatus === "submitting" ? t("pricing.partnersPortal.submittingDeal") : t("pricing.partnersPortal.submitDeal")}
             </button>
           </form>
         </section>
@@ -498,7 +505,7 @@ function PortalContent({
 
       <section style={{ marginBottom: 56 }}>
         <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.01em" }}>
-          Мои сделки
+          {t("pricing.partnersPortal.myDeals")}
         </h2>
         {deals.length === 0 ? (
           <div
@@ -512,7 +519,7 @@ function PortalContent({
               fontSize: 14,
             }}
           >
-            Сделок пока нет. Зарегистрируйте первую — это закрепляет клиента за вами на 90 дней.
+            {t("pricing.partnersPortal.noDealsYet")}
           </div>
         ) : (
           <div style={{ background: "#fff", border: BORDER, borderRadius: 12, overflow: "hidden" }}>
@@ -520,11 +527,11 @@ function PortalContent({
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#f8fafc" }}>
-                    <th style={th}>Клиент</th>
-                    <th style={th}>Модули</th>
-                    <th style={th}>Сумма</th>
-                    <th style={th}>Закрытие</th>
-                    <th style={th}>Статус</th>
+                    <th style={th}>{t("pricing.partnersPortal.table.customer")}</th>
+                    <th style={th}>{t("pricing.partnersPortal.table.modules")}</th>
+                    <th style={th}>{t("pricing.partnersPortal.table.amount")}</th>
+                    <th style={th}>{t("pricing.partnersPortal.table.closing")}</th>
+                    <th style={th}>{t("pricing.partnersPortal.table.status")}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type CaseIndustry = "banks" | "startups" | "government" | "creators" | "law-firms" | "media";
 type CaseTier = "free" | "lite" | "medium" | "full" | "enterprise";
@@ -48,17 +49,18 @@ const TIER_BADGE: Record<CaseTier, { bg: string; fg: string }> = {
   enterprise: { bg: "#0f172a", fg: "#f8fafc" },
 };
 
-const INDUSTRY_LABEL: Record<CaseIndustry, string> = {
-  banks: "Банки и финтех",
-  startups: "Стартапы",
-  government: "Госсектор",
-  creators: "Создатели контента",
-  "law-firms": "Юр. фирмы",
-  media: "Медиа",
+const INDUSTRY_LABEL_KEY: Record<CaseIndustry, string> = {
+  banks: "pricing.caseDetail.industry.banks",
+  startups: "pricing.caseDetail.industry.startups",
+  government: "pricing.caseDetail.industry.government",
+  creators: "pricing.caseDetail.industry.creators",
+  "law-firms": "pricing.caseDetail.industry.lawFirms",
+  media: "pricing.caseDetail.industry.media",
 };
 
 export default function PricingCaseDetailPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : null;
 
@@ -190,7 +192,7 @@ export default function PricingCaseDetailPage() {
               {c.customer}
             </h1>
             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span>{INDUSTRY_LABEL[c.industry]}</span>
+              <span>{t(INDUSTRY_LABEL_KEY[c.industry])}</span>
               <span>·</span>
               <span>{c.region}</span>
               <span>·</span>
@@ -429,7 +431,7 @@ export default function PricingCaseDetailPage() {
       {related.length > 0 && (
         <section style={{ marginBottom: 56 }}>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-            {tp("caseDetail.relatedTitle")} {INDUSTRY_LABEL[c.industry]}
+            {tp("caseDetail.relatedTitle")} {t(INDUSTRY_LABEL_KEY[c.industry])}
           </h2>
           <div
             style={{

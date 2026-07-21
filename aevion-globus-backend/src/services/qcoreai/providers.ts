@@ -24,6 +24,8 @@
  * Only Anthropic and Gemini use their native wire formats.
  */
 
+import { recordOutcome } from "./providerHealth";
+
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export type ProviderTier = "premium" | "budget" | "free";
@@ -320,6 +322,7 @@ export function getProviders(): Provider[] {
         "deepseek-ai/deepseek-r1",
         "meta/llama-3.3-70b-instruct",
         "qwen/qwen2.5-72b-instruct",
+        "qwen/qwen2.5-coder-32b-instruct",
         "mistralai/mistral-large-2-instruct",
       ],
       defaultModel: process.env.NVIDIA_MODEL || "meta/llama-3.3-70b-instruct",
@@ -960,8 +963,11 @@ export async function callProviderResilient(
   let lastErr: unknown;
   for (let i = 0; i < candidates.length; i++) {
     try {
-      return await callProvider(providerId, messages, candidates[i], temperature);
+      const res = await callProvider(providerId, messages, candidates[i], temperature);
+      recordOutcome(providerId, candidates[i], true);
+      return res;
     } catch (e) {
+      recordOutcome(providerId, candidates[i], false);
       lastErr = e;
       if (!isRetryableProviderError(e) || i === candidates.length - 1) throw e;
       // otherwise: try the next free model
@@ -990,8 +996,10 @@ export async function* streamProviderResilient(
         if (ev.kind === "text" && ev.text) emitted = true;
         yield ev;
       }
+      recordOutcome(providerId, candidates[i], true);
       return; // completed successfully
     } catch (e) {
+      recordOutcome(providerId, candidates[i], false);
       lastErr = e;
       // Can't retry once text is out, or if error isn't retryable, or if this
       // was the last candidate.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { SLIDER_SHORT_LABELS, type Sliders } from "@/lib/constitution";
+import { useI18n } from "@/lib/i18n";
 
 type RegimeStat = { id: string; name: string; n: number };
 type DailyStat = { day: string; n: number };
@@ -21,6 +22,7 @@ type StatsResponse = {
 };
 
 export default function ConstitutionStatsPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export default function ConstitutionStatsPage() {
           </Link>
           <div className="flex items-baseline justify-between flex-wrap gap-2 mt-2">
             <h1 className="text-3xl md:text-4xl font-bold text-[#d4af37]">
-              Constitution — Аналитика
+              {t("constitution.stats.title")}
             </h1>
             <Link
               href="/constitution/leaderboard"
@@ -67,8 +69,7 @@ export default function ConstitutionStatsPage() {
             </Link>
           </div>
           <p className="text-[#9aa3c0] mt-2">
-            Распределение сценариев по режимам, средние ползунки, динамика
-            публикаций за 30 дней.
+            {t("constitution.stats.subtitle")}
           </p>
           {data && (
             <div className="mt-2 text-xs text-[#9aa3c0]">
@@ -82,29 +83,31 @@ export default function ConstitutionStatsPage() {
               >
                 {data.storage}
               </span>{" "}
-              · Всего артефактов:{" "}
+              · {t("constitution.stats.totalArtifacts")}{" "}
               <span className="text-[#d4af37] font-mono">{data.total}</span>
             </div>
           )}
         </header>
 
         {loading && (
-          <div className="text-center text-[#9aa3c0] py-10">Загрузка…</div>
+          <div className="text-center text-[#9aa3c0] py-10">
+            {t("constitution.stats.loading")}
+          </div>
         )}
 
         {error && (
           <div className="text-rose-400 border border-rose-500/30 rounded p-4 bg-rose-500/5">
-            Ошибка загрузки: {error}
+            {t("constitution.stats.errorPrefix")} {error}
           </div>
         )}
 
         {data && data.total === 0 && (
           <div className="text-center text-[#9aa3c0] py-10 border border-[#d4af37]/20 rounded">
-            Пока нет данных. Опубликуй пару сценариев через{" "}
+            {t("constitution.stats.emptyBefore")}{" "}
             <Link href="/constitution" className="text-[#d4af37] underline">
               /constitution
             </Link>{" "}
-            → «🌍 Опубликовать на Planet».
+            {t("constitution.stats.emptyAfter")}
           </div>
         )}
 
@@ -127,15 +130,16 @@ function RegimeBarChart({
   data: RegimeStat[];
   total: number;
 }) {
+  const { t } = useI18n();
   if (data.length === 0) return null;
   const max = Math.max(...data.map((d) => d.n));
   return (
     <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <h2 className="text-lg font-semibold text-[#f5d27a] mb-1">
-        Распределение по режимам
+        {t("constitution.stats.regimeChartTitle")}
       </h2>
       <p className="text-xs text-[#9aa3c0] mb-4">
-        Какие режимы пользователи строят чаще всего
+        {t("constitution.stats.regimeChartSubtitle")}
       </p>
       <div className="space-y-1.5">
         {data.map((r) => {
@@ -170,14 +174,14 @@ function SliderHistograms({
   data: SliderAgg[];
   total: number;
 }) {
+  const { t } = useI18n();
   return (
     <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <h2 className="text-lg font-semibold text-[#f5d27a] mb-1">
-        Распределение ползунков
+        {t("constitution.stats.sliderHistTitle")}
       </h2>
       <p className="text-xs text-[#9aa3c0] mb-4">
-        Среднее значение и гистограмма (5 бакетов 0-19 / 20-39 / 40-59 / 60-79
-        / 80-100) по {total} артефактам
+        {t("constitution.stats.sliderHistSubtitle", { total })}
       </p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {data.map((s) => (
@@ -234,14 +238,15 @@ function SliderHistogramCell({ agg }: { agg: SliderAgg }) {
 }
 
 function DailySparkline({ data }: { data: DailyStat[] }) {
+  const { t } = useI18n();
   if (data.length === 0) {
     return (
       <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
         <h2 className="text-lg font-semibold text-[#f5d27a] mb-1">
-          Динамика публикаций за 30 дней
+          {t("constitution.stats.dailyEmptyTitle")}
         </h2>
         <p className="text-xs text-[#9aa3c0]">
-          Пока нет данных за последние 30 дней
+          {t("constitution.stats.dailyEmptySubtitle")}
         </p>
       </section>
     );
@@ -265,10 +270,10 @@ function DailySparkline({ data }: { data: DailyStat[] }) {
     <section className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex justify-between items-baseline flex-wrap gap-2 mb-1">
         <h2 className="text-lg font-semibold text-[#f5d27a]">
-          Динамика публикаций — 30 дней
+          {t("constitution.stats.dailyTitle")}
         </h2>
         <div className="text-sm text-[#9aa3c0]">
-          Всего за период:{" "}
+          {t("constitution.stats.dailyTotalLabel")}{" "}
           <span className="text-[#d4af37] font-mono">{total}</span>
         </div>
       </div>

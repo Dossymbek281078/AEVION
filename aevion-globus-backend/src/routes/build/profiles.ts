@@ -16,6 +16,8 @@ import {
   BUILD_ROLES,
   SHIFT_PREFERENCES,
   AVAILABILITY_TYPES,
+  WORK_MODES,
+  EDUCATION_LEVELS,
 } from "../../lib/build";
 
 export const profilesRouter = Router();
@@ -136,6 +138,16 @@ profilesRouter.post("/profiles", async (req, res) => {
         ? (req.body.availabilityType as typeof AVAILABILITY_TYPES[number]) : null;
     const readyFromDate = req.body?.readyFromDate == null
       ? null : String(req.body.readyFromDate).trim().slice(0, 32) || null;
+    const region = req.body?.region == null
+      ? null : String(req.body.region).trim().slice(0, 60) || null;
+    const country = typeof req.body?.country === "string" && req.body.country.trim()
+      ? req.body.country.trim().slice(0, 8) : "KZ";
+    const workMode =
+      typeof req.body?.workMode === "string" && (WORK_MODES as readonly string[]).includes(req.body.workMode)
+        ? (req.body.workMode as typeof WORK_MODES[number]) : null;
+    const educationLevel =
+      typeof req.body?.educationLevel === "string" && (EDUCATION_LEVELS as readonly string[]).includes(req.body.educationLevel)
+        ? (req.body.educationLevel as typeof EDUCATION_LEVELS[number]) : null;
     const preferredLocations = arrField(req.body?.preferredLocations, 20, 100);
     const toolsOwned = arrField(req.body?.toolsOwned, 50, 80);
     const medicalCheckValid = req.body?.medicalCheckValid === true || req.body?.medicalCheckValid === "true";
@@ -158,9 +170,10 @@ profilesRouter.post("/profiles", async (req, res) => {
           "driversLicense","shiftPreference","availabilityType","readyFromDate",
           "preferredLocationsJson","toolsOwnedJson",
           "medicalCheckValid","medicalCheckUntil",
-          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl")
+          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl",
+          "region","country","workMode","educationLevel")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name", "phone" = EXCLUDED."phone",
          "city" = EXCLUDED."city", "description" = EXCLUDED."description",
@@ -186,6 +199,8 @@ profilesRouter.post("/profiles", async (req, res) => {
          "safetyTrainingValid" = EXCLUDED."safetyTrainingValid",
          "safetyTrainingUntil" = EXCLUDED."safetyTrainingUntil",
          "introVideoUrl" = EXCLUDED."introVideoUrl",
+         "region" = EXCLUDED."region", "country" = EXCLUDED."country",
+         "workMode" = EXCLUDED."workMode", "educationLevel" = EXCLUDED."educationLevel",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -198,6 +213,7 @@ profilesRouter.post("/profiles", async (req, res) => {
         driversLicense, shiftPreference, availabilityType, readyFromDate,
         JSON.stringify(preferredLocations), JSON.stringify(toolsOwned),
         medicalCheckValid, medicalCheckUntil, safetyTrainingValid, safetyTrainingUntil, introVideoUrl,
+        region, country, workMode, educationLevel,
       ],
     );
 
@@ -237,6 +253,7 @@ profilesRouter.get("/profiles/:id", async (req, res, next) => {
               p."medicalCheckValid", p."medicalCheckUntil",
               p."safetyTrainingValid", p."safetyTrainingUntil",
               p."introVideoUrl",
+              p."region", p."country", p."workMode", p."educationLevel",
               u."email"
        FROM "BuildProfile" p
        LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
@@ -448,6 +465,22 @@ profilesRouter.get("/profiles/search", async (req, res) => {
       params.push(`%${req.query.city.trim()}%`);
       where.push(`p."city" ILIKE $${params.length}`);
     }
+    if (typeof req.query.region === "string" && req.query.region.trim()) {
+      params.push(req.query.region.trim().slice(0, 60));
+      where.push(`p."region" = $${params.length}`);
+    }
+    if (typeof req.query.workMode === "string") {
+      const wm = vEnum(req.query.workMode, "workMode", WORK_MODES);
+      if (!wm.ok) return fail(res, 400, wm.error);
+      params.push(wm.value);
+      where.push(`p."workMode" = $${params.length}`);
+    }
+    if (typeof req.query.educationLevel === "string") {
+      const ed = vEnum(req.query.educationLevel, "educationLevel", EDUCATION_LEVELS);
+      if (!ed.ok) return fail(res, 400, ed.error);
+      params.push(ed.value);
+      where.push(`p."educationLevel" = $${params.length}`);
+    }
     if (typeof req.query.role === "string") {
       const r = vEnum(req.query.role, "role", BUILD_ROLES);
       if (!r.ok) return fail(res, 400, r.error);
@@ -483,6 +516,7 @@ profilesRouter.get("/profiles/search", async (req, res) => {
               p."salaryMin", p."salaryMax", p."salaryCurrency",
               p."availability", p."experienceYears", p."photoUrl",
               p."openToWork", p."verifiedAt", p."updatedAt",
+              p."region", p."country", p."workMode", p."educationLevel",
               COALESCE(rv."count", 0)::int AS "reviewCount",
               COALESCE(rv."avg", 0)::float8 AS "avgRating"
        FROM "BuildProfile" p

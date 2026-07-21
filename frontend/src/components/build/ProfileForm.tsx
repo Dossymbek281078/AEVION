@@ -8,6 +8,15 @@ import {
   type ShiftPreference,
   type AvailabilityType,
 } from "@/lib/build/api";
+import {
+  WORK_MODES,
+  WORK_MODE_LABELS,
+  EDUCATION_LEVELS,
+  EDUCATION_LEVEL_LABELS,
+  WORK_REGIONS_KZ,
+  type WorkMode,
+  type EducationLevel,
+} from "@/lib/build/geo";
 import { VoiceInput } from "./VoiceInput";
 import { AiImprove } from "./AiImprove";
 import { phoneError, normalizePhone } from "@/lib/build/validate";
@@ -77,6 +86,11 @@ export function ProfileForm({
 
   // Resume v2 — construction-vertical
   const [driversLicense, setDriversLicense] = useState(initial?.driversLicense ?? "");
+  const [region, setRegion] = useState(initial?.region ?? "");
+  const [workMode, setWorkMode] = useState<WorkMode | "">(initial?.workMode ?? "");
+  const [educationLevel, setEducationLevel] = useState<EducationLevel | "">(
+    initial?.educationLevel ?? "",
+  );
   const [shiftPreference, setShiftPreference] = useState<ShiftPreference | "">(
     initial?.shiftPreference ?? "",
   );
@@ -176,6 +190,9 @@ export function ProfileForm({
         photoUrl: photoUrl.trim() || null,
         openToWork,
         driversLicense: driversLicense.trim() || null,
+        region: region || null,
+        workMode: workMode || null,
+        educationLevel: educationLevel || null,
         shiftPreference: shiftPreference || null,
         availabilityType: availabilityType || null,
         readyFromDate: readyFromDate.trim() || null,
@@ -229,6 +246,14 @@ export function ProfileForm({
             maxLength={100}
             className="input-build"
           />
+        </Field>
+        <Field label="Region (Kazakhstan)">
+          <select value={region} onChange={(e) => setRegion(e.target.value)} className="input-build">
+            <option value="">— not specified —</option>
+            {WORK_REGIONS_KZ.map((r) => (
+              <option key={r.slug} value={r.slug}>{r.label}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Phone">
           <input
@@ -546,6 +571,36 @@ export function ProfileForm({
               </button>
             ))}
           </div>
+        </Field>
+        <Field label="Work mode">
+          <div className="flex flex-wrap gap-1">
+            {WORK_MODES.map((m) => (
+              <button
+                type="button"
+                key={m}
+                onClick={() => setWorkMode(workMode === m ? "" : m)}
+                className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                  workMode === m
+                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                    : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
+                }`}
+              >
+                {WORK_MODE_LABELS[m]}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Education level">
+          <select
+            value={educationLevel}
+            onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+            className="input-build"
+          >
+            <option value="">— not specified —</option>
+            {EDUCATION_LEVELS.map((lvl) => (
+              <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Preferred locations">

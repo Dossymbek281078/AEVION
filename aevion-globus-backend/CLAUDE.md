@@ -244,5 +244,6 @@ model QuantumShield {
 - **Что сделано недавно** → последние коммиты + `../AEVION_WORKLOG_*.md`.
 - **Кто что пишет сейчас** → `../AEVION_COORDINATION.md` (WIP-таблица).
 - **Куда идём** → `../AEVION_27_PROJECTS_ROADMAP.md` + `../AEVION_TIMELINE_2026-03-25.md`.
+- **Публикуешь AI-бенчмарк/quality-claim для модуля?** → сначала `../docs/benchmarks/PLAYBOOK.md` — паттерн из QCoreAI (PR #726): eval-скрипт + `{historical, latest}` JSON, не голая цифра в комментарии.
 
 Если между чатами расхождение — правит файл координации, а не память треда.

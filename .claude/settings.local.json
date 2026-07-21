@@ -38,7 +38,15 @@
       "PowerShell(Stop-Process *)",
       "PowerShell(Remove-Item *)",
       "Bash(env)",
-      "Bash(railway list *)"
+      "Bash(railway list *)",
+      "Bash(railway variables *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git checkout *)",
+      "Bash(python -c \"import json; json.load\\(open\\('.claude/settings.local.json'\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(ln -s /c/Users/user/aevion-core/frontend/node_modules /c/Users/user/aevion-rev/frontend/node_modules)",
+      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules /c/Users/user/aevion-rev/aevion-globus-backend/node_modules)"
     ]
   }
 }

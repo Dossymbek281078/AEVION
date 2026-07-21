@@ -10,6 +10,7 @@ import {
   type Sliders,
 } from "@/lib/constitution";
 import { useFunnel } from "@/lib/useFunnel";
+import { useI18n } from "@/lib/i18n";
 
 const SHOWCASE_PRESETS = [
   "Open Access (идеал)",
@@ -18,46 +19,56 @@ const SHOWCASE_PRESETS = [
   "Феодализм",
 ];
 
-const ACADEMIC_QUOTES = [
+const QUOTE_META = [
   {
-    text: "Открытые порядки — это режимы, в которых элиты конкурируют, но не уничтожают друг друга, потому что правила одинаковы.",
+    key: "quote1",
     cite: "North, Wallis & Weingast",
     work: "Violence and Social Orders",
   },
   {
-    text: "Включающие институты делают пирог растущим. Извлекающие — фиксируют его.",
+    key: "quote2",
     cite: "Acemoglu & Robinson",
     work: "Why Nations Fail",
   },
   {
-    text: "Общие ресурсы лучше всего управляются полицентричными сообществами, не централизованным государством.",
+    key: "quote3",
     cite: "Elinor Ostrom",
     work: "Governing the Commons",
   },
   {
-    text: "Кто принимает решение, должен лично нести его последствия.",
+    key: "quote4",
     cite: "Nassim Taleb",
     work: "Skin in the Game",
   },
 ];
 
-const CODE_SAMPLE = `// 1 строка → получи 10 режимов
+export default function ConstitutionShowcasePage() {
+  const [activeIdx, setActiveIdx] = useState<number>(0);
+  const { track } = useFunnel();
+  const { t } = useI18n();
+
+  const ACADEMIC_QUOTES = useMemo(
+    () =>
+      QUOTE_META.map((q) => ({
+        ...q,
+        text: t(`constitution.showcase.${q.key}`),
+      })),
+    [t],
+  );
+
+  const codeSample = `// ${t("constitution.showcase.codeComment")}
 const r = await fetch(
   "https://aevion.app/api-backend/api/constitution/public/regimes"
 );
 const { items } = await r.json();
 console.log(items[0].id); // "open-access"`;
 
-export default function ConstitutionShowcasePage() {
-  const [activeIdx, setActiveIdx] = useState<number>(0);
-  const { track } = useFunnel();
-
   useEffect(() => { track("page_view", { source: "showcase" }); }, [track]);
 
   // Auto-cycle hero preset every 4 seconds
   useEffect(() => {
-    const t = setInterval(() => setActiveIdx((i) => (i + 1) % SHOWCASE_PRESETS.length), 4000);
-    return () => clearInterval(t);
+    const intervalId = setInterval(() => setActiveIdx((i) => (i + 1) % SHOWCASE_PRESETS.length), 4000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const preset = useMemo(() => {
@@ -78,12 +89,10 @@ export default function ConstitutionShowcasePage() {
               AEVION · Constitution
             </div>
             <h1 className="text-4xl md:text-6xl font-bold leading-tight text-[#d4af37]">
-              Устройство мира на 8 ползунках
+              {t("constitution.showcase.heroTitle")}
             </h1>
             <p className="mt-5 text-[#e7ecf8] text-lg leading-relaxed">
-              Open Access vs Nordic vs Authoritarian — одной анимацией.
-              Подкрути ползунки, получи исторический режим. AI-советник
-              расскажет, какие именно параметры менять.
+              {t("constitution.showcase.heroSubtitle")}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
@@ -106,7 +115,7 @@ export default function ConstitutionShowcasePage() {
               </Link>
             </div>
             <div className="mt-6 text-xs text-[#9aa3c0]">
-              Open-source · QSign-подписанные сценарии · 11 языков
+              {t("constitution.showcase.heroBadges")}
             </div>
           </div>
           <div className="flex justify-center">
@@ -119,19 +128,21 @@ export default function ConstitutionShowcasePage() {
       <section className="px-6 py-12 bg-[#0b1736]/40">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-[#f5d27a] mb-4">
-            Что это вообще
+            {t("constitution.showcase.whatHeading")}
           </h2>
           <p className="text-[#e7ecf8] leading-relaxed mb-3">
-            Constitution — это интерактивный симулятор политэкономии. Восемь
-            ползунков измеряют четыре опоры любого общества: <b>пол снизу</b>{" "}
-            (UBI, образование, медицина), <b>закон над верхом</b> (rule of
-            law), <b>ротация и множественные статусы</b> (sortition, axes
-            of respect), и <b>растущий пирог</b> (positive sum).
+            {t("constitution.showcase.whatIntro")}{" "}
+            <b>{t("constitution.showcase.whatFloorBold")}</b>{" "}
+            {t("constitution.showcase.whatFloorParenthetical")}{" "}
+            <b>{t("constitution.showcase.whatLawBold")}</b> (rule of
+            law), <b>{t("constitution.showcase.whatRotationBold")}</b>{" "}
+            {t("constitution.showcase.whatRotationConjunction")}{" "}
+            <b>{t("constitution.showcase.whatGrowingBold")}</b> (positive sum).
           </p>
           <p className="text-[#9aa3c0] leading-relaxed">
-            Двигаешь — видишь, в какой исторический режим скатывается система.
-            10 классифицированных режимов от <i>Open Access Order</i> до{" "}
-            <i>Тоталитарной диктатуры</i>.
+            {t("constitution.showcase.whatOutroIntro")}{" "}
+            <i>Open Access Order</i> {t("constitution.showcase.whatOutroTo")}{" "}
+            <i>{t("constitution.showcase.whatOutroTotalitarian")}</i>.
           </p>
         </div>
       </section>
@@ -140,31 +151,31 @@ export default function ConstitutionShowcasePage() {
       <section className="px-6 py-12">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-[#f5d27a] mb-6 text-center">
-            Почему именно 8 ползунков
+            {t("constitution.showcase.whyHeading")}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Pillar
               num={1}
-              title="Floor below — пол снизу"
-              text="UBI, образование, здравоохранение. Когда у людей есть, что терять, исчезает экзистенциальная мотивация отнимать."
+              title={t("constitution.showcase.pillar1Title")}
+              text={t("constitution.showcase.pillar1Text")}
               sliders={["floor"]}
             />
             <Pillar
               num={2}
-              title="Law above — закон над верхом"
-              text="Олигарх тоже проигрывает в суде. Закон одинаково применяется к министру и к рыбаку. Снижает интра-элитную вражду."
+              title={t("constitution.showcase.pillar2Title")}
+              text={t("constitution.showcase.pillar2Text")}
               sliders={["ruleOfLaw", "transparency"]}
             />
             <Pillar
               num={3}
-              title="Rotation & status — ротация и статусы"
-              text="Афинский жребий + многомерное уважение. Кто захочет уйти — уходит, кому надо подняться — поднимается, и никто не борется за один-единственный приз."
+              title={t("constitution.showcase.pillar3Title")}
+              text={t("constitution.showcase.pillar3Text")}
               sliders={["rotation", "multiStatus", "polycentricity"]}
             />
             <Pillar
               num={4}
-              title="Growing pie — растущий пирог"
-              text="Без positiveSum никакая реформа не держится. Феодализм 800 лет именно потому, что экономика не росла."
+              title={t("constitution.showcase.pillar4Title")}
+              text={t("constitution.showcase.pillar4Text")}
               sliders={["skinInGame", "positiveSum"]}
             />
           </div>
@@ -175,7 +186,7 @@ export default function ConstitutionShowcasePage() {
       <section className="px-6 py-12 bg-[#0b1736]/40">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-[#f5d27a] mb-6 text-center">
-            На чьих плечах
+            {t("constitution.showcase.quotesHeading")}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {ACADEMIC_QUOTES.map((q, i) => (
@@ -201,13 +212,11 @@ export default function ConstitutionShowcasePage() {
             Open API + open source
           </h2>
           <p className="text-[#9aa3c0] text-center mb-6 max-w-2xl mx-auto">
-            22 endpoints для интеграций. Public REST с 1h cache. Боты,
-            research-тулзы, AI-агенты тянут конституционную таксономию одним
-            cacheable GET.
+            {t("constitution.showcase.apiDescription")}
           </p>
           <div className="bg-[#050a1a] border border-[#d4af37]/20 rounded-xl p-5 max-w-2xl mx-auto mb-4">
             <pre className="text-xs font-mono text-[#e7ecf8] overflow-x-auto whitespace-pre">
-              {CODE_SAMPLE}
+              {codeSample}
             </pre>
           </div>
           <div className="text-center">
@@ -215,7 +224,7 @@ export default function ConstitutionShowcasePage() {
               href="/constitution/api"
               className="text-cyan-300 hover:underline"
             >
-              → Developer Playground (try-now кнопки)
+              {t("constitution.showcase.apiPlaygroundLink")}
             </Link>
           </div>
         </div>
@@ -228,14 +237,13 @@ export default function ConstitutionShowcasePage() {
             $0 → $9 → $49
           </h2>
           <p className="text-[#9aa3c0] mb-6">
-            Free навсегда. Pro для исследователей. Team для классов и
-            think-tanks.
+            {t("constitution.showcase.pricingDescription")}
           </p>
           <Link
             href="/constitution/pricing"
             className="inline-block px-6 py-3 rounded-lg bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold hover:opacity-90"
           >
-            💎 Смотреть тарифы →
+            {t("constitution.showcase.pricingCta")}
           </Link>
         </div>
       </section>
@@ -244,24 +252,23 @@ export default function ConstitutionShowcasePage() {
       <section className="px-6 py-16">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-[#d4af37] mb-4">
-            Готов попробовать?
+            {t("constitution.showcase.ctaHeading")}
           </h2>
           <p className="text-[#9aa3c0] mb-6">
-            2 минуты на онбординг. Никакой регистрации. Никаких email
-            предварительно.
+            {t("constitution.showcase.ctaDescription")}
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
             <Link
               href="/constitution/welcome"
               className="px-8 py-4 rounded-lg bg-[#d4af37] text-[#0b1736] font-bold text-lg hover:opacity-90"
             >
-              Начать с онбординга →
+              {t("constitution.showcase.ctaStartLink")}
             </Link>
             <Link
               href="/constitution"
               className="px-8 py-4 rounded-lg border border-[#d4af37]/40 text-[#d4af37] font-semibold text-lg hover:bg-[#d4af37]/10"
             >
-              Сразу в редактор
+              {t("constitution.showcase.ctaEditorLink")}
             </Link>
           </div>
         </div>

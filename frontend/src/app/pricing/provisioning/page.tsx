@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 type BillingPeriod = "monthly" | "annual";
@@ -74,10 +75,10 @@ const STATUS_COLOR: Record<HistoryStatus, string> = {
   expired: "text-rose-200 bg-rose-500/15 ring-rose-400/40",
 };
 
-const STATUS_LABEL: Record<HistoryStatus, string> = {
-  active: "Активна",
-  trial: "Триал",
-  expired: "Истекла",
+const STATUS_LABEL_KEY: Record<HistoryStatus, string> = {
+  active: "pricing.provisioning.status.active",
+  trial: "pricing.provisioning.status.trial",
+  expired: "pricing.provisioning.status.expired",
 };
 
 function formatDate(iso: string | null): string {
@@ -88,6 +89,7 @@ function formatDate(iso: string | null): string {
 }
 
 export default function ProvisioningPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState<string>("");
   const [submittedEmail, setSubmittedEmail] = useState<string>("");
   const [history, setHistory] = useState<HistoryResp | null>(null);
@@ -114,7 +116,7 @@ export default function ProvisioningPage() {
   const lookup = useCallback(async (rawEmail: string) => {
     const e = rawEmail.trim().toLowerCase();
     if (!e || !e.includes("@") || e.length < 5) {
-      setError("Введите корректный email");
+      setError(t("pricing.provisioning.error.invalidEmail"));
       return;
     }
     setLoading(true);
@@ -135,7 +137,7 @@ export default function ProvisioningPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleSubmit = (ev: React.FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
@@ -150,7 +152,7 @@ export default function ProvisioningPage() {
             href="/pricing"
             className="text-xs font-semibold text-slate-400 hover:text-slate-200"
           >
-            ← Все тарифы
+            ← {t("pricing.provisioning.backLink")}
           </Link>
         </div>
 
@@ -159,20 +161,19 @@ export default function ProvisioningPage() {
             AEVION · PROVISIONING
           </div>
           <h1 className="text-3xl md:text-4xl font-black leading-tight tracking-tight text-slate-50">
-            История подписки
+            {t("pricing.provisioning.title")}
           </h1>
           <p className="mt-3 text-sm md:text-[15px] text-slate-400 leading-relaxed">
-            Введите email, на который оформили подписку, чтобы проверить статус, оставшийся
-            триал-период и состав модулей. Без логина — для тех, кто пришёл по ссылке из письма.
+            {t("pricing.provisioning.intro")}
           </p>
         </header>
 
         {/* Stats strip */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
-            <StatCard label="Всего подписок" value={stats.total.toLocaleString("ru-RU")} />
-            <StatCard label="За 7 дней" value={`+${stats.last7d}`} accent="teal" />
-            <StatCard label="Активных триалов" value={stats.trialsActive.toString()} accent="amber" />
+            <StatCard label={t("pricing.provisioning.stats.totalSubscriptions")} value={stats.total.toLocaleString("ru-RU")} />
+            <StatCard label={t("pricing.provisioning.stats.last7d")} value={`+${stats.last7d}`} accent="teal" />
+            <StatCard label={t("pricing.provisioning.stats.activeTrials")} value={stats.trialsActive.toString()} accent="amber" />
             <StatCard
               label="Lite · Medium · Full"
               value={`${stats.byTier.lite ?? 0} · ${stats.byTier.medium ?? 0} · ${stats.byTier.full ?? 0}`}
@@ -190,7 +191,7 @@ export default function ProvisioningPage() {
             htmlFor="provisioning-email"
             className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2"
           >
-            Email подписки
+            {t("pricing.provisioning.form.emailLabel")}
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
@@ -208,18 +209,17 @@ export default function ProvisioningPage() {
               disabled={loading || !email.trim()}
               className="rounded-xl bg-gradient-to-br from-teal-500 to-sky-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-teal-900/40 hover:from-teal-400 hover:to-sky-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {loading ? "Ищем…" : "Найти"}
+              {loading ? t("pricing.provisioning.form.searching") : t("pricing.provisioning.form.searchCta")}
             </button>
           </div>
           <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
-            Мы маскируем email в ответе. История ограничена 100 последними записями. Сессии Stripe
-            доступны только администраторам.
+            {t("pricing.provisioning.form.privacyNote")}
           </p>
           {error && (
             <div className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              {error === "missing_email" && "Введите email"}
-              {error === "invalid_email" && "Введите корректный email"}
-              {error === "history_failed" && "Не удалось получить историю. Попробуйте позже."}
+              {error === "missing_email" && t("pricing.provisioning.error.missingEmail")}
+              {error === "invalid_email" && t("pricing.provisioning.error.invalidEmail")}
+              {error === "history_failed" && t("pricing.provisioning.error.historyFailed")}
               {!["missing_email", "invalid_email", "history_failed"].includes(error) && error}
             </div>
           )}
@@ -230,20 +230,19 @@ export default function ProvisioningPage() {
           <section className="mt-8">
             <div className="flex items-baseline justify-between mb-4">
               <h2 className="text-lg font-extrabold text-slate-100">
-                Подписки для <span className="text-teal-300">{history.email}</span>
+                {t("pricing.provisioning.results.heading")} <span className="text-teal-300">{history.email}</span>
               </h2>
               <span className="text-xs text-slate-500">
-                {history.count} {history.count === 1 ? "запись" : "записей"}
-                {history.truncated && " (обрезано)"}
+                {history.count} {history.count === 1 ? t("pricing.provisioning.results.entrySingular") : t("pricing.provisioning.results.entryPlural")}
+                {history.truncated && ` ${t("pricing.provisioning.results.truncated")}`}
               </span>
             </div>
 
             {history.count === 0 ? (
               <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-400">
-                Подписок с таким email не найдено. Возможно, вы ещё не активировали тариф или
-                ошиблись в email. <br />
+                {t("pricing.provisioning.results.empty")} <br />
                 <Link href="/pricing" className="text-teal-300 hover:text-teal-200 font-semibold">
-                  Выбрать тариф →
+                  {t("pricing.provisioning.results.chooseTierCta")}
                 </Link>
               </div>
             ) : (
@@ -260,13 +259,13 @@ export default function ProvisioningPage() {
                 onClick={() => void lookup(submittedEmail)}
                 className="text-xs font-bold text-teal-300 hover:text-teal-200"
               >
-                ↻ Обновить
+                ↻ {t("pricing.provisioning.results.refresh")}
               </button>
               <Link href="/qright" className="text-xs font-bold text-slate-300 hover:text-slate-100">
-                Открыть QRight →
+                {t("pricing.provisioning.results.openQright")}
               </Link>
               <Link href="/pricing" className="text-xs font-bold text-slate-400 hover:text-slate-200">
-                Изменить тариф
+                {t("pricing.provisioning.results.changeTier")}
               </Link>
             </div>
           </section>
@@ -276,7 +275,7 @@ export default function ProvisioningPage() {
         {!history && stats && stats.recent.length > 0 && (
           <section className="mt-10">
             <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-3">
-              Недавние активации
+              {t("pricing.provisioning.recent.heading")}
             </h2>
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 divide-y divide-slate-800/70 overflow-hidden">
               {stats.recent.slice(0, 6).map((r) => (
@@ -292,7 +291,7 @@ export default function ProvisioningPage() {
                       {TIER_LABEL[r.tierId]}
                     </span>
                     <span className="text-slate-400">
-                      {r.period === "annual" ? "годовая" : "месячная"}
+                      {r.period === "annual" ? t("pricing.provisioning.period.annual") : t("pricing.provisioning.period.monthly")}
                     </span>
                     {r.trial && (
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/40">
@@ -344,6 +343,7 @@ function StatCard({
 }
 
 function SubscriptionCard({ item }: { item: HistoryItem }) {
+  const { t } = useI18n();
   return (
     <article className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-900/30 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -354,40 +354,40 @@ function SubscriptionCard({ item }: { item: HistoryItem }) {
             {TIER_LABEL[item.tierId]}
           </span>
           <span className="text-xs text-slate-400">
-            {item.period === "annual" ? "годовая" : "месячная"} · {item.seats}{" "}
-            {item.seats === 1 ? "место" : "мест"}
+            {item.period === "annual" ? t("pricing.provisioning.period.annual") : t("pricing.provisioning.period.monthly")} · {item.seats}{" "}
+            {item.seats === 1 ? t("pricing.provisioning.seats.singular") : t("pricing.provisioning.seats.plural")}
           </span>
           <span
             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 ${STATUS_COLOR[item.status]}`}
           >
-            {STATUS_LABEL[item.status]}
+            {t(STATUS_LABEL_KEY[item.status])}
           </span>
         </div>
         <div className="text-right">
-          <div className="text-[11px] text-slate-500">Создана</div>
+          <div className="text-[11px] text-slate-500">{t("pricing.provisioning.card.created")}</div>
           <div className="text-xs font-bold text-slate-300">{formatDate(item.ts)}</div>
         </div>
       </div>
 
       <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[12px]">
         <div>
-          <dt className="text-slate-500">Действует до</dt>
+          <dt className="text-slate-500">{t("pricing.provisioning.card.validUntil")}</dt>
           <dd className="font-bold text-slate-100">{formatDate(item.validUntil)}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Осталось</dt>
+          <dt className="text-slate-500">{t("pricing.provisioning.card.daysLeft")}</dt>
           <dd className="font-bold text-slate-100">
-            {item.daysLeft !== null ? `${item.daysLeft} дн.` : "—"}
+            {item.daysLeft !== null ? t("pricing.provisioning.card.daysLeftValue", { days: item.daysLeft }) : "—"}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">Сумма</dt>
+          <dt className="text-slate-500">{t("pricing.provisioning.card.amount")}</dt>
           <dd className="font-bold text-slate-100">
             {item.amountUsd !== null ? `$${item.amountUsd.toLocaleString("ru-RU")}` : "—"}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">Источник</dt>
+          <dt className="text-slate-500">{t("pricing.provisioning.card.source")}</dt>
           <dd className="font-bold text-slate-100 truncate" title={item.source ?? ""}>
             {item.source ?? "—"}
           </dd>
@@ -397,7 +397,7 @@ function SubscriptionCard({ item }: { item: HistoryItem }) {
       {item.modules.length > 0 && (
         <div className="mt-3">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            Модули
+            {t("pricing.provisioning.card.modules")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {item.modules.map((m) => (
@@ -414,7 +414,7 @@ function SubscriptionCard({ item }: { item: HistoryItem }) {
 
       {item.promoCode && (
         <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-amber-200 bg-amber-500/10 px-2 py-1 rounded-md ring-1 ring-amber-500/30">
-          <span className="font-bold">Промо:</span>
+          <span className="font-bold">{t("pricing.provisioning.card.promo")}</span>
           <code className="font-mono">{item.promoCode}</code>
         </div>
       )}

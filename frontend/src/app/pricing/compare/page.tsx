@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 type ModuleKind = "core" | "product" | "service" | "experiment";
@@ -43,17 +44,18 @@ interface PricingPayload {
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
-const KIND_LABELS: Record<ModuleKind, { ru: string; en: string; color: string }> = {
-  core: { ru: "Core / Платформа", en: "Core / Platform", color: "#0d9488" },
-  product: { ru: "Продукты", en: "Products", color: "#0ea5e9" },
-  service: { ru: "Сервисы", en: "Services", color: "#7c3aed" },
-  experiment: { ru: "Эксперименты", en: "Experiments", color: "#f59e0b" },
+const KIND_LABELS: Record<ModuleKind, { key: string; color: string }> = {
+  core: { key: "pricing.compare.kind.core", color: "#0d9488" },
+  product: { key: "pricing.compare.kind.product", color: "#0ea5e9" },
+  service: { key: "pricing.compare.kind.service", color: "#7c3aed" },
+  experiment: { key: "pricing.compare.kind.experiment", color: "#f59e0b" },
 };
 
 const KIND_ORDER: ModuleKind[] = ["core", "product", "service", "experiment"];
 
 export default function PricingComparePage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [data, setData] = useState<PricingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filterKind, setFilterKind] = useState<ModuleKind | null>(null);
@@ -225,7 +227,7 @@ export default function PricingComparePage() {
             key={k}
             active={filterKind === k}
             onClick={() => setFilterKind(k)}
-            label={`${KIND_LABELS[k].ru} · ${counts[k]}`}
+            label={`${t(KIND_LABELS[k].key)} · ${counts[k]}`}
             color={KIND_LABELS[k].color}
           />
         ))}
@@ -387,7 +389,7 @@ export default function PricingComparePage() {
                 textTransform: "uppercase",
               }}
             >
-              {meta.ru} · {group.items.length}
+              {t(meta.key)} · {group.items.length}
             </h2>
             <div
               style={{

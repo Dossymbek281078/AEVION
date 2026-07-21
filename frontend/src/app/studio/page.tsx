@@ -114,10 +114,19 @@ const FEATURE_CATEGORIES = [
   },
 ];
 
+type SmartSavings = {
+  runs: number;
+  totalCostUsd: number;
+  estAlwaysCouncilUsd: number;
+  savedUsd: number;
+  savedPct: number;
+};
+
 export default function StudioPage() {
   const [caps, setCaps] = useState<CapabilitiesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState<CreditsData | null>(null);
+  const [savings, setSavings] = useState<SmartSavings | null>(null);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
@@ -128,6 +137,10 @@ export default function StudioPage() {
     fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d: CreditsData) => setCredits(d))
+      .catch(() => {});
+    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: SmartSavings) => { if (d && typeof d.runs === "number") setSavings(d); })
       .catch(() => {});
   }, []);
 
@@ -211,6 +224,34 @@ export default function StudioPage() {
               <UsageBar label="Music" icon="🎵" used={credits.usage.music.used} limit={credits.usage.music.limit} color="#b45309" />
               <UsageBar label="TTS chars" icon="🎙️" used={credits.usage.tts.used} limit={credits.usage.tts.limit} color="#0369a1" />
               <UsageBar label="Deploys" icon="🚀" used={credits.usage.deploy.used} limit={credits.usage.deploy.limit} color="#64748b" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI cost rationality — the free-fleet argument, with live numbers */}
+      {savings && savings.runs > 0 && (
+        <div style={{ background: "#f0fdfa", borderBottom: "1px solid #99f6e4", padding: "20px 24px" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+            <div style={{ maxWidth: 560 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
+                ⚡ Smart AI routing has saved {savings.savedUsd >= 0.005 ? `$${savings.savedUsd.toFixed(2)}` : "<$0.01"} across {savings.runs} call{savings.runs === 1 ? "" : "s"}
+              </div>
+              <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>
+                Every Studio AI call is routed to the cheapest model tier that can actually do the job —{" "}
+                {Math.round(savings.savedPct)}% less than always running the full council. Comparable AI builders
+                start at $20/mo before you generate anything; here the fleet itself is free.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 20, textAlign: "center" }}>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#0d9488" }}>${savings.totalCostUsd.toFixed(2)}</div>
+                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>ACTUAL SPEND</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#94a3b8", textDecoration: "line-through" }}>${savings.estAlwaysCouncilUsd.toFixed(2)}</div>
+                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>WITHOUT ROUTING</div>
+              </div>
             </div>
           </div>
         </div>

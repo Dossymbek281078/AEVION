@@ -1,0 +1,161 @@
+{
+  "historical": [
+    {
+      "id": "council-vs-flagship-n40-2026-07-12",
+      "label": "Council L2 (Fable 5 chair) vs single Fable 5 flagship",
+      "date": "2026-07-12",
+      "n": 40,
+      "source": "aevion-globus-backend/src/services/qcoreai/orchestrator.ts, comment above runAuto()",
+      "costMultiplierVsFlagship": 2.8,
+      "perCategoryWinRatePct": {
+        "reasoning": 100,
+        "writing": 100,
+        "advice": 100,
+        "analysis": 100,
+        "math": 80,
+        "coding": 67,
+        "knowledge": 50
+      },
+      "notePerCategory": "knowledge = pure factual recall, where Council only ties (50%) rather than wins — this is why the 'auto' strategy routes FACT-classified queries to a single flagship instead of paying the ~2.8x Council premium for no quality gain there.",
+      "note": "Transcribed verbatim from the pre-existing source comment (no fresh API spend). Curated N=40 set across 7 categories; assumed a normally-configured environment with the free-tier provider fleet active."
+    },
+    {
+      "id": "synth-chair-opus-vs-fable-n16-2026-07-09",
+      "label": "Synthesizer chair comparison: Opus 4.8 vs Fable 5",
+      "date": "2026-07-09",
+      "n": 16,
+      "source": "aevion-globus-backend/src/services/qcoreai/agents.ts, comment above buildSynthesizer()",
+      "opusChairWinRatePct": 92,
+      "opusCostMultiplierVsFlagship": 2.8,
+      "fableChairCostMultiplierVsFlagship": 3.6,
+      "note": "Opus 4.8 chair matches Fable 5 chair's win-rate at roughly 23% lower cost, which is why Opus 4.8 is the default Synthesizer (QCOREAI_SYNTH_MODEL overrides it). Transcribed verbatim from the pre-existing source comment (no fresh API spend)."
+    }
+  ],
+  "latest": {
+    "generatedAt": "2026-07-21T10:21:50.697Z",
+    "source": "live-run",
+    "n": 40,
+    "base": "http://127.0.0.1:4001",
+    "judge": "claude-fable-5",
+    "caveat": "Local dev server, only ONE free-tier provider configured (OpenRouter) -- not the full free fleet the historical entry assumes, which is why the cost multiplier here (~6.2-6.4x) is roughly double the historical ~2.8x. Also notable: 'knowledge' (pure factual recall) won 67-80% here, not the ~50% tie the historical entry reports -- with only 5-6 samples per category, this could be per-category variance rather than a real shift, but it's worth a properly free-fleet-configured re-run before revising the 'auto' router's FACT-vs-Council routing rationale in orchestrator.ts on the strength of this run alone.",
+    "costPerAnswerUsd": {
+      "single-fable": 0.027739487179487182,
+      "council-l2-fable": 0.17684723684210524,
+      "council-l2-opus": 0.1719244736842105
+    },
+    "winRateVsSingleFable": {
+      "council-l2-fable": {
+        "win": 29,
+        "tie": 4,
+        "loss": 5
+      },
+      "council-l2-opus": {
+        "win": 29,
+        "tie": 4,
+        "loss": 5
+      }
+    },
+    "perCategoryWinRate": {
+      "council-l2-fable": {
+        "reasoning": {
+          "win": 5,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 83
+        },
+        "math": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "coding": {
+          "win": 4,
+          "tie": 0,
+          "loss": 2,
+          "winRatePct": 67
+        },
+        "knowledge": {
+          "win": 4,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 80
+        },
+        "writing": {
+          "win": 6,
+          "tie": 0,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "advice": {
+          "win": 3,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "analysis": {
+          "win": 2,
+          "tie": 2,
+          "loss": 1,
+          "winRatePct": 67
+        }
+      },
+      "council-l2-opus": {
+        "reasoning": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "math": {
+          "win": 5,
+          "tie": 1,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "coding": {
+          "win": 4,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 80
+        },
+        "knowledge": {
+          "win": 2,
+          "tie": 2,
+          "loss": 1,
+          "winRatePct": 67
+        },
+        "writing": {
+          "win": 5,
+          "tie": 0,
+          "loss": 1,
+          "winRatePct": 83
+        },
+        "advice": {
+          "win": 5,
+          "tie": 0,
+          "loss": 0,
+          "winRatePct": 100
+        },
+        "analysis": {
+          "win": 3,
+          "tie": 0,
+          "loss": 2,
+          "winRatePct": 60
+        }
+      }
+    },
+    "verdicts": {
+      "council-l2-fable": {
+        "winRatePct": 85,
+        "costUsd": 0.17684723684210524,
+        "costMultiplierVsFlagship": 6.375288616470184
+      },
+      "council-l2-opus": {
+        "winRatePct": 85,
+        "costUsd": 0.1719244736842105,
+        "costMultiplierVsFlagship": 6.197824515348119
+      }
+    }
+  }
+}

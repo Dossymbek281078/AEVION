@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { fixDoubledScheme } from "@/lib/urls";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -14,6 +15,134 @@ function timeAgo(iso: string): string {
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
   return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+// Visual Edit — bridges clicks inside the sandboxed preview iframe back to
+// the parent via postMessage. Runs isolated (sandbox="allow-scripts", no
+// allow-same-origin) so it can't reach parent DOM/cookies even though it's
+// rendering the project's own HTML/CSS/JS.
+const VISUAL_EDIT_OVERLAY_SCRIPT = `
+(function(){
+  var hovered = null;
+  function withVid(el){ while (el && !(el.getAttribute && el.getAttribute('data-vid'))) el = el.parentElement; return el; }
+  function onOver(e){
+    var el = withVid(e.target);
+    if (hovered && hovered !== el) hovered.style.outline = '';
+    hovered = el;
+    if (hovered) { hovered.style.outline = '2px solid #0d9488'; hovered.style.outlineOffset = '1px'; }
+  }
+  function onOut(){ if (hovered) { hovered.style.outline = ''; hovered = null; } }
+  function brief(el){ return { vid: el.getAttribute('data-vid'), tagName: el.tagName }; }
+  function select(el){
+    var cs = getComputedStyle(el);
+    // Ancestor chain (nearest first) and tagged direct children let the IDE
+    // render a breadcrumb for retargeting nested markup without re-clicking.
+    var ancestors = [];
+    for (var p = el.parentElement; p && ancestors.length < 6; p = p.parentElement) {
+      if (p.getAttribute && p.getAttribute('data-vid')) ancestors.push(brief(p));
+    }
+    var children = [];
+    for (var i = 0; i < el.children.length && children.length < 8; i++) {
+      if (el.children[i].getAttribute('data-vid')) children.push(brief(el.children[i]));
+    }
+    parent.postMessage({
+      source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
+      styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign },
+      src: el.getAttribute('src') || '',
+      ancestors: ancestors, children: children
+    }, '*');
+  }
+  function onClick(e){
+    var el = withVid(e.target);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    select(el);
+  }
+  window.addEventListener('message', function(e){
+    var d = e.data;
+    if (!d) return;
+    // Live style preview: the IDE pushes { vid, styles } and we paint the
+    // element in place, so the user sees the change before committing it.
+    if (d.source === 'devhub-visual-edit-apply') {
+      var el = document.querySelector('[data-vid="' + d.vid + '"]');
+      if (!el) return;
+      for (var k in (d.styles || {})) el.style[k] = d.styles[k];
+    }
+    // Breadcrumb retarget: the IDE asks to select a specific vid (an ancestor
+    // or child of the current selection) — reply with the full select payload.
+    if (d.source === 'devhub-visual-edit-select') {
+      var target = document.querySelector('[data-vid="' + d.vid + '"]');
+      if (target) select(target);
+    }
+  });
+  document.addEventListener('mouseover', onOver, true);
+  document.addEventListener('mouseout', onOut, true);
+  document.addEventListener('click', onClick, true);
+})();
+`;
+
+/** Parses the project's HTML entry file, tags every element with a stable
+ * `data-vid` (document order), inlines any local <link>/<script src> that
+ * match another project file (so the iframe renders with no live server),
+ * and appends the click/hover bridge. Returns the PRISTINE (non-inlined)
+ * annotated doc separately — that's what gets edited and saved back, so
+ * inlining stays a display-only concern and never leaks into the source file. */
+function buildVisualEditDocs(htmlPath: string, filesList: FileItem[]): { sourceDoc: Document; srcdoc: string } | null {
+  const htmlFile = filesList.find((f) => f.path === htmlPath);
+  if (!htmlFile) return null;
+  const sourceDoc = new DOMParser().parseFromString(htmlFile.content, "text/html");
+  if (!sourceDoc.body) return null;
+
+  // IDs are scoped to <body> only — <html>/<head>/<title>/etc are never
+  // visually clickable, so they must never be a valid save target either
+  // (setting .textContent on <html> would wipe the entire document).
+  let counter = 0;
+  const SKIP = new Set(["SCRIPT", "STYLE", "BODY"]);
+  const walker = sourceDoc.createTreeWalker(sourceDoc.body, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null = walker.currentNode;
+  do {
+    const el = node as Element;
+    if (!SKIP.has(el.tagName)) el.setAttribute("data-vid", String(counter++));
+  } while ((node = walker.nextNode()));
+
+  const displayDoc = sourceDoc.cloneNode(true) as Document;
+  displayDoc.querySelectorAll('link[rel="stylesheet"][href]').forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const match = filesList.find((f) => f.path === href || f.path === href.replace(/^\.?\//, ""));
+    if (match) {
+      const style = displayDoc.createElement("style");
+      style.textContent = match.content;
+      link.replaceWith(style);
+    }
+  });
+  displayDoc.querySelectorAll("script[src]").forEach((script) => {
+    const src = script.getAttribute("src") || "";
+    const match = filesList.find((f) => f.path === src || f.path === src.replace(/^\.?\//, ""));
+    if (match) {
+      const inline = displayDoc.createElement("script");
+      inline.textContent = match.content;
+      script.replaceWith(inline);
+    }
+  });
+  const overlay = displayDoc.createElement("script");
+  overlay.textContent = VISUAL_EDIT_OVERLAY_SCRIPT;
+  displayDoc.body?.appendChild(overlay);
+
+  return { sourceDoc, srcdoc: "<!DOCTYPE html>\n" + displayDoc.documentElement.outerHTML };
+}
+
+type VisualStyles = { color: string; fontSize: string; fontWeight: string; textAlign: string };
+
+const VISUAL_STYLE_TO_CSS: Record<keyof VisualStyles, string> = {
+  color: "color", fontSize: "font-size", fontWeight: "font-weight", textAlign: "text-align",
+};
+
+/** getComputedStyle reports colors as rgb(a); <input type="color"> only accepts #rrggbb. */
+function cssColorToHex(css: string): string {
+  const m = css.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return css.startsWith("#") ? css : "#000000";
+  const hex = (n: string) => Number(n).toString(16).padStart(2, "0");
+  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
 }
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -183,7 +312,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
   // AI Chat state
-  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "visual" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [undoing, setUndoing] = useState(false);
@@ -204,6 +333,28 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [planIdea, setPlanIdea] = useState("");
   const [planning, setPlanning] = useState(false);
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
+
+  // Visual Edit — Static-stack only (renders client-side, no live dev server needed)
+  const [visualEditHtmlPath, setVisualEditHtmlPath] = useState<string | null>(null);
+  const [visualEditSrcdoc, setVisualEditSrcdoc] = useState<string | null>(null);
+  const [visualEditSelected, setVisualEditSelected] = useState<{
+    vid: string; tagName: string; text: string; src?: string;
+    ancestors?: Array<{ vid: string; tagName: string }>;
+    children?: Array<{ vid: string; tagName: string }>;
+  } | null>(null);
+  const [visualEditImgPrompt, setVisualEditImgPrompt] = useState("");
+  const [visualEditImgBusy, setVisualEditImgBusy] = useState(false);
+  const [visualEditText, setVisualEditText] = useState("");
+  const [visualEditSaving, setVisualEditSaving] = useState(false);
+  // Computed styles of the selected element (prefills the controls) vs. the
+  // overrides the user actually touched — only the overrides get written back,
+  // so saving never bakes browser-default styles into the HTML as inline noise.
+  const [visualEditStyleBase, setVisualEditStyleBase] = useState<VisualStyles | null>(null);
+  const [visualEditStyleEdits, setVisualEditStyleEdits] = useState<Partial<VisualStyles>>({});
+  const [visualEditAiPrompt, setVisualEditAiPrompt] = useState("");
+  const [visualEditAiBusy, setVisualEditAiBusy] = useState(false);
+  const visualEditSourceDocRef = useRef<Document | null>(null);
+  const visualEditIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Agent workflow state
   type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
@@ -740,6 +891,182 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Planning failed", "error");
     } finally {
       setPlanning(false);
+    }
+  };
+
+  // Rebuild the Visual Edit preview whenever the tab is opened or files change
+  // (e.g. after a save) — Static stack only, needs an HTML entry file.
+  useEffect(() => {
+    if (activeTab !== "visual" || !project || project.stack !== "static") return;
+    const htmlFile = files.find((f) => f.path === "index.html") || files.find((f) => f.path.toLowerCase().endsWith(".html"));
+    if (!htmlFile) {
+      visualEditSourceDocRef.current = null;
+      setVisualEditHtmlPath(null);
+      setVisualEditSrcdoc(null);
+      return;
+    }
+    const built = buildVisualEditDocs(htmlFile.path, files);
+    visualEditSourceDocRef.current = built?.sourceDoc ?? null;
+    setVisualEditHtmlPath(htmlFile.path);
+    setVisualEditSrcdoc(built?.srcdoc ?? null);
+    setVisualEditSelected(null);
+  }, [activeTab, project, files]);
+
+  // Bridge for clicks inside the sandboxed preview iframe (see VISUAL_EDIT_OVERLAY_SCRIPT)
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data;
+      if (!data || data.source !== "devhub-visual-edit") return;
+      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text, src: data.src, ancestors: data.ancestors, children: data.children });
+      setVisualEditText(data.text);
+      setVisualEditStyleBase(data.styles || null);
+      setVisualEditStyleEdits({});
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  // Retarget the selection to an ancestor/child via the overlay, which replies
+  // with the full select payload (text, styles, fresh ancestor/child chains).
+  const retargetVisualSelection = (vid: string) => {
+    visualEditIframeRef.current?.contentWindow?.postMessage({ source: "devhub-visual-edit-select", vid }, "*");
+  };
+
+  // Record a style override and paint it live in the preview iframe.
+  const setVisualStyle = (key: keyof VisualStyles, value: string) => {
+    if (!visualEditSelected) return;
+    setVisualEditStyleEdits((prev) => ({ ...prev, [key]: value }));
+    visualEditIframeRef.current?.contentWindow?.postMessage(
+      { source: "devhub-visual-edit-apply", vid: visualEditSelected.vid, styles: { [key]: value } },
+      "*"
+    );
+  };
+
+  const saveVisualEdit = async () => {
+    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current) return;
+    setVisualEditSaving(true);
+    try {
+      const doc = visualEditSourceDocRef.current;
+      const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
+      if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
+      if (visualEditSelected.tagName !== "IMG") el.textContent = visualEditText;
+      for (const [key, value] of Object.entries(visualEditStyleEdits)) {
+        (el as HTMLElement).style.setProperty(VISUAL_STYLE_TO_CSS[key as keyof VisualStyles], value);
+      }
+      // Serialize from a clone so a failed save leaves the working doc (and its
+      // data-vid anchors) intact for the next attempt.
+      const clean = doc.cloneNode(true) as Document;
+      clean.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
+      const finalHtml = "<!DOCTYPE html>\n" + clean.documentElement.outerHTML;
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(visualEditHtmlPath)}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: finalHtml }),
+      });
+      if (!r.ok) throw new Error("Save failed");
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast(`Saved — updated ${visualEditHtmlPath}`, "success");
+    } catch (e: any) {
+      showToast(e.message || "Save failed", "error");
+    } finally {
+      setVisualEditSaving(false);
+    }
+  };
+
+  // Generate an image for the selected <img> and save it as its src in one
+  // step (generation is the slow, costly part — a separate Save step would
+  // just add a way to lose the result).
+  const generateVisualImage = async () => {
+    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current || !visualEditImgPrompt.trim()) return;
+    setVisualEditImgBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/media/image`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Image generation failed");
+      const doc = visualEditSourceDocRef.current;
+      const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
+      if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
+      el.setAttribute("src", data.url);
+      if (!el.getAttribute("alt")) el.setAttribute("alt", visualEditImgPrompt.trim().slice(0, 120));
+      const clean = doc.cloneNode(true) as Document;
+      clean.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
+      const finalHtml = "<!DOCTYPE html>\n" + clean.documentElement.outerHTML;
+      const putR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(visualEditHtmlPath)}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: finalHtml }),
+      });
+      if (!putR.ok) throw new Error("Generated, but saving the page failed");
+      setVisualEditImgPrompt("");
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast(
+        String(data.url).startsWith("data:")
+          ? "Image generated and saved (embedded inline — the page carries the image data itself)"
+          : "Image generated and saved",
+        "success"
+      );
+    } catch (e: any) {
+      showToast(e.message || "Image generation failed", "error");
+    } finally {
+      setVisualEditImgBusy(false);
+    }
+  };
+
+  // AI edit for the visually-selected element — reuses the same /generate
+  // pipeline as the IDE button (checkpoints, undo, syntax check, self-correct
+  // all apply), just with the prompt anchored to what the user clicked.
+  const aiEditVisual = async () => {
+    if (!project || !visualEditSelected || !visualEditAiPrompt.trim()) return;
+    if (!visualEditHtmlPath && project.stack === "static") return;
+    setVisualEditAiBusy(true);
+    try {
+      const sel = visualEditSelected;
+      // Static mode pins the edit to the page's HTML file. Proxy mode (deployed
+      // Next/React/etc.) can't map a rendered element to one source file, so
+      // the model gets the element context and picks the file itself.
+      const prompt = visualEditHtmlPath
+        ? `In ${visualEditHtmlPath}, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
+          (sel.text.trim() ? ` whose current text is: "${sel.text.trim().slice(0, 200)}"` : "") +
+          `. Apply this change to that element (and its related styles if needed), keeping the rest of the page intact: ${visualEditAiPrompt.trim()}`
+        : `On the deployed preview of this project, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
+          (sel.text.trim() ? ` whose rendered text is: "${sel.text.trim().slice(0, 200)}"` : "") +
+          `. Find the source file(s) that produce this element and apply this change there, keeping everything else intact: ${visualEditAiPrompt.trim()}`;
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "AI edit failed");
+      if (data.aiGenerated === false) {
+        showToast("No AI provider configured — the page was not changed with real AI output", "error");
+      } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
+        showToast("AI edit applied, but the result failed a syntax check — review before deploying", "warning");
+      } else {
+        showToast(
+          visualEditHtmlPath
+            ? "AI edit applied — preview refreshed (↩ Undo below if it's wrong)"
+            : "AI edit applied to the source files — redeploy to see it in this preview (↩ Undo below if it's wrong)",
+          "success"
+        );
+      }
+      setVisualEditAiPrompt("");
+      // Refreshing the file list retriggers the preview rebuild effect.
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+    } catch (e: any) {
+      showToast(e.message || "AI edit failed", "error");
+    } finally {
+      setVisualEditAiBusy(false);
     }
   };
 
@@ -2032,7 +2359,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </span>
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
           {project.deployUrl && (
-            <a href={project.deployUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
+            <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
               View live
             </a>
           )}
@@ -2254,7 +2581,45 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Editor — top 60% */}
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
-            {selectedFile ? (
+            {activeTab === "visual" ? (
+              project?.stack !== "static" ? (
+                project?.deployUrl ? (
+                  // Deployed non-static stacks render through the backend
+                  // preview proxy, which injects the same overlay contract.
+                  <iframe
+                    ref={visualEditIframeRef}
+                    src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
+                    sandbox="allow-scripts"
+                    style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                    title="Visual Edit preview"
+                  />
+                ) : (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
+                  <div style={{ maxWidth: 420 }}>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>🖱️</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Deploy this project to use Visual Edit</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                      This project uses <b>{project?.stack}</b>, which needs a built page to render. Deploy it once —
+                      the deployed page then loads here and you can click elements and describe changes for AI to apply
+                      to the source.
+                    </div>
+                  </div>
+                </div>
+                )
+              ) : !visualEditSrcdoc ? (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8" }}>
+                  <div style={{ fontSize: 15 }}>No index.html found — create one to use Visual Edit.</div>
+                </div>
+              ) : (
+                <iframe
+                  ref={visualEditIframeRef}
+                  srcDoc={visualEditSrcdoc}
+                  sandbox="allow-scripts"
+                  style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                  title="Visual Edit preview"
+                />
+              )
+            ) : selectedFile ? (
               <>
                 <div style={{ padding: "8px 16px", background: "#f8fafc", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{selectedFile.path}</span>
@@ -2284,7 +2649,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
             <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
+              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -2296,6 +2661,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   }}
                 >
                   {tab === "chat" ? "AI Generate"
+                  : tab === "visual" ? "🖱️ Visual Edit"
                   : tab === "env" ? "Env Vars"
                   : tab === "github" ? "GitHub"
                   : tab === "media" ? "Media"
@@ -2479,6 +2845,190 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* Visual Edit Tab */}
+              {activeTab === "visual" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {project?.stack !== "static" && !project?.deployUrl ? (
+                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                      Deploy this project once to use Visual Edit — the deployed page renders above, and clicked
+                      elements become context for AI edits to the source.
+                    </div>
+                  ) : !visualEditSelected ? (
+                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                      Click any text element in the preview above to select and edit it in place.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12 }}>
+                        <span style={{ fontWeight: 700, color: "#0f172a" }}>Selected:</span>
+                        {[...(visualEditSelected.ancestors || [])].reverse().map((a) => (
+                          <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <button
+                              onClick={() => retargetVisualSelection(a.vid)}
+                              title="Select this parent element"
+                              style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
+                            >
+                              {"<" + a.tagName.toLowerCase() + ">"}
+                            </button>
+                            <span style={{ color: "#cbd5e1" }}>›</span>
+                          </span>
+                        ))}
+                        <span style={{ fontFamily: "monospace", color: "#0d9488", fontWeight: 700 }}>{"<" + visualEditSelected.tagName.toLowerCase() + ">"}</span>
+                        {(visualEditSelected.children || []).length > 0 && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ color: "#cbd5e1" }}>›</span>
+                            {(visualEditSelected.children || []).map((c) => (
+                              <button
+                                key={c.vid}
+                                onClick={() => retargetVisualSelection(c.vid)}
+                                title="Select this child element"
+                                style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
+                              >
+                                {"<" + c.tagName.toLowerCase() + ">"}
+                              </button>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                      {project?.stack !== "static" ? (
+                        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                          Proxied preview of the deployed page — direct text/style editing needs source mapping, so
+                          describe the change below and AI will apply it to the right source file.
+                        </div>
+                      ) : visualEditSelected.tagName === "IMG" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {visualEditSelected.src ? (
+                            <div style={{ fontSize: 12, color: "#64748b", wordBreak: "break-all" }}>
+                              Current image: {visualEditSelected.src.startsWith("data:")
+                                ? "embedded inline image"
+                                : visualEditSelected.src.slice(0, 120) + (visualEditSelected.src.length > 120 ? "…" : "")}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#64748b" }}>This image has no source yet.</div>
+                          )}
+                          <textarea
+                            value={visualEditImgPrompt}
+                            onChange={(e) => setVisualEditImgPrompt(e.target.value)}
+                            placeholder='Describe the image to generate, e.g. "minimal teal rocket logo on white"'
+                            style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                          />
+                          <button
+                            onClick={generateVisualImage}
+                            disabled={visualEditImgBusy || !visualEditImgPrompt.trim()}
+                            style={{
+                              padding: "9px 0", background: visualEditImgBusy || !visualEditImgPrompt.trim() ? "#99f6e4" : "#0d9488",
+                              color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                              cursor: visualEditImgBusy || !visualEditImgPrompt.trim() ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {visualEditImgBusy ? "Generating..." : "🎨 Generate & replace image"}
+                          </button>
+                        </div>
+                      ) : (
+                      <textarea
+                        value={visualEditText}
+                        onChange={(e) => setVisualEditText(e.target.value)}
+                        style={{ width: "100%", minHeight: 90, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                      />
+                      )}
+                      {project?.stack === "static" && visualEditSelected.tagName !== "IMG" && visualEditStyleBase && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <input
+                            type="color"
+                            value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
+                            onChange={(e) => setVisualStyle("color", e.target.value)}
+                            title="Text color"
+                            style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
+                          />
+                          <input
+                            type="number"
+                            min={8}
+                            max={120}
+                            value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
+                            onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
+                            title="Font size (px)"
+                            style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
+                          />
+                          <button
+                            onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
+                            title="Bold"
+                            style={{
+                              width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
+                              fontWeight: 800,
+                              background: parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "#ccfbf1" : "#fff",
+                              color: "#0f172a",
+                            }}
+                          >
+                            B
+                          </button>
+                          {(["left", "center", "right"] as const).map((align) => (
+                            <button
+                              key={align}
+                              onClick={() => setVisualStyle("textAlign", align)}
+                              title={`Align ${align}`}
+                              style={{
+                                width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, cursor: "pointer",
+                                background: (visualEditStyleEdits.textAlign ?? visualEditStyleBase.textAlign) === align ? "#ccfbf1" : "#fff",
+                                color: "#0f172a",
+                              }}
+                            >
+                              {align === "left" ? "⇤" : align === "center" ? "☰" : "⇥"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {project?.stack === "static" && visualEditSelected.tagName !== "IMG" && (
+                      <button
+                        onClick={saveVisualEdit}
+                        disabled={visualEditSaving}
+                        style={{
+                          padding: "9px 0", background: visualEditSaving ? "#99f6e4" : "#0d9488",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: visualEditSaving ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {visualEditSaving ? "Saving..." : "Save"}
+                      </button>
+                      )}
+                      <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>✨ Describe a change for this element</div>
+                        <textarea
+                          value={visualEditAiPrompt}
+                          onChange={(e) => setVisualEditAiPrompt(e.target.value)}
+                          placeholder='e.g. "make this a teal gradient button that links to /pricing"'
+                          style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                        />
+                        <button
+                          onClick={aiEditVisual}
+                          disabled={visualEditAiBusy || !visualEditAiPrompt.trim()}
+                          style={{
+                            padding: "9px 0", background: visualEditAiBusy || !visualEditAiPrompt.trim() ? "#c7d2fe" : "#4f46e5",
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: visualEditAiBusy || !visualEditAiPrompt.trim() ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {visualEditAiBusy ? "Applying AI edit..." : "AI Edit"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {(project?.stack === "static" || !!project?.deployUrl) && (
+                    <button
+                      onClick={undoLastGeneration}
+                      disabled={undoing}
+                      title="Revert the most recent AI change (same undo as the AI Generate tab)"
+                      style={{
+                        padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
+                        border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
+                        cursor: undoing ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {undoing ? "Undoing..." : "↩ Undo last AI change"}
+                    </button>
                   )}
                 </div>
               )}

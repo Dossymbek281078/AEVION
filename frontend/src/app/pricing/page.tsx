@@ -8,6 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 import { useABVariant } from "@/lib/abVariant";
 import NewStructureShowcase from "./_components/NewStructureShowcase";
 import AskAi from "@/components/AskAi";
@@ -138,12 +139,6 @@ interface Quote {
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
-function formatPrice(amount: number | null, symbol: string): string {
-  if (amount === null) return "По запросу";
-  if (amount === 0) return "Бесплатно";
-  return `${symbol}${amount.toLocaleString("ru-RU")}`;
-}
-
 function availabilityBadge(a: ModulePrice["availability"]) {
   const map: Record<ModulePrice["availability"], { bg: string; fg: string; label: string }> = {
     live: { bg: "#d1fae5", fg: "#065f46", label: "LIVE" },
@@ -171,6 +166,7 @@ function availabilityBadge(a: ModulePrice["availability"]) {
 
 export default function PricingPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const heroVariant = useABVariant("hero");
   const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
   const tierCardsVariant = useABVariant("tierCards");
@@ -181,6 +177,9 @@ export default function PricingPage() {
   const [copiedPromo, setCopiedPromo] = useState<string | null>(null);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [trust, setTrust] = useState<TrustPayload | null>(null);
+  const [aiSavings, setAiSavings] = useState<{
+    runs: number; totalCostUsd: number; estAlwaysCouncilUsd: number; savedUsd: number; savedPct: number;
+  } | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState<"idle" | "submitting" | "ok" | "error">("idle");
   const [newsletterError, setNewsletterError] = useState<string | null>(null);
@@ -263,12 +262,12 @@ export default function PricingPage() {
         window.location.href = j.url;
       } else {
         console.error("[checkout] no url returned", j);
-        setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
+        setCheckoutNotice(t("pricing.home.notice.checkoutError"));
         setCheckingOut(null);
       }
     } catch (e) {
       console.error("[checkout] failed", e);
-      setCheckoutNotice("Нет соединения — проверьте интернет и попробуйте ещё раз.");
+      setCheckoutNotice(t("pricing.home.notice.connectionError"));
       setCheckingOut(null);
     }
   }
@@ -310,6 +309,12 @@ export default function PricingPage() {
         if (!cancelled && j) setTrust(j);
       })
       .catch(() => {});
+    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j && typeof j.runs === "number" && j.runs > 0) setAiSavings(j);
+      })
+      .catch(() => {});
     track({
       type: "page_view",
       source: "pricing",
@@ -346,8 +351,8 @@ export default function PricingPage() {
   const rate = data?.currencies[currency].rate ?? 1;
 
   const displayPrice = (usd: number | null): string => {
-    if (usd === null) return "По запросу";
-    if (usd === 0) return "Бесплатно";
+    if (usd === null) return t("pricing.home.price.onRequest");
+    if (usd === 0) return t("pricing.home.price.free");
     const v = Math.round(usd * rate);
     return `${symbol}${v.toLocaleString("ru-RU")}`;
   };
@@ -453,18 +458,18 @@ export default function PricingPage() {
           >
             <div>
               <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                Тариф Lite — 1 продукт
+                {t("pricing.home.heroModule.badge")}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
                 {m.name}
                 {litePrice !== null && (
                   <span style={{ fontWeight: 700, color: "#334155", fontSize: 16 }}>
-                    {" "}— {displayPrice(litePrice)}/{period === "annual" ? "год" : "мес"}
+                    {" "}— {displayPrice(litePrice)}/{period === "annual" ? t("pricing.home.heroModule.perYear") : t("pricing.home.heroModule.perMonth")}
                   </span>
                 )}
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                Оплата картой. {currency === "KZT" ? "KZT → локальные карты КЗ + Kaspi (PayBox)." : "USD через LemonSqueezy."}
+                {t("pricing.home.heroModule.paymentCard")} {currency === "KZT" ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.usdNote")}
               </div>
             </div>
             <button
@@ -484,7 +489,7 @@ export default function PricingPage() {
                 opacity: checkingOut === "lite" ? 0.7 : 1,
               }}
             >
-              {checkingOut === "lite" ? "Открываем оплату…" : `Купить ${m.name}`}
+              {checkingOut === "lite" ? t("pricing.home.heroModule.openingCheckout") : t("pricing.home.heroModule.buyButton", { name: m.name })}
             </button>
           </section>
         );
@@ -577,6 +582,40 @@ export default function PricingPage() {
               </div>
             </div>
           ))}
+        </section>
+      )}
+
+      {/* Live AI-cost rationality strip — real routed-savings tally, shown
+          where the buying decision happens. Numbers come from the shared
+          /api/qcoreai/smart/savings counter, not marketing copy. */}
+      {aiSavings && (
+        <section
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: 12, marginBottom: 32, padding: "14px 18px",
+            background: "rgba(16,185,129,0.06)", borderRadius: 14,
+            border: "1px solid rgba(16,185,129,0.25)",
+          }}
+        >
+          <div style={{ maxWidth: 620 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#065f46", marginBottom: 2 }}>
+              ⚡ AI spend optimizes itself: {aiSavings.savedUsd >= 0.005 ? `$${aiSavings.savedUsd.toFixed(2)}` : "<$0.01"} saved across {aiSavings.runs} smart call{aiSavings.runs === 1 ? "" : "s"}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+              Every module routes AI calls to the cheapest tier that can do the job — {Math.round(aiSavings.savedPct)}%
+              below always running the full council. Your plan price buys features, not wasted tokens.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 18, textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#0d9488" }}>${aiSavings.totalCostUsd.toFixed(2)}</div>
+              <div style={{ fontSize: 9.5, color: "#64748b", fontWeight: 700 }}>ACTUAL</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#94a3b8", textDecoration: "line-through" }}>${aiSavings.estAlwaysCouncilUsd.toFixed(2)}</div>
+              <div style={{ fontSize: 9.5, color: "#64748b", fontWeight: 700 }}>UNROUTED</div>
+            </div>
+          </div>
         </section>
       )}
 
@@ -857,7 +896,7 @@ export default function PricingPage() {
                   <select
                     value={liteModule}
                     onChange={(e) => setLiteModule(e.target.value)}
-                    aria-label="Выберите продукт для Lite"
+                    aria-label={t("pricing.home.tier.selectProductAria")}
                     style={{
                       width: "100%",
                       padding: "9px 12px",
@@ -871,7 +910,7 @@ export default function PricingPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    <option value="">— выберите продукт —</option>
+                    <option value="">{t("pricing.home.tier.selectProductOption")}</option>
                     {(data?.modules ?? []).map((m) => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
@@ -899,7 +938,7 @@ export default function PricingPage() {
                   onClick={() => {
                     if (tier.id === "lite") {
                       if (!liteModule) {
-                        setCheckoutNotice("Сначала выберите продукт для тарифа Lite");
+                        setCheckoutNotice(t("pricing.home.notice.selectLiteModule"));
                         return;
                       }
                       startCheckout({ tierId: tier.id, period, seats: 1, modules: [liteModule] });
@@ -908,7 +947,7 @@ export default function PricingPage() {
                     }
                   }}
                 >
-                  {checkingOut === tier.id ? "Открываем оплату..." : tier.ctaLabel}
+                  {checkingOut === tier.id ? t("pricing.home.tier.openingCheckout") : tier.ctaLabel}
                 </button>
                 </>
               )}
@@ -1094,7 +1133,7 @@ export default function PricingPage() {
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
                 {displayPrice(b.priceMonthly)}
-                <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> /мес</span>
+                <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> {t("pricing.home.bundles.perMonth")}</span>
               </div>
               <a
                 href={gumroadCheckoutUrl({ key: b.id })}
@@ -1761,7 +1800,7 @@ export default function PricingPage() {
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 800, color: "#475569", width: "26%" }}>
-                    Что нужно
+                    {t("pricing.home.compare.colNeed")}
                   </th>
                   <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#0d9488" }}>
                     AEVION
@@ -1782,21 +1821,21 @@ export default function PricingPage() {
               </thead>
               <tbody>
                 {[
-                  ["Регистрация цифровой собственности", "✓", "—", "—", "—", "✓"],
-                  ["Цифровая подпись и проверка целостности", "✓", "✓", "—", "—", "—"],
-                  ["AI-движок (LLM, агенты)", "✓", "—", "—", "✓", "—"],
-                  ["Платёжное ядро / off-line сделки", "✓", "—", "✓", "—", "—"],
-                  ["Электронное бюро авторства", "✓", "—", "—", "—", "✓"],
-                  ["Карта мира и реестр объектов", "✓", "—", "—", "—", "—"],
-                  ["Единая подписка на всё", "✓", "—", "—", "—", "—"],
-                  ["Открытое API + OpenAPI", "✓", "✓", "✓", "✓", "—"],
+                  [t("pricing.home.compare.row.digitalPropertyReg"), "✓", "—", "—", "—", "✓"],
+                  [t("pricing.home.compare.row.digitalSignature"), "✓", "✓", "—", "—", "—"],
+                  [t("pricing.home.compare.row.aiEngine"), "✓", "—", "—", "✓", "—"],
+                  [t("pricing.home.compare.row.paymentCore"), "✓", "—", "✓", "—", "—"],
+                  [t("pricing.home.compare.row.authorshipBureau"), "✓", "—", "—", "—", "✓"],
+                  [t("pricing.home.compare.row.worldMap"), "✓", "—", "—", "—", "—"],
+                  [t("pricing.home.compare.row.unifiedSub"), "✓", "—", "—", "—", "—"],
+                  [t("pricing.home.compare.row.openApi"), "✓", "✓", "✓", "✓", "—"],
                   [
-                    "Сравнимая цена (Pro)",
-                    "$19/мес",
-                    "$25/мес",
-                    "%/транз",
-                    "$20/мес",
-                    "$59/мес",
+                    t("pricing.home.compare.row.comparablePrice"),
+                    t("pricing.home.compare.priceAevion"),
+                    t("pricing.home.compare.priceDocusign"),
+                    t("pricing.home.compare.priceStripe"),
+                    t("pricing.home.compare.priceOpenai"),
+                    t("pricing.home.compare.pricePatently"),
                   ],
                 ].map((row, i) => (
                   <tr
@@ -1841,7 +1880,7 @@ export default function PricingPage() {
               background: "#f8fafc",
             }}
           >
-            Цены конкурентов — публичные тарифы базовой подписки на момент публикации; могут отличаться в вашем регионе.
+            {t("pricing.home.compare.footerNote")}
           </div>
         </div>
       </section>
@@ -1869,36 +1908,36 @@ export default function PricingPage() {
         <div>
           {[
             {
-              q: "Как считается биллинг при смене тарифа?",
-              a: "Пропорционально дням. При апгрейде — кредит за неиспользованное на старом тарифе автоматически зачитывается. При даунгрейде — кредит остаётся на счёте до следующего цикла.",
+              q: t("pricing.home.faq.billingChange.q"),
+              a: t("pricing.home.faq.billingChange.a"),
             },
             {
-              q: "Можно ли купить только один модуль без тарифа?",
-              a: "Любой add-on модуль покупается поверх Free тарифа. Получаете нужный модуль без переплаты за все остальные.",
+              q: t("pricing.home.faq.singleModule.q"),
+              a: t("pricing.home.faq.singleModule.a"),
             },
             {
-              q: "Что если хочется AI Suite + IP Suite вместе?",
-              a: "Берите Business — там оба контура включены без отдельных бандлов. Сэкономите ~$20/мес против покупки бандлов поверх Pro.",
+              q: t("pricing.home.faq.bothSuites.q"),
+              a: t("pricing.home.faq.bothSuites.a"),
             },
             {
-              q: "Поддерживается ли on-premise установка?",
-              a: "Только для Enterprise. Включает Docker / Kubernetes артефакты, runbook, аудит. Минимальный контракт — 12 мес.",
+              q: t("pricing.home.faq.onPremise.q"),
+              a: t("pricing.home.faq.onPremise.a"),
             },
             {
-              q: "Где хранятся данные?",
-              a: "По умолчанию — EU (Frankfurt) + RU/KZ зеркала для локализации. Для Enterprise — выбор региона или ваш VPC.",
+              q: t("pricing.home.faq.dataResidency.q"),
+              a: t("pricing.home.faq.dataResidency.a"),
             },
             {
-              q: "Есть ли образовательный тариф?",
-              a: "Free покрывает 95% студенческих сценариев. Для университетов и хакатонов — связывайтесь, делаем sponsorship-аккаунты.",
+              q: t("pricing.home.faq.eduPlan.q"),
+              a: t("pricing.home.faq.eduPlan.a"),
             },
             {
-              q: "Можно ли отменить и забрать данные?",
-              a: "Да. Экспорт всех ваших QRight-объектов и QSign-подписей в JSON/PDF — кнопка в личном кабинете. После отмены — 30 дней grace period, затем soft-delete с возможностью восстановления ещё 60 дней.",
+              q: t("pricing.home.faq.cancelExport.q"),
+              a: t("pricing.home.faq.cancelExport.a"),
             },
             {
-              q: "Чем AEVION лучше связки DocuSign + OpenAI + Stripe?",
-              a: "Единый аккаунт, единый биллинг, единый аудит. Одна подпись = одна запись в реестре, одна оплата — связана. Модули знают друг про друга: AI-агент видит подпись, подпись видит платёж, реестр видит всё.",
+              q: t("pricing.home.faq.vsCompetitors.q"),
+              a: t("pricing.home.faq.vsCompetitors.a"),
             },
           ].map((f, i) => (
             <details
@@ -2097,13 +2136,13 @@ export default function PricingPage() {
             href="/pricing/compare"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Полная матрица тарифов →
+            {t("pricing.home.notes.fullMatrixLink")}
           </Link>
           <Link
             href="/pricing/cases"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Кейсы клиентов →
+            {t("pricing.home.notes.caseStudiesLink")}
           </Link>
           <Link
             href="/pricing/roadmap"
@@ -2139,37 +2178,37 @@ export default function PricingPage() {
             href="/pricing/affiliate"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Реферальная программа →
+            {t("pricing.home.notes.affiliateLink")}
           </Link>
           <Link
             href="/pricing/edu"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Для образования →
+            {t("pricing.home.notes.eduLink")}
           </Link>
           <Link
             href="/pricing/partners"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Партнёрам →
+            {t("pricing.home.notes.partnersLink")}
           </Link>
           <Link
             href="/pricing/integrations"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Интеграции →
+            {t("pricing.home.notes.integrationsLink")}
           </Link>
           <Link
             href="/pricing/migrations"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Миграция с DocuSign / OpenAI →
+            {t("pricing.home.notes.migrationLink")}
           </Link>
           <Link
             href="/pricing/glossary"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >
-            Глоссарий →
+            {t("pricing.home.notes.glossaryLink")}
           </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>

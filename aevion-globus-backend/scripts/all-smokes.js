@@ -46,6 +46,9 @@ const SMOKES = [
   // QBuild SEO: per-page metadata + JSON-LD on the 5 public /build landings (PR #433).
   // Read-only — hits frontend HTML, not the backend; safe against prod.
   { name: "qbuild-seo", script: "qbuild-seo-smoke.js", readOnly: true, env: { BASE: process.env.QBUILD_SEO_BASE || "https://aevion.app" } },
+  // Live pages: actually OPENS the public page of each live module (2xx +
+  // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
+  { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

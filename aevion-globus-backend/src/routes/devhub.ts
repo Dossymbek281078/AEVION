@@ -8,6 +8,7 @@ import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
+import { deployViaWrangler } from "../lib/wranglerPagesDeploy";
 
 export const devhubRouter = Router();
 
@@ -1529,17 +1530,24 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
           memDeployments.set(deployment.id, deployment);
         }
 
-        // After 5s mark as live
+        // Verify the page actually serves before calling it live — same
+        // honesty rule as the CF Pages / Vercel paths.
         setTimeout(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
-          d.status = "live";
+          const serves = await verifyDeploymentServes(railwayDeployUrl);
+          if (serves) {
+            d.status = "live";
+          } else {
+            d.status = "failed";
+            d.buildLog = (d.buildLog || "") + " | verify: deployed page is not serving (non-2xx after retries)";
+          }
           d.completedAt = now();
           try {
             await dbSaveDeployment(d);
           } catch {
             memDeployments.set(d.id, d);
           }
-          if (project) {
+          if (project && serves) {
             project.status = "live";
             project.deployUrl = railwayDeployUrl;
             project.updatedAt = now();
@@ -1550,29 +1558,18 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
             }
           }
         }, 5000);
-      } catch {
-        // Railway API failed — fall back to 3s simulation
-        setTimeout(async () => {
-          deployment.status = "live";
-          deployment.deployUrl = deployUrl;
-          deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
-          deployment.completedAt = now();
-          try {
-            await dbSaveDeployment(deployment);
-          } catch {
-            memDeployments.set(deployment.id, deployment);
-          }
-          if (project) {
-            project.status = "live";
-            project.deployUrl = deployUrl;
-            project.updatedAt = now();
-            try {
-              await dbSaveProject(project);
-            } catch {
-              memProjects.set(project.id, project);
-            }
-          }
-        }, 3000);
+      } catch (e: any) {
+        // Railway API unreachable. This used to SIMULATE a successful build
+        // on a fabricated URL — a deploy that never happened reported as
+        // live. Honest now: the deployment failed, with the reason.
+        deployment.status = "failed";
+        deployment.buildLog = `Railway API unreachable: ${e?.message || "network error"}`;
+        deployment.completedAt = now();
+        try {
+          await dbSaveDeployment(deployment);
+        } catch {
+          memDeployments.set(deployment.id, deployment);
+        }
       }
     })();
   } else {
@@ -4632,13 +4629,20 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     deployment.buildLog = `Vercel deployment ${vData.id} created`;
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
 
-    // After 5s, mark live + update project
+    // Verify the page actually serves before calling it live — same honesty
+    // rule as the CF Pages path (a deploy that never serves is a failure).
     setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
-      d.status = "live";
+      const serves = await verifyDeploymentServes(liveUrl);
+      if (serves) {
+        d.status = "live";
+      } else {
+        d.status = "failed";
+        d.buildLog = (d.buildLog || "") + " | verify: deployed page is not serving (non-2xx after retries)";
+      }
       d.completedAt = now();
       try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
-      if (project) {
+      if (project && serves) {
         project.status = "live";
         project.deployUrl = liveUrl;
         project.updatedAt = now();
@@ -4675,20 +4679,6 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 //   4. Provision CNAME DNS record in aevion.build zone
 //   5. Return live URL + domain
 // ═════════════════════════════════════════════════════════════════════════════
-
-function mimeForPath(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    html: "text/html", css: "text/css", js: "application/javascript",
-    ts: "application/javascript", tsx: "application/javascript",
-    jsx: "application/javascript", json: "application/json",
-    svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg",
-    jpeg: "image/jpeg", webp: "image/webp", ico: "image/x-icon",
-    txt: "text/plain", md: "text/markdown", xml: "application/xml",
-    wasm: "application/wasm",
-  };
-  return map[ext] || "application/octet-stream";
-}
 
 devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -4760,42 +4750,26 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       return res.status(500).json({ error: errMsg });
     }
 
-    // 2. Build multipart form: manifest + files keyed by SHA-256 hash
-    const form = new FormData();
-    const manifest: Record<string, string> = {};
-    const seenHashes = new Set<string>();
-
-    for (const file of files) {
-      const hash = crypto.createHash("sha256").update(file.content, "utf8").digest("hex");
-      const cleanPath = "/" + file.path.replace(/^\/+/, "");
-      manifest[cleanPath] = hash;
-      if (!seenHashes.has(hash)) {
-        seenHashes.add(hash);
-        form.set(hash, new Blob([file.content], { type: mimeForPath(file.path) }), hash);
-      }
-    }
-    form.set("manifest", JSON.stringify(manifest));
-
-    // 3. Upload deployment
-    const deployResp = await fetch(`${cfBase}/pages/projects/${pageName}/deployments`, {
-      method: "POST",
-      headers: cfHeaders, // NO Content-Type — let FormData set boundary automatically
-      body: form,
-    });
-    const deployData = await deployResp.json() as { success: boolean; result?: { id: string; url: string; latest_stage?: { name: string } }; errors?: Array<{ code: number; message: string }> };
-    if (!deployResp.ok) {
-      const errMsg = deployData.errors?.map((e) => e.message).join("; ") || "CF Pages deployment upload failed";
-      deployment.status = "failed"; deployment.buildLog = errMsg; deployment.completedAt = now();
+    // 2-3. Upload via wrangler — the only asset-upload path CF still honors.
+    // The previous raw multipart flow stored the manifest but never the
+    // assets: deploy reported success while every page served 500.
+    const wranglerResult = await deployViaWrangler(
+      files.map((f) => ({ path: f.path, content: f.content })),
+      pageName,
+      { accountId, apiToken }
+    );
+    if (!wranglerResult.ok) {
+      deployment.status = "failed";
+      deployment.buildLog = `wrangler: ${wranglerResult.error}`;
+      deployment.completedAt = now();
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-      return res.status(500).json({ error: errMsg });
+      return res.status(502).json({ error: `CF Pages upload failed: ${wranglerResult.error}` });
     }
-
-    const rawUrl = deployData.result?.url ?? `${pageName}.pages.dev`;
-    const pagesUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+    const pagesUrl = wranglerResult.url;
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;
-    deployment.buildLog = `CF Pages deployment ${deployData.result?.id ?? "?"} queued`;
+    deployment.buildLog = `CF Pages deployment uploaded via wrangler`;
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     await debitCredit(userId, "deploy").catch(() => {});
 

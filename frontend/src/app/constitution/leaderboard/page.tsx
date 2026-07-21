@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import type { Sliders } from "@/lib/constitution";
+import { useI18n } from "@/lib/i18n";
 
 type SimilarItem = {
   id: string;
@@ -32,6 +33,7 @@ type ArtifactFull = ArtifactSummary & {
 };
 
 export default function ConstitutionLeaderboardPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState<ArtifactSummary[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [stub, setStub] = useState<boolean>(false);
@@ -199,42 +201,44 @@ export default function ConstitutionLeaderboardPage() {
             Planet Constitutions — Leaderboard
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">
-            Подписанные QSign конституции, опубликованные на Planet. Сортировка
-            по дате публикации. Клик «Применить» — переход в редактор с
-            подгруженными ползунками.
+            {t("constitution.leaderboard.subtitle")}
           </p>
           {stub && (
             <p className="text-xs text-amber-300 mt-2 max-w-3xl">
-              ⚠ Хранилище — in-memory ring buffer (stub). Артефакты переживут
-              сервер до рестарта Railway. Production-storage — следующий шаг.
+              {t("constitution.leaderboard.stubWarning")}
             </p>
           )}
         </header>
 
         {loading && (
-          <div className="text-center text-[#9aa3c0] py-10">Загрузка…</div>
+          <div className="text-center text-[#9aa3c0] py-10">
+            {t("constitution.leaderboard.loading")}
+          </div>
         )}
 
         {error && (
           <div className="text-rose-400 border border-rose-500/30 rounded p-4 bg-rose-500/5">
-            Ошибка загрузки: {error}
+            {t("constitution.leaderboard.errorPrefix")} {error}
           </div>
         )}
 
         {!loading && !error && items.length === 0 && (
           <div className="text-center text-[#9aa3c0] py-10 border border-[#d4af37]/20 rounded">
-            Пока нет опубликованных артефактов. Зайди в{" "}
+            {t("constitution.leaderboard.emptyBefore")}{" "}
             <Link href="/constitution" className="text-[#d4af37] underline">
               /constitution
             </Link>{" "}
-            и нажми «🌍 Опубликовать на Planet».
+            {t("constitution.leaderboard.emptyAfter")}
           </div>
         )}
 
         {!loading && items.length > 0 && (
           <>
             <div className="mb-4 text-sm text-[#9aa3c0]">
-              Показано {items.length} из {total} артефактов
+              {t("constitution.leaderboard.shownCount", {
+                shown: items.length,
+                total,
+              })}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((it) => {
@@ -261,7 +265,7 @@ export default function ConstitutionLeaderboardPage() {
                       </div>
                     ) : (
                       <div className="h-[240px] flex items-center justify-center text-[#9aa3c0] text-xs">
-                        Загрузка отпечатка…
+                        {t("constitution.leaderboard.loadingFingerprint")}
                       </div>
                     )}
                     {(() => {
@@ -284,7 +288,7 @@ export default function ConstitutionLeaderboardPage() {
                                   ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200"
                                   : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
                               }`}
-                              title="Голос «за»"
+                              title={t("constitution.leaderboard.voteUpTitle")}
                             >
                               👍 {s.up}
                             </button>
@@ -296,7 +300,7 @@ export default function ConstitutionLeaderboardPage() {
                                   ? "bg-rose-500/30 border border-rose-400/60 text-rose-200"
                                   : "border border-[#d4af37]/30 hover:bg-rose-500/10"
                               }`}
-                              title="Голос «против»"
+                              title={t("constitution.leaderboard.voteDownTitle")}
                             >
                               👎 {s.down}
                             </button>
@@ -314,14 +318,16 @@ export default function ConstitutionLeaderboardPage() {
                       href={`/constitution?artifact=${it.id}`}
                       className="mt-3 px-3 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold text-center text-sm hover:opacity-90"
                     >
-                      Применить ползунки →
+                      {t("constitution.leaderboard.applySliders")}
                     </Link>
                     <button
                       type="button"
                       onClick={() => toggleSimilar(it.id)}
                       className="mt-1 px-2 py-1 text-xs text-[#9aa3c0] hover:text-[#f5d27a] text-center"
                     >
-                      {expandedSimilar === it.id ? "Скрыть похожие ▴" : "🪞 Похожие →"}
+                      {expandedSimilar === it.id
+                        ? t("constitution.leaderboard.hideSimilar")
+                        : t("constitution.leaderboard.showSimilar")}
                     </button>
                     {expandedSimilar === it.id && (
                       <div className="mt-2 border-t border-[#d4af37]/15 pt-2 space-y-1.5">
@@ -331,7 +337,7 @@ export default function ConstitutionLeaderboardPage() {
                           </div>
                         ) : similarById[it.id].length === 0 ? (
                           <div className="text-xs text-[#9aa3c0] italic">
-                            Похожих не нашлось
+                            {t("constitution.leaderboard.noSimilar")}
                           </div>
                         ) : (
                           similarById[it.id].map((sim) => (

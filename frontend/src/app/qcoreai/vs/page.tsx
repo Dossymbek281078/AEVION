@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SYSTEMS, ROWS, type Verdict } from "./data";
+import { SYSTEMS, ROWS, benchmarkDelta, benchmarkLatestMeta, type Verdict } from "./data";
+import BenchmarkDeltaChart from "./BenchmarkDeltaChart";
 
 export const metadata: Metadata = {
   title: "QCoreAI vs. AutoGen, CrewAI, LangGraph, Agents SDK, MetaGPT",
@@ -148,6 +149,36 @@ export default function QCoreAiVsPage() {
           <LegendItem verdict="no" label="Not part of the framework" />
         </div>
       </section>
+
+      {/* Historical vs. latest-run delta */}
+      {benchmarkDelta.length > 0 && (
+        <section
+          style={{
+            marginBottom: 20,
+            padding: 20,
+            background: "#fff",
+            border: BORDER,
+            borderRadius: 12,
+            boxShadow: CARD_SHADOW,
+            overflowX: "auto",
+          }}
+        >
+          <h3 style={{ fontSize: 14, fontWeight: 900, margin: 0, marginBottom: 4, color: "#0f172a" }}>
+            Historical vs. latest run — per category
+          </h3>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>
+            Win-rate (%) vs. a single flagship. The curated historical entry is the citable baseline;
+            the latest run is whatever a maintainer most recently reproduced — see the caveat below if
+            they diverge.
+          </p>
+          <BenchmarkDeltaChart data={benchmarkDelta} latestDate={benchmarkLatestMeta?.generatedAt} />
+          {benchmarkLatestMeta?.caveat && (
+            <p style={{ fontSize: 11.5, color: "#92400e", background: "#fef3c7", padding: "8px 12px", borderRadius: 8, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
+              <b>Caveat on the latest run:</b> {benchmarkLatestMeta.caveat}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Honest caveats */}
       <section

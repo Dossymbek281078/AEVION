@@ -26,6 +26,11 @@ const DEST = path.join(__dirname, "..", "..", "frontend", "src", "app", "qcoreai
 
 const raw = JSON.parse(fs.readFileSync(SRC, "utf8"));
 const historical = Array.isArray(raw.historical) ? raw.historical : [];
+const latest = raw.latest && typeof raw.latest === "object" ? raw.latest : null;
 
-fs.writeFileSync(DEST, JSON.stringify(historical, null, 2) + "\n");
-console.log(`Synced ${historical.length} historical benchmark entr${historical.length === 1 ? "y" : "ies"} to frontend/src/app/qcoreai/vs/benchmark.json`);
+fs.writeFileSync(DEST, JSON.stringify({ historical, latest }, null, 2) + "\n");
+console.log(
+  `Synced ${historical.length} historical entr${historical.length === 1 ? "y" : "ies"}` +
+    `${latest ? ` + 1 latest run (${latest.generatedAt})` : " (no latest run yet)"} ` +
+    `to frontend/src/app/qcoreai/vs/benchmark.json`
+);

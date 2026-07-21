@@ -103,6 +103,11 @@ jobs:
           add-paths: |
             docs/benchmarks/qcore-eval-latest.json
             frontend/src/app/qcoreai/vs/benchmark.json
+          # A weekly PR nobody is pinged for is a PR nobody reviews. Assign +
+          # request review from the repo owner so it shows up in their
+          # notifications instead of silently piling up.
+          assignees: Dossymbek281078
+          reviewers: Dossymbek281078
           commit-message: "chore(qcoreai): refresh Council-vs-flagship benchmark snapshot"
           title: "chore(qcoreai): refresh Council-vs-flagship benchmark snapshot"
           body: |

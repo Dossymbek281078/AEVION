@@ -10,7 +10,7 @@
  * they can't silently drift from the curated historical entry.
  */
 
-import benchmarkHistory from "./benchmark.json";
+import benchmarkFile from "./benchmark.json";
 
 export type SystemId = "qcoreai" | "autogen" | "crewai" | "langgraph" | "openai-agents" | "metagpt";
 
@@ -48,9 +48,35 @@ type HistoricalCouncilBenchmark = {
   perCategoryWinRatePct: Record<string, number>;
 };
 
-const councilBenchmark = (benchmarkHistory as HistoricalCouncilBenchmark[]).find((e) =>
-  e.id?.startsWith("council-vs-flagship")
-);
+type LatestBenchmarkRun = {
+  generatedAt: string;
+  n: number;
+  caveat?: string;
+  perCategoryWinRate: Record<string, Record<string, { winRatePct: number | null }>>;
+};
+
+const benchmarkHistory = (benchmarkFile.historical ?? []) as HistoricalCouncilBenchmark[];
+const benchmarkLatest = (benchmarkFile.latest ?? null) as LatestBenchmarkRun | null;
+
+const councilBenchmark = benchmarkHistory.find((e) => e.id?.startsWith("council-vs-flagship"));
+
+export type BenchmarkDeltaPoint = { category: string; historicalPct: number; latestPct: number | null };
+
+/** Historical vs latest-run win-rate per category, for the delta chart. Falls
+ *  back to an empty array when either side is missing (chart renders nothing
+ *  rather than guessing). Uses the "council-l2-fable" candidate on both sides
+ *  — the only one the historical entry actually reports. */
+export const benchmarkDelta: BenchmarkDeltaPoint[] = councilBenchmark
+  ? Object.entries(councilBenchmark.perCategoryWinRatePct).map(([category, historicalPct]) => ({
+      category,
+      historicalPct,
+      latestPct: benchmarkLatest?.perCategoryWinRate?.["council-l2-fable"]?.[category]?.winRatePct ?? null,
+    }))
+  : [];
+
+export const benchmarkLatestMeta = benchmarkLatest
+  ? { generatedAt: benchmarkLatest.generatedAt, n: benchmarkLatest.n, caveat: benchmarkLatest.caveat }
+  : null;
 
 /** Builds the quality-benchmark row's copy from the synced historical entry
  *  instead of hand-typed prose, so it can't silently drift from the JSON. */

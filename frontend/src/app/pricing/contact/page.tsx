@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
@@ -31,9 +32,11 @@ const INITIAL: LeadForm = {
 };
 
 const INDUSTRIES = ["Банки и финтех", "Стартапы", "Госсектор", "Создатели контента", "Юр. фирмы", "Другое"];
+const INDUSTRY_KEYS = ["banks", "startups", "government", "creators", "lawFirms", "other"];
 
 function ContactInner() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const sp = useSearchParams();
   const [form, setForm] = useState<LeadForm>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
@@ -146,7 +149,7 @@ function ContactInner() {
     <ProductPageShell maxWidth={680}>
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-          ← Все тарифы
+          {t("pricing.contact.backAllTiers")}
         </Link>
       </div>
 
@@ -231,9 +234,9 @@ function ContactInner() {
               style={inputStyle}
             >
               <option value="">{tp("contact.placeholder.industry")}</option>
-              {INDUSTRIES.map((i) => (
+              {INDUSTRIES.map((i, idx) => (
                 <option key={i} value={i}>
-                  {i}
+                  {t(`pricing.contact.industry.${INDUSTRY_KEYS[idx]}`)}
                 </option>
               ))}
             </select>
@@ -291,7 +294,7 @@ function ContactInner() {
               marginTop: 14,
             }}
           >
-            Ошибка: {error}
+            {t("pricing.contact.errorPrefix")} {error}
           </div>
         )}
 

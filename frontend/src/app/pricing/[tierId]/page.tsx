@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { useI18n } from "@/lib/i18n";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -47,146 +48,93 @@ interface PricingPayload {
   currencies: Record<CurrencyCode, { rate: number; symbol: string; label: string }>;
 }
 
+// Values below are i18n keys under "pricing.tierDetail.faq.*", resolved via
+// t() at render time (this object is module-level, outside the component).
 const TIER_FAQ: Record<TierId, { q: string; a: string }[]> = {
   free: [
-    {
-      q: "Можно ли остаться на Free навсегда?",
-      a: "Да. Free не имеет триал-таймера. Если уперлись в лимиты — апгрейд в любой момент.",
-    },
-    {
-      q: "Какой модуль выбрать на Free?",
-      a: "Большинство выбирают QRight (для регистрации идей) или Cyberchess. QRight + QSign даёт минимальный IP-контур.",
-    },
-    {
-      q: "Что произойдёт при превышении лимитов?",
-      a: "Операция вернёт 429 quota_exceeded. Данные не теряются. Можно дождаться следующего месяца или апгрейднуться.",
-    },
+    { q: "pricing.tierDetail.faq.free.q1", a: "pricing.tierDetail.faq.free.a1" },
+    { q: "pricing.tierDetail.faq.free.q2", a: "pricing.tierDetail.faq.free.a2" },
+    { q: "pricing.tierDetail.faq.free.q3", a: "pricing.tierDetail.faq.free.a3" },
   ],
   lite: [
-    {
-      q: "Что входит в Lite?",
-      a: "Один любой продукт AEVION на выбор за $19/месяц — полный доступ к нему. Например, только CyberChess или только HealthAI.",
-    },
-    {
-      q: "Можно ли сменить выбранный продукт?",
-      a: "Да. Выбранный продукт меняется в личном кабинете в любой момент — без доплат.",
-    },
-    {
-      q: "Чем Lite отличается от Medium?",
-      a: "Lite — 1 продукт на выбор. Medium ($29) — сразу 10 готовых продуктов (CyberChess, HealthAI, Multichat, QCoreAI, Smeta и др.).",
-    },
-    {
-      q: "Годовая скидка реальная?",
-      a: "Да — при оплате за год платишь за 10 месяцев (2 месяца в подарок): $190 вместо $228.",
-    },
+    { q: "pricing.tierDetail.faq.lite.q1", a: "pricing.tierDetail.faq.lite.a1" },
+    { q: "pricing.tierDetail.faq.lite.q2", a: "pricing.tierDetail.faq.lite.a2" },
+    { q: "pricing.tierDetail.faq.lite.q3", a: "pricing.tierDetail.faq.lite.a3" },
+    { q: "pricing.tierDetail.faq.lite.q4", a: "pricing.tierDetail.faq.lite.a4" },
   ],
   medium: [
-    {
-      q: "Что входит в Medium?",
-      a: "10 готовых продуктов одной подпиской: CyberChess, HealthAI, Multichat, QCoreAI, Smeta Trainer, QAI, QLearn, QNews, QStore, QMedia.",
-    },
-    {
-      q: "Чем Medium отличается от Full?",
-      a: "Medium — 10 consumer/prosumer-продуктов. Full ($49) — вся экосистема 30+ (включая QRight, QSign, IP Bureau, финтех-стек).",
-    },
-    {
-      q: "Сколько токенов QCoreAI в Medium?",
-      a: "10 000 000 токенов в месяц. На Full — 50 000 000.",
-    },
-    {
-      q: "Годовая скидка?",
-      a: "$290 в год вместо $348 — 2 месяца в подарок.",
-    },
+    { q: "pricing.tierDetail.faq.medium.q1", a: "pricing.tierDetail.faq.medium.a1" },
+    { q: "pricing.tierDetail.faq.medium.q2", a: "pricing.tierDetail.faq.medium.a2" },
+    { q: "pricing.tierDetail.faq.medium.q3", a: "pricing.tierDetail.faq.medium.a3" },
+    { q: "pricing.tierDetail.faq.medium.q4", a: "pricing.tierDetail.faq.medium.a4" },
   ],
   full: [
-    {
-      q: "Что входит в Full?",
-      a: "Вся экосистема AEVION (30+ продуктов): всё из Medium плюс QRight, QSign, IP Bureau, QTrade, QPayNet, QContract, QBuild и остальное.",
-    },
-    {
-      q: "Есть ли командные seats?",
-      a: "Базово 1 пользователь. Командные роли, мульти-seat и аудит-лог под организацию — на Enterprise.",
-    },
-    {
-      q: "Аудит и логи?",
-      a: "Полный аудит-лог по всем модулям (через QRight registry). Экспорт в JSON/CSV.",
-    },
-    {
-      q: "Годовая скидка?",
-      a: "$490 в год вместо $588 — 2 месяца в подарок. Можно отменить с возвратом за неиспользованные.",
-    },
+    { q: "pricing.tierDetail.faq.full.q1", a: "pricing.tierDetail.faq.full.a1" },
+    { q: "pricing.tierDetail.faq.full.q2", a: "pricing.tierDetail.faq.full.a2" },
+    { q: "pricing.tierDetail.faq.full.q3", a: "pricing.tierDetail.faq.full.a3" },
+    { q: "pricing.tierDetail.faq.full.q4", a: "pricing.tierDetail.faq.full.a4" },
   ],
   enterprise: [
-    {
-      q: "Что входит в Enterprise?",
-      a: "Выделенная инфра (VPC или on-prem), кастом-SLA от 1 часа, SOC2/ISO27001 пакет, безлимитные seats и токены, CSM, влияние на roadmap.",
-    },
-    {
-      q: "Минимальный контракт?",
-      a: "Обычно 12 месяцев. Pilot 3 месяца — по запросу.",
-    },
-    {
-      q: "Юрисдикции и compliance?",
-      a: "Поддерживаем GDPR, KZ data localization, RU 152-ФЗ. NDA/DPA/MSA по стандартам или вашим шаблонам.",
-    },
-    {
-      q: "Как начать?",
-      a: "Кнопка «Связаться с продажами» — наш Customer Success свяжется в течение 24 часов с предложением и demo.",
-    },
+    { q: "pricing.tierDetail.faq.enterprise.q1", a: "pricing.tierDetail.faq.enterprise.a1" },
+    { q: "pricing.tierDetail.faq.enterprise.q2", a: "pricing.tierDetail.faq.enterprise.a2" },
+    { q: "pricing.tierDetail.faq.enterprise.q3", a: "pricing.tierDetail.faq.enterprise.a3" },
+    { q: "pricing.tierDetail.faq.enterprise.q4", a: "pricing.tierDetail.faq.enterprise.a4" },
   ],
 };
 
+// Values below are i18n keys under "pricing.tierDetail.audience.*", resolved
+// via t() at render time (this object is module-level, outside the component).
 const TIER_AUDIENCE: Record<TierId, { who: string; usecase: string[]; notFor: string }> = {
   free: {
-    who: "Для тех, кто впервые знакомится с AEVION: студенты, фаундеры на стадии идеи, исследователи.",
+    who: "pricing.tierDetail.audience.free.who",
     usecase: [
-      "Зарегистрировать первую идею в QRight",
-      "Подписать пробный документ через QSign",
-      "Поиграть в CyberChess",
-      "Пройти Globus-онбординг",
+      "pricing.tierDetail.audience.free.usecase1",
+      "pricing.tierDetail.audience.free.usecase2",
+      "pricing.tierDetail.audience.free.usecase3",
+      "pricing.tierDetail.audience.free.usecase4",
     ],
-    notFor: "Не подойдёт для коммерческого использования с регулярной нагрузкой.",
+    notFor: "pricing.tierDetail.audience.free.notFor",
   },
   lite: {
-    who: "Те, кому нужен один продукт AEVION: игрок CyberChess, пользователь HealthAI, сметчик в Smeta Trainer.",
+    who: "pricing.tierDetail.audience.lite.who",
     usecase: [
-      "Полный доступ к одному выбранному продукту",
-      "Смена выбранного продукта в кабинете без доплат",
-      "AI-помощник QCoreAI до 2M токенов",
-      "Годовая оплата — 2 месяца в подарок ($190)",
+      "pricing.tierDetail.audience.lite.usecase1",
+      "pricing.tierDetail.audience.lite.usecase2",
+      "pricing.tierDetail.audience.lite.usecase3",
+      "pricing.tierDetail.audience.lite.usecase4",
     ],
-    notFor: "Не подойдёт, если нужно несколько продуктов сразу — смотрите Medium.",
+    notFor: "pricing.tierDetail.audience.lite.notFor",
   },
   medium: {
-    who: "Активные пользователи экосистемы: создатели, фрилансеры, инди-фаундеры.",
+    who: "pricing.tierDetail.audience.medium.who",
     usecase: [
-      "10 готовых продуктов одной подпиской",
-      "CyberChess + HealthAI + Multichat + QCoreAI + Smeta",
-      "QAI, QLearn, QNews, QStore, QMedia",
-      "AI-помощник QCoreAI до 10M токенов",
+      "pricing.tierDetail.audience.medium.usecase1",
+      "pricing.tierDetail.audience.medium.usecase2",
+      "pricing.tierDetail.audience.medium.usecase3",
+      "pricing.tierDetail.audience.medium.usecase4",
     ],
-    notFor: "Не включает IP-контур и финтех-стек — это Full.",
+    notFor: "pricing.tierDetail.audience.medium.notFor",
   },
   full: {
-    who: "Те, кому нужна вся экосистема: продуктовые студии, агентства, power-users.",
+    who: "pricing.tierDetail.audience.full.who",
     usecase: [
-      "Все продукты AEVION (30+) одной подпиской",
-      "IP-контур: QRight + QSign + IP Bureau",
-      "Финтех-стек: QTrade, QPayNet, QContract",
-      "AI-помощник QCoreAI до 50M токенов",
+      "pricing.tierDetail.audience.full.usecase1",
+      "pricing.tierDetail.audience.full.usecase2",
+      "pricing.tierDetail.audience.full.usecase3",
+      "pricing.tierDetail.audience.full.usecase4",
     ],
-    notFor: "Не покрывает on-prem, выделенную инфру и кастом-compliance — это Enterprise.",
+    notFor: "pricing.tierDetail.audience.full.notFor",
   },
   enterprise: {
-    who: "Корпорации, банки, государственный сектор, финансовые холдинги.",
+    who: "pricing.tierDetail.audience.enterprise.who",
     usecase: [
-      "Выделенная инфра (VPC или on-prem)",
-      "SOC2 / ISO27001 / DPA-пакет",
-      "Кастом-SLA до 1 часа",
-      "Влияние на roadmap и кастом-фичи",
-      "Customer Success менеджер",
+      "pricing.tierDetail.audience.enterprise.usecase1",
+      "pricing.tierDetail.audience.enterprise.usecase2",
+      "pricing.tierDetail.audience.enterprise.usecase3",
+      "pricing.tierDetail.audience.enterprise.usecase4",
+      "pricing.tierDetail.audience.enterprise.usecase5",
     ],
-    notFor: "Не подойдёт, если можно обойтись Business — переплатите за неиспользуемые гарантии.",
+    notFor: "pricing.tierDetail.audience.enterprise.notFor",
   },
 };
 
@@ -237,12 +185,13 @@ function FAQItem({ q, a }: { q: string; a: string }) {
   );
 }
 
-function fmtLimit(n: number | null, suffix: string): string {
-  if (n === null) return "Безлимит";
+function fmtLimit(n: number | null, suffix: string, unlimitedLabel: string): string {
+  if (n === null) return unlimitedLabel;
   return `${n.toLocaleString("ru-RU")} ${suffix}`;
 }
 
 export default function TierDetailPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useParams<{ tierId: string }>();
   const tierId = params?.tierId as TierId;
@@ -293,7 +242,7 @@ export default function TierDetailPage() {
     return (
       <ProductPageShell>
         <div style={{ padding: 60, textAlign: "center", color: "#64748b" }}>
-          Загружаем тариф...
+          {t("pricing.tierDetail.loading")}
         </div>
       </ProductPageShell>
     );
@@ -311,7 +260,7 @@ export default function TierDetailPage() {
             color: "#991b1b",
           }}
         >
-          <h2 style={{ margin: 0, marginBottom: 8 }}>Прайс недоступен</h2>
+          <h2 style={{ margin: 0, marginBottom: 8 }}>{t("pricing.tierDetail.error.title")}</h2>
           <p style={{ margin: 0 }}>{error}</p>
         </div>
       </ProductPageShell>
@@ -322,12 +271,12 @@ export default function TierDetailPage() {
     return (
       <ProductPageShell>
         <div style={{ padding: 24, textAlign: "center" }}>
-          <h2>Тариф не найден</h2>
+          <h2>{t("pricing.tierDetail.notFound.title")}</h2>
           <p style={{ color: "#64748b" }}>
-            id: <code>{tierId}</code>
+            {t("pricing.tierDetail.notFound.idLabel")} <code>{tierId}</code>
           </p>
           <Link href="/pricing" style={{ color: "#0d9488", fontWeight: 700 }}>
-            ← Все тарифы
+            {t("pricing.tierDetail.nav.backToAll")}
           </Link>
         </div>
       </ProductPageShell>
@@ -337,8 +286,8 @@ export default function TierDetailPage() {
   const symbol = data.currencies[currency].symbol;
   const rate = data.currencies[currency].rate;
   const displayPrice = (usd: number | null): string => {
-    if (usd === null) return "По запросу";
-    if (usd === 0) return "Бесплатно";
+    if (usd === null) return t("pricing.tierDetail.price.onRequest");
+    if (usd === 0) return t("pricing.tierDetail.price.free");
     return `${symbol}${Math.round(usd * rate).toLocaleString("ru-RU")}`;
   };
 
@@ -358,7 +307,7 @@ export default function TierDetailPage() {
             textDecoration: "none",
           }}
         >
-          ← Все тарифы
+          {t("pricing.tierDetail.nav.backToAll")}
         </Link>
       </div>
 
@@ -384,7 +333,7 @@ export default function TierDetailPage() {
             marginBottom: 16,
           }}
         >
-          ТАРИФ {tier.name.toUpperCase()}
+          {t("pricing.tierDetail.hero.badge", { tierName: tier.name.toUpperCase() })}
         </div>
         <h1
           style={{
@@ -396,7 +345,7 @@ export default function TierDetailPage() {
             color: "#0f172a",
           }}
         >
-          AEVION {tier.name}
+          {t("pricing.tierDetail.hero.title", { tierName: tier.name })}
         </h1>
         <p style={{ fontSize: 16, color: "#475569", maxWidth: 600, margin: "8px auto 24px" }}>
           {tier.tagline}
@@ -406,7 +355,7 @@ export default function TierDetailPage() {
             {displayPrice(showPrice)}
           </span>
           {showPrice !== null && showPrice > 0 && (
-            <span style={{ fontSize: 16, color: "#64748b", marginLeft: 4 }}>/мес</span>
+            <span style={{ fontSize: 16, color: "#64748b", marginLeft: 4 }}>{t("pricing.tierDetail.hero.perMonth")}</span>
           )}
         </div>
         <div
@@ -441,7 +390,7 @@ export default function TierDetailPage() {
                   color: period === p ? "#0f172a" : "#64748b",
                 }}
               >
-                {p === "monthly" ? "Месяц" : "Год (-16%)"}
+                {p === "monthly" ? t("pricing.tierDetail.hero.periodMonthly") : t("pricing.tierDetail.hero.periodAnnual")}
               </button>
             ))}
           </div>
@@ -521,14 +470,14 @@ export default function TierDetailPage() {
           }}
         >
           <h3 style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", letterSpacing: "0.06em", margin: 0, marginBottom: 8 }}>
-            КОМУ ПОДОЙДЁТ
+            {t("pricing.tierDetail.audience.whoTitle")}
           </h3>
           <p style={{ margin: 0, marginBottom: 16, color: "#0f172a", fontSize: 14, lineHeight: 1.5 }}>
-            {audience.who}
+            {t(audience.who)}
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, color: "#475569", fontSize: 13, lineHeight: 1.7 }}>
             {audience.usecase.map((u, i) => (
-              <li key={i}>{u}</li>
+              <li key={i}>{t(u)}</li>
             ))}
           </ul>
         </div>
@@ -541,10 +490,10 @@ export default function TierDetailPage() {
           }}
         >
           <h3 style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", letterSpacing: "0.06em", margin: 0, marginBottom: 8 }}>
-            КОГДА НЕ БРАТЬ
+            {t("pricing.tierDetail.audience.notForTitle")}
           </h3>
           <p style={{ margin: 0, color: "#7f1d1d", fontSize: 14, lineHeight: 1.5 }}>
-            {audience.notFor}
+            {t(audience.notFor)}
           </p>
         </div>
       </section>
@@ -552,7 +501,7 @@ export default function TierDetailPage() {
       {/* Features */}
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-          Что входит
+          {t("pricing.tierDetail.features.title")}
         </h2>
         <div
           style={{
@@ -586,7 +535,7 @@ export default function TierDetailPage() {
       {/* Limits */}
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-          Лимиты и квоты
+          {t("pricing.tierDetail.limits.title")}
         </h2>
         <div
           style={{
@@ -599,15 +548,15 @@ export default function TierDetailPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <tbody>
               {[
-                ["Активные модули", fmtLimit(tier.limits.modules, "шт")],
-                ["QRight объекты / мес", fmtLimit(tier.limits.qrightObjectsPerMonth, "шт")],
-                ["QSign операции / день", fmtLimit(tier.limits.qsignOpsPerDay, "оп")],
-                ["LLM токены / мес", fmtLimit(tier.limits.llmTokensPerMonth, "токенов")],
-                ["Пользователи (seats)", fmtLimit(tier.limits.seats, "шт")],
+                [t("pricing.tierDetail.limits.modules"), fmtLimit(tier.limits.modules, t("pricing.tierDetail.limits.unitCount"), t("pricing.tierDetail.price.unlimited"))],
+                [t("pricing.tierDetail.limits.qrightObjects"), fmtLimit(tier.limits.qrightObjectsPerMonth, t("pricing.tierDetail.limits.unitCount"), t("pricing.tierDetail.price.unlimited"))],
+                [t("pricing.tierDetail.limits.qsignOps"), fmtLimit(tier.limits.qsignOpsPerDay, t("pricing.tierDetail.limits.unitOps"), t("pricing.tierDetail.price.unlimited"))],
+                [t("pricing.tierDetail.limits.llmTokens"), fmtLimit(tier.limits.llmTokensPerMonth, t("pricing.tierDetail.limits.unitTokens"), t("pricing.tierDetail.price.unlimited"))],
+                [t("pricing.tierDetail.limits.seats"), fmtLimit(tier.limits.seats, t("pricing.tierDetail.limits.unitCount"), t("pricing.tierDetail.price.unlimited"))],
                 [
-                  "SLA поддержки",
+                  t("pricing.tierDetail.limits.supportSla"),
                   tier.limits.supportSlaHours === null
-                    ? "Сообщество"
+                    ? t("pricing.tierDetail.limits.community")
                     : `${tier.limits.supportSlaHours}h`,
                 ],
               ].map(([label, value], i) => (
@@ -627,7 +576,7 @@ export default function TierDetailPage() {
       {includedModules.length > 0 && (
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-            Включённые модули ({includedModules.length})
+            {t("pricing.tierDetail.modules.title", { count: includedModules.length })}
           </h2>
           <div
             style={{
@@ -660,11 +609,11 @@ export default function TierDetailPage() {
       {/* FAQ */}
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 16, letterSpacing: "-0.02em" }}>
-          Частые вопросы
+          {t("pricing.tierDetail.faq.title")}
         </h2>
         <div>
           {faq.map((f, i) => (
-            <FAQItem key={i} q={f.q} a={f.a} />
+            <FAQItem key={i} q={t(f.q)} a={t(f.a)} />
           ))}
         </div>
       </section>
@@ -679,14 +628,14 @@ export default function TierDetailPage() {
         }}
       >
         <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, marginBottom: 8 }}>
-          Готовы начать с AEVION {tier.name}?
+          {t("pricing.tierDetail.finalCta.title", { tierName: tier.name })}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
           {tier.id === "free"
-            ? "Создайте аккаунт и зарегистрируйте первую идею за 30 секунд."
+            ? t("pricing.tierDetail.finalCta.free")
             : tier.id === "enterprise"
-              ? "Customer Success свяжется в течение 24 часов."
-              : "Подписка отменяется в любой момент. Возврат за неиспользованное."}
+              ? t("pricing.tierDetail.finalCta.enterprise")
+              : t("pricing.tierDetail.finalCta.default")}
         </p>
         <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
           {tier.id === "enterprise" ? (
@@ -734,7 +683,7 @@ export default function TierDetailPage() {
               textDecoration: "none",
             }}
           >
-            Сравнить тарифы
+            {t("pricing.tierDetail.finalCta.compareTiers")}
           </Link>
         </div>
       </section>

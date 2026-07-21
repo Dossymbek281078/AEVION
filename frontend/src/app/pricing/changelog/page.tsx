@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type EntryKind = "added" | "changed" | "removed" | "deprecated" | "promo" | "module";
 
@@ -28,158 +29,183 @@ interface ChangelogPayload {
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
-const KIND_META: Record<EntryKind, { label: string; bg: string; fg: string }> = {
-  added: { label: "ДОБАВЛЕНО", bg: "#d1fae5", fg: "#065f46" },
-  changed: { label: "ИЗМЕНЕНО", bg: "#dbeafe", fg: "#1e40af" },
-  removed: { label: "УДАЛЕНО", bg: "#fee2e2", fg: "#991b1b" },
-  deprecated: { label: "DEPRECATED", bg: "#fef3c7", fg: "#92400e" },
-  promo: { label: "PROMO", bg: "#fce7f3", fg: "#9d174d" },
-  module: { label: "МОДУЛЬ", bg: "#e0f2fe", fg: "#075985" },
+const KIND_META: Record<EntryKind, { labelKey: string; bg: string; fg: string }> = {
+  added: { labelKey: "pricing.changelog.kind.added", bg: "#d1fae5", fg: "#065f46" },
+  changed: { labelKey: "pricing.changelog.kind.changed", bg: "#dbeafe", fg: "#1e40af" },
+  removed: { labelKey: "pricing.changelog.kind.removed", bg: "#fee2e2", fg: "#991b1b" },
+  deprecated: { labelKey: "pricing.changelog.kind.deprecated", bg: "#fef3c7", fg: "#92400e" },
+  promo: { labelKey: "pricing.changelog.kind.promo", bg: "#fce7f3", fg: "#9d174d" },
+  module: { labelKey: "pricing.changelog.kind.module", bg: "#e0f2fe", fg: "#075985" },
 };
 
-const ENTRIES_FALLBACK: ChangeEntry[] = [
+interface ChangeEntrySeed {
+  date: string;
+  kind: EntryKind;
+  titleKey: string;
+  bodyKey: string;
+  scope?: string;
+}
+
+const ENTRIES_FALLBACK_SEED: ChangeEntrySeed[] = [
   {
     date: "2026-04-28",
     kind: "added",
-    title: "Полная матрица тарифов на /pricing/compare",
-    body: "Side-by-side сравнение всех 37 модулей × 4 тарифов в одной таблице. Sticky tier headers, фильтр по типу модуля, скрытие SOON/by-request, цветовая подсветка для популярного тарифа.",
+    titleKey: "pricing.changelog.entry.compareMatrix.title",
+    bodyKey: "pricing.changelog.entry.compareMatrix.body",
     scope: "compare-page",
   },
   {
     date: "2026-04-28",
     kind: "added",
-    title: "/pricing/cases — 6 customer stories",
-    body: "Добавлен публичный листинг кейсов клиентов с метриками before/after. Фильтрация по индустрии и тарифу. 4 индустрии: банки, юр.фирмы, стартапы, госсектор.",
+    titleKey: "pricing.changelog.entry.cases.title",
+    bodyKey: "pricing.changelog.entry.cases.body",
     scope: "cases-page",
   },
   {
     date: "2026-04-28",
     kind: "added",
-    title: "Refund Policy на /pricing/refund-policy",
-    body: "Чёткая политика возвратов: 14-day money-back, прорейтинг, annual-расчёт, data retention 90+60 дней. Без юридического жаргона.",
+    titleKey: "pricing.changelog.entry.refundPolicy.title",
+    bodyKey: "pricing.changelog.entry.refundPolicy.body",
     scope: "refund-policy",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "/pricing/security — Compliance & Security landing",
-    body: "Отдельная страница: SOC 2 Type II, GDPR, 152-ФЗ, PCI DSS. 6 pillars безопасности, residency-таблица EU/RU/KZ, Bug Bounty программа.",
+    titleKey: "pricing.changelog.entry.securityPage.title",
+    bodyKey: "pricing.changelog.entry.securityPage.body",
     scope: "security-page",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Динамические OG-images через next/og",
-    body: "Edge-runtime генерация OpenGraph картинок для /pricing, /pricing/[tier], /pricing/for/[industry]. 3 шаблона. Lazy edge-render, CDN-кешируемые.",
+    titleKey: "pricing.changelog.entry.ogImages.title",
+    bodyKey: "pricing.changelog.entry.ogImages.body",
     scope: "seo",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Public roadmap на /pricing/roadmap",
-    body: "Все 37 модулей × 5 фаз (A-E) c прогрессом и target window. Public-facing — для прозрачности и инвесторов.",
+    titleKey: "pricing.changelog.entry.roadmapPage.title",
+    bodyKey: "pricing.changelog.entry.roadmapPage.body",
     scope: "roadmap-page",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Customer logos row на /pricing",
-    body: "6 wordmark-логотипов клиентов в shape-row. Базовое social proof над тарифными картами.",
+    titleKey: "pricing.changelog.entry.customerLogos.title",
+    bodyKey: "pricing.changelog.entry.customerLogos.body",
     scope: "logos",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Полная локализация EN/RU через usePricingT",
-    body: "Отдельный словарь pricing-ключей (~120 ключей) с fallback EN→RU→ключ. Покрывает 5 страниц: /pricing, /pricing/[tier], /pricing/for/[industry], /pricing/contact, checkout.",
+    titleKey: "pricing.changelog.entry.i18nLocalization.title",
+    bodyKey: "pricing.changelog.entry.i18nLocalization.body",
     scope: "i18n",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Provisioning подписки + welcome-email Resend",
-    body: "После Stripe-checkout — автоматический provisioning аккаунта на тариф + welcome-email через Resend (с graceful stub-fallback если RESEND_KEY не задан).",
+    titleKey: "pricing.changelog.entry.billingProvisioning.title",
+    bodyKey: "pricing.changelog.entry.billingProvisioning.body",
     scope: "billing",
   },
   {
     date: "2026-04-27",
     kind: "added",
-    title: "Testimonials + trust signals + newsletter signup",
-    body: "6 отзывов с фильтром по индустрии и модулю. 4-6 trust-numbers (NPS, страны, объекты, uptime). Newsletter на pricing.",
+    titleKey: "pricing.changelog.entry.trustSignals.title",
+    bodyKey: "pricing.changelog.entry.trustSignals.body",
     scope: "trust-signals",
   },
   {
     date: "2026-04-26",
     kind: "promo",
-    title: "Промо-коды AEVION20, STARTUP50, EARLYBIRD, FRIEND10, TEAM100",
-    body: "5 публичных промо-кодов: 20% запуск, 50% стартапам, 30% ранним пользователям, $10 рефералам, $100 командам. Применяются автоматически в калькуляторе.",
+    titleKey: "pricing.changelog.entry.promoCodes.title",
+    bodyKey: "pricing.changelog.entry.promoCodes.body",
     scope: "promo",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Free trial 14 дней для Pro и Business",
-    body: "Кнопка «Попробовать 14 дней бесплатно» в карточках Pro/Business. Карта не списывается до окончания триала. Welcome-email с trialEnds-датой.",
+    titleKey: "pricing.changelog.entry.freeTrial.title",
+    bodyKey: "pricing.changelog.entry.freeTrial.body",
     scope: "trial",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Analytics events ingest + /pricing/admin",
-    body: "POST /api/pricing/events ingest (page_view, checkout_start, etc.). Token-gated дашборд /pricing/admin с разбивкой по событиям, тарифам, источникам.",
+    titleKey: "pricing.changelog.entry.analyticsEvents.title",
+    bodyKey: "pricing.changelog.entry.analyticsEvents.body",
     scope: "analytics",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Stripe Checkout с graceful stub-fallback",
-    body: "Реальный Stripe-чекаут когда STRIPE_SECRET_KEY задан. Stub-режим (без оплаты, выдаёт fake-success URL) для dev/staging без ключей.",
+    titleKey: "pricing.changelog.entry.stripeCheckout.title",
+    bodyKey: "pricing.changelog.entry.stripeCheckout.body",
     scope: "checkout",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "POST /api/pricing/lead + форма /pricing/contact",
-    body: "Lead-form с rate-limit 5/10мин на IP, email-валидация. JSONL хранилище (gitignored, без PII в репо). Префилл от тарифа/индустрии через query.",
+    titleKey: "pricing.changelog.entry.leadForm.title",
+    bodyKey: "pricing.changelog.entry.leadForm.body",
     scope: "leads",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Индустриальные лендинги /pricing/for/[industry]",
-    body: "5 индустрий: banks, startups, government, creators, law-firms. Под каждую — рекомендованный стек модулей и копирайт.",
+    titleKey: "pricing.changelog.entry.industryLandings.title",
+    bodyKey: "pricing.changelog.entry.industryLandings.body",
     scope: "industries",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Сравнение с конкурентами + общий FAQ",
-    body: "Mini-таблица AEVION vs DocuSign / Stripe / OpenAI / Patently на /pricing. 8 общих FAQ-вопросов с раскрывашками.",
+    titleKey: "pricing.changelog.entry.competitorCompare.title",
+    bodyKey: "pricing.changelog.entry.competitorCompare.body",
     scope: "compare-mini",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "Детальные страницы тарифов /pricing/[tierId]",
-    body: "4 отдельные страницы: Free / Pro / Business / Enterprise. Расширенный список фич, лимиты, FAQ под тариф.",
+    titleKey: "pricing.changelog.entry.tierPages.title",
+    bodyKey: "pricing.changelog.entry.tierPages.body",
     scope: "tier-pages",
   },
   {
     date: "2026-04-26",
     kind: "added",
-    title: "GTM Pricing API + публичный /pricing",
-    body: "Backend `/api/pricing` отдаёт тарифы, модули, бандлы и валюты одним запросом. Калькулятор сметы (POST /api/pricing/quote) с прорейтингом seats и add-on.",
+    titleKey: "pricing.changelog.entry.gtmApi.title",
+    bodyKey: "pricing.changelog.entry.gtmApi.body",
     scope: "core",
   },
 ];
 
 export default function PricingChangelogPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
+  const fallbackEntries = useMemo<ChangeEntry[]>(
+    () =>
+      ENTRIES_FALLBACK_SEED.map((seed) => ({
+        date: seed.date,
+        kind: seed.kind,
+        scope: seed.scope,
+        title: t(seed.titleKey),
+        body: t(seed.bodyKey),
+      })),
+    [t],
+  );
   const [filter, setFilter] = useState<EntryKind | null>(null);
-  const [entries, setEntries] = useState<ChangeEntry[]>(ENTRIES_FALLBACK);
+  const [entries, setEntries] = useState<ChangeEntry[]>(fallbackEntries);
+  const [usingFallback, setUsingFallback] = useState(true);
   const [counts, setCounts] = useState<Partial<Record<EntryKind, number>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (usingFallback) setEntries(fallbackEntries);
+  }, [fallbackEntries, usingFallback]);
 
   useEffect(() => {
     track({ type: "page_view", source: "pricing/changelog" });
@@ -195,10 +221,14 @@ export default function PricingChangelogPage() {
         const j = (await r.json()) as ChangelogPayload;
         if (cancelled) return;
         setEntries(j.items);
+        setUsingFallback(false);
         setCounts(j.counts);
         setError(null);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setUsingFallback(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -306,7 +336,7 @@ export default function PricingChangelogPage() {
               key={k}
               active={filter === k}
               onClick={() => setFilter(filter === k ? null : k)}
-              label={`${meta.label} · ${c}`}
+              label={`${t(meta.labelKey)} · ${c}`}
               tint={meta.fg}
             />
           );
@@ -324,7 +354,7 @@ export default function PricingChangelogPage() {
             fontSize: 12,
           }}
         >
-          Не удалось загрузить changelog с сервера ({error}). Показываем последний кеш.
+          {t("pricing.changelog.fetchError", { error })}
         </div>
       )}
 
@@ -340,7 +370,7 @@ export default function PricingChangelogPage() {
             fontSize: 13,
           }}
         >
-          Загрузка…
+          {t("pricing.changelog.loadingEntries")}
         </div>
       )}
 
@@ -373,7 +403,10 @@ export default function PricingChangelogPage() {
                   textTransform: "uppercase",
                 }}
               >
-                {monthLabel(month)} · {items.length} {items.length === 1 ? "запись" : "записей"}
+                {monthLabel(month, t)} ·{" "}
+                {items.length === 1
+                  ? t("pricing.changelog.entriesCountOne", { count: items.length })
+                  : t("pricing.changelog.entriesCountMany", { count: items.length })}
               </h2>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {items.map((e, i) => {
@@ -416,7 +449,7 @@ export default function PricingChangelogPage() {
                             color: meta.fg,
                           }}
                         >
-                          {meta.label}
+                          {t(meta.labelKey)}
                         </span>
                       </div>
                       <div>
@@ -542,21 +575,8 @@ function FilterChip({
   );
 }
 
-function monthLabel(month: string): string {
+function monthLabel(month: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const [y, m] = month.split("-").map((s) => parseInt(s, 10));
-  const months = [
-    "Январь",
-    "Февраль",
-    "Март",
-    "Апрель",
-    "Май",
-    "Июнь",
-    "Июль",
-    "Август",
-    "Сентябрь",
-    "Октябрь",
-    "Ноябрь",
-    "Декабрь",
-  ];
-  return `${months[(m - 1) % 12]} ${y}`;
+  const key = `pricing.changelog.month.${String(((m - 1) % 12) + 1).padStart(2, "0")}`;
+  return `${t(key)} ${y}`;
 }

@@ -5,24 +5,24 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
-import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
-const APP_LINKS: Record<string, { label: string; href: string }> = {
-  qcoreai:    { label: "Открыть QCoreAI", href: "/qcoreai" },
-  healthai:   { label: "Открыть HealthAI", href: "/healthai" },
-  qlearn:     { label: "Открыть QLearn", href: "/qlearn" },
-  psyapp:     { label: "Открыть PsyApp", href: "/psyapp-deps" },
-  "psyapp-deps": { label: "Открыть PsyApp", href: "/psyapp-deps" },
-  qstore:     { label: "Открыть QStore", href: "/qstore" },
-  deepsan:    { label: "Открыть DeepSan", href: "/deepsan" },
-  qpersona:   { label: "Открыть QPersona", href: "/qpersona" },
-  lifebox:    { label: "Открыть LifeBox", href: "/lifebox" },
-  shadownet:  { label: "Открыть ShadowNet", href: "/shadownet" },
-  platform:   { label: "Открыть QRight", href: "/qright" },
+const APP_LINKS: Record<string, { name: string; href: string }> = {
+  qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
+  healthai:   { name: "HealthAI", href: "/healthai" },
+  qlearn:     { name: "QLearn", href: "/qlearn" },
+  psyapp:     { name: "PsyApp", href: "/psyapp-deps" },
+  "psyapp-deps": { name: "PsyApp", href: "/psyapp-deps" },
+  qstore:     { name: "QStore", href: "/qstore" },
+  deepsan:    { name: "DeepSan", href: "/deepsan" },
+  qpersona:   { name: "QPersona", href: "/qpersona" },
+  lifebox:    { name: "LifeBox", href: "/lifebox" },
+  shadownet:  { name: "ShadowNet", href: "/shadownet" },
+  platform:   { name: "QRight", href: "/qright" },
 };
 
 function SuccessInner() {
-  const tp = usePricingT();
+  const { t } = useI18n();
   const sp = useSearchParams();
   const sessionId = sp.get("session_id");
   // Gumroad redirects back with ?sale_id=...; keep _ptxn as a legacy fallback.
@@ -58,7 +58,7 @@ function SuccessInner() {
     <ProductPageShell maxWidth={680}>
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-          ← Все тарифы
+          {t("pricing.checkoutSuccess.backAllTiers")}
         </Link>
       </div>
 
@@ -81,19 +81,19 @@ function SuccessInner() {
         {/* Title */}
         <h1 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 12px", letterSpacing: "-0.02em" }}>
           {stub
-            ? "Тестовый checkout"
+            ? t("pricing.checkoutSuccess.titleStub")
             : trialDays > 0
-              ? `${tierName} — ${trialDays} дней бесплатно!`
-              : `${tierName} активирован!`}
+              ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
+              : t("pricing.checkoutSuccess.titleActivated", { tier: tierName })}
         </h1>
 
         {/* Subtitle */}
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           {stub
-            ? "Тестовый режим checkout. На проде оплата идёт через Gumroad — реальные платежи проходят сразу."
+            ? t("pricing.checkoutSuccess.subtitleStub")
             : trialDays > 0
-              ? `Триал до ${trialEndDate}. Карта не списывается до окончания периода — отмена в любой момент.`
-              : `Спасибо! Ваша подписка AEVION ${tierName} активна.`}
+              ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
+              : t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })}
         </p>
 
         {/* Trial end date badge */}
@@ -109,15 +109,15 @@ function SuccessInner() {
               border: "1px dashed rgba(255,255,255,0.35)",
             }}
           >
-            💳 Первое списание — <strong>{trialEndDate}</strong>
-            {period && <span style={{ opacity: 0.8 }}> · {period === "annual" ? "годовая" : "месячная"} подписка</span>}
+            {t("pricing.checkoutSuccess.firstCharge")} <strong>{trialEndDate}</strong>
+            {period && <span style={{ opacity: 0.8 }}> · {period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")} {t("pricing.checkoutSuccess.subscriptionWord")}</span>}
           </div>
         )}
 
         {/* Amount */}
         {!stub && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
-            Сумма: <strong>${totalUsd}</strong>
+            {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>
         )}
 
@@ -129,7 +129,7 @@ function SuccessInner() {
             fontSize: 12, marginBottom: 24, border: "1px solid rgba(255,255,255,0.2)",
           }}>
             <span>🔒</span>
-            <span>Оплата через Gumroad · безопасно{period ? ` · ${period === "annual" ? "годовая" : "месячная"}` : ""}</span>
+            <span>{t("pricing.checkoutSuccess.providerBadge")}{period ? ` · ${period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")}` : ""}</span>
           </div>
         )}
 
@@ -151,7 +151,7 @@ function SuccessInner() {
               fontWeight: 800, fontSize: 15,
             }}
           >
-            {appLink.label} →
+            {t("pricing.checkoutSuccess.openApp", { app: appLink.name })} →
           </Link>
           <Link
             href="/"
@@ -163,7 +163,7 @@ function SuccessInner() {
               border: "1px solid rgba(255,255,255,0.25)",
             }}
           >
-            На главную
+            {t("pricing.checkoutSuccess.home")}
           </Link>
         </div>
       </div>
@@ -176,14 +176,14 @@ function SuccessInner() {
           border: "1px solid #e2e8f0",
         }}>
           <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: "#1e293b" }}>
-            Что дальше?
+            {t("pricing.checkoutSuccess.whatsNext")}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { icon: "📧", text: "Проверьте email — квитанция от Gumroad уже отправлена" },
-              { icon: "🚀", text: `Откройте ${appLink.label.replace("Открыть ", "")} и начните работать` },
-              { icon: "⚙️", text: "Управление подпиской — в вашем аккаунте Gumroad" },
-              { icon: "💬", text: "Вопросы? Пишите на support@aevion.app" },
+              { icon: "📧", text: t("pricing.checkoutSuccess.nextEmail") },
+              { icon: "🚀", text: t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name }) },
+              { icon: "⚙️", text: t("pricing.checkoutSuccess.nextManage") },
+              { icon: "💬", text: t("pricing.checkoutSuccess.nextQuestions") },
             ].map((item, i) => (
               <li key={i} style={{ display: "flex", gap: 10, fontSize: 13, color: "#475569" }}>
                 <span>{item.icon}</span>
@@ -201,8 +201,7 @@ function SuccessInner() {
           background: "#fef3c7", borderRadius: 12,
           border: "1px solid #fde68a", fontSize: 13, color: "#92400e",
         }}>
-          <strong>Тестовый режим.</strong> Это демонстрационный checkout без реального списания.
-          На проде оплата идёт через Gumroad — реальные платежи проходят сразу.
+          <strong>{t("pricing.checkoutSuccess.stubNoticeTitle")}</strong> {t("pricing.checkoutSuccess.stubNoticeBody")}
         </div>
       )}
     </ProductPageShell>

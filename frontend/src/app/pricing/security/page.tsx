@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { getServerT } from "@/lib/i18n-server";
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
@@ -7,32 +8,32 @@ const BORDER = "1px solid rgba(15,23,42,0.08)";
 const CERTIFICATIONS = [
   {
     name: "SOC 2 Type II",
-    scope: "Security, Availability, Confidentiality",
-    status: "Certified",
+    scopeKey: "pricing.security.cert.soc2.scope",
+    statusKey: "pricing.security.cert.soc2.status",
     color: "#0d9488",
     bg: "#ecfdf5",
     icon: "✓",
   },
   {
     name: "GDPR",
-    scope: "EU General Data Protection Regulation",
-    status: "Compliant",
+    scopeKey: "pricing.security.cert.gdpr.scope",
+    statusKey: "pricing.security.cert.gdpr.status",
     color: "#0ea5e9",
     bg: "#e0f2fe",
     icon: "✓",
   },
   {
     name: "152-ФЗ",
-    scope: "Федеральный закон о персональных данных (РФ)",
-    status: "Compliant",
+    scopeKey: "pricing.security.cert.fz152.scope",
+    statusKey: "pricing.security.cert.fz152.status",
     color: "#7c3aed",
     bg: "#f5f3ff",
     icon: "✓",
   },
   {
     name: "PCI DSS",
-    scope: "Payment Card Industry Data Security Standard",
-    status: "Level 1",
+    scopeKey: "pricing.security.cert.pcidss.scope",
+    statusKey: "pricing.security.cert.pcidss.status",
     color: "#d97706",
     bg: "#fefce8",
     icon: "✓",
@@ -41,34 +42,34 @@ const CERTIFICATIONS = [
 
 const PILLARS = [
   {
-    title: "Шифрование данных",
+    titleKey: "pricing.security.pillar.encryption.title",
     icon: "🔒",
-    body: "Данные в покое шифруются с помощью AES-256. Транзитные данные защищены TLS 1.3. Ключи хранятся в HSM-совместимых хранилищах с ротацией раз в 90 дней. Поддержка BYOK (Bring Your Own Key) для Enterprise-клиентов.",
+    bodyKey: "pricing.security.pillar.encryption.body",
   },
   {
-    title: "Контроль доступа",
+    titleKey: "pricing.security.pillar.access.title",
     icon: "👤",
-    body: "Role-Based Access Control (RBAC) с granular-разрешениями на уровне объекта. Обязательная MFA для всех аккаунтов. SSO через SAML 2.0 / OIDC. Принцип наименьших привилегий применяется ко всем сервисным аккаунтам.",
+    bodyKey: "pricing.security.pillar.access.body",
   },
   {
-    title: "Аудит и логирование",
+    titleKey: "pricing.security.pillar.audit.title",
     icon: "📋",
-    body: "Иммутабельный журнал аудита для каждого действия в системе: кто, когда, с какого IP, что изменил. Логи хранятся минимум 365 дней. Экспорт в SIEM (Splunk, Datadog, ELK) через webhook или S3.",
+    bodyKey: "pricing.security.pillar.audit.body",
   },
   {
-    title: "Инфраструктура",
+    titleKey: "pricing.security.pillar.infra.title",
     icon: "🏗",
-    body: "Мультиарендная инфраструктура с жёсткой изоляцией на уровне namespace. Kubernetes с network policy, pod security standards. Все образы сканируются Trivy и Snyk до деплоя. Runtime-защита через Falco.",
+    bodyKey: "pricing.security.pillar.infra.body",
   },
   {
-    title: "BCP / Disaster Recovery",
+    titleKey: "pricing.security.pillar.bcp.title",
     icon: "♻",
-    body: "RPO ≤ 1 час, RTO ≤ 4 часа. Репликация данных в 2+ зоны доступности. Ежедневные бэкапы с проверкой восстановления. Учения DR проводятся ежеквартально. SLA uptime 99.9% (Enterprise — 99.95%).",
+    bodyKey: "pricing.security.pillar.bcp.body",
   },
   {
-    title: "Безопасная разработка",
+    titleKey: "pricing.security.pillar.secdev.title",
     icon: "🛡",
-    body: "OWASP Top-10 проверки в CI. Статический анализ (SonarQube, Semgrep) и DAST на staging. Обязательный security review для изменений в auth, billing и data access слоях. Dependency audit еженедельно.",
+    bodyKey: "pricing.security.pillar.secdev.body",
   },
 ];
 
@@ -76,64 +77,65 @@ const RESIDENCY_ROWS = [
   {
     region: "EU (Frankfurt)",
     flag: "🇪🇺",
-    tiers: "Free, Pro, Business",
+    tiersKey: "pricing.security.residency.eu.tiers",
     primary: true,
-    notes: "GDPR-compliant, стандартный регион",
+    notesKey: "pricing.security.residency.eu.notes",
   },
   {
-    region: "RU (Москва)",
+    regionKey: "pricing.security.residency.ru.region",
     flag: "🇷🇺",
-    tiers: "Business, Enterprise",
+    tiersKey: "pricing.security.residency.ru.tiers",
     primary: false,
-    notes: "152-ФЗ, зеркало + первичное хранение для RU-клиентов",
+    notesKey: "pricing.security.residency.ru.notes",
   },
   {
-    region: "KZ (Алматы)",
+    regionKey: "pricing.security.residency.kz.region",
     flag: "🇰🇿",
-    tiers: "Enterprise",
+    tiersKey: "pricing.security.residency.kz.tiers",
     primary: false,
-    notes: "Локальная резидентность по требованию регулятора",
+    notesKey: "pricing.security.residency.kz.notes",
   },
   {
     region: "Your VPC",
     flag: "🏢",
-    tiers: "Enterprise",
+    tiersKey: "pricing.security.residency.vpc.tiers",
     primary: false,
-    notes: "On-premise / private cloud, BYOK, полная изоляция",
+    notesKey: "pricing.security.residency.vpc.notes",
   },
 ];
 
 const DOC_CARDS = [
   {
-    title: "SOC 2 Report",
-    description: "Полный отчёт Type II доступен по запросу под NDA для Enterprise и Business клиентов.",
-    cta: "Запросить отчёт",
+    titleKey: "pricing.security.doc.soc2.title",
+    descriptionKey: "pricing.security.doc.soc2.description",
+    ctaKey: "pricing.security.doc.soc2.cta",
     href: "/pricing/contact?topic=soc2",
     accent: "#0d9488",
   },
   {
-    title: "Политика обработки данных (DPA)",
-    description: "Data Processing Agreement для соответствия GDPR Article 28. Подписывается электронно за 1 рабочий день.",
-    cta: "Получить DPA",
+    titleKey: "pricing.security.doc.dpa.title",
+    descriptionKey: "pricing.security.doc.dpa.description",
+    ctaKey: "pricing.security.doc.dpa.cta",
     href: "/pricing/contact?topic=dpa",
     accent: "#0ea5e9",
   },
   {
-    title: "Penetration Test Summary",
-    description: "Сводный отчёт о ежегодном penetration test от независимой фирмы. Доступен для Business и Enterprise.",
-    cta: "Запросить pentest summary",
+    titleKey: "pricing.security.doc.pentest.title",
+    descriptionKey: "pricing.security.doc.pentest.description",
+    ctaKey: "pricing.security.doc.pentest.cta",
     href: "/pricing/contact?topic=pentest",
     accent: "#7c3aed",
   },
 ];
 
-export default function SecurityPage() {
+export default async function SecurityPage() {
+  const { t } = await getServerT();
   return (
     <ProductPageShell maxWidth={1100}>
       {/* Back link */}
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-          ← Все тарифы
+          ← {t("pricing.security.backLink")}
         </Link>
       </div>
 
@@ -164,7 +166,7 @@ export default function SecurityPage() {
             color: "#0f172a",
           }}
         >
-          Безопасность и соответствие требованиям
+          {t("pricing.security.hero.title")}
         </h1>
         <p
           style={{
@@ -175,9 +177,7 @@ export default function SecurityPage() {
             lineHeight: 1.6,
           }}
         >
-          AEVION проектировался с фокусом на enterprise-grade защиту с первого дня. Данные клиентов хранятся в
-          изолированных namespace, шифруются AES-256 в покое и TLS 1.3 в транзите. Мы проходим независимые аудиты
-          SOC 2 Type II, выполняем требования GDPR, 152-ФЗ и PCI DSS, и публично раскрываем политики безопасности.
+          {t("pricing.security.hero.body")}
         </p>
       </section>
 
@@ -194,7 +194,7 @@ export default function SecurityPage() {
             color: "#0f172a",
           }}
         >
-          Сертификаты и соответствие
+          {t("pricing.security.certifications.heading")}
         </h2>
         <div
           style={{
@@ -248,9 +248,9 @@ export default function SecurityPage() {
                   marginBottom: 8,
                 }}
               >
-                {cert.status}
+                {t(cert.statusKey)}
               </div>
-              <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.4 }}>{cert.scope}</div>
+              <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.4 }}>{t(cert.scopeKey)}</div>
             </div>
           ))}
         </div>
@@ -268,10 +268,10 @@ export default function SecurityPage() {
             color: "#0f172a",
           }}
         >
-          6 уровней защиты
+          {t("pricing.security.pillars.heading")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 24, fontSize: 14 }}>
-          Комплексная защита на каждом слое — от кода до железа.
+          {t("pricing.security.pillars.subheading")}
         </p>
         <div
           style={{
@@ -282,7 +282,7 @@ export default function SecurityPage() {
         >
           {PILLARS.map((pillar) => (
             <div
-              key={pillar.title}
+              key={pillar.titleKey}
               style={{
                 background: "#fff",
                 border: BORDER,
@@ -293,9 +293,9 @@ export default function SecurityPage() {
             >
               <div style={{ fontSize: 24, marginBottom: 10 }}>{pillar.icon}</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>
-                {pillar.title}
+                {t(pillar.titleKey)}
               </div>
-              <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{pillar.body}</div>
+              <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{t(pillar.bodyKey)}</div>
             </div>
           ))}
         </div>
@@ -313,10 +313,10 @@ export default function SecurityPage() {
             color: "#0f172a",
           }}
         >
-          Резидентность данных
+          {t("pricing.security.residency.heading")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20, fontSize: 14 }}>
-          Выберите регион хранения данных в соответствии с требованиями вашего регулятора.
+          {t("pricing.security.residency.subheading")}
         </p>
         <div
           style={{
@@ -332,20 +332,20 @@ export default function SecurityPage() {
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Регион
+                    {t("pricing.security.residency.table.region")}
                   </th>
                   <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Доступно для тарифов
+                    {t("pricing.security.residency.table.tiers")}
                   </th>
                   <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Примечание
+                    {t("pricing.security.residency.table.notes")}
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {RESIDENCY_ROWS.map((row, i) => (
                   <tr
-                    key={row.region}
+                    key={"region" in row ? row.region : row.regionKey}
                     style={{
                       borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)",
                       background: row.primary ? "rgba(13,148,136,0.03)" : "transparent",
@@ -353,7 +353,7 @@ export default function SecurityPage() {
                   >
                     <td style={{ padding: "12px 16px", fontWeight: 700, whiteSpace: "nowrap" }}>
                       <span style={{ marginRight: 8 }}>{row.flag}</span>
-                      {row.region}
+                      {"region" in row ? row.region : t(row.regionKey)}
                       {row.primary && (
                         <span
                           style={{
@@ -371,8 +371,8 @@ export default function SecurityPage() {
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: "12px 16px", color: "#475569" }}>{row.tiers}</td>
-                    <td style={{ padding: "12px 16px", color: "#64748b" }}>{row.notes}</td>
+                    <td style={{ padding: "12px 16px", color: "#475569" }}>{t(row.tiersKey)}</td>
+                    <td style={{ padding: "12px 16px", color: "#64748b" }}>{t(row.notesKey)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -420,12 +420,10 @@ export default function SecurityPage() {
               letterSpacing: "-0.02em",
             }}
           >
-            Нашли уязвимость? Мы платим за это.
+            {t("pricing.security.bugBounty.title")}
           </h2>
           <p style={{ color: "#94a3b8", margin: 0, fontSize: 14, lineHeight: 1.6, maxWidth: 640 }}>
-            Программа Bug Bounty открыта для всех. Вознаграждение до $5 000 за критические уязвимости
-            (RCE, SQL-инъекции, утечки данных, обходы аутентификации). Ответ в течение 48 часов.
-            Responsible disclosure — обязательное условие.
+            {t("pricing.security.bugBounty.body")}
           </p>
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -442,7 +440,7 @@ export default function SecurityPage() {
               fontSize: 14,
             }}
           >
-            Сообщить об уязвимости
+            {t("pricing.security.bugBounty.reportCta")}
           </Link>
           <a
             href="mailto:security@aevion.io"
@@ -475,10 +473,10 @@ export default function SecurityPage() {
             color: "#0f172a",
           }}
         >
-          Запрос документов безопасности
+          {t("pricing.security.docs.heading")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20, fontSize: 14 }}>
-          Документы предоставляются действующим и потенциальным клиентам Business и Enterprise тарифов.
+          {t("pricing.security.docs.subheading")}
         </p>
         <div
           style={{
@@ -489,7 +487,7 @@ export default function SecurityPage() {
         >
           {DOC_CARDS.map((doc) => (
             <div
-              key={doc.title}
+              key={doc.titleKey}
               style={{
                 background: "#fff",
                 border: BORDER,
@@ -510,9 +508,9 @@ export default function SecurityPage() {
                   marginBottom: 2,
                 }}
               />
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>{doc.title}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>{t(doc.titleKey)}</div>
               <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, flex: 1 }}>
-                {doc.description}
+                {t(doc.descriptionKey)}
               </div>
               <Link
                 href={doc.href}
@@ -528,7 +526,7 @@ export default function SecurityPage() {
                   alignSelf: "flex-start",
                 }}
               >
-                {doc.cta}
+                {t(doc.ctaKey)}
               </Link>
             </div>
           ))}
@@ -549,10 +547,10 @@ export default function SecurityPage() {
         }}
       >
         <Link href="/pricing" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
-          ← Вернуться к тарифам
+          ← {t("pricing.security.backToPricing")}
         </Link>
         <div style={{ fontSize: 12, color: "#94a3b8" }}>
-          Вопросы?{" "}
+          {t("pricing.security.questions")}{" "}
           <a href="mailto:security@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
             security@aevion.io
           </a>

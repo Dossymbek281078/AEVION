@@ -111,39 +111,32 @@ function etaLabel(target: number, current: number, pace: RevenuePace | null): st
 
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [lsBalance, setLsBalance] = useState<GumroadBalance | null>(null);
+  const [lsLoading, setLsLoading] = useState(true);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
+  const [recentLoading, setRecentLoading] = useState(true);
   const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
   const [pace, setPace] = useState<RevenuePace | null>(null);
-  const [loading, setLoading] = useState(true);
 
+  // Each channel fetches independently — a slow/stuck one no longer blocks
+  // the whole page; every section renders as soon as its own data lands.
   useEffect(() => {
-    Promise.all([
-      fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null),
-      fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null),
-    ]).then(([ov, bal, rec, ls, gl, pc]) => {
-      setOverview(ov);
-      setBalance(bal);
-      setRecent(rec);
-      setLsBalance(ls);
-      if (gl && typeof gl.primaryUsd === "number") setGoals(gl);
-      setPace(pc);
-      setLoading(false);
-    });
+    fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setOverview(d); setOverviewLoading(false); });
+    fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setBalance(d); setBalanceLoading(false); });
+    fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setRecent(d); setRecentLoading(false); });
+    fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+      .then((d) => { setLsBalance(d); setLsLoading(false); });
+    fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
+      .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
+    fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
+      .then((d) => setPace(d));
   }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400 text-sm animate-pulse">Загружаем Revenue Hub...</div>
-      </div>
-    );
-  }
 
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;

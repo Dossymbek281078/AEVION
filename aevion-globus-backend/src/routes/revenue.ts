@@ -51,30 +51,52 @@ interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
   currency: string; created_at: string; email: string; product: string;
 }
-async function lsOrders(): Promise<LsOrder[] | null> {
+/**
+ * Fetch all pages of GET /v1/orders, following the JSON:API `links.next` URL.
+ * Mirrors gumroadSalesUncached: partial pages already collected are returned
+ * if a later page errors, and a maxPages cap stops a huge history from
+ * hanging the request (logged, never silently truncated).
+ */
+async function lsOrders(maxPages = 10): Promise<LsOrder[] | null> {
   const key = LS_KEY();
   if (!key) return null;
+  const store = LS_STORE();
+  const all: LsOrder[] = [];
+  let url: string | null =
+    `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}page[size]=50`;
+  let pages = 0;
   try {
-    const store = LS_STORE();
-    const url = `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}page[size]=50`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
-    if (!r.ok) return null;
-    const j = await r.json() as { data?: { id: string; attributes: Record<string, unknown> }[] };
-    return (j.data ?? []).map((o) => {
-      const a = o.attributes as Record<string, unknown>;
-      const foi = (a.first_order_item ?? {}) as Record<string, unknown>;
-      return {
-        id: o.id,
-        total: typeof a.total === "number" ? a.total : 0,
-        status: String(a.status ?? ""),
-        refunded: Boolean(a.refunded),
-        currency: String(a.currency ?? "USD").toUpperCase(),
-        created_at: String(a.created_at ?? ""),
-        email: String(a.user_email ?? ""),
-        product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+    while (url && pages < maxPages) {
+      const r: Response = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
+      if (!r.ok) return all.length ? all : null;
+      const j = await r.json() as {
+        data?: { id: string; attributes: Record<string, unknown> }[];
+        links?: { next?: string | null };
       };
-    });
-  } catch { return null; }
+      for (const o of j.data ?? []) {
+        const a = o.attributes as Record<string, unknown>;
+        const foi = (a.first_order_item ?? {}) as Record<string, unknown>;
+        all.push({
+          id: o.id,
+          total: typeof a.total === "number" ? a.total : 0,
+          status: String(a.status ?? ""),
+          refunded: Boolean(a.refunded),
+          currency: String(a.currency ?? "USD").toUpperCase(),
+          created_at: String(a.created_at ?? ""),
+          email: String(a.user_email ?? ""),
+          product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+        });
+      }
+      pages++;
+      url = j.links?.next || null;
+    }
+    if (url && pages >= maxPages) {
+      console.warn(`[revenue/lemonsqueezy] maxPages=${maxPages} reached — totals may undercount older orders`);
+    }
+    return all;
+  } catch {
+    return all.length ? all : null;
+  }
 }
 
 /** Built-in permalink -> appId fallback (aevion.gumroad.com/l/<permalink>).

@@ -1,0 +1,35 @@
+{
+  "source": "historical",
+  "note": "Transcribed verbatim from pre-existing source comments (no fresh API spend). See README.md for how to replace this with a live run.",
+  "entries": [
+    {
+      "id": "council-vs-flagship-n40-2026-07-12",
+      "label": "Council L2 (Fable 5 chair) vs single Fable 5 flagship",
+      "date": "2026-07-12",
+      "n": 40,
+      "source": "aevion-globus-backend/src/services/qcoreai/orchestrator.ts, comment above runAuto()",
+      "costMultiplierVsFlagship": 2.8,
+      "perCategoryWinRatePct": {
+        "reasoning": 100,
+        "writing": 100,
+        "advice": 100,
+        "analysis": 100,
+        "math": 80,
+        "coding": 67,
+        "knowledge": 50
+      },
+      "notePerCategory": "knowledge = pure factual recall, where Council only ties (50%) rather than wins — this is why the 'auto' strategy routes FACT-classified queries to a single flagship instead of paying the ~2.8x Council premium for no quality gain there."
+    },
+    {
+      "id": "synth-chair-opus-vs-fable-n16-2026-07-09",
+      "label": "Synthesizer chair comparison: Opus 4.8 vs Fable 5",
+      "date": "2026-07-09",
+      "n": 16,
+      "source": "aevion-globus-backend/src/services/qcoreai/agents.ts, comment above buildSynthesizer()",
+      "opusChairWinRatePct": 92,
+      "opusCostMultiplierVsFlagship": 2.8,
+      "fableChairCostMultiplierVsFlagship": 3.6,
+      "note": "Opus 4.8 chair matches Fable 5 chair's win-rate at roughly 23% lower cost, which is why Opus 4.8 is the default Synthesizer (QCOREAI_SYNTH_MODEL overrides it)."
+    }
+  ]
+}

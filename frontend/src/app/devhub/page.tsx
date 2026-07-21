@@ -9,6 +9,12 @@ import { catalog } from "@/lib/aevionCatalog";
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
 
+/** Legacy deploy records may carry a doubled scheme ("https://https://x") —
+ * the constructor was fixed, but stored URLs written before the fix remain. */
+function fixDoubledScheme(u: string): string {
+  return u.replace(/^(https?:\/\/)+(?=https?:\/\/)/, "");
+}
+
 interface Project {
   id: string;
   name: string;
@@ -286,6 +292,27 @@ export default function DevHubPage() {
           </div>
         )}
 
+        {/* Visual Edit feature highlight */}
+        <div style={{
+          border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+              🖱️ New: Visual Edit — click the page, not the code
+            </p>
+            <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
+              Open any Static project, click an element in the live preview, and edit its text, color, size and
+              alignment in place — or describe a change and let AI apply it. Every AI change is checkpointed with
+              one-click undo. Click an image to generate a replacement from a prompt.
+            </p>
+          </div>
+          <span style={{ padding: "6px 12px", background: "#0d9488", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
+            In the IDE → 🖱️ Visual Edit tab
+          </span>
+        </div>
+
         {/* Error banner */}
         {error && (
           <div style={{ background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", marginBottom: 20, color: "#991b1b", fontSize: 14, display: "flex", justifyContent: "space-between" }}>
@@ -346,12 +373,12 @@ export default function DevHubPage() {
 
                   {p.deployUrl && (
                     <a
-                      href={p.deployUrl}
+                      href={fixDoubledScheme(p.deployUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ fontSize: 12, color: "#0d9488", display: "block", marginBottom: 12, wordBreak: "break-all" }}
                     >
-                      {p.deployUrl}
+                      {fixDoubledScheme(p.deployUrl)}
                     </a>
                   )}
 

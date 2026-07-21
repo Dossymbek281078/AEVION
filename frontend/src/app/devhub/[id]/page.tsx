@@ -47,6 +47,7 @@ const VISUAL_EDIT_OVERLAY_SCRIPT = `
     parent.postMessage({
       source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
       styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign },
+      src: el.getAttribute('src') || '',
       ancestors: ancestors, children: children
     }, '*');
   }
@@ -134,6 +135,12 @@ type VisualStyles = { color: string; fontSize: string; fontWeight: string; textA
 const VISUAL_STYLE_TO_CSS: Record<keyof VisualStyles, string> = {
   color: "color", fontSize: "font-size", fontWeight: "font-weight", textAlign: "text-align",
 };
+
+/** Legacy deploy records may carry a doubled scheme ("https://https://x") —
+ * the constructor was fixed, but stored URLs written before the fix remain. */
+function fixDoubledScheme(u: string): string {
+  return u.replace(/^(https?:\/\/)+(?=https?:\/\/)/, "");
+}
 
 /** getComputedStyle reports colors as rgb(a); <input type="color"> only accepts #rrggbb. */
 function cssColorToHex(css: string): string {
@@ -336,10 +343,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [visualEditHtmlPath, setVisualEditHtmlPath] = useState<string | null>(null);
   const [visualEditSrcdoc, setVisualEditSrcdoc] = useState<string | null>(null);
   const [visualEditSelected, setVisualEditSelected] = useState<{
-    vid: string; tagName: string; text: string;
+    vid: string; tagName: string; text: string; src?: string;
     ancestors?: Array<{ vid: string; tagName: string }>;
     children?: Array<{ vid: string; tagName: string }>;
   } | null>(null);
+  const [visualEditImgPrompt, setVisualEditImgPrompt] = useState("");
+  const [visualEditImgBusy, setVisualEditImgBusy] = useState(false);
   const [visualEditText, setVisualEditText] = useState("");
   const [visualEditSaving, setVisualEditSaving] = useState(false);
   // Computed styles of the selected element (prefills the controls) vs. the
@@ -913,7 +922,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     const onMessage = (e: MessageEvent) => {
       const data = e.data;
       if (!data || data.source !== "devhub-visual-edit") return;
-      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text, ancestors: data.ancestors, children: data.children });
+      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text, src: data.src, ancestors: data.ancestors, children: data.children });
       setVisualEditText(data.text);
       setVisualEditStyleBase(data.styles || null);
       setVisualEditStyleEdits({});
@@ -945,7 +954,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
-      el.textContent = visualEditText;
+      if (visualEditSelected.tagName !== "IMG") el.textContent = visualEditText;
       for (const [key, value] of Object.entries(visualEditStyleEdits)) {
         (el as HTMLElement).style.setProperty(VISUAL_STYLE_TO_CSS[key as keyof VisualStyles], value);
       }
@@ -968,6 +977,51 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Save failed", "error");
     } finally {
       setVisualEditSaving(false);
+    }
+  };
+
+  // Generate an image for the selected <img> and save it as its src in one
+  // step (generation is the slow, costly part — a separate Save step would
+  // just add a way to lose the result).
+  const generateVisualImage = async () => {
+    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current || !visualEditImgPrompt.trim()) return;
+    setVisualEditImgBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/media/image`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Image generation failed");
+      const doc = visualEditSourceDocRef.current;
+      const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
+      if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
+      el.setAttribute("src", data.url);
+      if (!el.getAttribute("alt")) el.setAttribute("alt", visualEditImgPrompt.trim().slice(0, 120));
+      const clean = doc.cloneNode(true) as Document;
+      clean.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
+      const finalHtml = "<!DOCTYPE html>\n" + clean.documentElement.outerHTML;
+      const putR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(visualEditHtmlPath)}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: finalHtml }),
+      });
+      if (!putR.ok) throw new Error("Generated, but saving the page failed");
+      setVisualEditImgPrompt("");
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast(
+        String(data.url).startsWith("data:")
+          ? "Image generated and saved (embedded inline — the page carries the image data itself)"
+          : "Image generated and saved",
+        "success"
+      );
+    } catch (e: any) {
+      showToast(e.message || "Image generation failed", "error");
+    } finally {
+      setVisualEditImgBusy(false);
     }
   };
 
@@ -2298,7 +2352,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </span>
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
           {project.deployUrl && (
-            <a href={project.deployUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
+            <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
               View live
             </a>
           )}
@@ -2821,12 +2875,43 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </span>
                         )}
                       </div>
+                      {visualEditSelected.tagName === "IMG" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {visualEditSelected.src ? (
+                            <div style={{ fontSize: 12, color: "#64748b", wordBreak: "break-all" }}>
+                              Current image: {visualEditSelected.src.startsWith("data:")
+                                ? "embedded inline image"
+                                : visualEditSelected.src.slice(0, 120) + (visualEditSelected.src.length > 120 ? "…" : "")}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#64748b" }}>This image has no source yet.</div>
+                          )}
+                          <textarea
+                            value={visualEditImgPrompt}
+                            onChange={(e) => setVisualEditImgPrompt(e.target.value)}
+                            placeholder='Describe the image to generate, e.g. "minimal teal rocket logo on white"'
+                            style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                          />
+                          <button
+                            onClick={generateVisualImage}
+                            disabled={visualEditImgBusy || !visualEditImgPrompt.trim()}
+                            style={{
+                              padding: "9px 0", background: visualEditImgBusy || !visualEditImgPrompt.trim() ? "#99f6e4" : "#0d9488",
+                              color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                              cursor: visualEditImgBusy || !visualEditImgPrompt.trim() ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {visualEditImgBusy ? "Generating..." : "🎨 Generate & replace image"}
+                          </button>
+                        </div>
+                      ) : (
                       <textarea
                         value={visualEditText}
                         onChange={(e) => setVisualEditText(e.target.value)}
                         style={{ width: "100%", minHeight: 90, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
                       />
-                      {visualEditStyleBase && (
+                      )}
+                      {visualEditSelected.tagName !== "IMG" && visualEditStyleBase && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <input
                             type="color"
@@ -2872,6 +2957,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ))}
                         </div>
                       )}
+                      {visualEditSelected.tagName !== "IMG" && (
                       <button
                         onClick={saveVisualEdit}
                         disabled={visualEditSaving}
@@ -2883,6 +2969,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       >
                         {visualEditSaving ? "Saving..." : "Save"}
                       </button>
+                      )}
                       <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>✨ Describe a change for this element</div>
                         <textarea
@@ -2902,20 +2989,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         >
                           {visualEditAiBusy ? "Applying AI edit..." : "AI Edit"}
                         </button>
-                        <button
-                          onClick={undoLastGeneration}
-                          disabled={undoing}
-                          title="Revert the most recent AI change (same undo as the AI Generate tab)"
-                          style={{
-                            padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
-                            border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
-                            cursor: undoing ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {undoing ? "Undoing..." : "↩ Undo last AI change"}
-                        </button>
                       </div>
                     </>
+                  )}
+                  {project?.stack === "static" && (
+                    <button
+                      onClick={undoLastGeneration}
+                      disabled={undoing}
+                      title="Revert the most recent AI change (same undo as the AI Generate tab)"
+                      style={{
+                        padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
+                        border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
+                        cursor: undoing ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {undoing ? "Undoing..." : "↩ Undo last AI change"}
+                    </button>
                   )}
                 </div>
               )}

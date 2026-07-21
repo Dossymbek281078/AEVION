@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useToast } from "@/components/ToastProvider";
+import { useToast, type ToastAction } from "@/components/ToastProvider";
 
 // Detail carried by the "aevion:plan-limit" CustomEvent that module API clients
 // dispatch when the backend rejects an action with a 403 plan/tier limit.
@@ -42,6 +42,23 @@ function messageFor(d: PlanLimitDetail): string {
   return `Достигнут один из лимитов аккаунта. Удалите лишнее или проверьте условия плана.`;
 }
 
+// One-click action for the toast. Plan/tier limits route to pricing (honouring
+// a server-supplied upgradeUrl); hard caps route to the page where the user
+// frees up room. Unknown non-plan caps get no button (nothing sensible to open).
+function actionFor(d: PlanLimitDetail): ToastAction | undefined {
+  const code = typeof d.error === "string" ? d.error : "";
+  if (code === "portfolio_photo_limit_reached") {
+    return { label: "К портфолио →", href: "/build/portfolio" };
+  }
+  if (typeof d.upgradeUrl === "string" && d.upgradeUrl) {
+    return { label: "Открыть тарифы →", href: d.upgradeUrl };
+  }
+  if (code.startsWith("plan_")) {
+    return { label: "Открыть тарифы →", href: "/build/pricing" };
+  }
+  return undefined;
+}
+
 // Global listener: turns a swallowed 403 plan-limit into a visible toast for
 // any module whose API client dispatches "aevion:plan-limit". Mounted once,
 // inside ToastProvider, so every app shell is covered without per-form wiring.
@@ -51,7 +68,7 @@ export function PlanLimitToastBridge() {
   useEffect(() => {
     const onLimit = (e: Event) => {
       const detail = (e as CustomEvent<PlanLimitDetail>).detail || {};
-      showToast(messageFor(detail), "error", 8000);
+      showToast(messageFor(detail), "error", 8000, actionFor(detail));
     };
     window.addEventListener("aevion:plan-limit", onLimit as EventListener);
     return () => window.removeEventListener("aevion:plan-limit", onLimit as EventListener);

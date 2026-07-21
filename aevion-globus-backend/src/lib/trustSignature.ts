@@ -60,11 +60,37 @@ function canonical(value: unknown): string {
   return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonical((value as Record<string, unknown>)[k])).join(",") + "}";
 }
 
+// The exact fields the signature commits to. Deliberately ONLY the stable,
+// numeric/structural data (all ASCII) — the localized free-text `note`/`source`
+// strings are excluded. Why: those carry non-ASCII (Cyrillic) prose, and some
+// transports/proxies re-encode non-ASCII (e.g. \uXXXX escaping by a client's
+// JSON serialiser round-tripped through the edge proxy) in ways that change the
+// bytes a verifier reconstructs, which would break an otherwise-valid signature.
+// Committing to the numbers + timestamp + module ids (the KPI's actual meaning)
+// makes verification transport-independent and is the honest thing to prove.
+function signablePayload(score: TrustScore, asOf: string) {
+  const perModule: Record<string, { measuredPct: number; realPct: number; total: number }> = {};
+  for (const [id, m] of Object.entries(score.perModule ?? {})) {
+    perModule[id] = { measuredPct: Number(m.measuredPct), realPct: Number(m.realPct), total: Number(m.total) };
+  }
+  return {
+    asOf,
+    score: Number(score.score),
+    realPct: Number(score.realPct),
+    totalItems: Number(score.totalItems),
+    measured: Number(score.measured),
+    derived: Number(score.derived),
+    guessed: Number(score.guessed),
+    modulesReporting: Number(score.modulesReporting),
+    perModule,
+  };
+}
+
 export interface TrustAttestation {
   alg: "Ed25519";
   /** server-asserted issue time (ISO-8601) — covered by the signature */
   asOf: string;
-  /** SHA-256 hex of canonical({ score, asOf }) — the exact bytes that were signed */
+  /** SHA-256 hex of canonical(signablePayload) — the exact ASCII bytes that were signed */
   contentHash: string;
   /** base64 Ed25519 signature over the contentHash bytes */
   signature: string;
@@ -89,7 +115,7 @@ export function signedTrustScore(asOf: string): SignedTrustScore {
 }
 
 function attest(score: TrustScore, asOf: string): TrustAttestation {
-  const contentHash = crypto.createHash("sha256").update(canonical({ score, asOf })).digest("hex");
+  const contentHash = crypto.createHash("sha256").update(canonical(signablePayload(score, asOf))).digest("hex");
   const signature = crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64");
   return {
     alg: "Ed25519",
@@ -120,8 +146,10 @@ export interface VerifyResult {
 
 /**
  * Verify a previously-issued signed score. Recomputes the canonical hash over
- * { score, asOf } (score = the object minus its `attestation`), checks it
- * against the claimed contentHash, then verifies the Ed25519 signature.
+ * signablePayload(score, asOf) (score = the object minus its `attestation`),
+ * checks it against the claimed contentHash, then verifies the Ed25519
+ * signature. Only the numeric/structural fields are committed to — see
+ * signablePayload — so a re-encoded free-text note never breaks verification.
  */
 export function verifySignedTrustScore(input: unknown): VerifyResult {
   const base: VerifyResult = {
@@ -140,9 +168,12 @@ export function verifySignedTrustScore(input: unknown): VerifyResult {
     return { ...base, reason: "attestation fields malformed" };
   }
 
-  // Recompute the hash over the score (everything except the attestation) + asOf.
+  // Recompute the hash over the signable (ASCII, numeric) payload + asOf.
   const { attestation: _drop, ...score } = obj;
-  const recomputed = crypto.createHash("sha256").update(canonical({ score, asOf: att.asOf })).digest("hex");
+  const recomputed = crypto
+    .createHash("sha256")
+    .update(canonical(signablePayload(score as unknown as TrustScore, att.asOf)))
+    .digest("hex");
   const hashValid = recomputed === att.contentHash;
 
   let signatureValid = false;

@@ -3,6 +3,7 @@
 // weight-graded Council) and get back the answer plus how it was routed — while
 // the shared cross-module savings tally counts the run under `module`.
 import { apiUrl } from "@/lib/apiBase";
+import { isAiOffline } from "@/lib/aiOfflinePref";
 
 export type AskRouting = {
   classification: "open" | "fact";
@@ -24,10 +25,14 @@ export async function askSmart(opts: {
 }): Promise<AskResult> {
   const question = opts.question.trim();
   if (!question) throw new Error("question is empty");
+  // Platform offline switch: when the operator has flipped the whole ecosystem
+  // to the local fleet, every smart call runs on-prem (no network egress).
+  const body: Record<string, unknown> = { input: question, module: opts.module || "qcoreai" };
+  if (isAiOffline()) body.localOnly = true;
   const res = await fetch(apiUrl("/api/qcoreai/smart"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input: question, module: opts.module || "qcoreai" }),
+    body: JSON.stringify(body),
     signal: opts.signal,
     cache: "no-store",
   });

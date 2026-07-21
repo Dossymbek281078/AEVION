@@ -767,13 +767,13 @@ export async function getOpexSummary(days = 30): Promise<OpexSummary> {
       GROUP BY 1 ORDER BY 1`,
     [n]
   );
-  const byProvider = providerQ.rows.map((r: any) => ({
+  const byProvider: OpexSummary["byProvider"] = providerQ.rows.map((r: any) => ({
     provider: r.provider, calls: r.calls,
     tokensIn: Number(r.tokensIn), tokensOut: Number(r.tokensOut),
     costUsd: Number(r.costUsd),
   }));
   const totals = byProvider.reduce(
-    (a, p) => {
+    (a: OpexSummary["totals"], p: OpexSummary["byProvider"][number]) => {
       a.calls += p.calls; a.tokensIn += p.tokensIn; a.tokensOut += p.tokensOut; a.costUsd += p.costUsd;
       return a;
     },

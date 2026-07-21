@@ -31,16 +31,15 @@ type Task = {
   /** Tolerance: target slider must be ≥ this value (or ≤) */
   expectedAboveOrBelow: "above" | "below";
   expectedThreshold: number;
-  hint: string;
 };
 
 type Lesson = {
   id: LessonId;
   number: number;
-  title: string;
+  // title/theory/example/hint text lives in i18n-data.ts under
+  // "constitution.lesson.<id>.*" — looked up via t() at render time, not
+  // stored here, so translations stay in one place.
   pillar: "Pillar 1: Floor below" | "Pillar 2: Law above" | "Pillar 3: Rotation & status" | "Pillar 4: Growing pie";
-  theory: string;
-  example: string;
   task: Task;
 };
 
@@ -48,145 +47,97 @@ const LESSONS: Lesson[] = [
   {
     id: "floor",
     number: 1,
-    title: "Пол снизу",
     pillar: "Pillar 1: Floor below",
-    theory:
-      "Главное открытие XX века: элита перестаёт бояться низа не когда низ обезоружен, а когда низ имеет, что терять. Пол снизу — это гарантированный минимум: образование, базовое здравоохранение, пенсии, иногда UBI. Когда люди не прижаты к стене, у них нет экзистенциальной мотивации отнимать. Это самое дорогое и самое стабилизирующее изменение, которое можно сделать с обществом — но оно требует, чтобы пирог уже рос.",
-    example:
-      "1945–1980, Западная Европа. Бесплатные университеты в Германии и Франции, всеобщее здравоохранение в Британии (NHS 1948), социальное жилье в Швеции. Floor вырос с 20 до 70 за поколение — и капитализм впервые получил массовую легитимность.",
     task: {
       fixed: { ruleOfLaw: 85, rotation: 60, transparency: 80, multiStatus: 55, skinInGame: 55, polycentricity: 30, positiveSum: 65 },
       target: "floor",
       expectedRegimeId: "nordic",
       expectedAboveOrBelow: "above",
       expectedThreshold: 70,
-      hint: "Подними пол снизу ≥70 — получишь Скандинавскую модель.",
     },
   },
   {
     id: "ruleOfLaw",
     number: 2,
-    title: "Закон обязателен и для верха",
     pillar: "Pillar 2: Law above",
-    theory:
-      "Магна Карта 1215 — первый зафиксированный случай, когда король обязался жить по писаным правилам. Сегодня это очевидно, но 800 лет назад — революционно. Чем выше ruleOfLaw, тем меньше элиты грызутся между собой: проигравший знает, что проиграл по правилам, а не из-за того, что его кинули. Это снижает интенсивность интриг и переводит конкуренцию в продуктивное русло.",
-    example:
-      "Сингапур и UK XIX века — два разных пути к высокому ruleOfLaw. UK: эволюционно через парламент. Сингапур: жёсткий top-down под Ли Куан Ю. Оба варианта снижают коррупцию, но второй не оставляет ротации, что даёт хрупкость в кризис преемственности.",
     task: {
       fixed: { floor: 50, rotation: 10, transparency: 40, multiStatus: 30, skinInGame: 30, polycentricity: 20, positiveSum: 60 },
       target: "ruleOfLaw",
       expectedRegimeId: "feudalism",
       expectedAboveOrBelow: "below",
       expectedThreshold: 35,
-      hint: "Опусти закон ≤35 — получишь Поздний феодализм (закон уважает форму, но не суть).",
     },
   },
   {
     id: "rotation",
     number: 3,
-    title: "Ротация и жребий",
     pillar: "Pillar 3: Rotation & status",
-    theory:
-      "Афины V в. до н.э.: половина государственных должностей замещалась жребием. Это не было «случайно» — это было защитой от формирования постоянных коалиций. Когда верх ротируется, у нижних есть шанс наверх, и у верха меньше страха быть постоянной мишенью. Современная sortition (швейцарские референдумы, ирландский Citizens' Assembly) возвращает афинский принцип в XXI век.",
-    example:
-      "Ирландия 2016: 99 случайных граждан полтора года совещались об абортах. Их рекомендация легла в основу референдума 2018 — abortion-rights прошли с 66%. Жребий смог решить вопрос, который парламент 30 лет не мог сдвинуть.",
     task: {
       fixed: { floor: 35, ruleOfLaw: 55, transparency: 50, multiStatus: 55, skinInGame: 40, polycentricity: 70, positiveSum: 65 },
       target: "rotation",
       expectedRegimeId: "ancient-polis",
       expectedAboveOrBelow: "above",
       expectedThreshold: 65,
-      hint: "Подними ротацию ≥65 — получишь Античный полис (но осторожно: высокая rotation + низкий multi-status = exclusion).",
     },
   },
   {
     id: "transparency",
     number: 4,
-    title: "Прозрачность элит",
     pillar: "Pillar 2: Law above",
-    theory:
-      "Самое дешёвое улучшение конституции — публичные декларации доходов чиновников, открытые бюджеты, доступ к данным о решениях. Прозрачность не убивает власть, она убивает паранойю снизу. Скандинавская «принцип публичности» (Швеция, 1766 — самый старый Freedom of Information Act в мире) сделала возможным высокий floor: налогоплательщик видит, куда уходят деньги.",
-    example:
-      "Эстония — каждый гражданин может посмотреть, кто и когда обращался к его персональным данным в государственных системах. Эта обратная прозрачность («следишь за мной → я слежу за тобой») построила доверие к e-government быстрее, чем где-либо в Европе.",
     task: {
       fixed: { floor: 25, ruleOfLaw: 25, rotation: 10, multiStatus: 25, skinInGame: 25, polycentricity: 15, positiveSum: 50 },
       target: "transparency",
       expectedRegimeId: "authoritarian",
       expectedAboveOrBelow: "below",
       expectedThreshold: 25,
-      hint: "Опусти прозрачность ≤25 — получишь Авторитарную вертикаль (тёмные комнаты + тревожный верх).",
     },
   },
   {
     id: "multiStatus",
     number: 5,
-    title: "Множественные оси статуса",
     pillar: "Pillar 3: Rotation & status",
-    theory:
-      "Когда уважения можно достичь только через одну ось (например, деньги), всё общество выстраивается в линию и грызётся за неё. Когда легитимных осей много — наука, ремесло, забота, искусство, спорт — амбиции рассредотачиваются, конкуренция становится менее токсичной. Это самое хрупкое изменение, потому что его нельзя ввести законом — оно растёт из культуры.",
-    example:
-      "Япония: уважение к ремесленнику (shokunin) сохранилось рядом с уважением к корпоративному менеджеру. Школьный учитель в Финляндии престижнее, чем юрист. В обоих случаях это не natural — это столетия культурной работы.",
     task: {
       fixed: { floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, skinInGame: 70, polycentricity: 65, positiveSum: 80 },
       target: "multiStatus",
       expectedRegimeId: "open-access",
       expectedAboveOrBelow: "above",
       expectedThreshold: 70,
-      hint: "Подними multi-status ≥70 — соберёшь все 4 опоры → Open Access Order.",
     },
   },
   {
     id: "skinInGame",
     number: 6,
-    title: "Skin in the game",
     pillar: "Pillar 4: Growing pie",
-    theory:
-      "Талеб: «Кто принимает решение, должен нести его последствия лично». Когда банкир рискует только зарплатой, а вкладчики — деньгами, банкир будет принимать асимметричные риски. Кочевая степь — пример общества с экстремальным skin-in-game: вождь, который проиграет битву, ведя её сам, лишится головы или племени. Низкий skin-in-game → перекладывание рисков → системный кризис.",
-    example:
-      "Финансовый кризис 2008 — Lehman Brothers traders получили бонусы за 2005-2007, потом фирма рухнула, а их зарплаты остались. С 2010 в ЕС введены clawback-правила: бонусы можно отозвать через 5–7 лет если оказывается, что сделки были деструктивны.",
     task: {
       fixed: { floor: 40, ruleOfLaw: 45, rotation: 60, transparency: 70, multiStatus: 65, polycentricity: 85, positiveSum: 35 },
       target: "skinInGame",
       expectedRegimeId: "mixed",
       expectedAboveOrBelow: "above",
       expectedThreshold: 85,
-      hint: "Подними skin ≥85 — получишь «Кочевую степь» (но это попадёт в mixed-классификатор без правильных весов остальных ползунков).",
     },
   },
   {
     id: "polycentricity",
     number: 7,
-    title: "Полицентричность",
     pillar: "Pillar 3: Rotation & status",
-    theory:
-      "Элинор Остром (Нобель по экономике 2009) показала: общие ресурсы лучше всего управляются не централизованным государством и не приватизацией, а полицентричными сообществами с реальной автономией. Швейцарские кантоны, индийские деревенские водоохраны, североамериканские прибрежные рыболовные кооперативы — все работают через локальные правила + право на exit.",
-    example:
-      "Швейцария: 26 кантонов, каждый со своим налоговым режимом и системой образования. Цуг (низкий налог, корпорации) vs Базель (высокий налог, фарма-кластер) — конкурируют за резидентов. Кто не согласен — переезжает за 2 часа на поезде. Это и есть полицентричность в действии.",
     task: {
       fixed: { floor: 35, ruleOfLaw: 75, rotation: 35, transparency: 65, multiStatus: 75, skinInGame: 65, positiveSum: 80 },
       target: "polycentricity",
       expectedRegimeId: "network-post-nation",
       expectedAboveOrBelow: "above",
       expectedThreshold: 75,
-      hint: "Подними полицентричность ≥75 — получишь Сетевую постнацию (конкурирующие юрисдикции).",
     },
   },
   {
     id: "positiveSum",
     number: 8,
-    title: "Положительная сумма",
     pillar: "Pillar 4: Growing pie",
-    theory:
-      "Без растущего пирога все остальные ползунки скатываются обратно. Феодализм держался 800 лет именно потому, что positiveSum был близок к нулю — экономика не росла, а если кто-то получал больше, кто-то получал меньше. Промышленная революция (1750–1850) дала первый длинный рост positiveSum, и это сделало возможным всё последующее: избирательное право, социальное государство, открытый порядок. Любая конституционная реформа либо опирается на рост, либо обречена.",
-    example:
-      "Венесуэла 2000-х: высокие нефтяные цены → щедрые социальные программы (вырос floor с 30 до 60). После обвала цен (2014–) positiveSum рухнул, floor не удержался, страна провалилась в hyperinflation. Без растущей экономики высокий пол снизу — иллюзия.",
     task: {
       fixed: { floor: 30, ruleOfLaw: 30, rotation: 10, transparency: 20, multiStatus: 25, skinInGame: 30, polycentricity: 15 },
       target: "positiveSum",
       expectedRegimeId: "extractive-boom",
       expectedAboveOrBelow: "above",
       expectedThreshold: 65,
-      hint: "Подними positive sum ≥65 при низких остальных — получишь Экстрактивный бум (рост достаётся узкой группе).",
     },
   },
 ];

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { findPost, listPosts, type BlogBlock } from "@/lib/constitution-blog";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { getServerT } from "@/lib/i18n-server";
 import {
   classify,
   countryByCode,
@@ -109,6 +110,7 @@ export default async function BlogPostPage({ params }: PageProps) {
   const { slug } = await params;
   const post = findPost(slug);
   if (!post) notFound();
+  const { t } = await getServerT();
 
   const ogSliders = presetByName(post.ogPreset ?? "Open Access");
   const regime = classify(ogSliders);
@@ -157,13 +159,13 @@ export default async function BlogPostPage({ params }: PageProps) {
         <footer className="mt-10 pt-6 border-t border-[#d4af37]/15 text-sm text-[#9aa3c0]">
           <div className="flex justify-between items-center flex-wrap gap-3">
             <Link href="/constitution" className="text-[#d4af37] hover:underline">
-              → Открыть симулятор
+              {t("constitution.blog.post.openSimulator")}
             </Link>
             <Link href="/constitution/learn" className="text-emerald-300 hover:underline">
-              → Пройти Academy
+              {t("constitution.blog.post.takeAcademy")}
             </Link>
             <Link href="/constitution/leaderboard" className="text-cyan-300 hover:underline">
-              → Чужие сценарии
+              {t("constitution.blog.post.othersScenarios")}
             </Link>
           </div>
         </footer>

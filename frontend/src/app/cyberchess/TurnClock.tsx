@@ -7,14 +7,14 @@ import { useEffect, useRef, useState } from "react";
  * для активного игрока + 3-цветные зоны (зелёный > yellowAt, жёлтый > redAt,
  * красный ниже).
  *
- * `time` приходит сверху из useTimer (тик раз в секунду). Sub-second precision
- * добавляется локально: при `isActive` ставим setInterval каждые 100ms который
- * интерполирует time вниз. Это даёт визуальное ощущение realtime (без
- * перерасчёта реального state — он остаётся в parent).
+ * `getSeconds` is a stable callback reading the parent's deadline-ref clock
+ * (see useTimer in page.tsx) directly — TurnClock polls it locally every
+ * 100ms via its own `useState`, so the parent (a ~14k-line component) never
+ * re-renders just because the clock ticked; only this small component does.
  */
 
 type Props = {
-  time: number; // оставшиеся секунды (parent useTimer state)
+  getSeconds: () => number; // remaining seconds, read live from the parent's clock ref
   ini: number; // initial seconds (для % progress)
   isActive: boolean; // чей сейчас ход
   brand: string;
@@ -41,37 +41,31 @@ function colorFor(s: number, brand: string, mute: string, isActive: boolean): st
   return brand;
 }
 
-export default function TurnClock({ time, ini, isActive, brand, textMute }: Props) {
-  // Sub-second tick state — локально интерполирует time между real-state updates.
-  // Сбрасывается каждый раз когда parent `time` меняется (т.е. на каждый секундный тик).
-  const [subTime, setSubTime] = useState(time);
-  const baseTimeRef = useRef(time);
-  const baseAtRef = useRef(Date.now());
+export default function TurnClock({ getSeconds, ini, isActive, brand, textMute }: Props) {
+  // Local display state — polled from getSeconds(), not driven by a parent prop.
+  const [secs, setSecs] = useState(getSeconds);
 
   useEffect(() => {
-    baseTimeRef.current = time;
-    baseAtRef.current = Date.now();
-    setSubTime(time);
-  }, [time]);
-
-  useEffect(() => {
-    if (!isActive || time <= 0) return;
+    setSecs(getSeconds());
     const id = window.setInterval(() => {
-      const elapsedMs = Date.now() - baseAtRef.current;
-      const next = Math.max(0, baseTimeRef.current - elapsedMs / 1000);
-      setSubTime(next);
+      // Functional update bails out (no re-render) when the value hasn't
+      // actually changed, e.g. while the clock is paused/not our turn.
+      setSecs((prev) => {
+        const next = getSeconds();
+        return next === prev ? prev : next;
+      });
     }, 100);
     return () => window.clearInterval(id);
-  }, [isActive, time]);
+  }, [getSeconds, ini, isActive]);
 
   // Tick sound в последние 5 секунд активного хода — один beep на каждую целую секунду.
   const prevTickRef = useRef<number>(-1);
   useEffect(() => {
-    if (!isActive || subTime <= 0 || subTime > TICK_SOUND_FROM) {
+    if (!isActive || secs <= 0 || secs > TICK_SOUND_FROM) {
       prevTickRef.current = -1;
       return;
     }
-    const intSec = Math.ceil(subTime);
+    const intSec = Math.ceil(secs);
     if (intSec !== prevTickRef.current && intSec > 0) {
       prevTickRef.current = intSec;
       // Lightweight beep via WebAudio — без зависимостей от глобального chessSounds
@@ -92,17 +86,17 @@ export default function TurnClock({ time, ini, isActive, brand, textMute }: Prop
         setTimeout(() => ctx.close().catch(() => {}), 200);
       } catch {}
     }
-  }, [subTime, isActive]);
+  }, [secs, isActive]);
 
   // Circular progress: % оставшегося от ini. Если ini=0 (untimed) — пустое кольцо.
-  const pct = ini > 0 ? Math.max(0, Math.min(1, subTime / ini)) : 0;
-  const color = colorFor(subTime, brand, textMute, isActive);
+  const pct = ini > 0 ? Math.max(0, Math.min(1, secs / ini)) : 0;
+  const color = colorFor(secs, brand, textMute, isActive);
   const size = 56;
   const stroke = 3.5;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const dash = circ * pct;
-  const pulse = isActive && subTime <= RED_AT && subTime > 0;
+  const pulse = isActive && secs <= RED_AT && secs > 0;
 
   if (ini <= 0) {
     // Untimed mode — только цифровой clock без ring
@@ -139,7 +133,7 @@ export default function TurnClock({ time, ini, isActive, brand, textMute }: Prop
         />
       </svg>
       <div style={{
-        fontSize: subTime < 60 ? 13 : 12,
+        fontSize: secs < 60 ? 13 : 12,
         fontWeight: 900,
         fontFamily: "ui-monospace,monospace",
         letterSpacing: -0.4,
@@ -147,7 +141,7 @@ export default function TurnClock({ time, ini, isActive, brand, textMute }: Prop
         transition: "color 200ms",
         userSelect: "none" as const,
       }}>
-        {fmtPrecise(subTime)}
+        {fmtPrecise(secs)}
       </div>
     </div>
   );

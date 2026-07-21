@@ -37,11 +37,19 @@ export type FalPollResult =
   | { state: "completed"; result: unknown }
   | { state: "failed"; error: string };
 
+/** Request-эндпоинты fal живут на БАЗОВОМ id приложения (первые 2 сегмента):
+ *  submit — на полный путь модели, а status/result для
+ *  fal-ai/kling-video/v3/standard/text-to-video — на fal-ai/kling-video.
+ *  Полный путь в requests-URL даёт 405 (выяснено боем 2026-07-21). */
+function falRequestsBase(modelId: string): string {
+  return modelId.split("/").slice(0, 2).join("/");
+}
+
 export async function falQueuePoll(modelId: string, requestId: string): Promise<FalPollResult> {
   const key = falKey();
   if (!key) return { state: "failed", error: "FAL_KEY not configured" };
   try {
-    const base = `https://queue.fal.run/${modelId}/requests/${requestId}`;
+    const base = `https://queue.fal.run/${falRequestsBase(modelId)}/requests/${requestId}`;
     const s = await fetch(`${base}/status`, { headers: { Authorization: `Key ${key}` } });
     const sd = (await s.json().catch(() => ({}))) as any;
     const status = String(sd?.status || "").toUpperCase();

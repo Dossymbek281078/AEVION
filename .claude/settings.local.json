@@ -10,7 +10,10 @@
       "Bash(rmdir /c/Users/user/aevion-rev)",
       "Bash(npx tsc *)",
       "Bash(echo \"TSC_DONE_EXIT=$?\")",
-      "Bash(ln -s /c/Users/user/aevion-core/frontend/node_modules node_modules)"
+      "Bash(ln -s /c/Users/user/aevion-core/frontend/node_modules node_modules)",
+      "Bash(npx eslint *)",
+      "Bash(railway whoami *)",
+      "Bash(railway status *)"
     ]
   }
 }

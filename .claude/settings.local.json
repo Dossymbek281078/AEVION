@@ -15,7 +15,22 @@
       "Bash(railway whoami *)",
       "Bash(railway status *)",
       "Bash(git pull *)",
-      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules node_modules)"
+      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules node_modules)",
+      "Bash(ln -s /c/Users/user/aevion-core/node_modules node_modules)",
+      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/.env aevion-globus-backend/.env)",
+      "Bash(npm run *)",
+      "Bash(echo \"started with pid $!\")",
+      "Bash(curl -s http://localhost:4001/api/revenue/goals)",
+      "Bash(curl -s http://localhost:4001/api/revenue/summary)",
+      "Bash(curl -s http://localhost:4001/api/revenue/overview)",
+      "Bash(curl -s http://localhost:4001/api/revenue/health)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\" http://localhost:4001/api/revenue/goals)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\" http://localhost:4001/api/revenue/env-guide)",
+      "Bash(curl -s http://localhost:4001/api/revenue/env-guide)",
+      "Bash(netstat -ano)",
+      "Bash(PORT=4099 nohup npx ts-node-dev --respawn --transpile-only src/index.ts)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:4099/api/revenue/goals)"
     ]
   }
 }

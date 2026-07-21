@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PlatformAiSavings from "@/components/PlatformAiSavings";
+import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
 
 export function SiteHeader() {
@@ -68,6 +69,7 @@ export function SiteHeader() {
           </a>
           <AiOfflineToggle />
           <PlatformAiSavings />
+          <RevenueGoalBadge />
           <div style={{ marginLeft: 4 }}>
             <LanguageSwitcher />
           </div>

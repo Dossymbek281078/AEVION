@@ -571,6 +571,23 @@ revenueRouter.get("/goals", (_req, res) => {
 });
 
 /**
+ * GET /api/revenue/summary
+ * Cheap read of the combined live totals (same aggregation the snapshot
+ * cron writes) without persisting anything — for lightweight widgets like
+ * the header goal badge that just need "where are we right now".
+ */
+revenueRouter.get("/summary", async (_req, res) => {
+  try {
+    const totals = await computeLiveTotals();
+    res.json({ grossUsd: totals.grossUsd, netUsd: totals.netUsd, saleCount: totals.saleCount, channelsUsed: totals.channelsUsed });
+  } catch (err: unknown) {
+    capture(err, { route: "GET /summary" });
+    console.error("[revenue] summary_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "summary_failed" });
+  }
+});
+
+/**
  * GET /api/revenue/youtube/:channelId
  */
 revenueRouter.get("/youtube/:channelId", async (req, res) => {

@@ -179,22 +179,26 @@ export default function RevenuePage() {
             <span>Цели до Нового года</span>
             <span className="text-xs text-amber-400 normal-case">{daysLeft} дн. осталось</span>
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <GoalBar
-              label="$1M — первая цель"
-              target={goals.primaryUsd}
-              current={totalGross}
-              colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
-              eta={etaLabel(goals.primaryUsd, totalGross, pace)}
-            />
-            <GoalBar
-              label="$20M — стретч-цель"
-              target={goals.stretchUsd}
-              current={totalGross}
-              colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
-              eta={etaLabel(goals.stretchUsd, totalGross, pace)}
-            />
-          </div>
+          {balanceLoading || lsLoading ? (
+            <SkeletonGrid cols={2} />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <GoalBar
+                label="$1M — первая цель"
+                target={goals.primaryUsd}
+                current={totalGross}
+                colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
+                eta={etaLabel(goals.primaryUsd, totalGross, pace)}
+              />
+              <GoalBar
+                label="$20M — стретч-цель"
+                target={goals.stretchUsd}
+                current={totalGross}
+                colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
+                eta={etaLabel(goals.stretchUsd, totalGross, pace)}
+              />
+            </div>
+          )}
         </section>
 
         {/* Всего по всем каналам (Gumroad + LemonSqueezy) */}
@@ -202,25 +206,29 @@ export default function RevenuePage() {
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Всего · все чекауты <span className="ml-2 text-xs text-emerald-400 normal-case">(live)</span>
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
-              <div className="text-3xl font-semibold text-white">
-                ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+          {balanceLoading || lsLoading ? (
+            <SkeletonGrid cols={3} />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+                <div className="text-3xl font-semibold text-white">
+                  ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+                </div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
+                <div className="text-3xl font-semibold text-white">{totalCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
+                <div className="text-sm text-gray-300 mt-1 space-y-0.5">
+                  <div>Gumroad: <span className="text-white font-semibold">${gGross.toFixed(2)}</span> · {gCount}</div>
+                  <div>LemonSqueezy: <span className="text-white font-semibold">${lsGross.toFixed(2)}</span> · {lsCount}</div>
+                </div>
               </div>
             </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
-              <div className="text-3xl font-semibold text-white">{totalCount}</div>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
-              <div className="text-sm text-gray-300 mt-1 space-y-0.5">
-                <div>Gumroad: <span className="text-white font-semibold">${gGross.toFixed(2)}</span> · {gCount}</div>
-                <div>LemonSqueezy: <span className="text-white font-semibold">${lsGross.toFixed(2)}</span> · {lsCount}</div>
-              </div>
-            </div>
-          </div>
+          )}
         </section>
 
         {/* Gumroad Balance */}
@@ -228,7 +236,9 @@ export default function RevenuePage() {
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Gumroad Balance <span className="ml-2 text-xs text-pink-400 normal-case">(live)</span>
           </h2>
-          {balance?.stub ? (
+          {balanceLoading ? (
+            <SkeletonGrid cols={4} />
+          ) : balance?.stub ? (
             <GumroadSetupCard />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -262,10 +272,12 @@ export default function RevenuePage() {
         <RevenueTrend />
 
         {/* Recent Sales */}
-        {gumroadConfigured && (
+        {(overviewLoading || gumroadConfigured) && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние продажи</h2>
-            {recent?.stub ? (
+            {overviewLoading || recentLoading ? (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем продажи…</div>
+            ) : recent?.stub ? (
               <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Gumroad не настроен</div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -325,13 +337,17 @@ export default function RevenuePage() {
         {/* Apps Registry */}
         <section>
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Реестр приложений ({overview?.apps.length ?? 0})
+            {overviewLoading ? "Реестр приложений" : `Реестр приложений (${overview?.apps.length ?? 0})`}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(overview?.apps ?? []).map((app) => (
-              <AppCard key={app.appId} app={app} />
-            ))}
-          </div>
+          {overviewLoading ? (
+            <SkeletonGrid cols={3} />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(overview?.apps ?? []).map((app) => (
+                <AppCard key={app.appId} app={app} />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Channel coverage */}
@@ -350,7 +366,7 @@ export default function RevenuePage() {
         )}
 
         {/* Setup Guide */}
-        {!gumroadConfigured && <GumroadSetupCard full />}
+        {!overviewLoading && !gumroadConfigured && <GumroadSetupCard full />}
       </div>
     </div>
   );
@@ -500,6 +516,23 @@ function Sparkline({ points }: { points: number[] }) {
         <circle key={i} cx={x} cy={y} r="2" fill="rgb(16 185 129)" />
       ))}
     </svg>
+  );
+}
+
+// Literal class names (not interpolated) so Tailwind's scanner always picks them up.
+const SKELETON_GRID_COLS: Record<number, string> = {
+  2: "grid grid-cols-1 sm:grid-cols-2 gap-4",
+  3: "grid grid-cols-2 sm:grid-cols-3 gap-4",
+  4: "grid grid-cols-2 sm:grid-cols-4 gap-4",
+};
+
+function SkeletonGrid({ cols }: { cols: number }) {
+  return (
+    <div className={SKELETON_GRID_COLS[cols] ?? SKELETON_GRID_COLS[3]}>
+      {Array.from({ length: cols }).map((_, i) => (
+        <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-[88px] animate-pulse" />
+      ))}
+    </div>
   );
 }
 

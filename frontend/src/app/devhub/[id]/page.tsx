@@ -35,8 +35,21 @@ const VISUAL_EDIT_OVERLAY_SCRIPT = `
     var el = withVid(e.target);
     if (!el) return;
     e.preventDefault(); e.stopPropagation();
-    parent.postMessage({ source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '' }, '*');
+    var cs = getComputedStyle(el);
+    parent.postMessage({
+      source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
+      styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign }
+    }, '*');
   }
+  // Live style preview: the IDE pushes { vid, styles } and we paint the element
+  // in place, so the user sees the change before committing it with Save.
+  window.addEventListener('message', function(e){
+    var d = e.data;
+    if (!d || d.source !== 'devhub-visual-edit-apply') return;
+    var el = document.querySelector('[data-vid="' + d.vid + '"]');
+    if (!el) return;
+    for (var k in (d.styles || {})) el.style[k] = d.styles[k];
+  });
   document.addEventListener('mouseover', onOver, true);
   document.addEventListener('mouseout', onOut, true);
   document.addEventListener('click', onClick, true);
@@ -91,6 +104,20 @@ function buildVisualEditDocs(htmlPath: string, filesList: FileItem[]): { sourceD
   displayDoc.body?.appendChild(overlay);
 
   return { sourceDoc, srcdoc: "<!DOCTYPE html>\n" + displayDoc.documentElement.outerHTML };
+}
+
+type VisualStyles = { color: string; fontSize: string; fontWeight: string; textAlign: string };
+
+const VISUAL_STYLE_TO_CSS: Record<keyof VisualStyles, string> = {
+  color: "color", fontSize: "font-size", fontWeight: "font-weight", textAlign: "text-align",
+};
+
+/** getComputedStyle reports colors as rgb(a); <input type="color"> only accepts #rrggbb. */
+function cssColorToHex(css: string): string {
+  const m = css.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return css.startsWith("#") ? css : "#000000";
+  const hex = (n: string) => Number(n).toString(16).padStart(2, "0");
+  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
 }
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -288,7 +315,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [visualEditSelected, setVisualEditSelected] = useState<{ vid: string; tagName: string; text: string } | null>(null);
   const [visualEditText, setVisualEditText] = useState("");
   const [visualEditSaving, setVisualEditSaving] = useState(false);
+  // Computed styles of the selected element (prefills the controls) vs. the
+  // overrides the user actually touched — only the overrides get written back,
+  // so saving never bakes browser-default styles into the HTML as inline noise.
+  const [visualEditStyleBase, setVisualEditStyleBase] = useState<VisualStyles | null>(null);
+  const [visualEditStyleEdits, setVisualEditStyleEdits] = useState<Partial<VisualStyles>>({});
+  const [visualEditAiPrompt, setVisualEditAiPrompt] = useState("");
+  const [visualEditAiBusy, setVisualEditAiBusy] = useState(false);
   const visualEditSourceDocRef = useRef<Document | null>(null);
+  const visualEditIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Agent workflow state
   type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
@@ -853,10 +888,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!data || data.source !== "devhub-visual-edit") return;
       setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text });
       setVisualEditText(data.text);
+      setVisualEditStyleBase(data.styles || null);
+      setVisualEditStyleEdits({});
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  // Record a style override and paint it live in the preview iframe.
+  const setVisualStyle = (key: keyof VisualStyles, value: string) => {
+    if (!visualEditSelected) return;
+    setVisualEditStyleEdits((prev) => ({ ...prev, [key]: value }));
+    visualEditIframeRef.current?.contentWindow?.postMessage(
+      { source: "devhub-visual-edit-apply", vid: visualEditSelected.vid, styles: { [key]: value } },
+      "*"
+    );
+  };
 
   const saveVisualEdit = async () => {
     if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current) return;
@@ -866,8 +913,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
       el.textContent = visualEditText;
-      doc.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
-      const finalHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      for (const [key, value] of Object.entries(visualEditStyleEdits)) {
+        (el as HTMLElement).style.setProperty(VISUAL_STYLE_TO_CSS[key as keyof VisualStyles], value);
+      }
+      // Serialize from a clone so a failed save leaves the working doc (and its
+      // data-vid anchors) intact for the next attempt.
+      const clean = doc.cloneNode(true) as Document;
+      clean.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
+      const finalHtml = "<!DOCTYPE html>\n" + clean.documentElement.outerHTML;
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(visualEditHtmlPath)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -882,6 +935,44 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Save failed", "error");
     } finally {
       setVisualEditSaving(false);
+    }
+  };
+
+  // AI edit for the visually-selected element — reuses the same /generate
+  // pipeline as the IDE button (checkpoints, undo, syntax check, self-correct
+  // all apply), just with the prompt anchored to what the user clicked.
+  const aiEditVisual = async () => {
+    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditAiPrompt.trim()) return;
+    setVisualEditAiBusy(true);
+    try {
+      const sel = visualEditSelected;
+      const prompt =
+        `In ${visualEditHtmlPath}, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
+        (sel.text.trim() ? ` whose current text is: "${sel.text.trim().slice(0, 200)}"` : "") +
+        `. Apply this change to that element (and its related styles if needed), keeping the rest of the page intact: ${visualEditAiPrompt.trim()}`;
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, stack: project.stack, targetFiles: [visualEditHtmlPath] }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "AI edit failed");
+      if (data.aiGenerated === false) {
+        showToast("No AI provider configured — the page was not changed with real AI output", "error");
+      } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
+        showToast("AI edit applied, but the result failed a syntax check — review before deploying", "warning");
+      } else {
+        showToast("AI edit applied — preview refreshed (Undo in AI Generate tab if it's wrong)", "success");
+      }
+      setVisualEditAiPrompt("");
+      // Refreshing the file list retriggers the preview rebuild effect.
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+    } catch (e: any) {
+      showToast(e.message || "AI edit failed", "error");
+    } finally {
+      setVisualEditAiBusy(false);
     }
   };
 
@@ -2415,6 +2506,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : (
                 <iframe
+                  ref={visualEditIframeRef}
                   srcDoc={visualEditSrcdoc}
                   sandbox="allow-scripts"
                   style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
@@ -2673,6 +2765,52 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         onChange={(e) => setVisualEditText(e.target.value)}
                         style={{ width: "100%", minHeight: 90, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
                       />
+                      {visualEditStyleBase && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <input
+                            type="color"
+                            value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
+                            onChange={(e) => setVisualStyle("color", e.target.value)}
+                            title="Text color"
+                            style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
+                          />
+                          <input
+                            type="number"
+                            min={8}
+                            max={120}
+                            value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
+                            onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
+                            title="Font size (px)"
+                            style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
+                          />
+                          <button
+                            onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
+                            title="Bold"
+                            style={{
+                              width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
+                              fontWeight: 800,
+                              background: parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "#ccfbf1" : "#fff",
+                              color: "#0f172a",
+                            }}
+                          >
+                            B
+                          </button>
+                          {(["left", "center", "right"] as const).map((align) => (
+                            <button
+                              key={align}
+                              onClick={() => setVisualStyle("textAlign", align)}
+                              title={`Align ${align}`}
+                              style={{
+                                width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, cursor: "pointer",
+                                background: (visualEditStyleEdits.textAlign ?? visualEditStyleBase.textAlign) === align ? "#ccfbf1" : "#fff",
+                                color: "#0f172a",
+                              }}
+                            >
+                              {align === "left" ? "⇤" : align === "center" ? "☰" : "⇥"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <button
                         onClick={saveVisualEdit}
                         disabled={visualEditSaving}
@@ -2684,6 +2822,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       >
                         {visualEditSaving ? "Saving..." : "Save"}
                       </button>
+                      <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>✨ Describe a change for this element</div>
+                        <textarea
+                          value={visualEditAiPrompt}
+                          onChange={(e) => setVisualEditAiPrompt(e.target.value)}
+                          placeholder='e.g. "make this a teal gradient button that links to /pricing"'
+                          style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                        />
+                        <button
+                          onClick={aiEditVisual}
+                          disabled={visualEditAiBusy || !visualEditAiPrompt.trim()}
+                          style={{
+                            padding: "9px 0", background: visualEditAiBusy || !visualEditAiPrompt.trim() ? "#c7d2fe" : "#4f46e5",
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: visualEditAiBusy || !visualEditAiPrompt.trim() ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {visualEditAiBusy ? "Applying AI edit..." : "AI Edit"}
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>

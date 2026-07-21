@@ -39,35 +39,64 @@ const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
 const LS_KEY = () => process.env.LEMON_SQUEEZY_API_KEY?.trim() || "";
 const LS_STORE = () => process.env.LEMON_SQUEEZY_STORE_ID?.trim() || "";
 
+// ─── Revenue goals (New Year targets) ──────────────────────────────────────
+// Overridable via ENV so the numbers/deadline can change without a deploy;
+// defaults match the $1M / $20M goals tracked on the dashboard.
+const GOAL_PRIMARY_USD = () => Number(process.env.REVENUE_GOAL_PRIMARY_USD) || 1_000_000;
+const GOAL_STRETCH_USD = () => Number(process.env.REVENUE_GOAL_STRETCH_USD) || 20_000_000;
+const GOAL_DEADLINE = () => process.env.REVENUE_GOAL_DEADLINE?.trim() || "2027-01-01";
+
 // ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
   currency: string; created_at: string; email: string; product: string;
 }
-async function lsOrders(): Promise<LsOrder[] | null> {
+/**
+ * Fetch all pages of GET /v1/orders, following the JSON:API `links.next` URL.
+ * Mirrors gumroadSalesUncached: partial pages already collected are returned
+ * if a later page errors, and a maxPages cap stops a huge history from
+ * hanging the request (logged, never silently truncated).
+ */
+async function lsOrders(maxPages = 10): Promise<LsOrder[] | null> {
   const key = LS_KEY();
   if (!key) return null;
+  const store = LS_STORE();
+  const all: LsOrder[] = [];
+  let url: string | null =
+    `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}page[size]=50`;
+  let pages = 0;
   try {
-    const store = LS_STORE();
-    const url = `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}page[size]=50`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
-    if (!r.ok) return null;
-    const j = await r.json() as { data?: { id: string; attributes: Record<string, unknown> }[] };
-    return (j.data ?? []).map((o) => {
-      const a = o.attributes as Record<string, unknown>;
-      const foi = (a.first_order_item ?? {}) as Record<string, unknown>;
-      return {
-        id: o.id,
-        total: typeof a.total === "number" ? a.total : 0,
-        status: String(a.status ?? ""),
-        refunded: Boolean(a.refunded),
-        currency: String(a.currency ?? "USD").toUpperCase(),
-        created_at: String(a.created_at ?? ""),
-        email: String(a.user_email ?? ""),
-        product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+    while (url && pages < maxPages) {
+      const r: Response = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
+      if (!r.ok) return all.length ? all : null;
+      const j = await r.json() as {
+        data?: { id: string; attributes: Record<string, unknown> }[];
+        links?: { next?: string | null };
       };
-    });
-  } catch { return null; }
+      for (const o of j.data ?? []) {
+        const a = o.attributes as Record<string, unknown>;
+        const foi = (a.first_order_item ?? {}) as Record<string, unknown>;
+        all.push({
+          id: o.id,
+          total: typeof a.total === "number" ? a.total : 0,
+          status: String(a.status ?? ""),
+          refunded: Boolean(a.refunded),
+          currency: String(a.currency ?? "USD").toUpperCase(),
+          created_at: String(a.created_at ?? ""),
+          email: String(a.user_email ?? ""),
+          product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+        });
+      }
+      pages++;
+      url = j.links?.next || null;
+    }
+    if (url && pages >= maxPages) {
+      console.warn(`[revenue/lemonsqueezy] maxPages=${maxPages} reached — totals may undercount older orders`);
+    }
+    return all;
+  } catch {
+    return all.length ? all : null;
+  }
 }
 
 /** Built-in permalink -> appId fallback (aevion.gumroad.com/l/<permalink>).
@@ -528,6 +557,37 @@ revenueRouter.get("/overview", (_req, res) => {
 });
 
 /**
+ * GET /api/revenue/goals
+ * Static targets for the dashboard's goal-progress bars. Configurable via
+ * REVENUE_GOAL_PRIMARY_USD / REVENUE_GOAL_STRETCH_USD / REVENUE_GOAL_DEADLINE
+ * so they can move without a frontend deploy.
+ */
+revenueRouter.get("/goals", (_req, res) => {
+  res.json({
+    primaryUsd: GOAL_PRIMARY_USD(),
+    stretchUsd: GOAL_STRETCH_USD(),
+    deadline: GOAL_DEADLINE(),
+  });
+});
+
+/**
+ * GET /api/revenue/summary
+ * Cheap read of the combined live totals (same aggregation the snapshot
+ * cron writes) without persisting anything — for lightweight widgets like
+ * the header goal badge that just need "where are we right now".
+ */
+revenueRouter.get("/summary", async (_req, res) => {
+  try {
+    const totals = await computeLiveTotals();
+    res.json({ grossUsd: totals.grossUsd, netUsd: totals.netUsd, saleCount: totals.saleCount, channelsUsed: totals.channelsUsed });
+  } catch (err: unknown) {
+    capture(err, { route: "GET /summary" });
+    console.error("[revenue] summary_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "summary_failed" });
+  }
+});
+
+/**
  * GET /api/revenue/youtube/:channelId
  */
 revenueRouter.get("/youtube/:channelId", async (req, res) => {
@@ -843,6 +903,9 @@ revenueRouter.get("/env-guide", (_req, res) => {
       { key: "TWITCH_CLIENT_ID", required: false, example: "abc123...", note: "dev.twitch.tv/console → Register App → Client ID" },
       { key: "TWITCH_CLIENT_SECRET", required: false, example: "xyz789...", note: "dev.twitch.tv/console → Register App → New Secret" },
       { key: "PAYBOX_MERCHANT_ID", required: false, example: "123456", note: "paybox.money → Личный кабинет → Мерчанты → ID (для KZT)" },
+      { key: "REVENUE_GOAL_PRIMARY_USD", required: false, example: "1000000", note: "Цель прогресс-бара на /revenue. По умолчанию 1000000 ($1M)." },
+      { key: "REVENUE_GOAL_STRETCH_USD", required: false, example: "20000000", note: "Стретч-цель прогресс-бара на /revenue. По умолчанию 20000000 ($20M)." },
+      { key: "REVENUE_GOAL_DEADLINE", required: false, example: "2027-01-01", note: "Дедлайн целей (ISO date) для обратного отсчёта на /revenue. По умолчанию 2027-01-01." },
     ],
     perApp: REVENUE_APPS
       .filter((a) => a.youtubeChannelEnvKey || a.twitchChannelEnvKey)

@@ -18,6 +18,7 @@ interface Project {
   stack: Stack;
   status: ProjectStatus;
   deployUrl: string | null;
+  needsRedeploy?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -354,6 +355,14 @@ export default function DevHubPage() {
                     <span style={{ padding: "3px 10px", borderRadius: 6, background: statusStyle.bg, color: statusStyle.fg, fontSize: 12, fontWeight: 600 }}>
                       {statusStyle.label}
                     </span>
+                    {p.needsRedeploy && (
+                      <span
+                        title="Files were edited after the last deploy — the live page is behind. Open the IDE and deploy to update it."
+                        style={{ padding: "3px 10px", borderRadius: 6, background: "#fef3c7", color: "#92400e", fontSize: 12, fontWeight: 700 }}
+                      >
+                        ⟳ Redeploy needed
+                      </span>
+                    )}
                   </div>
 
                   <Link href={`/devhub/${p.id}`} style={{ textDecoration: "none" }}>

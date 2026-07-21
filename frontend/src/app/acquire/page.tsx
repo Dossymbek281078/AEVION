@@ -153,16 +153,21 @@ const DEAL_TERMS = [
 export default function AcquirePage() {
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [planetCount, setPlanetCount] = useState<number | null>(null);
+  const [aiSavedPct, setAiSavedPct] = useState<number | null>(null);
   const acquireRef = useAcquireRef();
 
   useEffect(() => {
     Promise.allSettled([
       fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
       fetch(apiUrl("/api/planet/stats")).then(r => r.json()),
-    ]).then(([reg, planet]) => {
+      fetch(apiUrl("/api/qcoreai/smart/savings")).then(r => r.json()),
+    ]).then(([reg, planet, savings]) => {
       if (reg.status === "fulfilled" && reg.value) setRegistry(reg.value as RegistryStats);
       if (planet.status === "fulfilled" && planet.value?.submissions != null) {
         setPlanetCount(planet.value.submissions as number);
+      }
+      if (savings.status === "fulfilled" && typeof savings.value?.savedPct === "number" && savings.value.runs > 0) {
+        setAiSavedPct(Math.round(savings.value.savedPct));
       }
     });
   }, []);
@@ -245,6 +250,9 @@ export default function AcquirePage() {
           <Counter label="Daily smoke" value="24/24" sub="PASS today" />
           <Counter label="DevHub integrations" value="9" sub="live · +5 в очереди" />
           <Counter label="Planet attestations" value={(planetCount ?? 0).toString()} sub="/api/planet/stats" />
+          {aiSavedPct != null && (
+            <Counter label="AI-расходы: роутинг" value={`−${aiSavedPct}%`} sub="/api/qcoreai/smart/savings · live" />
+          )}
         </div>
       </section>
 

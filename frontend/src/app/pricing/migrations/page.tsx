@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
@@ -15,20 +16,21 @@ interface Migration {
   fromColor: string;
   toModule: string;
   toName: string;
-  estDays: string;
-  costDelta: string;
+  estDaysKey: string;
+  costDeltaKey: string;
   steps: number;
 }
 
 const MIGRATIONS: Migration[] = [
-  { id: "docusign", fromName: "DocuSign", fromColor: "#ffcc00", toModule: "QSign", toName: "AEVION QSign", estDays: "5-14 дней", costDelta: "−73%", steps: 4 },
-  { id: "openai", fromName: "OpenAI", fromColor: "#10a37f", toModule: "QCoreAI", toName: "AEVION QCoreAI", estDays: "3-7 дней", costDelta: "−45%", steps: 4 },
-  { id: "stripe", fromName: "Stripe Connect", fromColor: "#635bff", toModule: "QPayNet", toName: "AEVION QPayNet", estDays: "14-30 дней", costDelta: "−42% на latency", steps: 4 },
-  { id: "patently", fromName: "Patently", fromColor: "#1a1a1a", toModule: "IP Bureau", toName: "AEVION IP Bureau", estDays: "7-14 дней", costDelta: "−74% per registration", steps: 4 },
+  { id: "docusign", fromName: "DocuSign", fromColor: "#ffcc00", toModule: "QSign", toName: "AEVION QSign", estDaysKey: "pricing.migrations.estDays.docusign", costDeltaKey: "pricing.migrations.costDelta.docusign", steps: 4 },
+  { id: "openai", fromName: "OpenAI", fromColor: "#10a37f", toModule: "QCoreAI", toName: "AEVION QCoreAI", estDaysKey: "pricing.migrations.estDays.openai", costDeltaKey: "pricing.migrations.costDelta.openai", steps: 4 },
+  { id: "stripe", fromName: "Stripe Connect", fromColor: "#635bff", toModule: "QPayNet", toName: "AEVION QPayNet", estDaysKey: "pricing.migrations.estDays.stripe", costDeltaKey: "pricing.migrations.costDelta.stripe", steps: 4 },
+  { id: "patently", fromName: "Patently", fromColor: "#1a1a1a", toModule: "IP Bureau", toName: "AEVION IP Bureau", estDaysKey: "pricing.migrations.estDays.patently", costDeltaKey: "pricing.migrations.costDelta.patently", steps: 4 },
 ];
 
 export default function PricingMigrationsPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [active, setActive] = useState<string | null>("docusign");
 
   useEffect(() => {
@@ -145,7 +147,7 @@ export default function PricingMigrationsPage() {
                 letterSpacing: "0.04em",
               }}
             >
-              {m.costDelta} · {m.estDays}
+              {t(m.costDeltaKey)} · {t(m.estDaysKey)}
             </div>
           </button>
         ))}
@@ -177,8 +179,8 @@ export default function PricingMigrationsPage() {
               border: "1px solid rgba(13,148,136,0.15)",
             }}
           >
-            <Stat label={tp("migrations.stat.estDays")} value={m.estDays} />
-            <Stat label={tp("migrations.stat.cost")} value={m.costDelta} />
+            <Stat label={tp("migrations.stat.estDays")} value={t(m.estDaysKey)} />
+            <Stat label={tp("migrations.stat.cost")} value={t(m.costDeltaKey)} />
             <Stat label={tp("migrations.stat.steps")} value={`${m.steps} ${tp("migrations.stat.stepsUnit")}`} />
             <Stat label={tp("migrations.stat.zeroDowntime")} value="✓" />
           </div>

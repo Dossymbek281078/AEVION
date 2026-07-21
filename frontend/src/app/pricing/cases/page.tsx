@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 type CaseIndustry = "banks" | "startups" | "government" | "creators" | "law-firms" | "media";
 type CaseTier = "free" | "lite" | "medium" | "full" | "enterprise";
@@ -47,17 +48,18 @@ const TIER_BADGE: Record<CaseTier, { bg: string; fg: string }> = {
   enterprise: { bg: "#0f172a", fg: "#f8fafc" },
 };
 
-const INDUSTRY_LABEL: Record<CaseIndustry, string> = {
-  banks: "Банки и финтех",
-  startups: "Стартапы",
-  government: "Госсектор",
-  creators: "Создатели контента",
-  "law-firms": "Юр. фирмы",
-  media: "Медиа",
+const INDUSTRY_LABEL_KEY: Record<CaseIndustry, string> = {
+  banks: "pricing.cases.industry.banks",
+  startups: "pricing.cases.industry.startups",
+  government: "pricing.cases.industry.government",
+  creators: "pricing.cases.industry.creators",
+  "law-firms": "pricing.cases.industry.lawFirms",
+  media: "pricing.cases.industry.media",
 };
 
 export default function PricingCasesPage() {
   const tp = usePricingT();
+  const { t } = useI18n();
   const [cases, setCases] = useState<CaseStudy[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filterIndustry, setFilterIndustry] = useState<CaseIndustry | null>(null);
@@ -192,8 +194,8 @@ export default function PricingCasesPage() {
         <span style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: "0.06em" }}>
           {tp("cases.filterIndustry")}
         </span>
-        <FilterChip active={filterIndustry === null} onClick={() => setFilterIndustry(null)} label={`Все · ${cases.length}`} />
-        {(Object.keys(INDUSTRY_LABEL) as CaseIndustry[]).map((k) => {
+        <FilterChip active={filterIndustry === null} onClick={() => setFilterIndustry(null)} label={`${t("pricing.cases.filterAll")} · ${cases.length}`} />
+        {(Object.keys(INDUSTRY_LABEL_KEY) as CaseIndustry[]).map((k) => {
           const c = industryCounts[k] ?? 0;
           if (c === 0) return null;
           return (
@@ -201,7 +203,7 @@ export default function PricingCasesPage() {
               key={k}
               active={filterIndustry === k}
               onClick={() => setFilterIndustry(filterIndustry === k ? null : k)}
-              label={`${INDUSTRY_LABEL[k]} · ${c}`}
+              label={`${t(INDUSTRY_LABEL_KEY[k])} · ${c}`}
             />
           );
         })}
@@ -311,7 +313,7 @@ export default function PricingCasesPage() {
                         alignItems: "center",
                       }}
                     >
-                      <span>{INDUSTRY_LABEL[c.industry]}</span>
+                      <span>{t(INDUSTRY_LABEL_KEY[c.industry])}</span>
                       <span>·</span>
                       <span>{c.region}</span>
                       <span>·</span>

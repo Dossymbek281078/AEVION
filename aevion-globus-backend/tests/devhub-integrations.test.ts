@@ -408,6 +408,39 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
+  test("flags a deployed project whose files were edited after the last deploy", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Stale" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>v1</h1>" });
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { success: true }))
+      .mockResolvedValueOnce(jsonResp(200, { success: true, result: { id: "dep-1", url: "stale.pages.dev" } }));
+    const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+    expect(dep.status).toBe(200);
+    // The pages route flips project.deployUrl in a deferred "mark live" step
+    // (4s setTimeout) — set it directly, as a completed deploy would have.
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ deployUrl: "https://stale.pages.dev" });
+
+    // Freshly deployed → not stale
+    let list = await request(app).get("/api/devhub/projects");
+    let proj = list.body.projects.find((p: any) => p.id === id);
+    expect(proj.deployUrl).toBeTruthy();
+    expect(proj.needsRedeploy).toBe(false);
+
+    // Edit a file after the deploy → stale
+    await new Promise((r) => setTimeout(r, 10));
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>v2</h1>" });
+    list = await request(app).get("/api/devhub/projects");
+    proj = list.body.projects.find((p: any) => p.id === id);
+    expect(proj.needsRedeploy).toBe(true);
+  });
+});
+
 describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing CF Pages project", () => {
   test("'already exists' create error under a non-8000000 code proceeds to upload instead of 500", async () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";

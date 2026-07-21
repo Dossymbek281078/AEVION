@@ -933,12 +933,31 @@ devhubRouter.post("/projects", async (req, res) => {
 });
 
 // GET /api/devhub/projects
+/** True when the project has a live deployment but its files were edited
+ * after the last deploy was triggered — the deployed page is stale. */
+async function computeNeedsRedeploy(project: DevHubProject): Promise<boolean> {
+  if (!project.deployUrl) return false;
+  try {
+    const [files, deployments] = await Promise.all([
+      dbListFiles(project.id),
+      dbListDeployments(project.id, 1),
+    ]);
+    const lastDeploy = deployments[0];
+    if (!lastDeploy || !files.length) return false;
+    const lastEdit = files.reduce((max, f) => (f.updatedAt > max ? f.updatedAt : max), "");
+    return lastEdit > lastDeploy.triggeredAt;
+  } catch {
+    return false; // badge is advisory — never break the list over it
+  }
+}
+
 devhubRouter.get("/projects", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   try {
     const projects = await dbListProjects(userId);
-    res.json({ projects, total: projects.length });
+    const flags = await Promise.all(projects.map(computeNeedsRedeploy));
+    res.json({ projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })), total: projects.length });
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:list", userId });
     const projects = [...memProjects.values()].filter((p) => p.userId === userId);

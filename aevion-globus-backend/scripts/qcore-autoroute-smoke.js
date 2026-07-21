@@ -215,6 +215,22 @@ ok("assessOpenDepth always returns 1 or 2",
   ok("per-module tags include qcoreai + devhub", snap.perModule.map((m) => m.module).sort().join(",") === "devhub,qcoreai");
   ok("smartComplete forced-deep override works", (await smartComplete({ userInput: "short", councilSize: 3, councilLayers: 2 })).routing.layers === 2);
 
+  // 5b. Offline telemetry — a localOnly smart call is tagged offline in the
+  //     routing AND counted in the tally, so /admin/ai-spend can show what share
+  //     of traffic never left the box. A cloud call must NOT be counted offline.
+  resetSmartTally();
+  const scCloud = await smartComplete({ userInput: "Is Rust worth learning?", councilSize: 3 }, { module: "qcoreai" });
+  const scLocal = await smartComplete({ userInput: "Is Go worth learning?", councilSize: 3, localOnly: true }, { module: "healthai" });
+  ok("cloud smart call is not flagged offline", scCloud.routing.offline !== true);
+  ok("localOnly smart call is flagged offline in routing", scLocal.routing.offline === true);
+  const offSnap = smartSavingsSnapshot();
+  ok("tally counts exactly one offline run of two", offSnap.offline === 1 && offSnap.runs === 2);
+  ok("per-module offline attribution is correct", (() => {
+    const h = offSnap.perModule.find((m) => m.module === "healthai");
+    const q = offSnap.perModule.find((m) => m.module === "qcoreai");
+    return h?.offline === 1 && q?.offline === 0;
+  })());
+
   // Durable log helpers are DB-optional — with no database they must return null
   // (never throw), so the route falls back to the in-memory session snapshot.
   const { aggregateSmartRuns, dailySmartRuns } = require(path.join(__dirname, "..", "dist", "lib", "smartRunLog.js"));

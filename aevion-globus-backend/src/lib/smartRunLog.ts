@@ -29,9 +29,12 @@ async function ensureTable(): Promise<boolean> {
         "resolved"  TEXT NOT NULL,
         "depth"     TEXT,
         "costUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "savedUsd"  DOUBLE PRECISION NOT NULL DEFAULT 0
+        "savedUsd"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "offline"   BOOLEAN NOT NULL DEFAULT FALSE
       );
     `);
+    // Backfill the column on tables created before offline telemetry existed.
+    await pool.query(`ALTER TABLE "smart_run_log" ADD COLUMN IF NOT EXISTS "offline" BOOLEAN NOT NULL DEFAULT FALSE;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "smart_run_log_module_ts_idx" ON "smart_run_log" ("module", "ts");`);
     dbUsable = true;
   } catch (e: any) {
@@ -47,6 +50,7 @@ export type SmartRunRow = {
   depth?: "light" | "deep";
   costUsd: number;
   savedUsd: number;
+  offline?: boolean;
 };
 
 /** Fire-and-forget: persist one routed run. Never throws. */
@@ -55,8 +59,8 @@ export function insertSmartRun(row: SmartRunRow): void {
     try {
       if (!(await ensureTable())) return;
       await getPool().query(
-        `INSERT INTO "smart_run_log" ("module","resolved","depth","costUsd","savedUsd") VALUES ($1,$2,$3,$4,$5)`,
-        [row.module, row.resolved, row.depth ?? null, row.costUsd, row.savedUsd]
+        `INSERT INTO "smart_run_log" ("module","resolved","depth","costUsd","savedUsd","offline") VALUES ($1,$2,$3,$4,$5,$6)`,
+        [row.module, row.resolved, row.depth ?? null, row.costUsd, row.savedUsd, row.offline === true]
       );
     } catch {
       /* best-effort — drop silently */
@@ -70,6 +74,7 @@ export type SmartModuleAgg = {
   facts: number;
   light: number;
   deep: number;
+  offline: number;
   totalCostUsd: number;
   savedUsd: number;
 };
@@ -79,6 +84,7 @@ export type SmartAllTime = {
   facts: number;
   light: number;
   deep: number;
+  offline: number;
   totalCostUsd: number;
   estAlwaysCouncilUsd: number;
   savedUsd: number;
@@ -90,7 +96,7 @@ export type SmartAllTime = {
 export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
   if (!(await ensureTable())) return null;
   try {
-    type Row = { module: string; runs: string; facts: string; light: string; deep: string; cost: string; saved: string };
+    type Row = { module: string; runs: string; facts: string; light: string; deep: string; offline: string; cost: string; saved: string };
     const result = await getPool().query(`
       SELECT
         "module",
@@ -98,6 +104,7 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
         COUNT(*) FILTER (WHERE "resolved" = 'single')        AS facts,
         COUNT(*) FILTER (WHERE "resolved" = 'council' AND "depth" = 'light') AS light,
         COUNT(*) FILTER (WHERE "resolved" = 'council' AND "depth" = 'deep')  AS deep,
+        COUNT(*) FILTER (WHERE "offline")                    AS offline,
         COALESCE(SUM("costUsd"), 0)                          AS cost,
         COALESCE(SUM("savedUsd"), 0)                         AS saved
       FROM "smart_run_log"
@@ -111,16 +118,17 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
       facts: Number(r.facts),
       light: Number(r.light),
       deep: Number(r.deep),
+      offline: Number(r.offline),
       totalCostUsd: Number(r.cost),
       savedUsd: Number(r.saved),
     }));
     const total = perModule.reduce(
       (a, m) => {
-        a.runs += m.runs; a.facts += m.facts; a.light += m.light; a.deep += m.deep;
+        a.runs += m.runs; a.facts += m.facts; a.light += m.light; a.deep += m.deep; a.offline += m.offline;
         a.totalCostUsd += m.totalCostUsd; a.savedUsd += m.savedUsd;
         return a;
       },
-      { runs: 0, facts: 0, light: 0, deep: 0, totalCostUsd: 0, savedUsd: 0 }
+      { runs: 0, facts: 0, light: 0, deep: 0, offline: 0, totalCostUsd: 0, savedUsd: 0 }
     );
     const estAlwaysCouncilUsd = total.runs * EST_COUNCIL_COST_USD;
     const savedPct = estAlwaysCouncilUsd > 0 ? (100 * total.savedUsd) / estAlwaysCouncilUsd : 0;

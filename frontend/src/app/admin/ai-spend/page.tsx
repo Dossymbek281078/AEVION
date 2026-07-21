@@ -14,6 +14,7 @@ type ModuleAgg = {
   facts: number;
   light: number;
   deep: number;
+  offline?: number;
   totalCostUsd: number;
   savedUsd: number;
   savedPct?: number;
@@ -25,6 +26,7 @@ type Savings = {
   facts: number;
   light: number;
   deep: number;
+  offline?: number;
   totalCostUsd: number;
   estAlwaysCouncilUsd: number;
   savedUsd: number;
@@ -114,6 +116,13 @@ export default function AiSpendPage() {
               <div style={{ fontSize: 12, color: "#64748b" }}>vs {usd(data.estAlwaysCouncilUsd)} always-Council</div>
             </div>
             <div style={card}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>On-prem / offline</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#4f46e5" }}>
+                {data.runs > 0 ? Math.round((100 * (data.offline ?? 0)) / data.runs) : 0}%
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>{data.offline ?? 0} of {data.runs} ran on the local fleet · no egress</div>
+            </div>
+            <div style={card}>
               <div style={{ fontSize: 12, color: "#64748b" }}>Scope</div>
               <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6 }}>{data.scope === "all-time" ? "All-time (DB)" : "Session (in-memory)"}</div>
               <div style={{ fontSize: 12, color: "#64748b" }}>{data.scope === "all-time" ? "persisted" : "resets on restart"}</div>
@@ -138,13 +147,14 @@ export default function AiSpendPage() {
                   <th style={th}>Fact→single</th>
                   <th style={th}>Focused→light</th>
                   <th style={th}>Heavy→deep</th>
+                  <th style={th}>On-prem</th>
                   <th style={th}>Spend</th>
                   <th style={th}>Saved</th>
                 </tr>
               </thead>
               <tbody>
                 {data.perModule.length === 0 && (
-                  <tr><td style={td} colSpan={7}>No smart calls yet.</td></tr>
+                  <tr><td style={td} colSpan={8}>No smart calls yet.</td></tr>
                 )}
                 {data.perModule.map((m) => (
                   <tr key={m.module}>
@@ -153,6 +163,7 @@ export default function AiSpendPage() {
                     <td style={td}>{m.facts}</td>
                     <td style={td}>{m.light}</td>
                     <td style={td}>{m.deep}</td>
+                    <td style={{ ...td, color: (m.offline ?? 0) > 0 ? "#4f46e5" : "#94a3b8", fontWeight: (m.offline ?? 0) > 0 ? 700 : 400 }}>{m.offline ?? 0}</td>
                     <td style={td}>{usd4(m.totalCostUsd)}</td>
                     <td style={{ ...td, color: "#059669", fontWeight: 700 }}>{usd(m.savedUsd)}</td>
                   </tr>

@@ -36,6 +36,8 @@ export type SmartRouting = {
   costUsd: number;
   /** Wall-clock duration (ms). */
   durationMs: number;
+  /** true = ran on the local / on-prem fleet (localOnly) — no network egress. */
+  offline?: boolean;
 };
 
 export type SmartResult = {
@@ -62,13 +64,14 @@ export type SmartTally = {
   facts: number; // fact → single flagship
   light: number; // open → light 1-layer council
   deep: number; // open → deep 2-layer council
+  offline: number; // ran on the local / on-prem fleet (localOnly)
   totalCostUsd: number;
   estAlwaysCouncilUsd: number; // what always-Council would have cost
   savedUsd: number; // Σ max(0, estCouncil − actual) per run
 };
 
 const zero = (): SmartTally => ({
-  runs: 0, facts: 0, light: 0, deep: 0, totalCostUsd: 0, estAlwaysCouncilUsd: 0, savedUsd: 0,
+  runs: 0, facts: 0, light: 0, deep: 0, offline: 0, totalCostUsd: 0, estAlwaysCouncilUsd: 0, savedUsd: 0,
 });
 
 const tally: SmartTally = zero();
@@ -81,6 +84,7 @@ function fold(t: SmartTally, r: SmartRouting, savedUsd: number): void {
   t.totalCostUsd += r.costUsd;
   t.estAlwaysCouncilUsd += EST_COUNCIL_COST_USD;
   t.savedUsd += savedUsd;
+  if (r.offline) t.offline += 1;
   if (r.resolved === "single") t.facts += 1;
   else if (r.depth === "deep") t.deep += 1;
   else t.light += 1;
@@ -94,7 +98,7 @@ export function recordSmartRun(r: SmartRouting, moduleTag = "qcoreai"): void {
   if (!m) { m = zero(); byModule.set(moduleTag, m); }
   fold(m, r, savedUsd);
   // Fire-and-forget durable log (no-ops when DB is unavailable).
-  insertSmartRun({ module: moduleTag, resolved: r.resolved, depth: r.depth, costUsd: r.costUsd, savedUsd });
+  insertSmartRun({ module: moduleTag, resolved: r.resolved, depth: r.depth, costUsd: r.costUsd, savedUsd, offline: r.offline === true });
 }
 
 const withPct = (t: SmartTally): SmartTally & { savedPct: number } => ({
@@ -205,6 +209,7 @@ export async function smartComplete(
     note,
     costUsd,
     durationMs: durationMs || Date.now() - t0,
+    offline: input.localOnly === true,
   };
   recordSmartRun(routing, moduleTag);
   return { answer, routing };

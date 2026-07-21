@@ -1315,6 +1315,27 @@ export default function CyberChessPage(){
   const[pzTimer,sPzTimer]=useState(0);
   const pzTimerRef=useRef<number>(0);
   const pzTimerIntervalRef=useRef<ReturnType<typeof setInterval>|null>(null);
+  // Imperative display refs for the puzzle countdown/stopwatch badges — painted directly via
+  // DOM (textContent/style), bypassing setState, so the 250ms/500ms ticks below don't force a
+  // full re-render of this 14k-line component on every frame (same technique as the hover-hints
+  // fix at paintHoverHints — see comment there). pzTimer/pzTimeLeft REACT STATE still exists and
+  // is still set at the rare moments other code needs it (initial mount paint, and — for
+  // pzTimeLeft — the exact zero-crossing, since two other effects key off pzTimeLeft to fire
+  // end-of-session logic exactly once). Nothing about the failed-count/streak-reset/session-end
+  // LOGIC below changes — only how the on-screen numbers get updated every tick.
+  const pzTimerBadgeRef=useRef<HTMLElement|null>(null); // "⏱ Сейчас" raw-seconds badge (ScoreCard)
+  const pzTimerStopwatchRef=useRef<HTMLElement|null>(null); // mm:ss stopwatch badge (current-puzzle card)
+  const pzTimeLeftBadgeRef=useRef<HTMLElement|null>(null); // countdown badge (current-puzzle card)
+  const paintPzTimer=useCallback((sec:number)=>{
+    const a=pzTimerBadgeRef.current;
+    if(a)a.textContent=`${sec}с`;
+    const b=pzTimerStopwatchRef.current;
+    if(b){
+      b.textContent=`⏱ ${Math.floor(sec/60)>0?`${Math.floor(sec/60)}:`:""}${String(sec%60).padStart(2,"0")}`;
+      (b as HTMLElement).style.color=sec<10?"#065f46":sec<30?"#92400e":"#6b7280";
+      (b as HTMLElement).style.background=sec<10?"#d1fae5":sec<30?"#fef3c7":"#f3f4f6";
+    }
+  },[]);
   // Per-puzzle wrong-attempt tracking (keyed by fen so it resets on puzzle change).
   // Used to reveal the expected best move as a hint after 2 wrong tries (lichess-style).
   const pzWrongTriesRef=useRef<{fen:string;n:number}>({fen:"",n:0});
@@ -1354,6 +1375,15 @@ export default function CyberChessPage(){
   // component still see CC_LIGHT via the import alias (kept for backwards compat
   // of any module-scoped colors, though currently none use CC.* outside the fn).
   const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // Countdown badge (current-puzzle card) — separate from paintPzTimer above because it uses
+  // theme-aware CC.* colors (recreated when the user toggles light/dark), not hardcoded hex.
+  const paintPzTimeLeft=useCallback((sec:number)=>{
+    const el=pzTimeLeftBadgeRef.current;
+    if(!el)return;
+    el.textContent=`⏱ ${fmt(sec)}`;
+    (el as HTMLElement).style.color=sec<15?CC.danger:sec<30?CC.gold:CC.text;
+    (el as HTMLElement).style.background=sec<15?"#fef2f2":sec<30?"#fef3c7":"#f3f4f6";
+  },[CC.danger,CC.gold,CC.text]);
   // Фон-«слой» по активной вкладке — каждая фича своим лёгким оттенком (запрос основателя
   // «слои по фичам разные цвет»): пазлы→cyan, анализ→синий, коуч→фиолет, играть→нейтраль.
   const TAB_BG_TINT:Record<string,{light:string;dark:string}>={
@@ -4735,8 +4765,8 @@ export default function CyberChessPage(){
     showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
-    pzTimerRef.current=Date.now();sPzTimer(0);
-    pzTimerIntervalRef.current=setInterval(()=>sPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);};
+    pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
+    pzTimerIntervalRef.current=setInterval(()=>paintPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);};
 
   // Next puzzle helper
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
@@ -4894,8 +4924,8 @@ export default function CyberChessPage(){
         }
         // reset timer for loaded puzzle
         if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
-        pzTimerRef.current=Date.now();sPzTimer(0);
-        pzTimerIntervalRef.current=setInterval(()=>sPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);
+        pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
+        pzTimerIntervalRef.current=setInterval(()=>paintPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);
       }catch{showToast("Не удалось разобрать файл","error")}
     };
     reader.readAsText(file);
@@ -4909,8 +4939,15 @@ export default function CyberChessPage(){
     if(pzDeadlineRef.current<=0)return;
     const tick=()=>{
       const rem=Math.max(0,Math.round((pzDeadlineRef.current-Date.now())/1000));
-      sPzTimeLeft(rem);
-      if(rem<=0&&pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();}
+      paintPzTimeLeft(rem);
+      // State only touched at the zero-crossing (not every 250ms tick) — the two effects
+      // below that key off pzTimeLeft only ever check the >0/<=0 boundary, never the exact
+      // value, so this is the only moment they need to see. Everything in between is a pure
+      // DOM paint via paintPzTimeLeft, no re-render.
+      if(rem<=0){
+        sPzTimeLeft(0);
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();}
+      }
     };
     tick();
     const t=setInterval(tick,250);
@@ -9440,7 +9477,7 @@ export default function CyberChessPage(){
               <div style={{fontSize:10,fontWeight:800,color:"#0369a1",letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:8}}>📊 Сессия</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,textAlign:"center"}}>
                 <div><div style={{fontSize:16,fontWeight:900,color:"#0369a1",lineHeight:1}}>{pzSolvedCount+pzFailedCount>0?Math.round(pzSolvedCount/(pzSolvedCount+pzFailedCount)*100):0}%</div><div style={{fontSize:9,color:"#0369a1",fontWeight:700,marginTop:2}}>🎯 Точность</div></div>
-                <div><div style={{fontSize:16,fontWeight:900,color:"#0369a1",lineHeight:1,fontFamily:"ui-monospace,monospace"}}>{pzTimer}с</div><div style={{fontSize:9,color:"#0369a1",fontWeight:700,marginTop:2}}>⏱ Сейчас</div></div>
+                <div><div ref={pzTimerBadgeRef as any} style={{fontSize:16,fontWeight:900,color:"#0369a1",lineHeight:1,fontFamily:"ui-monospace,monospace"}}>{pzTimer}с</div><div style={{fontSize:9,color:"#0369a1",fontWeight:700,marginTop:2}}>⏱ Сейчас</div></div>
                 <div><div style={{fontSize:16,fontWeight:900,color:"#c2410c",lineHeight:1}}>🔥{pzStreak.cur}</div><div style={{fontSize:9,color:"#9a3412",fontWeight:700,marginTop:2}}>Серия</div></div>
                 <div><div style={{fontSize:16,fontWeight:900,color:CC.gold||"#d97706",lineHeight:1}}>{pzSessionChessy}</div><div style={{fontSize:9,color:"#92400e",fontWeight:700,marginTop:2}}>⭐ Очки</div></div>
               </div>
@@ -9460,8 +9497,8 @@ export default function CyberChessPage(){
                       <span style={{fontSize:9,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,opacity:0.85}}>{pzCurrent.r<800?"Лёгкая":pzCurrent.r<1400?"Средняя":pzCurrent.r<2000?"Сложная":"Эксперт"}</span>
                       <span style={{fontSize:15,fontWeight:900,lineHeight:1}}>★ {pzCurrent.r}</span>
                     </span>
-                    {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
-                    {pzAttempt==="idle"&&<span style={{fontSize:12,fontWeight:800,color:pzTimer<10?"#065f46":pzTimer<30?"#92400e":"#6b7280",fontFamily:"ui-monospace,monospace",padding:"2px 6px",borderRadius:4,background:pzTimer<10?"#d1fae5":pzTimer<30?"#fef3c7":"#f3f4f6"}}>⏱ {Math.floor(pzTimer/60)>0?`${Math.floor(pzTimer/60)}:`:""}{ String(pzTimer%60).padStart(2,"0")}</span>}
+                    {pzTimeLeft>0&&<span ref={pzTimeLeftBadgeRef as any} style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
+                    {pzAttempt==="idle"&&<span ref={pzTimerStopwatchRef as any} style={{fontSize:12,fontWeight:800,color:pzTimer<10?"#065f46":pzTimer<30?"#92400e":"#6b7280",fontFamily:"ui-monospace,monospace",padding:"2px 6px",borderRadius:4,background:pzTimer<10?"#d1fae5":pzTimer<30?"#fef3c7":"#f3f4f6"}}>⏱ {Math.floor(pzTimer/60)>0?`${Math.floor(pzTimer/60)}:`:""}{ String(pzTimer%60).padStart(2,"0")}</span>}
                   </div>
                 </div>
                 {/* Rush HUD — score + streak */}

@@ -205,6 +205,80 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
   return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
 }
 
+/** Factor keys an adverse disclosure can be charged against. */
+type PenaltyFactor = "market" | "moat" | "economics" | "execution" | "legal" | "competition";
+
+interface AdverseSignal {
+  factor: PenaltyFactor;
+  /** Points deducted from that factor's 0-100 score. */
+  penalty: number;
+  /** Investor-facing explanation of what was found and why it costs points. */
+  flag: string;
+}
+
+/** Per-factor ceiling, so a single verbose plan cannot zero a factor out. */
+const ADVERSE_CAP_PER_FACTOR = 40;
+
+/**
+ * Detect *explicit* adverse disclosures in the plan text.
+ *
+ * The rest of the engine only ever adds points: every factor starts at a sector
+ * prior and moves up when the plan discloses something good. That made the
+ * composite bottom out around ~59 ("watch") even for plainly dead deals, so the
+ * verdict band "pass" (<55) was unreachable in practice. This charges stated
+ * negatives against the specific factor they impair.
+ *
+ * Deliberately conservative: each pattern matches an unambiguous statement, so a
+ * penalty is always defensible to a founder who asks why the score dropped.
+ */
+function detectAdverseDisclosures(text: string): AdverseSignal[] {
+  const t = text.toLowerCase();
+  const out: AdverseSignal[] = [];
+  const add = (factor: PenaltyFactor, penalty: number, flag: string) => out.push({ factor, penalty, flag });
+
+  // ── Execution: no revenue, shrinking revenue, team loss, cash exhaustion. ──
+  if (/\b(no|zero|without any)\s+(revenue|sales|paying customers)\b|\bpre-?revenue\b/.test(t)) {
+    add("execution", 18, "Plan states there is no revenue — commercial validation is absent, not merely undisclosed.");
+  }
+  if (/\b(declining|shrinking|falling|decreasing)\s+(revenue|sales|arr|mrr|users?)\b|\brevenue (fell|dropped|declined)\b/.test(t)) {
+    add("execution", 16, "Plan discloses declining revenue — the business is contracting, not compounding.");
+  }
+  if (/\b(founders?|co-?founders?|cto|ceo)\b[^.]{0,60}\b(left|departed|quit|resigned|exited)\b|\b(lost|losing)\b[^.]{0,20}\bfounders?\b/.test(t)) {
+    add("execution", 15, "Plan discloses founder or key-executive departure — a material team-continuity risk at this stage.");
+  }
+  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\bout of (cash|money|runway)\b/.test(t)) {
+    add("execution", 14, "Plan discloses six months or less of runway — the round is a rescue, which changes the terms materially.");
+  }
+
+  // ── Moat / competition: the defensibility claim is contradicted. ──────────
+  if (/\b(incumbents?|competitors?|google|amazon|microsoft|shopify|salesforce|meta|apple)\b[^.]{0,70}\b(free|bundl\w*|included at no cost|ships? the same)\b/.test(t)) {
+    add("competition", 20, "Plan concedes an incumbent offers equivalent functionality free or bundled — price and distribution advantage sit with the incumbent.");
+    add("moat", 14, "A free incumbent substitute caps willingness to pay and undercuts the stated moat.");
+  }
+  if (/\b(commodit\w+|no (real )?(moat|differentiation|barrier)|easily (copied|replicated)|low barriers? to entry)\b/.test(t)) {
+    add("moat", 16, "Plan concedes weak or absent defensibility — the moat factor cannot rest on the sector archetype alone.");
+  }
+
+  // ── Legal / IP: lapsed rights, active proceedings, lost permissions. ──────
+  if (/\bpatents?\b[^.]{0,40}\b(lapsed|expired|invalidated|abandoned|rejected)\b|\b(lapsed|expired|invalidated)\b[^.]{0,20}\bpatents?\b/.test(t)) {
+    add("legal", 16, "Plan discloses lapsed or invalidated patents — claimed IP protection is not enforceable.");
+    add("moat", 12, "Lapsed IP removes the legal basis of an IP-patents moat.");
+  }
+  if (/\b(lawsuit|litigation|sued|being sued|injunction|cease and desist|class action)\b/.test(t)) {
+    add("legal", 14, "Plan discloses active litigation — quantify exposure and legal spend before committing capital.");
+  }
+  if (/\b(licen[cs]e|authorization|approval)\b[^.]{0,40}\b(revoked|denied|withdrawn|suspended)\b|\b(regulatory|government)\b[^.]{0,30}\b(investigation|ban|banned|enforcement action)\b/.test(t)) {
+    add("legal", 20, "Plan discloses a lost licence or an active regulatory action — the right to operate is itself in question.");
+  }
+
+  // ── Unit economics: stated unprofitability per unit. ──────────────────────
+  if (/\b(negative|inverted)\s+(gross\s+)?(margin|unit economics)\b|\blos(e|ing) money on (each|every)\b|\bsell\w*\s+below cost\b/.test(t)) {
+    add("economics", 20, "Plan discloses negative unit economics — growth compounds the loss rather than the return.");
+  }
+
+  return out;
+}
+
 export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals): AnalysisResult {
   const sector = resolveSector(rawInput.sector);
   const stage = STAGES.includes(rawInput.stage) ? rawInput.stage : "seed";
@@ -293,6 +367,21 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
 
+  // ── Adverse disclosures: charge stated negatives against the factor they
+  //    impair, capped per factor, and record the deduction in the rationale so
+  //    every lost point stays explainable. ─────────────────────────────────────
+  const adverse = detectAdverseDisclosures(`${rawInput.description || ""} ${rawInput.tractionNotes || ""}`);
+  const penaltyByFactor = new Map<string, number>();
+  for (const a of adverse) {
+    penaltyByFactor.set(a.factor, Math.min(ADVERSE_CAP_PER_FACTOR, (penaltyByFactor.get(a.factor) ?? 0) + a.penalty));
+  }
+  for (const f of factors) {
+    const p = penaltyByFactor.get(f.key);
+    if (!p) continue;
+    f.score = round(clamp(f.score - p));
+    f.rationale = `${f.rationale} −${p} for adverse disclosures in the plan.`;
+  }
+
   const composite = round(factors.reduce((acc, f) => acc + f.weight * f.score, 0), 1);
 
   // ── Signal coverage: share of the composite weight backed by company data. ──
@@ -302,7 +391,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const signalCoverage = round(companyWeight, 2);
 
   // ── Deterministic red flags: inconsistencies / weak disclosed metrics. ──
-  const redFlags: string[] = [];
+  const redFlags: string[] = adverse.map((a) => a.flag);
   const sectorGmPct = round(sector.grossMargin * 100);
   if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
     redFlags.push(`Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.`);

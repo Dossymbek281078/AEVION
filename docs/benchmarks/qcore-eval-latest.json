@@ -1,7 +1,5 @@
 {
-  "source": "historical",
-  "note": "Transcribed verbatim from pre-existing source comments (no fresh API spend). See README.md for how to replace this with a live run.",
-  "entries": [
+  "historical": [
     {
       "id": "council-vs-flagship-n40-2026-07-12",
       "label": "Council L2 (Fable 5 chair) vs single Fable 5 flagship",
@@ -18,7 +16,8 @@
         "coding": 67,
         "knowledge": 50
       },
-      "notePerCategory": "knowledge = pure factual recall, where Council only ties (50%) rather than wins — this is why the 'auto' strategy routes FACT-classified queries to a single flagship instead of paying the ~2.8x Council premium for no quality gain there."
+      "notePerCategory": "knowledge = pure factual recall, where Council only ties (50%) rather than wins — this is why the 'auto' strategy routes FACT-classified queries to a single flagship instead of paying the ~2.8x Council premium for no quality gain there.",
+      "note": "Transcribed verbatim from the pre-existing source comment (no fresh API spend). Curated N=40 set across 7 categories; assumed a normally-configured environment with the free-tier provider fleet active."
     },
     {
       "id": "synth-chair-opus-vs-fable-n16-2026-07-09",
@@ -29,7 +28,48 @@
       "opusChairWinRatePct": 92,
       "opusCostMultiplierVsFlagship": 2.8,
       "fableChairCostMultiplierVsFlagship": 3.6,
-      "note": "Opus 4.8 chair matches Fable 5 chair's win-rate at roughly 23% lower cost, which is why Opus 4.8 is the default Synthesizer (QCOREAI_SYNTH_MODEL overrides it)."
+      "note": "Opus 4.8 chair matches Fable 5 chair's win-rate at roughly 23% lower cost, which is why Opus 4.8 is the default Synthesizer (QCOREAI_SYNTH_MODEL overrides it). Transcribed verbatim from the pre-existing source comment (no fresh API spend)."
     }
-  ]
+  ],
+  "latest": {
+    "generatedAt": "2026-07-21T06:48:51.621Z",
+    "source": "live-run",
+    "n": 8,
+    "base": "http://127.0.0.1:4001",
+    "judge": "claude-fable-5",
+    "caveat": "Small sanity-check run (N=8) against a local dev server with NO free-tier provider configured — the Council degraded to Anthropic-only members, so its cost multiplier here (~5-7x) is inflated versus a normally-configured environment and is NOT comparable to the historical N=40 entry's ~2.8x (which assumes the free fleet is active). This run exists to prove the eval script + JSON-persistence pipeline end-to-end, not to supersede the curated historical benchmark. Re-run with at least one free-tier key (OPENROUTER_API_KEY, GROQ_API_KEY, etc.) set for a representative cost read.",
+    "costPerAnswerUsd": {
+      "single-fable": 0.028044285714285713,
+      "council-l2-fable": 0.1943264285714286,
+      "council-l2-opus": 0.14402399999999999
+    },
+    "winRateVsSingleFable": {
+      "council-l2-fable": { "win": 4, "tie": 2, "loss": 1 },
+      "council-l2-opus": { "win": 5, "tie": 1, "loss": 1 }
+    },
+    "perCategoryWinRate": {
+      "council-l2-fable": {
+        "reasoning": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "math": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "coding": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "knowledge": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null },
+        "writing": { "win": 0, "tie": 0, "loss": 1, "winRatePct": 0 },
+        "advice": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "analysis": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null }
+      },
+      "council-l2-opus": {
+        "reasoning": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "math": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "coding": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "knowledge": { "win": 0, "tie": 0, "loss": 1, "winRatePct": 0 },
+        "writing": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "advice": { "win": 1, "tie": 0, "loss": 0, "winRatePct": 100 },
+        "analysis": { "win": 0, "tie": 1, "loss": 0, "winRatePct": null }
+      }
+    },
+    "verdicts": {
+      "council-l2-fable": { "winRatePct": 80, "costUsd": 0.1943264285714286, "costMultiplierVsFlagship": 6.9292700320921 },
+      "council-l2-opus": { "winRatePct": 83, "costUsd": 0.14402399999999999, "costMultiplierVsFlagship": 5.135591666242168 }
+    }
+  }
 }

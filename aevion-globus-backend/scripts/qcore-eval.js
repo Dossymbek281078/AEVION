@@ -299,7 +299,13 @@ async function compare(question, candidate, baseline) {
     verdicts,
   };
   const outDir = path.join(__dirname, "..", "..", "docs", "benchmarks");
+  const outPath = path.join(outDir, "qcore-eval-latest.json");
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, "qcore-eval-latest.json"), JSON.stringify(snapshot, null, 2) + "\n");
+  // Merge into `latest`, preserving any curated `historical` entries already on
+  // disk — a fresh run must never silently wipe the seeded historical numbers.
+  let existing = {};
+  try { existing = JSON.parse(fs.readFileSync(outPath, "utf8")); } catch { /* first run, or file missing */ }
+  const merged = { historical: existing.historical ?? [], latest: snapshot };
+  fs.writeFileSync(outPath, JSON.stringify(merged, null, 2) + "\n");
   console.log(`\nSnapshot written to docs/benchmarks/qcore-eval-latest.json`);
 })();

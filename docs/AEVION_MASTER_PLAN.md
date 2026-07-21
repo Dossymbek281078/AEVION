@@ -417,6 +417,12 @@ so cross-window readers keep stable references.
 3. **Don't push without committing trailing changes** at session end — see
    memory `feedback_session_end_must_push`.
 4. **Don't propose work that's done.** Step 6 of § 1 exists because of this.
+5. **Don't let an AI-quality claim live only as a source comment.** If a module
+   asserts a specific benchmark/accuracy number, it needs a reproducible eval
+   script + a persisted result artifact, or the number will silently drift
+   from reality. QCoreAI hit exactly this (PR #726, 2026-07-21) — see
+   `docs/benchmarks/PLAYBOOK.md` for the reusable fix before repeating it
+   elsewhere.
 
 ---
 

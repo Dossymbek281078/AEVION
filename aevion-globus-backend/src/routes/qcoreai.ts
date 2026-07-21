@@ -17,7 +17,7 @@ import {
   type Provider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
-import { providerHealthSummary } from "../services/qcoreai/providerHealth";
+import { providerHealthSummary, latencySummary } from "../services/qcoreai/providerHealth";
 import { getModelPrice, type UsdPer1M } from "../services/qcoreai/pricing";
 import {
   runMultiAgent,
@@ -5797,12 +5797,13 @@ qcoreaiRouter.get("/benchmarks", (_req, res) => {
   const models = priced.map(({ price, ...m }) => {
     const blend = price ? blendedPrice(price) : 0;
     const costScore = blend <= 0 ? 100 : Math.round(Math.min(100, (cheapest / blend) * 100));
-    return { ...m, costScore };
+    const lat = latencySummary(m.provider, m.model);
+    return { ...m, costScore, measuredLatencyMs: lat.p50Ms, latencySamples: lat.samples };
   });
   res.json({
     models,
     lastUpdated: new Date().toISOString().slice(0, 10),
-    note: "costScore is computed live from pricing.ts's real list prices (cheaper = higher score). speedScore/qualityScore are illustrative estimates, not measured -- for an actual measured multi-agent quality benchmark (N=40, pairwise-judged, reproducible), see /qcoreai/vs and docs/benchmarks/.",
+    note: "costScore is computed live from pricing.ts's real list prices (cheaper = higher score). measuredLatencyMs is the median full-request latency of this instance's recent real non-streaming calls (provider_health_log window; null until >=3 samples). speedScore/qualityScore are illustrative estimates, not measured -- for an actual measured multi-agent quality benchmark (N=40, pairwise-judged, reproducible), see /qcoreai/vs and docs/benchmarks/.",
   });
 });
 

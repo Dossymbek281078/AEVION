@@ -24,7 +24,7 @@ import { getPool } from "../../lib/dbPool";
 
 const WINDOW = 20;
 
-type Outcome = { ok: boolean };
+type Outcome = { ok: boolean; ms?: number };
 
 const outcomes = new Map<string, Outcome[]>();
 
@@ -47,9 +47,11 @@ async function ensureTable(): Promise<boolean> {
         "ts"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         "provider" TEXT NOT NULL,
         "model"    TEXT NOT NULL,
-        "ok"       BOOLEAN NOT NULL
+        "ok"       BOOLEAN NOT NULL,
+        "ms"       INTEGER
       );
     `);
+    await pool.query(`ALTER TABLE "provider_health_log" ADD COLUMN IF NOT EXISTS "ms" INTEGER;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "provider_health_log_pm_ts_idx" ON "provider_health_log" ("provider", "model", "ts");`);
     dbUsable = true;
   } catch (e: any) {
@@ -64,11 +66,11 @@ async function ensureTable(): Promise<boolean> {
  *  hydration only ever reads the last WINDOW rows per pair regardless of
  *  total table size — pruning can be added later if storage becomes a
  *  real concern. */
-function insertOutcomeDb(provider: string, model: string, ok: boolean): void {
+function insertOutcomeDb(provider: string, model: string, ok: boolean, ms?: number): void {
   void (async () => {
     try {
       if (!(await ensureTable())) return;
-      await getPool().query(`INSERT INTO "provider_health_log" ("provider","model","ok") VALUES ($1,$2,$3)`, [provider, model, ok]);
+      await getPool().query(`INSERT INTO "provider_health_log" ("provider","model","ok","ms") VALUES ($1,$2,$3,$4)`, [provider, model, ok, ms ?? null]);
     } catch {
       /* best-effort — drop silently */
     }
@@ -86,18 +88,18 @@ async function hydrate(): Promise<void> {
   try {
     if (!(await ensureTable())) return;
     const result = await getPool().query(`
-      SELECT provider, model, ok FROM (
-        SELECT provider, model, ok, ts,
+      SELECT provider, model, ok, ms FROM (
+        SELECT provider, model, ok, ms, ts,
                ROW_NUMBER() OVER (PARTITION BY provider, model ORDER BY ts DESC) AS rn
         FROM "provider_health_log"
       ) ranked
       WHERE rn <= ${WINDOW}
       ORDER BY provider, model, ts ASC
     `);
-    for (const row of result.rows as { provider: string; model: string; ok: boolean }[]) {
+    for (const row of result.rows as { provider: string; model: string; ok: boolean; ms: number | null }[]) {
       const k = key(row.provider, row.model);
       const list = outcomes.get(k) ?? [];
-      list.push({ ok: row.ok });
+      list.push({ ok: row.ok, ms: row.ms ?? undefined });
       outcomes.set(k, list);
     }
   } catch {
@@ -108,14 +110,17 @@ async function hydrate(): Promise<void> {
 void hydrate();
 
 /** Record one call's outcome. Call this from the resilient wrappers on every
- *  terminal result (success, or an error that won't be retried further). */
-export function recordOutcome(provider: string, model: string, ok: boolean): void {
+ *  terminal result (success, or an error that won't be retried further).
+ *  `ms` is the full request duration; only pass it for non-streaming calls
+ *  (a stream's duration scales with answer length, not model speed) so the
+ *  latency samples stay one comparable metric. */
+export function recordOutcome(provider: string, model: string, ok: boolean, ms?: number): void {
   const k = key(provider, model);
   const list = outcomes.get(k) ?? [];
-  list.push({ ok });
+  list.push({ ok, ms });
   if (list.length > WINDOW) list.shift();
   outcomes.set(k, list);
-  insertOutcomeDb(provider, model, ok);
+  insertOutcomeDb(provider, model, ok, ms);
 }
 
 /** Recent success rate for a pair, or 1 (neutral/healthy) when there's no
@@ -125,6 +130,24 @@ export function healthScore(provider: string, model: string): number {
   if (!list || list.length === 0) return 1;
   const ok = list.filter((o) => o.ok).length;
   return ok / list.length;
+}
+
+/** Median full-request latency over this pair's recent successful
+ *  non-streaming calls, or null when fewer than `minSamples` are recorded.
+ *  Only successes count — a failed call's duration measures the retry/timeout
+ *  path, not the model. */
+export function latencySummary(
+  provider: string,
+  model: string,
+  minSamples = 3
+): { p50Ms: number | null; samples: number } {
+  const list = outcomes.get(key(provider, model)) ?? [];
+  const ms = list.filter((o) => o.ok && typeof o.ms === "number").map((o) => o.ms as number);
+  if (ms.length < minSamples) return { p50Ms: null, samples: ms.length };
+  const sorted = [...ms].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const p50 = sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  return { p50Ms: p50, samples: ms.length };
 }
 
 /** Reset all tracked outcomes (tests only). */

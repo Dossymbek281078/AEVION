@@ -330,6 +330,7 @@ function VacanciesFeedInner() {
             <VacancyCard
               key={v.id}
               vacancy={v}
+              theme="light"
               showProject
               hot={hotIds.has(v.id)}
               footerAction={

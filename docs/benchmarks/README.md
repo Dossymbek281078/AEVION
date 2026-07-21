@@ -49,11 +49,15 @@ BASE=http://127.0.0.1:4001 QCORE_EVAL_N=40 node scripts/qcore-eval.js
   A live run never overwrites this key.
 - **`latest`** — the most recent live run's full output (cost/answer,
   win/tie/loss, per-category heatmap, verdicts), overwritten every time
-  `qcore-eval.js` runs. The committed one is a small N=8 sanity check against
-  a local dev server with **no free-tier provider configured**, so its cost
-  multiplier (~5-7x) is not comparable to `historical`'s ~2.8x — see its
-  `caveat` field. It proves the script + persistence pipeline work
-  end-to-end, not a replacement for the curated historical benchmark.
+  `qcore-eval.js` runs. The committed one is a real N=40 run (2026-07-21)
+  against a local dev server with only **one** free-tier provider configured
+  (OpenRouter) — see its `caveat` field for why that makes its cost
+  multiplier (~6.2-6.4×) roughly double `historical`'s ~2.8×, and why its
+  per-category `knowledge` win-rate (67-80%) doesn't match `historical`'s ~50%
+  tie. That disagreement is flagged, not resolved: a small single-provider
+  local run isn't strong enough evidence to revise the curated historical
+  entry or the "auto" router's FACT-vs-Council rationale in `orchestrator.ts`
+  — it needs a fully free-fleet-configured re-run to settle.
 
-Re-run with `QCORE_EVAL_N=40` and at least one free-tier key set to get a
-`latest` entry that's actually comparable to `historical`.
+Re-run with `QCORE_EVAL_N=40` and several free-tier keys set (not just one)
+to get a `latest` entry that's actually comparable to `historical`.

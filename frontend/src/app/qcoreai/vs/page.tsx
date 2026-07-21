@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SYSTEMS, ROWS, type Verdict } from "./data";
+import { SYSTEMS, ROWS, benchmarkDelta, benchmarkLatestMeta, type Verdict } from "./data";
+import BenchmarkDeltaChart from "./BenchmarkDeltaChart";
 
 export const metadata: Metadata = {
   title: "QCoreAI vs. AutoGen, CrewAI, LangGraph, Agents SDK, MetaGPT",
@@ -14,6 +15,7 @@ const LABEL_COL = "minmax(240px, 1.7fr)";
 const SYS_COLS = `repeat(${SYSTEMS.length}, minmax(108px, 1fr))`;
 
 export default function QCoreAiVsPage() {
+  const benchmarkRow = ROWS.find((r) => r.id === "quality-benchmark");
   return (
     <main
       style={{
@@ -148,6 +150,36 @@ export default function QCoreAiVsPage() {
         </div>
       </section>
 
+      {/* Historical vs. latest-run delta */}
+      {benchmarkDelta.length > 0 && (
+        <section
+          style={{
+            marginBottom: 20,
+            padding: 20,
+            background: "#fff",
+            border: BORDER,
+            borderRadius: 12,
+            boxShadow: CARD_SHADOW,
+            overflowX: "auto",
+          }}
+        >
+          <h3 style={{ fontSize: 14, fontWeight: 900, margin: 0, marginBottom: 4, color: "#0f172a" }}>
+            Historical vs. latest run — per category
+          </h3>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>
+            Win-rate (%) vs. a single flagship. The curated historical entry is the citable baseline;
+            the latest run is whatever a maintainer most recently reproduced — see the caveat below if
+            they diverge.
+          </p>
+          <BenchmarkDeltaChart data={benchmarkDelta} latestDate={benchmarkLatestMeta?.generatedAt} />
+          {benchmarkLatestMeta?.caveat && (
+            <p style={{ fontSize: 11.5, color: "#92400e", background: "#fef3c7", padding: "8px 12px", borderRadius: 8, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
+              <b>Caveat on the latest run:</b> {benchmarkLatestMeta.caveat}
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Honest caveats */}
       <section
         style={{
@@ -177,13 +209,14 @@ export default function QCoreAiVsPage() {
           </li>
         </ul>
         <p style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
-          Quality benchmark methodology and the underlying numbers: N=40 pairwise-judged questions
-          across 7 categories, order-randomised A/B to cancel position bias, judged by Claude Fable 5.
-          Council beats a single flagship 80–100% on reasoning/math/writing/advice/analysis, ties (50%)
-          on pure factual recall — which is exactly why the auto-router sends factual queries to a
-          single model instead of paying the Council premium there. Reproduce it with
+          Quality benchmark methodology: questions across 7 categories, order-randomised A/B to cancel
+          position bias, judged by Claude Fable 5. {benchmarkRow?.detail} Reproduce it with
           <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, margin: "0 4px" }}>
             node scripts/qcore-eval.js
+          </code>
+          then
+          <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, margin: "0 4px" }}>
+            node scripts/sync-qcore-benchmark.js
           </code>
           in the backend.
         </p>

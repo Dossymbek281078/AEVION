@@ -38,12 +38,14 @@ function Bar({ value, max, color, height = 8 }: { value: number; max: number; co
 type AgentPerf = { role: string; runs: number; avgCostUsd: number; avgDurationMs: number; avgRating: number; ratedRuns: number };
 type AgentLength = { role: string; calls: number; avgLength: number; minLength: number; maxLength: number; avgWords: number };
 type ProviderCompare = { provider: string; calls: number; avgDurationMs: number; avgCostUsd: number; totalCostUsd: number; avgTokensIn: number; avgTokensOut: number; avgContentLength: number };
+type ProviderHealthEntry = { id: string; sessionHealthScore?: number; sessionSamples?: number };
 
 export default function InsightsPage() {
   const [data, setData] = useState<Insights | null>(null);
   const [agentPerf, setAgentPerf] = useState<AgentPerf[]>([]);
   const [agentLength, setAgentLength] = useState<AgentLength[]>([]);
   const [providerCompare, setProviderCompare] = useState<ProviderCompare[]>([]);
+  const [providerHealth, setProviderHealth] = useState<ProviderHealthEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,11 +55,13 @@ export default function InsightsPage() {
       fetch(apiUrl("/api/qcoreai/analytics/agent-performance"), { headers: bearerHeader() }).then((r) => r.json()).catch(() => ({ items: [] })),
       fetch(apiUrl("/api/qcoreai/analytics/agent-length"), { headers: bearerHeader() }).then((r) => r.json()).catch(() => ({ items: [] })),
       fetch(apiUrl("/api/qcoreai/analytics/provider-compare"), { headers: bearerHeader() }).then((r) => r.json()).catch(() => ({ items: [] })),
-    ]).then(([d, ap, al, pc]) => {
+      fetch(apiUrl("/api/qcoreai/providers/health")).then((r) => r.json()).catch(() => ({ providers: [] })),
+    ]).then(([d, ap, al, pc, ph]) => {
       setData(d);
       if (Array.isArray(ap?.items)) setAgentPerf(ap.items);
       if (Array.isArray(al?.items)) setAgentLength(al.items);
       if (Array.isArray(pc?.items)) setProviderCompare(pc.items);
+      if (Array.isArray(ph?.providers)) setProviderHealth(ph.providers);
     }).catch((e) => setError(e?.message || "Failed"))
       .finally(() => setLoading(false));
   }, []);
@@ -250,22 +254,34 @@ export default function InsightsPage() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
-                        {["Provider", "Calls", "Avg speed", "Avg cost", "Total cost", "Avg in/out tokens"].map((h) => (
+                        {["Provider", "Calls", "Avg speed", "Avg cost", "Total cost", "Avg in/out tokens", "Session health"].map((h) => (
                           <th key={h} style={{ textAlign: "left", padding: "6px 12px 8px", fontWeight: 700, fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {providerCompare.map((p, i) => (
-                        <tr key={p.provider} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "transparent" : "#fafafa" }}>
-                          <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0f172a" }}>{p.provider}</td>
-                          <td style={{ padding: "8px 12px", color: "#475569" }}>{p.calls}</td>
-                          <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgDurationMs ? `${(p.avgDurationMs / 1000).toFixed(1)}s` : "—"}</td>
-                          <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgCostUsd > 0 ? `$${p.avgCostUsd.toFixed(5)}` : "—"}</td>
-                          <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0f172a" }}>{p.totalCostUsd > 0 ? `$${p.totalCostUsd.toFixed(4)}` : "$0"}</td>
-                          <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgTokensIn}/{p.avgTokensOut}</td>
-                        </tr>
-                      ))}
+                      {providerCompare.map((p, i) => {
+                        const health = providerHealth.find((h) => h.id === p.provider);
+                        const hasHealthData = health && (health.sessionSamples ?? 0) > 0;
+                        const healthPct = hasHealthData ? Math.round((health!.sessionHealthScore ?? 1) * 100) : null;
+                        const healthColor = healthPct === null ? "#cbd5e1" : healthPct >= 80 ? "#10b981" : healthPct >= 50 ? "#f59e0b" : "#ef4444";
+                        return (
+                          <tr key={p.provider} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "transparent" : "#fafafa" }}>
+                            <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0f172a" }}>{p.provider}</td>
+                            <td style={{ padding: "8px 12px", color: "#475569" }}>{p.calls}</td>
+                            <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgDurationMs ? `${(p.avgDurationMs / 1000).toFixed(1)}s` : "—"}</td>
+                            <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgCostUsd > 0 ? `$${p.avgCostUsd.toFixed(5)}` : "—"}</td>
+                            <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0f172a" }}>{p.totalCostUsd > 0 ? `$${p.totalCostUsd.toFixed(4)}` : "$0"}</td>
+                            <td style={{ padding: "8px 12px", color: "#475569" }}>{p.avgTokensIn}/{p.avgTokensOut}</td>
+                            <td
+                              style={{ padding: "8px 12px", fontWeight: 700, color: healthColor }}
+                              title={hasHealthData ? `${healthPct}% success over ${health!.sessionSamples} recent calls this session` : "no session data yet"}
+                            >
+                              {healthPct === null ? "—" : `${healthPct}%`}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

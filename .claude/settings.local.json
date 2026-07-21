@@ -46,7 +46,12 @@
       "Bash(python -c \"import json; json.load\\(open\\('.claude/settings.local.json'\\)\\)\")",
       "Bash(git add *)",
       "Bash(ln -s /c/Users/user/aevion-core/frontend/node_modules /c/Users/user/aevion-rev/frontend/node_modules)",
-      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules /c/Users/user/aevion-rev/aevion-globus-backend/node_modules)"
+      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules /c/Users/user/aevion-rev/aevion-globus-backend/node_modules)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe pr *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29832337381 --job 88640873399)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe api *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/qbuild-ai-multiagent)",
+      "Bash(git commit *)"
     ]
   }
 }

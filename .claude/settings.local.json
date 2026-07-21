@@ -13,7 +13,9 @@
       "Bash(ln -s /c/Users/user/aevion-core/frontend/node_modules node_modules)",
       "Bash(npx eslint *)",
       "Bash(railway whoami *)",
-      "Bash(railway status *)"
+      "Bash(railway status *)",
+      "Bash(git pull *)",
+      "Bash(ln -s /c/Users/user/aevion-core/aevion-globus-backend/node_modules node_modules)"
     ]
   }
 }

@@ -39,6 +39,13 @@ const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
 const LS_KEY = () => process.env.LEMON_SQUEEZY_API_KEY?.trim() || "";
 const LS_STORE = () => process.env.LEMON_SQUEEZY_STORE_ID?.trim() || "";
 
+// ─── Revenue goals (New Year targets) ──────────────────────────────────────
+// Overridable via ENV so the numbers/deadline can change without a deploy;
+// defaults match the $1M / $20M goals tracked on the dashboard.
+const GOAL_PRIMARY_USD = () => Number(process.env.REVENUE_GOAL_PRIMARY_USD) || 1_000_000;
+const GOAL_STRETCH_USD = () => Number(process.env.REVENUE_GOAL_STRETCH_USD) || 20_000_000;
+const GOAL_DEADLINE = () => process.env.REVENUE_GOAL_DEADLINE?.trim() || "2027-01-01";
+
 // ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
@@ -528,6 +535,20 @@ revenueRouter.get("/overview", (_req, res) => {
 });
 
 /**
+ * GET /api/revenue/goals
+ * Static targets for the dashboard's goal-progress bars. Configurable via
+ * REVENUE_GOAL_PRIMARY_USD / REVENUE_GOAL_STRETCH_USD / REVENUE_GOAL_DEADLINE
+ * so they can move without a frontend deploy.
+ */
+revenueRouter.get("/goals", (_req, res) => {
+  res.json({
+    primaryUsd: GOAL_PRIMARY_USD(),
+    stretchUsd: GOAL_STRETCH_USD(),
+    deadline: GOAL_DEADLINE(),
+  });
+});
+
+/**
  * GET /api/revenue/youtube/:channelId
  */
 revenueRouter.get("/youtube/:channelId", async (req, res) => {
@@ -843,6 +864,9 @@ revenueRouter.get("/env-guide", (_req, res) => {
       { key: "TWITCH_CLIENT_ID", required: false, example: "abc123...", note: "dev.twitch.tv/console → Register App → Client ID" },
       { key: "TWITCH_CLIENT_SECRET", required: false, example: "xyz789...", note: "dev.twitch.tv/console → Register App → New Secret" },
       { key: "PAYBOX_MERCHANT_ID", required: false, example: "123456", note: "paybox.money → Личный кабинет → Мерчанты → ID (для KZT)" },
+      { key: "REVENUE_GOAL_PRIMARY_USD", required: false, example: "1000000", note: "Цель прогресс-бара на /revenue. По умолчанию 1000000 ($1M)." },
+      { key: "REVENUE_GOAL_STRETCH_USD", required: false, example: "20000000", note: "Стретч-цель прогресс-бара на /revenue. По умолчанию 20000000 ($20M)." },
+      { key: "REVENUE_GOAL_DEADLINE", required: false, example: "2027-01-01", note: "Дедлайн целей (ISO date) для обратного отсчёта на /revenue. По умолчанию 2027-01-01." },
     ],
     perApp: REVENUE_APPS
       .filter((a) => a.youtubeChannelEnvKey || a.twitchChannelEnvKey)

@@ -46,6 +46,18 @@ interface GumroadBalance {
   setupGuide?: string;
 }
 
+interface RevenueGoals {
+  primaryUsd: number;
+  stretchUsd: number;
+  deadline: string;
+}
+
+interface RevenuePace {
+  change?: { grossUsd: number };
+  windowDays: number;
+  points: number;
+}
+
 const CHANNEL_LABELS: Record<string, string> = {
   gumroad_onetime: "Gumroad Pay",
   gumroad_membership: "Gumroad Sub",
@@ -78,12 +90,23 @@ const CHANNEL_COLORS: Record<string, string> = {
   marketplace: "bg-pink-500/20 text-pink-300 border-pink-500/30",
 };
 
-const NEW_YEAR_UTC = Date.UTC(2027, 0, 1);
-const GOAL_1M = 1_000_000;
-const GOAL_20M = 20_000_000;
+// Fallback if /api/revenue/goals is unreachable — matches the backend defaults.
+const DEFAULT_GOALS: RevenueGoals = { primaryUsd: 1_000_000, stretchUsd: 20_000_000, deadline: "2027-01-01" };
 
-function daysUntilNewYear(): number {
-  return Math.max(0, Math.ceil((NEW_YEAR_UTC - Date.now()) / 86_400_000));
+function daysUntil(deadline: string): number {
+  const target = Date.parse(`${deadline}T00:00:00Z`);
+  if (Number.isNaN(target)) return 0;
+  return Math.max(0, Math.ceil((target - Date.now()) / 86_400_000));
+}
+
+/** ETA at the current pace (last-30-days gross Δ/day). Null if flat/shrinking or not enough data. */
+function etaLabel(target: number, current: number, pace: RevenuePace | null): string | null {
+  if (current >= target) return "🎉 цель достигнута";
+  if (!pace?.change || pace.points < 2) return null;
+  const perDay = pace.change.grossUsd / pace.windowDays;
+  if (perDay <= 0) return "нет роста за 30 дней";
+  const days = Math.ceil((target - current) / perDay);
+  return `в темпе — ~${days.toLocaleString("en-US")} дн.`;
 }
 
 export default function RevenuePage() {
@@ -91,6 +114,8 @@ export default function RevenuePage() {
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
   const [lsBalance, setLsBalance] = useState<GumroadBalance | null>(null);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
+  const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
+  const [pace, setPace] = useState<RevenuePace | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -99,11 +124,15 @@ export default function RevenuePage() {
       fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null),
       fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null),
       fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null),
-    ]).then(([ov, bal, rec, ls]) => {
+      fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null),
+    ]).then(([ov, bal, rec, ls, gl, pc]) => {
       setOverview(ov);
       setBalance(bal);
       setRecent(rec);
       setLsBalance(ls);
+      if (gl && typeof gl.primaryUsd === "number") setGoals(gl);
+      setPace(pc);
       setLoading(false);
     });
   }, []);
@@ -126,7 +155,7 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
-  const daysLeft = daysUntilNewYear();
+  const daysLeft = daysUntil(goals.deadline);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -160,15 +189,17 @@ export default function RevenuePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <GoalBar
               label="$1M — первая цель"
-              target={GOAL_1M}
+              target={goals.primaryUsd}
               current={totalGross}
               colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
+              eta={etaLabel(goals.primaryUsd, totalGross, pace)}
             />
             <GoalBar
               label="$20M — стретч-цель"
-              target={GOAL_20M}
+              target={goals.stretchUsd}
               current={totalGross}
               colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
+              eta={etaLabel(goals.stretchUsd, totalGross, pace)}
             />
           </div>
         </section>
@@ -479,7 +510,7 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-function GoalBar({ label, target, current, colorClass }: { label: string; target: number; current: number; colorClass: string }) {
+function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
   return (
@@ -498,6 +529,7 @@ function GoalBar({ label, target, current, colorClass }: { label: string; target
         <span>${current.toLocaleString("en-US", { maximumFractionDigits: 2 })} собрано</span>
         <span>осталось ${remaining.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
       </div>
+      {eta && <div className="mt-1.5 text-[11px] text-emerald-400/80">{eta}</div>}
     </div>
   );
 }

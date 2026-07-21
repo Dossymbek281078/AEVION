@@ -160,6 +160,17 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "driversLicense" TEXT;`); // e.g. "B,C,E"
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "shiftPreference" TEXT;`); // DAY|NIGHT|FLEX|ANY
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availabilityType" TEXT;`); // FULL_TIME|PART_TIME|PROJECT|SHIFT|REMOTE
+  // Structured location + work mode, separate from the free-text "city".
+  // "city" stays free-text (matches existing search UX); region/country let
+  // us filter "all of Mangystau region" without string-matching every town.
+  // workMode is distinct from availabilityType (employment form) — a worker
+  // can be FULL_TIME + FLY_IN_FLY_OUT ("vahta"), which the old single field
+  // couldn't express (see HH.ru's work-format taxonomy).
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "region" TEXT;`); // KZ oblast slug, see WORK_REGIONS_KZ
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "country" TEXT NOT NULL DEFAULT 'KZ';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "workMode" TEXT;`); // see WORK_MODES
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "educationLevel" TEXT;`); // see EDUCATION_LEVELS
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProfile_region_idx" ON "BuildProfile" ("region");`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "readyFromDate" TEXT;`); // YYYY-MM-DD or freeform
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "preferredLocationsJson" TEXT NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "toolsOwnedJson" TEXT NOT NULL DEFAULT '[]';`);
@@ -450,6 +461,8 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProject_client_created_idx" ON "BuildProject" ("clientId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProject_status_idx" ON "BuildProject" ("status");`);
+  await pool.query(`ALTER TABLE "BuildProject" ADD COLUMN IF NOT EXISTS "region" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProject" ADD COLUMN IF NOT EXISTS "country" TEXT NOT NULL DEFAULT 'KZ';`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildVacancy" (
@@ -475,6 +488,15 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgent" BOOLEAN NOT NULL DEFAULT FALSE;`);
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgentUntil" TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgentNote" TEXT;`);
+  // Same structured location/requirement fields as BuildProfile — lets
+  // talent search and vacancy search filter on the same axes instead of
+  // only free-text "city" + salary range.
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "region" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "country" TEXT NOT NULL DEFAULT 'KZ';`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "workMode" TEXT;`); // see WORK_MODES
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "minExperienceYears" INTEGER;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "educationLevel" TEXT;`); // minimum required, see EDUCATION_LEVELS
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancy_region_idx" ON "BuildVacancy" ("region");`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (
@@ -1001,6 +1023,36 @@ export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
 export const SHIFT_PREFERENCES = ["DAY", "NIGHT", "FLEX", "ANY"] as const;
 export const AVAILABILITY_TYPES = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"] as const;
 export const PLAN_KEYS = ["FREE", "PRO", "AGENCY", "PPHIRE"] as const;
+// Work format, modelled on hh.ru's taxonomy — kept distinct from
+// AVAILABILITY_TYPES (employment form) because e.g. a full-time welder can
+// also be FLY_IN_FLY_OUT ("vahta"), which one field can't express.
+export const WORK_MODES = ["ON_SITE", "REMOTE", "HYBRID", "FIELD_WORK", "FLY_IN_FLY_OUT"] as const;
+export const EDUCATION_LEVELS = ["SECONDARY", "VOCATIONAL", "BACHELOR", "MASTER", "OTHER"] as const;
+// Kazakhstan oblasts + the 3 cities of republican significance. Local to
+// QBuild (not shared with smeta-trainer's own copy) — slug is the DB value,
+// label is what's shown in the UI.
+export const WORK_REGIONS_KZ = [
+  { slug: "almaty-city", label: "Алматы" },
+  { slug: "astana-city", label: "Астана" },
+  { slug: "shymkent-city", label: "Шымкент" },
+  { slug: "abai", label: "Абайская область" },
+  { slug: "akmola", label: "Акмолинская область" },
+  { slug: "aktobe", label: "Актюбинская область" },
+  { slug: "almaty-region", label: "Алматинская область" },
+  { slug: "atyrau", label: "Атырауская область" },
+  { slug: "east-kazakhstan", label: "Восточно-Казахстанская область" },
+  { slug: "zhambyl", label: "Жамбылская область" },
+  { slug: "zhetysu", label: "Жетысуская область" },
+  { slug: "west-kazakhstan", label: "Западно-Казахстанская область" },
+  { slug: "karaganda", label: "Карагандинская область" },
+  { slug: "kostanay", label: "Костанайская область" },
+  { slug: "kyzylorda", label: "Кызылординская область" },
+  { slug: "mangystau", label: "Мангистауская область" },
+  { slug: "pavlodar", label: "Павлодарская область" },
+  { slug: "north-kazakhstan", label: "Северо-Казахстанская область" },
+  { slug: "turkestan", label: "Туркестанская область" },
+  { slug: "ulytau", label: "Улытауская область" },
+] as const;
 
 export function safeParseJson<T>(raw: unknown, fallback: T): T {
   if (typeof raw !== "string") return fallback;

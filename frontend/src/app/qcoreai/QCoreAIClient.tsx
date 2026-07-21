@@ -692,6 +692,7 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/bookmarks",  icon: "🔖", t: "Bookmarks",                   d: "Starred runs for quick re-access" },
             { href: "/qcoreai/api-keys",   icon: "🔑", t: "API Keys",                    d: "Personal access tokens for programmatic access" },
             { href: "/qcoreai/orgs",       icon: "🏢", t: "Organizations",                d: "Multi-user teams with shared workspaces" },
+            { href: "/qcoreai/vs",         icon: "⚔️", t: "vs. other frameworks",          d: "AutoGen, CrewAI, LangGraph — source-cited comparison" },
           ].map(({ href, icon, t, d }) => (
             <a
               key={href}

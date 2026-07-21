@@ -160,7 +160,9 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.revenueBasis = isMrr ? "MRR" : /arr/i.test(kindStr) ? "ARR" : "revenue";
     }
   }
-  if (s.revenueUsd === null && /\b(revenue|paying customers|arr|mrr|monetiz)\b/i.test(t)) {
+  // A plan that says it has no revenue is not 'revenue mentioned without a
+  // figure' — that is a denial, and the adverse-disclosure path handles it.
+  if (s.revenueUsd === null && mentionsUnnegated(t, /\b(revenue|paying customers|arr|mrr|monetiz)\b/i)) {
     s.mentionsRevenueNoNumber = true;
   }
 
@@ -234,7 +236,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ── Patents / proprietary IP ──
   // "We have no patents and no proprietary technology" used to set this true,
   // and the engine then credited +0.1 moat realization for the patents it denied.
-  s.mentionsPatent = mentionsUnnegated(t, /(patent|patented|proprietary technology|proprietary algorithm|patent[- ]pending)/i);
+  s.mentionsPatent = mentionsUnnegated(t, /\b(patent|patented|proprietary technology|proprietary algorithm|patent[- ]pending)\b/i);
 
   // ── Count concrete quantitative fields for coverage ──
   const quant: Array<number | null> = [

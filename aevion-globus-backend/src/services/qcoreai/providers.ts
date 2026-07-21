@@ -320,6 +320,7 @@ export function getProviders(): Provider[] {
         "deepseek-ai/deepseek-r1",
         "meta/llama-3.3-70b-instruct",
         "qwen/qwen2.5-72b-instruct",
+        "qwen/qwen2.5-coder-32b-instruct",
         "mistralai/mistral-large-2-instruct",
       ],
       defaultModel: process.env.NVIDIA_MODEL || "meta/llama-3.3-70b-instruct",

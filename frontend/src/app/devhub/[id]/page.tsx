@@ -16,6 +16,83 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
+// Visual Edit — bridges clicks inside the sandboxed preview iframe back to
+// the parent via postMessage. Runs isolated (sandbox="allow-scripts", no
+// allow-same-origin) so it can't reach parent DOM/cookies even though it's
+// rendering the project's own HTML/CSS/JS.
+const VISUAL_EDIT_OVERLAY_SCRIPT = `
+(function(){
+  var hovered = null;
+  function withVid(el){ while (el && !(el.getAttribute && el.getAttribute('data-vid'))) el = el.parentElement; return el; }
+  function onOver(e){
+    var el = withVid(e.target);
+    if (hovered && hovered !== el) hovered.style.outline = '';
+    hovered = el;
+    if (hovered) { hovered.style.outline = '2px solid #0d9488'; hovered.style.outlineOffset = '1px'; }
+  }
+  function onOut(){ if (hovered) { hovered.style.outline = ''; hovered = null; } }
+  function onClick(e){
+    var el = withVid(e.target);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    parent.postMessage({ source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '' }, '*');
+  }
+  document.addEventListener('mouseover', onOver, true);
+  document.addEventListener('mouseout', onOut, true);
+  document.addEventListener('click', onClick, true);
+})();
+`;
+
+/** Parses the project's HTML entry file, tags every element with a stable
+ * `data-vid` (document order), inlines any local <link>/<script src> that
+ * match another project file (so the iframe renders with no live server),
+ * and appends the click/hover bridge. Returns the PRISTINE (non-inlined)
+ * annotated doc separately — that's what gets edited and saved back, so
+ * inlining stays a display-only concern and never leaks into the source file. */
+function buildVisualEditDocs(htmlPath: string, filesList: FileItem[]): { sourceDoc: Document; srcdoc: string } | null {
+  const htmlFile = filesList.find((f) => f.path === htmlPath);
+  if (!htmlFile) return null;
+  const sourceDoc = new DOMParser().parseFromString(htmlFile.content, "text/html");
+  if (!sourceDoc.body) return null;
+
+  // IDs are scoped to <body> only — <html>/<head>/<title>/etc are never
+  // visually clickable, so they must never be a valid save target either
+  // (setting .textContent on <html> would wipe the entire document).
+  let counter = 0;
+  const SKIP = new Set(["SCRIPT", "STYLE", "BODY"]);
+  const walker = sourceDoc.createTreeWalker(sourceDoc.body, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null = walker.currentNode;
+  do {
+    const el = node as Element;
+    if (!SKIP.has(el.tagName)) el.setAttribute("data-vid", String(counter++));
+  } while ((node = walker.nextNode()));
+
+  const displayDoc = sourceDoc.cloneNode(true) as Document;
+  displayDoc.querySelectorAll('link[rel="stylesheet"][href]').forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const match = filesList.find((f) => f.path === href || f.path === href.replace(/^\.?\//, ""));
+    if (match) {
+      const style = displayDoc.createElement("style");
+      style.textContent = match.content;
+      link.replaceWith(style);
+    }
+  });
+  displayDoc.querySelectorAll("script[src]").forEach((script) => {
+    const src = script.getAttribute("src") || "";
+    const match = filesList.find((f) => f.path === src || f.path === src.replace(/^\.?\//, ""));
+    if (match) {
+      const inline = displayDoc.createElement("script");
+      inline.textContent = match.content;
+      script.replaceWith(inline);
+    }
+  });
+  const overlay = displayDoc.createElement("script");
+  overlay.textContent = VISUAL_EDIT_OVERLAY_SCRIPT;
+  displayDoc.body?.appendChild(overlay);
+
+  return { sourceDoc, srcdoc: "<!DOCTYPE html>\n" + displayDoc.documentElement.outerHTML };
+}
+
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
 
@@ -183,7 +260,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
   // AI Chat state
-  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "visual" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [undoing, setUndoing] = useState(false);
@@ -204,6 +281,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [planIdea, setPlanIdea] = useState("");
   const [planning, setPlanning] = useState(false);
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
+
+  // Visual Edit — Static-stack only (renders client-side, no live dev server needed)
+  const [visualEditHtmlPath, setVisualEditHtmlPath] = useState<string | null>(null);
+  const [visualEditSrcdoc, setVisualEditSrcdoc] = useState<string | null>(null);
+  const [visualEditSelected, setVisualEditSelected] = useState<{ vid: string; tagName: string; text: string } | null>(null);
+  const [visualEditText, setVisualEditText] = useState("");
+  const [visualEditSaving, setVisualEditSaving] = useState(false);
+  const visualEditSourceDocRef = useRef<Document | null>(null);
 
   // Agent workflow state
   type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
@@ -740,6 +825,63 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Planning failed", "error");
     } finally {
       setPlanning(false);
+    }
+  };
+
+  // Rebuild the Visual Edit preview whenever the tab is opened or files change
+  // (e.g. after a save) — Static stack only, needs an HTML entry file.
+  useEffect(() => {
+    if (activeTab !== "visual" || !project || project.stack !== "static") return;
+    const htmlFile = files.find((f) => f.path === "index.html") || files.find((f) => f.path.toLowerCase().endsWith(".html"));
+    if (!htmlFile) {
+      visualEditSourceDocRef.current = null;
+      setVisualEditHtmlPath(null);
+      setVisualEditSrcdoc(null);
+      return;
+    }
+    const built = buildVisualEditDocs(htmlFile.path, files);
+    visualEditSourceDocRef.current = built?.sourceDoc ?? null;
+    setVisualEditHtmlPath(htmlFile.path);
+    setVisualEditSrcdoc(built?.srcdoc ?? null);
+    setVisualEditSelected(null);
+  }, [activeTab, project, files]);
+
+  // Bridge for clicks inside the sandboxed preview iframe (see VISUAL_EDIT_OVERLAY_SCRIPT)
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data;
+      if (!data || data.source !== "devhub-visual-edit") return;
+      setVisualEditSelected({ vid: data.vid, tagName: data.tagName, text: data.text });
+      setVisualEditText(data.text);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  const saveVisualEdit = async () => {
+    if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current) return;
+    setVisualEditSaving(true);
+    try {
+      const doc = visualEditSourceDocRef.current;
+      const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
+      if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
+      el.textContent = visualEditText;
+      doc.querySelectorAll("[data-vid]").forEach((n) => n.removeAttribute("data-vid"));
+      const finalHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(visualEditHtmlPath)}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: finalHtml }),
+      });
+      if (!r.ok) throw new Error("Save failed");
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast(`Saved — updated ${visualEditHtmlPath}`, "success");
+    } catch (e: any) {
+      showToast(e.message || "Save failed", "error");
+    } finally {
+      setVisualEditSaving(false);
     }
   };
 
@@ -2254,7 +2396,32 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Editor — top 60% */}
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
-            {selectedFile ? (
+            {activeTab === "visual" ? (
+              project?.stack !== "static" ? (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
+                  <div style={{ maxWidth: 420 }}>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>🖱️</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Visual Edit works on Static projects</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                      This project uses <b>{project?.stack}</b>, which needs a running dev server to render. Visual Edit
+                      only supports the Static stack (plain HTML/CSS/JS) for now, since that renders directly in the
+                      browser with no build step.
+                    </div>
+                  </div>
+                </div>
+              ) : !visualEditSrcdoc ? (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8" }}>
+                  <div style={{ fontSize: 15 }}>No index.html found — create one to use Visual Edit.</div>
+                </div>
+              ) : (
+                <iframe
+                  srcDoc={visualEditSrcdoc}
+                  sandbox="allow-scripts"
+                  style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                  title="Visual Edit preview"
+                />
+              )
+            ) : selectedFile ? (
               <>
                 <div style={{ padding: "8px 16px", background: "#f8fafc", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{selectedFile.path}</span>
@@ -2284,7 +2451,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
             <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
+              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -2296,6 +2463,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   }}
                 >
                   {tab === "chat" ? "AI Generate"
+                  : tab === "visual" ? "🖱️ Visual Edit"
                   : tab === "env" ? "Env Vars"
                   : tab === "github" ? "GitHub"
                   : tab === "media" ? "Media"
@@ -2479,6 +2647,44 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* Visual Edit Tab */}
+              {activeTab === "visual" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {project?.stack !== "static" ? (
+                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                      Create a new project with the <b>Static</b> stack to use Visual Edit — it renders the page
+                      directly in the browser, which only plain HTML/CSS/JS supports without a live dev server.
+                    </div>
+                  ) : !visualEditSelected ? (
+                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                      Click any text element in the preview above to select and edit it in place.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                        Selected: <span style={{ fontFamily: "monospace", color: "#0d9488" }}>{"<" + visualEditSelected.tagName.toLowerCase() + ">"}</span>
+                      </div>
+                      <textarea
+                        value={visualEditText}
+                        onChange={(e) => setVisualEditText(e.target.value)}
+                        style={{ width: "100%", minHeight: 90, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+                      />
+                      <button
+                        onClick={saveVisualEdit}
+                        disabled={visualEditSaving}
+                        style={{
+                          padding: "9px 0", background: visualEditSaving ? "#99f6e4" : "#0d9488",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: visualEditSaving ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {visualEditSaving ? "Saving..." : "Save"}
+                      </button>
+                    </>
                   )}
                 </div>
               )}

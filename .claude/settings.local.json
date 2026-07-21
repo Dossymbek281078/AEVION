@@ -35,7 +35,10 @@
       "Bash(jobs *)",
       "PowerShell(Get-CimInstance *)",
       "PowerShell(Get-NetTCPConnection *)",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Remove-Item *)",
+      "Bash(env)",
+      "Bash(railway list *)"
     ]
   }
 }

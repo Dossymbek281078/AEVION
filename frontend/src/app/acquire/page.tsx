@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 const KNOWN_REFS: Record<string, string> = {
   stripe: "Stripe",
@@ -158,6 +159,17 @@ export default function AcquirePage() {
   const [aiSavedPct, setAiSavedPct] = useState<number | null>(null);
   const [devhubLive, setDevhubLive] = useState<{ live: number; total: number } | null>(null);
   const acquireRef = useAcquireRef();
+
+  // Attribution for the most valuable visits on the site: personalized briefs.
+  // `source` carries the explicit ?ref= (anthropic/openai/...), full query in path.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    track({
+      type: "page_view",
+      source: params.get("ref") ?? params.get("utm_source") ?? undefined,
+      meta: { page: "acquire", campaign: params.get("utm_campaign") },
+    });
+  }, []);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"))

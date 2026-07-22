@@ -218,7 +218,13 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 749 -R Dossymbek281078/AEVION --watch --interval 15)",
       "Bash(unset RAILWAY_API_TOKEN RAILWAY_TOKEN)",
       "Bash(curl -s https://api.aevion.app/api/qskyway/slots)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 758 -R Dossymbek281078/AEVION --watch --interval 15)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 758 -R Dossymbek281078/AEVION --watch --interval 15)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 770 -R Dossymbek281078/AEVION --watch --interval 15)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 770 --squash --delete-branch -R Dossymbek281078/AEVION)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 770 -R Dossymbek281078/AEVION --json state,statusCheckRollup)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 776 -R Dossymbek281078/AEVION --watch --interval 15)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 776 --squash --delete-branch -R Dossymbek281078/AEVION)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 776 -R Dossymbek281078/AEVION --json state,statusCheckRollup)"
     ]
   }
 }

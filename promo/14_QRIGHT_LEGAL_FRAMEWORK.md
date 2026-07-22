@@ -274,4 +274,4 @@ AEVION, QSign, QRight, QShield, QCoreAI, DevHub — регистрация в WI
 
 ---
 
-— Досымбек Жакия, основатель AEVION · 2026-05-27
+— Досымбек Жақия, основатель AEVION · 2026-05-27

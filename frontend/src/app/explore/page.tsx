@@ -213,7 +213,7 @@ export default function ExplorePlanet() {
         </section>
 
         <footer className="aevx-footer">
-          <div className="aevx-copy">© AEVION — Досымбек Жакия. Authorship signed (Ed25519). All rights reserved.</div>
+          <div className="aevx-copy">© AEVION — Досымбек Жақия. Authorship signed (Ed25519). All rights reserved.</div>
           <div className="aevx-links">
             <a href="/terms">Terms</a>
             <a href="/privacy">Privacy</a>

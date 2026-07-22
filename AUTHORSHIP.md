@@ -2,11 +2,11 @@
 
 **AEVION — Artificial Evolution of Value, Innovation, Ownership and Networks**
 
-**Автор / Author:** Досымбек Жакия (Dossymbek Zhakiya)
-**Правообладатель / Copyright holder:** © Досымбек Жакия / AEVION
+**Автор / Author:** Досымбек Жақия (Dosymbek Zhakiya)
+**Правообладатель / Copyright holder:** © Досымбек Жақия / AEVION
 **Контакт:** yahiin1978@gmail.com
-**Подписано / Signed:** 2026-07-10T00:00:00Z
-**Файлов охвачено:** 2626
+**Подписано / Signed:** 2026-07-22T06:34:09.836Z
+**Файлов охвачено:** 2942
 
 Все права защищены. Авторское право охраняется Бернской конвенцией с момента создания. Данная подпись Ed25519 + SHA-256 манифест служат доказательством авторства и приоритета на дату подписи.
 
@@ -15,11 +15,11 @@
 ## Криптографическая подпись авторства (Ed25519)
 
 - **Отпечаток публичного ключа (SHA-256):** `a3e109c96646fff6d5d73c7599d537eb73fbdf8895b712fee157d7b7fd598648`
-- **SHA-256 манифеста целостности:** `b99608b25a214c03578882523848ceb888bf97dd197e3f378bc7886e177751d6`
+- **SHA-256 манифеста целостности:** `2e8533f326cd5ccf9aaa7f8759da38ea902c3073a1f39f0fa2e380fe903b21c1`
 - **Подпись (base64):**
 
 ```
-9OWb0DPAgjvFEvCLlqrkpA263IpafPAGaT/4KoGCOMMAwnrjm3jeZ/ishykwLy1PlxH+voEJXBlQXPY98QclAA==
+CECBQpiFWfuQIAfzCgM9UPPL0K2Ftp2bYWnj+kKI8utViUfff3dtRD2ILhoRG/j/q1jVuGMQLwJO1Yz8xzZKDw==
 ```
 
 Проверка целостности и подлинности:

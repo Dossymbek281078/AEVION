@@ -237,7 +237,7 @@ export default function PartnerPage() {
               <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg, #10b981, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 900, color: "#0a0e1a", marginBottom: 20 }}>
                 Д
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#f8fafc", marginBottom: 6 }}>Досымбек Жакия</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#f8fafc", marginBottom: 6 }}>Досымбек Жақия</div>
               <div style={{ fontSize: 13, color: "#10b981", fontWeight: 700, marginBottom: 16 }}>Founder & Chief Idea Officer</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {[

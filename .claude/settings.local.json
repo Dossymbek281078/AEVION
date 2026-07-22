@@ -90,7 +90,15 @@
       "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(billing\\): consolidate pricing config, fix Universe/pro entitlement bug' --body ' *)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 779 --watch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29889613085 --job 88827230412 --log-failed)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe pr *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" workflow run ci.yml --ref fix/qbuild-vacancy-region-inherit)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29891574759)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe api *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/qbuild-theme-cleanup)",
+      "Bash(node -e ' *)",
+      "Bash(bash \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-user-aevion-qbuild-lighten\\\\e0972e64-e89c-4ccd-8685-1362fbdd9e97\\\\scratchpad\\\\run_nl_tests.sh\" 2>&1)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/fix/qbuild-vacancy-region-inherit)"
     ]
   }
 }

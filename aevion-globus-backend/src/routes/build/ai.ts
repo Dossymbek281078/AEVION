@@ -237,6 +237,32 @@ aiRouter.post("/parse-resume", aiRateLimiter, async (req, res) => {
   }
 });
 
+// Deterministic safety net for parse-search: even with prompt rules telling
+// both agents that minExp is talent-only and maxExperience is vacancy-only,
+// live testing showed the model still occasionally emits the wrong one for
+// the mode — and the frontend only ever reads its own mode's field, so a
+// mismatched field silently vanishes instead of erroring. Don't rely on
+// prompt compliance alone for something this cheap to enforce in code.
+function normalizeModeFields(filtersRaw: unknown, mode: "talent" | "vacancy"): Record<string, unknown> {
+  if (typeof filtersRaw !== "object" || filtersRaw === null) return {};
+  const filters = { ...(filtersRaw as Record<string, unknown>) };
+  if (mode === "talent") {
+    if (filters.minExp == null && typeof filters.maxExperience === "number") {
+      filters.minExp = filters.maxExperience;
+    }
+    delete filters.maxExperience;
+    delete filters.minSalary;
+    delete filters.maxSalary;
+  } else {
+    if (filters.maxExperience == null && typeof filters.minExp === "number") {
+      filters.maxExperience = filters.minExp;
+    }
+    delete filters.minExp;
+    delete filters.role;
+  }
+  return filters;
+}
+
 function parseJsonFence(raw: string): unknown | null {
   const stripped = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
   try {
@@ -382,7 +408,7 @@ aiRouter.post("/parse-search", aiRateLimiter, async (req, res) => {
       | null;
 
     return ok(res, {
-      filters: checkerJson?.filters ?? parserJson.filters ?? {},
+      filters: normalizeModeFields(checkerJson?.filters ?? parserJson.filters ?? {}, mode),
       explanation:
         (typeof checkerJson?.explanation === "string" && checkerJson.explanation) ||
         (typeof parserJson.explanation === "string" && parserJson.explanation) ||

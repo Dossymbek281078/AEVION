@@ -884,6 +884,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: userText, stack: project.stack,
+          // Prior turns give follow-ups their referent ("make the button blue").
+          history: chatHistory.slice(-8).map((m) =>
+            m.role === "user"
+              ? { role: "user", text: m.text }
+              : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+          ),
           ...(aiImage ? { imageBase64: aiImage.dataBase64, imageMediaType: aiImage.mediaType } : {}),
         }),
       });

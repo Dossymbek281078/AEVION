@@ -278,6 +278,43 @@ export default function DevHubPage() {
           </button>
         </div>
 
+        {/* Prompt-first entry — the product's front door: describe → built */}
+        <div style={{
+          background: "linear-gradient(135deg, #0f172a 0%, #134e4a 100%)",
+          borderRadius: 16, padding: "28px 24px", marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
+            Опиши — и получи работающее приложение
+          </div>
+          <div style={{ fontSize: 13.5, color: "#99f6e4", marginBottom: 14, lineHeight: 1.5 }}>
+            ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами
+            (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <textarea
+              value={ideaPrompt}
+              onChange={(e) => setIdeaPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
+              placeholder={'Например: "трекер привычек с календарём и статистикой по неделям"'}
+              style={{
+                flex: "1 1 380px", minHeight: 56, padding: "12px 14px", border: "none",
+                borderRadius: 10, fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box",
+              }}
+            />
+            <button
+              onClick={startFromIdea}
+              disabled={ideaStarting || !ideaPrompt.trim()}
+              style={{
+                padding: "0 26px", minHeight: 56, background: ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
+                color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15,
+                cursor: ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              {ideaStarting ? "Создаю…" : "⚡ Построить"}
+            </button>
+          </div>
+        </div>
+
         {/* Studio Pro upgrade banner */}
         {userTier === "free" && (
           <div style={{

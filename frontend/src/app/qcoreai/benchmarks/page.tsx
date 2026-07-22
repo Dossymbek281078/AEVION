@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 interface ModelBenchmark {
   provider: string;
@@ -45,6 +46,7 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
 }
 
 export default function BenchmarksPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<BenchmarkData | null>(null);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"quality" | "speed" | "cost">("quality");
@@ -77,11 +79,9 @@ export default function BenchmarksPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-xl font-bold">Сравнение моделей</h1>
+          <h1 className="text-xl font-bold">{t("qcoreai.bench.title")}</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Экономность считается вживую по реальным ценам провайдеров; где есть значок ⏱ — показана
-            медианная задержка по реальным вызовам этого сервера. Полосы «скорость» и «качество» — иллюстративные
-            оценки, не измеренный тест — за реальным измеренным бенчмарком Council см.{" "}
+            {t("qcoreai.bench.intro")}{" "}
             <Link href="/qcoreai/vs" className="text-teal-400 hover:text-teal-300 underline">
               /qcoreai/vs
             </Link>
@@ -89,13 +89,13 @@ export default function BenchmarksPage() {
           </p>
         </div>
 
-        {loading && <div className="text-center py-16 text-slate-500 animate-pulse text-sm">Загрузка…</div>}
+        {loading && <div className="text-center py-16 text-slate-500 animate-pulse text-sm">{t("qcoreai.common.loading")}</div>}
 
         {!loading && data && (
           <>
             {/* Sort tabs */}
             <div className="flex gap-1 bg-slate-900 p-1 rounded-xl mb-6 border border-slate-800">
-              {([["quality", "🎯 Качество"], ["speed", "⚡ Скорость"], ["cost", "💰 Экономность"]] as const).map(([k, l]) => (
+              {([["quality", t("qcoreai.bench.tab.quality")], ["speed", t("qcoreai.bench.tab.speed")], ["cost", t("qcoreai.bench.tab.cost")]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setSort(k)}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sort === k ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"}`}
                 >
@@ -125,14 +125,14 @@ export default function BenchmarksPage() {
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Качество</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{t("qcoreai.bench.row.quality")}</p>
                         <ScoreBar value={m.qualityScore} color="#10b981" />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Скорость</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">{t("qcoreai.bench.row.speed")}</p>
                           {typeof m.measuredLatencyMs === "number" && (
-                            <span className="text-[10px] text-sky-400" title={`Медиана полного ответа по ${m.latencySamples} реальным вызовам этого инстанса`}>
+                            <span className="text-[10px] text-sky-400" title={t("qcoreai.bench.badge.title", { n: m.latencySamples ?? 0 })}>
                               ⏱ {(m.measuredLatencyMs / 1000).toFixed(1)}s · N={m.latencySamples}
                             </span>
                           )}
@@ -140,7 +140,7 @@ export default function BenchmarksPage() {
                         <ScoreBar value={m.speedScore} color="#3b82f6" />
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Экономность</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{t("qcoreai.bench.row.cost")}</p>
                         <ScoreBar value={m.costScore} color="#f59e0b" />
                       </div>
                     </div>
@@ -150,7 +150,7 @@ export default function BenchmarksPage() {
             </div>
 
             <p className="text-xs text-slate-600 text-center mt-4" title={data.note}>
-              💰 экономность — живой расчёт по ценам · ⏱ — измеренная медиана реальных вызовов · 🎯⚡ полосы качество/скорость — иллюстративные оценки · {data.lastUpdated}
+              {t("qcoreai.bench.footer")} · {data.lastUpdated}
             </p>
           </>
         )}

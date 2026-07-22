@@ -324,7 +324,7 @@ export default function StudioPage() {
             },
             {
               tier: "Pro", price: "$149", color: "#0d9488",
-              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Everything in Free", "Priority support"],
+              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Your own *.aevion.build subdomain", "Everything in Free", "Priority support"],
               cta: "Upgrade to Pro", ctaHref: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57", disabled: false,
             },
             {

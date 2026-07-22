@@ -73,6 +73,15 @@ export interface TierLimits {
   qsignOpsPerDay: number | null;
   /** LLM-токены / месяц (QCoreAI / Multichat) */
   llmTokensPerMonth: number | null;
+  /**
+   * Суб-лимит токенов / месяц ТОЛЬКО на премиум/топовые модели (isPremiumModel
+   * в services/qcoreai/pricing.ts — вывод ≥$5/1M). null = нет отдельного
+   * суб-лимита (весь llmTokensPerMonth можно тратить на любые модели).
+   * Добавлено 2026-07-22: llmTokensPerMonth сам по себе не защищает от того,
+   * что весь месячный пакет уйдёт на самую дорогую модель в парке — см.
+   * docs/PRICING_STRATEGY_2026-07.md.
+   */
+  premiumTokensPerMonth: number | null;
   /** Кол-во пользовательских мест */
   seats: number | null;
   /** SLA в часах ответа поддержки */
@@ -156,6 +165,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: 10,
       qsignOpsPerDay: 1,
       llmTokensPerMonth: 100_000,
+      premiumTokensPerMonth: null, // tiny overall cap already bounds worst-case exposure
       seats: 1,
       supportSlaHours: null,
     },
@@ -181,6 +191,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: null,
       qsignOpsPerDay: 25,
       llmTokensPerMonth: 2_000_000,
+      premiumTokensPerMonth: 200_000, // 10% of the overall cap
       seats: 1,
       supportSlaHours: 24,
     },
@@ -206,6 +217,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: null,
       qsignOpsPerDay: 100,
       llmTokensPerMonth: 10_000_000,
+      premiumTokensPerMonth: 1_000_000, // 10% of the overall cap
       seats: 1,
       supportSlaHours: 24,
     },
@@ -233,6 +245,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: null,
       qsignOpsPerDay: null,
       llmTokensPerMonth: 50_000_000,
+      premiumTokensPerMonth: 5_000_000, // 10% of the overall cap
       seats: 1,
       supportSlaHours: 8,
     },
@@ -259,6 +272,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: null,
       qsignOpsPerDay: null,
       llmTokensPerMonth: 200_000_000,
+      premiumTokensPerMonth: 20_000_000, // 10% of the overall cap
       seats: 1,
       supportSlaHours: 6,
     },
@@ -285,6 +299,7 @@ export const TIERS: PricingTier[] = [
       qrightObjectsPerMonth: null,
       qsignOpsPerDay: null,
       llmTokensPerMonth: null,
+      premiumTokensPerMonth: null,
       seats: null,
       supportSlaHours: 1,
     },

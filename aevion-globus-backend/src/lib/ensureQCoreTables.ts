@@ -471,6 +471,13 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       PRIMARY KEY ("userId", "ym")
     );
   `);
+  // Premium/frontier-model sub-total (see isPremiumModel in
+  // services/qcoreai/pricing.ts) — a subset of tokensIn/tokensOut spent on
+  // models priced above the premium threshold. Backs each tier's
+  // premiumTokensPerMonth sub-cap (data/pricing.ts) so a tier's overall
+  // token allowance can't be spent entirely on the priciest models.
+  await pool.query(`ALTER TABLE "QCoreTokenLedger" ADD COLUMN IF NOT EXISTS "premiumTokensIn" BIGINT NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE "QCoreTokenLedger" ADD COLUMN IF NOT EXISTS "premiumTokensOut" BIGINT NOT NULL DEFAULT 0;`);
 
   // Scheduled batch runs.
   await pool.query(`

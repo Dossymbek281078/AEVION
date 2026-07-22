@@ -98,3 +98,59 @@ access"). Not implemented in this pass — flagged here so it isn't lost.
 - CyberChess/QCoreAI's discount is *temporary framing*, not a permanent
   policy — revisit pricing once traction data exists.
 - Enterprise stays "contact sales" / custom — no change.
+
+## Update 2026-07-22 (same day) — premium-model sub-cap shipped, other modules checked
+
+**Premium/frontier-model token sub-cap — implemented.** The "open follow-up"
+above (a subscriber spending their whole token allowance on the priciest
+model before hitting the raw count) is now built, not just flagged:
+- `services/qcoreai/pricing.ts`: `isPremiumModel()` / `getPremiumModelNames()`
+  — any model priced ≥$5/1M output tokens (threshold-based, so a newly added
+  expensive model is covered automatically, no second list to maintain).
+- `data/pricing.ts`: new `TierLimits.premiumTokensPerMonth` — ~10% of each
+  tier's overall cap (Lite 200k, Medium 1M, Full 5M, Universe 20M; Free is
+  `null` since its tiny 100k overall cap already bounds worst-case exposure;
+  Enterprise `null`/unlimited).
+- `QCoreTokenLedger` gained `premiumTokensIn`/`premiumTokensOut` columns
+  (additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, no migration
+  framework needed — this table was already raw-SQL, not Prisma-managed).
+- New gate `enforcePremiumModelQuota()` in `lib/qcoreQuota.ts`, behind its
+  own dormant flag `QCOREAI_PREMIUM_QUOTA=1` (independent from
+  `QCOREAI_TIER_QUOTA`) — wired into `routes/qcoreai.ts`'s two single-shot
+  `/chat` + `/chat-stream` endpoints, called after the model is resolved and
+  before dispatch (unlike the other two gates, which run at request start,
+  this one needs to know which model first).
+- **Known gap, not yet covered:** the multi-agent orchestrator's per-call
+  dispatch points (the `/run` pipeline, batch runs, etc.) don't call this
+  gate yet — only the two direct chat endpoints do. A heavy orchestrator run
+  could still spend unboundedly on premium models today. Extending coverage
+  there is the next piece of this specific work, not done in this pass.
+- **Pre-flip visibility**: `GET /api/qcoreai/me/token-quota` (authenticated,
+  already existed for the free-tier gate) now also reports the caller's
+  status against both the overall paid-tier cap and the premium sub-cap —
+  `usedTokens`/`limitTokens`/`remainingTokens` and
+  `premiumUsedTokens`/`premiumLimitTokens`/`premiumRemainingTokens` — even
+  while both gates stay dormant (`metered`/`premiumMetered` reflect the real
+  env-flag state). This is the way to check real accounts' current standing
+  before flipping either flag on Railway, without needing direct production
+  database access from a dev machine.
+
+**Other modules checked for a repricing benchmark — none applied.** Looked
+for a clean single-purpose competitor for QSign and QRight/IP Bureau (the
+same "50% below a named rival" logic used for CyberChess/QCoreAI):
+- QSign vs. DocuSign (~$10–15/mo Personal, $25–45/mo Standard) / Dropbox Sign
+  (~$15/mo Essentials, $25/mo Standard): a real subscription market exists,
+  but QSign is a narrow HMAC/canonical-JSON signing primitive, not a full
+  contract-lifecycle product (no templates, audit-trail UI, SMS delivery).
+  Repricing off this comparison risked an apples-to-oranges "50% cheaper
+  than DocuSign" claim the product doesn't actually earn feature-for-feature
+  — left unchanged pending a clearer scope match.
+- QRight/IP Bureau vs. digital-copyright/authorship-timestamp services: no
+  clean subscription competitor found. US Copyright Office registration is a
+  one-time $45–125 government fee (not a subscription); third-party
+  timestamp services (Copyright01, Authorship Registry, Surety) are mostly
+  free or have no published subscription pricing to benchmark against.
+  Left unchanged — no comparison to responsibly act on.
+- Other modules (multichat-engine, healthai, aevion-ip-bureau,
+  qtradeoffline, qpaynet-embedded, etc.) — not researched this pass; still
+  open for a future pass if a genuine competitor benchmark turns up.

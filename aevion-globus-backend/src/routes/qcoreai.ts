@@ -4,8 +4,9 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
-import { enforceFreeTokenQuota, freeTokenLimit } from "../lib/qcoreQuota";
+import { enforceFreeTokenQuota, enforcePremiumModelQuota, freeTokenLimit } from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
+import { getTier } from "../data/pricing";
 import {
   callProvider,
   callProviderResilient,
@@ -127,6 +128,7 @@ import {
   getDueSchedules,
   getMonthlySpend,
   getMonthlyTokens,
+  getMonthlyPremiumTokens,
   addTokenUsage,
   getScheduledBatch,
   getSpendLimit,
@@ -360,12 +362,14 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     const modelName = resolveModel(provider, req.body?.model);
     const temperature = clampTemperature(req.body?.temperature, 0.6);
 
+    if (await enforcePremiumModelQuota(req, res, providerId, modelName)) return;
+
     const result = await callProviderResilient(providerId, messages, modelName, temperature);
     // Count usage toward the free-tier monthly quota (single-shot /chat does
     // not persist a QCoreRun/QCoreMessage, so it must ledger explicitly).
     if (auth?.sub) {
       const { tokensIn, tokensOut } = usageToTokens(result.usage);
-      addTokenUsage(auth.sub, tokensIn, tokensOut).catch(() => {});
+      addTokenUsage(auth.sub, tokensIn, tokensOut, { provider: providerId, model: modelName }).catch(() => {});
     }
     res.json({
       mode: providerId,
@@ -423,6 +427,8 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
   const modelName = resolveModel(provider, req.body?.model);
   const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
 
+  if (await enforcePremiumModelQuota(req, res, providerId, modelName)) return;
+
   // SSE headers
   res.status(200);
   res.setHeader("Content-Type", "text/event-stream");
@@ -475,7 +481,7 @@ qcoreaiRouter.post("/chat-stream", async (req, res) => {
     // Count streamed usage toward the free-tier monthly quota (chat-stream does
     // not persist a QCoreRun/QCoreMessage). Fire-and-forget; anon → no-op.
     if (auth?.sub && (ledgerIn > 0 || ledgerOut > 0)) {
-      addTokenUsage(auth.sub, ledgerIn, ledgerOut).catch(() => {});
+      addTokenUsage(auth.sub, ledgerIn, ledgerOut, { provider: providerId, model: modelName }).catch(() => {});
     }
     if (!aborted) {
       res.write("data: [DONE]\n\n");
@@ -1114,25 +1120,44 @@ qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
 });
 
 /*
- * Free-tier token quota — current-month token usage vs the 100k allowance.
- * Lets the UI show "37,400 / 100,000 tokens used this month" and an upgrade
- * nudge before the hard 402. Read-only; reflects the gate in lib/qcoreQuota.ts.
+ * Token quota — current-month usage vs the caller's tier allowance(s). Lets
+ * the UI show "37,400 / 100,000 tokens used this month" and an upgrade nudge
+ * before the hard 402. Read-only; reflects the three gates in lib/qcoreQuota.ts.
+ *
+ * `metered`/`premiumMetered` report the gate's ACTUAL enforcement state (the
+ * QCOREAI_*_QUOTA env flags), so this endpoint is useful even while every
+ * gate is still dormant: it shows exactly how close each real account
+ * already is to its cap — the pre-flip visibility check before switching
+ * enforcement on (see docs/PRICING_STRATEGY_2026-07.md).
  */
 qcoreaiRouter.get("/me/token-quota", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const plan = resolveUserPlan(req);
-    const limit = freeTokenLimit();
+    const isFree = plan.tier === "free";
+    const tier = getTier(plan.rawTier) ?? getTier(plan.tier);
+    const limit = isFree ? freeTokenLimit() : (tier?.limits.llmTokensPerMonth ?? null);
+    const premiumLimit = isFree ? null : (tier?.limits.premiumTokensPerMonth ?? null);
     const used = await getMonthlyTokens(auth.sub);
-    const metered = plan.tier === "free" && process.env.QCOREAI_FREE_QUOTA === "1";
+    const premiumUsed = premiumLimit != null ? await getMonthlyPremiumTokens(auth.sub) : 0;
+    const metered = isFree
+      ? process.env.QCOREAI_FREE_QUOTA === "1"
+      : process.env.QCOREAI_TIER_QUOTA === "1" && limit != null;
+    const premiumMetered = !isFree && process.env.QCOREAI_PREMIUM_QUOTA === "1" && premiumLimit != null;
     res.json({
       tier: plan.tier,
+      rawTier: plan.rawTier,
       metered,
       usedTokens: used,
       limitTokens: metered ? limit : null,
-      remainingTokens: metered ? Math.max(0, limit - used) : null,
-      exceeded: metered ? used >= limit : false,
+      remainingTokens: metered && limit != null ? Math.max(0, limit - used) : null,
+      exceeded: metered && limit != null ? used >= limit : false,
+      premiumMetered,
+      premiumUsedTokens: premiumLimit != null ? premiumUsed : null,
+      premiumLimitTokens: premiumMetered ? premiumLimit : null,
+      premiumRemainingTokens: premiumMetered && premiumLimit != null ? Math.max(0, premiumLimit - premiumUsed) : null,
+      premiumExceeded: premiumMetered && premiumLimit != null ? premiumUsed >= premiumLimit : false,
     });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-token-quota" });

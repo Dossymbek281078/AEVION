@@ -19,6 +19,19 @@
  *     only after confirming real usage doesn't false-positive legitimate
  *     heavy users on tiers that were previously uncapped in practice.
  *
+ *   - QCOREAI_PREMIUM_QUOTA=1 — a THIRD, separate gate (enforcePremiumModelQuota,
+ *     called explicitly by routes once the model is resolved, unlike the two
+ *     above which run at request start): even with the overall llmTokensPerMonth
+ *     cap enforced, nothing stops a tier's whole allowance being spent on the
+ *     single priciest model in the fleet (e.g. 200M tokens on claude-fable-5 at
+ *     ~$50/1M output would cost far more than any subscription price). This
+ *     checks a smaller premiumTokensPerMonth sub-cap (TIERS[].limits, ~10% of
+ *     the overall cap) against isPremiumModel-flagged usage only. Added
+ *     2026-07-22, ships dormant. NOTE: only wired into qcoreai.ts's two
+ *     single-shot /chat + /chat-stream call sites so far — the multi-agent
+ *     orchestrator's per-call dispatch points are NOT yet covered (tracked as
+ *     a follow-up in docs/PRICING_STRATEGY_2026-07.md).
+ *
  * qcoreai carries real per-request AI OPEX, so it is deliberately NOT placed
  * behind the all-or-nothing module paywall (that would break the advertised
  * free quota outright rather than "N free, then upgrade"). Anonymous callers
@@ -29,7 +42,8 @@
 import type { Request, Response } from "express";
 import { resolveUserPlan } from "./planGate";
 import { verifyBearerOptional } from "./authJwt";
-import { getMonthlyTokens } from "../services/qcoreai/store";
+import { getMonthlyTokens, getMonthlyPremiumTokens } from "../services/qcoreai/store";
+import { isPremiumModel } from "../services/qcoreai/pricing";
 import { getTier } from "../data/pricing";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
@@ -107,4 +121,51 @@ export async function enforceFreeTokenQuota(req: Request, res: Response): Promis
   if (used < limit) return false;
 
   return block(res, { rawTier: plan.rawTier, used, limit, requiredTiers: ["enterprise"] });
+}
+
+/**
+ * Enforce the caller's tier's premium-model token sub-cap (see the module
+ * doc above). Call AFTER the route has resolved which provider/model will
+ * actually serve the request, and BEFORE dispatching to it — unlike
+ * enforceFreeTokenQuota, this needs to know the model up front. Returns true
+ * if blocked (402 already sent); false to proceed. Fails open on any
+ * metering error, on a non-premium model, and on anonymous callers.
+ */
+export async function enforcePremiumModelQuota(
+  req: Request,
+  res: Response,
+  provider: string,
+  model: string,
+): Promise<boolean> {
+  if (process.env.QCOREAI_PREMIUM_QUOTA !== "1") return false; // dormant unless flipped on
+  if (!isPremiumModel(provider, model)) return false; // not a premium model — nothing to check
+
+  const auth = verifyBearerOptional(req) as { sub?: string } | null;
+  if (!auth?.sub) return false; // anonymous — unmetered, unchanged
+
+  const plan = resolveUserPlan(req);
+  const tier = getTier(plan.rawTier) ?? getTier(plan.tier);
+  const limit = tier?.limits.premiumTokensPerMonth;
+  if (limit == null) return false; // no sub-cap for this tier (free's overall cap already bounds it; enterprise unlimited)
+
+  let used = 0;
+  try {
+    used = await getMonthlyPremiumTokens(auth.sub);
+  } catch {
+    return false; // fail open — a metering failure must not break chat
+  }
+  if (used < limit) return false;
+
+  res.status(402).json({
+    error: "upgrade_required",
+    module: "qcoreai",
+    plan: plan.rawTier,
+    reason: "premium_model_quota_exhausted",
+    usedTokens: used,
+    limitTokens: limit,
+    requiredTiers: ["enterprise"],
+    upgradeUrl: `${PUBLIC_BASE}/pricing`,
+    message: `Месячный лимит на топовые модели для вашего тарифа (${limit.toLocaleString("ru-RU")} токенов/мес) исчерпан — обычные модели остаются доступны. Upgrade → ${PUBLIC_BASE}/pricing`,
+  });
+  return true;
 }

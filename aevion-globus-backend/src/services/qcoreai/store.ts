@@ -16,6 +16,7 @@ import { getPool } from "../../lib/dbPool";
 import { ensureQCoreTables, isDbReady } from "../../lib/ensureQCoreTables";
 import type { ChatMessage } from "./providers";
 import { callProvider, resolveProvider, getProviders } from "./providers";
+import { isPremiumModel, getPremiumModelNames } from "./pricing";
 
 const pool = getPool();
 
@@ -87,7 +88,7 @@ const memSessions = new Map<string, SessionRow>();
 const memRuns = new Map<string, RunRow>();
 const memMessagesByRun = new Map<string, MessageRow[]>();
 // Per-user monthly token ledger (in-memory fallback), key = `${userId}:${ym}`.
-const memTokenLedger = new Map<string, { tokensIn: number; tokensOut: number }>();
+const memTokenLedger = new Map<string, { tokensIn: number; tokensOut: number; premiumTokensIn: number; premiumTokensOut: number }>();
 
 // V43 — in-memory API key store
 type ApiKeyRow = {
@@ -2224,36 +2225,49 @@ function currentYm(): string {
  * endpoints that do NOT persist a QCoreRun/QCoreMessage (single-shot /chat and
  * /chat-stream) so their usage still counts toward the free-tier quota. No-op
  * for anonymous callers (null userId) or non-positive totals.
+ *
+ * Pass `modelInfo` (the provider/model that actually served the request) so
+ * premium/frontier-model spend (isPremiumModel in ./pricing) is also tracked
+ * separately — backs each tier's premiumTokensPerMonth sub-cap. Omitting it
+ * just skips the premium sub-total (treated as non-premium).
  */
 export async function addTokenUsage(
   userId: string | null | undefined,
   tokensIn: number,
   tokensOut: number,
+  modelInfo?: { provider: string; model: string },
 ): Promise<void> {
   if (!userId) return;
   const tin = Math.max(0, Math.round(Number(tokensIn) || 0));
   const tout = Math.max(0, Math.round(Number(tokensOut) || 0));
   if (tin === 0 && tout === 0) return;
   const ym = currentYm();
+  const premium = modelInfo ? isPremiumModel(modelInfo.provider, modelInfo.model) : false;
+  const ptin = premium ? tin : 0;
+  const ptout = premium ? tout : 0;
 
   if (!isDbReady()) {
     const key = `${userId}:${ym}`;
-    const cur = memTokenLedger.get(key) ?? { tokensIn: 0, tokensOut: 0 };
+    const cur = memTokenLedger.get(key) ?? { tokensIn: 0, tokensOut: 0, premiumTokensIn: 0, premiumTokensOut: 0 };
     cur.tokensIn += tin;
     cur.tokensOut += tout;
+    cur.premiumTokensIn += ptin;
+    cur.premiumTokensOut += ptout;
     memTokenLedger.set(key, cur);
     return;
   }
 
   await ensureQCoreTables(pool);
   await pool.query(
-    `INSERT INTO "QCoreTokenLedger" ("userId","ym","tokensIn","tokensOut","updatedAt")
-     VALUES ($1,$2,$3,$4,NOW())
+    `INSERT INTO "QCoreTokenLedger" ("userId","ym","tokensIn","tokensOut","premiumTokensIn","premiumTokensOut","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,NOW())
      ON CONFLICT ("userId","ym") DO UPDATE
-       SET "tokensIn"  = "QCoreTokenLedger"."tokensIn"  + EXCLUDED."tokensIn",
-           "tokensOut" = "QCoreTokenLedger"."tokensOut" + EXCLUDED."tokensOut",
+       SET "tokensIn"         = "QCoreTokenLedger"."tokensIn"         + EXCLUDED."tokensIn",
+           "tokensOut"        = "QCoreTokenLedger"."tokensOut"        + EXCLUDED."tokensOut",
+           "premiumTokensIn"  = "QCoreTokenLedger"."premiumTokensIn"  + EXCLUDED."premiumTokensIn",
+           "premiumTokensOut" = "QCoreTokenLedger"."premiumTokensOut" + EXCLUDED."premiumTokensOut",
            "updatedAt" = NOW()`,
-    [userId, ym, tin, tout],
+    [userId, ym, tin, tout, ptin, ptout],
   );
 }
 
@@ -2271,6 +2285,62 @@ export async function getLedgerTokens(userId: string): Promise<number> {
     [userId, ym],
   );
   return Number(r.rows[0]?.total ?? 0) || 0;
+}
+
+/** Sum of ledgered PREMIUM-model tokens (in+out) for the user in the current month. */
+export async function getLedgerPremiumTokens(userId: string): Promise<number> {
+  const ym = currentYm();
+  if (!isDbReady()) {
+    const cur = memTokenLedger.get(`${userId}:${ym}`);
+    return cur ? cur.premiumTokensIn + cur.premiumTokensOut : 0;
+  }
+  await ensureQCoreTables(pool);
+  const r = await pool.query(
+    `SELECT COALESCE("premiumTokensIn",0)+COALESCE("premiumTokensOut",0) AS total
+       FROM "QCoreTokenLedger" WHERE "userId"=$1 AND "ym"=$2`,
+    [userId, ym],
+  );
+  return Number(r.rows[0]?.total ?? 0) || 0;
+}
+
+/**
+ * Sum of PREMIUM-model tokens (in + out) a user has spent this calendar
+ * month, across both QCoreRun/QCoreMessage (multi-agent) and the ledger
+ * (single-shot /chat, /chat-stream). Mirrors getMonthlyTokens but restricted
+ * to models isPremiumModel() flags — backs the tier premiumTokensPerMonth
+ * sub-cap in lib/qcoreQuota.ts.
+ */
+export async function getMonthlyPremiumTokens(userId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const premiumModels = getPremiumModelNames();
+  if (premiumModels.length === 0) return getLedgerPremiumTokens(userId);
+
+  if (!isDbReady()) {
+    const sessions = await listSessions(userId, 200);
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    let total = 0;
+    for (const run of memRuns.values()) {
+      if (!sessionIds.has(run.sessionId) || run.startedAt < monthStart) continue;
+      for (const m of memMessagesByRun.get(run.id) ?? []) {
+        if (!m.model || !premiumModels.includes(m.model)) continue;
+        total += (m.tokensIn ?? 0) + (m.tokensOut ?? 0);
+      }
+    }
+    return total + (await getLedgerPremiumTokens(userId));
+  }
+
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(COALESCE(m."tokensIn",0)+COALESCE(m."tokensOut",0)),0)::bigint AS total
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id"=m."runId"
+       JOIN "QCoreSession" s ON s."id"=r."sessionId"
+      WHERE s."userId"=$1 AND r."startedAt" >= $2 AND m."model" = ANY($3::text[])`,
+    [userId, monthStart, premiumModels],
+  );
+  const fromMessages = Number(r.rows[0]?.total ?? 0) || 0;
+  return fromMessages + (await getLedgerPremiumTokens(userId));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -27,7 +27,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
-import { callProvider, pickConfiguredProvider } from "../services/qcoreai/providers";
+import { callProvider, pickConfiguredProvider, getProviders } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
@@ -317,13 +317,17 @@ async function aiStoryboard(p: Project): Promise<Shot[] | null> {
   try {
     const provider = pickConfiguredProvider();
     if (!provider || provider === "stub") return null;
+    // Пустая модель давала 400 у Anthropic → тихий stub-фолбэк на проде
+    // (найдено смоуком storyboardMethod 2026-07-22). Берём defaultModel провайдера.
+    const model = getProviders().find((x) => x.id === provider)?.defaultModel || "";
+    if (!model) return null;
     const r = await callProvider(
       provider,
       [
         { role: "system", content: STORYBOARD_SYSTEM },
         { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}):\n${p.brief}` },
       ],
-      "", 0.7
+      model, 0.7
     );
     const jsonText = r.reply.replace(/```json|```/g, "").trim();
     const arr = JSON.parse(jsonText);

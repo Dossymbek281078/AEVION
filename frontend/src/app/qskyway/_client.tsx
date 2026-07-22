@@ -69,7 +69,7 @@ export default function QSkywayClient() {
 
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, corridors: 0 });
+  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, corridors: 0, heightConfidencePct: null as number | null, avgConfClearM: null as number | null });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
@@ -168,7 +168,7 @@ export default function QSkywayClient() {
     const city = cityRef.current!;
     const distKm = t.alts.length * city.grid.cell / 1000;
     const cruise = t.alts.reduce((m, v) => Math.max(m, v), 0);
-    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1) }));
+    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null }));
   }, [makeTaxi]);
 
   // ── hero route: real backend A* (obeys no-fly + wind ETA), falls back to
@@ -189,7 +189,7 @@ export default function QSkywayClient() {
       if (!res.ok) throw new Error("route " + res.status);
       const r = await res.json();
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
-      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind }));
+      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null }));
     } catch {
       localHero();
     } finally {
@@ -210,7 +210,7 @@ export default function QSkywayClient() {
       let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       const cols = Math.floor(city.grid.cols / 3), rows = Math.floor(city.grid.rows / 3);
-      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2 });
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2, heightConfidencePct: null, avgConfClearM: null });
       setMeta({
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
@@ -521,6 +521,8 @@ export default function QSkywayClient() {
                     ["Крейсер. высота", stats.cruiseAlt + " м"],
                     ["Расч. время", stats.eta + " мин"],
                     ["Разведено бортов", String(stats.conflicts)],
+                    ["Увер. высоты (маршрут)", stats.heightConfidencePct == null ? "—" : stats.heightConfidencePct + "%"],
+                    ["Запас на неувер-ть", stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " м"],
                   ].map(([k, v]) => (
                     <div key={k} style={{ background: "#0e141f", padding: "12px 14px" }}>
                       <div style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#5f7086" }}>{k}</div>

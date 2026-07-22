@@ -484,6 +484,22 @@ describe("makeExecutor", () => {
     expect(seenBody).toEqual({ idea: "add a chat feature", projectId: "proj-1" });
   });
 
+  test("design_database is project-scoped and sends the description to /database/design", async () => {
+    let seenUrl = "";
+    let seenBody: unknown = null;
+    const fakeFetch = (async (url: string, init?: { body?: string }) => {
+      seenUrl = url;
+      seenBody = JSON.parse(init?.body ?? "{}");
+      return { ok: true, json: async () => ({ ok: true, files: [] }) };
+    }) as unknown as typeof fetch;
+
+    const exec = makeExecutor("http://127.0.0.1:4001", fakeFetch, { projectId: "proj-9" });
+    await exec({ id: "t1", name: "design_database", input: { description: "todo app with users and tasks" } });
+
+    expect(seenUrl).toContain("/api/devhub/projects/proj-9/database/design");
+    expect(seenBody).toEqual({ description: "todo app with users and tasks" });
+  });
+
   test("read_project_file forwards the Authorization header like the other project-scoped tools", async () => {
     let seenHeaders: Record<string, string> = {};
     const fakeFetch = (async (_url: string, init?: { headers?: Record<string, string> }) => {

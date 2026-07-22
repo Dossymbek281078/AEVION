@@ -94,14 +94,14 @@ export default function BuildHomePage() {
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#17181a]">Construction projects</h1>
-          <p className="mt-1 text-sm text-[#74767c]">
+          <h1 className="text-2xl font-bold text-paper-ink">Construction projects</h1>
+          <p className="mt-1 text-sm text-paper-ink-faint">
             Browse open projects, post a vacancy, or apply directly.
           </p>
         </div>
         <Link
           href="/build/create-project"
-          className="rounded-lg bg-[#0a7d72] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#075b53]"
+          className="rounded-lg bg-paper-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-paper-teal-deep"
         >
           + New project
         </Link>
@@ -123,7 +123,7 @@ export default function BuildHomePage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by title or description…"
-          className="flex-1 rounded-lg border border-[#d4d3cc] bg-white px-3 py-2 text-sm text-[#17181a] placeholder:text-[#9a9c9f] focus:border-[#0a7d72] focus:outline-none"
+          className="flex-1 rounded-lg border border-paper-rule bg-white px-3 py-2 text-sm text-paper-ink placeholder:text-paper-ink-faint-2 focus:border-paper-teal focus:outline-none"
         />
         {token && (
           <button
@@ -131,8 +131,8 @@ export default function BuildHomePage() {
             aria-pressed={mineOnly}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
               mineOnly
-                ? "bg-[#0a7d72] text-white"
-                : "border border-[#d4d3cc] bg-white text-[#45474c] hover:bg-[#efeee8]"
+                ? "bg-paper-teal text-white"
+                : "border border-paper-rule bg-white text-paper-ink-soft hover:bg-paper-2"
             }`}
           >
             {mineOnly ? "✓ Mine only" : "Mine only"}
@@ -145,8 +145,8 @@ export default function BuildHomePage() {
               onClick={() => setStatus(s)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                 status === s
-                  ? "bg-[#0a7d72] text-white"
-                  : "border border-[#d4d3cc] bg-white text-[#45474c] hover:bg-[#efeee8]"
+                  ? "bg-paper-teal text-white"
+                  : "border border-paper-rule bg-white text-paper-ink-soft hover:bg-paper-2"
               }`}
             >
               {s}
@@ -164,7 +164,7 @@ export default function BuildHomePage() {
       {loading && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-[#d4d3cc] bg-white p-4">
+            <div key={i} className="rounded-xl border border-paper-rule bg-white p-4">
               <Skeleton width="70%" height={16} />
               <Skeleton width="100%" height={11} className="mt-3" />
               <Skeleton width="85%" height={11} className="mt-1.5" />
@@ -182,10 +182,10 @@ export default function BuildHomePage() {
       )}
 
       {!loading && projects.length === 0 && !(mineOnly && token) && (
-        <div className="rounded-xl border border-[#d4d3cc] bg-white p-8 text-center">
-          <p className="text-sm text-[#45474c]">
+        <div className="rounded-xl border border-paper-rule bg-white p-8 text-center">
+          <p className="text-sm text-paper-ink-soft">
             No projects match these filters. Try clearing the search or{" "}
-            <Link href="/build/create-project" className="text-[#075b53] underline">
+            <Link href="/build/create-project" className="text-paper-teal-deep underline">
               post the first one
             </Link>
             .
@@ -224,8 +224,8 @@ function SmartSuggestions() {
   if (!loaded || items.length === 0) return null;
 
   return (
-    <div className="mb-8 rounded-xl border border-[#d4d3cc] bg-white p-5">
-      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[#075b53]">
+    <div className="mb-8 rounded-xl border border-paper-rule bg-white p-5">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-paper-teal-deep">
         ✨ Suggested for you
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -233,10 +233,10 @@ function SmartSuggestions() {
           <Link
             key={v.id}
             href={`/build/vacancy/${encodeURIComponent(v.id)}`}
-            className="rounded-lg border border-[#d4d3cc] bg-[#fffefb] px-4 py-3 transition hover:border-[#0a7d72]"
+            className="rounded-lg border border-paper-rule bg-paper-card px-4 py-3 transition hover:border-paper-teal"
           >
-            <div className="font-semibold text-[#17181a] text-sm">{v.title}</div>
-            <div className="mt-0.5 text-xs text-[#74767c]">
+            <div className="font-semibold text-paper-ink text-sm">{v.title}</div>
+            <div className="mt-0.5 text-xs text-paper-ink-faint">
               {formatSalary(v.salary, v.salaryCurrency)}
               {v.city ? ` · ${v.city}` : ""}
             </div>
@@ -250,17 +250,17 @@ function SmartSuggestions() {
 function LandingHero({ publicStats }: { publicStats: { vacancies: number; candidates: number; projects: number } | null }) {
   const { t } = useI18n();
   return (
-    <section className="mb-10 rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] px-6 py-10 sm:px-10 sm:py-14">
-      <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#075b53]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#b5241b]" />
+    <section className="mb-10 rounded-2xl border-y-[3px] border-paper-ink bg-paper-card px-6 py-10 sm:px-10 sm:py-14">
+      <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-paper-teal-deep">
+        <span className="h-1.5 w-1.5 rounded-full bg-paper-red" />
         AEVION QBuild · Construction Recruiting
       </div>
-      <h1 className="mt-4 font-serif text-4xl font-extrabold tracking-tight text-[#17181a] sm:text-5xl lg:text-6xl" style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif' }}>
+      <h1 className="mt-4 font-serif text-4xl font-extrabold tracking-tight text-paper-ink sm:text-5xl lg:text-6xl" style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif' }}>
         {t("build.home.heroTitleLine1")}<br />
-        <span className="text-[#0a7d72]">{t("build.home.heroTitleLine2")}</span>
+        <span className="text-paper-teal">{t("build.home.heroTitleLine2")}</span>
       </h1>
-      <p className="mt-4 max-w-2xl text-base text-[#45474c]">
-        {t("build.home.heroSubtitlePrefix")} <strong className="text-[#17181a]">{t("build.home.heroSubtitleRate")}</strong> {t("build.home.heroSubtitleSuffix")}
+      <p className="mt-4 max-w-2xl text-base text-paper-ink-soft">
+        {t("build.home.heroSubtitlePrefix")} <strong className="text-paper-ink">{t("build.home.heroSubtitleRate")}</strong> {t("build.home.heroSubtitleSuffix")}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2 text-xs">
@@ -274,7 +274,7 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
         ].map((chip) => (
           <span
             key={chip}
-            className="rounded-full border border-[#b9b8b0] px-3 py-1 text-[#45474c]"
+            className="rounded-full border border-paper-rule-mid px-3 py-1 text-paper-ink-soft"
           >
             {chip}
           </span>
@@ -292,19 +292,19 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
       <div className="mt-8 flex flex-wrap gap-3">
         <Link
           href="/build/profile"
-          className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
+          className="rounded-lg bg-paper-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-paper-teal-deep"
         >
           {t("build.home.createProfileFree")}
         </Link>
         <Link
           href="/build/vacancies"
-          className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
+          className="rounded-lg border border-paper-rule-soft bg-white px-5 py-2.5 text-sm font-semibold text-paper-ink transition hover:bg-paper-2"
         >
           {t("build.home.viewVacancies")}
         </Link>
         <Link
           href="/build/why-aevion"
-          className="rounded-lg px-5 py-2.5 text-sm font-medium text-[#45474c] transition hover:text-[#17181a]"
+          className="rounded-lg px-5 py-2.5 text-sm font-medium text-paper-ink-soft transition hover:text-paper-ink"
         >
           {t("build.home.compareWithHh")}
         </Link>
@@ -350,10 +350,10 @@ function LiveActivityBand() {
   }
 
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-[#d4d3cc] bg-white">
-      <div className="flex items-center gap-2 border-b border-[#d4d3cc] px-3 py-1.5">
-        <span className="inline-block h-2 w-2 rounded-full bg-[#b5241b]" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
+    <div className="mb-6 overflow-hidden rounded-xl border border-paper-rule bg-white">
+      <div className="flex items-center gap-2 border-b border-paper-rule px-3 py-1.5">
+        <span className="inline-block h-2 w-2 rounded-full bg-paper-red" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-paper-ink-soft">
           Live · last 20 events
         </span>
       </div>
@@ -361,7 +361,7 @@ function LiveActivityBand() {
         {items.map((e, i) => {
           const tone =
             e.kind === "HIRE"
-              ? "text-[#075b53]"
+              ? "text-paper-teal-deep"
               : e.kind === "VACANCY"
                 ? "text-[#1f6f9f]"
                 : "text-[#8a3fb0]";
@@ -374,9 +374,9 @@ function LiveActivityBand() {
           return (
             <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-xs">
               <span className={`shrink-0 font-semibold ${tone}`}>{verb}</span>
-              <span className="min-w-0 flex-1 truncate text-[#17181a]">{e.title}</span>
-              {e.city && <span className="shrink-0 text-[#74767c]">📍 {e.city}</span>}
-              <span className="shrink-0 text-[#74767c]">{relative(e.at)}</span>
+              <span className="min-w-0 flex-1 truncate text-paper-ink">{e.title}</span>
+              {e.city && <span className="shrink-0 text-paper-ink-faint">📍 {e.city}</span>}
+              <span className="shrink-0 text-paper-ink-faint">{relative(e.at)}</span>
             </li>
           );
         })}
@@ -388,8 +388,8 @@ function LiveActivityBand() {
 function LiveStat({ n, label }: { n: number; label: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-2xl font-extrabold text-[#0a7d72]">{n.toLocaleString("ru-RU")}</span>
-      <span className="text-[#45474c]">{label}</span>
+      <span className="text-2xl font-extrabold text-paper-teal">{n.toLocaleString("ru-RU")}</span>
+      <span className="text-paper-ink-soft">{label}</span>
     </div>
   );
 }
@@ -397,13 +397,13 @@ function LiveStat({ n, label }: { n: number; label: string }) {
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "emerald" | "amber" }) {
   const toneCls =
     tone === "emerald"
-      ? "text-[#0a7d72]"
+      ? "text-paper-teal"
       : tone === "amber"
         ? "text-[#b7791f]"
-        : "text-[#17181a]";
+        : "text-paper-ink";
   return (
-    <div className="rounded-xl border border-[#d4d3cc] bg-white px-4 py-3">
-      <div className="text-xs uppercase tracking-wider text-[#74767c]">{label}</div>
+    <div className="rounded-xl border border-paper-rule bg-white px-4 py-3">
+      <div className="text-xs uppercase tracking-wider text-paper-ink-faint">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
@@ -436,10 +436,10 @@ function FeaturedEmployers() {
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-[#74767c]">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-paper-ink-faint">
           Featured employers
         </h2>
-        <Link href="/build/leaderboard" className="text-[11px] text-[#075b53] hover:underline">
+        <Link href="/build/leaderboard" className="text-[11px] text-paper-teal-deep hover:underline">
           See all →
         </Link>
       </div>
@@ -448,7 +448,7 @@ function FeaturedEmployers() {
           <Link
             key={e.userId}
             href={`/build/employer/${encodeURIComponent(e.userId)}`}
-            className="group shrink-0 rounded-xl border border-[#d4d3cc] bg-white p-3 transition hover:border-[#0a7d72]"
+            className="group shrink-0 rounded-xl border border-paper-rule bg-white p-3 transition hover:border-paper-teal"
             style={{ minWidth: 200, maxWidth: 240 }}
           >
             <div className="flex items-center gap-2">
@@ -462,28 +462,28 @@ function FeaturedEmployers() {
                   className="h-9 w-9 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0a7d72]/15 text-sm font-bold text-[#075b53]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-paper-teal/15 text-sm font-bold text-paper-teal-deep">
                   {(e.name ?? "?").charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
-                  <span className="truncate text-sm font-semibold text-[#17181a] group-hover:text-[#075b53]">
+                  <span className="truncate text-sm font-semibold text-paper-ink group-hover:text-paper-teal-deep">
                     {e.name ?? "Anonymous"}
                   </span>
                   {e.verifiedAt && (
                     <span className="text-[10px] text-[#1f6f9f]" title="Verified">✓</span>
                   )}
                 </div>
-                {e.city && <div className="truncate text-[10px] text-[#74767c]">📍 {e.city}</div>}
+                {e.city && <div className="truncate text-[10px] text-paper-ink-faint">📍 {e.city}</div>}
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] text-[#74767c]">
+            <div className="mt-2 flex items-center justify-between text-[10px] text-paper-ink-faint">
               <span>
                 {e.openVacancies > 0 ? (
-                  <span className="text-[#075b53]">{e.openVacancies} open</span>
+                  <span className="text-paper-teal-deep">{e.openVacancies} open</span>
                 ) : (
-                  <span className="text-[#9a9c9f]">no open roles</span>
+                  <span className="text-paper-ink-faint-2">no open roles</span>
                 )}
               </span>
               <span>
@@ -503,39 +503,39 @@ function FeaturedEmployers() {
 function FirstProjectCta() {
   const { t } = useI18n();
   return (
-    <div className="rounded-2xl border-y-[3px] border-[#17181a] bg-[#fffefb] p-8 text-center">
+    <div className="rounded-2xl border-y-[3px] border-paper-ink bg-paper-card p-8 text-center">
       <div className="text-5xl">🏗</div>
-      <h2 className="mt-4 text-xl font-bold text-[#17181a]">{t("build.home.ctaTitle")}</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-[#45474c]">
+      <h2 className="mt-4 text-xl font-bold text-paper-ink">{t("build.home.ctaTitle")}</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-paper-ink-soft">
         {t("build.home.ctaDescription")}
       </p>
-      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-[#45474c] sm:grid-cols-3">
-        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
+      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-paper-ink-soft sm:grid-cols-3">
+        <div className="rounded-lg border border-paper-rule bg-white px-3 py-2">
           <div className="text-base">📝</div>
-          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep1Title")}</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep1Desc")}</p>
+          <div className="mt-1 font-semibold text-paper-ink">{t("build.home.ctaStep1Title")}</div>
+          <p className="mt-0.5 text-[11px] text-paper-ink-faint">{t("build.home.ctaStep1Desc")}</p>
         </div>
-        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
+        <div className="rounded-lg border border-paper-rule bg-white px-3 py-2">
           <div className="text-base">👥</div>
-          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep2Title")}</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep2Desc")}</p>
+          <div className="mt-1 font-semibold text-paper-ink">{t("build.home.ctaStep2Title")}</div>
+          <p className="mt-0.5 text-[11px] text-paper-ink-faint">{t("build.home.ctaStep2Desc")}</p>
         </div>
-        <div className="rounded-lg border border-[#d4d3cc] bg-white px-3 py-2">
+        <div className="rounded-lg border border-paper-rule bg-white px-3 py-2">
           <div className="text-base">✓</div>
-          <div className="mt-1 font-semibold text-[#17181a]">{t("build.home.ctaStep3Title")}</div>
-          <p className="mt-0.5 text-[11px] text-[#74767c]">{t("build.home.ctaStep3Desc")}</p>
+          <div className="mt-1 font-semibold text-paper-ink">{t("build.home.ctaStep3Title")}</div>
+          <p className="mt-0.5 text-[11px] text-paper-ink-faint">{t("build.home.ctaStep3Desc")}</p>
         </div>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Link
           href="/build/create-project"
-          className="rounded-lg bg-[#0a7d72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#075b53]"
+          className="rounded-lg bg-paper-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-paper-teal-deep"
         >
           {t("build.home.ctaCreateFirst")}
         </Link>
         <Link
           href="/build/onboarding"
-          className="rounded-lg border border-[#c2c8cf] bg-white px-5 py-2.5 text-sm font-semibold text-[#17181a] transition hover:bg-[#efeee8]"
+          className="rounded-lg border border-paper-rule-soft bg-white px-5 py-2.5 text-sm font-semibold text-paper-ink transition hover:bg-paper-2"
         >
           {t("build.home.ctaOnboarding")}
         </Link>

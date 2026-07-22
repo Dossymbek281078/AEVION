@@ -56,6 +56,7 @@ interface RevenuePace {
   change?: { grossUsd: number };
   windowDays: number;
   points: number;
+  first?: { capturedAt: string };
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -109,6 +110,20 @@ function etaLabel(target: number, current: number, pace: RevenuePace | null): st
   return `в темпе — ~${days.toLocaleString("en-US")} дн.`;
 }
 
+/** Compact form for large dollar amounts ($19,999,821 → $20.0M); small ones stay exact. */
+function formatCompactUsd(n: number): string {
+  if (n < 10_000) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return `$${Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
+}
+
+function agoLabel(sinceMs: number, nowMs: number): string {
+  const s = Math.max(0, Math.round((nowMs - sinceMs) / 1000));
+  if (s < 60) return `${s} сек`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} мин`;
+  return `${Math.round(m / 60)} ч`;
+}
+
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
@@ -120,22 +135,38 @@ export default function RevenuePage() {
   const [recentLoading, setRecentLoading] = useState(true);
   const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
   const [pace, setPace] = useState<RevenuePace | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   // Each channel fetches independently — a slow/stuck one no longer blocks
   // the whole page; every section renders as soon as its own data lands.
+  // Re-runs every 60s so a tab left open doesn't go stale under its own
+  // "обновлено N назад" timestamp.
   useEffect(() => {
-    fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setOverview(d); setOverviewLoading(false); });
-    fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setBalance(d); setBalanceLoading(false); });
-    fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setRecent(d); setRecentLoading(false); });
-    fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setLsBalance(d); setLsLoading(false); });
-    fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
-      .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
-    fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
-      .then((d) => setPace(d));
+    const touch = () => setLastUpdatedAt(Date.now());
+    const loadAll = () => {
+      fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setOverview(d); setOverviewLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setBalance(d); setBalanceLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setRecent(d); setRecentLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setLsBalance(d); setLsLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
+        .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
+      fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
+        .then((d) => setPace(d));
+    };
+    loadAll();
+    const t = setInterval(loadAll, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Live "N сек назад" — ticks every second while the tab is open.
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
   }, []);
 
   const providers = overview?.providers;
@@ -159,6 +190,9 @@ export default function RevenuePage() {
             <h1 className="text-xl font-semibold text-white">AEVION Revenue Hub</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               Gumroad · LemonSqueezy · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
+              {lastUpdatedAt && (
+                <span className="ml-2 text-xs text-gray-500">· обновлено {agoLabel(lastUpdatedAt, nowTick)} назад</span>
+              )}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
@@ -197,6 +231,11 @@ export default function RevenuePage() {
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
                 eta={etaLabel(goals.stretchUsd, totalGross, pace)}
               />
+            </div>
+          )}
+          {pace && pace.points >= 2 && pace.first?.capturedAt && (
+            <div className="mt-2 text-[11px] text-gray-500">
+              Прогноз темпа — по {pace.points} снапшотам за 30 дней, с {new Date(pace.first.capturedAt).toLocaleDateString("ru")}
             </div>
           )}
         </section>
@@ -537,10 +576,18 @@ function SkeletonGrid({ cols }: { cols: number }) {
 }
 
 function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
+  const [exact, setExact] = useState(false);
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
+  const reached = pct >= 100;
+  const currentStr = exact ? `$${current.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(current);
+  const remainingStr = exact ? `$${remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining);
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <div
+      className={`bg-gray-900 border rounded-xl p-5 transition-shadow ${
+        reached ? "border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.35)] animate-pulse" : "border-gray-800"
+      }`}
+    >
       <div className="flex items-baseline justify-between mb-2">
         <div className="text-sm font-medium text-gray-300">{label}</div>
         <div className="text-xs text-gray-500 font-mono">{pct >= 0.1 ? pct.toFixed(1) : pct.toFixed(4)}%</div>
@@ -551,10 +598,15 @@ function GoalBar({ label, target, current, colorClass, eta }: { label: string; t
           style={{ width: `${pct > 0 ? Math.max(pct, 0.6) : 0}%` }}
         />
       </div>
-      <div className="flex items-baseline justify-between mt-2 text-xs text-gray-500">
-        <span>${current.toLocaleString("en-US", { maximumFractionDigits: 2 })} собрано</span>
-        <span>осталось ${remaining.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
-      </div>
+      <button
+        type="button"
+        onClick={() => setExact((v) => !v)}
+        className="w-full flex items-baseline justify-between mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        title={exact ? "Скрыть точную сумму" : "Показать точную сумму"}
+      >
+        <span>{currentStr} собрано</span>
+        <span>осталось {remainingStr}</span>
+      </button>
       {eta && <div className="mt-1.5 text-[11px] text-emerald-400/80">{eta}</div>}
     </div>
   );

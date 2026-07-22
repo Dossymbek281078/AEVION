@@ -1212,6 +1212,13 @@ export default function CyberChessPage(){
   // the ecb callback (3rd arg). Displayed as a small "d18/35" badge next to evalCp
   // so users can see progressive deepening in real time.
   const[evalDepth,sEvalDepth]=useState(0);
+  // Engine-verified best move (UCI, e.g. "e2e4") for the CURRENT position — captured
+  // from the live-eval Stockfish call's `done` callback. Used to ground the AI Coach
+  // chat in a real, legal move instead of letting the LLM invent one from the FEN
+  // alone (LLMs are unreliable at chess move legality even when told not to guess).
+  // Ref, not state — read lazily when a chat message is composed, doesn't need to
+  // trigger a render on its own.
+  const evalBestUciRef=useRef<string|null>(null);
   const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]);
   const[analyzing,sAnalyzing]=useState(false);
   // MultiPV
@@ -2781,7 +2788,7 @@ export default function CyberChessPage(){
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
           if(typeof depth==="number"&&depth>0)sEvalDepth(depth);
-        },()=>{done=true});
+        },(best)=>{done=true;evalBestUciRef.current=best||null;});
       },{timeout:200})
       :setTimeout(()=>{
         if(done||!sfR.current?.ready())return;
@@ -2789,7 +2796,7 @@ export default function CyberChessPage(){
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
           if(typeof depth==="number"&&depth>0)sEvalDepth(depth);
-        },()=>{done=true});
+        },(best)=>{done=true;evalBestUciRef.current=best||null;});
       },150);
     return()=>{
       done=true;
@@ -10414,18 +10421,29 @@ export default function CyberChessPage(){
                   :"";
                 const openingCtx=currentOpening?`\nДебют: ${currentOpening.eco} ${currentOpening.name}`:"";
                 const variantCtx=variant!=="standard"?`\nВариант: ${variant}`:"";
+                // Ground the LLM in moves that are ACTUALLY legal in this exact position —
+                // chess.js is deterministic and always correct, unlike an LLM reading a raw
+                // FEN string. This is what stops the coach from suggesting moves that don't
+                // exist on the board (reported bug: hallucinated non-existent moves).
+                const legalSan=game.moves();
+                const legalMovesCtx=legalSan.length>0
+                  ?`\nЛегальные ходы в этой позиции (${legalSan.length}): ${legalSan.join(", ")}`
+                  :"\n(партия окончена — легальных ходов нет)";
+                const bestUci=evalBestUciRef.current;
+                const bestSan=bestUci?uciToSan(fen,[bestUci])[0]:undefined;
+                const bestMoveCtx=bestSan&&bestSan!=="?"?`\nЛучший ход по движку (проверен, легален): ${bestSan}`:"";
                 // Build context block prepended to the user's question for the API.
                 const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
 FEN: ${fen}
 Ход ${Math.floor(hist.length/2)+1}, ${turn} ходят. Фаза: ${phase}.${openingCtx}${variantCtx}
 Последние ходы: ${recent||"начало партии"}
 Последний ход: ${lastMove}
-Engine eval: ${evalCpStr} (с точки зрения белых)
+Engine eval: ${evalCpStr} (с точки зрения белых)${bestMoveCtx}${legalMovesCtx}
 Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}${annotSummary}
 
 ВОПРОС УЧЕНИКА:
 ${question.trim()}`;
-                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. Не выдумывай ходов. Если есть аннотации — прокомментируй отмеченные моменты.`;
+                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. КРИТИЧЕСКИ ВАЖНО: любой ход, который ты называешь как возможный/рекомендуемый ход В ТЕКУЩЕЙ позиции, ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его как основу для конкретных рекомендаций. Если есть аннотации — прокомментируй отмеченные моменты.`;
                 try{
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);

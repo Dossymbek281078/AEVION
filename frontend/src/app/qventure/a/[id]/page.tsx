@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { ResultView, VERDICT_LABEL, type AnalysisResult, type Verdict } from "../../_result";
+import paper from "@/styles/aevionPaper.module.css";
+import { ResultView, VERDICT_LABEL, SERIF, type AnalysisResult, type Verdict } from "../../_result";
 
 export const dynamic = "force-dynamic";
 
@@ -81,33 +82,35 @@ export default async function SharedAnalysisPage({ params }: Props) {
     <>
       <Wave1Nav />
       <ProductPageShell>
+       <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>
         {!a ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Analysis not found</h1>
-            <p style={{ color: "#64748b", marginTop: 8 }}>This QVenture report doesn&apos;t exist or is no longer public.</p>
-            <Link href="/qventure" style={{ display: "inline-block", marginTop: 16, padding: "10px 20px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
+            <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 800, color: "var(--ink, #17181a)" }}>Analysis not found</h1>
+            <p style={{ color: "var(--ink-faint, #74767c)", marginTop: 8 }}>This QVenture report doesn&apos;t exist or is no longer public.</p>
+            <Link href="/qventure" style={{ display: "inline-block", marginTop: 16, padding: "11px 20px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, textDecoration: "none" }}>
               Run a new analysis →
             </Link>
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", letterSpacing: 1, textTransform: "uppercase" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16, borderTop: "3px solid var(--rule-bold, #17181a)", paddingTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: "0.28em", textTransform: "uppercase" }}>
                 AEVION · QVenture · shared report
               </div>
-              <Link href="/qventure" style={{ padding: "9px 18px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
+              <Link href="/qventure" style={{ padding: "10px 18px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
                 Run your own analysis →
               </Link>
             </div>
             <ResultView result={a} shared />
-            <div style={{ marginTop: 8, padding: "18px 20px", borderRadius: 14, background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "#fff", textAlign: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Analyze any company in any sector with QVenture</div>
-              <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
+            <div style={{ marginTop: 8, padding: "20px", borderRadius: 4, background: "var(--ink, #17181a)", color: "var(--card, #fffefb)", textAlign: "center" }}>
+              <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Analyze any company in any sector with QVenture</div>
+              <Link href="/qventure" style={{ display: "inline-block", padding: "11px 22px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, textDecoration: "none" }}>
                 Get a fund-grade memo →
               </Link>
             </div>
           </>
         )}
+       </div>
       </ProductPageShell>
     </>
   );

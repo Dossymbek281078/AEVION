@@ -1,20 +1,21 @@
 /* AEVION QBuild — гид работодателя. Светлый «газетный» full-width стиль.
    Эталон дизайн-языка AEVION (см. память feedback_aevion_light_newspaper_ui).
-   Токены локальны для страницы; при выносе общего слоя заменить на shared. */
+   Цвета — алиасы на shared-токены из globals.css (@theme inline, --color-paper-*),
+   те же значения что используют BuildShell.tsx / page.tsx / onboarding / help. */
 
 .guide {
-  --paper: #f7f6f2;
-  --paper-2: #efeee8;
-  --card: #fffefb;
-  --ink: #17181a;
-  --ink-soft: #45474c;
-  --ink-faint: #74767c;
-  --rule: #d4d3cc;
-  --rule-mid: #b9b8b0;
-  --rule-bold: #17181a;
-  --teal: #0a7d72;
-  --teal-deep: #075b53;
-  --red: #b5241b;
+  --paper: var(--color-paper);
+  --paper-2: var(--color-paper-2);
+  --card: var(--color-paper-card);
+  --ink: var(--color-paper-ink);
+  --ink-soft: var(--color-paper-ink-soft);
+  --ink-faint: var(--color-paper-ink-faint);
+  --rule: var(--color-paper-rule);
+  --rule-mid: var(--color-paper-rule-mid);
+  --rule-bold: var(--color-paper-ink);
+  --teal: var(--color-paper-teal);
+  --teal-deep: var(--color-paper-teal-deep);
+  --red: var(--color-paper-red);
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;

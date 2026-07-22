@@ -61,6 +61,24 @@ const ROLE_META: Record<LensId, { role: string; brief: string }> = {
   },
 };
 
+// The quant factor each role owns. Anchoring a lens to its factor makes the
+// narrative reference the number instead of floating beside it — "unit economics
+// scored 33/100 because…" is a diligence note; a generic paragraph is filler.
+const LENS_FACTOR: Record<LensId, string> = {
+  scientist: "science",
+  data_analyst: "economics",
+  economist: "market",
+  lawyer: "legal",
+};
+
+/** The one-line "anchor" a lens is told to open from: its factor's score + why. */
+function lensAnchor(lens: LensId, result: AnalysisResult): string | null {
+  const f = result.factors.find((x) => x.key === LENS_FACTOR[lens]);
+  if (!f) return null;
+  return `Your primary quant factor is "${f.label}", currently ${f.score}/100 (${Math.round(f.weight * 100)}% of the composite). ` +
+    `Open by engaging that score directly — agree or push back on it, and say why — then broaden. Do not restate it without a view.`;
+}
+
 function providerDefaultModel(providerId: string): string {
   const p = getProviders().find((x) => x.id === providerId);
   return p?.defaultModel || "claude-opus-4-8";
@@ -152,7 +170,8 @@ async function runLens(
       `{"headline": string (<=140 chars), "points": string[3-4 concise findings], "risks": string[2-3 concrete risks]}. ` +
       `Be specific, quantitative where possible, and intellectually honest — surface the strongest counter-argument. ` +
       `If the brief lists RED FLAGS that fall in your domain, you must address them explicitly rather than writing around them: ` +
-      `a lawyer praising IP the model just penalised for lapsing, or an economist ignoring a disclosed free incumbent, is worse than no memo.`,
+      `a lawyer praising IP the model just penalised for lapsing, or an economist ignoring a disclosed free incumbent, is worse than no memo.` +
+      (lensAnchor(lens, result) ? `\n\n${lensAnchor(lens, result)}` : ""),
   };
   const legalAppendix =
     lens === "lawyer" ? `\n\n${legalContext(input, result)}` : "";

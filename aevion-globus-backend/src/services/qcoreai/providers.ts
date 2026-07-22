@@ -544,7 +544,9 @@ async function callAnthropic(messages: ChatMessage[], model: string, temperature
 
   const body: any = {
     model,
-    max_tokens: 4096,
+    // 4096 silently truncated multi-file code generations mid-JSON (found
+    // live 2026-07-22: an 8.8KB reply cut off inside a CSS string).
+    max_tokens: 8192,
     messages: chatMsgs.map((m, i) => {
       if (images?.length && m.role === "user" && i === chatMsgs.length - 1) {
         return {

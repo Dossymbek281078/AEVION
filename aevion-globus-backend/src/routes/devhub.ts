@@ -725,8 +725,54 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path
       }
     } catch { /* try the next extraction */ }
   }
+  // Truncation salvage: max_tokens can cut a reply mid-string (seen live —
+  // 8.8KB reply ending inside a CSS value). Individual complete file objects
+  // are still recoverable; parse them one by one and drop the cut-off tail.
+  const salvaged = salvageCompleteFileObjects(raw);
+  if (salvaged.length > 0) return salvaged;
   const path = targetFiles[0] || "output.ts";
   return [{ path, content: reply, language: detectLanguage(path) }];
+}
+
+/** Extract every COMPLETE {"path":…,"content":…} object from a (possibly
+ * truncated) files-array reply. Walks strings with escape awareness so braces
+ * inside code content don't fool the depth counter. */
+function salvageCompleteFileObjects(raw: string): Array<{ path: string; content: string; language: string }> {
+  const arrStart = raw.indexOf('"files"');
+  if (arrStart < 0) return [];
+  const out: Array<{ path: string; content: string; language: string }> = [];
+  let i = raw.indexOf("[", arrStart);
+  if (i < 0) return [];
+  const n = raw.length;
+  while (i < n) {
+    const objStart = raw.indexOf("{", i);
+    if (objStart < 0) break;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let end = -1;
+    for (let j = objStart; j < n; j++) {
+      const ch = raw[j];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) { end = j; break; }
+      }
+    }
+    if (end < 0) break; // truncated tail — stop here
+    try {
+      const obj = JSON.parse(raw.slice(objStart, end + 1));
+      if (obj && typeof obj.path === "string" && typeof obj.content === "string") {
+        out.push({ path: obj.path, content: obj.content, language: String(obj.language || detectLanguage(obj.path)) });
+      }
+    } catch { /* malformed object — skip */ }
+    i = end + 1;
+  }
+  return out;
 }
 
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;

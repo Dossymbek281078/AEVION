@@ -19,11 +19,19 @@ export type BillingPeriod = "monthly" | "annual";
 
 /**
  * Публичные тарифы: free / lite / medium / full / pro / enterprise.
- *   - lite   = 1 любой продукт на выбор ($19)
- *   - medium = куратор-бандл готовых апп ($29)
- *   - full   = все продукты ($49)
- *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($149.99)
+ *   - lite   = 1 любой продукт на выбор ($24)
+ *   - medium = куратор-бандл готовых апп ($39)
+ *   - full   = все продукты ($89)
+ *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($249.99)
  * Годовая оплата = -2 месяца (×10).
+ *
+ * Репрайсинг 2026-07-22 (см. docs/PRICING_STRATEGY_2026-07.md): платформенные
+ * тарифы подняты так, чтобы Universe/Full/Medium стоили выше эквивалентной
+ * одиночной AI-подписки (Claude Pro/Max, ChatGPT Plus/Pro) — AEVION даёт
+ * несравнимо больше ценности одной подпиской. Отдельные же продукты с прямым
+ * конкурентом (cyberchess, qcoreai-addon — см. MODULES_PRICING ниже) идут
+ * ПРОТИВОПОЛОЖНЫМ курсом: ~50% ниже своего конкурента, чтобы отвоёвывать
+ * пользователей поштучно, пока монетизация всей платформы идёт через bundle.
  *
  * `pro` ЖИВОЙ публичный тариф (id "pro", имя "Universe") — есть в TIERS ниже,
  * реально продаётся через checkout.ts, попадает в /pricing/[tierId]. Раньше
@@ -157,9 +165,9 @@ export const TIERS: PricingTier[] = [
     id: "lite",
     name: "Lite",
     tagline: "Один продукт AEVION на твой выбор",
-    priceMonthly: 19,
-    priceAnnualPerMonth: annualPerMonth(19),
-    priceAnnualTotal: annualTotal(19),
+    priceMonthly: 24,
+    priceAnnualPerMonth: annualPerMonth(24),
+    priceAnnualTotal: annualTotal(24),
     features: [
       "1 любой продукт AEVION на выбор",
       "Полный доступ к выбранному продукту",
@@ -182,9 +190,9 @@ export const TIERS: PricingTier[] = [
     id: "medium",
     name: "Medium",
     tagline: "Бандл готовых продуктов AEVION",
-    priceMonthly: 29,
-    priceAnnualPerMonth: annualPerMonth(29),
-    priceAnnualTotal: annualTotal(29),
+    priceMonthly: 39,
+    priceAnnualPerMonth: annualPerMonth(39),
+    priceAnnualTotal: annualTotal(39),
     features: [
       "10 готовых продуктов AEVION в одной подписке",
       "CyberChess, HealthAI, Multichat, QCoreAI, Smeta",
@@ -208,9 +216,9 @@ export const TIERS: PricingTier[] = [
     id: "full",
     name: "Full",
     tagline: "Вся экосистема AEVION без ограничений",
-    priceMonthly: 49,
-    priceAnnualPerMonth: annualPerMonth(49),
-    priceAnnualTotal: annualTotal(49),
+    priceMonthly: 89,
+    priceAnnualPerMonth: annualPerMonth(89),
+    priceAnnualTotal: annualTotal(89),
     features: [
       "Все продукты AEVION (30+)",
       "QRight + QSign + IP Bureau (полный доступ)",
@@ -233,10 +241,10 @@ export const TIERS: PricingTier[] = [
   {
     id: "pro",
     name: "Universe",
-    tagline: "Всё AEVION в одном месте — единое премиум-место (Apple-style)",
-    priceMonthly: 149.99,
-    priceAnnualPerMonth: annualPerMonth(149.99),
-    priceAnnualTotal: annualTotal(149.99),
+    tagline: "Всё AEVION в одном месте — флагман экосистемы (Apple-style)",
+    priceMonthly: 249.99,
+    priceAnnualPerMonth: annualPerMonth(249.99),
+    priceAnnualTotal: annualTotal(249.99),
     features: [
       "Всё из Full + приоритетный доступ ко всем новым модулям",
       "QCoreAI: 200 000 000 токенов / месяц",
@@ -244,7 +252,7 @@ export const TIERS: PricingTier[] = [
       "Оффлайн/локальные модели (приватность, $0 за токены)",
       "Ранний доступ к site-builder и агентским фичам",
       "Приоритетная поддержка (6h SLA)",
-      "Вводная цена на первые 6–12 месяцев — далее может вырасти",
+      "Больше, чем один любой AI-сервис на максимальном тарифе — потому что тут вся платформа AEVION, а не один продукт",
     ],
     limits: {
       modules: null,
@@ -318,7 +326,10 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qcoreai",
-    addonMonthly: 29,
+    // ~50% below Claude Pro / ChatGPT Plus ($20/mo) as a standalone AI
+    // subscription — penetration pricing against single-purpose AI rivals,
+    // same logic applied to cyberchess below. See docs/PRICING_STRATEGY_2026-07.md.
+    addonMonthly: 9.99,
     includedIn: ["medium", "full", "enterprise"],
     availability: "live",
     oneLiner: "AI Core Engine: оркестрация агентов и LLM",
@@ -394,7 +405,10 @@ export const MODULES_PRICING: ModulePrice[] = [
   // ===== CONSUMER PRODUCTS ===== (CyberChess/HealthAI входят в Medium)
   {
     id: "cyberchess",
-    addonMonthly: 19,
+    // ~50% below chess.com Diamond (~$20/mo monthly billing) — penetration
+    // pricing against the direct single-purpose rival while it's still
+    // building traction. See docs/PRICING_STRATEGY_2026-07.md.
+    addonMonthly: 9.99,
     includedIn: ["medium", "full", "enterprise"],
     availability: "live",
     oneLiner: "Шахматная платформа нового поколения",
@@ -684,8 +698,10 @@ export const BUNDLES: PricingBundle[] = [
     name: "AI Suite",
     description: "QCoreAI + Multichat + Kids AI — единая AI-платформа",
     modules: ["qcoreai", "multichat-engine", "kids-ai-content"],
-    priceMonthly: 49,
-    savingsPercent: 12,
+    // Recomputed 2026-07-22 after qcoreai's addonMonthly dropped to 9.99:
+    // components now sum to 37.99 (9.99 + 19 + 9); 33 keeps a genuine ~13% bundle discount.
+    priceMonthly: 33,
+    savingsPercent: 13,
   },
   {
     id: "fintech-suite",

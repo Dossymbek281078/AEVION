@@ -237,7 +237,12 @@
       "Bash(powershell -Command 'foreach\\($p in 3000,3001,4001\\){ $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; if\\($c\\){ Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } }')",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 801 -R Dossymbek281078/AEVION --watch --interval 15)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 801 --squash --delete-branch -R Dossymbek281078/AEVION)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 801 -R Dossymbek281078/AEVION --json state,statusCheckRollup)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 801 -R Dossymbek281078/AEVION --json state,statusCheckRollup)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 817 -R Dossymbek281078/AEVION --watch --interval 15)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 817 --squash --delete-branch -R Dossymbek281078/AEVION)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 817 -R Dossymbek281078/AEVION --json state,statusCheckRollup)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://aevion.app/qskyway)",
+      "Bash(curl -s https://api.aevion.app/api/qskyway/health)"
     ]
   }
 }

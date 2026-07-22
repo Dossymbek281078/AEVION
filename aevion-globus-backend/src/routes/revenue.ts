@@ -461,8 +461,7 @@ revenueRouter.get("/health", (_req, res) => {
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),
-        note: "KYC не пройдена — не используется как живой канал",
-        setupGuide: "/api/paddle/setup-guide",
+        note: "KYC не пройдена — не используется; /api/paddle/* routes удалены (PR #779)",
       },
       paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim()), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
       paypal: { configured: Boolean(process.env.PAYPAL_CLIENT_ID?.trim() && process.env.PAYPAL_SECRET?.trim()), sandbox: process.env.PAYPAL_SANDBOX !== "0", note: "Глобальный карт/PayPal-канал. Каскад checkout: method=paypal → PayPal Orders v2." },
@@ -542,7 +541,7 @@ revenueRouter.get("/apps/:appId", async (req, res) => {
       sandbox: PADDLE_SANDBOX(),
     };
   } else {
-    result.paddle = { stub: true, message: "PADDLE_API_KEY not set — visit /api/paddle/setup-guide" };
+    result.paddle = { stub: true, message: "PADDLE_API_KEY not set — Paddle не используется (KYC), канал = Gumroad" };
   }
 
   res.json(result);
@@ -632,7 +631,7 @@ revenueRouter.get("/twitch/:login", async (req, res) => {
  */
 revenueRouter.get("/paddle/balance", async (_req, res) => {
   if (!PADDLE_KEY()) {
-    return res.json({ stub: true, message: "PADDLE_API_KEY not set", setupGuide: "/api/paddle/setup-guide" });
+    return res.json({ stub: true, message: "PADDLE_API_KEY not set — Paddle decommissioned (PR #779)" });
   }
   const data = await paddleGet("/transactions?per_page=50&status_equals=completed") as {
     data?: { total?: string; currency_code?: string; custom_data?: Record<string, string> }[];
@@ -649,7 +648,7 @@ revenueRouter.get("/paddle/balance", async (_req, res) => {
  */
 revenueRouter.get("/paddle/recent", async (_req, res) => {
   if (!PADDLE_KEY()) {
-    return res.json({ stub: true, transactions: [], message: "PADDLE_API_KEY not set", setupGuide: "/api/paddle/setup-guide" });
+    return res.json({ stub: true, transactions: [], message: "PADDLE_API_KEY not set — Paddle decommissioned (PR #779)" });
   }
   const data = await paddleGet("/transactions?per_page=20&order_by=id[DESC]") as {
     data?: { id: string; status: string; custom_data?: Record<string, string>; total?: string; currency_code?: string; created_at?: string }[];
@@ -952,6 +951,5 @@ revenueRouter.get("/env-guide", (_req, res) => {
         envKeyPattern: `GUMROAD_APP_<PERMALINK>=${a.appId}`,
       })),
     },
-    setupGuide: "/api/paddle/setup-guide",
   });
 });

@@ -34,10 +34,15 @@ function fail(name, reason) {
   console.error(`       ↳ ${reason}`);
 }
 
+let TOKEN = null;
+
 async function call(method, path, body) {
+  const headers = {};
+  if (body) headers["content-type"] = "application/json";
+  if (TOKEN) headers["authorization"] = `Bearer ${TOKEN}`;
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   let json = null;
@@ -48,8 +53,18 @@ async function call(method, path, body) {
 async function main() {
   console.log(`AEV smoke against ${BASE} (deviceId=${DEVICE})\n`);
 
+  // 0. register a throwaway user — prod requires Bearer on mint/sync/spend
+  // (AEC↔fiat boundary R1, docs/bank/AEC_FIAT_BOUNDARY.md). Non-prod
+  // tolerates anonymous, but authed works everywhere, so always auth.
+  const email = `smoke+aev${Date.now()}@aevion.test`;
+  let r = await call("POST", "/api/auth/register", { email, password: "smoke-password-1234", name: "AEV Smoke" });
+  if ((r.status === 200 || r.status === 201) && r.body?.token) {
+    TOKEN = r.body.token;
+    ok("register throwaway user", email);
+  } else return fail("register", `status=${r.status}`);
+
   // 1. baseline stats
-  let r = await call("GET", "/api/aev/stats");
+  r = await call("GET", "/api/aev/stats");
   if (r.status === 200 && r.body?.ok) ok("baseline GET /api/aev/stats", `wallets=${r.body.wallets} ledger=${r.body.ledgerEntries}`);
   else return fail("baseline GET /api/aev/stats", `status=${r.status}`);
 
@@ -97,6 +112,12 @@ async function main() {
   r = await call("GET", `/api/aev/wallet/x`);
   if (r.status === 400 && r.body?.error === "invalid_device_id") ok("invalid deviceId → 400");
   else return fail("invalid deviceId", `expected 400 got ${r.status}`);
+
+  // 11. cleanup — delete the throwaway user (wallet/ledger entries persist;
+  // append-only ledger is bounded, same trade-off as bank-prod-smoke)
+  r = await call("DELETE", "/api/auth/account");
+  if (r.status === 200 || r.status === 204) ok("cleanup DELETE /api/auth/account");
+  else fail("cleanup account", `status=${r.status}`);
 }
 
 main()

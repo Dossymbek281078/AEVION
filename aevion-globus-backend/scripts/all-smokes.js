@@ -70,7 +70,10 @@ const SMOKES = [
   // CyberChess finalize→prize webhook — live end-to-end: signed /tournament-finalized
   // records a podium prize, idempotent replay drops dups, GET /results (Bearer-scoped)
   // surfaces it for the Bank ChessWinnings UI. Signs with CYBERCHESS_WEBHOOK_SECRET.
-  { name: "cyberchess-finalize", script: "cyberchess-finalize-smoke.js", readOnly: false, env: { CYBERCHESS_WEBHOOK_SECRET: process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook" } },
+  // No dev-secret fallback here: the script itself defaults to the dev secret
+  // for local runs, and against prod it must SEE that no real secret was
+  // provided so it can self-skip the signed-path asserts (gate-check only).
+  { name: "cyberchess-finalize", script: "cyberchess-finalize-smoke.js", readOnly: false, env: process.env.CYBERCHESS_WEBHOOK_SECRET ? { CYBERCHESS_WEBHOOK_SECRET: process.env.CYBERCHESS_WEBHOOK_SECRET } : {} },
   { name: "smeta-trainer", script: "smeta-trainer-smoke.js", readOnly: false },
   { name: "multichat", script: "multichat-smoke.js", readOnly: false },
   // HealthAI — profile/log/screener/plan/LLM-check (soft: needs ANTHROPIC_API_KEY)

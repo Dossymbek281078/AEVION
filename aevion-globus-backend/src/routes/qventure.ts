@@ -109,7 +109,9 @@ async function ensureExampleAnalyses(): Promise<void> {
 
 // ── Limiters ────────────────────────────────────────────────────────────────
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 40, keyPrefix: "qventure:general", message: "rate_limited" });
-const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 6, keyPrefix: "qventure:analyze", message: "rate_limited" });
+// 6/min left no room: an investor screening a handful of deals in one sitting hit
+// the wall, and the smoke suite sat exactly at the ceiling so any retry failed it.
+const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 15, keyPrefix: "qventure:analyze", message: "rate_limited" });
 
 export const qventureRouter = Router();
 qventureRouter.use(generalLimiter);

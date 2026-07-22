@@ -132,6 +132,14 @@ async function run() {
   // call — /analyze is limited to 6/min and the suite already sits at that ceiling.
   assert("clean deal is not penalised", d?.result?.redFlags?.length === 0,
     String(d?.result?.redFlags?.length));
+  // A pass must say what would have to change; naming a cheque size for a deal
+  // you are declining reads as a recommendation.
+  const rec = dr?.strategy?.reEntryConditions;
+  assert("pass carries re-entry conditions", Array.isArray(rec) && rec.length >= 3, String(rec?.length));
+  assert("pass names the points-to-55 gap", rec.some((c) => /re-score must reach 55/i.test(c)));
+  assert("pass does not recommend a ticket", dr.strategy.reasoning.some((r) => /no ticket recommended/i.test(r)));
+  assert("non-pass has no re-entry conditions", d?.result?.strategy?.reEntryConditions === undefined,
+    String(d?.result?.strategy?.reEntryConditions));
 
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);

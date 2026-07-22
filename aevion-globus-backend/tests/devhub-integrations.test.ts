@@ -415,6 +415,48 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the project", () => {
+  test("updates changed files, creates new ones, checkpoints first, and skips binaries", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "S" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>old</h1>" });
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
+
+    const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/repos/o/r")) return jsonResp(200, { default_branch: "main" });
+      if (u.includes("/git/trees/main")) return jsonResp(200, { tree: [
+        { path: "index.html", type: "blob", sha: "s1", size: 20 },
+        { path: "app.js", type: "blob", sha: "s2", size: 30 },
+        { path: "logo.png", type: "blob", sha: "s3", size: 40 },
+      ] });
+      if (u.includes("/git/blobs/s1")) return jsonResp(200, { encoding: "base64", content: b64("<h1>new from repo</h1>") });
+      if (u.includes("/git/blobs/s2")) return jsonResp(200, { encoding: "base64", content: b64("console.log(1)") });
+      throw new Error(`unexpected ${u}`);
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/sync`).send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.updated).toEqual(["index.html"]);
+    expect(r.body.created).toEqual(["app.js"]);
+    expect(r.body.skipped).toContain("logo.png");
+    expect(r.body.checkpointId).toBeTruthy();
+
+    const f = await request(app).get(`/api/devhub/projects/${id}/file?path=index.html`);
+    expect(f.body.file.content).toBe("<h1>new from repo</h1>");
+    // Undo restores the pre-sync content — the safety contract holds.
+    const undo = await request(app).post(`/api/devhub/projects/${id}/generate/undo`);
+    expect(undo.status).toBe(200);
+    const f2 = await request(app).get(`/api/devhub/projects/${id}/file?path=index.html`);
+    expect(f2.body.file.content).toBe("<h1>old</h1>");
+    delete process.env.GITHUB_TOKEN;
+  });
+});
+
 describe("parseGeneratedFiles robustness — JSON wrapped in prose/fences", () => {
   test("fenced JSON with prose around it parses into real files, not an output.ts dump", async () => {
     vi.mocked(getProviders).mockReturnValue([

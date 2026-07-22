@@ -187,6 +187,18 @@ export const TOOL_SPECS: ToolSpec[] = [
     },
   },
   {
+    name: "sync_from_github",
+    description:
+      "Pull the linked GitHub repo's current default-branch files INTO the open DevHub project (the reverse of " +
+      "push). Use when the user says the repo changed outside DevHub, or asks to sync/pull latest from GitHub. " +
+      "A checkpoint is taken first, so undo_last_generation restores the pre-sync state. Only works when the " +
+      "project has a linked repo.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
     name: "design_database",
     description:
       "Design a PostgreSQL database for the currently open DevHub project from a plain-language description: " +
@@ -288,6 +300,7 @@ const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string, input: Record<
   read_project_file: (projectId) => `/api/devhub/projects/${projectId}/file`,
   undo_last_generation: (projectId) => `/api/devhub/projects/${projectId}/generate/undo`,
   design_database: (projectId) => `/api/devhub/projects/${projectId}/database/design`,
+  sync_from_github: (projectId) => `/api/devhub/projects/${projectId}/github/sync`,
 };
 
 /** Per-request context an executor may need beyond the model's tool input. */

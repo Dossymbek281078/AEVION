@@ -269,7 +269,7 @@ router.post('/comment', async (req: Request, res: Response) => {
 
 // ─── POST /ask ──────────────────────────────────────────────────────────
 // Body: { question, fen?, lastMove?, history?, sessionId?, eval?, userSide?,
-//         model?, temperature? }
+//         legalMoves?, bestMove?, model?, temperature? }
 // Returns: { text: string, sessionId: string }
 router.post('/ask', async (req: Request, res: Response) => {
   try {
@@ -281,6 +281,8 @@ router.post('/ask', async (req: Request, res: Response) => {
       sessionId?: string;
       eval?: EvalInfo | null;
       userSide?: 'w' | 'b';
+      legalMoves?: string[];
+      bestMove?: string;
       model?: string;
       temperature?: number;
     };
@@ -313,6 +315,10 @@ router.post('/ask', async (req: Request, res: Response) => {
           priorMessages: session.messages,
           eval: body.eval ?? null,
           userSide: body.userSide,
+          legalMoves: Array.isArray(body.legalMoves)
+            ? body.legalMoves.filter((m) => typeof m === 'string').slice(0, 128).map((m) => m.slice(0, 12))
+            : undefined,
+          bestMove: typeof body.bestMove === 'string' ? body.bestMove.slice(0, 12) : undefined,
         },
         {
           qcoreaiBase: qcoreaiBase(),

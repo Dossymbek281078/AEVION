@@ -102,7 +102,13 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 791 --json state,mergedAt)",
       "Bash(node bin/sign-project.js \"C:\\\\Users\\\\user\\\\aevion-backend-modules\")",
       "Bash(npm install *)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(authorship\\): correct founder name spelling \\(Досымбек Жақия\\)' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(authorship\\): correct founder name spelling \\(Досымбек Жақия\\)' --body ' *)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe workflow *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X PUT repos/Dossymbek281078/AEVION/pulls/826/merge -f merge_method=squash)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/qbuild-vacancy-detail-location)",
+      "Bash(node -e 'console.log\\(JSON.stringify\\({brief:\"сварщик вахтой в Атырау, от 3 лет опыта\", city:null}\\)\\)')",
+      "Bash(git show *)",
+      "Read(//tmp/**)"
     ]
   }
 }

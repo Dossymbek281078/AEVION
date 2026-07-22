@@ -57,6 +57,8 @@ export interface AnalysisResult {
   composite: number;
   verdict: Verdict;
   result: {
+    /** Rubric generation that produced this score; absent on records predating versioning. */
+    rubricVersion?: number;
     factors: ScoreFactor[];
     strategy: Strategy;
     assumptions: string[];
@@ -195,6 +197,59 @@ export function FactorBar({ f }: { f: ScoreFactor }) {
         <div style={{ width: `${f.score}%`, height: "100%", background: color }} />
       </div>
       <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{f.rationale}</div>
+    </div>
+  );
+}
+
+/**
+ * Score breakdown, split by what the number is actually about.
+ *
+ * Listing all eight factors flat gives equal billing to rows that describe this
+ * company and rows that are the same for every deal in the sector. Reading top
+ * to bottom, five sector constants drown the two or three rows that carry the
+ * real information. What the company disclosed leads; the sector benchmark
+ * collapses into one block that opens on demand.
+ */
+export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
+  const [showSector, setShowSector] = useState(false);
+  const company = factors.filter((f) => f.basis !== "sector-prior");
+  const sector = factors.filter((f) => f.basis === "sector-prior");
+  const sectorWeight = Math.round(sector.reduce((s, f) => s + f.weight, 0) * 100);
+
+  if (sector.length === 0 || company.length === 0) {
+    return <>{factors.map((f) => <FactorBar key={f.key} f={f} />)}</>;
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+        About this company · {100 - sectorWeight}% of the score
+      </div>
+      {company.map((f) => <FactorBar key={f.key} f={f} />)}
+
+      <button
+        type="button"
+        onClick={() => setShowSector((v) => !v)}
+        style={{
+          width: "100%", marginTop: 6, padding: "9px 12px", cursor: "pointer",
+          background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10,
+          fontSize: 12.5, fontWeight: 600, color: "#475569", textAlign: "left",
+        }}
+      >
+        {showSector ? "▾" : "▸"} Sector context · {sectorWeight}% of the score ·{" "}
+        <span style={{ fontWeight: 400 }}>
+          {sector.length} factors identical for every company in this sector
+        </span>
+      </button>
+      {showSector && (
+        <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: "3px solid #e2e8f0" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+            These are benchmarks for the sector, not findings about this company — a rival deal in
+            the same market scores the same here. They set the backdrop; they do not differentiate.
+          </p>
+          {sector.map((f) => <FactorBar key={f.key} f={f} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -705,6 +760,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "#1e293b", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>
           Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
+          {result.result.rubricVersion ? ` · scored by rubric v${result.result.rubricVersion} — scores are only comparable within a version` : ""}
         </div>
       </div>
 
@@ -729,7 +785,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
             labels={{ measured: "из данных стартапа", derived: "секторный бенчмарк", guessed: "нет данных", unit: "факторов" }}
           />
         </div>
-        {result.result.factors.map((f) => <FactorBar key={f.key} f={f} />)}
+        <FactorBreakdown factors={result.result.factors} />
       </div>
 
       <div style={SECTION}>

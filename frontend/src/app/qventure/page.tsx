@@ -544,9 +544,22 @@ function FormFields({ form, set, sectors, full = false }: {
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
-          <label style={LABEL}>Traction / metrics (optional — improves the execution score)</label>
+          <label style={LABEL}>Traction / metrics</label>
           <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
             placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
+          {/* Execution carries 28% of the composite and scores low — not neutral — when
+              nothing is submitted. Saying so here beats letting someone submit an empty
+              field and be surprised by the number. */}
+          {!form.tractionNotes.trim() && (
+            <div style={{
+              marginTop: 6, fontSize: 12, lineHeight: 1.5, color: "#92400e",
+              background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 11px",
+            }}>
+              Leaving this empty caps the score at about 58 — no submission without metrics has
+              ever reached &ldquo;invest&rdquo;. Execution is 28% of the total and counts as unproven,
+              not neutral. Any real figure moves it: revenue, customers, growth, retention.
+            </div>
+          )}
         </div>
       )}
       {full && (

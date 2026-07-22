@@ -164,6 +164,16 @@ async function run() {
   assert("disclosed traction marks execution as company evidence",
     d.result.factors.find((f) => f.key === "execution")?.basis === "company-evidence");
 
+  // Scores are only comparable within a rubric version — the gallery, percentiles
+  // and watchlist all rank stored analyses against each other.
+  console.log("\n12. Scores are stamped with the rubric that produced them");
+  assert("result carries a rubric version", typeof d.result.rubricVersion === "number",
+    String(d.result.rubricVersion));
+  assert("rubric version is >= 3", d.result.rubricVersion >= 3, String(d.result.rubricVersion));
+  assert("stored record keeps the rubric version",
+    typeof fetched.body?.data?.result?.rubricVersion === "number",
+    String(fetched.body?.data?.result?.rubricVersion));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

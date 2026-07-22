@@ -29,6 +29,7 @@ import {
 } from "@/lib/build/geo";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
+import { useI18n } from "@/lib/i18n";
 
 const STATUSES: ProjectStatus[] = ["OPEN", "IN_PROGRESS", "DONE"];
 
@@ -42,6 +43,7 @@ type ProjectBundle = {
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const me = useBuildAuth((s) => s.user);
+  const { t } = useI18n();
 
   const [bundle, setBundle] = useState<ProjectBundle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,7 +112,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               href={`/build/references/write/${project.id}`}
               className="rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/20 transition-colors"
             >
-              📝 Рекомендации
+              {t("build.projectDetail.references")}
             </Link>
           )}
           {client && (
@@ -615,6 +617,7 @@ function NewVacancyButton({
   const [educationLevel, setEducationLevel] = useState<EducationLevel | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   // Cheap fuzzy-match: normalise → token-set Jaccard. Triggers a soft warning
   // if there's an active vacancy in this project with very similar title.
@@ -778,7 +781,7 @@ function NewVacancyButton({
         value={description}
         onAccept={(v) => setDescription(v)}
         kind="vacancy_description"
-        hint="Сделать описание вакансии конкретнее"
+        hint={t("build.projectDetail.aiImproveHint")}
       />
       <input
         type="number"
@@ -923,7 +926,7 @@ function NewVacancyButton({
                 }
               }}
               onBlur={addQuestion}
-              placeholder="e.g. Опишите проект где вы работали с AutoCAD"
+              placeholder={t("build.projectDetail.questionPlaceholder")}
               className="w-full rounded-md border border-fuchsia-500/20 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-fuchsia-300/40"
             />
           )}

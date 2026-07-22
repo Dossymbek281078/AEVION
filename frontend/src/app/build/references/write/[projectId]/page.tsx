@@ -6,11 +6,12 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useToast } from "@/components/build/Toast";
+import { useI18n } from "@/lib/i18n";
 
-const SKILL_PRESETS = [
-  "Пунктуальность", "Качество работы", "Коммуникация",
-  "Соблюдение сроков", "Безопасность", "Командная работа",
-  "Профессионализм", "Инициативность",
+const SKILL_PRESET_KEYS = [
+  "punctuality", "quality", "communication",
+  "deadlines", "safety", "teamwork",
+  "professionalism", "initiative",
 ];
 
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -32,6 +33,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
 }
 
 function WriteReferenceForm() {
+  const { t } = useI18n();
   const { projectId } = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -53,13 +55,17 @@ function WriteReferenceForm() {
     buildApi.getProject(projectId).then((p) => setProjectTitle(p.project?.title ?? "")).catch(() => {});
   }, [projectId]);
 
+  function skillLabel(key: string): string {
+    return t(`build.referenceWrite.skill.${key}`);
+  }
+
   function toggleSkill(s: string) {
     setSkills((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s].slice(0, 8));
   }
 
   async function submit() {
     if (!workerId.trim() || rating === 0 || text.trim().length < 20) {
-      toast.error("Укажите ID специалиста, оценку и минимум 20 символов");
+      toast.error(t("build.referenceWrite.validationError"));
       return;
     }
     setSubmitting(true);
@@ -67,32 +73,39 @@ function WriteReferenceForm() {
       await buildApi.createReference(projectId, {
         workerId: workerId.trim(),
         rating,
-        text: text.trim() + (skills.length ? `\n\nКлючевые навыки: ${skills.join(", ")}` : ""),
+        text: text.trim() + (skills.length ? `\n\n${t("build.referenceWrite.keySkillsLabel")}: ${skills.map(skillLabel).join(", ")}` : ""),
         recommend,
       });
-      toast.success("Рекомендация опубликована! Она появится в профиле специалиста.");
+      toast.success(t("build.referenceWrite.publishSuccess"));
       router.push(`/build/project/${projectId}`);
     } catch (e: unknown) {
-      toast.error((e instanceof Error ? e.message : null) ?? "Ошибка сохранения");
+      toast.error((e instanceof Error ? e.message : null) ?? t("build.referenceWrite.saveError"));
     } finally {
       setSubmitting(false);
     }
   }
 
-  const ratingLabels = ["", "Очень плохо", "Плохо", "Нормально", "Хорошо", "Отлично"];
+  const ratingLabels = [
+    "",
+    t("build.referenceWrite.rating.1"),
+    t("build.referenceWrite.rating.2"),
+    t("build.referenceWrite.rating.3"),
+    t("build.referenceWrite.rating.4"),
+    t("build.referenceWrite.rating.5"),
+  ];
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
       <div className="flex items-center gap-3 mb-2">
         <Link href={`/build/project/${projectId}`} className="text-slate-400 hover:text-white text-sm">
-          ← Проект
+          ← {t("build.referenceWrite.backToProject")}
         </Link>
         <span className="text-slate-700">·</span>
-        <h1 className="text-lg font-bold">Написать рекомендацию</h1>
+        <h1 className="text-lg font-bold">{t("build.referenceWrite.title")}</h1>
       </div>
       {projectTitle && (
         <p className="text-slate-400 text-sm mb-6">
-          Проект: <strong className="text-white">{projectTitle}</strong>
+          {t("build.referenceWrite.projectLabel")}: <strong className="text-white">{projectTitle}</strong>
         </p>
       )}
 
@@ -100,7 +113,7 @@ function WriteReferenceForm() {
         {/* Worker */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-            Специалист
+            {t("build.referenceWrite.specialistLabel")}
           </label>
           {workerName ? (
             <div className="flex items-center gap-3 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3">
@@ -118,11 +131,11 @@ function WriteReferenceForm() {
                 type="text"
                 value={workerId}
                 onChange={(e) => setWorkerId(e.target.value)}
-                placeholder="User ID специалиста"
+                placeholder={t("build.referenceWrite.specialistIdPlaceholder")}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500"
               />
               <p className="text-xs text-slate-600 mt-1">
-                Найти ID в URL профиля: /build/u/<em>ID</em>
+                {t("build.referenceWrite.findIdHint")} /build/u/<em>ID</em>
               </p>
             </div>
           )}
@@ -131,7 +144,7 @@ function WriteReferenceForm() {
         {/* Rating */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-            Оценка
+            {t("build.referenceWrite.ratingLabel")}
           </label>
           <StarPicker value={rating} onChange={setRating} />
           {rating > 0 && (
@@ -142,14 +155,14 @@ function WriteReferenceForm() {
         {/* Text */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-            Текст рекомендации{" "}
-            <span className="text-slate-600 normal-case">(мин. 20 символов)</span>
+            {t("build.referenceWrite.textLabel")}{" "}
+            <span className="text-slate-600 normal-case">({t("build.referenceWrite.textMinChars")})</span>
           </label>
           <textarea
             rows={5}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 2000))}
-            placeholder="Опишите опыт работы: качество, надёжность, что особенно выделилось..."
+            placeholder={t("build.referenceWrite.textPlaceholder")}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 resize-none"
           />
           <p className="text-xs text-slate-600 mt-1 text-right">{text.length}/2000</p>
@@ -158,10 +171,10 @@ function WriteReferenceForm() {
         {/* Skills */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-            Отмеченные навыки
+            {t("build.referenceWrite.skillsLabel")}
           </label>
           <div className="flex gap-2 flex-wrap">
-            {SKILL_PRESETS.map((s) => (
+            {SKILL_PRESET_KEYS.map((s) => (
               <button
                 key={s}
                 type="button"
@@ -172,7 +185,7 @@ function WriteReferenceForm() {
                     : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
                 }`}
               >
-                {s}
+                {skillLabel(s)}
               </button>
             ))}
           </div>
@@ -187,7 +200,7 @@ function WriteReferenceForm() {
             className="w-4 h-4 accent-emerald-500"
           />
           <span className="text-sm font-medium text-slate-200">
-            Рекомендую этого специалиста другим работодателям
+            {t("build.referenceWrite.recommendLabel")}
           </span>
         </label>
 
@@ -196,9 +209,9 @@ function WriteReferenceForm() {
           disabled={submitting || !workerId.trim() || rating === 0 || text.trim().length < 20}
           className="w-full py-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors"
         >
-          {submitting ? "Публикация…" : "Опубликовать рекомендацию"}
+          {submitting ? t("build.referenceWrite.publishing") : t("build.referenceWrite.publishBtn")}
         </button>
-        <p className="text-xs text-slate-600 text-center">Можно отозвать в течение 7 дней</p>
+        <p className="text-xs text-slate-600 text-center">{t("build.referenceWrite.revokeHint")}</p>
       </div>
     </div>
   );

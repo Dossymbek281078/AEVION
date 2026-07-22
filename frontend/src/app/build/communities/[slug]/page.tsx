@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 
 type Message = {
   id: string;
@@ -25,6 +26,7 @@ type Community = {
 };
 
 export default function CommunityPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { t } = useI18n();
   const { slug } = use(params);
   const user = useBuildAuth((s) => s.user);
   const token = useBuildAuth((s) => s.token);
@@ -64,7 +66,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
       setContent("");
       load();
     } catch {
-      setError("Ошибка отправки. Попробуйте ещё раз.");
+      setError(t("build.communityDetail.sendError"));
     } finally {
       setSending(false);
     }
@@ -89,14 +91,14 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
         <div className="flex items-center justify-between">
           <div>
             <Link href="/build/communities" className="text-xs text-slate-400 hover:text-white">
-              ← Все комьюнити
+              {t("build.communityDetail.backToAll")}
             </Link>
             <h1 className="mt-1 text-xl font-bold text-white">
               {community?.name ?? slug}
             </h1>
             {community && (
               <p className="text-xs text-slate-400">
-                {community.specialty} · {community.memberCount} участников
+                {community.specialty} · {t("build.communityDetail.memberCount", { count: community.memberCount })}
               </p>
             )}
           </div>
@@ -105,7 +107,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
               onClick={() => void handleJoin()}
               className="rounded-lg bg-teal-500/20 px-4 py-2 text-sm font-medium text-teal-200 hover:bg-teal-500/30"
             >
-              Вступить
+              {t("build.communityDetail.joinButton")}
             </button>
           )}
         </div>
@@ -113,7 +115,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-3 rounded-xl border border-white/10 bg-slate-900/50 p-4">
           {messages.length === 0 ? (
-            <p className="text-center text-sm text-slate-500 py-8">Пока нет сообщений. Начните разговор!</p>
+            <p className="text-center text-sm text-slate-500 py-8">{t("build.communityDetail.noMessages")}</p>
           ) : (
             messages.map((m) => {
               const isMe = m.userId === user?.id;
@@ -128,7 +130,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
                   )}
                   <div className={`max-w-[70%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
                     <p className={`text-[10px] ${ROLE_COLOR[m.buildRole ?? ""] ?? "text-slate-400"}`}>
-                      {m.authorName ?? "Пользователь"}
+                      {m.authorName ?? t("build.communityDetail.anonymousUser")}
                       {m.buildRole && ` · ${m.buildRole}`}
                     </p>
                     <div className={`rounded-xl px-3 py-2 text-sm ${isMe ? "bg-teal-500/20 text-teal-100" : "bg-white/10 text-slate-100"}`}>
@@ -151,7 +153,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
             <input
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Написать сообщение…"
+              placeholder={t("build.communityDetail.messagePlaceholder")}
               maxLength={2000}
               className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
             />
@@ -165,7 +167,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
           </form>
         ) : (
           <p className="text-center text-sm text-slate-500">
-            <Link href="/build/profile" className="text-teal-400 underline">Войдите</Link> чтобы писать в чат
+            <Link href="/build/profile" className="text-teal-400 underline">{t("build.communityDetail.loginLinkText")}</Link> {t("build.communityDetail.loginToChatSuffix")}
           </p>
         )}
         {error && <p className="text-xs text-rose-400">{error}</p>}

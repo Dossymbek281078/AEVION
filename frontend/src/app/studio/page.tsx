@@ -81,7 +81,7 @@ const FEATURE_CATEGORIES = [
     color: "#0d9488",
     items: [
       { icon: "🎬", name: "Video AI", desc: "Text-to-video via Replicate — MiniMax, HunyuanVideo, AnimateDiff", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🖼️", name: "Image DALL-E", desc: "DALL-E 3 image generation — 1024×1024, HD quality, vivid/natural styles", href: "/devhub", badge: "NEEDS TOKEN" },
+      { icon: "🖼️", name: "Image Generation", desc: "AI images with a fallback fleet — OpenAI → Workers AI (flux) → Together, permanent CDN URLs", href: "/devhub", badge: "LIVE" },
       { icon: "🎵", name: "Music & SFX", desc: "ElevenLabs AI music and sound effects generation", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🎙️", name: "Voice TTS", desc: "ElevenLabs text-to-speech — 9 voices, high-quality audio", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🔊", name: "Voice Cloning", desc: "Clone any voice from audio sample — create your own AI voice", href: "/devhub", badge: "NEEDS TOKEN" },
@@ -96,6 +96,7 @@ const FEATURE_CATEGORIES = [
     items: [
       { icon: "🚂", name: "Railway Deploy", desc: "One-click backend deployment — Node.js, Python, Postgres, Redis", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "▲", name: "Vercel Deploy", desc: "Frontend deployment — Next.js, React SPA, static sites", href: "/devhub", badge: "NEEDS TOKEN" },
+      { icon: "☁️", name: "Cloudflare Pages", desc: "Static-site deploy via wrangler with serve-verification + *.aevion.build domain", href: "/devhub", badge: "LIVE" },
       { icon: "🐙", name: "GitHub Auto-Push", desc: "Code syncs to GitHub repo in aevion-io org automatically", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🌐", name: "Domain (aevion.build)", desc: "Provision <slug>.aevion.build subdomain via Cloudflare", href: "/devhub", badge: "NEEDS TOKEN" },
     ],
@@ -323,7 +324,7 @@ export default function StudioPage() {
             },
             {
               tier: "Pro", price: "$149", color: "#0d9488",
-              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Everything in Free", "Priority support"],
+              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Your own *.aevion.build subdomain", "Everything in Free", "Priority support"],
               cta: "Upgrade to Pro", ctaHref: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57", disabled: false,
             },
             {

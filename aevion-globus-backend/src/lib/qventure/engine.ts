@@ -17,6 +17,22 @@ import { parsePlanSignals, mergeStructuredSignals, type PlanSignals, type Struct
 import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
 import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
+import { defineBands } from "../verdictBands";
+
+/**
+ * Rubric version — bump on any change that moves a composite for unchanged input.
+ *
+ * Scores are only comparable within a version. The gallery, /benchmark percentiles
+ * and the watchlist all rank stored analyses against each other, so mixing scores
+ * produced by different weightings silently compares numbers that do not mean the
+ * same thing. Stamping it lets a reader see which rules produced a given verdict.
+ *
+ * v1  original rubric (additive only; "pass" was unreachable)
+ * v2  adverse disclosures penalised; pass reachable
+ * v3  negation fixes, moat no longer inherited from stage, weights moved to
+ *     company evidence (execution 0.12 -> 0.28); orphan metric flags weighted
+ */
+export const RUBRIC_VERSION = 3;
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -38,12 +54,23 @@ export interface AnalysisInput {
   projections?: ProjectionPoint[];
 }
 
+/**
+ * Where a factor's number actually came from.
+ *
+ * Five of the eight factors are sector constants — identical for every company
+ * in that sector — so a reader comparing two deals in the same market is looking
+ * at the same numbers twice. Showing this makes that visible instead of implying
+ * all eight were assessed about this specific company.
+ */
+export type FactorBasis = "company-evidence" | "sector-prior" | "no-evidence";
+
 export interface ScoreFactor {
   key: string;
   label: string;
   weight: number; // 0–1, weights sum to 1
   score: number; // 0–100
   rationale: string;
+  basis: FactorBasis;
 }
 
 export interface EntryStrategy {
@@ -62,9 +89,13 @@ export interface EntryStrategy {
   };
   portfolioNote: string;
   reasoning: string[];
+  /** Only set on a "pass": what must change before this deal is worth re-opening. */
+  reEntryConditions?: string[];
 }
 
 export interface AnalysisResult {
+  /** Rubric generation that produced this score — see RUBRIC_VERSION. */
+  rubricVersion: number;
   composite: number; // 0–100
   verdict: EntryStrategy["verdict"];
   factors: ScoreFactor[];
@@ -132,10 +163,17 @@ const STAGE_MOAT_REALIZATION: Record<Stage, number> = {
 
 /** Fraction of a moat archetype's mature ceiling a company has plausibly earned,
  *  from stage maturity ± disclosed traction evidence. */
-function moatRealization(stage: Stage, tractionScore: number): number {
+function moatRealization(stage: Stage, tractionScore: number, hasQuantifiedTraction: boolean): number {
   const base = STAGE_MOAT_REALIZATION[stage];
   const tractionAdj = ((tractionScore - 50) / 50) * 0.2; // ±0.2 around a neutral 50
-  return clamp01(base + tractionAdj);
+  const realized = clamp01(base + tractionAdj);
+  // Stage is a proxy for maturity, not evidence of it. Taken alone it let a
+  // pre-launch Series A inherit a 0.75 realization — and so outscore a seed
+  // company with real adoption on moat, purely for having raised a later round.
+  // Without disclosed numbers the claim is unevidenced, so it is capped at the
+  // seed level however late the round.
+  if (!hasQuantifiedTraction) return Math.min(realized, STAGE_MOAT_REALIZATION.seed);
+  return realized;
 }
 
 function clamp(n: number, lo = 0, hi = 100): number {
@@ -147,17 +185,41 @@ function round(n: number, dp = 0): number {
   return Math.round(n * f) / f;
 }
 
-/** Heuristic "execution signal" from the presence/richness of traction text. */
+/**
+ * Qualitative execution signal, used only when no quantitative traction parsed.
+ *
+ * This used to credit a keyword wherever it appeared, so "Pre-launch. No revenue,
+ * no users." scored +18 for "revenue/customers cited" — the rubric read a denial
+ * as an achievement, and pre-launch companies outscored ones with real adoption.
+ * Each cue now has to survive a negation check on the words immediately before it.
+ */
 function tractionSignal(input: AnalysisInput): { score: number; note: string } {
   const t = (input.tractionNotes || "").toLowerCase();
   if (!t.trim()) return { score: 38, note: "no traction disclosed — execution unproven" };
+
+  const NEGATED = /\b(no|not|zero|without|pre-?launch|pre-?revenue|none|yet to|lacks?|awaiting)\b[^.]{0,25}$/;
+  const cited = (re: RegExp): boolean => {
+    for (const m of t.matchAll(new RegExp(re.source, "g"))) {
+      if (m.index === undefined) continue;
+      if (!NEGATED.test(t.slice(Math.max(0, m.index - 30), m.index))) return true;
+    }
+    return false;
+  };
+
   let s = 50;
   const notes: string[] = [];
-  if (/\b(revenue|arr|mrr|\$|paying|customers?)\b/.test(t)) { s += 18; notes.push("revenue/customers cited"); }
-  if (/\b(growth|mom|wow|yoy|%|x\b|doubl|tripl)\b/.test(t)) { s += 12; notes.push("growth metric cited"); }
-  if (/\b(retention|churn|nps|cohort|ltv|cac|payback)\b/.test(t)) { s += 12; notes.push("unit-economics metric cited"); }
-  if (/\b(pilot|loi|partnership|contract|enterprise)\b/.test(t)) { s += 8; notes.push("commercial validation cited"); }
+  if (cited(/\b(revenue|arr|mrr|\$|paying|customers?)\b/)) { s += 18; notes.push("revenue/customers cited"); }
+  if (cited(/\b(growth|mom|wow|yoy|%|x\b|doubl|tripl)\b/)) { s += 12; notes.push("growth metric cited"); }
+  if (cited(/\b(retention|churn|nps|cohort|ltv|cac|payback)\b/)) { s += 12; notes.push("unit-economics metric cited"); }
+  if (cited(/\b(pilot|loi|partnership|contract|enterprise)\b/)) { s += 8; notes.push("commercial validation cited"); }
   if (t.length > 240) s += 4;
+  // Explicitly pre-launch at a stage that is supposed to have shipped is the
+  // strongest negative execution signal there is; do not let length credit mask it.
+  if (/\bpre-?launch\b|\bnot (yet )?launched\b|\bno (users?|customers?|revenue)\b/.test(t)) {
+    s = Math.min(s, 30);
+    notes.length = 0;
+    notes.push("plan states the product has not launched / has no users");
+  }
   return { score: clamp(s), note: notes.length ? notes.join("; ") : "qualitative traction only" };
 }
 
@@ -203,6 +265,98 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
   if (sig.retentionPct !== null) s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
   if (sig.churnPct !== null && sig.churnPct > 5) { s -= 6; notes.push(`${sig.churnPct}% churn`); }
   return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
+}
+
+/** Factor keys an adverse disclosure can be charged against. */
+type PenaltyFactor = "market" | "moat" | "economics" | "execution" | "legal" | "competition";
+
+interface AdverseSignal {
+  factor: PenaltyFactor;
+  /** Points deducted from that factor's 0-100 score. */
+  penalty: number;
+  /** Investor-facing explanation of what was found and why it costs points. */
+  flag: string;
+}
+
+/** Per-factor ceiling, so a single verbose plan cannot zero a factor out. */
+const ADVERSE_CAP_PER_FACTOR = 40;
+
+/**
+ * Detect *explicit* adverse disclosures in the plan text.
+ *
+ * The rest of the engine only ever adds points: every factor starts at a sector
+ * prior and moves up when the plan discloses something good. That made the
+ * composite bottom out around ~59 ("watch") even for plainly dead deals, so the
+ * verdict band "pass" (<55) was unreachable in practice. This charges stated
+ * negatives against the specific factor they impair.
+ *
+ * Deliberately conservative: each pattern matches an unambiguous statement, so a
+ * penalty is always defensible to a founder who asks why the score dropped.
+ */
+function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProfile): AdverseSignal[] {
+  const t = text.toLowerCase();
+  const out: AdverseSignal[] = [];
+  const add = (factor: PenaltyFactor, penalty: number, flag: string) => out.push({ factor, penalty, flag });
+
+  // A pattern whose *own* wording is not negative ("competitors ship it free")
+  // must not fire on a sentence that denies it ("we have no competitors shipping
+  // it free"). Patterns that already encode the negative are matched directly.
+  const NEGATOR = /\b(no|not|never|without|zero|none|aren'?t|isn'?t|hasn'?t|haven'?t)\b[^.]{0,30}$/;
+  const firesUnnegated = (re: RegExp): boolean => {
+    const m = re.exec(t);
+    return m ? !NEGATOR.test(t.slice(Math.max(0, m.index - 45), m.index)) : false;
+  };
+
+  // ── Execution: no revenue, shrinking revenue, team loss, cash exhaustion. ──
+  // Being pre-revenue is the expected base case early on — and for therapeutics
+  // and space hardware it stays normal well past seed. Only charge for it where
+  // revenue is the stage's own benchmark.
+  if (/\b(no|zero|without any)\s+(revenue|sales|paying customers)\b|\bpre-?revenue\b/.test(t)) {
+    const longRnD = sector.id === "biotech" || sector.id === "space";
+    const penalty = stage === "growth" ? (longRnD ? 12 : 18)
+      : stage === "series-a" ? (longRnD ? 0 : 12)
+        : 0;
+    if (penalty > 0) {
+      add("execution", penalty, `Plan states there is no revenue at ${stage} stage — by this point revenue is the benchmark, so commercial validation is absent rather than merely early.`);
+    }
+  }
+  if (/\b(declining|shrinking|falling|decreasing)\s+(revenue|sales|arr|mrr|users?)\b|\brevenue (fell|dropped|declined)\b/.test(t)) {
+    add("execution", 16, "Plan discloses declining revenue — the business is contracting, not compounding.");
+  }
+  if (/\b(founders?|co-?founders?|cto|ceo)\b[^.]{0,60}\b(left|departed|quit|resigned|exited)\b|\b(lost|losing)\b[^.]{0,20}\bfounders?\b/.test(t)) {
+    add("execution", 15, "Plan discloses founder or key-executive departure — a material team-continuity risk at this stage.");
+  }
+  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\bout of (cash|money|runway)\b/.test(t)) {
+    add("execution", 14, "Plan discloses six months or less of runway — the round is a rescue, which changes the terms materially.");
+  }
+
+  // ── Moat / competition: the defensibility claim is contradicted. ──────────
+  if (firesUnnegated(/\b(incumbents?|competitors?|google|amazon|microsoft|shopify|salesforce|meta|apple)\b[^.]{0,70}\b(free|bundl\w*|included at no cost|ships? the same)\b/)) {
+    add("competition", 20, "Plan concedes an incumbent offers equivalent functionality free or bundled — price and distribution advantage sit with the incumbent.");
+    add("moat", 14, "A free incumbent substitute caps willingness to pay and undercuts the stated moat.");
+  }
+  if (/\b(commodit\w+|no (real )?(moat|differentiation|barrier)|easily (copied|replicated)|low barriers? to entry)\b/.test(t)) {
+    add("moat", 16, "Plan concedes weak or absent defensibility — the moat factor cannot rest on the sector archetype alone.");
+  }
+
+  // ── Legal / IP: lapsed rights, active proceedings, lost permissions. ──────
+  if (/\bpatents?\b[^.]{0,40}\b(lapsed|expired|invalidated|abandoned|rejected)\b|\b(lapsed|expired|invalidated)\b[^.]{0,20}\bpatents?\b/.test(t)) {
+    add("legal", 16, "Plan discloses lapsed or invalidated patents — claimed IP protection is not enforceable.");
+    add("moat", 12, "Lapsed IP removes the legal basis of an IP-patents moat.");
+  }
+  if (/\b(lawsuit|litigation|sued|being sued|injunction|cease and desist|class action)\b/.test(t)) {
+    add("legal", 14, "Plan discloses active litigation — quantify exposure and legal spend before committing capital.");
+  }
+  if (/\b(licen[cs]e|authorization|approval)\b[^.]{0,40}\b(revoked|denied|withdrawn|suspended)\b|\b(regulatory|government)\b[^.]{0,30}\b(investigation|ban|banned|enforcement action)\b/.test(t)) {
+    add("legal", 20, "Plan discloses a lost licence or an active regulatory action — the right to operate is itself in question.");
+  }
+
+  // ── Unit economics: stated unprofitability per unit. ──────────────────────
+  if (/\b(negative|inverted)\s+(gross\s+)?(margin|unit economics)\b|\blos(e|ing) money on (each|every)\b|\bsell\w*\s+below cost\b/.test(t)) {
+    add("economics", 20, "Plan discloses negative unit economics — growth compounds the loss rather than the return.");
+  }
+
+  return out;
 }
 
 export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals): AnalysisResult {
@@ -261,7 +415,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // ── Moat: archetype ceiling × realization (from stage & the now-company-
   //    specific traction), nudged up if the plan asserts patents. ──────────
   const moatCeiling = MOAT_STRENGTH[moat];
-  let moatRealized = moatRealization(stage, traction.score);
+  let moatRealized = moatRealization(stage, traction.score, execCompany);
   if (signals.mentionsPatent && moat === "ip-patents") moatRealized = clamp01(moatRealized + 0.1);
   const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
   const moatCompany = execCompany || signals.mentionsPatent;
@@ -271,59 +425,98 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
 
   const factors: ScoreFactor[] = [
-    { key: "market", label: "Market size & growth", weight: 0.20, score: round(marketScore),
+    { key: "market", label: "Market size & growth", weight: 0.14, score: round(marketScore),
+      basis: marketCompany ? "company-evidence" : "sector-prior",
       rationale: marketCompany
         ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
         : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
-    { key: "timing", label: "Timing / tailwinds", weight: 0.10, score: round(timing),
+    { key: "timing", label: "Timing / tailwinds", weight: 0.05, score: round(timing),
+      basis: "sector-prior",
       rationale: `Sector growth ${round(sector.cagr * 100)}% vs. 12% neutral baseline.` },
-    { key: "moat", label: "Moat / defensibility", weight: 0.15, score: round(moatScore),
+    { key: "moat", label: "Moat / defensibility", weight: 0.16, score: round(moatScore),
+      basis: moatCompany ? "company-evidence" : "sector-prior",
       rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${execCompany ? " given disclosed traction" : (rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"}${signals.mentionsPatent && moat === "ip-patents" ? " (patent claim credited)" : ""} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
     { key: "economics", label: "Unit economics potential", weight: 0.15, score: round(econScore),
+      basis: econCompany ? "company-evidence" : "sector-prior",
       rationale: econCompany
         ? `Company metrics: ${econNotes.join(", ")} (capital intensity ${round(sector.capitalIntensity * 100)}%).`
         : `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}% (sector reference).` },
-    { key: "execution", label: "Team / execution signal", weight: 0.12, score: round(traction.score),
+    { key: "execution", label: "Team / execution signal", weight: 0.28, score: round(traction.score),
+      basis: execCompany ? "company-evidence" : ((rawInput.tractionNotes || "").trim() ? "company-evidence" : "no-evidence"),
       rationale: traction.note },
-    { key: "science", label: "Scientific / tech feasibility", weight: 0.10, score: round(scienceScore),
+    { key: "science", label: "Scientific / tech feasibility", weight: 0.07, score: round(scienceScore),
+      basis: "sector-prior",
       rationale: sector.scienceFrontier },
-    { key: "legal", label: "Regulatory / legal headroom", weight: 0.09, score: round(legalScore),
+    { key: "legal", label: "Regulatory / legal headroom", weight: 0.07, score: round(legalScore),
+      basis: "sector-prior",
       rationale: `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
-    { key: "competition", label: "Competitive headroom", weight: 0.09, score: round(competitionScore),
+    { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
+      basis: "sector-prior",
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
+
+  // ── Adverse disclosures: charge stated negatives against the factor they
+  //    impair, capped per factor, and record the deduction in the rationale so
+  //    every lost point stays explainable. ─────────────────────────────────────
+  const adverse = detectAdverseDisclosures(`${rawInput.description || ""} ${rawInput.tractionNotes || ""}`, stage, sector);
+  // ── Deterministic red flags on disclosed metrics. ──────────────────────
+  // These were detected and displayed but carried no weight, so the report could
+  // warn that a TAM was inflated 3x while the market factor stayed untouched.
+  // The ones that already move a factor elsewhere are left as text, called out
+  // below, so a disclosure is never charged twice.
+  const metricFlags: AdverseSignal[] = [];
+  const sectorGmPct = round(sector.grossMargin * 100);
+  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
+    metricFlags.push({ factor: "economics", penalty: 10,
+      flag: `Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.` });
+  }
+  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd > sectorTamUsd * 2) {
+    metricFlags.push({ factor: "market", penalty: 14,
+      flag: `Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} exceeds 2x the entire ${sector.label} market (~$${sector.tamUsdBn}B) — likely top-down inflation.` });
+  }
+  if (signals.mentionsRevenueNoNumber && signals.revenueUsd === null) {
+    metricFlags.push({ factor: "execution", penalty: 10,
+      flag: `Revenue / monetization is referenced but no figure is disclosed — treat traction as unverified.` });
+  }
+  if (signals.growthPct !== null && signals.growthPeriod === "MoM" && signals.growthPct > 40) {
+    metricFlags.push({ factor: "execution", penalty: 8,
+      flag: `${signals.growthPct}% month-over-month growth is exceptionally high — confirm it is sustained, not a single-period spike.` });
+  }
+
+  // Already priced in elsewhere — surfaced as text only, deliberately unweighted:
+  //   LTV/CAC < 1  → econScoreRaw already takes -18 in the unit-economics factor
+  //   churn > 5    → quantifiedExecution already takes -6 in the execution factor
+  const textOnlyFlags: string[] = [];
+  if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
+    textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
+  }
+  if (signals.churnPct !== null && signals.churnPct > 8) {
+    textOnlyFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
+  }
+
+  const redFlags: string[] = [...adverse.map((a) => a.flag), ...metricFlags.map((f) => f.flag), ...textOnlyFlags];
+
+  const penaltyByFactor = new Map<string, number>();
+  for (const a of [...adverse, ...metricFlags]) {
+    penaltyByFactor.set(a.factor, Math.min(ADVERSE_CAP_PER_FACTOR, (penaltyByFactor.get(a.factor) ?? 0) + a.penalty));
+  }
+  for (const f of factors) {
+    const p = penaltyByFactor.get(f.key);
+    if (!p) continue;
+    f.score = round(clamp(f.score - p));
+    f.rationale = `${f.rationale} −${p} for adverse disclosures in the plan.`;
+  }
 
   const composite = round(factors.reduce((acc, f) => acc + f.weight * f.score, 0), 1);
 
   // ── Signal coverage: share of the composite weight backed by company data. ──
   const companyWeight =
-    (marketCompany ? 0.20 : 0) + (econCompany ? 0.15 : 0) +
-    (execCompany ? 0.12 : 0) + (moatCompany ? 0.15 : 0);
+    (marketCompany ? 0.14 : 0) + (econCompany ? 0.15 : 0) +
+    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0);
   const signalCoverage = round(companyWeight, 2);
 
-  // ── Deterministic red flags: inconsistencies / weak disclosed metrics. ──
-  const redFlags: string[] = [];
-  const sectorGmPct = round(sector.grossMargin * 100);
-  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
-    redFlags.push(`Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.`);
-  }
-  if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
-    redFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
-  }
-  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd > sectorTamUsd * 2) {
-    redFlags.push(`Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} exceeds 2× the entire ${sector.label} market (~$${sector.tamUsdBn}B) — likely top-down inflation.`);
-  }
-  if (signals.mentionsRevenueNoNumber && signals.revenueUsd === null) {
-    redFlags.push(`Revenue / monetization is referenced but no figure is disclosed — treat traction as unverified.`);
-  }
-  if (signals.growthPct !== null && signals.growthPeriod === "MoM" && signals.growthPct > 40) {
-    redFlags.push(`${signals.growthPct}% month-over-month growth is exceptionally high — confirm it is sustained, not a single-period spike.`);
-  }
-  if (signals.churnPct !== null && signals.churnPct > 8) {
-    redFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
-  }
 
-  const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput });
+  const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput, factors, redFlags });
 
   const citedSource = sector.sources[0];
   const assumptions = [
@@ -339,18 +532,33 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const tam = triangulateTam(signals, sector);
   const projections = analyzeProjections(rawInput.projections, sector);
 
-  return { composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
+  return { rubricVersion: RUBRIC_VERSION, composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
 }
 
+// Verdict and conviction thresholds. Declared rather than inlined so a test can
+// assert every band is reachable on real calibration scores — "pass" was
+// unreachable for months behind exactly this ternary.
+export const VERDICT_BANDS = defineBands<"invest" | "watch" | "pass">("qventure.verdict", [
+  { label: "invest", min: 72 },
+  { label: "watch", min: 55 },
+  { label: "pass", min: 0 },
+]);
+
+export const CONVICTION_BANDS = defineBands<"high" | "medium" | "low">("qventure.conviction", [
+  { label: "high", min: 78 },
+  { label: "medium", min: 62 },
+  { label: "low", min: 0 },
+]);
 function buildStrategy(args: {
   composite: number; stage: Stage;
   norms: (typeof STAGE_NORMS)[Stage];
   sector: SectorProfile; input: AnalysisInput;
+  factors: ScoreFactor[]; redFlags: string[];
 }): EntryStrategy {
-  const { composite, stage, norms, sector, input } = args;
+  const { composite, stage, norms, sector, input, factors, redFlags } = args;
 
-  const verdict: EntryStrategy["verdict"] = composite >= 72 ? "invest" : composite >= 55 ? "watch" : "pass";
-  const conviction: EntryStrategy["conviction"] = composite >= 78 ? "high" : composite >= 62 ? "medium" : "low";
+  const verdict: EntryStrategy["verdict"] = VERDICT_BANDS.classify(composite);
+  const conviction: EntryStrategy["conviction"] = CONVICTION_BANDS.classify(composite);
 
   // Valuation band: blend stage norm with score (stronger deals command up-band).
   const scoreMul = 0.7 + (composite / 100) * 0.6; // 0.7–1.3
@@ -403,16 +611,31 @@ function buildStrategy(args: {
     ? `Pass for now. If re-scored ≥55 after new traction, size at ~${portfolioPct}% of a diversified venture book — never single-name concentration at this stage.`
     : `Size at ~${portfolioPct}% of a diversified venture portfolio (fractional-Kelly, conviction-scaled). Reserve ${round(ticketUsd.target * 1.5, 0).toLocaleString("en-US")} USD for pro-rata follow-on.`;
 
+  // On a pass the cheque size is not the decision — what would have to change is.
+  // Naming a ticket for a deal you are declining reads as a recommendation, so
+  // that line is replaced with the gap that has to close first.
+  const gapPoints = round(55 - composite, 1);
+  const weakest = [...factors].sort((a, b) => a.score - b.score).slice(0, 3);
+  const reEntryConditions = verdict !== "pass" ? undefined : [
+    `Re-score must reach 55 — currently ${composite}, a ${gapPoints}-point gap.`,
+    ...weakest.map((f) => `Lift "${f.label}" (${f.score}/100, ${Math.round(f.weight * 100)}% of the score): ${f.rationale}`),
+    ...redFlags.slice(0, 3).map((r) => `Resolve or disprove: ${r}`),
+    `Bring evidence, not narrative — the score only moves on disclosed, checkable metrics.`,
+  ];
+
   const reasoning = [
     `Composite ${composite}/100 → verdict "${verdict.toUpperCase()}" (${conviction} conviction).`,
     `Valuation anchor: ~$${(valuationBandUsd.base / 1e6).toFixed(1)}M pre-money base case for a ${stage} ${sector.label} deal.`,
-    `Lead with $${targetTicket.toLocaleString("en-US")} for ~${ownershipTargetPct}% target ownership; cap exposure at $${ticketUsd.max.toLocaleString("en-US")}.`,
+    verdict === "pass"
+      ? `No ticket recommended. The figures below are the terms this deal would have to earn on a re-score, not an offer.`
+      : `Lead with $${targetTicket.toLocaleString("en-US")} for ~${ownershipTargetPct}% target ownership; cap exposure at $${ticketUsd.max.toLocaleString("en-US")}.`,
     `Base-case ${baseMoic}x on success; probability-weighted ${expectedMoic}x after a ${round(lossProbability * 100)}% loss rate → ~${targetIrrPct}% target IRR over ${norms.horizonYears}yr.`,
   ];
 
   return {
     verdict, conviction, ticketUsd, valuationBandUsd, ownershipTargetPct,
     tranches, returns, portfolioNote, reasoning,
+    ...(reEntryConditions ? { reEntryConditions } : {}),
   };
 }
 

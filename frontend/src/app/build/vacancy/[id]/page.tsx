@@ -16,6 +16,7 @@ import {
   type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 import { formatSalary } from "@/lib/build/format";
 import { emailError, isEmail } from "@/lib/build/validate";
 import { useToast } from "@/components/build/Toast";
@@ -922,6 +923,7 @@ function ApplicationRow({
   onOptimistic?: (status: ApplicationStatus) => void;
   onOptimisticLabel?: (labelKey: ApplicationLabel | null) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const toast = useToast();
@@ -1057,7 +1059,10 @@ function ApplicationRow({
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 if (r.hireOrder && r.hireOrder.amount > 0) {
                   toast.success(
-                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в «Settings → Orders».`,
+                    t("build.vacancyDetail.candidateAcceptedHireFee", {
+                      amount: r.hireOrder.amount.toLocaleString(),
+                      currency: r.hireOrder.currency,
+                    }),
                   );
                 } else {
                   toast.success("Candidate accepted.");
@@ -1531,6 +1536,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
 }
 
 function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
+  const { t } = useI18n();
   const me = useBuildAuth((s) => s.user);
   const [copied, setCopied] = useState(false);
 
@@ -1550,17 +1556,17 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // fallback: prompt
-      window.prompt("Скопируйте ссылку:", text);
+      window.prompt(t("build.vacancyDetail.share.copyLinkPrompt"), text);
     }
   }
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-5">
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-        Поделиться
+        {t("build.vacancyDetail.share.heading")}
       </h2>
       <p className="text-xs text-slate-400">
-        Скопируйте ссылку для друга. Если они откликнутся через ваш реферал — это засчитывается в платформенный лидерборд (скоро).
+        {t("build.vacancyDetail.share.description")}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -1578,7 +1584,7 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
           </button>
         )}
         <QuickShareButtons getLink={() => buildLink(!!me)} />
-        {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
+        {copied && <span className="text-xs text-emerald-300">{t("build.vacancyDetail.share.copied")}</span>}
       </div>
     </div>
   );
@@ -2155,6 +2161,7 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
 }
 
 function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
+  const { t } = useI18n();
   type Note = Awaited<ReturnType<typeof buildApi.vacancyNotes>>["items"][number];
   const [items, setItems] = useState<Note[] | null>(null);
   const [draft, setDraft] = useState("");
@@ -2217,8 +2224,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
       {open && (
         <>
           <p className="mt-1 text-[11px] text-slate-500">
-            Private notes about this role — visible to vacancy owner only. Не путать с заметками
-            на конкретного кандидата.
+            Private notes about this role — visible to vacancy owner only. {t("build.vacancyDetail.teamNotes.disclaimer")}
           </p>
           <div className="mt-3 flex items-end gap-2">
             <textarea
@@ -2226,7 +2232,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
               onChange={(e) => setDraft(e.target.value)}
               rows={2}
               maxLength={4000}
-              placeholder="Например: «бюджет согласован до 5 млн ₸», «клиент хочет только русскоязычных»…"
+              placeholder={t("build.vacancyDetail.teamNotes.placeholder")}
               className="flex-1 resize-none rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/40 focus:outline-none"
             />
             <button
@@ -3379,6 +3385,7 @@ function VacancyStatusToggle({
 }
 
 function UrgentToggleButton({ vacancy, onDone }: { vacancy: BuildVacancy & { urgent?: boolean; urgentUntil?: string | null }; onDone: () => void }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const isUrgent = !!vacancy.urgent && (!vacancy.urgentUntil || new Date(vacancy.urgentUntil) > new Date());
 
@@ -3395,14 +3402,14 @@ function UrgentToggleButton({ vacancy, onDone }: { vacancy: BuildVacancy & { urg
     <button
       onClick={toggle}
       disabled={busy}
-      title={isUrgent ? "Снять срочность" : "Пометить как срочную (🚨 badge на 7 дней)"}
+      title={isUrgent ? t("build.vacancyDetail.urgent.remove") : t("build.vacancyDetail.urgent.mark")}
       className={`rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
         isUrgent
           ? "border border-red-500/50 bg-red-500/20 text-red-200 hover:bg-red-500/10"
           : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
       }`}
     >
-      {busy ? "…" : isUrgent ? "🚨 Срочно ON" : "🚨 Срочно"}
+      {busy ? "…" : isUrgent ? t("build.vacancyDetail.urgent.onLabel") : t("build.vacancyDetail.urgent.label")}
     </button>
   );
 }

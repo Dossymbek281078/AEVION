@@ -6,6 +6,7 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { StarsDisplay } from "@/components/build/StarRating";
+import { useI18n } from "@/lib/i18n";
 
 type Worker = {
   userId: string;
@@ -26,16 +27,19 @@ type Worker = {
   avgRating: number;
 };
 
-function timeLeft(until: string | null): string {
-  if (!until) return "Сегодня";
+function timeLeft(until: string | null, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (!until) return t("build.available.timeToday");
   const ms = new Date(until).getTime() - Date.now();
-  if (ms <= 0) return "Истекло";
+  if (ms <= 0) return t("build.available.timeExpired");
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `ещё ${h}ч ${m}м` : `ещё ${m}м`;
+  return h > 0
+    ? t("build.available.timeLeftHours", { h, m })
+    : t("build.available.timeLeftMinutes", { m });
 }
 
 export default function AvailablePage() {
+  const { t } = useI18n();
   const [city, setCity] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -81,7 +85,7 @@ export default function AvailablePage() {
               Available Now
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Специалисты готовые выйти на объект сегодня · обновляется каждую минуту
+              {t("build.available.subtitle")}
             </p>
           </div>
           <RequireAuth>
@@ -94,27 +98,27 @@ export default function AvailablePage() {
           <input
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder="Город (Алматы, Астана…)"
+            placeholder={t("build.available.cityPlaceholder")}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
           <input
             value={specialty}
             onChange={(e) => setSpecialty(e.target.value)}
-            placeholder="Специальность (сварщик, электрик…)"
+            placeholder={t("build.available.specialtyPlaceholder")}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
           <button
             onClick={() => void load()}
             className="rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/30"
           >
-            Обновить
+            {t("build.available.refreshButton")}
           </button>
         </div>
 
         {/* Status */}
         {asOf && (
           <p className="text-xs text-slate-500">
-            Обновлено: {new Date(asOf).toLocaleTimeString("ru")} · {workers.length} специалистов онлайн
+            {t("build.available.updatedAt", { time: new Date(asOf).toLocaleTimeString("ru"), count: workers.length })}
           </p>
         )}
 
@@ -128,8 +132,8 @@ export default function AvailablePage() {
         ) : workers.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
             <p className="text-4xl">🔍</p>
-            <p className="mt-3 text-slate-300">Сейчас нет доступных специалистов</p>
-            <p className="mt-1 text-sm text-slate-500">Попробуйте убрать фильтры или зайдите позже</p>
+            <p className="mt-3 text-slate-300">{t("build.available.emptyTitle")}</p>
+            <p className="mt-1 text-sm text-slate-500">{t("build.available.emptySubtitle")}</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +146,7 @@ export default function AvailablePage() {
                 {/* Available badge */}
                 <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-1 text-xs font-bold text-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  {timeLeft(w.availableUntil)}
+                  {timeLeft(w.availableUntil, t)}
                 </div>
 
                 {/* Identity */}
@@ -177,7 +181,7 @@ export default function AvailablePage() {
 
                 {/* Meta */}
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{w.experienceYears > 0 ? `${w.experienceYears} лет опыта` : "Начинающий"}</span>
+                  <span>{w.experienceYears > 0 ? t("build.available.experienceYears", { years: w.experienceYears }) : t("build.available.experienceBeginner")}</span>
                   {w.reviewCount > 0 && (
                     <span className="flex items-center gap-1">
                       <StarsDisplay value={w.avgRating} />
@@ -189,8 +193,8 @@ export default function AvailablePage() {
                 {/* Salary */}
                 {(w.salaryMin || w.salaryMax) && (
                   <p className="text-xs font-medium text-emerald-300">
-                    {w.salaryMin ? `от ${w.salaryMin.toLocaleString()}` : ""}
-                    {w.salaryMax ? ` до ${w.salaryMax.toLocaleString()}` : ""}{" "}
+                    {w.salaryMin ? t("build.available.salaryFrom", { min: w.salaryMin.toLocaleString() }) : ""}
+                    {w.salaryMax ? ` ${t("build.available.salaryTo", { max: w.salaryMax.toLocaleString() })}` : ""}{" "}
                     {w.salaryCurrency || "RUB"}
                   </p>
                 )}
@@ -204,6 +208,7 @@ export default function AvailablePage() {
 }
 
 function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
+  const { t } = useI18n();
   const token = useBuildAuth((s) => s.token);
   const [on, setOn] = useState(false);
   const [until, setUntil] = useState<string | null>(null);
@@ -234,9 +239,9 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
       <div>
-        <p className="text-sm font-semibold text-white">Мой статус</p>
+        <p className="text-sm font-semibold text-white">{t("build.available.myStatus")}</p>
         {on && until && (
-          <p className="text-xs text-emerald-400">{timeLeft(until)}</p>
+          <p className="text-xs text-emerald-400">{timeLeft(until, t)}</p>
         )}
       </div>
       {!on && (
@@ -246,7 +251,7 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
           className="rounded-md border border-white/10 bg-slate-900 px-2 py-1 text-xs text-white"
         >
           {[2,4,8,12,24,48].map(h => (
-            <option key={h} value={h}>{h}ч</option>
+            <option key={h} value={h}>{t("build.available.hoursOption", { h })}</option>
           ))}
         </select>
       )}
@@ -259,7 +264,7 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
             : "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
         }`}
       >
-        {busy ? "…" : on ? "Отключить" : "Я готов!"}
+        {busy ? "…" : on ? t("build.available.statusOff") : t("build.available.statusOn")}
       </button>
     </div>
   );

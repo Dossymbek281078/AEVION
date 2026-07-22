@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ async function load(): Promise<Row[]> {
 }
 
 export default async function ReferralsPage() {
+  const { t } = await getServerT();
   const rows = await load();
   return (
     <main className="min-h-screen bg-[#06070b] px-6 py-16 text-white sm:px-10">
@@ -41,7 +43,7 @@ export default async function ReferralsPage() {
         </div>
         <h1 className="mt-3 text-4xl font-bold sm:text-5xl">Referral leaderboard</h1>
         <p className="mt-3 max-w-2xl text-sm text-slate-300">
-          Делитесь ссылками на вакансии с пометкой ref — ваш user-id появляется в этом списке когда друг откликается, и поднимается в топ когда друга нанимают. Скоро привяжем награды.
+          {t("build.referrals.intro")}
         </p>
 
         <div className="mt-10 overflow-hidden rounded-2xl border border-white/10">
@@ -58,7 +60,7 @@ export default async function ReferralsPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-500">
-                    Пока никто не делился ref-ссылками. Будьте первым 🎯
+                    {t("build.referrals.empty")} 🎯
                   </td>
                 </tr>
               ) : (
@@ -82,7 +84,7 @@ export default async function ReferralsPage() {
         </div>
 
         <p className="mt-3 text-[11px] text-slate-500">
-          Сортировка: количество ACCEPTED-наймов → общее число рефералов.
+          {t("build.referrals.sortNote")}
         </p>
 
         <div className="mt-12 flex flex-wrap gap-3">
@@ -90,7 +92,7 @@ export default async function ReferralsPage() {
             href="/build/vacancies"
             className="rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-300"
           >
-            Поделиться вакансией →
+            {t("build.referrals.shareVacancy")}
           </Link>
           <Link
             href="/build/why-aevion"

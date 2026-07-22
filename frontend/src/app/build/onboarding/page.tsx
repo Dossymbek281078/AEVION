@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type Step = {
   key: string;
@@ -24,6 +25,7 @@ export default function OnboardingPage() {
 }
 
 function Body() {
+  const { t } = useI18n();
   const [steps, setSteps] = useState<Step[] | null>(null);
 
   useEffect(() => {
@@ -54,42 +56,37 @@ function Body() {
       setSteps([
         {
           key: "profile",
-          title: "Заполните профиль",
-          body:
-            "Минимум: должность, краткое summary, и 2+ навыка. Это нужно, чтобы ваши проекты отображались в рекомендациях.",
-          cta: { label: "К профилю →", href: "/build/profile" },
+          title: t("build.onboarding.step1Title"),
+          body: t("build.onboarding.step1Body"),
+          cta: { label: t("build.onboarding.step1Cta"), href: "/build/profile" },
           done: profileFilled,
         },
         {
           key: "project",
-          title: "Создайте первый проект",
-          body:
-            "Проект — это контейнер для одной или нескольких вакансий. Указывается город, бюджет, сроки.",
-          cta: { label: "Создать проект →", href: "/build/create-project" },
+          title: t("build.onboarding.step2Title"),
+          body: t("build.onboarding.step2Body"),
+          cta: { label: t("build.onboarding.step2Cta"), href: "/build/create-project" },
           done: hasProject,
         },
         {
           key: "vacancy",
-          title: "Опубликуйте вакансию",
-          body:
-            "Откройте свой проект и нажмите «+ Add vacancy». Чем конкретнее описание, тем выше apply rate (см. AI-фидбэк).",
-          cta: { label: "Мои проекты →", href: "/build" },
+          title: t("build.onboarding.step3Title"),
+          body: t("build.onboarding.step3Body"),
+          cta: { label: t("build.onboarding.step3Cta"), href: "/build" },
           done: hasVacancy,
         },
         {
           key: "bookmarks",
-          title: "Сохраните 3 кандидата в закладки",
-          body:
-            "Зайдите на /build/talent, найдите подходящих специалистов и добавьте в закладки. Удобно сравнивать через /build/compare.",
-          cta: { label: "Поиск кандидатов →", href: "/build/talent" },
+          title: t("build.onboarding.step4Title"),
+          body: t("build.onboarding.step4Body"),
+          cta: { label: t("build.onboarding.step4Cta"), href: "/build/talent" },
           done: !!bookmarks && bookmarks.items.length >= 3,
         },
         {
           key: "share",
-          title: "Поделитесь реферальной ссылкой",
-          body:
-            "Получайте AEV-кэшбэк за каждого приведённого работодателя/кандидата. Ссылка живёт в /build/referrals.",
-          cta: { label: "К рефералам →", href: "/build/referrals" },
+          title: t("build.onboarding.step5Title"),
+          body: t("build.onboarding.step5Body"),
+          cta: { label: t("build.onboarding.step5Cta"), href: "/build/referrals" },
           done: hasReferral,
         },
       ]);
@@ -111,7 +108,7 @@ function Body() {
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-paper-ink">Welcome to QBuild</h1>
         <p className="mt-1 text-sm text-paper-ink-faint">
-          5 шагов от регистрации до первого найма. Можно пропускать и возвращаться позже.
+          {t("build.onboarding.subtitle")}
         </p>
       </header>
 
@@ -130,7 +127,7 @@ function Body() {
         </div>
         {completed === steps.length && (
           <p className="mt-2 text-xs text-paper-teal-deep">
-            🎉 Все шаги пройдены — вы готовы нанимать на QBuild!
+            {t("build.onboarding.allDone")}
           </p>
         )}
       </div>
@@ -173,15 +170,15 @@ function Body() {
       </ol>
 
       <p className="mt-8 text-[11px] text-paper-ink-faint-2">
-        Нужен разбор с механикой оплаты?{" "}
+        {t("build.onboarding.footerQuestion")}{" "}
         <Link href="/build/guide" className="text-paper-teal-deep underline">
-          Гайд для работодателя
+          {t("build.onboarding.footerGuideLink")}
         </Link>
-        . Частые вопросы —{" "}
+        . {t("build.onboarding.footerFaqLabel")}{" "}
         <Link href="/build/help" className="text-paper-teal-deep underline">
           /build/help
         </Link>
-        , или напишите на{" "}
+        , {t("build.onboarding.footerEmailLabel")}{" "}
         <a href="mailto:hello@aevion.tech" className="text-paper-teal-deep underline">
           hello@aevion.tech
         </a>

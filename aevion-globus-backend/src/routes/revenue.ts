@@ -821,6 +821,10 @@ revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
         JSON.stringify(totals.byApp), JSON.stringify(totals.byChannel),
       ],
     );
+    // Bound the table's growth: /snapshots and /trend never query past 365
+    // days (their own hard cap), so nothing older than that is ever read —
+    // prune with a margin past it rather than let history accumulate forever.
+    await pool.query(`DELETE FROM "RevenueSnapshot" WHERE "capturedAt" < NOW() - INTERVAL '400 days'`);
     res.status(201).json({ snapshot: serializeSnapshot(r.rows[0] as SnapshotRow), channelsUsed: totals.channelsUsed });
   } catch (err: unknown) {
     capture(err, { route: "POST /snapshot" });

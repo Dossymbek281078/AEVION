@@ -150,7 +150,9 @@ async function runLens(
       `(primarily US/EU) opportunity. ${meta.brief}\n\n` +
       `Respond ONLY with strict JSON, no markdown, of the form: ` +
       `{"headline": string (<=140 chars), "points": string[3-4 concise findings], "risks": string[2-3 concrete risks]}. ` +
-      `Be specific, quantitative where possible, and intellectually honest — surface the strongest counter-argument.`,
+      `Be specific, quantitative where possible, and intellectually honest — surface the strongest counter-argument. ` +
+      `If the brief lists RED FLAGS that fall in your domain, you must address them explicitly rather than writing around them: ` +
+      `a lawyer praising IP the model just penalised for lapsing, or an economist ignoring a disclosed free incumbent, is worse than no memo.`,
   };
   const legalAppendix =
     lens === "lawyer" ? `\n\n${legalContext(input, result)}` : "";

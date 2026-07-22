@@ -112,6 +112,68 @@ async function run() {
   const fn0 = await req("GET", "/api/qventure/funnel/pdf?ids=nope-1,nope-2");
   assert("funnel with unknown ids → 404", fn0.status === 404, String(fn0.status));
 
+  // Regression guard: before adverse-disclosure penalties existed the engine could
+  // only add points, so the composite bottomed out around 59 and the "pass" verdict
+  // (<55) was unreachable — 55 live analyses had produced zero passes.
+  console.log("\n9. Adverse disclosures reach a 'pass' verdict");
+  const dead = await req("POST", "/api/qventure/analyze", {
+    name: "Adverse Co", sector: "ecommerce", stage: "growth", geography: "US", askUsd: 40000000,
+    description: "No revenue in 3 years, two of four founders left, incumbent Shopify ships the same feature free, and our only patent lapsed. We lose money on every order.",
+  });
+  assert("adverse deal → 200", dead.status === 200, String(dead.status));
+  const dr = dead.body?.data?.result;
+  assert("adverse deal scores 'pass'", dr?.strategy?.verdict === "pass", String(dr?.strategy?.verdict));
+  assert("adverse deal composite < 55", dr?.composite < 55, String(dr?.composite));
+  assert("adverse disclosures surfaced as red flags", Array.isArray(dr?.redFlags) && dr.redFlags.length >= 4,
+    String(dr?.redFlags?.length));
+  assert("penalties are explained in factor rationales",
+    dr.factors.some((f) => /adverse disclosures/i.test(f.rationale)));
+  // Reuses the healthy deal from group 4 rather than spending another analyze
+  // call — /analyze is limited to 6/min and the suite already sits at that ceiling.
+  assert("clean deal is not penalised", d?.result?.redFlags?.length === 0,
+    String(d?.result?.redFlags?.length));
+  // A pass must say what would have to change; naming a cheque size for a deal
+  // you are declining reads as a recommendation.
+  const rec = dr?.strategy?.reEntryConditions;
+  assert("pass carries re-entry conditions", Array.isArray(rec) && rec.length >= 3, String(rec?.length));
+  assert("pass names the points-to-55 gap", rec.some((c) => /re-score must reach 55/i.test(c)));
+  assert("pass does not recommend a ticket", dr.strategy.reasoning.some((r) => /no ticket recommended/i.test(r)));
+  assert("non-pass has no re-entry conditions", d?.result?.strategy?.reEntryConditions === undefined,
+    String(d?.result?.strategy?.reEntryConditions));
+
+  // The analysed plan is retained server-side so a verdict stays reproducible when
+  // the rubric changes, but it is confidential and analyses are public by default —
+  // it must not survive serialisation on any read path.
+  console.log("\n10. Retained plan never leaves the API");
+  assert("POST /analyze does not echo the plan", d?.input === undefined, JSON.stringify(d?.input || "").slice(0, 80));
+  const fetched = await req("GET", `/api/qventure/analyses/${analysisId}`);
+  assert("GET /analyses/:id does not expose the plan", fetched.body?.data?.input === undefined,
+    JSON.stringify(fetched.body?.data?.input || "").slice(0, 80));
+  assert("no description leaks in the serialised record",
+    !/"description"\s*:/.test(JSON.stringify(fetched.body?.data ?? {})));
+
+  // Five of eight factors are sector constants. The report must say which, or a
+  // reader assumes all eight were assessed about this specific company.
+  console.log("\n11. Factors declare where their number came from");
+  const BASES = ["company-evidence", "sector-prior", "no-evidence"];
+  assert("every factor declares a basis", d.result.factors.every((f) => BASES.includes(f.basis)),
+    JSON.stringify(d.result.factors.map((f) => f.basis)));
+  assert("sector-only factors are labelled as such",
+    ["timing", "science", "legal", "competition"].every((k) =>
+      d.result.factors.find((f) => f.key === k)?.basis === "sector-prior"));
+  assert("disclosed traction marks execution as company evidence",
+    d.result.factors.find((f) => f.key === "execution")?.basis === "company-evidence");
+
+  // Scores are only comparable within a rubric version — the gallery, percentiles
+  // and watchlist all rank stored analyses against each other.
+  console.log("\n12. Scores are stamped with the rubric that produced them");
+  assert("result carries a rubric version", typeof d.result.rubricVersion === "number",
+    String(d.result.rubricVersion));
+  assert("rubric version is >= 3", d.result.rubricVersion >= 3, String(d.result.rubricVersion));
+  assert("stored record keeps the rubric version",
+    typeof fetched.body?.data?.result?.rubricVersion === "number",
+    String(fetched.body?.data?.result?.rubricVersion));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

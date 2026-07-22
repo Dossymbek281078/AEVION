@@ -17,7 +17,7 @@ import {
   type Provider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
-import { providerHealthSummary, latencySummary } from "../services/qcoreai/providerHealth";
+import { providerHealthSummary, latencySummary, providerLatencySummary } from "../services/qcoreai/providerHealth";
 import { getModelPrice, type UsdPer1M } from "../services/qcoreai/pricing";
 import {
   runMultiAgent,
@@ -140,6 +140,7 @@ import {
   finishRun,
   forkPrompt,
   getAnalytics,
+  getOpexSummary,
   getCostTimeseries,
   getEvalRun,
   getEvalSuite,
@@ -1393,6 +1394,20 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-analytics" });
     res.status(500).json({ error: "analytics failed" });
+  }
+});
+
+/** GET /opex — platform-wide per-provider spend (P2-5). Aggregate-only:
+ *  costs/tokens/calls per provider and model plus a daily series; no user
+ *  ids, titles, or content — same public posture as /smart/savings. */
+qcoreaiRouter.get("/opex", async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 30;
+    const summary = await getOpexSummary(days);
+    res.json(summary);
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "opex" });
+    res.status(500).json({ error: "opex failed" });
   }
 });
 
@@ -6012,7 +6027,10 @@ qcoreaiRouter.get("/providers/health", async (_req, res) => {
       // this ping) -- a provider can ping "ok" right now yet have been
       // flaky across actual usage this session, or vice-versa.
       const { score: sessionHealthScore, samples: sessionSamples } = providerHealthSummary(p.id);
-      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString(), sessionHealthScore, sessionSamples };
+      // Median full-request latency over this instance's real (non-ping)
+      // successful calls -- a steadier speed signal than the single ping above.
+      const { p50Ms: sessionLatencyP50Ms, samples: sessionLatencySamples } = providerLatencySummary(p.id);
+      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString(), sessionHealthScore, sessionSamples, sessionLatencyP50Ms, sessionLatencySamples };
       providerHealthCache.set(p.id, { result, cachedAt: now });
       return result;
     })

@@ -12,19 +12,10 @@ import {
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
+import { useI18n } from "@/lib/i18n";
 
 type Cycle = "MONTHLY" | "YEARLY";
 const YEARLY_DISCOUNT = 0.2; // 20% off → 2 months free
-
-// HH baseline numbers used in the comparison table. These are *order-of-
-// magnitude* — public price lists shift, so we keep the language honest
-// ("starts at", "from"). The point of the table is the gap, not exact ₽.
-const HH_COMPARE = {
-  vacancyPost: "от 4 990 ₽",
-  resumeDb: "от 50 000 ₽/мес",
-  hireFee: "15–25% (агентство)",
-  hiddenFees: "паки, бусты, продление",
-};
 
 export default function PricingPage() {
   const token = useBuildAuth((s) => s.token);
@@ -168,6 +159,7 @@ export default function PricingPage() {
 }
 
 function ClaimCashbackButton({ onClaimed }: { onClaimed: () => void }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function claim() {
@@ -182,9 +174,14 @@ function ClaimCashbackButton({ onClaimed }: { onClaimed: () => void }) {
       }
       const r = await buildApi.claimCashback(deviceId);
       if (r.claimedRows === 0) {
-        setMsg("Все cashback уже были claimed.");
+        setMsg(t("build.pricing.cashback.allClaimed"));
       } else {
-        setMsg(`Claimed: ${r.claimedAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV (${r.claimedRows} записей).`);
+        setMsg(
+          t("build.pricing.cashback.claimedResult", {
+            amount: r.claimedAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 }),
+            count: r.claimedRows,
+          }),
+        );
       }
       onClaimed();
     } catch (e) {
@@ -208,6 +205,7 @@ function ClaimCashbackButton({ onClaimed }: { onClaimed: () => void }) {
 }
 
 function LoyaltyBanner() {
+  const { t } = useI18n();
   const token = useBuildAuth((s) => s.token);
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.loyaltyMe>> | null>(null);
   const [cashback, setCashback] = useState<Awaited<ReturnType<typeof buildApi.loyaltyCashback>> | null>(null);
@@ -229,26 +227,26 @@ function LoyaltyBanner() {
             Loyalty · 5 tiers, automatic
           </div>
           <h2 className="mt-2 text-2xl font-bold text-white">
-            Чем больше нанимаете — тем меньше комиссия и больше cashback
+            {t("build.pricing.loyalty.headline")}
           </h2>
         </div>
         <Link
           href="/build/loyalty"
           className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
         >
-          Все benefits →
+          {t("build.pricing.loyalty.allBenefits")}
         </Link>
       </div>
       <p className="mt-2 max-w-3xl text-sm text-slate-300">
-        Pay-per-Hire стартует с <span className="font-semibold text-fuchsia-200">12%</span> и опускается до <span className="font-semibold text-fuchsia-200">4%</span> на Platinum. Cashback растёт <span className="font-semibold text-emerald-200">2% → 5%</span>. Скидка на подписку до <span className="font-semibold text-cyan-200">−25%</span>. Всё применяется автоматически.
+        {t("build.pricing.loyalty.introPre")} <span className="font-semibold text-fuchsia-200">12%</span>{t("build.pricing.loyalty.introMid1")} <span className="font-semibold text-fuchsia-200">4%</span>{t("build.pricing.loyalty.introMid2")} <span className="font-semibold text-emerald-200">2% → 5%</span>{t("build.pricing.loyalty.introMid3")} <span className="font-semibold text-cyan-200">−25%</span>{t("build.pricing.loyalty.introEnd")}
       </p>
       <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {visibleTiers.map((t) => {
-          const reached = data ? data.hires >= t.minHires : false;
-          const current = data ? data.tier?.key === t.key : t.minHires === 0;
+        {visibleTiers.map((tier) => {
+          const reached = data ? data.hires >= tier.minHires : false;
+          const current = data ? data.tier?.key === tier.key : tier.minHires === 0;
           return (
             <div
-              key={t.key}
+              key={tier.key}
               className={`rounded-xl border p-4 text-sm ${
                 current
                   ? "border-fuchsia-400 bg-fuchsia-500/15 text-white"
@@ -258,20 +256,22 @@ function LoyaltyBanner() {
               }`}
             >
               <div className="text-xs font-semibold uppercase tracking-wider">
-                {t.label}
-                {current && <span className="ml-1 text-fuchsia-200">— вы</span>}
+                {tier.label}
+                {current && <span className="ml-1 text-fuchsia-200">{t("build.pricing.loyalty.youTag")}</span>}
               </div>
-              <div className="mt-1 text-3xl font-bold">{t.hireFeePct}%</div>
+              <div className="mt-1 text-3xl font-bold">{tier.hireFeePct}%</div>
               <div className="text-xs text-slate-400">
-                {t.minHires === 0 ? "С первого найма" : `с ${t.minHires} наймов`}
+                {tier.minHires === 0
+                  ? t("build.pricing.loyalty.fromFirstHire")
+                  : t("build.pricing.loyalty.fromNHires", { count: tier.minHires })}
               </div>
               <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
                 <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">
-                  +{(t.cashbackBps / 100).toFixed(1)}% cashback
+                  +{(tier.cashbackBps / 100).toFixed(1)}% cashback
                 </span>
-                {t.subDiscountBps > 0 && (
+                {tier.subDiscountBps > 0 && (
                   <span className="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200">
-                    −{t.subDiscountBps / 100}% sub
+                    −{tier.subDiscountBps / 100}% sub
                   </span>
                 )}
               </div>
@@ -281,14 +281,18 @@ function LoyaltyBanner() {
       </div>
       {data && (
         <div className="mt-4 text-xs text-fuchsia-100/80">
-          У вас уже {data.hires} закрытых наймов · текущий уровень{" "}
+          {t("build.pricing.loyalty.progressPre", { hires: data.hires })}{" "}
           <span className="font-semibold text-white">{data.tier.label}</span>
           {data.next &&
-            ` · до ${data.next.label} ещё ${data.next.hiresToNext} (${data.next.progressPct}%).`}
+            t("build.pricing.loyalty.progressNext", {
+              label: data.next.label,
+              hiresToNext: data.next.hiresToNext,
+              progressPct: data.next.progressPct,
+            })}
         </div>
       )}
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
-        💎 {data ? `+${(data.tier.cashbackBps / 100).toFixed(1)}%` : "+2%"} AEV cashback на любой платёж
+        💎 {data ? `+${(data.tier.cashbackBps / 100).toFixed(1)}%` : "+2%"} {t("build.pricing.loyalty.cashbackOnAnyPayment")}
       </div>
       {cashback && cashback.entries > 0 && (
         <div className="mt-4 space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
@@ -300,11 +304,11 @@ function LoyaltyBanner() {
               </div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-emerald-300">PAID-заказов</div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">{t("build.pricing.loyalty.paidOrders")}</div>
               <div className="mt-1 text-2xl font-bold text-emerald-200">{cashback.entries}</div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-emerald-300">Текущая ставка</div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">{t("build.pricing.loyalty.currentRate")}</div>
               <div className="mt-1 text-2xl font-bold text-emerald-200">
                 {(cashback.cashbackBps / 100).toFixed(0)}%
               </div>
@@ -382,22 +386,23 @@ function OrdersLedger({
 }
 
 function Hero() {
+  const { t } = useI18n();
   return (
     <section className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-900 px-6 py-10 sm:px-10 sm:py-14">
       <div className="text-xs font-bold uppercase tracking-wider text-emerald-300">
         QBuild · pricing
       </div>
       <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">
-        Платите за результат, а не за паки
+        {t("build.pricing.hero.title")}
       </h1>
       <p className="mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">
-        В отличие от HH, у нас все резюме видны на любом тарифе. Free Forever — навсегда. Pay-per-Hire — 0 ₽ до того как кандидат вышел на работу. Pro и Agency — ровно те функции, которые написаны в карточке: без скрытых платежей за &laquo;поднятие&raquo; и &laquo;премиум-объявление&raquo;.
+        {t("build.pricing.hero.subtitle")}
       </p>
       <div className="mt-5 flex flex-wrap gap-2 text-xs">
-        <Badge>0 ₽ за публикацию вакансии</Badge>
-        <Badge>База резюме во всех тарифах</Badge>
-        <Badge>Loyalty: 12% → 6% по мере наймов</Badge>
-        <Badge>2% AEV cashback на каждый PAID заказ</Badge>
+        <Badge>{t("build.pricing.hero.badge1")}</Badge>
+        <Badge>{t("build.pricing.hero.badge2")}</Badge>
+        <Badge>{t("build.pricing.hero.badge3")}</Badge>
+        <Badge>{t("build.pricing.hero.badge4")}</Badge>
         <Badge>Cancel anytime</Badge>
       </div>
     </section>
@@ -458,6 +463,7 @@ function PlanCard({
   tierDiscountBps: number;
   tierLabel: string | null;
 }) {
+  const { t } = useI18n();
   const isPro = plan.key === "PRO";
   const isPPH = plan.key === "PPHIRE";
   const showPrice = !isPPH;
@@ -489,7 +495,7 @@ function PlanCard({
         {isPPH ? (
           <>
             <div className="text-3xl font-extrabold text-white">0 ₽</div>
-            <div className="text-xs text-slate-400">upfront · 12% от оклада на найме</div>
+            <div className="text-xs text-slate-400">{t("build.pricing.plan.pphUpfront")}</div>
           </>
         ) : showPrice && plan.priceMonthly === 0 ? (
           <>
@@ -545,6 +551,7 @@ function PlanCard({
 }
 
 function ComparisonTable({ plans }: { plans: BuildPlan[] }) {
+  const { t } = useI18n();
   if (plans.length === 0) return null;
   const free = plans.find((p) => p.key === "FREE");
   const pro = plans.find((p) => p.key === "PRO");
@@ -552,29 +559,101 @@ function ComparisonTable({ plans }: { plans: BuildPlan[] }) {
   const pph = plans.find((p) => p.key === "PPHIRE");
   if (!free || !pro || !agency || !pph) return null;
 
-  const rows: { label: string; hh: string; free: string; pro: string; agency: string; pph: string }[] = [
-    { label: "Публикация вакансии", hh: HH_COMPARE.vacancyPost, free: "✓ бесплатно", pro: "✓", agency: "✓", pph: "✓" },
-    { label: "Доступ к резюме / поиск кандидатов", hh: HH_COMPARE.resumeDb, free: "5 поисков / мес", pro: "∞", agency: "∞", pph: "∞" },
-    { label: "Активных вакансий одновременно", hh: "по тарифу", free: "1", pro: "10", agency: "∞", pph: "∞" },
-    { label: "Boost / премиум-размещение", hh: "от 1 000 ₽ за раз", free: "—", pro: "5 / мес", agency: "20 / мес", pph: "—" },
-    { label: "Месячная плата", hh: "5 000–80 000 ₽", free: "0 ₽", pro: "4 990 ₽", agency: "14 990 ₽", pph: "0 ₽" },
-    { label: "Комиссия с найма", hh: HH_COMPARE.hireFee, free: "0%", pro: "0%", agency: "0%", pph: "12%" },
-    { label: "Скрытые платежи", hh: HH_COMPARE.hiddenFees, free: "нет", pro: "нет", agency: "нет", pph: "нет" },
-    { label: "Public/share-страница вакансии", hh: "—", free: "✓", pro: "✓", agency: "✓ white-label", pph: "✓" },
-    { label: "Cancel anytime", hh: "по договору", free: "—", pro: "✓", agency: "✓", pph: "✓" },
+  const rows: { id: string; label: string; hh: string; free: string; pro: string; agency: string; pph: string }[] = [
+    {
+      id: "vacancyPost",
+      label: t("build.pricing.compare.row.vacancyPost.label"),
+      hh: t("build.pricing.compare.row.vacancyPost.hh"),
+      free: t("build.pricing.compare.row.vacancyPost.free"),
+      pro: "✓",
+      agency: "✓",
+      pph: "✓",
+    },
+    {
+      id: "resumeDb",
+      label: t("build.pricing.compare.row.resumeDb.label"),
+      hh: t("build.pricing.compare.row.resumeDb.hh"),
+      free: t("build.pricing.compare.row.resumeDb.free"),
+      pro: "∞",
+      agency: "∞",
+      pph: "∞",
+    },
+    {
+      id: "activeVacancies",
+      label: t("build.pricing.compare.row.activeVacancies.label"),
+      hh: t("build.pricing.compare.row.activeVacancies.hh"),
+      free: "1",
+      pro: "10",
+      agency: "∞",
+      pph: "∞",
+    },
+    {
+      id: "boost",
+      label: t("build.pricing.compare.row.boost.label"),
+      hh: t("build.pricing.compare.row.boost.hh"),
+      free: "—",
+      pro: t("build.pricing.compare.row.boost.pro"),
+      agency: t("build.pricing.compare.row.boost.agency"),
+      pph: "—",
+    },
+    {
+      id: "monthlyFee",
+      label: t("build.pricing.compare.row.monthlyFee.label"),
+      hh: "5 000–80 000 ₽",
+      free: "0 ₽",
+      pro: "4 990 ₽",
+      agency: "14 990 ₽",
+      pph: "0 ₽",
+    },
+    {
+      id: "hireFee",
+      label: t("build.pricing.compare.row.hireFee.label"),
+      hh: t("build.pricing.compare.row.hireFee.hh"),
+      free: "0%",
+      pro: "0%",
+      agency: "0%",
+      pph: "12%",
+    },
+    {
+      id: "hiddenFees",
+      label: t("build.pricing.compare.row.hiddenFees.label"),
+      hh: t("build.pricing.compare.row.hiddenFees.hh"),
+      free: t("build.pricing.compare.row.hiddenFees.value"),
+      pro: t("build.pricing.compare.row.hiddenFees.value"),
+      agency: t("build.pricing.compare.row.hiddenFees.value"),
+      pph: t("build.pricing.compare.row.hiddenFees.value"),
+    },
+    {
+      id: "publicPage",
+      label: t("build.pricing.compare.row.publicPage.label"),
+      hh: "—",
+      free: "✓",
+      pro: "✓",
+      agency: "✓ white-label",
+      pph: "✓",
+    },
+    {
+      id: "cancelAnytime",
+      label: "Cancel anytime",
+      hh: t("build.pricing.compare.row.cancelAnytime.hh"),
+      free: "—",
+      pro: "✓",
+      agency: "✓",
+      pph: "✓",
+    },
   ];
 
   return (
     <section className="mt-12">
-      <h2 className="text-lg font-bold text-white">Сравнение с HeadHunter</h2>
+      <h2 className="text-lg font-bold text-white">{t("build.pricing.compare.heading")}</h2>
       <p className="mt-1 text-sm text-slate-400">
-        Цифры HH — публичные тарифы на 2026-04. Реальные суммы зависят от региона и условий аккаунт-менеджера.
+        {t("build.pricing.compare.disclaimer")}
       </p>
       <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full sm:min-w-[720px] text-left text-sm">
           <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
             <tr>
-              <th className="px-4 py-3">Параметр</th>
+              <th className="px-4 py-3">{t("build.pricing.compare.header.parameter")}</th>
               <th className="px-4 py-3 text-rose-300">HH</th>
               <th className="px-4 py-3">Free</th>
               <th className="px-4 py-3 text-emerald-300">Pro</th>
@@ -584,7 +663,7 @@ function ComparisonTable({ plans }: { plans: BuildPlan[] }) {
           </thead>
           <tbody className="divide-y divide-white/5">
             {rows.map((r) => (
-              <tr key={r.label} className="text-slate-200">
+              <tr key={r.id} className="text-slate-200">
                 <td className="px-4 py-3 font-medium">{r.label}</td>
                 <td className="px-4 py-3 text-rose-200/80">{r.hh}</td>
                 <td className="px-4 py-3 text-slate-300">{r.free}</td>
@@ -601,33 +680,34 @@ function ComparisonTable({ plans }: { plans: BuildPlan[] }) {
 }
 
 function AddOns() {
+  const { t } = useI18n();
   return (
     <section className="mt-12">
-      <h2 className="text-lg font-bold text-white">Add-ons (доступны на любом тарифе)</h2>
+      <h2 className="text-lg font-bold text-white">{t("build.pricing.addOns.heading")}</h2>
       <p className="mt-1 text-sm text-slate-400">
-        Не привязаны к подписке — берёте, когда нужно.
+        {t("build.pricing.addOns.subheading")}
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <AddOnCard
-          title="Boost-вакансия"
+          title={t("build.pricing.addOns.boost.title")}
           price="990 ₽"
-          desc="Топ ленты на 7 дней + значок &laquo;featured&raquo;. 5-pack — 3 990 ₽ (на 17% дешевле)."
+          desc={t("build.pricing.addOns.boost.desc")}
         />
         <AddOnCard
           title="Talent Day Pass"
           price="490 ₽"
-          desc="Безлимит поиска кандидатов на 24 часа. Для разовых задач — без подписки."
+          desc={t("build.pricing.addOns.talentPass.desc")}
         />
         <AddOnCard
           title="Verified Employer"
-          price="2 990 ₽ / год"
-          desc="Бейдж проверенного работодателя + повышенный приоритет в фиде. Проверка через AEVION QSign."
+          price={t("build.pricing.addOns.verifiedEmployer.price")}
+          desc={t("build.pricing.addOns.verifiedEmployer.desc")}
         />
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        Add-ons появятся в &laquo;Account → Billing&raquo; во время beta. Сейчас все add-ons бесплатно по запросу — пишите{" "}
+        {t("build.pricing.addOns.footerPre")}{" "}
         <Link href="/build/messages" className="text-emerald-300 underline">
-          в чат поддержки
+          {t("build.pricing.addOns.footerLink")}
         </Link>
         .
       </p>
@@ -646,26 +726,32 @@ function AddOnCard({ title, price, desc }: { title: string; price: string; desc:
 }
 
 function Faq() {
-  const items: { q: string; a: string }[] = [
+  const { t } = useI18n();
+  const items: { id: string; q: string; a: string }[] = [
     {
-      q: "Чем Pay-per-Hire реально отличается от HH-агентства?",
-      a: "12% от месячного оклада нового сотрудника против 15–25% у классических кадровых агентств и связки HH+рекрутер. Деньги хранятся в эскроу до выхода кандидата на первый рабочий день — если он не вышел, возврат 100%.",
+      id: "vsAgency",
+      q: t("build.pricing.faq.vsAgency.q"),
+      a: t("build.pricing.faq.vsAgency.a"),
     },
     {
-      q: "Почему Free навсегда, а не 30 дней?",
-      a: "Маленькой команде нужна одна вакансия раз в полгода. Заставлять её платить — глупо. Free Forever нужен, чтобы вы пользовались QBuild как телефоном: он есть, когда нужен.",
+      id: "whyFreeForever",
+      q: t("build.pricing.faq.whyFreeForever.q"),
+      a: t("build.pricing.faq.whyFreeForever.a"),
     },
     {
-      q: "Что входит в boost-вакансию?",
-      a: "7 дней закрепления в топе фида /build/vacancies (по дате создания и без учёта boost-конкурентов в это время). Значок &laquo;featured&raquo; в карточке. Аналитика просмотров.",
+      id: "whatsInBoost",
+      q: t("build.pricing.faq.whatsInBoost.q"),
+      a: t("build.pricing.faq.whatsInBoost.a"),
     },
     {
-      q: "Я уже на Pro. Можно подключить Pay-per-Hire?",
-      a: "Можно совместить: Pro даёт безлимит поиска, PPH — структуру оплаты найма. Включите PPH в настройках конкретной вакансии — это не отменит Pro.",
+      id: "proPlusPph",
+      q: t("build.pricing.faq.proPlusPph.q"),
+      a: t("build.pricing.faq.proPlusPph.a"),
     },
     {
-      q: "Что если я не нашёл кандидата за месяц?",
-      a: "На Free и PPH ничего не теряете. На Pro/Agency можно либо поставить на паузу (вакансия скрыта, плата идёт), либо отменить — поданные вакансии живут до конца оплаченного периода.",
+      id: "noHireInMonth",
+      q: t("build.pricing.faq.noHireInMonth.q"),
+      a: t("build.pricing.faq.noHireInMonth.a"),
     },
   ];
   return (
@@ -674,7 +760,7 @@ function Faq() {
       <div className="mt-4 space-y-3">
         {items.map((it) => (
           <details
-            key={it.q}
+            key={it.id}
             className="group rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
           >
             <summary className="cursor-pointer list-none font-semibold text-slate-200 marker:hidden">

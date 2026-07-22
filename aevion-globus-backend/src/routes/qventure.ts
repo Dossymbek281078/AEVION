@@ -109,7 +109,9 @@ async function ensureExampleAnalyses(): Promise<void> {
 
 // ── Limiters ────────────────────────────────────────────────────────────────
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 40, keyPrefix: "qventure:general", message: "rate_limited" });
-const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 6, keyPrefix: "qventure:analyze", message: "rate_limited" });
+// 6/min left no room: an investor screening a handful of deals in one sitting hit
+// the wall, and the smoke suite sat exactly at the ceiling so any retry failed it.
+const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 15, keyPrefix: "qventure:analyze", message: "rate_limited" });
 
 export const qventureRouter = Router();
 qventureRouter.use(generalLimiter);
@@ -132,6 +134,10 @@ interface StoredAnalysis {
   composite: number;
   verdict: string;
   result: ReturnType<typeof analyze> & { council: MemoOutput };
+  /** The analysed plan, retained so this verdict can be re-derived when the rubric
+   *  changes. Stripped from every API response by redactInput() — business plans
+   *  are confidential and analyses are public by default. */
+  input?: AnalysisInput;
   contentHash: string;
   visibility: string;
   createdAt: string;
@@ -139,6 +145,19 @@ interface StoredAnalysis {
 
 // In-memory fallback store (newest-first).
 const memStore: StoredAnalysis[] = [];
+
+/**
+ * Strip the retained plan before a record leaves the process.
+ *
+ * `input` exists only so a stored verdict stays reproducible when the rubric
+ * changes. It is the founder's confidential business plan, and analyses are
+ * public by default (and shareable by link), so it must never be serialised
+ * into a response. Every read path funnels through here.
+ */
+function redactInput(record: StoredAnalysis): Omit<StoredAnalysis, "input"> {
+  const { input: _retainedForReproducibility, ...safe } = record;
+  return safe;
+}
 
 // ── Watchlist (per-investor saved deals) ───────────────────────────────────────
 interface WatchItem {
@@ -361,6 +380,7 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
       composite: engineResult.composite,
       verdict: engineResult.verdict,
       result: { ...engineResult, council },
+      input,
       contentHash: contentHash(input),
       visibility: "public",
       createdAt: nowIso(),
@@ -368,7 +388,7 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
 
     await persist(record);
 
-    res.json({ ok: true, data: record });
+    res.json({ ok: true, data: redactInput(record) });
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "analysis_failed" });
@@ -402,7 +422,7 @@ qventureRouter.get("/analyses/:id", async (req: Request, res: Response) => {
   try {
     const row = await getById(String(req.params.id));
     if (!row) return res.status(404).json({ ok: false, error: "not_found" });
-    res.json({ ok: true, data: row });
+    res.json({ ok: true, data: redactInput(row) });
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "get_failed" });
@@ -937,12 +957,13 @@ async function persist(record: StoredAnalysis): Promise<void> {
     try {
       await pool.query(
         `INSERT INTO qventure_analyses
-         (id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, visibility, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         (id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, visibility, created_at, analysis_input)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           record.id, record.name, record.sector, record.stage, record.geography,
           record.askUsd, record.composite, record.verdict,
           JSON.stringify(record.result), record.contentHash, record.visibility, record.createdAt,
+          record.input ? JSON.stringify(record.input) : null,
         ]
       );
       return;
@@ -1119,6 +1140,11 @@ function rowToRecord(row: Record<string, unknown>): StoredAnalysis {
     composite: Number(row.composite),
     verdict: String(row.verdict),
     result: result as StoredAnalysis["result"],
+    input: row.analysis_input
+      ? ((typeof row.analysis_input === "string"
+          ? JSON.parse(row.analysis_input as string)
+          : row.analysis_input) as AnalysisInput)
+      : undefined,
     contentHash: (row.content_hash as string) ?? "",
     visibility: "public",
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),

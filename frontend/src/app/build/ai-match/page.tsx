@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 type MatchResult = {
   score: number;
@@ -22,6 +23,7 @@ const SCORE_BG = (s: number) =>
   s >= 80 ? "bg-emerald-950/40 border-emerald-800/60" : s >= 50 ? "bg-amber-950/40 border-amber-800/60" : "bg-red-950/40 border-red-800/60";
 
 export default function AiMatchPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("match");
   const [profileText, setProfileText] = useState("");
   const [vacancyText, setVacancyText] = useState("");
@@ -34,27 +36,27 @@ export default function AiMatchPage() {
 
   async function handleMatch() {
     if (!profileText.trim() || !vacancyText.trim()) {
-      setError("Заполните оба поля"); return;
+      setError(t("build.aiMatch.fillBothFields")); return;
     }
     setLoading(true); setError(""); setMatchResult(null);
     try {
       const r = await buildApi.aiMatchVacancy({ profileText, vacancyText });
       setMatchResult(r.match);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка AI");
+      setError(e instanceof Error ? e.message : t("build.aiMatch.aiError"));
     } finally { setLoading(false); }
   }
 
   async function handleCoverLetter() {
     if (!profileText.trim() || !vacancyText.trim()) {
-      setError("Заполните оба поля"); return;
+      setError(t("build.aiMatch.fillBothFields")); return;
     }
     setLoading(true); setError(""); setCoverLetter(null);
     try {
       const r = await buildApi.aiCoverLetter({ profileText, vacancyText, tone });
       setCoverLetter(r.coverLetter ?? r.letter ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка AI");
+      setError(e instanceof Error ? e.message : t("build.aiMatch.aiError"));
     } finally { setLoading(false); }
   }
 
@@ -72,26 +74,26 @@ export default function AiMatchPage() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-2xl">🤖</span>
-            <h1 className="text-xl font-bold">AI Анализ вакансии</h1>
+            <h1 className="text-xl font-bold">{t("build.aiMatch.title")}</h1>
           </div>
           <p className="text-slate-400 text-sm">
-            Вставьте свой профиль и описание вакансии — AI оценит соответствие или напишет сопроводительное письмо.
+            {t("build.aiMatch.subtitle")}
           </p>
         </div>
 
         {/* Tab switcher */}
         <div className="flex gap-1 bg-slate-900 p-1 rounded-xl mb-6 border border-slate-800">
-          {(["match", "cover"] as Tab[]).map((t) => (
+          {(["match", "cover"] as Tab[]).map((tabKey) => (
             <button
-              key={t}
-              onClick={() => { setTab(t); setError(""); }}
+              key={tabKey}
+              onClick={() => { setTab(tabKey); setError(""); }}
               className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                tab === t
+                tab === tabKey
                   ? "bg-slate-700 text-white shadow"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {t === "match" ? "📊 Оценить соответствие" : "✍️ Написать письмо"}
+              {tabKey === "match" ? t("build.aiMatch.tabMatch") : t("build.aiMatch.tabCover")}
             </button>
           ))}
         </div>
@@ -100,45 +102,49 @@ export default function AiMatchPage() {
         <div className="grid gap-4 mb-4">
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Мой профиль / резюме
+              {t("build.aiMatch.profileLabel")}
             </label>
             <textarea
               rows={6}
               value={profileText}
               onChange={(e) => setProfileText(e.target.value)}
-              placeholder="Опыт: 7 лет в строительстве, отделочные работы. Специализация: штукатурка, плитка. Сертификат КНАУФ..."
+              placeholder={t("build.aiMatch.profilePlaceholder")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Описание вакансии
+              {t("build.aiMatch.vacancyLabel")}
             </label>
             <textarea
               rows={6}
               value={vacancyText}
               onChange={(e) => setVacancyText(e.target.value)}
-              placeholder="Ищем опытного штукатура для объекта в ЖК Алматы. Требования: опыт от 3 лет, умение работать машинной штукатуркой..."
+              placeholder={t("build.aiMatch.vacancyPlaceholder")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none"
             />
           </div>
           {tab === "cover" && (
             <div>
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Тон письма
+                {t("build.aiMatch.toneLabel")}
               </label>
               <div className="flex gap-2">
-                {(["professional", "friendly", "concise"] as const).map((t) => (
+                {(["professional", "friendly", "concise"] as const).map((toneKey) => (
                   <button
-                    key={t}
-                    onClick={() => setTone(t)}
+                    key={toneKey}
+                    onClick={() => setTone(toneKey)}
                     className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors border ${
-                      tone === t
+                      tone === toneKey
                         ? "bg-violet-600 border-violet-500 text-white"
                         : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"
                     }`}
                   >
-                    {t === "professional" ? "💼 Деловой" : t === "friendly" ? "😊 Дружелюбный" : "⚡ Краткий"}
+                    {toneKey === "professional"
+                      ? t("build.aiMatch.toneProfessional")
+                      : toneKey === "friendly"
+                        ? t("build.aiMatch.toneFriendly")
+                        : t("build.aiMatch.toneConcise")}
                   </button>
                 ))}
               </div>
@@ -158,10 +164,10 @@ export default function AiMatchPage() {
           className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors mb-6"
         >
           {loading
-            ? "AI анализирует..."
+            ? t("build.aiMatch.analyzing")
             : tab === "match"
-              ? "📊 Оценить соответствие"
-              : "✍️ Написать сопроводительное письмо"}
+              ? t("build.aiMatch.tabMatch")
+              : t("build.aiMatch.submitCover")}
         </button>
 
         {/* Match result */}
@@ -176,13 +182,13 @@ export default function AiMatchPage() {
               </div>
               <div>
                 <p className="text-xl font-bold text-white">{matchResult.label}</p>
-                <p className="text-slate-400 text-sm">Индекс соответствия AI</p>
+                <p className="text-slate-400 text-sm">{t("build.aiMatch.matchIndexLabel")}</p>
               </div>
             </div>
 
             {matchResult.strengths.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">✅ Сильные стороны</h3>
+                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">{t("build.aiMatch.strengthsHeading")}</h3>
                 <ul className="space-y-1">
                   {matchResult.strengths.map((s, i) => (
                     <li key={i} className="text-sm text-slate-200 flex gap-2">
@@ -196,7 +202,7 @@ export default function AiMatchPage() {
 
             {matchResult.gaps.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">⚠ Пробелы</h3>
+                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">{t("build.aiMatch.gapsHeading")}</h3>
                 <ul className="space-y-1">
                   {matchResult.gaps.map((g, i) => (
                     <li key={i} className="text-sm text-slate-200 flex gap-2">
@@ -210,7 +216,7 @@ export default function AiMatchPage() {
 
             {matchResult.tip && (
               <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
-                <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-1">💡 Совет</h3>
+                <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-1">{t("build.aiMatch.tipHeading")}</h3>
                 <p className="text-sm text-slate-200">{matchResult.tip}</p>
               </div>
             )}
@@ -219,7 +225,7 @@ export default function AiMatchPage() {
               onClick={() => { setTab("cover"); setCoverLetter(null); }}
               className="mt-4 w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-colors"
             >
-              ✍️ Написать сопроводительное письмо для этой вакансии →
+              {t("build.aiMatch.writeCoverForVacancy")}
             </button>
           </div>
         )}
@@ -228,12 +234,12 @@ export default function AiMatchPage() {
         {tab === "cover" && coverLetter && (
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-white">Сопроводительное письмо</h3>
+              <h3 className="font-bold text-white">{t("build.aiMatch.coverLetterHeading")}</h3>
               <button
                 onClick={copyLetter}
                 className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg transition-colors"
               >
-                {copiedCover ? "✓ Скопировано" : "Копировать"}
+                {copiedCover ? t("build.aiMatch.copied") : t("build.aiMatch.copy")}
               </button>
             </div>
             <pre className="whitespace-pre-wrap text-sm text-slate-200 leading-relaxed font-sans">
@@ -243,11 +249,11 @@ export default function AiMatchPage() {
         )}
 
         <div className="mt-6 pt-4 border-t border-slate-800 flex items-center gap-4 text-xs text-slate-600">
-          <Link href="/build" className="hover:text-slate-400">← Назад</Link>
+          <Link href="/build" className="hover:text-slate-400">{t("build.aiMatch.back")}</Link>
           <span>·</span>
-          <span>AI на базе Claude · AEVION QBuild</span>
+          <span>{t("build.aiMatch.poweredBy")}</span>
           <span>·</span>
-          <span>10 запросов / 10 мин</span>
+          <span>{t("build.aiMatch.rateLimit")}</span>
         </div>
       </div>
     </BuildShell>

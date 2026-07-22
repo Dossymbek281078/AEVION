@@ -20,6 +20,7 @@ export interface ScoreFactor {
   weight: number;
   score: number;
   rationale: string;
+  basis?: "company-evidence" | "sector-prior" | "no-evidence";
 }
 
 export interface Lens {
@@ -40,6 +41,7 @@ export interface Strategy {
   returns: { baseMoic: number; lossProbability: number; expectedMoic: number; targetIrrPct: number; horizonYears: number };
   portfolioNote: string;
   reasoning: string[];
+  reEntryConditions?: string[];
 }
 
 export interface SectorSource {
@@ -55,6 +57,8 @@ export interface AnalysisResult {
   composite: number;
   verdict: Verdict;
   result: {
+    /** Rubric generation that produced this score; absent on records predating versioning. */
+    rubricVersion?: number;
     factors: ScoreFactor[];
     strategy: Strategy;
     assumptions: string[];
@@ -141,40 +145,116 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
   );
 }
 
-// Provenance of the composite score: how much of it reflects THIS startup's own
-// disclosed evidence vs. sector-level priors. Only the execution factor is scored
-// from the founder's traction input; the other seven are sector-benchmark derived
-// (from SectorProfile, which carries cited sources). Honest by the engine's design.
+// Provenance of the composite: how much of it rests on this startup's own
+// disclosed evidence rather than sector priors.
+//
+// This used to infer provenance by string-matching the rationale text for
+// "cited" / "no traction", and to assume exactly one factor could ever come from
+// the founder. Both had gone stale: a submission with real metrics produces
+// "Quantified traction: $12M revenue…", which contains none of those words and so
+// was miscounted as a sector benchmark — and market, moat and economics can all
+// be company-scored when the plan discloses figures. The engine now states the
+// provenance of each factor directly, so read that instead of guessing from prose.
 export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
   let measured = 0, derived = 0, guessed = 0;
   for (const f of factors) {
-    if (f.key === "execution") {
-      const r = f.rationale.toLowerCase();
-      if (r.includes("cited")) measured++;               // founder cited concrete metrics
-      else if (r.includes("no traction") || r.includes("unproven")) guessed++;
-      else derived++;                                     // qualitative traction only
-    } else {
-      derived++;                                          // sector benchmark (sourced)
+    // Records predating the basis field fall back to sector-benchmark, which is
+    // what five of eight factors always were.
+    switch (f.basis ?? "sector-prior") {
+      case "company-evidence": measured++; break;
+      case "no-evidence": guessed++; break;
+      default: derived++; break;
     }
   }
   return dataQualityFromCounts(measured, derived, guessed, {
-    source: "QVenture engine — 1 execution factor from startup input, 7 from sector benchmarks",
+    source: `QVenture engine — ${measured} of ${factors.length} factors scored from this startup's disclosed metrics, the rest from sector benchmarks`,
     note: "из данных стартапа — фактор оценён по раскрытым метрикам основателя; секторный бенчмарк — из отраслевых норм (с источниками); нет данных — трэкшн не раскрыт. Скор — секторный скрининг, не глубокий DD.",
   });
 }
 
+// Five of the eight factors are sector constants — the same number for every
+// company in that market. Labelling the source stops a reader assuming all eight
+// were assessed about this specific company, and explains a low execution score.
+const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: string; fg: string; title: string }> = {
+  "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Scored from metrics disclosed in this submission." },
+  "sector-prior": { text: "sector average", bg: "#f1f5f9", fg: "#475569", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
+  "no-evidence": { text: "not disclosed", bg: "#fef2f2", fg: "#b91c1c", title: "Nothing was submitted for this factor, so it scores low rather than neutral. Add traction metrics to move it." },
+};
+
 export function FactorBar({ f }: { f: ScoreFactor }) {
   const color = f.score >= 70 ? "#16a34a" : f.score >= 50 ? "#d97706" : "#dc2626";
+  const tag = f.basis ? BASIS_TAG[f.basis] : null;
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-        <span style={{ color: "#0f172a", fontWeight: 600 }}>{f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span></span>
+        <span style={{ color: "#0f172a", fontWeight: 600 }}>
+          {f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span>
+          {tag && (
+            <span title={tag.title} style={{
+              marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "1px 6px",
+              borderRadius: 999, background: tag.bg, color: tag.fg, whiteSpace: "nowrap",
+            }}>{tag.text}</span>
+          )}
+        </span>
         <span style={{ fontWeight: 700, color }}>{f.score}</span>
       </div>
       <div style={{ height: 7, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
         <div style={{ width: `${f.score}%`, height: "100%", background: color }} />
       </div>
       <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{f.rationale}</div>
+    </div>
+  );
+}
+
+/**
+ * Score breakdown, split by what the number is actually about.
+ *
+ * Listing all eight factors flat gives equal billing to rows that describe this
+ * company and rows that are the same for every deal in the sector. Reading top
+ * to bottom, five sector constants drown the two or three rows that carry the
+ * real information. What the company disclosed leads; the sector benchmark
+ * collapses into one block that opens on demand.
+ */
+export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
+  const [showSector, setShowSector] = useState(false);
+  const company = factors.filter((f) => f.basis !== "sector-prior");
+  const sector = factors.filter((f) => f.basis === "sector-prior");
+  const sectorWeight = Math.round(sector.reduce((s, f) => s + f.weight, 0) * 100);
+
+  if (sector.length === 0 || company.length === 0) {
+    return <>{factors.map((f) => <FactorBar key={f.key} f={f} />)}</>;
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+        About this company · {100 - sectorWeight}% of the score
+      </div>
+      {company.map((f) => <FactorBar key={f.key} f={f} />)}
+
+      <button
+        type="button"
+        onClick={() => setShowSector((v) => !v)}
+        style={{
+          width: "100%", marginTop: 6, padding: "9px 12px", cursor: "pointer",
+          background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10,
+          fontSize: 12.5, fontWeight: 600, color: "#475569", textAlign: "left",
+        }}
+      >
+        {showSector ? "▾" : "▸"} Sector context · {sectorWeight}% of the score ·{" "}
+        <span style={{ fontWeight: 400 }}>
+          {sector.length} factors identical for every company in this sector
+        </span>
+      </button>
+      {showSector && (
+        <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: "3px solid #e2e8f0" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+            These are benchmarks for the sector, not findings about this company — a rival deal in
+            the same market scores the same here. They set the backdrop; they do not differentiate.
+          </p>
+          {sector.map((f) => <FactorBar key={f.key} f={f} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -206,10 +286,28 @@ export function StrategyPanel({ s }: { s: Strategy }) {
       {sub && <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 1 }}>{sub}</div>}
     </div>
   );
+  // On a pass the sizing grid is a reference for a hypothetical re-score, not a
+  // recommendation — label it so, and lead with what would have to change instead.
+  const isPass = s.verdict === "pass";
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
-        {cell("Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
+      {isPass && s.reEntryConditions && s.reEntryConditions.length > 0 && (
+        <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 6 }}>
+            Not investable as presented — what would have to change
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+            {s.reEntryConditions.map((c, i) => <li key={i} style={{ marginBottom: 3 }}>{c}</li>)}
+          </ol>
+        </div>
+      )}
+      {isPass && (
+        <div style={{ fontSize: 12, color: "#92400e", marginBottom: 8 }}>
+          The figures below are the terms this deal would have to earn on a re-score — not an offer.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14, opacity: isPass ? 0.62 : 1 }}>
+        {cell(isPass ? "Ticket (indicative)" : "Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
         {cell("Target ownership", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
         {cell("Valuation (pre)", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
         {cell("Expected return", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
@@ -226,7 +324,11 @@ export function StrategyPanel({ s }: { s: Strategy }) {
           ))}
         </div>
       </div>
-      <div style={{ fontSize: 13, color: "#334155", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px" }}>
+      <div style={{
+        fontSize: 13, color: "#334155", borderRadius: 10, padding: "10px 14px",
+        background: isPass ? "#fffbeb" : "#f0fdf4",
+        border: `1px solid ${isPass ? "#fde68a" : "#bbf7d0"}`,
+      }}>
         <strong>Portfolio:</strong> {s.portfolioNote}
       </div>
     </div>
@@ -663,6 +765,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "#1e293b", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>
           Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
+          {result.result.rubricVersion ? ` · scored by rubric v${result.result.rubricVersion} — scores are only comparable within a version` : ""}
         </div>
       </div>
 
@@ -687,7 +790,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
             labels={{ measured: "из данных стартапа", derived: "секторный бенчмарк", guessed: "нет данных", unit: "факторов" }}
           />
         </div>
-        {result.result.factors.map((f) => <FactorBar key={f.key} f={f} />)}
+        <FactorBreakdown factors={result.result.factors} />
       </div>
 
       <div style={SECTION}>

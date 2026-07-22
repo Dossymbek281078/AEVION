@@ -1,0 +1,30 @@
+name: Post-merge prod check
+
+# The 2026-07-21 lesson applied to the planet itself: a merge is not "done"
+# when CI is green — it's done when the production page still opens. This
+# waits out the Vercel deploy window and then actually GETs the homepage,
+# so a broken main surfaces minutes after the merge, not in tomorrow's
+# daily smoke.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  homepage-serves:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Wait for Vercel deploy window, then GET the homepage
+        run: |
+          sleep 300
+          for url in "https://aevion.vercel.app" "https://aevion.vercel.app/explore"; do
+            echo "checking $url"
+            code=$(curl -s -o /tmp/body -w "%{http_code}" --max-time 30 -L "$url")
+            size=$(wc -c < /tmp/body)
+            echo "  HTTP $code, ${size} bytes"
+            if [ "$code" != "200" ]; then echo "::error::$url returned $code"; exit 1; fi
+            if [ "$size" -lt 5000 ]; then echo "::error::$url body suspiciously small (${size}B)"; exit 1; fi
+            if ! grep -qi "aevion" /tmp/body; then echo "::error::$url body does not mention AEVION"; exit 1; fi
+          done
+          echo "prod homepage serves after this merge"

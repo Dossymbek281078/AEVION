@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useI18n } from "@/lib/i18n";
 
 type TeamRequest = {
   id: string;
@@ -20,6 +21,7 @@ type TeamRequest = {
 type Role = { specialty: string; count: number; salary: number | null };
 
 export default function TeamRequestsPage() {
+  const { t } = useI18n();
   const token = useBuildAuth((s) => s.token);
   const [requests, setRequests] = useState<TeamRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,9 +42,9 @@ export default function TeamRequestsPage() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">👷 Найм бригады</h1>
+            <h1 className="text-2xl font-bold text-white">👷 {t("build.teamRequests.pageTitle")}</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Одним запросом — целая команда. Укажите нужные роли и найдите бригаду.
+              {t("build.teamRequests.pageSubtitle")}
             </p>
           </div>
           {token && (
@@ -50,7 +52,7 @@ export default function TeamRequestsPage() {
               onClick={() => setShowCreate(true)}
               className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
             >
-              + Найти бригаду
+              {t("build.teamRequests.findTeamCta")}
             </button>
           )}
         </div>
@@ -70,10 +72,10 @@ export default function TeamRequestsPage() {
         ) : requests.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
             <p className="text-4xl">👷</p>
-            <p className="mt-3 text-slate-300">Пока нет запросов на бригаду</p>
+            <p className="mt-3 text-slate-300">{t("build.teamRequests.emptyTitle")}</p>
             {token && (
               <button onClick={() => setShowCreate(true)} className="mt-4 rounded-lg bg-emerald-500/20 px-4 py-2 text-sm text-emerald-200">
-                Создать первый запрос
+                {t("build.teamRequests.emptyCta")}
               </button>
             )}
           </div>
@@ -95,7 +97,7 @@ export default function TeamRequestsPage() {
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
-                      {r.applicantCount} откликов
+                      {t("build.teamRequests.applicantsCount", { count: r.applicantCount })}
                     </span>
                   </div>
 
@@ -124,6 +126,7 @@ export default function TeamRequestsPage() {
 }
 
 function CreateTeamForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [city, setCity] = useState("");
@@ -150,7 +153,7 @@ function CreateTeamForm({ onCreated }: { onCreated: () => void }) {
           count: Number(r.count) || 1,
           salary: r.salary ? Number(r.salary) : null,
         }));
-      if (validRoles.length === 0) { setError("Добавьте хотя бы одну роль"); return; }
+      if (validRoles.length === 0) { setError(t("build.teamRequests.form.errorNoRoles")); return; }
       await buildApi.createTeamRequest({
         title, description, roles: validRoles,
         city: city || undefined,
@@ -158,7 +161,7 @@ function CreateTeamForm({ onCreated }: { onCreated: () => void }) {
       });
       onCreated();
     } catch {
-      setError("Ошибка создания запроса");
+      setError(t("build.teamRequests.form.errorCreate"));
     } finally {
       setBusy(false);
     }
@@ -166,33 +169,33 @@ function CreateTeamForm({ onCreated }: { onCreated: () => void }) {
 
   return (
     <form onSubmit={(e) => void submit(e)} className="space-y-4 text-sm">
-      <h3 className="font-semibold text-white">Создать запрос на бригаду</h3>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название объекта / работ *" required className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание задачи, сроки, условия *" required rows={3} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+      <h3 className="font-semibold text-white">{t("build.teamRequests.form.heading")}</h3>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("build.teamRequests.form.titlePlaceholder")} required className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("build.teamRequests.form.descriptionPlaceholder")} required rows={3} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
       <div className="grid grid-cols-2 gap-3">
-        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Город" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-        <input value={startDate} onChange={(e) => setStartDate(e.target.value)} placeholder="Дата начала (дд.мм.гггг)" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder={t("build.teamRequests.form.cityPlaceholder")} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+        <input value={startDate} onChange={(e) => setStartDate(e.target.value)} placeholder={t("build.teamRequests.form.startDatePlaceholder")} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
       </div>
       <div className="space-y-2">
-        <p className="text-xs font-medium text-slate-400 uppercase">Нужные роли</p>
+        <p className="text-xs font-medium text-slate-400 uppercase">{t("build.teamRequests.form.rolesLabel")}</p>
         {roles.map((role, i) => (
           <div key={i} className="flex gap-2">
-            <input value={role.specialty} onChange={(e) => updateRole(i, "specialty", e.target.value)} placeholder="Специальность *" className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-            <input type="number" value={role.count} onChange={(e) => updateRole(i, "count", e.target.value)} min={1} max={99} placeholder="Кол-во" className="w-20 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white" />
-            <input value={role.salary} onChange={(e) => updateRole(i, "salary", e.target.value)} placeholder="Зарплата ₽" className="w-28 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+            <input value={role.specialty} onChange={(e) => updateRole(i, "specialty", e.target.value)} placeholder={t("build.teamRequests.form.specialtyPlaceholder")} className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
+            <input type="number" value={role.count} onChange={(e) => updateRole(i, "count", e.target.value)} min={1} max={99} placeholder={t("build.teamRequests.form.countPlaceholder")} className="w-20 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white" />
+            <input value={role.salary} onChange={(e) => updateRole(i, "salary", e.target.value)} placeholder={t("build.teamRequests.form.salaryPlaceholder")} className="w-28 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
             {roles.length > 1 && (
               <button type="button" onClick={() => removeRole(i)} className="px-2 text-rose-400 hover:text-rose-300">×</button>
             )}
           </div>
         ))}
-        <button type="button" onClick={addRole} className="text-xs text-emerald-400 hover:text-emerald-300">+ Добавить роль</button>
+        <button type="button" onClick={addRole} className="text-xs text-emerald-400 hover:text-emerald-300">{t("build.teamRequests.form.addRole")}</button>
       </div>
       {error && <p className="text-xs text-rose-400">{error}</p>}
       <div className="flex gap-3">
         <button type="submit" disabled={busy} className="rounded-lg bg-emerald-500 px-5 py-2 font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50">
-          {busy ? "…" : "Опубликовать запрос"}
+          {busy ? "…" : t("build.teamRequests.form.submit")}
         </button>
-        <button type="button" onClick={onCreated} className="rounded-lg border border-white/10 px-4 py-2 text-slate-300">Отмена</button>
+        <button type="button" onClick={onCreated} className="rounded-lg border border-white/10 px-4 py-2 text-slate-300">{t("build.teamRequests.form.cancel")}</button>
       </div>
     </form>
   );

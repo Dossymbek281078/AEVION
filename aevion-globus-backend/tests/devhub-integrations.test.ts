@@ -20,6 +20,12 @@ vi.mock("../src/services/qcoreai/providers", () => ({
   callProvider: vi.fn(),
 }));
 
+// Mock the wrangler CLI wrapper — tests must never spawn a real npx process.
+const { mockDeployViaWrangler } = vi.hoisted(() => ({ mockDeployViaWrangler: vi.fn() }));
+vi.mock("../src/lib/wranglerPagesDeploy", () => ({
+  deployViaWrangler: mockDeployViaWrangler,
+}));
+
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
@@ -41,6 +47,7 @@ beforeEach(() => {
   __resetDevHubStore();
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
+  mockDeployViaWrangler.mockReset();
 });
 
 afterEach(() => {
@@ -417,9 +424,8 @@ describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
     const id = cr.body.project.id as string;
     await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>v1</h1>" });
 
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { success: true }))
-      .mockResolvedValueOnce(jsonResp(200, { success: true, result: { id: "dep-1", url: "stale.pages.dev" } }));
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://stale.pages.dev", output: "" });
     const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
     expect(dep.status).toBe(200);
     // The pages route flips project.deployUrl in a deferred "mark live" step
@@ -470,19 +476,35 @@ describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing
       .put(`/api/devhub/projects/${id}/file?path=index.html`)
       .send({ content: "<h1>hi</h1>" });
 
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(400, {
-        success: false,
-        // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
-        errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
-      }))
-      .mockResolvedValueOnce(jsonResp(200, { success: true, result: { id: "dep-1", url: "t-abc123.pages.dev" } }));
+    fetchMock.mockResolvedValueOnce(jsonResp(400, {
+      success: false,
+      // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
+      errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
+    }));
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://t-abc123.pages.dev", output: "" });
 
     const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
     expect(r.status).toBe(200);
-    expect(String(fetchMock.mock.calls[1][0])).toContain("/deployments");
+    expect(mockDeployViaWrangler).toHaveBeenCalledTimes(1);
     expect(r.body.pagesUrl ?? r.body.liveUrl ?? r.body.deployUrl).toContain("pages.dev");
+  });
+
+  test("wrangler failure marks the deployment failed and returns 502 with the reason", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: false, error: "wrangler exited with code 1: auth error", output: "" });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/wrangler exited/);
   });
 });
 

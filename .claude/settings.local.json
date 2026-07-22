@@ -87,7 +87,10 @@
       "Bash(node scripts/i18n-kk-extract.mjs)",
       "Bash(git rev-list *)",
       "Bash(git rebase *)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(billing\\): consolidate pricing config, fix Universe/pro entitlement bug' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(billing\\): consolidate pricing config, fix Universe/pro entitlement bug' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 779 --watch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29889613085 --job 88827230412 --log-failed)",
+      "Bash(npm test *)"
     ]
   }
 }

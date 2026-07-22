@@ -9,12 +9,16 @@ import {
 } from "../src/lib/planGate";
 
 function plan(tier: ResolvedPlan["tier"], chosenModules: string[] = []): ResolvedPlan {
-  return { tier, email: "u@test.io", reason: "test", chosenModules };
+  return { tier, rawTier: tier, email: "u@test.io", reason: "test", chosenModules };
 }
 
 describe("normalizeTier", () => {
   it("maps legacy aliases to canonical tiers", () => {
-    expect(normalizeTier("pro")).toBe("lite");
+    // "pro" (Universe, $149.99/mo flagship) grants full module access, same
+    // ceiling as "full" — it used to alias "lite" back when "pro" was a
+    // placeholder id with no real tier object behind it. Fixed 2026-07-22:
+    // that mapping would have gated a $149.99 customer at $19-Lite access.
+    expect(normalizeTier("pro")).toBe("full");
     expect(normalizeTier("business")).toBe("full");
   });
   it("passes through canonical tiers and defaults unknown to free", () => {

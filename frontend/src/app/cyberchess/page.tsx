@@ -1960,9 +1960,16 @@ export default function CyberChessPage(){
   });
   useEffect(()=>{try{localStorage.setItem("cc_spectator_publish_v1",spectatorPublish?"1":"0")}catch{}},[spectatorPublish]);
   const spectatorGameIdRef=useRef<string|null>(null);
-  // Publish current state на каждое изменение позиции/хода (если on && spectatorPublish)
+  // Publish current state на каждое изменение позиции/хода (если on && spectatorPublish).
+  // `on` alone would miss the FINAL publish: every game-ending call site sets
+  // sOver(result) and sOn(false) together (same statement), so by the time
+  // this effect re-runs off the `over` dep, `on` is already false — the guard
+  // must let the one-shot "game just ended" publish through too, or the
+  // backend's archiveFinishedGame() (triggered by result being set on
+  // /publish) never fires and the replay archive silently never populates.
   useEffect(()=>{
-    if(!spectatorPublish||!on||setup)return;
+    if(!spectatorPublish||setup)return;
+    if(!on&&!over)return;
     // Replay snapshots: FEN на каждом ply + eval history → backend сохранит в replay archive при result
     const evalCpHistory=analysis.length>0?analysis.map(a=>typeof a.cp==="number"?a.cp:0):undefined;
     const payload={

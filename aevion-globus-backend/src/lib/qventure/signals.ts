@@ -236,7 +236,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ── Patents / proprietary IP ──
   // "We have no patents and no proprietary technology" used to set this true,
   // and the engine then credited +0.1 moat realization for the patents it denied.
-  s.mentionsPatent = mentionsUnnegated(t, /\b(patent|patented|proprietary technology|proprietary algorithm|patent[- ]pending)\b/i);
+  s.mentionsPatent = mentionsUnnegated(t, /\b(patents?|patented|proprietary technolog(?:y|ies)|proprietary algorithms?|patent[- ]pending)\b/i);
 
   // ── Count concrete quantitative fields for coverage ──
   const quant: Array<number | null> = [

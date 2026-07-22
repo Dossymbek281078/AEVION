@@ -17,6 +17,7 @@ import { parsePlanSignals, mergeStructuredSignals, type PlanSignals, type Struct
 import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
 import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
+import { defineBands } from "../verdictBands";
 
 /**
  * Rubric version — bump on any change that moves a composite for unchanged input.
@@ -534,6 +535,20 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   return { rubricVersion: RUBRIC_VERSION, composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
 }
 
+// Verdict and conviction thresholds. Declared rather than inlined so a test can
+// assert every band is reachable on real calibration scores — "pass" was
+// unreachable for months behind exactly this ternary.
+export const VERDICT_BANDS = defineBands<"invest" | "watch" | "pass">("qventure.verdict", [
+  { label: "invest", min: 72 },
+  { label: "watch", min: 55 },
+  { label: "pass", min: 0 },
+]);
+
+export const CONVICTION_BANDS = defineBands<"high" | "medium" | "low">("qventure.conviction", [
+  { label: "high", min: 78 },
+  { label: "medium", min: 62 },
+  { label: "low", min: 0 },
+]);
 function buildStrategy(args: {
   composite: number; stage: Stage;
   norms: (typeof STAGE_NORMS)[Stage];
@@ -542,8 +557,8 @@ function buildStrategy(args: {
 }): EntryStrategy {
   const { composite, stage, norms, sector, input, factors, redFlags } = args;
 
-  const verdict: EntryStrategy["verdict"] = composite >= 72 ? "invest" : composite >= 55 ? "watch" : "pass";
-  const conviction: EntryStrategy["conviction"] = composite >= 78 ? "high" : composite >= 62 ? "medium" : "low";
+  const verdict: EntryStrategy["verdict"] = VERDICT_BANDS.classify(composite);
+  const conviction: EntryStrategy["conviction"] = CONVICTION_BANDS.classify(composite);
 
   // Valuation band: blend stage norm with score (stronger deals command up-band).
   const scoreMul = 0.7 + (composite / 100) * 0.6; // 0.7–1.3

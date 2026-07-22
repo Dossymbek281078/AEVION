@@ -140,6 +140,7 @@ import {
   finishRun,
   forkPrompt,
   getAnalytics,
+  getOpexSummary,
   getCostTimeseries,
   getEvalRun,
   getEvalSuite,
@@ -1393,6 +1394,20 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-analytics" });
     res.status(500).json({ error: "analytics failed" });
+  }
+});
+
+/** GET /opex — platform-wide per-provider spend (P2-5). Aggregate-only:
+ *  costs/tokens/calls per provider and model plus a daily series; no user
+ *  ids, titles, or content — same public posture as /smart/savings. */
+qcoreaiRouter.get("/opex", async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 30;
+    const summary = await getOpexSummary(days);
+    res.json(summary);
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "opex" });
+    res.status(500).json({ error: "opex failed" });
   }
 });
 

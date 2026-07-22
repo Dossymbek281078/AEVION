@@ -5261,6 +5261,18 @@ export default function CyberChessPage(){
     try{const ch=new Chess(fen);return uciMoves.map(uci=>{
       try{const m=ch.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});
       return m?m.san:"?"}catch{return "?"}}).filter(s=>s!=="?")}catch{return uciMoves}};
+  // Engine-verified best move for `fen`, in SAN — or undefined if none is
+  // captured yet / the conversion fails. Single source of truth for every
+  // LLM coach touchpoint that needs to ground a "best move" recommendation
+  // in something actually legal (see evalBestUciRef above) — used by both
+  // the "Спроси Coach" chat and the "GM-разбор" button so neither can drift
+  // out of sync with the other or reintroduce the hallucinated-move bug.
+  const getEngineBestSan=(fen:string):string|undefined=>{
+    const uci=evalBestUciRef.current;
+    if(!uci)return undefined;
+    const san=uciToSan(fen,[uci])[0];
+    return san&&san!=="?"?san:undefined;
+  };
 
   /* ── MultiPV analysis ── */
   const runMultiPV=useCallback(()=>{
@@ -8161,8 +8173,6 @@ export default function CyberChessPage(){
                 gmBusyRef.current=true;
                 sCoachRemark({kind:"position",title:"🧠 Гроссмейстер думает…",body:"Разбираю позицию…"});
                 try{
-                  const gmBestUci=evalBestUciRef.current;
-                  const gmBestSan=gmBestUci?uciToSan(game.fen(),[gmBestUci])[0]:undefined;
                   const r=await fetch(`/api-backend/api/cyberchess-voice-coach/ask`,{
                     method:"POST",headers:{"Content-Type":"application/json"},
                     body:JSON.stringify({
@@ -8173,10 +8183,10 @@ export default function CyberChessPage(){
                       userSide:pCol,
                       eval:typeof evalCp==="number"?{cp:evalCp,mate:evalMate||0}:null,
                       // Ground the LLM in moves that are actually legal — same fix as the
-                      // "Спроси Coach" chat (see useTimer/evalBestUciRef comment above):
-                      // без этого модель называла ходы, которых нет в позиции.
+                      // "Спроси Coach" chat (see getEngineBestSan above): без этого модель
+                      // называла ходы, которых нет в позиции.
                       legalMoves:game.moves(),
-                      bestMove:gmBestSan&&gmBestSan!=="?"?gmBestSan:undefined,
+                      bestMove:getEngineBestSan(game.fen()),
                     }),
                     signal:AbortSignal.timeout(15000),
                   });
@@ -10436,9 +10446,8 @@ export default function CyberChessPage(){
                 const legalMovesCtx=legalSan.length>0
                   ?`\nЛегальные ходы в этой позиции (${legalSan.length}): ${legalSan.join(", ")}`
                   :"\n(партия окончена — легальных ходов нет)";
-                const bestUci=evalBestUciRef.current;
-                const bestSan=bestUci?uciToSan(fen,[bestUci])[0]:undefined;
-                const bestMoveCtx=bestSan&&bestSan!=="?"?`\nЛучший ход по движку (проверен, легален): ${bestSan}`:"";
+                const bestSan=getEngineBestSan(fen);
+                const bestMoveCtx=bestSan?`\nЛучший ход по движку (проверен, легален): ${bestSan}`:"";
                 // Build context block prepended to the user's question for the API.
                 const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
 FEN: ${fen}

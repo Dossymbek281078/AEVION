@@ -41,7 +41,7 @@ vacanciesRouter.post("/", async (req, res) => {
     if (salary.ok === false) return fail(res, 400, salary.error);
 
     const project = await pool.query(
-      `SELECT "id","clientId" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
+      `SELECT "id","clientId","region" AS "projectRegion","country" AS "projectCountry" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
       [projectId.value],
     );
     if (project.rowCount === 0) return fail(res, 404, "project_not_found");
@@ -73,9 +73,17 @@ vacanciesRouter.post("/", async (req, res) => {
     const questions = Array.isArray(req.body?.questions)
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
-    const region = req.body?.region == null ? null : String(req.body.region).trim().slice(0, 60) || null;
+    // Inherit region/country from the parent project when the vacancy form
+    // doesn't set its own — vacancies almost never carry their own city/region
+    // (they follow the project's site), so without this every vacancy stayed
+    // region=null and was invisible to region-filtered search regardless of
+    // the project's region (caught by live-testing prod search accuracy).
+    const region = req.body?.region == null
+      ? (project.rows[0].projectRegion ?? null)
+      : String(req.body.region).trim().slice(0, 60) || null;
     const country = typeof req.body?.country === "string" && req.body.country.trim()
-      ? req.body.country.trim().slice(0, 8) : "KZ";
+      ? req.body.country.trim().slice(0, 8)
+      : (project.rows[0].projectCountry || "KZ");
     const workMode =
       typeof req.body?.workMode === "string" && (WORK_MODES as readonly string[]).includes(req.body.workMode)
         ? (req.body.workMode as typeof WORK_MODES[number]) : null;
@@ -163,7 +171,10 @@ vacanciesRouter.get("/", async (req, res) => {
     }
     if (typeof req.query.region === "string" && req.query.region.trim()) {
       params.push(req.query.region.trim().slice(0, 60));
-      where.push(`v."region" = $${params.length}`);
+      // COALESCE with the project's region: most vacancies don't set their own
+      // (they follow the project's site) — filtering on v.region alone missed
+      // almost every real vacancy, confirmed via live prod testing.
+      where.push(`COALESCE(v."region", p."region") = $${params.length}`);
     }
     if (typeof req.query.workMode === "string") {
       const wm = vEnum(req.query.workMode, "workMode", WORK_MODES);
@@ -201,7 +212,8 @@ vacanciesRouter.get("/", async (req, res) => {
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
               v."skillsJson", v."expiresAt",
-              v."region", v."country", v."workMode", v."minExperienceYears", v."educationLevel",
+              COALESCE(v."region", p."region") AS "region", COALESCE(v."country", p."country") AS "country",
+              v."workMode", v."minExperienceYears", v."educationLevel",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"

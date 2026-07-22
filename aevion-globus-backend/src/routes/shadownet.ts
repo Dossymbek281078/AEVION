@@ -411,8 +411,34 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
   );
 });
 
-shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
-  const alias = req.params.alias;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+shadownetRouter.get("/posts/:alias", async (req: Request, res: Response, next) => {
+  const alias = String(req.params.alias);
+  // POST /posts answers with a numeric `id` (SERIAL / memory counter), and a
+  // numeric string is also a valid alias — so fetch-by-id used to "succeed"
+  // with an empty alias match. Treat an all-digit param as an id lookup.
+  // A UUID param belongs to the generic mvpConcepts store (mounted after this
+  // router) — pass it along instead of swallowing it as an alias miss.
+  if (UUID_RE.test(alias)) return next();
+  if (/^\d+$/.test(alias)) {
+    if (isShadowNetDbReady()) {
+      try {
+        const result = await pool.query(
+          `SELECT id, alias, ciphertext, iv, salt, size_bytes, created_at
+           FROM shadownet_posts WHERE id = $1`,
+          [Number(alias)],
+        );
+        if (result.rows.length > 0) return ok(res, result.rows[0]);
+      } catch (e) {
+        console.error("[ShadowNet] GET /posts/:id db error:", e);
+        // fall through to memory
+      }
+    }
+    const byId = memPosts.get(Number(alias));
+    if (byId) return ok(res, byId);
+    return fail(res, "not found", 404);
+  }
   if (!isValidAlias(alias)) {
     return fail(res, "invalid alias");
   }

@@ -20,8 +20,11 @@ async function req(method, path, body) {
   catch { return { status: r.status, body: text }; }
 }
 
+const { moduleFullyPaywalled } = require("./lib/paywallAware");
+
 async function run() {
   console.log(`\nQAI smoke → ${BASE}\n`);
+  if (await moduleFullyPaywalled(BASE, "/api/qai/personas", "qai")) return;
 
   console.log("1. Health");
   const h = await req("GET", "/api/qai/health");

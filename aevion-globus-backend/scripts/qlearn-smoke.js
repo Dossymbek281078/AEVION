@@ -22,8 +22,11 @@ async function req(method, path, body, headers = {}) {
   catch { return { status: r.status, body: text }; }
 }
 
+const { moduleFullyPaywalled } = require("./lib/paywallAware");
+
 async function run() {
   console.log(`\nQLearn smoke → ${BASE}\n`);
+  if (await moduleFullyPaywalled(BASE, "/api/qlearn/courses", "qlearn")) return;
 
   console.log("1. Health");
   const h = await req("GET", "/api/qlearn/health");

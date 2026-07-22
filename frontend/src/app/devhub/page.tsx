@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -75,7 +76,34 @@ export default function DevHubPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
+  const [ideaPrompt, setIdeaPrompt] = useState("");
+  const [ideaStarting, setIdeaStarting] = useState(false);
+
+  // Prompt-first entry: one phrase → project created → generation auto-runs
+  // in the IDE (the prompt travels via localStorage; the IDE picks it up,
+  // fires /generate, and the chat + live preview show the result).
+  const startFromIdea = async () => {
+    const idea = ideaPrompt.trim();
+    if (!idea || ideaStarting) return;
+    setIdeaStarting(true);
+    try {
+      const name = idea.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
+      const r = await fetch(apiUrl("/api/devhub/projects"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description: idea, stack: "react" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to create project");
+      try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
+      router.push(`/devhub/${data.project.id}`);
+    } catch (e: any) {
+      setError(e.message);
+      setIdeaStarting(false);
+    }
+  };
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", stack: "next" as Stack });
   const [error, setError] = useState<string | null>(null);

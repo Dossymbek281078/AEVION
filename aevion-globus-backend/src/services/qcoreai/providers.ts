@@ -28,6 +28,10 @@ import { recordOutcome } from "./providerHealth";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/** Optional image attachment for vision-capable calls — base64 payload plus
+ * its media type. Attached to the LAST user message on the wire. */
+export type ChatImage = { mediaType: string; dataBase64: string };
+
 export type ProviderTier = "premium" | "budget" | "free";
 
 export type Provider = {
@@ -531,7 +535,7 @@ function anthropicRejectsSampling(model: string): boolean {
   );
 }
 
-async function callAnthropic(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
+async function callAnthropic(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[]): Promise<CallResult> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
 
@@ -541,7 +545,18 @@ async function callAnthropic(messages: ChatMessage[], model: string, temperature
   const body: any = {
     model,
     max_tokens: 4096,
-    messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
+    messages: chatMsgs.map((m, i) => {
+      if (images?.length && m.role === "user" && i === chatMsgs.length - 1) {
+        return {
+          role: m.role,
+          content: [
+            ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.dataBase64 } })),
+            { type: "text", text: m.content },
+          ],
+        };
+      }
+      return { role: m.role, content: m.content };
+    }),
   };
   if (!anthropicRejectsSampling(model)) body.temperature = temperature;
   if (systemMsg) body.system = systemMsg.content;
@@ -580,13 +595,28 @@ async function callOpenAICompat(
   providerId: string,
   messages: ChatMessage[],
   model: string,
-  temperature: number
+  temperature: number,
+  images?: ChatImage[]
 ): Promise<CallResult> {
   const { url, headers } = openAICompatCfg(providerId);
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+  const wireMessages = images?.length
+    ? messages.map((m, i) =>
+        i === lastUserIdx
+          ? {
+              role: m.role,
+              content: [
+                ...images.map((img) => ({ type: "image_url", image_url: { url: `data:${img.mediaType};base64,${img.dataBase64}` } })),
+                { type: "text", text: m.content },
+              ],
+            }
+          : m
+      )
+    : messages;
   const r = await fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify({ model, messages, temperature }),
+    body: JSON.stringify({ model, messages: wireMessages, temperature }),
   });
   const data = (await r.json()) as any;
   if (!r.ok) {
@@ -602,14 +632,21 @@ async function callOpenAICompat(
   return { reply, model: data.model || model, usage: data.usage || null };
 }
 
-async function callGemini(messages: ChatMessage[], model: string, temperature: number): Promise<CallResult> {
+async function callGemini(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[]): Promise<CallResult> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error("GEMINI_API_KEY not configured");
   const systemMsg = messages.find((m) => m.role === "system");
   const chatMsgs = messages.filter((m) => m.role !== "system");
-  const contents = chatMsgs.map((m) => ({
+  const lastUserIdx = chatMsgs.map((m) => m.role).lastIndexOf("user");
+  const contents = chatMsgs.map((m, i) => ({
     role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
+    parts:
+      images?.length && i === lastUserIdx
+        ? [
+            ...images.map((img) => ({ inline_data: { mime_type: img.mediaType, data: img.dataBase64 } })),
+            { text: m.content },
+          ]
+        : [{ text: m.content }],
   }));
   const body: any = {
     contents,
@@ -657,15 +694,16 @@ export async function callProvider(
   providerId: string,
   messages: ChatMessage[],
   model: string,
-  temperature: number
+  temperature: number,
+  images?: ChatImage[]
 ): Promise<CallResult> {
   if (providerId === "stub") {
     const reply = stubReply(messages);
     return { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
   }
-  if (providerId === "anthropic") return callAnthropic(messages, model, temperature);
-  if (providerId === "gemini") return callGemini(messages, model, temperature);
-  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature);
+  if (providerId === "anthropic") return callAnthropic(messages, model, temperature, images);
+  if (providerId === "gemini") return callGemini(messages, model, temperature, images);
+  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature, images);
   throw new Error("No AI provider configured");
 }
 

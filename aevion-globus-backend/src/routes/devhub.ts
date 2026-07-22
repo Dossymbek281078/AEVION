@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
-import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
@@ -744,11 +744,14 @@ function buildFileContext(existingFiles: Array<{ path: string; content: string }
   return ctx;
 }
 
+const VISION_PROVIDERS = new Set(["anthropic", "gemini", "openai"]);
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
   targetFiles: string[] = [],
-  existingFiles: Array<{ path: string; content: string }> = []
+  existingFiles: Array<{ path: string; content: string }> = [],
+  images?: ChatImage[]
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -768,7 +771,16 @@ async function generateCodeWithAI(
       aiGenerated: false,
     };
   }
-  const provider = configured[0];
+  // A screenshot needs a vision-capable model; the first configured provider
+  // may be text-only. Pick honestly or refuse — never silently drop the image.
+  let provider = configured[0];
+  if (images?.length) {
+    const vision = configured.find((pr) => VISION_PROVIDERS.has(pr.id));
+    if (!vision) {
+      throw new Error("NO_VISION_PROVIDER: attach-a-screenshot needs ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY — none configured");
+    }
+    provider = vision;
+  }
 
   const systemPrompt =
     targetFiles.length === 1
@@ -777,7 +789,7 @@ async function generateCodeWithAI(
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
         : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${buildFileContext(existingFiles, targetFiles)}`;
+  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -786,8 +798,9 @@ async function generateCodeWithAI(
 
   let result;
   try {
-    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2);
-  } catch {
+    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images);
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("NO_VISION_PROVIDER")) throw e;
     const path = targetFiles[0] || "generated.ts";
     return {
       files: [{ path, content: `// AI generation failed — configure a provider\n// Prompt: ${prompt}\n`, language: detectLanguage(path) }],
@@ -813,7 +826,7 @@ async function generateCodeWithAI(
         `\n\nReturn the corrected, complete files in the same JSON format. No explanation, just JSON.`,
     });
     try {
-      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2);
+      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
@@ -1268,9 +1281,23 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
-  const { prompt, targetFile, targetFiles: targetFilesRaw, stack } = req.body || {};
+  const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
+  }
+  let images: ChatImage[] | undefined;
+  if (imageBase64 !== undefined) {
+    if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
+      return res.status(400).json({ error: "imageBase64 must be a non-empty base64 string" });
+    }
+    if (imageBase64.length > 7_000_000) {
+      return res.status(400).json({ error: "image too large (max ~5MB)" });
+    }
+    const mediaType = typeof imageMediaType === "string" && imageMediaType ? imageMediaType : "image/png";
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType)) {
+      return res.status(400).json({ error: "imageMediaType must be image/png, image/jpeg, image/webp or image/gif" });
+    }
+    images = [{ mediaType, dataBase64: imageBase64.replace(/^data:[^,]+,/, "") }];
   }
   // targetFiles (array) lets a caller request several coordinated files at once
   // (e.g. an API route + the page that calls it); targetFile (string) stays as
@@ -1280,16 +1307,19 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
   try {
-    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles));
+    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images));
   } catch (e: any) {
+    if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
+      return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
+    }
     res.status(500).json({ error: e?.message || "generation failed" });
   }
 });
 
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
-async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[]) {
+async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[]) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images);
   const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
   for (const gf of generatedFiles) {
     const file: DevHubFile = {

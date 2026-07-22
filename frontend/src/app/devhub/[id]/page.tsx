@@ -445,6 +445,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     | { role: "user"; text: string; at: string }
     | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
+  const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
+  const aiImageInputRef = useRef<HTMLInputElement | null>(null);
   const chatLogRef = useRef<HTMLDivElement | null>(null);
 
   // Templates
@@ -873,12 +875,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!userText || !project) return;
     setGenerating(true);
     setGeneratedFiles([]);
-    setChatHistory((h) => [...h, { role: "user", text: userText, at: new Date().toISOString() }]);
+    const sentImage = aiImage;
+    setAiImage(null);
+    setChatHistory((h) => [...h, { role: "user", text: (sentImage ? "🖼 " : "") + userText, at: new Date().toISOString() }]);
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: userText, stack: project.stack }),
+        body: JSON.stringify({
+          prompt: userText, stack: project.stack,
+          ...(aiImage ? { imageBase64: aiImage.dataBase64, imageMediaType: aiImage.mediaType } : {}),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Generation failed");
@@ -2976,6 +2983,42 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     }}
                     onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generateCode(); }}
                   />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      ref={aiImageInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        if (f.size > 5 * 1024 * 1024) { showToast("Image too large (max 5MB)", "error"); return; }
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const url = String(reader.result || "");
+                          const b64 = url.split(",")[1] || "";
+                          setAiImage({ dataBase64: b64, mediaType: f.type || "image/png", name: f.name });
+                        };
+                        reader.readAsDataURL(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      onClick={() => aiImageInputRef.current?.click()}
+                      title="Attach a screenshot or design — AI will recreate it as code"
+                      style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
+                    >
+                      📎 Screenshot
+                    </button>
+                    {aiImage && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, fontSize: 12, color: "#0f766e" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`data:${aiImage.mediaType};base64,${aiImage.dataBase64}`} alt="" style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 4 }} />
+                        {aiImage.name.slice(0, 22)}
+                        <button onClick={() => setAiImage(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#0f766e", fontWeight: 800, padding: 0 }}>×</button>
+                      </span>
+                    )}
+                  </div>
                   <button
                     onClick={() => generateCode()}
                     disabled={generating || !aiPrompt.trim()}

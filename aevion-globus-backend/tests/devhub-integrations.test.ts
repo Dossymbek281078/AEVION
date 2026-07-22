@@ -415,6 +415,58 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("POST /api/devhub/projects/:id/generate — screenshot attachment (vision)", () => {
+  async function makeProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "V" });
+    return cr.body.project.id as string;
+  }
+  const PNG_B64 = Buffer.from("fake-png").toString("base64");
+
+  test("400 on oversized or wrong-type image", async () => {
+    const app = makeApp();
+    const id = await makeProject(app);
+    const big = await request(app).post(`/api/devhub/projects/${id}/generate`)
+      .send({ prompt: "x", imageBase64: "a".repeat(7_000_001) });
+    expect(big.status).toBe(400);
+    const badType = await request(app).post(`/api/devhub/projects/${id}/generate`)
+      .send({ prompt: "x", imageBase64: PNG_B64, imageMediaType: "image/tiff" });
+    expect(badType.status).toBe(400);
+  });
+
+  test("503 (honest) when an image is attached but no vision-capable provider is configured", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "llama", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    const app = makeApp();
+    const id = await makeProject(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/generate`)
+      .send({ prompt: "recreate this design", imageBase64: PNG_B64 });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY/);
+  });
+
+  test("vision provider is preferred over an earlier text-only provider and receives the image", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "llama", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+      { id: "anthropic", name: "Anthropic", models: [], defaultModel: "claude-x", envKey: "ANTHROPIC_API_KEY", configured: true, free: false, tier: "premium" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "index.html", content: "<h1>from screenshot</h1>", language: "html" }] }),
+      model: "claude-x", usage: null,
+    } as never);
+    const app = makeApp();
+    const id = await makeProject(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/generate`)
+      .send({ prompt: "recreate this design", imageBase64: PNG_B64, imageMediaType: "image/jpeg" });
+    expect(r.status).toBe(200);
+    expect(r.body.aiGenerated).toBe(true);
+    const call = vi.mocked(callProvider).mock.calls[0];
+    expect(call[0]).toBe("anthropic"); // vision-capable wins over groq
+    expect(call[4]).toEqual([{ mediaType: "image/jpeg", dataBase64: PNG_B64 }]);
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
 describe("POST /api/devhub/projects/:id/database/design — schema by prompt", () => {
   test("400 without a description; 404 for unknown project", async () => {
     const app = makeApp();

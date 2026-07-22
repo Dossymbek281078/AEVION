@@ -233,7 +233,11 @@
       "Bash(powershell -Command 'foreach\\($p in 3000,3001\\){ $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; if\\($c\\){ Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } }')",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 793 -R Dossymbek281078/AEVION --watch --interval 15)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 793 --squash --delete-branch -R Dossymbek281078/AEVION)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 793 -R Dossymbek281078/AEVION --json state,statusCheckRollup)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 793 -R Dossymbek281078/AEVION --json state,statusCheckRollup)",
+      "Bash(powershell -Command 'foreach\\($p in 3000,3001,4001\\){ $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; if\\($c\\){ Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } }')",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 801 -R Dossymbek281078/AEVION --watch --interval 15)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 801 --squash --delete-branch -R Dossymbek281078/AEVION)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 801 -R Dossymbek281078/AEVION --json state,statusCheckRollup)"
     ]
   }
 }

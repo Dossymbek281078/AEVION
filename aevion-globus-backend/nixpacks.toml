@@ -1,0 +1,5 @@
+# Railway/Nixpacks: системные пакеты backend-сервиса.
+# ffmpeg нужен QReal (/api/qreal/.../assemble — склейка фильма) и любым
+# будущим медиа-модулям; без него assemble отдаёт честный 501.
+[phases.setup]
+aptPkgs = ["ffmpeg"]

@@ -538,6 +538,15 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "Провайдер-независимые 3D-аэрокоридоры для аэротакси над цифровым двойником города",
   },
   {
+    // Рендер стоит реальных денег ($0.13-0.30/с движка) — модуль платный
+    // с первого дня: addon поверх Full, себестоимость×~3 на типовой фильм/мес.
+    id: "qreal",
+    addonMonthly: 29,
+    includedIn: ["enterprise"],
+    availability: "beta",
+    oneLiner: "Полностью живое AI-видео без актёра: бриф → кадры → фильм с QC реализма и провенансом",
+  },
+  {
     id: "deepsan",
     addonMonthly: 9,
     includedIn: ["full", "enterprise"],

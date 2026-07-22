@@ -530,6 +530,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qmedia/playlists": {
         get: { summary: "List playlists", security: [] },
       },
+      // QReal Studio — fully-alive AI video (no actor), realism QC, provenance
+      "/api/qreal/health": { get: { summary: "QReal health + pipeline stages", security: [] } },
+      "/api/qreal/engines": { get: { summary: "Direct render engines + $/s unit economics", security: [] } },
+      "/api/qreal/realism-criteria": { get: { summary: "14 weighted realism QC criteria", security: [] } },
+      "/api/qreal/demo": { get: { summary: "Seeded demo project (steppe morning)", security: [] } },
+      "/api/qreal/projects": {
+        get: { summary: "List my projects (Bearer required)" },
+        post: { summary: "Create project from a text brief", security: [] },
+      },
       // QAI — universal AI assistant (personas + sessions + chat)
       "/api/qai/health": { get: { summary: "QAI health + session count", security: [] } },
       "/api/qai/personas": {
@@ -942,6 +951,7 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/startupx", "startup-exchange"],
   ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
+  ["/api/qreal", "qreal"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
   ["/api/qevents", "qevents"],

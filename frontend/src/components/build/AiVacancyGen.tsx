@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { buildApi, type AiVacancyDraft } from "@/lib/build/api";
+import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS } from "@/lib/build/geo";
 
 export function AiVacancyGen({
   city,
@@ -89,6 +90,17 @@ export function AiVacancyGen({
               <div className="text-slate-400">Зарплата:</div>
               <div className="text-white">
                 {draft.salaryMin?.toLocaleString("ru-RU") || "?"} — {draft.salaryMax?.toLocaleString("ru-RU") || "?"} {draft.salaryCurrency}
+              </div>
+            </div>
+          )}
+          {(draft.region || draft.workMode || draft.minExperienceYears != null || draft.educationLevel) && (
+            <div>
+              <div className="text-slate-400">Требования:</div>
+              <div className="flex flex-wrap gap-2 text-white">
+                {draft.region && <span>📍 {regionLabel(draft.region)}</span>}
+                {draft.workMode && <span>{WORK_MODE_LABELS[draft.workMode]}</span>}
+                {draft.minExperienceYears != null && <span>⏱ от {draft.minExperienceYears}y</span>}
+                {draft.educationLevel && <span>🎓 {EDUCATION_LEVEL_LABELS[draft.educationLevel]}</span>}
               </div>
             </div>
           )}

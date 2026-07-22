@@ -312,7 +312,12 @@ const SYSTEM_PROMPT_QA =
   'Отвечай конкретно и содержательно (2-4 предложения), опираясь на FEN, оценку движка ' +
   'и историю ходов. Называй конкретные ходы-кандидаты в нотации, тактические мотивы, ' +
   'сильные/слабые поля и типовые планы за обе стороны — как настоящий тренер, а не общими ' +
-  'словами. Если вопрос не про шахматы — мягко верни диалог к партии.';
+  'словами. КРИТИЧЕСКИ ВАЖНО: любой ход, который ты называешь как возможный/рекомендуемый ' +
+  'ход В ТЕКУЩЕЙ позиции, ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ' +
+  'ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не ' +
+  'уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ' +
+  'ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его ' +
+  'как основу для конкретных рекомендаций. Если вопрос не про шахматы — мягко верни диалог к партии.';
 
 function joinSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
   const ctrl = new AbortController();
@@ -483,6 +488,16 @@ export interface QAContext {
   eval?: EvalInfo | null;
   /** Player side (which colour the user plays as), if known. */
   userSide?: 'w' | 'b';
+  /**
+   * Every legal move (SAN) in the current position, computed client-side by
+   * chess.js — deterministic and always correct. Without this the model has
+   * nothing to check itself against when it names a "candidate move", and
+   * LLMs are unreliable at chess legality from a raw FEN alone (reported
+   * bug: the coach named moves that don't exist on the board).
+   */
+  legalMoves?: string[];
+  /** Engine-verified best move (SAN), if the caller has one available. */
+  bestMove?: string;
 }
 
 function describeMove(m: string | MoveInfo | null | undefined): string | null {
@@ -529,6 +544,14 @@ export async function answerQuestion(
     );
   } else if (context.eval?.cp != null) {
     contextLines.push(`Eval: ${(context.eval.cp / 100).toFixed(2)} (за белых)`);
+  }
+  if (context.bestMove) {
+    contextLines.push(`Лучший ход по движку (проверен, легален): ${context.bestMove}`);
+  }
+  if (Array.isArray(context.legalMoves) && context.legalMoves.length) {
+    contextLines.push(
+      `Легальные ходы в этой позиции (${context.legalMoves.length}): ${context.legalMoves.join(', ')}`,
+    );
   }
 
   const contextBlock = contextLines.length

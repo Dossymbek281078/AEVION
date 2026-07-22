@@ -8161,6 +8161,8 @@ export default function CyberChessPage(){
                 gmBusyRef.current=true;
                 sCoachRemark({kind:"position",title:"🧠 Гроссмейстер думает…",body:"Разбираю позицию…"});
                 try{
+                  const gmBestUci=evalBestUciRef.current;
+                  const gmBestSan=gmBestUci?uciToSan(game.fen(),[gmBestUci])[0]:undefined;
                   const r=await fetch(`/api-backend/api/cyberchess-voice-coach/ask`,{
                     method:"POST",headers:{"Content-Type":"application/json"},
                     body:JSON.stringify({
@@ -8170,6 +8172,11 @@ export default function CyberChessPage(){
                       history:hist.slice(-24),
                       userSide:pCol,
                       eval:typeof evalCp==="number"?{cp:evalCp,mate:evalMate||0}:null,
+                      // Ground the LLM in moves that are actually legal — same fix as the
+                      // "Спроси Coach" chat (see useTimer/evalBestUciRef comment above):
+                      // без этого модель называла ходы, которых нет в позиции.
+                      legalMoves:game.moves(),
+                      bestMove:gmBestSan&&gmBestSan!=="?"?gmBestSan:undefined,
                     }),
                     signal:AbortSignal.timeout(15000),
                   });

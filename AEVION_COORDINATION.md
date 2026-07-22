@@ -449,6 +449,12 @@ C) [третий вариант]
   - **Что нужно в твоей зоне (если хочешь):** ничего не сломано и не заблокировано — `/cyberchess` рендерится байт-в-байт как раньше. Если хочешь показать прогресс цели и в CyberChess, компонент `AppShellRevenueBadge` (`frontend/src/components/AppShellRevenueBadge.tsx`) уже готов к переиспользованию — просто убери условие `!isCyberchess` в `ClientProviders.tsx` или подключи компонент напрямую в cyberchess-layout.
   - **Срочность:** none — это чисто информационная запись, не запрос на действие.
 
+- **2026-07-22** — `aevion-rev` (Revenue Hub) → FYI/bug report for whoever owns `frontend/src/app/bank/**` (не моя зона, только докладываю — не правил код)
+  - **Что нашёл:** сегодня в Revenue Hub`е чинил свой же баг — `etaLabel()` (прогноз "дней до цели" по темпу роста) при близком к нулю темпе выдавал абсурдные числа вроде "~4,026,810 дней" вместо разумного капа. Пока разбирался, заметил тот же паттерн в `bank/_lib/forecast.ts` → `daysToComplete`/`etaISO`.
+  - **Где именно:** `forecast.ts:105` — `Math.ceil(remaining / setAside)` без верхнего предела, если `setAside` маленький относительно `remaining`. `WealthForecast.tsx:367-387` рендерит это напрямую как `{days}d` и дату (`new Date(g.etaISO)`) — при небольшом ежемесячном отложении на крупную цель может показать пользователю банка что-то вроде даты в XXII веке или "1470000d".
+  - **Что нужно (если хочешь):** тот же класс фикса, что я применил у себя (`frontend/src/lib/goalEta.ts` — берёт готовый паттерн: посчитать days, если > разумного порога — вернуть текстовую заглушку вместо числа/даты). Можно скопировать подход, не сам файл (у Bank другая доменная модель целей).
+  - **Срочность:** low — не крашит, просто выглядит сломанным для пользователя с медленными накоплениями на крупную цель.
+
 - **2026-07-22** — `aevion-rev` (Revenue Hub) → FYI/bug report for whoever owns `aevion-globus-backend/src/lib/planGate.ts` + `routes/multichat.ts` (не моя зона, только докладываю находку — не правил код)
   - **Что нашёл:** на `/multichat-engine` в бою `GET /api/multichat/provider-status` и `GET /api/multichat/presets` отдают `402 upgrade_required`, хотя это read-only introspection-роуты.
   - **Причина:** `planGate.ts` → `isExemptPath()` держит белый список суффиксов пути (`/health`, `/status`, `/providers`, `/me/plan`, `/me/entitlements`), которые должны оставаться бесплатными даже на платном модуле. Проверка — `path.endsWith("/status")`. Реальный роут называется `/provider-status` (дефис, не слэш перед "status"), поэтому `"/provider-status".endsWith("/status")` = `false` — исключение не срабатывает, и health-чек проваливается в платный гейт.
@@ -513,6 +519,7 @@ C) [третий вариант]
 - `git commit --only -- FILE1 FILE2` ВСЕГДА. Никогда `git add .` или `git commit -a`.
 - Если push rejected: `git pull --rebase` один раз, потом push. Если конфликт в чужой зоне — `git rebase --abort` + добавить запрос в "Pending cross-zone".
 - Сообщения коммитов — `scope(module): action` (англ или ru, но один scope per commit).
+- **Визуальные/рантайм-правки — открыть страницу в браузере перед мерджем, не полагаться только на `tsc`/`next build`.** 2026-07-22: тикающий таймстамп на `/revenue` конфликтовал с `AutoTranslate` (гонка на одном текстовом узле → "updated 0 sec ago23 sec"), тайпчек и билд это не ловят — баг всплыл только вживую на проде, потребовалось два захода на фикс.
 
 ---
 

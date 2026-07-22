@@ -280,13 +280,30 @@ function sanitizeProjections(raw: unknown): ProjectionPoint[] | undefined {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-qventureRouter.get("/health", (_req: Request, res: Response) => {
+// Lightweight row count for health — COUNT(*) on an indexed table, not a scan of
+// rows like /stats does. Returns null if the count itself errors, so health never
+// fails on a metrics hiccup.
+async function countAnalyses(): Promise<number | null> {
+  if (!isQVentureDbReady()) return memStore.length;
+  try {
+    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM qventure_analyses`);
+    return rows[0]?.n ?? null;
+  } catch {
+    return null;
+  }
+}
+
+qventureRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     service: "qventure",
     storage: isQVentureDbReady() ? "postgres" : "in-memory",
     sectors: listSectors().length,
     stages: STAGES,
+    // Observability: which rubric is live and how much data sits behind it, so a
+    // monitor can spot a stuck showcase or a bad deploy without opening a report.
+    rubricVersion: RUBRIC_VERSION,
+    analyses: await countAnalyses(),
   });
 });
 

@@ -154,9 +154,14 @@ export default function AcquirePage() {
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [planetCount, setPlanetCount] = useState<number | null>(null);
   const [aiSavedPct, setAiSavedPct] = useState<number | null>(null);
+  const [devhubLive, setDevhubLive] = useState<{ live: number; total: number } | null>(null);
   const acquireRef = useAcquireRef();
 
   useEffect(() => {
+    fetch(apiUrl("/api/devhub/studio/capabilities"))
+      .then(r => r.json())
+      .then(d => { if (d?.summary?.total) setDevhubLive({ live: d.summary.live, total: d.summary.total }); })
+      .catch(() => {});
     Promise.allSettled([
       fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
       fetch(apiUrl("/api/planet/stats")).then(r => r.json()),
@@ -248,7 +253,11 @@ export default function AcquirePage() {
           <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/registry" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
           <Counter label="Daily smoke" value="24/24" sub="PASS today" />
-          <Counter label="DevHub integrations" value="9" sub="live · +5 в очереди" />
+          <Counter
+            label="DevHub integrations"
+            value={devhubLive ? devhubLive.live.toString() : "9"}
+            sub={devhubLive ? `live из ${devhubLive.total} · /studio/capabilities` : "live · +5 в очереди"}
+          />
           <Counter label="Planet attestations" value={(planetCount ?? 0).toString()} sub="/api/planet/stats" />
           {aiSavedPct != null && (
             <Counter label="AI-расходы: роутинг" value={`−${aiSavedPct}%`} sub="/api/qcoreai/smart/savings · live" />

@@ -50,6 +50,20 @@ export async function deployViaWrangler(
   }
 }
 
+/** Fire-and-forget first-run warm-up: npx resolution + wrangler's own init
+ * cost seconds on a fresh pod — pay them at boot, not inside a user's deploy.
+ * Never throws; failure just means the first deploy pays the cost instead. */
+export function warmWrangler(): void {
+  try {
+    const child = spawn("npx", ["wrangler", "--version"], {
+      env: { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" },
+      shell: process.platform === "win32",
+      stdio: "ignore",
+    });
+    child.on("error", () => { /* warm-up is best-effort */ });
+  } catch { /* best-effort */ }
+}
+
 function runWrangler(args: string[], opts: { accountId: string; apiToken: string }): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("npx", ["wrangler", ...args], {

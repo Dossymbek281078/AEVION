@@ -101,8 +101,21 @@ async function run() {
   if (r.status === 401) ok("bad signature → 401");
   else fail("bad signature → 401", `got ${r.status} ${JSON.stringify(r.body)}`);
 
-  // 5. Valid HMAC finalize → 201, prize recorded
+  // 5. Valid HMAC finalize → 201, prize recorded.
+  // Requires the REAL webhook secret; against prod the dev default can only
+  // produce 401s. Verify the gate rejects our dev-signed call, then skip the
+  // signed-path checks — same self-skip contract as ls-webhook.
   r = await req("POST", "/api/cyberchess/tournament-finalized", goodBody, signHeaders(goodBody));
+  if (!process.env.CYBERCHESS_WEBHOOK_SECRET && r.status === 401) {
+    ok("dev-signed finalize rejected by prod secret (gate holds)");
+    console.log("  ↷ skipped 4 signed-path asserts — set CYBERCHESS_WEBHOOK_SECRET to exercise the full finalize→prize flow");
+    r = await req("DELETE", "/api/auth/account", { password: "ChessSmoke123!" }, {}, token);
+    if (r.status === 200 || r.status === 204) ok("DELETE /account (cleanup)");
+    else fail("DELETE /account", `${r.status}`);
+    console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
+    if (failed > 0) process.exit(1);
+    return;
+  }
   if (r.status === 201 && Array.isArray(r.body?.recorded) && r.body.recorded.length === 1 && r.body.recorded[0].place === 1)
     ok("valid finalize → 201 recorded", `prizeId=${r.body.recorded[0].id?.slice(0, 12)}`);
   else fail("valid finalize → 201 recorded", `${r.status} ${JSON.stringify(r.body)}`);

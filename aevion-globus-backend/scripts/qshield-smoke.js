@@ -235,8 +235,10 @@ async function main() {
     if (wit.data?.cid !== r.data.witnessCid)
       return fail("distributed.witness", "CID mismatch between create and witness endpoints");
 
-    // GET /:id should return only 2 shards (server-held), not 3
-    const full = await jsonFetch("GET", `/api/quantum-shield/${dvId}`);
+    // GET /:id should return only 2 shards (server-held), not 3.
+    // Must be the OWNER's call: since the shard-exposure hardening, an
+    // anonymous GET /:id gets the record without shards at all.
+    const full = await jsonFetch("GET", `/api/quantum-shield/${dvId}`, { token });
     const stored = (full.data?.shards || []).map((s) => s.index).sort();
     if (JSON.stringify(stored) !== "[2,3]")
       return fail("distributed.persisted", `expected [2,3] persisted, got ${JSON.stringify(stored)}`);

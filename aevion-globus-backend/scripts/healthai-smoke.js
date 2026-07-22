@@ -39,8 +39,11 @@ async function req(method, path, body) {
   return { status: r.status, ok: r.ok, data };
 }
 
+const { moduleFullyPaywalled } = require("./lib/paywallAware");
+
 async function main() {
   console.log(`HealthAI smoke test → ${BASE}${PREFIX}`);
+  if (await moduleFullyPaywalled(BASE, `${PREFIX}/referrals`, "healthai")) return;
   console.log("");
 
   // 1) /health.

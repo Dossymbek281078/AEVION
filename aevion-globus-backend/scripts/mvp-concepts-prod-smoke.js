@@ -15,6 +15,7 @@
  */
 
 const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
+const { isPaywall402, paywallNote } = require("./lib/paywallAware");
 
 let passed = 0; let failed = 0;
 function ok(l, e) { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
@@ -72,7 +73,8 @@ async function run() {
         // stats-like endpoints return objects, not arrays — that's also valid
         ok(`${m.name} list (object shape)`, `${m.list} keys=${Object.keys(body).length}`);
       } else fail(`${m.name} list shape`, `${m.list} body=${JSON.stringify(body).slice(0, 60)}`);
-    } else fail(`${m.name} list`, `${r.status} ${m.list}`);
+    } else if (isPaywall402(r)) ok(`${m.name} list`, paywallNote(r));
+    else fail(`${m.name} list`, `${r.status} ${m.list}`);
   }
 
   // Content-Type sanity on first 3 modules' health endpoints

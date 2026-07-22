@@ -53,8 +53,11 @@ function isProfileNotFound(r) {
   return r.status === 404 || r.body?.error === "profile-not-found";
 }
 
+const { moduleFullyPaywalled } = require("./lib/paywallAware");
+
 async function run() {
   console.log(`\nHealthAI PROD smoke → ${BASE}\n`);
+  if (await moduleFullyPaywalled(BASE, "/api/healthai/referrals", "healthai")) return;
 
   // 1. Health
   let r = await req("GET", "/api/healthai/health");

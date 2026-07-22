@@ -1277,37 +1277,9 @@ export const openapiSpec = {
       },
     },
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Paddle Billing v2
-    // ──────────────────────────────────────────────────────────────────────
-    "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
-    "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
-    "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
-    "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
-    "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
-    "/api/paddle/checkout": {
-      post: {
-        summary: "Create Paddle transaction → returns checkout URL",
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
-        responses: {
-          "200": { description: "{ mode, url, transactionId, sandbox }" },
-          "400": { description: "priceId required" },
-          "502": { description: "Paddle API error" },
-        },
-      },
-    },
-    "/api/paddle/webhook": {
-      post: {
-        summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
-        security: [],
-        responses: {
-          "200": { description: "{ received: true }" },
-          "400": { description: "missing signature or invalid_signature" },
-        },
-      },
-    },
-    "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
-    "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+    // Paddle Billing removed 2026-07-22 — /api/paddle/* routes no longer
+    // exist (payments = Gumroad MoR); the spec advertising them made the
+    // phantom-endpoint audit fail with a confirmed phantom.
 
     // ──────────────────────────────────────────────────────────────────────
     // Pricing — subscription self-service

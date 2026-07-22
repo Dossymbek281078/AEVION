@@ -49,9 +49,9 @@ const CRITICAL_PREFIXES = [
   "/api/planet",
   "/api/modules",
   "/api/search",
-  "/api/paddle",
   "/api/aevion",
 ];
+// "/api/paddle" removed 2026-07-22 — Paddle decommissioned (Gumroad MoR).
 
 // Informational — checked but missing doesn't fail the smoke.
 const SOFT_PREFIXES = [

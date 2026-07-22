@@ -7,6 +7,7 @@ import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { BookmarkButton } from "./BookmarkButton";
 import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource";
+import { regionLabel, WORK_MODE_LABELS } from "@/lib/build/geo";
 
 export function VacancyCard({
   vacancy,
@@ -14,7 +15,7 @@ export function VacancyCard({
   hot = false,
   footerAction,
 }: {
-  vacancy: BuildVacancy;
+  vacancy: BuildVacancy & { projectCity?: string | null };
   showProject?: boolean;
   hot?: boolean;
   /** Optional control (e.g. compare toggle) laid out in the footer's right side
@@ -39,6 +40,10 @@ export function VacancyCard({
     ? Math.ceil((new Date(vacancy.expiresAt).getTime() - Date.now()) / 86400000)
     : null;
   const expiringSoon = daysLeft != null && daysLeft >= 0 && daysLeft <= 7 && !isClosed;
+  const city = vacancy.city || vacancy.projectCity || null;
+  const region = regionLabel(vacancy.region);
+  const workModeLabel = vacancy.workMode ? WORK_MODE_LABELS[vacancy.workMode] : null;
+  const hasLocationLine = !!city || !!region || !!workModeLabel;
 
   async function quickApply(e: React.MouseEvent) {
     e.preventDefault();
@@ -102,6 +107,13 @@ export function VacancyCard({
           {showProject && vacancy.projectTitle && (
             <p className="mt-0.5 truncate text-xs text-slate-400">
               {vacancy.projectTitle}
+            </p>
+          )}
+          {hasLocationLine && (
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
+              {city && <span>📍 {city}{region ? `, ${region}` : ""}</span>}
+              {!city && region && <span>📍 {region}</span>}
+              {workModeLabel && <span>· {workModeLabel}</span>}
             </p>
           )}
         </div>

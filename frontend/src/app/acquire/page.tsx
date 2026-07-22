@@ -43,9 +43,11 @@ function useAcquireRef(): { key: string | null; name: string | null } {
       if (fromUrl) {
         next = fromUrl.toLowerCase().split("-")[0] ?? null;
         if (next) localStorage.setItem(REF_STORAGE_KEY, next);
-      } else {
-        next = localStorage.getItem(REF_STORAGE_KEY);
       }
+      // No ?ref= in the URL -> neutral page. Deliberately NOT falling back to
+      // localStorage: a sticky ref from an earlier visit could greet the wrong
+      // addressee on screenshots/demos. The stored value stays write-only for
+      // attribution.
     } catch {
       // ignore — sandboxed iframes, blocked localStorage, etc.
     }

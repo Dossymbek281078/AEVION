@@ -95,8 +95,7 @@
       "Bash(grep -rln \"149\\\\.99\\\\|\\\\\\\\\\\\$19\\\\b\\\\|\\\\\\\\\\\\$29\\\\b\\\\|\\\\\\\\\\\\$49\\\\b\" frontend/src --include=\"*.tsx\" --include=\"*.ts\")",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 779 --squash --delete-branch)",
       "Bash(/c/Program Files/GitHub CLI/gh.exe pr *)",
-      "Bash(git cherry-pick *)",
-      "Bash(git stash *)"
+      "Bash(git cherry-pick *)"
     ]
   }
 }

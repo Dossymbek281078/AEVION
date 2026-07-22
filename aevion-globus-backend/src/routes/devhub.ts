@@ -699,18 +699,32 @@ interface GeneratedCodeResult {
  * the same "not valid JSON → treat the whole reply as one file" fallback on
  * both the first attempt and any self-correction retry. */
 function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path: string; content: string; language: string }> {
-  try {
-    const raw = reply.trim();
-    const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);
-    const parsed = JSON.parse(jsonStr);
-    if (Array.isArray(parsed.files)) {
-      return parsed.files.map((f: any) => ({
-        path: String(f.path || "output.ts"),
-        content: String(f.content || ""),
-        language: String(f.language || detectLanguage(f.path || "")),
-      }));
-    }
-  } catch { /* fall through to raw-text fallback */ }
+  // Models wrap JSON in prose and fences in every combination — try the
+  // likeliest extractions in order before giving up. The raw-text fallback
+  // (whole reply into output.ts) is what a founder saw as a broken first
+  // impression, so it's a genuinely last resort now.
+  const raw = reply.trim();
+  const candidates: string[] = [];
+  if (raw.startsWith("{")) candidates.push(raw);
+  const fence = raw.match(/```(?:json)?\s*\n?([\s\S]+?)```/);
+  if (fence) candidates.push(fence[1].trim());
+  // First '{' through last '}' — JSON preceded/followed by prose.
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed.files) && parsed.files.length > 0) {
+        return parsed.files.map((f: any) => ({
+          path: String(f.path || "output.ts"),
+          content: String(f.content || ""),
+          language: String(f.language || detectLanguage(f.path || "")),
+        }));
+      }
+    } catch { /* try the next extraction */ }
+  }
   const path = targetFiles[0] || "output.ts";
   return [{ path, content: reply, language: detectLanguage(path) }];
 }

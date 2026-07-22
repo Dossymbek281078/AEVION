@@ -6,9 +6,10 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
+import paper from "@/styles/aevionPaper.module.css";
 import {
   ResultView, ScoreGauge, STAGES, VERDICT_COLOR, VERDICT_LABEL,
-  SECTION, H2, type AnalysisResult, type Verdict,
+  SECTION, H2, SERIF, type AnalysisResult, type Verdict,
 } from "./_result";
 
 interface SectorOption { id: string; label: string; }
@@ -42,8 +43,8 @@ const emptyForm = (): FormShape => ({
   projY0: "", projY1: "", projY2: "",
 });
 
-const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" };
-const LABEL: React.CSSProperties = { display: "block", fontSize: 12.5, fontWeight: 600, color: "#475569", marginBottom: 4 };
+const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid var(--rule-mid, #b9b8b0)", borderRadius: 4, fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", background: "var(--card, #fffefb)", color: "var(--ink, #17181a)" };
+const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-faint, #74767c)", marginBottom: 5 };
 
 // Pure request helper — returns the analysis or an error string, no state.
 async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string }> {
@@ -102,37 +103,40 @@ export default function QVenturePage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
+       <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <ModulePricingChip moduleId="qventure" theme="light" />
         </div>
 
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
-          <h1 style={{ margin: "6px 0 8px", fontSize: 30, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
+        {/* Masthead — newspaper treatment: kicker rule, serif headline. */}
+        <div style={{ borderTop: "3px solid var(--rule-bold, #17181a)", paddingTop: 14, marginBottom: 22 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: "0.32em", textTransform: "uppercase" }}>AEVION · QVenture</div>
+          <h1 style={{ margin: "8px 0 10px", fontFamily: SERIF, fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--ink, #17181a)", lineHeight: 1.1 }}>
             AI Investment Analyst for Any Business
           </h1>
-          <p style={{ margin: 0, fontSize: 15, color: "#475569", maxWidth: 760 }}>
+          <p style={{ margin: 0, fontSize: 15.5, color: "var(--ink-soft, #45474c)", maxWidth: 760, lineHeight: 1.55 }}>
             Fund-grade due diligence in seconds. A transparent quant score, a four-role expert council
             (scientist · data analyst · economist · lawyer), and a concrete entry strategy — how much to
             invest, at what valuation, staged over which milestones, for what risk-adjusted return.
           </p>
           <Link href="/qventure/a/demo-neurodx" style={{
             display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
-            fontSize: 14, fontWeight: 700, color: "#7c3aed", textDecoration: "none",
+            fontSize: 14, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none",
+            borderBottom: "1px solid color-mix(in srgb, var(--teal, #0a7d72) 45%, transparent)",
           }}>
-            See a live example → <span style={{ fontWeight: 400, color: "#94a3b8" }}>(NeuroDx report)</span>
+            See a live example → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
           </Link>
         </div>
 
         {/* Mode switch + watchlist link */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ display: "inline-flex", gap: 2, padding: 3, background: "#f1f5f9", borderRadius: 10 }}>
+          <div style={{ display: "inline-flex", gap: 2, padding: 3, background: "var(--paper-2, #efeee8)", borderRadius: 10 }}>
             {(["single", "compare"] as const).map((m) => (
               <button key={m} type="button" onClick={() => setMode(m)} style={{
                 padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
                 fontSize: 13.5, fontWeight: 700,
                 background: mode === m ? "#fff" : "transparent",
-                color: mode === m ? "#7c3aed" : "#64748b",
+                color: mode === m ? "var(--teal-deep, #075b53)" : "#64748b",
                 boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
               }}>
                 {m === "single" ? "Analyze one" : "⚖ Compare two"}
@@ -140,13 +144,13 @@ export default function QVenturePage() {
             ))}
           </div>
           <div style={{ display: "flex", gap: 16 }}>
-            <Link href="/qventure/batch" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+            <Link href="/qventure/batch" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ☰ Batch funnel →
             </Link>
-            <Link href="/qventure/gallery" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+            <Link href="/qventure/gallery" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ▦ Examples →
             </Link>
-            <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+            <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ★ Watchlist →
             </Link>
           </div>
@@ -157,6 +161,7 @@ export default function QVenturePage() {
           : <ComparePanel sectors={sectors} />}
 
         <MarketingSections />
+       </div>
       </ProductPageShell>
     </>
   );
@@ -190,8 +195,8 @@ function MarketingSections() {
           {steps.map((s, i) => (
             <div key={i} style={{ padding: "4px 4px" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed" }}>STEP {i + 1}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "2px 0 6px" }}>{s.title}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)" }}>STEP {i + 1}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink, #17181a)", margin: "2px 0 6px" }}>{s.title}</div>
               <p style={{ margin: 0, fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>{s.body}</p>
             </div>
           ))}
@@ -204,18 +209,18 @@ function MarketingSections() {
           {audience.map((a, i) => (
             <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
               <div style={{ fontSize: 22, marginBottom: 6 }}>{a.icon}</div>
-              <div style={{ fontSize: 14.5, fontWeight: 800, color: "#0f172a" }}>{a.label}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: "var(--ink, #17181a)" }}>{a.label}</div>
               <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>{a.body}</p>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ ...SECTION, background: "linear-gradient(135deg, #0f172a, #1e293b)", borderColor: "transparent" }}>
+      <div style={{ ...SECTION, background: "var(--ink, #17181a)", borderColor: "transparent" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
           {trust.map(([k, v], i) => (
             <div key={i}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#a78bfa" }}>{k}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "var(--teal, #0a7d72)" }}>{k}</div>
               <div style={{ fontSize: 12.5, color: "#cbd5e1", marginTop: 3, lineHeight: 1.4 }}>{v}</div>
             </div>
           ))}
@@ -314,15 +319,15 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
     <>
       <div style={SECTION}>
         <h2 style={H2}>Analyze an opportunity</h2>
-        <div style={{ border: "1px dashed #c4b5fd", background: "#faf5ff", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ border: "1px dashed var(--rule-mid, #b9b8b0)", background: "var(--paper-2, #efeee8)", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={onDeckFile} style={{ display: "none" }} />
           <button type="button" onClick={() => fileRef.current?.click()} disabled={extracting || loading} style={{
-            padding: "10px 18px", background: extracting ? "#a78bfa" : "#7c3aed", color: "#fff", border: "none",
+            padding: "10px 18px", background: extracting ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: extracting ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
             {extracting ? "Reading deck…" : "📄 Upload pitch deck (PDF)"}
           </button>
-          <span style={{ fontSize: 12.5, color: extractNote ? "#7c3aed" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
+          <span style={{ fontSize: 12.5, color: extractNote ? "var(--teal-deep, #075b53)" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
             {extractNote || "We extract the fields and pre-fill the form — you review, then run."}
           </span>
         </div>
@@ -391,14 +396,14 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
   const head = (r: AnalysisResult, side: "a" | "b") => (
     <div style={{
       ...SECTION, flex: "1 1 300px", marginBottom: 0,
-      borderColor: winner === side ? "#7c3aed" : "#e2e8f0",
+      borderColor: winner === side ? "var(--teal-deep, #075b53)" : "#e2e8f0",
       borderWidth: winner === side ? 2 : 1,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div>
           <h2 style={{ ...H2, marginBottom: 4 }}>{r.name}</h2>
           <div style={{ fontSize: 13, color: "#64748b" }}>{r.result.sector.label} · {r.result.stage}</div>
-          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed", marginTop: 6 }}>◆ Higher score</div>}
+          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)", marginTop: 6 }}>◆ Higher score</div>}
         </div>
       </div>
       <div style={{ marginTop: 12 }}><ScoreGauge score={r.composite} verdict={r.verdict} size={104} /></div>
@@ -418,7 +423,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
           rel="noopener noreferrer"
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
-            padding: "9px 18px", background: "#fff", color: "#7c3aed",
+            padding: "9px 18px", background: "#fff", color: "var(--teal-deep, #075b53)",
             border: "1px solid #ddd6fe", borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: "none",
           }}
         >
@@ -446,7 +451,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
                 const dColor = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#94a3b8";
                 return (
                   <tr key={fa.key} style={{ borderTop: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "8px", color: "#0f172a", fontWeight: 600 }}>{fa.label}
+                    <td style={{ padding: "8px", color: "var(--ink, #17181a)", fontWeight: 600 }}>{fa.label}
                       <span style={{ color: "#94a3b8", fontWeight: 400 }}> · {Math.round(fa.weight * 100)}%</span></td>
                     <td style={{ padding: "8px", textAlign: "center", color: "#334155" }}>{fa.score}</td>
                     <td style={{ padding: "8px", textAlign: "center", color: "#334155" }}>{bs}</td>
@@ -457,7 +462,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
                 );
               })}
               <tr style={{ borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "8px", fontWeight: 800, color: "#0f172a" }}>Composite</td>
+                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Composite</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{a.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{b.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: b.composite - a.composite >= 0 ? "#16a34a" : "#dc2626" }}>
@@ -477,11 +482,11 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
               <span style={{ padding: "4px 12px", borderRadius: 999, background: VERDICT_COLOR[r.verdict], color: "#fff", fontWeight: 800, fontSize: 13 }}>
                 {VERDICT_LABEL[r.verdict as Verdict]}
               </span>
-              <strong style={{ color: "#0f172a" }}>{r.name}</strong>
+              <strong style={{ color: "var(--ink, #17181a)" }}>{r.name}</strong>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: "#334155", lineHeight: 1.5 }}>{firstSentences(r.result.council.memo)}</p>
             <a href={apiUrl(`/api/qventure/analyses/${r.id}/pdf`)} target="_blank" rel="noopener noreferrer"
-              style={{ display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}>
+              style={{ display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ⬇ PDF memo
             </a>
           </div>
@@ -591,10 +596,10 @@ function FormFields({ form, set, sectors, full = false }: {
 }
 
 const primaryBtn = (loading: boolean): React.CSSProperties => ({
-  padding: "12px 28px", background: loading ? "#94a3b8" : "#7c3aed", color: "#fff", border: "none",
+  padding: "12px 28px", background: loading ? "var(--ink-faint, #74767c)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
   borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
 });
 const ghostBtn = (loading: boolean): React.CSSProperties => ({
-  padding: "12px 22px", background: "#fff", color: "#7c3aed", border: "1px solid #ddd6fe",
+  padding: "12px 22px", background: "#fff", color: "var(--teal-deep, #075b53)", border: "1px solid #ddd6fe",
   borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer",
 });

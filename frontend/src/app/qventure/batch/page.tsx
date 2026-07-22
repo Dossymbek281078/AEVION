@@ -135,34 +135,34 @@ export default function BatchPage() {
       <ProductPageShell>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>Deal funnel — batch analysis</h1>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Deal funnel — batch analysis</h1>
           </div>
-          <Link href="/qventure" style={{ padding: "9px 18px", background: "#fff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
+          <Link href="/qventure" style={{ padding: "9px 18px", background: "#fff", color: "var(--teal-deep, #075b53)", border: "1px solid var(--rule-mid, #b9b8b0)", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
             ← Single deal
           </Link>
         </div>
-        <p style={{ margin: "0 0 18px", fontSize: 15, color: "#475569", maxWidth: 760 }}>
+        <p style={{ margin: "0 0 18px", fontSize: 15, color: "var(--ink-soft, #45474c)", maxWidth: 760 }}>
           Upload up to 20 pitch decks at once. Each is scored through the full engine — quant score, red flags,
           stress test — then ranked into one shortlist you can export as a single funnel PDF.
         </p>
 
-        <div style={{ border: "1px dashed #c4b5fd", background: "#faf5ff", borderRadius: 12, padding: "16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ border: "1px dashed #c4b5fd", background: "var(--paper-2, #efeee8)", borderRadius: 12, padding: "16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple onChange={onFiles} style={{ display: "none" }} />
           <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} style={{
-            padding: "11px 20px", background: busy ? "#a78bfa" : "#7c3aed", color: "#fff", border: "none",
+            padding: "11px 20px", background: busy ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
             {busy ? "Analyzing…" : "📄 Upload decks (PDF, up to 20)"}
           </button>
           {progress && (
-            <span style={{ fontSize: 13.5, color: "#7c3aed", fontWeight: 600 }}>
+            <span style={{ fontSize: 13.5, color: "var(--teal-deep, #075b53)", fontWeight: 600 }}>
               {progress.done}/{progress.total} · {progress.current.slice(0, 40)}
             </span>
           )}
           {note && <span style={{ fontSize: 13, color: "#b45309", fontWeight: 600 }}>{note}</span>}
           {!busy && !progress && rows.length === 0 && (
-            <span style={{ fontSize: 12.5, color: "#94a3b8" }}>Text-based PDFs only (not scanned images).</span>
+            <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Text-based PDFs only (not scanned images).</span>
           )}
         </div>
 
@@ -183,14 +183,14 @@ export default function BatchPage() {
                 { k: "Pass", v: String(rows.length - invest - watch) },
               ].map((s) => (
                 <div key={s.k} style={{ ...SECTION, padding: "10px 16px", margin: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>{s.v}</div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>{s.k}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "var(--ink, #17181a)" }}>{s.v}</div>
+                  <div style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>{s.k}</div>
                 </div>
               ))}
               <div style={{ flex: 1 }} />
               {funnelHref && (
                 <a href={funnelHref} target="_blank" rel="noopener noreferrer" style={{
-                  padding: "11px 20px", background: "#0f172a", color: "#fff", borderRadius: 10,
+                  padding: "11px 20px", background: "var(--ink, #17181a)", color: "#fff", borderRadius: 10,
                   fontWeight: 700, fontSize: 13.5, textDecoration: "none", whiteSpace: "nowrap",
                 }}>
                   ⬇ Export funnel PDF
@@ -201,19 +201,19 @@ export default function BatchPage() {
             <div style={{ ...SECTION }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
                 <h2 style={{ ...H2, margin: 0, flex: 1 }}>Ranking</h2>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Sort:</span>
+                <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Sort:</span>
                 {(["composite", "redFlags", "name"] as SortKey[]).map((k) => (
                   <button key={k} type="button" onClick={() => setSort(k)} style={{
                     padding: "5px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                    border: "1px solid " + (sort === k ? "#7c3aed" : "#e2e8f0"),
-                    background: sort === k ? "#7c3aed" : "#fff", color: sort === k ? "#fff" : "#475569",
+                    border: "1px solid " + (sort === k ? "var(--teal-deep, #075b53)" : "var(--rule, #d4d3cc)"),
+                    background: sort === k ? "var(--teal-deep, #075b53)" : "#fff", color: sort === k ? "#fff" : "var(--ink-soft, #45474c)",
                   }}>{k === "composite" ? "Score" : k === "redFlags" ? "Red flags" : "Name"}</button>
                 ))}
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                   <thead>
-                    <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12, borderBottom: "2px solid #e2e8f0" }}>
+                    <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12, borderBottom: "2px solid var(--rule, #d4d3cc)" }}>
                       <th style={{ padding: "8px 6px" }}>#</th>
                       <th style={{ padding: "8px 6px" }}>Company</th>
                       <th style={{ padding: "8px 6px" }}>Sector · Stage</th>
@@ -227,19 +227,19 @@ export default function BatchPage() {
                   <tbody>
                     {sorted.map((r, i) => (
                       <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                        <td style={{ padding: "9px 6px", fontWeight: 700, color: "#94a3b8" }}>{i + 1}</td>
-                        <td style={{ padding: "9px 6px", fontWeight: 700, color: "#0f172a" }}>{r.name}</td>
-                        <td style={{ padding: "9px 6px", color: "#475569" }}>{r.sector} · {r.stage}</td>
-                        <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 800, color: "#0f172a" }}>{r.composite}</td>
+                        <td style={{ padding: "9px 6px", fontWeight: 700, color: "var(--ink-faint, #74767c)" }}>{i + 1}</td>
+                        <td style={{ padding: "9px 6px", fontWeight: 700, color: "var(--ink, #17181a)" }}>{r.name}</td>
+                        <td style={{ padding: "9px 6px", color: "var(--ink-soft, #45474c)" }}>{r.sector} · {r.stage}</td>
+                        <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 800, color: "var(--ink, #17181a)" }}>{r.composite}</td>
                         <td style={{ padding: "9px 6px" }}>
                           <span style={{ padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, color: "#fff", background: VERDICT_COLOR[r.verdict] }}>
                             {VERDICT_LABEL[r.verdict]}
                           </span>
                         </td>
-                        <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 700, color: r.redFlags > 0 ? "#b45309" : "#94a3b8" }}>{r.redFlags}</td>
-                        <td style={{ padding: "9px 6px", color: r.resilience === "underwater" || r.resilience === "fragile" ? "#b45309" : "#475569", textTransform: "capitalize" }}>{r.resilience}</td>
+                        <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 700, color: r.redFlags > 0 ? "#b45309" : "var(--ink-faint, #74767c)" }}>{r.redFlags}</td>
+                        <td style={{ padding: "9px 6px", color: r.resilience === "underwater" || r.resilience === "fragile" ? "#b45309" : "var(--ink-soft, #45474c)", textTransform: "capitalize" }}>{r.resilience}</td>
                         <td style={{ padding: "9px 6px", textAlign: "right" }}>
-                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "#7c3aed", textDecoration: "none", whiteSpace: "nowrap" }}>Report →</Link>
+                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none", whiteSpace: "nowrap" }}>Report →</Link>
                         </td>
                       </tr>
                     ))}
@@ -247,7 +247,7 @@ export default function BatchPage() {
                 </table>
               </div>
             </div>
-            <p style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 12 }}>
+            <p style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 12 }}>
               Each deck is scored deterministically then narrated by the four-role council. Figures are model estimates — research tool, not investment advice.
             </p>
           </>

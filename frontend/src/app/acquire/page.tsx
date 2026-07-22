@@ -215,11 +215,23 @@ export default function AcquirePage() {
             lineHeight: 1.55,
             maxWidth: 820,
           }}>
-            <strong style={{ color: "#f8fafc" }}>Every line of AEVION was built on your platform.</strong>{" "}
-            A non-engineer — director of several construction-trust companies — shipped 30+ production
-            modules solo in six months, with AI as the only engineer. Before it is an investment, AEVION
-            may be the most complete living proof of what your platform makes possible. Honest disclosure:
-            a short list of strategic addressees received this brief, and each was told so.
+            {acquireRef.key === "anthropic" ? (
+              <>
+                <strong style={{ color: "#f8fafc" }}>Every line of AEVION was built on your platform.</strong>{" "}
+                A non-engineer — director of several construction-trust companies — shipped 30+ production
+                modules solo in six months, with AI as the only engineer. Before it is an investment, AEVION
+                may be the most complete living proof of what your platform makes possible. Honest disclosure:
+                a short list of strategic addressees received this brief, and each was told so.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: "#f8fafc" }}>Every line of AEVION was built by one person with AI as the only engineer.</strong>{" "}
+                A non-engineer — director of several construction-trust companies — shipped 30+ production
+                modules solo in six months, today running on Anthropic&apos;s Claude. Treat it as a working
+                blueprint of what a whole platform on your models could look like. Honest disclosure:
+                a short list of strategic addressees received this brief, and each was told so.
+              </>
+            )}
           </div>
         )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 24 }}>

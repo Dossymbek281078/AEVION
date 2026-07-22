@@ -49,7 +49,15 @@ const VERDICT_COLOR: Record<Verdict, string> = { invest: TEAL, watch: AMBER, pas
 // ships only a sans, so without this the headline renders sans. Fetched from
 // Google Fonts at request time (allowed on the nodejs runtime) and wrapped so a
 // fetch failure degrades to the default sans rather than erroring the whole image.
-async function loadSerif(): Promise<ArrayBuffer | null> {
+//
+// Cached at module scope so the two Google Fonts round-trips happen at most once
+// per warm server instance, not on every card render. Social crawlers hit these
+// URLs in bursts (one per shared link), and an uncached fetch per request would
+// make the endpoint slow and flaky under exactly that load. The promise itself is
+// memoised, so concurrent first-hits share one fetch instead of racing.
+let serifPromise: Promise<ArrayBuffer | null> | null = null;
+
+async function fetchSerif(): Promise<ArrayBuffer | null> {
   try {
     const css = await fetch("https://fonts.googleapis.com/css2?family=Lora:wght@600", {
       headers: { "User-Agent": "Mozilla/5.0" },
@@ -61,6 +69,18 @@ async function loadSerif(): Promise<ArrayBuffer | null> {
   } catch {
     return null;
   }
+}
+
+function loadSerif(): Promise<ArrayBuffer | null> {
+  // Re-arm on a null result so a transient font-CDN blip doesn't cache "sans
+  // forever" for the life of the instance — only a successful load is sticky.
+  if (!serifPromise) {
+    serifPromise = fetchSerif().then((buf) => {
+      if (buf === null) serifPromise = null;
+      return buf;
+    });
+  }
+  return serifPromise;
 }
 
 export default async function QVentureOgImage({

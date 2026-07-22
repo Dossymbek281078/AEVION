@@ -86,7 +86,8 @@
       "Bash(grep -rn \"aevion/pricing\\\\|aevion\\\\\\\\\\\\\\\\/pricing\" aevion-globus-backend/src --include=\"*.ts\")",
       "Bash(node scripts/i18n-kk-extract.mjs)",
       "Bash(git rev-list *)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(billing\\): consolidate pricing config, fix Universe/pro entitlement bug' --body ' *)"
     ]
   }
 }

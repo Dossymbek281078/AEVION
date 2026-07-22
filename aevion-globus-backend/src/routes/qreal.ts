@@ -29,6 +29,8 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { callProvider, pickConfiguredProvider } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
+import { ensureQRealTables } from "../lib/ensureQRealTables";
+import { getPool } from "../lib/dbPool";
 
 const captureQRealError = makeServiceCapture("qreal");
 
@@ -96,6 +98,57 @@ const memProjects = new Map<string, Project>();
 // Повторный рендер того же кадра не тратит деньги («дешевле» на практике).
 const memRenderCache = new Map<string, string>();
 
+/* ── P7 persistence: Postgres write-through поверх in-memory ── */
+
+const pool = getPool();
+let dbWarmed = false;
+
+/** Best-effort upsert проекта (fire-and-forget: рендер важнее записи). */
+function saveProject(p: Project): void {
+  pool
+    .query(
+      `INSERT INTO "QRealProject" ("id","userId","data","updatedAt") VALUES ($1,$2,$3,NOW())
+       ON CONFLICT ("id") DO UPDATE SET "data"=$3, "updatedAt"=NOW()`,
+      [p.id, p.userId, JSON.stringify(p)]
+    )
+    .catch(() => {});
+}
+
+function saveCacheEntry(cacheKey: string, url: string): void {
+  pool
+    .query(
+      `INSERT INTO "QRealRenderCache" ("cacheKey","url") VALUES ($1,$2) ON CONFLICT ("cacheKey") DO NOTHING`,
+      [cacheKey, url]
+    )
+    .catch(() => {});
+}
+
+async function loadProjectFromDb(id: string): Promise<Project | null> {
+  try {
+    const r = await pool.query(`SELECT "data" FROM "QRealProject" WHERE "id"=$1`, [id]);
+    return r.rows[0]?.data ? (r.rows[0].data as Project) : null;
+  } catch { return null; }
+}
+
+/** Разогрев при первом запросе: кэш рендеров + сохранённые проекты (демо в
+ *  БД новее сида — рендеры демо переживают редеплой). */
+async function warmFromDb(): Promise<void> {
+  if (dbWarmed) return;
+  dbWarmed = true;
+  try {
+    await ensureQRealTables(pool);
+    const cache = await pool.query(`SELECT "cacheKey","url" FROM "QRealRenderCache" LIMIT 5000`);
+    for (const row of cache.rows) memRenderCache.set(row.cacheKey, row.url);
+    const projects = await pool.query(`SELECT "data" FROM "QRealProject" ORDER BY "updatedAt" DESC LIMIT 500`);
+    for (const row of projects.rows) {
+      const p = row.data as Project;
+      if (p?.id) memProjects.set(p.id, p);
+    }
+  } catch { /* in-memory режим */ }
+}
+
+qrealRouter.use((_req, _res, next) => { warmFromDb().finally(() => next()); });
+
 function renderCacheKey(engineId: string, prompt: string, durationSec: number): string {
   return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}`).digest("hex");
 }
@@ -144,7 +197,7 @@ const RENDER_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_RENDER_IP_DAI
 const RENDER_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_RENDER_GLOBAL_DAILY_CAP) || 20);
 const renderCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
 
-function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> }): { ok: true } | { ok: false; error: string } {
+async function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> }): Promise<{ ok: true } | { ok: false; error: string }> {
   const today = nowIso().slice(0, 10);
   if (renderCounters.day !== today) {
     renderCounters.day = today;
@@ -153,6 +206,27 @@ function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> })
   }
   const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   const ip = fwd || req.ip || "unknown";
+  // Postgres-счётчики (переживают редеплой); при недоступной БД — in-memory.
+  try {
+    const r = await pool.query(
+      `SELECT "ip","count" FROM "QRealQuota" WHERE "day"=$1 AND "ip" IN ($2,'__global__')`,
+      [today, ip]
+    );
+    const ipCount = r.rows.find((x: any) => x.ip === ip)?.count ?? 0;
+    const globalCount = r.rows.find((x: any) => x.ip === "__global__")?.count ?? 0;
+    if (globalCount >= RENDER_GLOBAL_DAILY_CAP) {
+      return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+    }
+    if (ipCount >= RENDER_IP_DAILY_LIMIT) {
+      return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+    }
+    await pool.query(
+      `INSERT INTO "QRealQuota" ("day","ip","count") VALUES ($1,$2,1),($1,'__global__',1)
+       ON CONFLICT ("day","ip") DO UPDATE SET "count"="QRealQuota"."count"+1`,
+      [today, ip]
+    );
+    return { ok: true };
+  } catch { /* БД недоступна — считаем в памяти */ }
   if (renderCounters.total >= RENDER_GLOBAL_DAILY_CAP) {
     return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
   }
@@ -461,6 +535,7 @@ qrealRouter.post("/projects", (req, res) => {
       createdAt: nowIso(), updatedAt: nowIso(),
     };
     memProjects.set(p.id, p);
+    saveProject(p);
     res.status(201).json({ project: p });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "create project failed" }); }
 });
@@ -491,6 +566,7 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
     for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
     p.status = "storyboarded";
     p.updatedAt = nowIso();
+    saveProject(p);
     res.json({ project: p, storyboardMethod: viaAi ? "llm" : "deterministic-stub" });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "storyboard failed" }); }
 });
@@ -562,11 +638,12 @@ qrealRouter.post("/projects/:id/shots/:sid/render", async (req, res) => {
     const preferred = typeof req.body?.engine === "string" ? req.body.engine : undefined;
     const engine = pickVideoEngine(preferred);
     if (engine && !isCachedShot(p, s, engine)) {
-      const quota = takeRenderQuota(req as any);
+      const quota = await takeRenderQuota(req as any);
       if (!quota.ok) return res.status(429).json({ error: "render_quota_exceeded", message: quota.error });
     }
     const note = await submitShot(p, s, engine);
     p.updatedAt = nowIso();
+    saveProject(p);
     if (s.status === "failed") return res.status(502).json({ shot: s, note });
     res.json({ shot: s, note });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render failed" }); }
@@ -583,13 +660,14 @@ qrealRouter.post("/projects/:id/render-all", async (req, res) => {
     for (const s of p.shots) {
       if (s.status === "rendered" || s.status === "queued") continue;
       if (engine && !isCachedShot(p, s, engine)) {
-        const quota = takeRenderQuota(req as any);
+        const quota = await takeRenderQuota(req as any);
         if (!quota.ok) { notes.push({ shotId: s.id, note: quota.error }); continue; }
       }
       notes.push({ shotId: s.id, note: await submitShot(p, s, engine) });
     }
     p.status = engine ? "rendering" : p.status;
     p.updatedAt = nowIso();
+    saveProject(p);
     res.json({ project: p, notes });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-all failed" }); }
 });
@@ -609,12 +687,14 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
       if (poll.videoUrl && s.prompt) {
         const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
         memRenderCache.set(cacheKey, poll.videoUrl);
+        saveCacheEntry(cacheKey, poll.videoUrl);
         journalAppend({ type: "completed", projectId: p.id, shotId: s.id, requestId: s.engineRequestId, cacheKey, url: poll.videoUrl });
       }
     } else if (poll.state === "failed") {
       s.status = "failed";
     }
     p.updatedAt = nowIso();
+    saveProject(p);
     res.json({ shot: s, engineState: poll.state });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-status failed" }); }
 });
@@ -629,6 +709,7 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
     s.qc = emptyQcReport();
     s.qc.method = s.resultUrl ? "vlm-judge" : "manual";
     p.updatedAt = nowIso();
+    saveProject(p);
     res.json({ qc: s.qc, note: s.resultUrl ? "Рендер найден — очередь VLM-судьи." : "Рендера ещё нет: чеклист для ручной проверки." });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "qc failed" }); }
 });
@@ -650,6 +731,7 @@ qrealRouter.post("/projects/:id/assemble", async (req, res) => {
     p.filmPath = r.filmPath;
     p.status = "done";
     p.updatedAt = nowIso();
+    saveProject(p);
     res.json({ ok: true, filmUrl: `/api/qreal/projects/${p.id}/film`, disclosure: AI_DISCLOSURE_META });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "assemble failed" }); }
 });

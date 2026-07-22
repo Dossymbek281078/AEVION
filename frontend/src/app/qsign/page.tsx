@@ -253,7 +253,6 @@ export default function QSignPage() {
   const [signed, setSigned] = useState<SignResponse | null>(null);
   const [hashAtSign, setHashAtSign] = useState<string>("");
   const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
-  const [, setRateTick] = useState(0);
   const [hashingFile, setHashingFile] = useState(false);
 
   // webhooks
@@ -301,16 +300,6 @@ export default function QSignPage() {
       .catch(() => setHealth(null));
   }, []);
 
-  /* — tick countdown timer for rate-limit reset, only while a rate-limit
-   * window is known. The 1s tick triggers re-render via setRateTick so the
-   * "resets in Ns" text stays current; the actual reset value is read from
-   * RateLimit-Reset response headers and stored in `rateLimit.resetAt`.
-   */
-  useEffect(() => {
-    if (!rateLimit?.resetAt) return;
-    const t = setInterval(() => setRateTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [rateLimit?.resetAt]);
 
   /* — live stats + recent feed (refetched after every successful sign) — */
   const loadMetrics = () => {
@@ -1163,47 +1152,7 @@ export default function QSignPage() {
               {signing ? "Signing…" : "Sign with HMAC + Ed25519"}
             </button>
 
-            {rateLimit
-              ? (() => {
-                  const secsLeft =
-                    rateLimit.resetAt !== null
-                      ? Math.max(0, Math.round((rateLimit.resetAt - Date.now()) / 1000))
-                      : null;
-                  const low = rateLimit.remaining <= 5;
-                  return (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        background: low ? "rgba(220,38,38,0.06)" : "#f1f5f9",
-                        border: low
-                          ? "1px solid rgba(220,38,38,0.25)"
-                          : "1px solid rgba(15,23,42,0.06)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        fontSize: 11,
-                      }}
-                    >
-                      <span style={{ color: "#64748b", fontWeight: 700 }}>
-                        Sign rate limit (per IP)
-                      </span>
-                      <span
-                        style={{
-                          ...mono,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: low ? "#b91c1c" : "#0f172a",
-                        }}
-                      >
-                        {rateLimit.remaining}/{rateLimit.limit} left
-                        {secsLeft !== null ? ` · resets in ${secsLeft}s` : ""}
-                      </span>
-                    </div>
-                  );
-                })()
-              : null}
+            {rateLimit ? <RateLimitBadge rateLimit={rateLimit} /> : null}
 
             {/* signed result */}
             {signed ? (
@@ -2138,6 +2087,54 @@ def verify_qsign_webhook(raw_body: bytes, header_sig: str, secret: str) -> bool:
 }
 
 /* ───────── sub-components ───────── */
+
+// Rate-limit countdown badge. Owns its own 1s ticker locally (only while
+// a reset time is known) so the "resets in Ns" refresh stays scoped to
+// this small component instead of re-rendering the whole page (same
+// setState-per-tick bug class fixed in CyberChess #721/#740/#746,
+// QTrade #765, aev/page.tsx, and coach/page.tsx).
+function RateLimitBadge({ rateLimit }: { rateLimit: RateLimitInfo }) {
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!rateLimit.resetAt) return;
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [rateLimit.resetAt]);
+
+  const secsLeft =
+    rateLimit.resetAt !== null
+      ? Math.max(0, Math.round((rateLimit.resetAt - Date.now()) / 1000))
+      : null;
+  const low = rateLimit.remaining <= 5;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: "8px 12px",
+        borderRadius: 8,
+        background: low ? "rgba(220,38,38,0.06)" : "#f1f5f9",
+        border: low ? "1px solid rgba(220,38,38,0.25)" : "1px solid rgba(15,23,42,0.06)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        fontSize: 11,
+      }}
+    >
+      <span style={{ color: "#64748b", fontWeight: 700 }}>Sign rate limit (per IP)</span>
+      <span
+        style={{
+          ...mono,
+          fontSize: 11,
+          fontWeight: 700,
+          color: low ? "#b91c1c" : "#0f172a",
+        }}
+      >
+        {rateLimit.remaining}/{rateLimit.limit} left
+        {secsLeft !== null ? ` · resets in ${secsLeft}s` : ""}
+      </span>
+    </div>
+  );
+}
 
 function StatCard({
   label: text,

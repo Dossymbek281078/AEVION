@@ -56,6 +56,7 @@ interface RevenuePace {
   change?: { grossUsd: number };
   windowDays: number;
   points: number;
+  first?: { capturedAt: string };
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -139,20 +140,27 @@ export default function RevenuePage() {
 
   // Each channel fetches independently — a slow/stuck one no longer blocks
   // the whole page; every section renders as soon as its own data lands.
+  // Re-runs every 60s so a tab left open doesn't go stale under its own
+  // "обновлено N назад" timestamp.
   useEffect(() => {
     const touch = () => setLastUpdatedAt(Date.now());
-    fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setOverview(d); setOverviewLoading(false); touch(); });
-    fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setBalance(d); setBalanceLoading(false); touch(); });
-    fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setRecent(d); setRecentLoading(false); touch(); });
-    fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
-      .then((d) => { setLsBalance(d); setLsLoading(false); touch(); });
-    fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
-      .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
-    fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
-      .then((d) => setPace(d));
+    const loadAll = () => {
+      fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setOverview(d); setOverviewLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setBalance(d); setBalanceLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setRecent(d); setRecentLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setLsBalance(d); setLsLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
+        .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
+      fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
+        .then((d) => setPace(d));
+    };
+    loadAll();
+    const t = setInterval(loadAll, 60_000);
+    return () => clearInterval(t);
   }, []);
 
   // Live "N сек назад" — ticks every second while the tab is open.
@@ -223,6 +231,11 @@ export default function RevenuePage() {
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
                 eta={etaLabel(goals.stretchUsd, totalGross, pace)}
               />
+            </div>
+          )}
+          {pace && pace.points >= 2 && pace.first?.capturedAt && (
+            <div className="mt-2 text-[11px] text-gray-500">
+              Прогноз темпа — по {pace.points} снапшотам за 30 дней, с {new Date(pace.first.capturedAt).toLocaleDateString("ru")}
             </div>
           )}
         </section>
@@ -563,9 +576,12 @@ function SkeletonGrid({ cols }: { cols: number }) {
 }
 
 function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
+  const [exact, setExact] = useState(false);
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
   const reached = pct >= 100;
+  const currentStr = exact ? `$${current.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(current);
+  const remainingStr = exact ? `$${remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining);
   return (
     <div
       className={`bg-gray-900 border rounded-xl p-5 transition-shadow ${
@@ -582,14 +598,15 @@ function GoalBar({ label, target, current, colorClass, eta }: { label: string; t
           style={{ width: `${pct > 0 ? Math.max(pct, 0.6) : 0}%` }}
         />
       </div>
-      <div className="flex items-baseline justify-between mt-2 text-xs text-gray-500">
-        <span title={`$${current.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}>
-          {formatCompactUsd(current)} собрано
-        </span>
-        <span title={`$${remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}>
-          осталось {formatCompactUsd(remaining)}
-        </span>
-      </div>
+      <button
+        type="button"
+        onClick={() => setExact((v) => !v)}
+        className="w-full flex items-baseline justify-between mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        title={exact ? "Скрыть точную сумму" : "Показать точную сумму"}
+      >
+        <span>{currentStr} собрано</span>
+        <span>осталось {remainingStr}</span>
+      </button>
       {eta && <div className="mt-1.5 text-[11px] text-emerald-400/80">{eta}</div>}
     </div>
   );

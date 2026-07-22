@@ -163,9 +163,13 @@ export default function RevenuePage() {
     return () => clearInterval(t);
   }, []);
 
-  // Live "N сек назад" — ticks every second while the tab is open.
+  // Live "N сек назад" — ticks every 5s, not 1s: a faster churn on a text
+  // node inside AutoTranslate's observed subtree fought with its live
+  // re-translation and produced garbled concatenated text (same class of
+  // bug already worked around for CyberChess's move clock). The ticking
+  // value itself is also wrapped in translate="no" below, belt-and-suspenders.
   useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    const t = setInterval(() => setNowTick(Date.now()), 5000);
     return () => clearInterval(t);
   }, []);
 
@@ -191,7 +195,9 @@ export default function RevenuePage() {
             <p className="text-sm text-gray-400 mt-0.5">
               Gumroad · LemonSqueezy · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
               {lastUpdatedAt && (
-                <span className="ml-2 text-xs text-gray-500">· обновлено {agoLabel(lastUpdatedAt, nowTick)} назад</span>
+                <span className="ml-2 text-xs text-gray-500">
+                  · обновлено <span translate="no">{agoLabel(lastUpdatedAt, nowTick)}</span> назад
+                </span>
               )}
             </p>
           </div>

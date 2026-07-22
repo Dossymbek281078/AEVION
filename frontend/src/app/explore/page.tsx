@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
+import { track } from "@/lib/track";
 
 type Status = "live" | "new" | "soon";
 type Item = { name: string; slug: string; desc: string; status: Status };
@@ -78,6 +79,17 @@ const STATUS_LABEL: Record<Status, string> = { live: "Live", new: "New", soon: "
 
 export default function ExplorePlanet() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Outreach attribution: full query lands in `path`; utm_source is lifted
+  // into `source` so /admin/events aggregates by campaign without parsing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    track({
+      type: "page_view",
+      source: params.get("utm_source") ?? undefined,
+      meta: { campaign: params.get("utm_campaign") },
+    });
+  }, []);
 
   useEffect(() => {
     const c = canvasRef.current;

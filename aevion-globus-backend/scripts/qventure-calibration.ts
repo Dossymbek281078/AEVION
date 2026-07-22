@@ -156,6 +156,25 @@ function run() {
     console.log(`  ${group.padEnd(10)} invest ${c("invest")} (${pct(c("invest"), g.length)}%)  watch ${c("watch")} (${pct(c("watch"), g.length)}%)  pass ${c("pass")} (${pct(c("pass"), g.length)}%)`);
   }
 
+  // Per-sector n is 2-3 here, which is noise. Split on the axis that plausibly
+  // breaks the rubric instead: capital-intensive businesses, where the sector
+  // priors carry most of the score, versus software, where disclosed traction
+  // can actually move it. If the failure concentrates on one side, the fix is
+  // the priors for those sectors — not the factor architecture.
+  const CAPITAL_HEAVY = new Set(["climate", "space", "proptech", "logistics", "biotech", "agtech"]);
+  console.log("── Discrimination by business type ──");
+  for (const [label, pred] of [
+    ["capital-intensive", (r: typeof rows[number]) => CAPITAL_HEAVY.has(r.sector as string)],
+    ["software-like", (r: typeof rows[number]) => !CAPITAL_HEAVY.has(r.sector as string)],
+  ] as const) {
+    const g = rows.filter(pred);
+    const f = g.filter((r) => r.outcome === "failed").map((r) => r.composite);
+    const s = g.filter((r) => r.outcome === "succeeded").map((r) => r.composite);
+    if (!f.length || !s.length) { console.log(`  ${label.padEnd(18)} n=${g.length} — too few in one arm to compare`); continue; }
+    console.log(`  ${label.padEnd(18)} failed n=${f.length} mean ${mean(f).toFixed(1)} | succeeded n=${s.length} mean ${mean(s).toFixed(1)} | separation ${(mean(s) - mean(f)).toFixed(1)}`);
+  }
+  console.log("");
+
   const all = rows.map((r) => r.composite);
   console.log(`\n── Range used ──\n  ${Math.min(...all)}–${Math.max(...all)} of a nominal 0–100 scale (${(Math.max(...all) - Math.min(...all)).toFixed(1)} points of ${100} used)\n`);
 }

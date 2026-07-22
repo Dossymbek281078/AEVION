@@ -20,7 +20,7 @@ import {
   ensureQVentureTables,
   isQVentureDbReady,
 } from "../lib/ensureQVentureTables";
-import { analyze, STAGES, type AnalysisInput, type Stage } from "../lib/qventure/engine";
+import { analyze, STAGES, RUBRIC_VERSION, type AnalysisInput, type Stage } from "../lib/qventure/engine";
 import type { StructuredFinancials } from "../lib/qventure/signals";
 import type { ProjectionPoint } from "../lib/qventure/projections";
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
@@ -53,8 +53,16 @@ const DEMO_INPUT: AnalysisInput = {
 async function ensureDemoAnalysis(): Promise<void> {
   try {
     const existing = await getById(DEMO_ID);
-    // Re-seed if missing OR if it predates the cited-sources upgrade.
-    if (existing && (existing.result?.sector?.sources?.length ?? 0) > 0) return;
+    // Re-seed if missing, if it predates cited-sources, OR if it was scored by an
+    // older rubric. The showcase is the most-viewed report, so a stale demo would
+    // display a v1 score (and none of the basis / reEntry fields the new UI needs)
+    // while every fresh analysis uses the current rubric — exactly the version
+    // mixing RUBRIC_VERSION exists to prevent.
+    const fresh =
+      existing &&
+      (existing.result?.sector?.sources?.length ?? 0) > 0 &&
+      (existing.result?.rubricVersion ?? 0) >= RUBRIC_VERSION;
+    if (fresh) return;
     if (existing) await deleteById(DEMO_ID);
     const engineResult = analyze(DEMO_INPUT);
     const council = await runCouncil(DEMO_INPUT, engineResult);
@@ -82,7 +90,11 @@ async function ensureExampleAnalyses(): Promise<void> {
   for (const seed of EXAMPLE_SEEDS) {
     const id = `${EXAMPLE_ID_PREFIX}${seed.slug}`;
     try {
-      if (await getById(id)) continue;
+      // Refresh a gallery example if it is stale under the current rubric, so the
+      // gallery never ranks v1 and v3 scores side by side.
+      const prior = await getById(id);
+      if (prior && (prior.result?.rubricVersion ?? 0) >= RUBRIC_VERSION) continue;
+      if (prior) await deleteById(id);
       const input: AnalysisInput = {
         name: seed.name, description: seed.description, sector: seed.sector, stage: seed.stage,
         geography: seed.geography, askUsd: seed.askUsd, tractionNotes: seed.tractionNotes,

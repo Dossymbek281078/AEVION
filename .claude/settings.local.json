@@ -96,27 +96,7 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 779 --squash --delete-branch)",
       "Bash(/c/Program Files/GitHub CLI/gh.exe pr *)",
       "Bash(git cherry-pick *)",
-      "Bash(git branch *)",
-      "Bash(npx vitest *)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 791 --squash --delete-branch)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 791 --json state,mergedAt)",
-      "Bash(node bin/sign-project.js \"C:\\\\Users\\\\user\\\\aevion-backend-modules\")",
-      "Bash(npm install *)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(authorship\\): correct founder name spelling \\(Досымбек Жақия\\)' --body ' *)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 808 --watch)",
-      "mcp__higgsfield__show_marketing_studio_generations",
-      "mcp__higgsfield__get_workflow_instructions",
-      "mcp__higgsfield__show_generations",
-      "mcp__higgsfield__get_explainer_presets",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 808 --squash --delete-branch)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 808 --json state,mergedAt)",
-      "Artifact",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): premium-model token sub-cap, pre-flip visibility, manual payment checklist' --body ' *)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 822 --watch)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 822)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 822 --squash --delete-branch)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 822 --json state,mergedAt)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): usage-meter UI + tests for paid-tier/premium quota fields' --body ' *)"
+      "Bash(git stash *)"
     ]
   }
 }

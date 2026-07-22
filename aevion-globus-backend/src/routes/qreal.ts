@@ -88,6 +88,7 @@ type Project = {
   status: "draft" | "storyboarded" | "rendering" | "done";
   shots: Shot[];
   filmPath: string | null;
+  assembledAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -357,6 +358,8 @@ function provenanceManifest(p: Project) {
     projectId: p.id,
     title: p.title,
     aiGenerated: true, // всегда true, тумблера нет by design
+    assembledAt: p.assembledAt,
+    engines: Array.from(new Set(p.shots.map((s) => s.engine).filter(Boolean))),
     disclosure:
       "Это видео полностью сгенерировано ИИ (AEVION QReal). Люди, дети, животные и " +
       "среда в кадре не существуют. Маркировка соответствует EU AI Act art. 50.",
@@ -421,7 +424,7 @@ function seedDemo() {
     brief: "Утро казахской семьи в степи: рассвет, мальчик с собакой, бабушка с чаем в юрте, беркут. Полностью живое видео без единой съёмки — люди, ребёнок, животные, птица, ветер и звук сгенерированы.",
     format: "scene", targetDurationSec: 24, language: "kk",
     depictsRealPeople: false, consentConfirmed: false,
-    status: "storyboarded", shots, filmPath: null,
+    status: "storyboarded", shots, filmPath: null, assembledAt: null,
     createdAt: created, updatedAt: created,
   };
   for (const s of demo.shots) s.prompt = buildRenderPrompt(demo, s);
@@ -531,7 +534,7 @@ qrealRouter.post("/projects", (req, res) => {
       language: typeof language === "string" && language ? language.slice(0, 8) : "ru",
       depictsRealPeople: depictsRealPeople === true,
       consentConfirmed: consentConfirmed === true,
-      status: "draft", shots: [], filmPath: null,
+      status: "draft", shots: [], filmPath: null, assembledAt: null,
       createdAt: nowIso(), updatedAt: nowIso(),
     };
     memProjects.set(p.id, p);
@@ -729,6 +732,7 @@ qrealRouter.post("/projects/:id/assemble", async (req, res) => {
       });
     }
     p.filmPath = r.filmPath;
+    p.assembledAt = nowIso();
     p.status = "done";
     p.updatedAt = nowIso();
     saveProject(p);
@@ -736,12 +740,42 @@ qrealRouter.post("/projects/:id/assemble", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "assemble failed" }); }
 });
 
-qrealRouter.get("/projects/:id/film", (req, res) => {
-  const p = memProjects.get(req.params.id);
-  if (!p?.filmPath || !fs.existsSync(p.filmPath)) return res.status(404).json({ error: "film not assembled" });
-  res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", `attachment; filename="qreal-${p.id}.mp4"`);
-  fs.createReadStream(p.filmPath).pipe(res);
+qrealRouter.get("/projects/:id/film", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    // Ленивый re-assemble: /tmp не переживает рестарт контейнера, а кадры
+    // живут в CDN движка — пересборка бесплатна. /film само-восстанавливается.
+    if ((!p.filmPath || !fs.existsSync(p.filmPath)) && p.shots.length && p.shots.every((s) => s.resultUrl)) {
+      const r = await assembleFilm(p);
+      if (r.ok) {
+        p.filmPath = r.filmPath;
+        p.assembledAt = nowIso();
+        p.updatedAt = nowIso();
+        saveProject(p);
+      }
+    }
+    if (!p.filmPath || !fs.existsSync(p.filmPath)) return res.status(404).json({ error: "film not assembled" });
+    const stat = fs.statSync(p.filmPath);
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Disposition", `inline; filename="qreal-${p.id}.mp4"`);
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ""));
+    if (range && (range[1] || range[2])) {
+      const start = range[1] ? parseInt(range[1], 10) : 0;
+      const end = range[2] ? Math.min(parseInt(range[2], 10), stat.size - 1) : stat.size - 1;
+      if (start >= stat.size || end < start) {
+        res.setHeader("Content-Range", `bytes */${stat.size}`);
+        return res.status(416).end();
+      }
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+      res.setHeader("Content-Length", end - start + 1);
+      return fs.createReadStream(p.filmPath, { start, end }).pipe(res);
+    }
+    res.setHeader("Content-Length", stat.size);
+    fs.createReadStream(p.filmPath).pipe(res);
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "film failed" }); }
 });
 
 qrealRouter.get("/projects/:id/provenance", (req, res) => {

@@ -84,6 +84,20 @@ export default function QRealClient() {
     finally { setBusy(false); }
   }
 
+  // Демо-фильм одной кнопкой: кадры демо в прод-кэше ($0) → ленивый
+  // re-assemble на сервере → открываем готовый mp4.
+  async function watchDemoFilm() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetch(apiUrl("/api/qreal/projects/demo-steppe-morning/render-all"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: '{"engine":"kling"}',
+      });
+      window.open(apiUrl("/api/qreal/projects/demo-steppe-morning/film"), "_blank");
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
   async function assembleFilm() {
     if (!project || busy) return;
     setBusy(true);
@@ -183,6 +197,13 @@ export default function QRealClient() {
             </figure>
           </div>
           <p className="mt-3 max-w-3xl text-xs leading-relaxed text-neutral-500">{t("qreal.compare.note")}</p>
+          <button
+            onClick={watchDemoFilm}
+            disabled={busy}
+            className="mt-3 border border-neutral-900 bg-neutral-900 px-5 py-2 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
+          >
+            {busy ? t("qreal.brief.cta.busy") : t("qreal.film.watch")}
+          </button>
         </section>
 
         {/* Бриф */}

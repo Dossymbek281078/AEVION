@@ -7,6 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
+import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -79,6 +80,72 @@ const VISUAL_EDIT_OVERLAY_SCRIPT = `
   document.addEventListener('mouseover', onOver, true);
   document.addEventListener('mouseout', onOut, true);
   document.addEventListener('click', onClick, true);
+})();
+`;
+
+// Overlay for the client-side React preview: the DOM appears only after the
+// module graph loads and React renders, so data-vid tagging happens on a
+// MutationObserver tick (re-tagging untagged nodes) instead of at parse time.
+// Message contract is identical to the static overlay.
+const REACT_PREVIEW_OVERLAY_SCRIPT = `
+(function(){
+  var counter = 0;
+  var SKIP = { SCRIPT: 1, STYLE: 1 };
+  function tag(){
+    var all = document.body ? document.body.querySelectorAll('*') : [];
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (!SKIP[el.tagName] && !el.hasAttribute('data-vid')) el.setAttribute('data-vid', String(counter++));
+    }
+  }
+  var pending = false;
+  new MutationObserver(function(){
+    if (pending) return;
+    pending = true;
+    setTimeout(function(){ pending = false; tag(); }, 120);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  tag();
+  var hovered = null;
+  function withVid(el){ while (el && !(el.getAttribute && el.getAttribute('data-vid'))) el = el.parentElement; return el; }
+  function brief(el){ return { vid: el.getAttribute('data-vid'), tagName: el.tagName }; }
+  function select(el){
+    var cs = getComputedStyle(el);
+    var ancestors = [];
+    for (var p = el.parentElement; p && ancestors.length < 6; p = p.parentElement) {
+      if (p.getAttribute && p.getAttribute('data-vid')) ancestors.push(brief(p));
+    }
+    var children = [];
+    for (var i = 0; i < el.children.length && children.length < 8; i++) {
+      if (el.children[i].getAttribute('data-vid')) children.push(brief(el.children[i]));
+    }
+    parent.postMessage({
+      source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
+      styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign },
+      src: el.getAttribute('src') || '',
+      proxied: true,
+      ancestors: ancestors, children: children
+    }, '*');
+  }
+  document.addEventListener('mouseover', function(e){
+    var el = withVid(e.target);
+    if (hovered && hovered !== el) hovered.style.outline = '';
+    hovered = el;
+    if (hovered) { hovered.style.outline = '2px solid #0d9488'; hovered.style.outlineOffset = '1px'; }
+  }, true);
+  document.addEventListener('mouseout', function(){ if (hovered) { hovered.style.outline = ''; hovered = null; } }, true);
+  document.addEventListener('click', function(e){
+    var el = withVid(e.target);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    select(el);
+  }, true);
+  window.addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.source === 'devhub-visual-edit-select') {
+      var target = document.querySelector('[data-vid="' + d.vid + '"]');
+      if (target) select(target);
+    }
+  });
 })();
 `;
 
@@ -338,6 +405,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Visual Edit — Static-stack only (renders client-side, no live dev server needed)
   const [visualEditHtmlPath, setVisualEditHtmlPath] = useState<string | null>(null);
   const [visualEditSrcdoc, setVisualEditSrcdoc] = useState<string | null>(null);
+  const [reactPreviewSrcdoc, setReactPreviewSrcdoc] = useState<string | null>(null);
+  const [reactPreviewError, setReactPreviewError] = useState<string | null>(null);
   const [visualEditSelected, setVisualEditSelected] = useState<{
     vid: string; tagName: string; text: string; src?: string;
     ancestors?: Array<{ vid: string; tagName: string }>;
@@ -948,6 +1017,25 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setVisualEditSrcdoc(built?.srcdoc ?? null);
     setVisualEditSelected(null);
   }, [activeTab, project, files]);
+
+  // Client-side live preview for React SPA projects — transform in the parent,
+  // module graph via import map, no deploy needed (see lib/reactPreview.ts).
+  useEffect(() => {
+    if (activeTab !== "visual" || !project || project.stack !== "react") return;
+    let cancelled = false;
+    setReactPreviewError(null);
+    buildReactPreviewSrcdoc(
+      files.map((f) => ({ path: f.path, content: f.content })),
+      REACT_PREVIEW_OVERLAY_SCRIPT
+    ).then((r) => {
+      if (cancelled) return;
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(r.error); }
+      else { setReactPreviewSrcdoc(r.srcdoc); }
+      setVisualEditSelected(null);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, project?.stack, files]);
 
   // Bridge for clicks inside the sandboxed preview iframe (see VISUAL_EDIT_OVERLAY_SCRIPT)
   useEffect(() => {
@@ -2620,7 +2708,24 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
             {activeTab === "visual" ? (
               project?.stack !== "static" ? (
-                project?.deployUrl ? (
+                project?.stack === "react" && reactPreviewSrcdoc ? (
+                  <iframe
+                    ref={visualEditIframeRef}
+                    srcDoc={reactPreviewSrcdoc}
+                    sandbox="allow-scripts"
+                    style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                    title="Visual Edit preview"
+                  />
+                ) : project?.stack === "react" ? (
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
+                    <div style={{ maxWidth: 460 }}>
+                      <div style={{ fontSize: 32, marginBottom: 12 }}>⚛️</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+                        {reactPreviewError ?? "Building the live preview…"}
+                      </div>
+                    </div>
+                  </div>
+                ) : project?.deployUrl ? (
                   // Deployed non-static stacks render through the backend
                   // preview proxy, which injects the same overlay contract.
                   <iframe
@@ -2925,7 +3030,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Visual Edit Tab */}
               {activeTab === "visual" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {project?.stack !== "static" && !project?.deployUrl ? (
+                  {project?.stack !== "static" && project?.stack !== "react" && !project?.deployUrl ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
                       Deploy this project once to use Visual Edit — the deployed page renders above, and clicked
                       elements become context for AI edits to the source.
@@ -3089,7 +3194,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                     </>
                   )}
-                  {(project?.stack === "static" || !!project?.deployUrl) && (
+                  {(project?.stack === "static" || project?.stack === "react" || !!project?.deployUrl) && (
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}

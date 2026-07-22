@@ -77,6 +77,7 @@ export default function QSkywayClient() {
   const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
+  const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -199,7 +200,7 @@ export default function QSkywayClient() {
   // ── city loading (switchable) ─────────────────────────────────────────────────
   const loadCity = useCallback(async (id: string) => {
     cityIdRef.current = id;
-    setLoaded(false); setErr(null);
+    setLoaded(false); setErr(null); setVerify("idle");
     try {
       const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
       if (!res.ok) throw new Error("city " + res.status);
@@ -411,6 +412,17 @@ export default function QSkywayClient() {
     } catch { /* market panel is best-effort */ }
   }, []);
 
+  // ── verify the displayed twin signature end-to-end (real Ed25519 check,
+  // not just trusting the hash the city payload already carries) ────────────
+  const verifySignature = useCallback(async () => {
+    setVerify("checking");
+    try {
+      const res = await fetch(apiUrl(`/api/qskyway/verify?city=${encodeURIComponent(cityIdRef.current)}`));
+      const j = await res.json();
+      setVerify(res.ok && j.valid === true ? "valid" : "invalid");
+    } catch { setVerify("invalid"); }
+  }, []);
+
   // ── slot booking (real backend) ──────────────────────────────────────────────
   const bookSlot = useCallback(async () => {
     const hero = heroRef.current;
@@ -476,7 +488,20 @@ export default function QSkywayClient() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>🌬 ветер {meta.wind}</span>
                   <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
-                  <span style={{ color: "#2dd4bf" }}>🔏 Ed25519 · {meta.signed}…</span>
+                  <span
+                    onClick={verify === "checking" ? undefined : verifySignature}
+                    title="Проверить подпись двойника на бэкенде (GET /verify)"
+                    style={{
+                      cursor: verify === "checking" ? "wait" : "pointer",
+                      textDecoration: "underline dotted",
+                      color: verify === "valid" ? "#2dd4bf" : verify === "invalid" ? "#fb7185" : "#2dd4bf",
+                    }}
+                  >
+                    🔏 Ed25519 · {meta.signed}…
+                    {verify === "checking" && " · проверка…"}
+                    {verify === "valid" && " · ✓ подпись верна"}
+                    {verify === "invalid" && " · ✗ проверка не прошла"}
+                  </span>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
                   <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
                 </div>

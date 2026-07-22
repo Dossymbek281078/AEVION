@@ -8,7 +8,7 @@ import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
-import { deployViaWrangler } from "../lib/wranglerPagesDeploy";
+import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 
 export const devhubRouter = Router();
 
@@ -54,6 +54,10 @@ const pool = getPool();
   } catch (e) {
     captureException(e, { route: "devhub/bootstrap", op: "ensureDevHubTables" });
     // in-memory fallback active
+  }
+  // Pay wrangler's first-run cost at boot, not inside a user's deploy.
+  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+    try { warmWrangler(); } catch { /* best-effort */ }
   }
 })();
 
@@ -5355,7 +5359,7 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
     { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
-    { id: "image", name: "Image Generation", description: "DALL-E 3 image generation", status: process.env.OPENAI_API_KEY ? "live" : "needs_token", token: "OPENAI_API_KEY" },
+    { id: "image", name: "Image Generation", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
     { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
     { id: "audio_music", name: "Music & SFX", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
     { id: "email", name: "Email", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },

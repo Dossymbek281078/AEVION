@@ -49,28 +49,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const verdict = VERDICT_LABEL[a.verdict as Verdict] ?? a.verdict.toUpperCase();
   const title = `${a.name} — ${a.composite}/100 · ${verdict} · QVenture`;
   const description = memoSnippet(a.result.council.memo);
-  const origin = await getOrigin();
-  const ogPath = `/api/og/module/${encodeURIComponent(id)}?title=${encodeURIComponent(a.name)}`
-    + `&subtitle=${encodeURIComponent(memoSnippet(a.result.council.memo, 120))}`
-    + `&tag=${encodeURIComponent("QVenture")}`
-    + `&status=${encodeURIComponent(`${verdict} · ${a.composite}/100`)}`;
-  const ogImage = origin ? `${origin}${ogPath}` : ogPath;
 
+  // Image is intentionally omitted here: the co-located opengraph-image.tsx
+  // renders the newspaper card (name · verdict · composite) and Next injects it
+  // into both og:image and twitter:image automatically. Setting images here would
+  // override it with the generic /api/og/module card.
   return {
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      type: "article",
-      images: [{ url: ogImage, width: 1200, height: 630 }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [ogImage],
-    },
+    openGraph: { title, description, type: "article" },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 

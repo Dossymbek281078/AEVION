@@ -281,7 +281,7 @@ If the user insists on more code work in this window, candidates are:
 ### `frontend-qcore`
 1. ~~**P2-5** Per-provider OPEX accounting dashboard~~ ✅ 2026-07-22 — `/qcoreai/opex`
 2. ~~**P2-6** Multichat prod smoke~~ ✅ 2026-07-21 — 7/7 PASS against aevion.app
-3. Translation parity for QCoreAI suggestion deck
+3. ~~Translation parity for QCoreAI suggestion deck~~ ✅ 2026-07-22 — deck + chat welcome via t() with EN/RU/KK keys (`qcoreai.suggest.*`), others fall back to EN
 
 ### `aevion-cyberchess` / `chess-tournaments` — P2 backlog ✅ cleared
 1. ~~**P2-2** Regression suite for drag/click/premove~~ ✅ premove move-gen contract locked in vitest (PR #436); drag/click are DOM-coupled → Playwright, deferred

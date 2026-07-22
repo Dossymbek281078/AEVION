@@ -5,6 +5,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
@@ -18,12 +19,14 @@ type ProviderInfo = {
   configured: boolean;
 };
 
-const SUGGESTIONS = [
-  "What is AEVION?",
-  "How does QRight protect my IP?",
-  "Explain Trust Graph",
-  "How do automatic royalties work?",
-  "What is the AEVION partnership offer?",
+// Rendered via t() so the deck follows the user's language (EN/RU/KK parity
+// in i18n-data.ts; other languages fall back to EN).
+const SUGGESTION_KEYS = [
+  "qcoreai.suggest.1",
+  "qcoreai.suggest.2",
+  "qcoreai.suggest.3",
+  "qcoreai.suggest.4",
+  "qcoreai.suggest.5",
 ];
 
 const PROVIDER_ICONS: Record<string, string> = {
@@ -63,6 +66,7 @@ const prettyModel = (m: string) => {
 };
 
 export default function QCoreAIPage() {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "system",
@@ -487,12 +491,12 @@ export default function QCoreAIPage() {
           {visible.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px 20px" }}>
               <div style={{ fontSize: 36, marginBottom: 12 }}>🤖</div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>Welcome to QCoreAI</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>{t("qcoreai.chat.welcome")}</div>
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
-                Ask me anything about AEVION — IP protection, signatures, royalties, or how to get started.
+                {t("qcoreai.chat.intro")}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
-                {SUGGESTIONS.map((s) => (
+                {SUGGESTION_KEYS.map((k) => t(k)).map((s) => (
                   <button
                     key={s}
                     onClick={() => send(s)}

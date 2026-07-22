@@ -23,6 +23,7 @@ import { useToast } from "@/components/build/Toast";
 import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
 import { recordVacancyView } from "@/lib/build/recentlyViewed";
 import { renderMarkdown } from "@/lib/build/markdown";
+import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS, type WorkMode, type EducationLevel } from "@/lib/build/geo";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -257,6 +258,15 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">{vacancy.title}</h1>
+          {(vacancy.city || vacancy.region || vacancy.workMode || vacancy.minExperienceYears != null || vacancy.educationLevel) && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+              {vacancy.city && <span>📍 {vacancy.city}{vacancy.region ? `, ${regionLabel(vacancy.region)}` : ""}</span>}
+              {!vacancy.city && vacancy.region && <span>📍 {regionLabel(vacancy.region)}</span>}
+              {vacancy.workMode && <span>{WORK_MODE_LABELS[vacancy.workMode as WorkMode]}</span>}
+              {vacancy.minExperienceYears != null && <span>⏱ от {vacancy.minExperienceYears}y опыта</span>}
+              {vacancy.educationLevel && <span>🎓 {EDUCATION_LEVEL_LABELS[vacancy.educationLevel as EducationLevel]}</span>}
+            </div>
+          )}
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <span>Posted {new Date(vacancy.createdAt).toLocaleDateString()}</span>
             <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>

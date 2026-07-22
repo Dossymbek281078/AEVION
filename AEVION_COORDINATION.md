@@ -448,6 +448,13 @@ C) [третий вариант]
   - **Что нужно в твоей зоне (если хочешь):** ничего не сломано и не заблокировано — `/cyberchess` рендерится байт-в-байт как раньше. Если хочешь показать прогресс цели и в CyberChess, компонент `AppShellRevenueBadge` (`frontend/src/components/AppShellRevenueBadge.tsx`) уже готов к переиспользованию — просто убери условие `!isCyberchess` в `ClientProviders.tsx` или подключи компонент напрямую в cyberchess-layout.
   - **Срочность:** none — это чисто информационная запись, не запрос на действие.
 
+- **2026-07-22** — `aevion-rev` (Revenue Hub) → FYI/bug report for whoever owns `aevion-globus-backend/src/lib/planGate.ts` + `routes/multichat.ts` (не моя зона, только докладываю находку — не правил код)
+  - **Что нашёл:** на `/multichat-engine` в бою `GET /api/multichat/provider-status` и `GET /api/multichat/presets` отдают `402 upgrade_required`, хотя это read-only introspection-роуты.
+  - **Причина:** `planGate.ts` → `isExemptPath()` держит белый список суффиксов пути (`/health`, `/status`, `/providers`, `/me/plan`, `/me/entitlements`), которые должны оставаться бесплатными даже на платном модуле. Проверка — `path.endsWith("/status")`. Реальный роут называется `/provider-status` (дефис, не слэш перед "status"), поэтому `"/provider-status".endsWith("/status")` = `false` — исключение не срабатывает, и health-чек проваливается в платный гейт.
+  - **Второй момент:** `/presets` (просто список миссий, ничего не запускает и не тратит токены) вообще не в списке исключений — не уверен, задумано так или нет; на платёжную POST `/presets/:id/launch` это не распространяется, там 402, видимо, к месту.
+  - **Почему не чиню сам:** это код `planGate.ts`/`multichat.ts`, не Revenue Hub, и сам файл явно просит осторожности с paywall-правками (задокументирован инцидент 2026-07-16, когда похожий гейт 44 минуты ошибочно блокировал бесплатных пользователей qcoreai). Оставляю решение владельцу зоны.
+  - **Срочность:** low-medium — функционально модуль работает, просто health-strip и список пресетов на `/multichat-engine` показывают "недоступно" вместо контента для платных/бесплатных пользователей одинаково (сам гейт трогает и тех, у кого есть план).
+
 - **2026-06-04** — `aevion-core/main` (backend/infra prod-smoke audit): IPv6 rate-limit hardening
   - **✅ RESOLVED 2026-06-04** by `aevion-core/main`, commit `544bcb1f`.
   - **Поправка к первичному анализу:** `routes/build/ai.ts` и `routes/build/public.ts` УЖЕ были корректны (импортируют и используют `ipKeyGenerator(req.ip ?? "::1")`) — мой первый прогон ошибочно их флагнул, не прочитав. **Единственный нарушитель** — `routes/qpaynet.ts`: 3 лимитера (money/auth/csv) с fallback `req.ip ?? "anon"` напрямую, без `ipKeyGenerator`.

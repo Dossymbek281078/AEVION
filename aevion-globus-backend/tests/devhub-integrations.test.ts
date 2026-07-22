@@ -415,6 +415,24 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("parseGeneratedFiles robustness — JSON wrapped in prose/fences", () => {
+  test("fenced JSON with prose around it parses into real files, not an output.ts dump", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: 'Here is your app!\n```json\n{"files":[{"path":"src/App.jsx","content":"export default ()=>null","language":"javascript"}]}\n```\nEnjoy!',
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "P" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({ prompt: "habit tracker" });
+    expect(r.status).toBe(200);
+    expect(r.body.files.map((f: { path: string }) => f.path)).toEqual(["src/App.jsx"]);
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
 describe("POST /api/devhub/projects/:id/generate — screenshot attachment (vision)", () => {
   async function makeProject(app: express.Express) {
     const cr = await request(app).post("/api/devhub/projects").send({ name: "V" });

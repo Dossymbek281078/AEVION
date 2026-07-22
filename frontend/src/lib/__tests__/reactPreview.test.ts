@@ -43,6 +43,13 @@ describe("reactPreview — srcdoc build (real babel transform)", () => {
     expect(r.srcdoc).toContain("/*overlay*/");
   }, 30_000);
 
+  it("transforms a .tsx entry under Babel 8 (isTSX/allExtensions were removed)", async () => {
+    const files = [f("src/App.tsx", "type P = { n: number };\nexport default function App({ n = 1 }: P) { return <b>{n}</b>; }")];
+    const r = await buildReactPreviewSrcdoc(files, "");
+    if ("error" in r) throw new Error(r.error);
+    expect(r.srcdoc).toContain('"local/src/App.tsx":"data:text/javascript;base64,');
+  }, 30_000);
+
   it("reports a broken file as an error instead of a blank preview", async () => {
     const r = await buildReactPreviewSrcdoc([f("App.jsx", "export default function ( { return <h1>; }")], "");
     expect("error" in r && r.error).toMatch(/Babel could not transform App.jsx/);

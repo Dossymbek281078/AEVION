@@ -91,9 +91,12 @@ export async function buildReactPreviewSrcdoc(files: PreviewFile[], overlayScrip
     try {
       const out = babel.transform(f.content, {
         filename: f.path,
+        // Babel 8 removed preset-typescript's isTSX/allExtensions options —
+        // the filename alone now decides TS/TSX handling (bug found live:
+        // every preview build failed with "[BABEL] options have been removed").
         presets: [
           ["react", { runtime: "automatic" }],
-          ...(/\.tsx?$/i.test(f.path) ? [["typescript", { isTSX: f.path.toLowerCase().endsWith(".tsx"), allExtensions: true }]] : []),
+          ...(/\.tsx?$/i.test(f.path) ? ["typescript"] : []),
         ],
         sourceType: "module",
       });

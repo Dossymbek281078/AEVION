@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { etaLabel, type GoalPace } from "@/lib/goalEta";
 
 interface RevenueOverview {
   totalApps: number;
@@ -52,10 +53,7 @@ interface RevenueGoals {
   deadline: string;
 }
 
-interface RevenuePace {
-  change?: { grossUsd: number };
-  windowDays: number;
-  points: number;
+interface RevenuePace extends GoalPace {
   first?: { capturedAt: string };
 }
 
@@ -98,16 +96,6 @@ function daysUntil(deadline: string): number {
   const target = Date.parse(`${deadline}T00:00:00Z`);
   if (Number.isNaN(target)) return 0;
   return Math.max(0, Math.ceil((target - Date.now()) / 86_400_000));
-}
-
-/** ETA at the current pace (last-30-days gross Δ/day). Null if flat/shrinking or not enough data. */
-function etaLabel(target: number, current: number, pace: RevenuePace | null): string | null {
-  if (current >= target) return "🎉 цель достигнута";
-  if (!pace?.change || pace.points < 2) return null;
-  const perDay = pace.change.grossUsd / pace.windowDays;
-  if (perDay <= 0) return "нет роста за 30 дней";
-  const days = Math.ceil((target - current) / perDay);
-  return `в темпе — ~${days.toLocaleString("en-US")} дн.`;
 }
 
 /** Compact form for large dollar amounts ($19,999,821 → $20.0M); small ones stay exact. */

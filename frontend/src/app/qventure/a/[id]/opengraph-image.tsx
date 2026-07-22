@@ -45,13 +45,34 @@ async function fetchAnalysis(id: string): Promise<AnalysisView | null> {
 
 const VERDICT_COLOR: Record<Verdict, string> = { invest: TEAL, watch: AMBER, pass: RED };
 
+// Load a serif face so the card matches the page's newspaper type. next/og
+// ships only a sans, so without this the headline renders sans. Fetched from
+// Google Fonts at request time (allowed on the nodejs runtime) and wrapped so a
+// fetch failure degrades to the default sans rather than erroring the whole image.
+async function loadSerif(): Promise<ArrayBuffer | null> {
+  try {
+    const css = await fetch("https://fonts.googleapis.com/css2?family=Lora:wght@600", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    }).then((r) => r.text());
+    const url = css.match(/src:\s*url\((.+?)\)\s*format/)?.[1];
+    if (!url) return null;
+    const buf = await fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null));
+    return buf ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function QVentureOgImage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await fetchAnalysis(id);
+  const [data, serif] = await Promise.all([fetchAnalysis(id), loadSerif()]);
+  // Only claim the serif family when the font actually loaded; otherwise let it
+  // fall back to the default sans so the card still renders.
+  const titleFont = serif ? "Lora" : "serif";
 
   const nameRaw = data?.name?.trim() || `Report ${id.slice(0, 8)}`;
   const name = nameRaw.length > 46 ? `${nameRaw.slice(0, 44)}…` : nameRaw;
@@ -73,7 +94,7 @@ export default async function QVentureOgImage({
           padding: "56px 64px",
           background: PAPER,
           color: INK,
-          fontFamily: "serif",
+          fontFamily: titleFont,
         }}
       >
         {/* Masthead rule + kicker */}
@@ -157,6 +178,11 @@ export default async function QVentureOgImage({
         </div>
       </div>
     ),
-    size,
+    {
+      ...size,
+      fonts: serif
+        ? [{ name: "Lora", data: serif, weight: 600 as const, style: "normal" as const }]
+        : undefined,
+    },
   );
 }

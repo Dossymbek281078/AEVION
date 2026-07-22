@@ -263,7 +263,7 @@ export default function DevHubPage() {
                 Studio Pro — unlock the full IDE
               </p>
               <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "4px 0 0" }}>
-                50 AI videos · 200 images · unlimited deploys · team collaborators
+                50 AI videos · 200 images · unlimited deploys · your own *.aevion.build subdomain · team collaborators
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -307,6 +307,27 @@ export default function DevHubPage() {
           </div>
           <span style={{ padding: "6px 12px", background: "#0d9488", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
             In the IDE → 🖱️ Visual Edit tab
+          </span>
+        </div>
+
+        {/* Verified deploys + own subdomain highlight */}
+        <div style={{
+          border: "1px solid #ddd6fe", background: "#f5f3ff", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+              🌐 Deploy → your own <span style={{ fontFamily: "monospace" }}>&lt;project&gt;.aevion.build</span>
+            </p>
+            <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
+              One click deploys a Static project to Cloudflare's edge and provisions a real subdomain.
+              A deploy is only marked live after the backend has actually opened the page and got a 2xx —
+              no fake green statuses.
+            </p>
+          </div>
+          <span style={{ padding: "6px 12px", background: "#7c3aed", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
+            In the IDE → Deploy
           </span>
         </div>
 

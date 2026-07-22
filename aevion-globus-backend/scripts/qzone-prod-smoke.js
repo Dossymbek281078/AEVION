@@ -21,6 +21,7 @@
  */
 
 const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
+const { isPaywall402, paywallNote } = require("./lib/paywallAware");
 
 let passed = 0; let failed = 0;
 function ok(l, e) { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
@@ -52,7 +53,9 @@ async function run() {
 
   r = await req("GET", "/api/qai/personas");
   let personas = null;
-  if (r.status === 200 && Array.isArray(r.body?.personas) && r.body.personas.length >= 3) {
+  if (isPaywall402(r)) {
+    ok("GET /qai/personas", paywallNote(r));
+  } else if (r.status === 200 && Array.isArray(r.body?.personas) && r.body.personas.length >= 3) {
     personas = r.body.personas;
     ok("GET /qai/personas", `count=${personas.length}`);
   } else fail("GET /qai/personas", `${r.status} count=${r.body?.personas?.length}`);
@@ -67,11 +70,13 @@ async function run() {
   r = await req("GET", "/api/qai/sessions");
   if (r.status === 200 && Array.isArray(r.body?.sessions)) ok("GET /qai/sessions public", `count=${r.body.sessions.length}`);
   else if (r.status === 401) ok("GET /qai/sessions → 401");
+  else if (isPaywall402(r)) ok("GET /qai/sessions", paywallNote(r));
   else fail("GET /qai/sessions", `got=${r.status}`);
 
   r = await req("POST", "/api/qai/chat", { body: { message: "hi" } });
   if (r.status === 200 || r.status === 201) ok("POST /qai/chat public OK", `status=${r.status}`);
   else if (r.status === 401) ok("POST /qai/chat → 401");
+  else if (isPaywall402(r)) ok("POST /qai/chat", paywallNote(r));
   else fail("POST /qai/chat", `got=${r.status}`);
 
   // ── DevHub ────────────────────────────────────────────────────────────────

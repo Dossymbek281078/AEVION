@@ -33,10 +33,22 @@ async function req(method, path, body, token) {
   return { status: r.status, body: json };
 }
 
-async function ledgerCount(module, kind) {
+/** Highest ledger sequenceNumber for a module — a monotonic watermark.
+ *  Counting kinds inside a limited window breaks once the module has more
+ *  than `limit` total entries (a new entry just pushes an old one of the
+ *  same kind out of the window; count stays flat — exactly what happened
+ *  when prod passed 25 deposits + 25 withdrawals). */
+async function ledgerMaxSeq(module) {
   const r = await req("GET", `/api/veilnetx-ledger/entries?module=${module}&limit=50`);
   if (r.status !== 200 || !Array.isArray(r.body?.entries)) return -1;
-  return r.body.entries.filter((e) => e.kind === kind).length;
+  return r.body.entries.reduce((m, e) => Math.max(m, Number(e.sequenceNumber) || 0), 0);
+}
+
+/** True when an entry of `kind` exists with sequenceNumber > afterSeq. */
+async function ledgerHasNew(module, kind, afterSeq) {
+  const r = await req("GET", `/api/veilnetx-ledger/entries?module=${module}&limit=50`);
+  if (r.status !== 200 || !Array.isArray(r.body?.entries)) return false;
+  return r.body.entries.some((e) => e.kind === kind && (Number(e.sequenceNumber) || 0) > afterSeq);
 }
 
 async function ztideScore(token) {
@@ -57,12 +69,11 @@ async function run() {
   else { fail("register", `${r.status}`); process.exit(1); }
   const token = r.body.token;
 
-  // Baseline snapshots
-  const depBefore = await ledgerCount("qpaynet", "deposit");
-  const withBefore = await ledgerCount("qpaynet", "withdrawal");
-  const settleBefore = await ledgerCount("qmaskcard", "settlement");
+  // Baseline snapshots — sequence watermarks, not window counts
+  const paySeqBefore = await ledgerMaxSeq("qpaynet");
+  const maskSeqBefore = await ledgerMaxSeq("qmaskcard");
   const scoreBefore = await ztideScore(token);
-  ok("baseline snapshot", `dep=${depBefore} wd=${withBefore} settle=${settleBefore} score=${scoreBefore}`);
+  ok("baseline snapshot", `paySeq=${paySeqBefore} maskSeq=${maskSeqBefore} score=${scoreBefore}`);
 
   // 1. qpaynet/deposit emission
   r = await req("POST", "/api/qpaynet/wallets", { currency: "KZT" }, token);
@@ -75,9 +86,8 @@ async function run() {
   else fail("deposit", `${r.status}`);
 
   await sleep(400);
-  const depAfter = await ledgerCount("qpaynet", "deposit");
-  if (depAfter === depBefore + 1) ok("VeilNetX: +1 qpaynet/deposit entry");
-  else fail("deposit ledger trace", `before=${depBefore} after=${depAfter}`);
+  if (await ledgerHasNew("qpaynet", "deposit", paySeqBefore)) ok("VeilNetX: new qpaynet/deposit entry");
+  else fail("deposit ledger trace", `no deposit entry with seq > ${paySeqBefore}`);
 
   // 2. qpaynet/withdrawal emission — both VeilNetX (kind=withdrawal) AND Z-Tide (qpaynet-payout +3)
   r = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 1000 }, token);
@@ -85,9 +95,8 @@ async function run() {
   else fail("withdraw", `${r.status}`);
 
   await sleep(400);
-  const withAfter = await ledgerCount("qpaynet", "withdrawal");
-  if (withAfter === withBefore + 1) ok("VeilNetX: +1 qpaynet/withdrawal entry");
-  else fail("withdrawal ledger trace", `before=${withBefore} after=${withAfter}`);
+  if (await ledgerHasNew("qpaynet", "withdrawal", paySeqBefore)) ok("VeilNetX: new qpaynet/withdrawal entry");
+  else fail("withdrawal ledger trace", `no withdrawal entry with seq > ${paySeqBefore}`);
 
   const scoreAfterWd = await ztideScore(token);
   if (scoreAfterWd >= scoreBefore + 3) ok("Z-Tide: +3 (qpaynet-payout) after withdrawal", `score=${scoreAfterWd}`);
@@ -110,9 +119,8 @@ async function run() {
   else fail("mask charge", `${r.status}`);
 
   await sleep(400);
-  const settleAfter = await ledgerCount("qmaskcard", "settlement");
-  if (settleAfter === settleBefore + 1) ok("VeilNetX: +1 qmaskcard/settlement entry");
-  else fail("settlement ledger trace", `before=${settleBefore} after=${settleAfter}`);
+  if (await ledgerHasNew("qmaskcard", "settlement", maskSeqBefore)) ok("VeilNetX: new qmaskcard/settlement entry");
+  else fail("settlement ledger trace", `no settlement entry with seq > ${maskSeqBefore}`);
 
   // 4. Z-Tide direct emission via login-streak (kind: login-streak, weight 1)
   const scoreBeforeStreak = await ztideScore(token);

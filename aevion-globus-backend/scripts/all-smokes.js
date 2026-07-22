@@ -167,8 +167,9 @@ const SMOKES = [
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },
   // Universal Search PROD — 15 checks: health, results shape, byType, type filter, validation gates.
   { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
-  // Paddle Billing PROD — 15 checks: health/plans/products/transactions + webhook HMAC round-trip.
-  { name: "paddle-prod", script: "paddle-prod-smoke.js", readOnly: true, env: { PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET || "" } },
+  // Paddle Billing retired 2026-07-22: /api/paddle/* routes no longer exist in the
+  // backend (payments moved to Gumroad MoR — see gumroad-webhook below), so
+  // paddle-prod-smoke.js only produced guaranteed 404 failures against prod.
   // Lemon Squeezy subscription webhook — mode probe (stub vs real), bad-sig 401,
   // and (with LEMON_SQUEEZY_WEBHOOK_SECRET) activate/downgrade/ignore/400/dedup.
   // Self-skips gracefully in stub mode or when the secret isn't in env.

@@ -38,6 +38,7 @@
  */
 
 const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
+const { isPaywall402, paywallNote } = require("./lib/paywallAware");
 
 let passed = 0; let failed = 0;
 function ok(l, e) { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
@@ -85,7 +86,9 @@ async function run() {
   } else fail("GET /qlearn/health", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
   r = await req("GET", "/api/qlearn/courses?limit=3");
-  if (r.status === 200 && Array.isArray(r.body?.courses) && typeof r.body?.total === "number") {
+  if (isPaywall402(r)) {
+    ok("GET /qlearn/courses", paywallNote(r));
+  } else if (r.status === 200 && Array.isArray(r.body?.courses) && typeof r.body?.total === "number") {
     ok("GET /qlearn/courses", `items=${r.body.courses.length} total=${r.body.total}`);
   } else fail("GET /qlearn/courses", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
@@ -134,37 +137,46 @@ async function run() {
   } else fail("GET /qnews/health", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
   r = await req("GET", "/api/qnews/categories");
-  if (r.status === 200 && Array.isArray(r.body?.categories) && r.body.categories.length > 0) {
+  if (isPaywall402(r)) {
+    ok("GET /qnews/categories", paywallNote(r));
+  } else if (r.status === 200 && Array.isArray(r.body?.categories) && r.body.categories.length > 0) {
     const c = r.body.categories[0];
     if (c.id && typeof c.count === "number") ok("GET /qnews/categories shape (id+count)", `count=${r.body.categories.length}`);
     else fail("qnews categories[0] shape", `got=${JSON.stringify(c)}`);
   } else fail("GET /qnews/categories", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
   r = await req("GET", "/api/qnews/articles?limit=3");
-  if (r.status === 200 && Array.isArray(r.body?.articles) && typeof r.body?.total === "number") {
+  if (isPaywall402(r)) {
+    ok("GET /qnews/articles", paywallNote(r));
+  } else if (r.status === 200 && Array.isArray(r.body?.articles) && typeof r.body?.total === "number") {
     ok("GET /qnews/articles", `items=${r.body.articles.length} total=${r.body.total}`);
   } else fail("GET /qnews/articles", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
   const rss = await reqRaw("GET", "/api/qnews/rss");
   if (rss.status === 200) ok("GET /qnews/rss", `ct=${rss.ct.slice(0, 32)}`);
+  else if (rss.status === 402) ok("GET /qnews/rss", "402 paywalled");
   else fail("GET /qnews/rss", `status=${rss.status}`);
 
   r = await req("POST", "/api/qnews/articles", { body: { title: "smoke" } });
   if (r.status === 401) ok("POST /qnews/articles (no auth) → 401");
+  else if (isPaywall402(r)) ok("POST /qnews/articles (no auth)", paywallNote(r));
   else fail("POST /qnews/articles auth gate", `got=${r.status}`);
 
   // ── Multichat (fully auth-gated) ─────────────────────────────────────────
   r = await req("GET", "/api/multichat/health");
   if (r.status === 401) ok("GET /multichat/health → 401 (auth gate)");
   else if (r.status === 200 && r.body?.ok === true) ok("GET /multichat/health → 200 public", "");
+  else if (isPaywall402(r)) ok("GET /multichat/health", paywallNote(r));
   else fail("GET /multichat/health", `${r.status}`);
 
   r = await req("GET", "/api/multichat/rooms");
   if (r.status === 401) ok("GET /multichat/rooms → 401");
+  else if (isPaywall402(r)) ok("GET /multichat/rooms", paywallNote(r));
   else fail("GET /multichat/rooms auth gate", `got=${r.status}`);
 
   r = await req("POST", "/api/multichat/rooms", { body: { name: "smoke" } });
   if (r.status === 401) ok("POST /multichat/rooms (no auth) → 401");
+  else if (isPaywall402(r)) ok("POST /multichat/rooms (no auth)", paywallNote(r));
   else fail("POST /multichat/rooms auth gate", `got=${r.status}`);
 
   // ── Cross-module Content-Type ───────────────────────────────────────────

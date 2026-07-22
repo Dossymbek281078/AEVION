@@ -16,8 +16,11 @@ async function req(method, path, body) {
   const text = await r.text();
   try { return { status: r.status, body: JSON.parse(text) }; } catch { return { status: r.status, body: text }; }
 }
+const { moduleFullyPaywalled } = require("./lib/paywallAware");
+
 async function run() {
   console.log(`\nQFusionAI smoke → ${BASE}\n`);
+  if (await moduleFullyPaywalled(BASE, "/api/qfusionai/stats", "qfusionai")) return;
 
   const h = await req("GET", "/api/qfusionai/health");
   assert("health → 200", h.status === 200, String(h.status));

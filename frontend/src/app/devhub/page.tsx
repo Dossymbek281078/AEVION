@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -75,7 +76,34 @@ export default function DevHubPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
+  const [ideaPrompt, setIdeaPrompt] = useState("");
+  const [ideaStarting, setIdeaStarting] = useState(false);
+
+  // Prompt-first entry: one phrase → project created → generation auto-runs
+  // in the IDE (the prompt travels via localStorage; the IDE picks it up,
+  // fires /generate, and the chat + live preview show the result).
+  const startFromIdea = async () => {
+    const idea = ideaPrompt.trim();
+    if (!idea || ideaStarting) return;
+    setIdeaStarting(true);
+    try {
+      const name = idea.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
+      const r = await fetch(apiUrl("/api/devhub/projects"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description: idea, stack: "react" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to create project");
+      try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
+      router.push(`/devhub/${data.project.id}`);
+    } catch (e: any) {
+      setError(e.message);
+      setIdeaStarting(false);
+    }
+  };
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", stack: "next" as Stack });
   const [error, setError] = useState<string | null>(null);
@@ -248,6 +276,43 @@ export default function DevHubPage() {
           >
             + New Project
           </button>
+        </div>
+
+        {/* Prompt-first entry — the product's front door: describe → built */}
+        <div style={{
+          background: "linear-gradient(135deg, #0f172a 0%, #134e4a 100%)",
+          borderRadius: 16, padding: "28px 24px", marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
+            Опиши — и получи работающее приложение
+          </div>
+          <div style={{ fontSize: 13.5, color: "#99f6e4", marginBottom: 14, lineHeight: 1.5 }}>
+            ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами
+            (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <textarea
+              value={ideaPrompt}
+              onChange={(e) => setIdeaPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
+              placeholder={'Например: "трекер привычек с календарём и статистикой по неделям"'}
+              style={{
+                flex: "1 1 380px", minHeight: 56, padding: "12px 14px", border: "none",
+                borderRadius: 10, fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box",
+              }}
+            />
+            <button
+              onClick={startFromIdea}
+              disabled={ideaStarting || !ideaPrompt.trim()}
+              style={{
+                padding: "0 26px", minHeight: 56, background: ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
+                color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15,
+                cursor: ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              {ideaStarting ? "Создаю…" : "⚡ Построить"}
+            </button>
+          </div>
         </div>
 
         {/* Studio Pro upgrade banner */}

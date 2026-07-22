@@ -835,6 +835,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Prompt-first handoff from /devhub: the landing stored the idea under
+  // devhub_autoprompt_<id>; pick it up once and run the first generation
+  // automatically so "describe -> built" needs zero extra clicks.
+  const autoPromptFiredRef = useRef(false);
+  useEffect(() => {
+    if (!project || generating || autoPromptFiredRef.current) return;
+    let pending: string | null = null;
+    try { pending = localStorage.getItem(`devhub_autoprompt_${project.id}`); } catch { /* private mode */ }
+    if (!pending) return;
+    autoPromptFiredRef.current = true;
+    try { localStorage.removeItem(`devhub_autoprompt_${project.id}`); } catch { /* ignore */ }
+    setActiveTab("chat");
+    setAiPrompt(pending);
+    generateCode(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
   // Chat history persists per project so an iteration survives a reload.
   useEffect(() => {
     if (!project) return;
@@ -851,9 +868,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatHistory]);
 
-  const generateCode = async () => {
-    if (!aiPrompt.trim() || !project) return;
-    const userText = aiPrompt.trim();
+  const generateCode = async (promptOverride?: string) => {
+    const userText = (promptOverride ?? aiPrompt).trim();
+    if (!userText || !project) return;
     setGenerating(true);
     setGeneratedFiles([]);
     setChatHistory((h) => [...h, { role: "user", text: userText, at: new Date().toISOString() }]);
@@ -2960,7 +2977,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generateCode(); }}
                   />
                   <button
-                    onClick={generateCode}
+                    onClick={() => generateCode()}
                     disabled={generating || !aiPrompt.trim()}
                     style={{
                       width: "100%", padding: "10px 0", background: generating ? "#99f6e4" : "#0d9488",

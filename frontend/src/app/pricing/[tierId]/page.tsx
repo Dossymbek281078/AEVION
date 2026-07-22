@@ -10,7 +10,7 @@ import { useI18n } from "@/lib/i18n";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
 
 interface PricingTier {
   id: TierId;
@@ -74,6 +74,12 @@ const TIER_FAQ: Record<TierId, { q: string; a: string }[]> = {
     { q: "pricing.tierDetail.faq.full.q3", a: "pricing.tierDetail.faq.full.a3" },
     { q: "pricing.tierDetail.faq.full.q4", a: "pricing.tierDetail.faq.full.a4" },
   ],
+  pro: [
+    { q: "pricing.tierDetail.faq.pro.q1", a: "pricing.tierDetail.faq.pro.a1" },
+    { q: "pricing.tierDetail.faq.pro.q2", a: "pricing.tierDetail.faq.pro.a2" },
+    { q: "pricing.tierDetail.faq.pro.q3", a: "pricing.tierDetail.faq.pro.a3" },
+    { q: "pricing.tierDetail.faq.pro.q4", a: "pricing.tierDetail.faq.pro.a4" },
+  ],
   enterprise: [
     { q: "pricing.tierDetail.faq.enterprise.q1", a: "pricing.tierDetail.faq.enterprise.a1" },
     { q: "pricing.tierDetail.faq.enterprise.q2", a: "pricing.tierDetail.faq.enterprise.a2" },
@@ -124,6 +130,16 @@ const TIER_AUDIENCE: Record<TierId, { who: string; usecase: string[]; notFor: st
       "pricing.tierDetail.audience.full.usecase4",
     ],
     notFor: "pricing.tierDetail.audience.full.notFor",
+  },
+  pro: {
+    who: "pricing.tierDetail.audience.pro.who",
+    usecase: [
+      "pricing.tierDetail.audience.pro.usecase1",
+      "pricing.tierDetail.audience.pro.usecase2",
+      "pricing.tierDetail.audience.pro.usecase3",
+      "pricing.tierDetail.audience.pro.usecase4",
+    ],
+    notFor: "pricing.tierDetail.audience.pro.notFor",
   },
   enterprise: {
     who: "pricing.tierDetail.audience.enterprise.who",
@@ -324,7 +340,7 @@ export default function TierDetailPage() {
           style={{
             display: "inline-block",
             padding: "4px 12px",
-            background: tier.id === "enterprise" ? "#0f172a" : "#0d9488",
+            background: tier.id === "enterprise" ? "#0f172a" : tier.id === "pro" ? "#7c3aed" : "#0d9488",
             color: "#fff",
             fontSize: 11,
             fontWeight: 800,

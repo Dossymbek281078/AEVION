@@ -76,7 +76,21 @@
       "Bash(grep \"pages · /build$\")",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.local.json','utf8'\\)\\); console.log\\('valid JSON'\\)\")",
       "Bash(git commit *)",
-      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\(0,'utf8'\\)\\); console.log\\('committed version valid JSON'\\)\")"
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\(0,'utf8'\\)\\); console.log\\('committed version valid JSON'\\)\")",
+      "Bash(git push *)",
+      "WebSearch",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 766)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 766 --squash --delete-branch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 766 --json state,mergedAt)",
+      "Bash(git ls-remote *)",
+      "Bash(grep -rn \"aevion/pricing\\\\|aevion\\\\\\\\\\\\\\\\/pricing\" aevion-globus-backend/src --include=\"*.ts\")",
+      "Bash(node scripts/i18n-kk-extract.mjs)",
+      "Bash(git rev-list *)",
+      "Bash(git rebase *)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(billing\\): consolidate pricing config, fix Universe/pro entitlement bug' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 779 --watch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29889613085 --job 88827230412 --log-failed)",
+      "Bash(npm test *)"
     ]
   }
 }

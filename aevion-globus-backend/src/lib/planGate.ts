@@ -74,20 +74,30 @@ const TIER_RANK: Record<CanonicalTier, number> = {
 };
 
 /**
- * Normalise any stored/legacy tier id to a canonical tier. Legacy aliases
- * (`pro`, `business`) are still written by older Gumroad/LemonSqueezy
- * webhook paths (see provisioning.ts) — map them so the gate stays correct
- * regardless of which checkout path produced the subscription.
- *   pro → lite ("1 product of choice"),  business → full ("all-access").
+ * Normalise any stored tier id to a canonical tier for gating purposes.
+ *
+ * `pro` ("Universe") is a real, live, self-serve flagship tier (see TIERS in
+ * data/pricing.ts, $149.99/mo) — "all AEVION in one place", so it normalizes
+ * to `full` (every module's ceiling short of a negotiated Enterprise
+ * contract), NOT `lite`. It used to alias `lite` back when `pro` was a
+ * placeholder id with no real tier object behind it; now that it's sold at
+ * the top of the ladder, gating it at `lite` would 402 a $149.99/mo customer
+ * out of modules a $19/mo Lite customer can already reach — checked and
+ * fixed 2026-07-22.
+ *
+ * `business` is a legacy alias with no live tier object of its own — still
+ * written by older Gumroad/LemonSqueezy webhook paths (see provisioning.ts)
+ * for subscriptions sold before the current tier lineup — and maps to
+ * `full` ("all-access"), matching what those old plans actually granted.
  */
 export function normalizeTier(tier: string | null | undefined): CanonicalTier {
   switch ((tier ?? "free").toLowerCase()) {
     case "lite":
-    case "pro":
       return "lite";
     case "medium":
       return "medium";
     case "full":
+    case "pro":
     case "business":
       return "full";
     case "enterprise":
@@ -100,13 +110,23 @@ export function normalizeTier(tier: string | null | undefined): CanonicalTier {
 /* ───── Plan resolution ─────────────────────────────────────────── */
 
 export interface ResolvedPlan {
-  /** Canonical tier the request is entitled to. */
+  /** Canonical tier the request is entitled to (module-access gating). */
   tier: CanonicalTier;
   email: string | null;
   /** How the tier was decided — for debugging / the /me/entitlements payload. */
   reason: string;
   /** Modules explicitly chosen on a Lite ("1 of choice") subscription. */
   chosenModules: string[];
+  /**
+   * The tier id as actually stored/claimed, before normalizeTier() collapses
+   * legacy aliases into a canonical tier — e.g. "pro" for a Universe
+   * subscriber, where `tier` above reads "full". Needed anywhere that must
+   * tell Universe apart from Full (e.g. qcoreQuota.ts's per-tier token cap —
+   * Universe advertises 200M tokens/mo, Full 50M, and both normalize to the
+   * same canonical "full" for module gating). Falls back to the canonical
+   * tier for allowlist/default resolution paths that have no separate raw id.
+   */
+  rawTier: string;
 }
 
 /**
@@ -121,14 +141,14 @@ export function resolveUserPlan(req: Request): ResolvedPlan {
   const email = payload && typeof payload.email === "string" ? payload.email.toLowerCase() : null;
 
   if (email && ALLOWLIST.includes(email)) {
-    return { tier: "full", email, reason: "allowlist", chosenModules: [] };
+    return { tier: "full", rawTier: "full", email, reason: "allowlist", chosenModules: [] };
   }
 
   // A tier baked into the JWT wins over the subscription store (used for
   // impersonation / comped accounts). Only trust it if it names a real tier.
   if (payload && typeof payload.plan === "string" && payload.plan !== "free") {
     const t = normalizeTier(payload.plan);
-    if (t !== "free") return { tier: t, email, reason: "jwt-plan", chosenModules: [] };
+    if (t !== "free") return { tier: t, rawTier: payload.plan, email, reason: "jwt-plan", chosenModules: [] };
   }
 
   if (email) {
@@ -138,6 +158,7 @@ export function resolveUserPlan(req: Request): ResolvedPlan {
       if (!expired && sub.tierId !== "free") {
         return {
           tier: normalizeTier(sub.tierId),
+          rawTier: sub.tierId,
           email,
           reason: `subscription:${sub.tierId}`,
           chosenModules: Array.isArray(sub.modules) ? sub.modules : [],
@@ -146,7 +167,7 @@ export function resolveUserPlan(req: Request): ResolvedPlan {
     }
   }
 
-  return { tier: "free", email, reason: "default", chosenModules: [] };
+  return { tier: "free", rawTier: "free", email, reason: "default", chosenModules: [] };
 }
 
 /* ───── Entitlement policy (derived from MODULES_PRICING) ───────── */

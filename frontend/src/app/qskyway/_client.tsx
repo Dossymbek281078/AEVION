@@ -20,13 +20,13 @@ interface CityData {
   vertiports: { c: number; r: number; x: number; y: number }[];
   nofly?: NoFly[];
   wind?: { fromDeg: number; groundMs: number; topMs: number };
-  vertiportScores?: { c: number; r: number; suitability: number; class: string }[];
+  vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number }[];
   dataQuality?: DataQuality;
   _signature?: { alg: string; contentHash: string };
 }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
-interface VertiportRow { id: string; suitability: number; cls: string; }
+interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; }
 interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
 
 const VP_CLASS_LABEL: Record<string, string> = {
@@ -219,11 +219,11 @@ export default function QSkywayClient() {
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
       });
-      const scoreOf = new Map<string, { suitability: number; cls: string }>();
-      for (const s of city.vertiportScores ?? []) scoreOf.set(s.c + "," + s.r, { suitability: s.suitability, cls: s.class });
+      const scoreOf = new Map<string, { suitability: number; cls: string; openRadiusM: number; clearanceM: number; distNoFlyM: number }>();
+      for (const s of city.vertiportScores ?? []) scoreOf.set(s.c + "," + s.r, { suitability: s.suitability, cls: s.class, openRadiusM: s.openRadiusM, clearanceM: s.clearanceM, distNoFlyM: s.distNoFlyM });
       setVpRows(city.vertiports.map((v, i) => {
         const s = scoreOf.get(v.c + "," + v.r);
-        return { id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.cls ?? "unscored" };
+        return { id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.cls ?? "unscored", openRadiusM: s?.openRadiusM ?? null, clearanceM: s?.clearanceM ?? null, distNoFlyM: s?.distNoFlyM ?? null };
       }).sort((a, b) => b.suitability - a.suitability));
       setLoaded(true);
       newHero();
@@ -548,9 +548,16 @@ export default function QSkywayClient() {
                   <div style={cardH}>Пригодность площадок · {vpRows.length}</div>
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {vpRows.map((v) => (
-                      <div key={v.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
-                        <span style={{ color: "#9fb0c4" }}>{v.id}</span>
-                        <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{VP_CLASS_LABEL[v.cls] ?? "не оценена"} · {v.suitability}</span>
+                      <div key={v.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ color: "#9fb0c4" }}>{v.id}</span>
+                          <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{VP_CLASS_LABEL[v.cls] ?? "не оценена"} · {v.suitability}</span>
+                        </div>
+                        {v.openRadiusM != null && (
+                          <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
+                            откр. радиус {v.openRadiusM}м · просвет {v.clearanceM}м · до запретной зоны {v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м"}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

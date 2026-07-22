@@ -114,7 +114,6 @@ import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
 import { revenueRouter } from "./routes/revenue";
-import { paddleRouter } from "./routes/paddle";
 import { searchRouter } from "./routes/search";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -764,26 +763,6 @@ app.get("/api/openapi.json", (_req, res) => {
           ],
         },
       },
-      // Paddle Billing v2
-      "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
-      "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
-      "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
-      "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
-      "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
-      "/api/paddle/checkout": {
-        post: {
-          summary: "Create Paddle transaction → returns checkout URL",
-          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
-        },
-      },
-      "/api/paddle/webhook": {
-        post: {
-          summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
-          security: [],
-        },
-      },
-      "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
-      "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
       // Lemon Squeezy — recurring subscription webhook
       "/api/lemonsqueezy/webhook": {
         post: {
@@ -1159,10 +1138,8 @@ app.use("/api/build/social", qsocialRouter);
 app.use("/api/qsocial", qsocialRouter);
 // QEvents now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 
-// Revenue Hub — centralized monetization: Paddle + YouTube + Twitch per app
+// Revenue Hub — centralized monetization: Gumroad + YouTube + Twitch per app
 app.use("/api/revenue", revenueRouter);
-// Paddle Billing — payment processor for KZ + international (MoR model)
-app.use("/api/paddle", paddleRouter);
 // Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
 app.use("/api/search", searchRouter);
 

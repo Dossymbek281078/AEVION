@@ -9,7 +9,6 @@
 
 import { Router, type Request } from "express";
 import { projects } from "../data/projects";
-import { buildPricingResponse } from "../data/modulePricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const capture = makeServiceCapture("aevion-hub");
@@ -899,15 +898,6 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   SDK_STATS_CACHE.set(pkgName, { stats, expiresAt: now + (ok ? SDK_STATS_TTL_MS : 60_000) });
   return stats;
 }
-
-// GET /api/aevion/pricing — single source of truth for module pricing.
-// Returns solo (per-module à la carte) + bundles (4 verticals) + all-access
-// in 4 currencies. See src/data/modulePricing.ts for the design + how to
-// update. Read-only, no auth, safe to cache for ~24h on the CDN edge.
-aevionHubRouter.get("/pricing", (_req, res) => {
-  res.set("Cache-Control", "public, max-age=86400");
-  res.json(buildPricingResponse());
-});
 
 // GET /api/aevion/sdks/diag — diagnostic: probe npm endpoints from this host
 // and return raw outcome (status, headers, error message). Read-only.

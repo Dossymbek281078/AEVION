@@ -17,7 +17,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
 type BillingPeriod = "monthly" | "annual";
 type HistoryStatus = "active" | "trial" | "expired";
 
@@ -58,6 +58,7 @@ const TIER_LABEL: Record<TierId, string> = {
   lite: "Lite",
   medium: "Medium",
   full: "Full",
+  pro: "Universe",
   enterprise: "Enterprise",
 };
 
@@ -66,6 +67,7 @@ const TIER_COLOR: Record<TierId, string> = {
   lite: "text-teal-200 bg-teal-500/15 ring-teal-400/40",
   medium: "text-sky-200 bg-sky-500/15 ring-sky-400/40",
   full: "text-violet-200 bg-violet-500/15 ring-violet-400/40",
+  pro: "text-fuchsia-200 bg-fuchsia-500/15 ring-fuchsia-400/40",
   enterprise: "text-amber-200 bg-amber-500/15 ring-amber-400/40",
 };
 

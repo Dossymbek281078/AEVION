@@ -74,20 +74,30 @@ const TIER_RANK: Record<CanonicalTier, number> = {
 };
 
 /**
- * Normalise any stored/legacy tier id to a canonical tier. Legacy aliases
- * (`pro`, `business`) are still written by older Gumroad/LemonSqueezy
- * webhook paths (see provisioning.ts) — map them so the gate stays correct
- * regardless of which checkout path produced the subscription.
- *   pro → lite ("1 product of choice"),  business → full ("all-access").
+ * Normalise any stored tier id to a canonical tier for gating purposes.
+ *
+ * `pro` ("Universe") is a real, live, self-serve flagship tier (see TIERS in
+ * data/pricing.ts, $149.99/mo) — "all AEVION in one place", so it normalizes
+ * to `full` (every module's ceiling short of a negotiated Enterprise
+ * contract), NOT `lite`. It used to alias `lite` back when `pro` was a
+ * placeholder id with no real tier object behind it; now that it's sold at
+ * the top of the ladder, gating it at `lite` would 402 a $149.99/mo customer
+ * out of modules a $19/mo Lite customer can already reach — checked and
+ * fixed 2026-07-22.
+ *
+ * `business` is a legacy alias with no live tier object of its own — still
+ * written by older Gumroad/LemonSqueezy webhook paths (see provisioning.ts)
+ * for subscriptions sold before the current tier lineup — and maps to
+ * `full` ("all-access"), matching what those old plans actually granted.
  */
 export function normalizeTier(tier: string | null | undefined): CanonicalTier {
   switch ((tier ?? "free").toLowerCase()) {
     case "lite":
-    case "pro":
       return "lite";
     case "medium":
       return "medium";
     case "full":
+    case "pro":
     case "business":
       return "full";
     case "enterprise":

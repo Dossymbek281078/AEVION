@@ -75,7 +75,7 @@ export default function AevionProjectsBanner({ onHide }: Props) {
         ))}
       </div>
 
-      {/* CyberChess pricing — live from /api/aevion/pricing */}
+      {/* CyberChess pricing — live from /api/pricing via ModulePricingChip */}
       <div style={{
         margin: "8px", padding: "10px 12px", flexShrink: 0,
         border: "1px solid #3d3b39", borderRadius: 6,

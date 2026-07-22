@@ -10,12 +10,11 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant } from "@/lib/abVariant";
-import NewStructureShowcase from "./_components/NewStructureShowcase";
 import AskAi from "@/components/AskAi";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
 
 // Все тиры идут через бэкенд /api/pricing/checkout/session — он сам выбирает
 // процессинг (LemonSqueezy primary → Gumroad fallback → stub).
@@ -757,10 +756,6 @@ export default function PricingPage() {
           </button>
         </div>
       )}
-
-      {/* New 3-tier monetization structure (Solo / Bundles / All-Access).
-          Lives above the legacy Paddle tiers until Phase 3 retires them. */}
-      <NewStructureShowcase currency={currency} billingPeriod={period} />
 
       {/* Tier cards */}
       <section

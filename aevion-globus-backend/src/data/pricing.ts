@@ -18,16 +18,25 @@ export type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 export type BillingPeriod = "monthly" | "annual";
 
 /**
- * Публичные тарифы: free / lite / medium / full / enterprise.
+ * Публичные тарифы: free / lite / medium / full / pro / enterprise.
  *   - lite   = 1 любой продукт на выбор ($19)
  *   - medium = куратор-бандл готовых апп ($29)
  *   - full   = все продукты ($49)
+ *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($149.99)
  * Годовая оплата = -2 месяца (×10).
  *
- * `pro` / `business` — DEPRECATED legacy-алиасы. Оставлены в union, чтобы
- * мёртвые провайдеры (paddle.ts, lemonSqueezyWebhook.ts) и старые Gumroad-ссылки
- * продолжали компилироваться. В публичном списке TIERS их нет. Маппинг при
- * провижининге: pro → lite, business → full.
+ * `pro` ЖИВОЙ публичный тариф (id "pro", имя "Universe") — есть в TIERS ниже,
+ * реально продаётся через checkout.ts, попадает в /pricing/[tierId]. Раньше
+ * был deprecated-заглушкой без объекта тарифа, отсюда старое допущение "не в
+ * публичном TIERS" — но объект давно добавлен, а комментарий не обновили.
+ * Для гейтинга модулей normalizeTier() в lib/planGate.ts маппит его в `full`
+ * (не в `lite` — это была реальная ошибка: $149.99-клиент получал бы доступ
+ * уровня $19-Lite; исправлено 2026-07-22).
+ *
+ * `business` — DEPRECATED legacy-алиас без собственного объекта тарифа.
+ * Оставлен в union, чтобы старые Gumroad-ссылки/вебхуки (provisioning.ts)
+ * продолжали компилироваться. В TIERS его нет. Маппинг при провижининге:
+ * business → full.
  */
 export type TierId = "free" | "lite" | "medium" | "full" | "enterprise" | "pro" | "business";
 

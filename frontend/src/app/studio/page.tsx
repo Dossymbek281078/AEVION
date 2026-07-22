@@ -82,6 +82,7 @@ const FEATURE_CATEGORIES = [
     items: [
       { icon: "🎬", name: "Video AI", desc: "Text-to-video via Replicate — MiniMax, HunyuanVideo, AnimateDiff", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🖼️", name: "Image Generation", desc: "AI images with a fallback fleet — OpenAI → Workers AI (flux) → Together, permanent CDN URLs", href: "/devhub", badge: "LIVE" },
+      { icon: "📎", name: "Screenshot → Code", desc: "Attach a design screenshot in the AI chat — a vision model recreates it as working code", href: "/devhub", badge: "LIVE" },
       { icon: "🎵", name: "Music & SFX", desc: "ElevenLabs AI music and sound effects generation", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🎙️", name: "Voice TTS", desc: "ElevenLabs text-to-speech — 9 voices, high-quality audio", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "🔊", name: "Voice Cloning", desc: "Clone any voice from audio sample — create your own AI voice", href: "/devhub", badge: "NEEDS TOKEN" },

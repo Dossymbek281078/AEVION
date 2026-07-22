@@ -1219,6 +1219,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Pull the linked repo's default branch INTO the project (two-way sync).
+  const [repoPulling, setRepoPulling] = useState(false);
+  const syncFromGithub = async () => {
+    if (!project || repoPulling) return;
+    setRepoPulling(true);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
+      const data = await r.json();
+      if (!r.ok || data.ok === false) throw new Error(data.error || data.message || "Sync failed");
+      showToast(data.message || "Synced", (data.updated?.length || data.created?.length) ? "success" : "info");
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+    } catch (e: any) {
+      showToast(e.message || "Sync failed", "error");
+    } finally {
+      setRepoPulling(false);
+    }
+  };
+
   // Connect to SSE log stream for a given deploymentId
   const streamBuildLog = useCallback((projectId: string, deploymentId: string) => {
     setBuildLog([]);
@@ -3457,6 +3477,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div style={{ fontSize: 13, color: "#94a3b8" }}>No repository linked yet. Push to create one.</div>
                     )}
                   </div>
+
+                  {project?.repoUrl && (
+                    <button
+                      onClick={syncFromGithub}
+                      disabled={repoPulling}
+                      title="Pull the repo's current default-branch files into this project (a checkpoint is taken first — undo restores the pre-sync state)"
+                      style={{
+                        padding: "9px 0", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
+                        borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {repoPulling ? "Pulling…" : "⟳ Pull from repo"}
+                    </button>
+                  )}
 
                   {/* Branches */}
                   {githubBranches.length > 0 && (

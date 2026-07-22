@@ -150,7 +150,9 @@ async function main() {
   assert(bad.status === 422, "same-vertiport route rejected", `status=${bad.status}`);
 
   // slot market: capacity 4 then 409, non-overlapping ok
-  const rid = "smoke-route-1";
+  // routeId must be unique per run — against a persistent (Postgres) store, a
+  // fixed id collides with slots booked by earlier runs and books=0 forever.
+  const rid = "smoke-route-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
   const before = await jget("/api/qskyway/slots");
   assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);

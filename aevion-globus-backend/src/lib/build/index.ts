@@ -1048,6 +1048,16 @@ async function backfillRegionsFromCity(): Promise<void> {
       );
     }
   }
+  // BuildVacancy almost never carries its own "city" (it follows the parent
+  // project's site), so the city-pattern pass above rarely touches it —
+  // confirmed via live prod testing where every vacancy had region=NULL
+  // despite its project having a correctly-backfilled region. Propagate
+  // project → vacancy directly for anything the pattern pass missed.
+  await pool.query(`
+    UPDATE "BuildVacancy" v SET "region" = p."region"
+    FROM "BuildProject" p
+    WHERE v."projectId" = p."id" AND v."region" IS NULL AND p."region" IS NOT NULL
+  `);
 }
 
 export const buildPool = pool;

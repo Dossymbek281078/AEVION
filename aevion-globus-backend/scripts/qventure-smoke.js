@@ -174,6 +174,26 @@ async function run() {
     typeof fetched.body?.data?.result?.rubricVersion === "number",
     String(fetched.body?.data?.result?.rubricVersion));
 
+  // Re-submitting an identical plan must return the SAME analysis, not mint a
+  // duplicate that inflates the gallery and skews percentiles.
+  console.log("\n13. Identical re-submission is deduplicated");
+  const dedupePayload = {
+    name: "Dedupe Co", sector: "saas", stage: "seed",
+    description: "Deterministic dedupe fixture — identical resubmission should return the same id.",
+    tractionNotes: "$500k ARR, 20% MoM, LTV/CAC 3.5",
+  };
+  const first = await req("POST", "/api/qventure/analyze", dedupePayload);
+  const second = await req("POST", "/api/qventure/analyze", dedupePayload);
+  assert("first submission → 200", first.status === 200, String(first.status));
+  assert("second submission → 200", second.status === 200, String(second.status));
+  assert("identical plan returns the same analysis id",
+    first.body?.data?.id && first.body.data.id === second.body?.data?.id,
+    `${first.body?.data?.id} vs ${second.body?.data?.id}`);
+  assert("dedup is flagged on the response", second.body?.deduped === true, String(second.body?.deduped));
+  const differing = await req("POST", "/api/qventure/analyze", { ...dedupePayload, tractionNotes: "$9M ARR, 120% NRR, LTV/CAC 7" });
+  assert("different traction is NOT deduped", differing.body?.data?.id && differing.body.data.id !== first.body?.data?.id,
+    `${differing.body?.data?.id}`);
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

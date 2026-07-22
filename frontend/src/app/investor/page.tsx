@@ -16,6 +16,8 @@ type Stats = {
   dailySmoke: string;
 };
 
+type RevenueSummary = { grossUsd: number; saleCount: number };
+
 /**
  * Aggregate AEVION registry stats — shape pulled from `/api/aevion/stats`.
  * Only the fields the investor page actually renders are typed; the
@@ -42,13 +44,15 @@ export default function InvestorPage() {
   });
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [registryLive, setRegistryLive] = useState(false);
+  const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
 
   useEffect(() => {
     Promise.allSettled([
       fetch(apiUrl("/api/planet/stats")).then(r => r.json()),
       fetch(apiUrl("/api/qright/objects?limit=1")).then(r => r.json()),
       fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
-    ]).then(([planet, qright, reg]) => {
+      fetch(apiUrl("/api/revenue/summary")).then(r => r.json()),
+    ]).then(([planet, qright, reg, rev]) => {
       setStats(s => ({
         ...s,
         planetSubmissions: planet.status === "fulfilled" ? (planet.value?.submissions ?? s.planetSubmissions) : s.planetSubmissions,
@@ -57,6 +61,9 @@ export default function InvestorPage() {
       if (reg.status === "fulfilled" && reg.value && typeof reg.value === "object") {
         setRegistry(reg.value as RegistryStats);
         setRegistryLive(true);
+      }
+      if (rev.status === "fulfilled" && rev.value && typeof rev.value.grossUsd === "number") {
+        setRevenue(rev.value as RevenueSummary);
       }
     });
   }, []);
@@ -106,6 +113,11 @@ export default function InvestorPage() {
             { label: "Registered objects", value: stats.qrightObjects.toString(), sub: "QRight registry" },
             { label: "Planet submissions", value: stats.planetSubmissions.toString(), sub: "compliance pipeline" },
             { label: "LLM providers", value: stats.qcoreProviders.toString(), sub: "QCoreAI router" },
+            {
+              label: "Live revenue",
+              value: `$${(revenue?.grossUsd ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
+              sub: `cumulative · ${revenue?.saleCount ?? 0} sales, all channels`,
+            },
           ].map(m => (
             <div key={m.label} style={{ textAlign: "center" }}>
               <div style={{ fontSize: 28, fontWeight: 900, color: "#10b981" }}>{m.value}</div>

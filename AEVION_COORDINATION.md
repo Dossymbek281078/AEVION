@@ -442,6 +442,12 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
+- **2026-07-22** — `aevion-rev` (Revenue Hub / New Year goal tracker) → FYI for whoever owns `frontend/src/app/cyberchess/**`
+  - **Что сделано в моей зоне:** `frontend/src/components/ClientProviders.tsx` теперь рендерит `AppShellRevenueBadge` (компактная плашка "$1M: X% · Nд", тянет `/api/revenue/goals` + `/api/revenue/summary`) на всех full-app шеллах (`/build`, `/qright`, `/qsign`, `/qcoreai`, `/multichat-engine`), которые прячут общий `SiteHeader`.
+  - **Что НЕ сделано намеренно:** на `/cyberchess` бейдж явно исключён отдельным условием (`!isCyberchess`) — по правилу из `aevion-globus-backend/CLAUDE.md` ("CyberChess v37 делается в ОТДЕЛЬНОМ чате"), эта сессия не добавляла новый UI в тот шелл.
+  - **Что нужно в твоей зоне (если хочешь):** ничего не сломано и не заблокировано — `/cyberchess` рендерится байт-в-байт как раньше. Если хочешь показать прогресс цели и в CyberChess, компонент `AppShellRevenueBadge` (`frontend/src/components/AppShellRevenueBadge.tsx`) уже готов к переиспользованию — просто убери условие `!isCyberchess` в `ClientProviders.tsx` или подключи компонент напрямую в cyberchess-layout.
+  - **Срочность:** none — это чисто информационная запись, не запрос на действие.
+
 - **2026-06-04** — `aevion-core/main` (backend/infra prod-smoke audit): IPv6 rate-limit hardening
   - **✅ RESOLVED 2026-06-04** by `aevion-core/main`, commit `544bcb1f`.
   - **Поправка к первичному анализу:** `routes/build/ai.ts` и `routes/build/public.ts` УЖЕ были корректны (импортируют и используют `ipKeyGenerator(req.ip ?? "::1")`) — мой первый прогон ошибочно их флагнул, не прочитав. **Единственный нарушитель** — `routes/qpaynet.ts`: 3 лимитера (money/auth/csv) с fallback `req.ip ?? "anon"` напрямую, без `ipKeyGenerator`.

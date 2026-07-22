@@ -1964,6 +1964,114 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
 // POST /api/devhub/projects/:id/github/pull-request — open a PR with the
 // project's current files on a new branch, targeting the repo's default branch.
 // Requires the project to already be linked to GitHub (via /github/push).
+// POST /api/devhub/projects/:id/github/sync — pull the linked repo's current
+// default-branch state INTO the project (roadmap #5: sync was push-only).
+// A checkpoint is taken before anything is written, so a bad sync is one
+// undo away — same safety contract as AI generations.
+const SYNC_BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|otf|eot|zip|gz|tar|pdf|mp[34]|wasm|jar|exe|dll|so|dylib)$/i;
+const SYNC_MAX_FILES = 100;
+const SYNC_MAX_FILE_BYTES = 200_000;
+
+devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!project.repoUrl) {
+    return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+  }
+  const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) {
+    return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+  }
+  const [, owner, repo] = match;
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return res.json({ ok: false, message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration" });
+  }
+  const ghHeaders = { Authorization: `Bearer ${githubToken}`, Accept: "application/vnd.github+json", "User-Agent": "aevion-devhub" };
+  try {
+    const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: ghHeaders });
+    const repoData = await repoResp.json() as { default_branch?: string; message?: string };
+    if (!repoResp.ok) return res.status(502).json({ error: `GitHub: ${repoData.message || repoResp.status}` });
+    const branch = repoData.default_branch || "main";
+
+    const treeResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, { headers: ghHeaders });
+    const treeData = await treeResp.json() as { tree?: Array<{ path: string; type: string; sha: string; size?: number }>; message?: string };
+    if (!treeResp.ok || !Array.isArray(treeData.tree)) {
+      return res.status(502).json({ error: `GitHub tree: ${treeData.message || treeResp.status}` });
+    }
+
+    const skipped: string[] = [];
+    const candidates = treeData.tree.filter((n) => {
+      if (n.type !== "blob") return false;
+      if (SYNC_BINARY_EXT.test(n.path) || (n.size ?? 0) > SYNC_MAX_FILE_BYTES) { skipped.push(n.path); return false; }
+      return true;
+    });
+    if (candidates.length > SYNC_MAX_FILES) {
+      skipped.push(...candidates.slice(SYNC_MAX_FILES).map((n) => n.path));
+      candidates.length = SYNC_MAX_FILES;
+    }
+
+    const existing = await dbListFiles(project.id);
+    const byPath = new Map(existing.map((f) => [f.path, f]));
+    const updated: string[] = [];
+    const created: string[] = [];
+    let unchanged = 0;
+    const toWrite: Array<{ path: string; content: string }> = [];
+
+    for (const node of candidates) {
+      const blobResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${node.sha}`, { headers: ghHeaders });
+      if (!blobResp.ok) { skipped.push(node.path); continue; }
+      const blob = await blobResp.json() as { content?: string; encoding?: string };
+      if (blob.encoding !== "base64" || typeof blob.content !== "string") { skipped.push(node.path); continue; }
+      const content = Buffer.from(blob.content, "base64").toString("utf8");
+      const current = byPath.get(node.path);
+      if (!current) { created.push(node.path); toWrite.push({ path: node.path, content }); }
+      else if (current.content !== content) { updated.push(node.path); toWrite.push({ path: node.path, content }); }
+      else unchanged++;
+    }
+
+    let checkpointId: string | null = null;
+    if (toWrite.length > 0) {
+      checkpointId = await createCheckpoint(
+        project.id, userId, `GitHub sync from ${owner}/${repo}@${branch}`,
+        toWrite.map((f) => f.path), existing
+      );
+      for (const f of toWrite) {
+        const file: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: f.path,
+          content: f.content, language: detectLanguage(f.path), updatedAt: now(),
+        };
+        try { await dbUpsertFile(file); }
+        catch {
+          const cur = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
+          if (cur) { cur.content = file.content; cur.language = file.language; cur.updatedAt = file.updatedAt; }
+          else memFiles.set(file.id, file);
+        }
+      }
+    }
+
+    res.json({
+      ok: true, branch, updated, created, unchanged,
+      ...(skipped.length ? { skipped } : {}),
+      ...(checkpointId ? { checkpointId } : {}),
+      message: toWrite.length
+        ? `Synced ${owner}/${repo}@${branch}: ${updated.length} updated, ${created.length} new (undo restores the pre-sync state)`
+        : `Already in sync with ${owner}/${repo}@${branch}`,
+    });
+  } catch (e: any) {
+    res.status(502).json({ error: e?.message || "GitHub sync failed" });
+  }
+});
+
 devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";

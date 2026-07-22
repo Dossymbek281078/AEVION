@@ -415,6 +415,37 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("POST /api/devhub/projects/:id/generate — dialog history as context", () => {
+  test("prior turns are folded into the prompt (capped), so follow-ups keep their referent", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "src/App.jsx", content: "x", language: "javascript" }] }),
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "H" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({
+      prompt: "make the button blue",
+      history: [
+        { role: "user", text: "build a pomodoro timer with a start button" },
+        { role: "assistant", text: "Changed files: src/App.jsx" },
+        { role: "weird", text: "dropped" },
+      ],
+    });
+    expect(r.status).toBe(200);
+    const messages = vi.mocked(callProvider).mock.calls[0][1] as Array<{ role: string; content: string }>;
+    const userMsg = messages.find((m) => m.role === "user")!.content;
+    expect(userMsg).toContain("Conversation so far");
+    expect(userMsg).toContain("User: build a pomodoro timer");
+    expect(userMsg).toContain("Assistant: Changed files: src/App.jsx");
+    expect(userMsg).not.toContain("dropped");
+    expect(userMsg).toContain("make the button blue");
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
 describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the project", () => {
   test("updates changed files, creates new ones, checkpoints first, and skips binaries", async () => {
     process.env.GITHUB_TOKEN = "gh-fake";

@@ -760,12 +760,23 @@ function buildFileContext(existingFiles: Array<{ path: string; content: string }
 
 const VISION_PROVIDERS = new Set(["anthropic", "gemini", "openai"]);
 
+export type ChatTurn = { role: "user" | "assistant"; text: string };
+
+/** Fold prior dialog turns into plain prompt text. Wire-level multi-turn
+ * would fight each provider's alternation rules; text survives everywhere. */
+function foldHistory(history: ChatTurn[] | undefined): string {
+  if (!history?.length) return "";
+  const lines = history.map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.text}`);
+  return `Conversation so far (for context — the current request may refer back to it):\n${lines.join("\n")}\n\n`;
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
   targetFiles: string[] = [],
   existingFiles: Array<{ path: string; content: string }> = [],
-  images?: ChatImage[]
+  images?: ChatImage[],
+  history?: ChatTurn[]
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -803,7 +814,7 @@ async function generateCodeWithAI(
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
         : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -1295,7 +1306,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
-  const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType } = req.body || {};
+  const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
@@ -1313,6 +1324,18 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
     }
     images = [{ mediaType, dataBase64: imageBase64.replace(/^data:[^,]+,/, "") }];
   }
+  // Prior dialog turns give follow-ups their referent ("make the button
+  // blue" needs to know which button). Capped hard — context, not transcript.
+  let history: ChatTurn[] | undefined;
+  if (Array.isArray(historyRaw)) {
+    history = historyRaw
+      .filter((h: unknown): h is { role: string; text: string } =>
+        !!h && typeof (h as any).role === "string" && typeof (h as any).text === "string")
+      .filter((h) => h.role === "user" || h.role === "assistant")
+      .slice(-8)
+      .map((h) => ({ role: h.role as "user" | "assistant", text: h.text.slice(0, 500) }));
+    if (history.length === 0) history = undefined;
+  }
   // targetFiles (array) lets a caller request several coordinated files at once
   // (e.g. an API route + the page that calls it); targetFile (string) stays as
   // the single-file shorthand for back-compat.
@@ -1321,7 +1344,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
   try {
-    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images));
+    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history));
   } catch (e: any) {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
@@ -1331,9 +1354,9 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
 });
 
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
-async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[]) {
+async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[]) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images);
+  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history);
   const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
   for (const gf of generatedFiles) {
     const file: DevHubFile = {

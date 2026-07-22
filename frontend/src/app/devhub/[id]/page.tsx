@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
+import { diffLines } from "@/lib/lineDiff";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -370,6 +371,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [agentLiveStep, setAgentLiveStep] = useState<number | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<Array<{ id: string; name: string; description: string; steps: AgentStep[] }>>([]);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
+  type ChatFileChange = { path: string; language: string; isNew: boolean; added: number; removed: number; diff: string | null };
+  type ChatMsg =
+    | { role: "user"; text: string; at: string }
+    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string };
+  const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
+  const chatLogRef = useRef<HTMLDivElement | null>(null);
 
   // Templates
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -759,34 +766,64 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Chat history persists per project so an iteration survives a reload.
+  useEffect(() => {
+    if (!project) return;
+    try {
+      const raw = localStorage.getItem(`devhub_chat_${project.id}`);
+      if (raw) setChatHistory(JSON.parse(raw));
+    } catch { /* corrupt cache — start fresh */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+  useEffect(() => {
+    if (!project || chatHistory.length === 0) return;
+    try { localStorage.setItem(`devhub_chat_${project.id}`, JSON.stringify(chatHistory.slice(-40))); } catch { /* quota */ }
+    chatLogRef.current?.scrollTo({ top: chatLogRef.current.scrollHeight });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatHistory]);
+
   const generateCode = async () => {
     if (!aiPrompt.trim() || !project) return;
+    const userText = aiPrompt.trim();
     setGenerating(true);
     setGeneratedFiles([]);
+    setChatHistory((h) => [...h, { role: "user", text: userText, at: new Date().toISOString() }]);
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: aiPrompt, stack: project.stack }),
+        body: JSON.stringify({ prompt: userText, stack: project.stack }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Generation failed");
       const newGenerated = data.files || [];
       setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
-      // Reload files list
-      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
-      const listData = await listR.json();
-      setFiles(listData.files || []);
+      // Diffs are computed against the files as they were BEFORE this
+      // generation (still in state here — the list reload happens below).
+      const changes = newGenerated.map((gf: { path: string; language?: string; content: string }) => {
+        const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
+        const d = diffLines(before, gf.content ?? "");
+        return { path: gf.path, language: gf.language || "text", isNew: before === "", added: d.added, removed: d.removed, diff: d.text };
+      });
+      let note: string | undefined;
       if (data.aiGenerated === false) {
+        note = "No AI provider configured — placeholder inserted instead of real code";
         showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
+        note = `Syntax check failed: ${paths}`;
         showToast(`Generated ${newGenerated.length} file(s), but ${paths} failed a syntax check — review before deploying`, "warning");
       } else {
         showToast(`Generated ${newGenerated.length} file(s)`, "success");
       }
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
+      // Reload files list
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
       setAiPrompt("");
     } catch (e: any) {
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: e.message || "Generation failed" }]);
       showToast(e.message || "Generation failed", "error");
     } finally {
       setGenerating(false);
@@ -2675,23 +2712,59 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* AI Chat Tab */}
               {activeTab === "chat" && (
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
-                  {generatedFiles.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6 }}>Generated files:</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {generatedFiles.map((gf) => (
-                          <button
-                            key={gf.path}
-                            onClick={() => {
-                              const f = files.find((ff) => ff.path === gf.path);
-                              if (f) loadFile(f);
-                            }}
-                            style={{ padding: "4px 10px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 6, fontSize: 12, cursor: "pointer", color: "#0d9488", fontWeight: 600 }}
-                          >
-                            {gf.path}
-                          </button>
-                        ))}
-                      </div>
+                  {chatHistory.length > 0 && (
+                    <div ref={chatLogRef} style={{ flex: "0 1 auto", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, maxHeight: "45%", paddingRight: 4 }}>
+                      {chatHistory.map((msg, mi) =>
+                        msg.role === "user" ? (
+                          <div key={mi} style={{ alignSelf: "flex-end", maxWidth: "85%", background: "#0d9488", color: "#fff", borderRadius: "12px 12px 2px 12px", padding: "8px 12px", fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>
+                            {msg.text}
+                          </div>
+                        ) : (
+                          <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", width: "95%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13 }}>
+                            {msg.files.length === 0 ? (
+                              <div style={{ color: "#991b1b" }}>{msg.note || "No changes"}</div>
+                            ) : (
+                              <>
+                                {msg.note && <div style={{ color: "#92400e", fontSize: 12, marginBottom: 6 }}>⚠ {msg.note}</div>}
+                                {msg.files.map((fc) => (
+                                  <div key={fc.path} style={{ marginBottom: 6 }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                      <button
+                                        onClick={() => { const f = files.find((ff) => ff.path === fc.path); if (f) loadFile(f); }}
+                                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "monospace", fontSize: 12.5, fontWeight: 700, color: "#0d9488" }}
+                                      >
+                                        {fc.path}
+                                      </button>
+                                      {fc.isNew && <span style={{ fontSize: 10, fontWeight: 800, color: "#065f46", background: "#d1fae5", borderRadius: 4, padding: "1px 6px" }}>NEW</span>}
+                                      <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700 }}>+{fc.added}</span>
+                                      <span style={{ fontSize: 11, color: "#dc2626", fontWeight: 700 }}>−{fc.removed}</span>
+                                    </div>
+                                    {fc.diff && (
+                                      <details style={{ marginTop: 3 }}>
+                                        <summary style={{ fontSize: 11, color: "#64748b", cursor: "pointer" }}>diff</summary>
+                                        <pre style={{ margin: "4px 0 0", padding: 8, background: "#0f172a", borderRadius: 6, fontSize: 11, lineHeight: 1.45, overflowX: "auto", maxHeight: 220 }}>
+                                          {fc.diff.split("\n").map((ln, li) => (
+                                            <div key={li} style={{ color: ln.startsWith("+") ? "#4ade80" : ln.startsWith("-") ? "#f87171" : "#64748b" }}>{ln}</div>
+                                          ))}
+                                        </pre>
+                                      </details>
+                                    )}
+                                  </div>
+                                ))}
+                                {msg.checkpointId && (
+                                  <button
+                                    onClick={() => restoreToCheckpoint(msg.checkpointId!)}
+                                    disabled={restoringId !== null}
+                                    style={{ marginTop: 4, padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer" }}
+                                  >
+                                    ↩ Revert to before this
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                   {/* Idea planner — plan_project */}

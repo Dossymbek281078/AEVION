@@ -187,6 +187,22 @@ export const TOOL_SPECS: ToolSpec[] = [
     },
   },
   {
+    name: "design_database",
+    description:
+      "Design a PostgreSQL database for the currently open DevHub project from a plain-language description: " +
+      "generates db/schema.sql (idempotent DDL with keys, constraints and indexes) plus a typed data-access " +
+      "client wired to the project's own DATABASE_URL env var. Use when the user asks for a database, schema, " +
+      "models, or persistence. NOTE: this designs and writes files — it does NOT provision a live database; " +
+      "tell the user to set DATABASE_URL in Env Vars and apply the schema.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        description: { type: "string", description: "What the app stores and how it's used, in plain language." },
+      },
+      required: ["description"],
+    },
+  },
+  {
     name: "plan_project",
     description:
       "Turn a raw project idea into a concrete build plan: target users, a recommended tech stack, a minimal " +
@@ -251,6 +267,9 @@ function toBody(name: string, input: Record<string, unknown>): Record<string, un
   if (name === "plan_project") {
     return { idea: input.idea };
   }
+  if (name === "design_database") {
+    return { description: input.description };
+  }
   return input;
 }
 
@@ -268,6 +287,7 @@ const PROJECT_SCOPED_ENDPOINT: Record<string, (projectId: string, input: Record<
   merge_pull_request: (projectId, input) => `/api/devhub/projects/${projectId}/github/pull-request/${Number(input.number)}/merge`,
   read_project_file: (projectId) => `/api/devhub/projects/${projectId}/file`,
   undo_last_generation: (projectId) => `/api/devhub/projects/${projectId}/generate/undo`,
+  design_database: (projectId) => `/api/devhub/projects/${projectId}/database/design`,
 };
 
 /** Per-request context an executor may need beyond the model's tool input. */

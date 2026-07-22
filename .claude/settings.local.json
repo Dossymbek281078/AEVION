@@ -116,7 +116,8 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 822)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 822 --squash --delete-branch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 822 --json state,mergedAt)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): usage-meter UI + tests for paid-tier/premium quota fields' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): usage-meter UI + tests for paid-tier/premium quota fields' --body ' *)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe workflow *)"
     ]
   }
 }

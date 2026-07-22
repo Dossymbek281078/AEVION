@@ -103,15 +103,21 @@ export interface AnalysisResult {
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 
-export const VERDICT_COLOR: Record<Verdict, string> = { invest: "#16a34a", watch: "#d97706", pass: "#dc2626" };
+// Newspaper palette (see feedback_aevion_light_newspaper_ui). Verdict keeps its
+// semantic split, but aligned to the paper red/teal/amber rather than SaaS slate.
+export const VERDICT_COLOR: Record<Verdict, string> = { invest: "#0a7d72", watch: "#b7791f", pass: "#b5241b" };
 export const VERDICT_LABEL: Record<Verdict, string> = { invest: "INVEST", watch: "WATCH", pass: "PASS" };
 const LENS_ICON: Record<string, string> = { scientist: "🔬", data_analyst: "📊", economist: "📈", lawyer: "⚖️" };
 
 export const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 export const mm = (n: number) => "$" + (n / 1e6).toFixed(1) + "M";
 
-export const SECTION: React.CSSProperties = { border: "1px solid #e2e8f0", borderRadius: 14, padding: 20, background: "#fff", marginBottom: 18 };
-export const H2: React.CSSProperties = { margin: "0 0 14px", fontSize: 18, fontWeight: 800, color: "#0f172a" };
+// Shared section shell and heading, restyled to the paper language: a cream card
+// under a hairline rule instead of a rounded SaaS box, and a serif section head.
+// These reference the --paper tokens, so any consumer must sit inside .paper.
+export const SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif';
+export const SECTION: React.CSSProperties = { border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4, padding: 22, background: "var(--card, #fffefb)", marginBottom: 20 };
+export const H2: React.CSSProperties = { margin: "0 0 16px", paddingBottom: 9, borderBottom: "2px solid var(--rule-bold, #17181a)", fontFamily: SERIF, fontSize: 24, fontWeight: 800, letterSpacing: "-0.015em", color: "var(--ink, #17181a)" };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -123,15 +129,15 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
     <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
       <div style={{
         width: size, height: size, borderRadius: "50%",
-        background: `conic-gradient(${color} ${pct * 3.6}deg, #e2e8f0 0deg)`,
+        background: `conic-gradient(${color} ${pct * 3.6}deg, var(--rule, #d4d3cc) 0deg)`,
         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       }}>
         <div style={{
-          width: inner, height: inner, borderRadius: "50%", background: "#fff",
+          width: inner, height: inner, borderRadius: "50%", background: "var(--card, #fffefb)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         }}>
-          <span style={{ fontSize: 30, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{score}</span>
-          <span style={{ fontSize: 11, color: "#64748b" }}>/ 100</span>
+          <span style={{ fontSize: 30, fontWeight: 800, color: "var(--ink, #17181a)", lineHeight: 1 }}>{score}</span>
+          <span style={{ fontSize: 11, color: "var(--ink-faint, #74767c)" }}>/ 100</span>
         </div>
       </div>
       <div>
@@ -139,7 +145,7 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
           display: "inline-block", padding: "6px 16px", borderRadius: 999, background: color,
           color: "#fff", fontWeight: 800, fontSize: 15, letterSpacing: 0.5,
         }}>{VERDICT_LABEL[verdict]}</span>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>QVenture composite score</div>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)", marginTop: 8 }}>QVenture composite score</div>
       </div>
     </div>
   );
@@ -177,18 +183,18 @@ export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
 // were assessed about this specific company, and explains a low execution score.
 const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: string; fg: string; title: string }> = {
   "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Scored from metrics disclosed in this submission." },
-  "sector-prior": { text: "sector average", bg: "#f1f5f9", fg: "#475569", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
+  "sector-prior": { text: "sector average", bg: "var(--paper-2, #efeee8)", fg: "var(--ink-soft, #45474c)", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
   "no-evidence": { text: "not disclosed", bg: "#fef2f2", fg: "#b91c1c", title: "Nothing was submitted for this factor, so it scores low rather than neutral. Add traction metrics to move it." },
 };
 
 export function FactorBar({ f }: { f: ScoreFactor }) {
-  const color = f.score >= 70 ? "#16a34a" : f.score >= 50 ? "#d97706" : "#dc2626";
+  const color = f.score >= 70 ? "var(--teal, #0a7d72)" : f.score >= 50 ? "var(--amber, #b7791f)" : "var(--red, #b5241b)";
   const tag = f.basis ? BASIS_TAG[f.basis] : null;
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-        <span style={{ color: "#0f172a", fontWeight: 600 }}>
-          {f.label} <span style={{ color: "#94a3b8", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span>
+        <span style={{ color: "var(--ink, #17181a)", fontWeight: 600 }}>
+          {f.label} <span style={{ color: "var(--ink-faint, #74767c)", fontWeight: 400 }}>· {Math.round(f.weight * 100)}%</span>
           {tag && (
             <span title={tag.title} style={{
               marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "1px 6px",
@@ -198,10 +204,10 @@ export function FactorBar({ f }: { f: ScoreFactor }) {
         </span>
         <span style={{ fontWeight: 700, color }}>{f.score}</span>
       </div>
-      <div style={{ height: 7, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
+      <div style={{ height: 7, background: "var(--rule, #d4d3cc)", borderRadius: 4, overflow: "hidden" }}>
         <div style={{ width: `${f.score}%`, height: "100%", background: color }} />
       </div>
-      <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{f.rationale}</div>
+      <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 3 }}>{f.rationale}</div>
     </div>
   );
 }
@@ -227,7 +233,7 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink, #17181a)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
         About this company · {100 - sectorWeight}% of the score
       </div>
       {company.map((f) => <FactorBar key={f.key} f={f} />)}
@@ -237,8 +243,8 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
         onClick={() => setShowSector((v) => !v)}
         style={{
           width: "100%", marginTop: 6, padding: "9px 12px", cursor: "pointer",
-          background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10,
-          fontSize: 12.5, fontWeight: 600, color: "#475569", textAlign: "left",
+          background: "var(--paper-2, #efeee8)", border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4,
+          fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft, #45474c)", textAlign: "left",
         }}
       >
         {showSector ? "▾" : "▸"} Sector context · {sectorWeight}% of the score ·{" "}
@@ -247,8 +253,8 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
         </span>
       </button>
       {showSector && (
-        <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: "3px solid #e2e8f0" }}>
-          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+        <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: "3px solid var(--rule, #d4d3cc)" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--ink-faint, #74767c)", lineHeight: 1.5 }}>
             These are benchmarks for the sector, not findings about this company — a rival deal in
             the same market scores the same here. They set the backdrop; they do not differentiate.
           </p>
@@ -261,15 +267,15 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
 
 export function LensCard({ lens }: { lens: Lens }) {
   return (
-    <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
-      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
+    <div style={{ border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4, padding: 16, background: "var(--card, #fffefb)" }}>
+      <div style={{ fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>
         {LENS_ICON[lens.lens] || "•"} {lens.role}
       </div>
-      <div style={{ fontSize: 13.5, color: "#334155", fontStyle: "italic", marginBottom: 10 }}>{lens.headline}</div>
-      <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 13, color: "#334155" }}>
+      <div style={{ fontSize: 13.5, color: "var(--ink-soft, #45474c)", fontStyle: "italic", marginBottom: 10 }}>{lens.headline}</div>
+      <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)" }}>
         {lens.points.map((p, i) => <li key={i} style={{ marginBottom: 4 }}>{p}</li>)}
       </ul>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#dc2626", marginBottom: 3 }}>Risks</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red, #b5241b)", marginBottom: 3 }}>Risks</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#7f1d1d" }}>
         {lens.risks.map((r, i) => <li key={i} style={{ marginBottom: 3 }}>{r}</li>)}
       </ul>
@@ -280,10 +286,10 @@ export function LensCard({ lens }: { lens: Lens }) {
 export function StrategyPanel({ s }: { s: Strategy }) {
   const r = s.returns;
   const cell = (label: string, value: string, sub?: string) => (
-    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px" }}>
-      <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 1 }}>{sub}</div>}
+    <div style={{ background: "var(--paper-2, #efeee8)", border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4, padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, color: "var(--ink-faint, #74767c)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "var(--ink, #17181a)", marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 1 }}>{sub}</div>}
     </div>
   );
   // On a pass the sizing grid is a reference for a hypothetical re-score, not a
@@ -292,11 +298,11 @@ export function StrategyPanel({ s }: { s: Strategy }) {
   return (
     <div>
       {isPass && s.reEntryConditions && s.reEntryConditions.length > 0 && (
-        <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 10, padding: "12px 16px" }}>
+        <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 4, padding: "12px 16px" }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 6 }}>
             Not investable as presented — what would have to change
           </div>
-          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55 }}>
             {s.reEntryConditions.map((c, i) => <li key={i} style={{ marginBottom: 3 }}>{c}</li>)}
           </ol>
         </div>
@@ -314,18 +320,18 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         {cell("Target IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
       </div>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Deployment schedule</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>Deployment schedule</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {s.tranches.map((t, i) => (
-            <div key={i} style={{ flex: "1 1 180px", border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>{t.pct}% <span style={{ fontWeight: 600, fontSize: 13 }}>· {t.label}</span></div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{t.trigger}</div>
+            <div key={i} style={{ flex: "1 1 180px", border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4, padding: "10px 12px", background: "var(--card, #fffefb)" }}>
+              <div style={{ fontWeight: 800, color: "var(--ink, #17181a)" }}>{t.pct}% <span style={{ fontWeight: 600, fontSize: 13 }}>· {t.label}</span></div>
+              <div style={{ fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 2 }}>{t.trigger}</div>
             </div>
           ))}
         </div>
       </div>
       <div style={{
-        fontSize: 13, color: "#334155", borderRadius: 10, padding: "10px 14px",
+        fontSize: 13, color: "var(--ink-soft, #45474c)", borderRadius: 4, padding: "10px 14px",
         background: isPass ? "#fffbeb" : "#f0fdf4",
         border: `1px solid ${isPass ? "#fde68a" : "#bbf7d0"}`,
       }}>
@@ -356,7 +362,7 @@ export function ShareButton({ id }: { id: string }) {
   return (
     <button type="button" onClick={share} style={{
       display: "inline-flex", alignItems: "center", gap: 6,
-      padding: "8px 16px", background: "#fff", color: "#7c3aed",
+      padding: "8px 16px", background: "var(--card, #fffefb)", color: "var(--teal-deep, #075b53)",
       border: "1px solid #ddd6fe", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer",
     }}>
       {copied ? "✓ Link copied" : "🔗 Share"}
@@ -387,8 +393,8 @@ export function SaveButton({ result }: { result: AnalysisResult }) {
     <button type="button" onClick={onClick} style={{
       display: "inline-flex", alignItems: "center", gap: 6,
       padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer",
-      background: saved ? "#7c3aed" : "#fff",
-      color: saved ? "#fff" : "#7c3aed",
+      background: saved ? "var(--teal-deep, #075b53)" : "#fff",
+      color: saved ? "#fff" : "var(--teal-deep, #075b53)",
       border: "1px solid #ddd6fe",
     }}>
       {saved ? "★ Saved" : "☆ Save to watchlist"}
@@ -424,15 +430,15 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
     return (
       <div style={SECTION}>
         <h2 style={H2}>Recent comparable rounds</h2>
-        <div style={{ fontSize: 13, color: "#94a3b8" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
       </div>
     );
   }
   if (!data || data.comps.length === 0) return null;
 
   const badge = data.mode === "live"
-    ? { text: "LIVE · web-sourced", bg: "#16a34a" }
-    : { text: "ILLUSTRATIVE · model-recalled", bg: "#d97706" };
+    ? { text: "LIVE · web-sourced", bg: "var(--teal, #0a7d72)" }
+    : { text: "ILLUSTRATIVE · model-recalled", bg: "var(--amber, #b7791f)" };
 
   return (
     <div style={SECTION}>
@@ -443,7 +449,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
           <thead>
-            <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
+            <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12 }}>
               <th style={{ padding: "6px 8px" }}>Company</th>
               <th style={{ padding: "6px 8px" }}>Amount</th>
               <th style={{ padding: "6px 8px" }}>Round</th>
@@ -453,14 +459,14 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
           </thead>
           <tbody>
             {data.comps.map((c, i) => (
-              <tr key={i} style={{ borderTop: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "8px", fontWeight: 700, color: "#0f172a" }}>{c.company}</td>
-                <td style={{ padding: "8px", color: "#0f172a" }}>{c.amountText || (c.amountUsd ? `$${(c.amountUsd / 1e6).toFixed(1)}M` : "—")}</td>
-                <td style={{ padding: "8px", color: "#334155" }}>{c.round || "—"}</td>
-                <td style={{ padding: "8px", color: "#64748b" }}>{c.date || "—"}</td>
+              <tr key={i} style={{ borderTop: "1px solid var(--paper-2, #efeee8)" }}>
+                <td style={{ padding: "8px", fontWeight: 700, color: "var(--ink, #17181a)" }}>{c.company}</td>
+                <td style={{ padding: "8px", color: "var(--ink, #17181a)" }}>{c.amountText || (c.amountUsd ? `$${(c.amountUsd / 1e6).toFixed(1)}M` : "—")}</td>
+                <td style={{ padding: "8px", color: "var(--ink-soft, #45474c)" }}>{c.round || "—"}</td>
+                <td style={{ padding: "8px", color: "var(--ink-faint, #74767c)" }}>{c.date || "—"}</td>
                 {data.mode === "live" && (
                   <td style={{ padding: "8px" }}>
-                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none" }}>link ↗</a> : "—"}
+                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>link ↗</a> : "—"}
                   </td>
                 )}
               </tr>
@@ -468,7 +474,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
           </tbody>
         </table>
       </div>
-      <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>{data.disclaimer}</div>
+      <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
     </div>
   );
 }
@@ -517,7 +523,7 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
       <h2 style={{ ...H2, margin: 0 }}>QVenture benchmark</h2>
-      <span style={{ padding: "3px 10px", borderRadius: 999, background: "#0f172a", color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>NETWORK SIGNAL</span>
+      <span style={{ padding: "3px 10px", borderRadius: 999, background: "var(--ink, #17181a)", color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>NETWORK SIGNAL</span>
     </div>
   );
 
@@ -525,49 +531,49 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
     return (
       <div style={SECTION}>
         {header}
-        <div style={{ fontSize: 13, color: "#64748b" }}>{data.disclaimer}</div>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>{data.disclaimer}</div>
       </div>
     );
   }
 
   const maxBucket = Math.max(1, ...data.buckets.map((b) => b.count));
-  const pctColor = (data.percentile ?? 0) >= 66 ? "#16a34a" : (data.percentile ?? 0) >= 33 ? "#d97706" : "#dc2626";
+  const pctColor = (data.percentile ?? 0) >= 66 ? "var(--teal, #0a7d72)" : (data.percentile ?? 0) >= 33 ? "var(--amber, #b7791f)" : "var(--red, #b5241b)";
 
   return (
     <div style={SECTION}>
       {header}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: pctColor, lineHeight: 1 }}>{ordinal(data.percentile ?? 0)}</span>
-        <span style={{ fontSize: 14, color: "#334155" }}>percentile</span>
-        <span style={{ fontSize: 13, color: "#64748b" }}>— scores higher than {data.percentile}% of {data.count} {data.basisLabel}</span>
+        <span style={{ fontSize: 14, color: "var(--ink-soft, #45474c)" }}>percentile</span>
+        <span style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>— scores higher than {data.percentile}% of {data.count} {data.basisLabel}</span>
       </div>
 
       {/* Distribution histogram with this deal's bucket highlighted */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 74, margin: "16px 0 6px" }}>
         {data.buckets.map((b) => (
           <div key={b.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <div style={{ fontSize: 10.5, color: b.containsScore ? "#0f172a" : "#94a3b8", fontWeight: b.containsScore ? 800 : 400 }}>{b.count}</div>
+            <div style={{ fontSize: 10.5, color: b.containsScore ? "var(--ink, #17181a)" : "var(--ink-faint, #74767c)", fontWeight: b.containsScore ? 800 : 400 }}>{b.count}</div>
             <div
               title={`${b.count} deals scored ${b.label}`}
               style={{
                 width: "100%",
                 height: `${Math.max(4, (b.count / maxBucket) * 52)}px`,
-                background: b.containsScore ? pctColor : "#e2e8f0",
+                background: b.containsScore ? pctColor : "var(--rule, #d4d3cc)",
                 borderRadius: "4px 4px 0 0",
               }}
             />
-            <div style={{ fontSize: 10, color: b.containsScore ? "#0f172a" : "#94a3b8", fontWeight: b.containsScore ? 700 : 400 }}>{b.label}</div>
+            <div style={{ fontSize: 10, color: b.containsScore ? "var(--ink, #17181a)" : "var(--ink-faint, #74767c)", fontWeight: b.containsScore ? 700 : 400 }}>{b.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "#64748b", marginTop: 10 }}>
-        {data.p25 != null && <span>25th pct: <b style={{ color: "#334155" }}>{Math.round(data.p25)}</b></span>}
-        {data.median != null && <span>median: <b style={{ color: "#334155" }}>{Math.round(data.median)}</b></span>}
-        {data.p75 != null && <span>75th pct: <b style={{ color: "#334155" }}>{Math.round(data.p75)}</b></span>}
-        {data.best != null && <span>best seen: <b style={{ color: "#334155" }}>{Math.round(data.best)}</b></span>}
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
+        {data.p25 != null && <span>25th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
+        {data.median != null && <span>median: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
+        {data.p75 != null && <span>75th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
+        {data.best != null && <span>best seen: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
       </div>
-      <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>{data.disclaimer}</div>
+      <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
     </div>
   );
 }
@@ -578,10 +584,10 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 /** Revenue projection vs sector CAGR — the hockey-stick check. */
 function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["result"]["projections"]>> }) {
   const V: Record<string, { c: string; bg: string; label: string }> = {
-    grounded: { c: "#16a34a", bg: "#f0fdf4", label: "GROUNDED" },
-    aggressive: { c: "#d97706", bg: "#fffbeb", label: "AGGRESSIVE" },
-    "hockey-stick": { c: "#dc2626", bg: "#fef2f2", label: "HOCKEY STICK" },
-    "pre-revenue": { c: "#64748b", bg: "#f8fafc", label: "PRE-REVENUE" },
+    grounded: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "GROUNDED" },
+    aggressive: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "AGGRESSIVE" },
+    "hockey-stick": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "HOCKEY STICK" },
+    "pre-revenue": { c: "var(--ink-faint, #74767c)", bg: "var(--paper-2, #efeee8)", label: "PRE-REVENUE" },
   };
   const fmt = (n: number) => (n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
   const v = V[p.verdict];
@@ -590,11 +596,11 @@ function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["res
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
         <h2 style={{ ...H2, margin: 0 }}>Revenue projection</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: v.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{v.label}</span>
-        <span style={{ fontSize: 12.5, color: "#475569" }}>
+        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>
           {fmt(p.startRevenueUsd)} → {fmt(p.endRevenueUsd)} ({p.multiple}× / {p.years}yr){p.impliedCagrPct !== null ? ` · ${p.impliedCagrPct}% CAGR vs ${p.sectorCagrPct}% sector` : ""}
         </span>
       </div>
-      <p style={{ margin: 0, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>{p.note}</p>
+      <p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55 }}>{p.note}</p>
     </div>
   );
 }
@@ -604,8 +610,8 @@ function TamPanel({ tam }: { tam: NonNullable<AnalysisResult["result"]["tam"]> }
   const fmt = (n: number | null) => (n === null ? "—" : n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
   const stat = (label: string, value: string) => (
     <div style={{ minWidth: 120 }}>
-      <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{value}</div>
+      <div style={{ fontSize: 11, color: "var(--ink-faint, #74767c)", textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink, #17181a)" }}>{value}</div>
     </div>
   );
   return (
@@ -620,11 +626,11 @@ function TamPanel({ tam }: { tam: NonNullable<AnalysisResult["result"]["tam"]> }
       </div>
       <ul style={{ margin: 0, paddingLeft: 20 }}>
         {tam.triangulation.map((t, i) => (
-          <li key={i} style={{ fontSize: 13, color: "#334155", lineHeight: 1.55, marginBottom: 4 }}>{t}</li>
+          <li key={i} style={{ fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55, marginBottom: 4 }}>{t}</li>
         ))}
       </ul>
       {tam.flags.length > 0 && (
-        <div style={{ marginTop: 12, padding: 12, background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10 }}>
+        <div style={{ marginTop: 12, padding: 12, background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 4 }}>
           {tam.flags.map((f, i) => (
             <div key={i} style={{ fontSize: 13, color: "#78350f", lineHeight: 1.5 }}>⚠ {f}</div>
           ))}
@@ -640,28 +646,28 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
     return (
       <div style={SECTION}>
         <h2 style={H2}>Financial stress test</h2>
-        <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>{stress.note}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--ink-faint, #74767c)" }}>{stress.note}</p>
       </div>
     );
   }
   const RES: Record<string, { c: string; bg: string; label: string }> = {
-    robust: { c: "#16a34a", bg: "#f0fdf4", label: "ROBUST" },
-    fragile: { c: "#d97706", bg: "#fffbeb", label: "FRAGILE" },
-    underwater: { c: "#dc2626", bg: "#fef2f2", label: "UNDERWATER" },
+    robust: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "ROBUST" },
+    fragile: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "FRAGILE" },
+    underwater: { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "UNDERWATER" },
   };
-  const HEALTH: Record<string, string> = { healthy: "#16a34a", tight: "#d97706", underwater: "#dc2626" };
+  const HEALTH: Record<string, string> = { healthy: "var(--teal, #0a7d72)", tight: "var(--amber, #b7791f)", underwater: "var(--red, #b5241b)" };
   const r = RES[stress.resilience];
   return (
     <div style={{ ...SECTION, background: r.bg, borderColor: `${r.c}44` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
         <h2 style={{ ...H2, margin: 0 }}>Financial stress test</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: r.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{r.label}</span>
-        <span style={{ fontSize: 12.5, color: "#475569" }}>base LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
+        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>base LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
           <thead>
-            <tr style={{ textAlign: "left", color: "#64748b", fontSize: 11.5, textTransform: "uppercase" }}>
+            <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 11.5, textTransform: "uppercase" }}>
               <th style={{ padding: "6px 8px" }}>Scenario</th>
               <th style={{ padding: "6px 8px" }}>LTV/CAC</th>
               <th style={{ padding: "6px 8px" }}>Payback</th>
@@ -669,16 +675,16 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
           </thead>
           <tbody>
             {stress.scenarios.map((s, i) => (
-              <tr key={i} style={{ borderTop: "1px solid #e2e8f0" }}>
-                <td style={{ padding: "7px 8px" }}><b>{s.label}</b> <span style={{ color: "#94a3b8" }}>· {s.shock}</span></td>
+              <tr key={i} style={{ borderTop: "1px solid var(--rule, #d4d3cc)" }}>
+                <td style={{ padding: "7px 8px" }}><b>{s.label}</b> <span style={{ color: "var(--ink-faint, #74767c)" }}>· {s.shock}</span></td>
                 <td style={{ padding: "7px 8px", fontWeight: 700, color: HEALTH[s.health] }}>{s.ltvCac ?? "—"}</td>
-                <td style={{ padding: "7px 8px", color: "#475569" }}>{s.paybackMonths !== null ? `${s.paybackMonths} mo` : "—"}</td>
+                <td style={{ padding: "7px 8px", color: "var(--ink-soft, #45474c)" }}>{s.paybackMonths !== null ? `${s.paybackMonths} mo` : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p style={{ margin: "12px 0 0", fontSize: 13, color: "#334155", lineHeight: 1.5 }}>{stress.note}</p>
+      <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.5 }}>{stress.note}</p>
     </div>
   );
 }
@@ -686,20 +692,20 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
 /** Shows how much of the score is backed by the plan's own numbers vs sector priors. */
 function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: number }) {
   const pct = Math.round(coverage * 100);
-  const color = pct >= 40 ? "#16a34a" : pct >= 15 ? "#d97706" : "#64748b";
+  const color = pct >= 40 ? "var(--teal, #0a7d72)" : pct >= 15 ? "var(--amber, #b7791f)" : "var(--ink-faint, #74767c)";
   const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
   return (
     <div
       title="Share of the composite score backed by metrics disclosed in the plan (revenue, growth, margin, LTV/CAC…) rather than sector averages. Add financials to raise it."
       style={{
         display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
-        padding: "5px 10px", borderRadius: 999, background: "#f8fafc",
-        border: `1px solid ${color}33`, fontSize: 12, color: "#334155",
+        padding: "5px 10px", borderRadius: 999, background: "var(--paper-2, #efeee8)",
+        border: `1px solid ${color}33`, fontSize: 12, color: "var(--ink-soft, #45474c)",
       }}
     >
       <span style={{ width: 8, height: 8, borderRadius: 999, background: color }} />
       <span><b style={{ color }}>{pct}%</b> signal coverage · {label}</span>
-      <span style={{ color: "#94a3b8" }}>({fields} metric{fields === 1 ? "" : "s"} parsed)</span>
+      <span style={{ color: "var(--ink-faint, #74767c)" }}>({fields} metric{fields === 1 ? "" : "s"} parsed)</span>
     </div>
   );
 }
@@ -711,7 +717,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
           <div>
             <h2 style={{ ...H2, marginBottom: 4 }}>{result.name}</h2>
-            <div style={{ fontSize: 13, color: "#64748b" }}>{result.result.sector.label} · {result.result.stage}</div>
+            <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>{result.result.sector.label} · {result.result.stage}</div>
             {typeof result.result.signalCoverage === "number" && (
               <SignalCoverageChip
                 coverage={result.result.signalCoverage}
@@ -725,7 +731,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
                 rel="noopener noreferrer"
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "8px 16px", background: "#fff", color: "#7c3aed",
+                  padding: "8px 16px", background: "var(--card, #fffefb)", color: "var(--teal-deep, #075b53)",
                   border: "1px solid #ddd6fe", borderRadius: 8, fontSize: 13, fontWeight: 700,
                   textDecoration: "none",
                 }}
@@ -762,8 +768,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
 
       <div style={SECTION}>
         <h2 style={H2}>Investment memo</h2>
-        <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "#1e293b", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
-        <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 10 }}>
+        <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "var(--ink, #17181a)", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
+        <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
           Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
           {result.result.rubricVersion ? ` · scored by rubric v${result.result.rubricVersion} — scores are only comparable within a version` : ""}
         </div>
@@ -803,16 +809,16 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       {result.result.sector.sources && result.result.sector.sources.length > 0 && (
         <div style={SECTION}>
           <h2 style={{ ...H2, marginBottom: 6 }}>Market data sources</h2>
-          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#64748b" }}>
+          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>
             Market-size and growth figures for {result.result.sector.label} are anchored to recent third-party research:
           </p>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#334155" }}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)" }}>
             {result.result.sector.sources.map((s, i) => (
               <li key={i} style={{ marginBottom: 8 }}>
-                <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none" }}>
+                <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>
                   {s.publisher} ({s.year})
                 </a>
-                <span style={{ color: "#475569" }}> — {s.claim}</span>
+                <span style={{ color: "var(--ink-soft, #45474c)" }}> — {s.claim}</span>
               </li>
             ))}
           </ul>

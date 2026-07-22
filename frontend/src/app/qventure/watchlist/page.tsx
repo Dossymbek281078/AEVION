@@ -50,10 +50,10 @@ export default function WatchlistPage() {
       <ProductPageShell>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>Watchlist</h1>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Watchlist</h1>
           </div>
-          <Link href="/qventure" style={{ padding: "9px 18px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
+          <Link href="/qventure" style={{ padding: "9px 18px", background: "var(--teal-deep, #075b53)", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
             + Analyze a deal
           </Link>
         </div>
@@ -62,8 +62,8 @@ export default function WatchlistPage() {
           <div style={{ ...SECTION, textAlign: "center", padding: "48px 20px" }}>
             <div style={{ fontSize: 40, marginBottom: 8 }}>☆</div>
             <h2 style={{ ...H2, marginBottom: 6 }}>No saved deals yet</h2>
-            <p style={{ color: "#64748b", margin: "0 0 16px" }}>Run an analysis and hit <strong>Save to watchlist</strong> to track it here.</p>
-            <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "#7c3aed", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
+            <p style={{ color: "var(--ink-faint, #74767c)", margin: "0 0 16px" }}>Run an analysis and hit <strong>Save to watchlist</strong> to track it here.</p>
+            <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "var(--teal-deep, #075b53)", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
               Analyze your first deal →
             </Link>
           </div>
@@ -75,21 +75,21 @@ export default function WatchlistPage() {
                 { k: "Avg score", v: String(avg) },
                 { k: "Invest-rated", v: String(invest) },
               ].map((s) => (
-                <div key={s.k} style={{ flex: "1 1 140px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "12px 16px" }}>
-                  <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{s.k}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>{s.v}</div>
+                <div key={s.k} style={{ flex: "1 1 140px", background: "var(--paper-2, #efeee8)", border: "1px solid var(--rule, #d4d3cc)", borderRadius: 12, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 11, color: "var(--ink-faint, #74767c)", textTransform: "uppercase", letterSpacing: 0.5 }}>{s.k}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "var(--ink, #17181a)" }}>{s.v}</div>
                 </div>
               ))}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 12.5, color: "#64748b" }}>Sort by</span>
+              <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Sort by</span>
               {(["composite", "savedAt", "name"] as const).map((k) => (
                 <button key={k} type="button" onClick={() => setSort(k)} style={{
                   padding: "5px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-                  border: "1px solid " + (sort === k ? "#7c3aed" : "#e2e8f0"),
+                  border: "1px solid " + (sort === k ? "var(--teal-deep, #075b53)" : "var(--rule, #d4d3cc)"),
                   background: sort === k ? "#f5f3ff" : "#fff",
-                  color: sort === k ? "#7c3aed" : "#64748b",
+                  color: sort === k ? "var(--teal-deep, #075b53)" : "var(--ink-faint, #74767c)",
                 }}>
                   {k === "composite" ? "Score" : k === "savedAt" ? "Recently saved" : "Name"}
                 </button>
@@ -100,7 +100,7 @@ export default function WatchlistPage() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, minWidth: 620 }}>
                   <thead>
-                    <tr style={{ background: "#f8fafc", textAlign: "left", color: "#64748b", fontSize: 12 }}>
+                    <tr style={{ background: "var(--paper-2, #efeee8)", textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12 }}>
                       <th style={{ padding: "10px 14px" }}>Company</th>
                       <th style={{ padding: "10px 14px" }}>Sector</th>
                       <th style={{ padding: "10px 14px" }}>Stage</th>
@@ -113,21 +113,21 @@ export default function WatchlistPage() {
                   <tbody>
                     {sorted.map((it) => (
                       <tr key={it.id} style={{ borderTop: "1px solid #f1f5f9" }}>
-                        <td style={{ padding: "10px 14px", fontWeight: 700, color: "#0f172a" }}>
-                          <Link href={`/qventure/a/${it.id}`} style={{ color: "#0f172a", textDecoration: "none" }}>{it.name}</Link>
+                        <td style={{ padding: "10px 14px", fontWeight: 700, color: "var(--ink, #17181a)" }}>
+                          <Link href={`/qventure/a/${it.id}`} style={{ color: "var(--ink, #17181a)", textDecoration: "none" }}>{it.name}</Link>
                         </td>
-                        <td style={{ padding: "10px 14px", color: "#334155" }}>{it.sector}</td>
-                        <td style={{ padding: "10px 14px", color: "#334155" }}>{it.stage}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 800, color: "#0f172a" }}>{it.composite}</td>
+                        <td style={{ padding: "10px 14px", color: "var(--ink-soft, #45474c)" }}>{it.sector}</td>
+                        <td style={{ padding: "10px 14px", color: "var(--ink-soft, #45474c)" }}>{it.stage}</td>
+                        <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 800, color: "var(--ink, #17181a)" }}>{it.composite}</td>
                         <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                          <span style={{ padding: "3px 10px", borderRadius: 999, background: VERDICT_COLOR[it.verdict as Verdict] ?? "#64748b", color: "#fff", fontWeight: 800, fontSize: 11 }}>
+                          <span style={{ padding: "3px 10px", borderRadius: 999, background: VERDICT_COLOR[it.verdict as Verdict] ?? "var(--ink-faint, #74767c)", color: "#fff", fontWeight: 800, fontSize: 11 }}>
                             {VERDICT_LABEL[it.verdict as Verdict] ?? it.verdict.toUpperCase()}
                           </span>
                         </td>
-                        <td style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 12.5 }}>{it.savedAt.slice(0, 10)}</td>
+                        <td style={{ padding: "10px 14px", color: "var(--ink-faint, #74767c)", fontSize: 12.5 }}>{it.savedAt.slice(0, 10)}</td>
                         <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
-                          <Link href={`/qventure/a/${it.id}`} style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none", marginRight: 12, fontSize: 12.5 }}>Open →</Link>
-                          <button type="button" onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "#94a3b8", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>Remove</button>
+                          <Link href={`/qventure/a/${it.id}`} style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none", marginRight: 12, fontSize: 12.5 }}>Open →</Link>
+                          <button type="button" onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "var(--ink-faint, #74767c)", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>Remove</button>
                         </td>
                       </tr>
                     ))}
@@ -135,7 +135,7 @@ export default function WatchlistPage() {
                 </table>
               </div>
             </div>
-            <p style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 12 }}>
+            <p style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 12 }}>
               {synced
                 ? "Your watchlist is saved to your account and synced across devices. Open links share the public report for each deal."
                 : "Your watchlist is stored privately in this browser. Sign in to sync it across devices. Open links share the public report for each deal."}

@@ -58,6 +58,7 @@ export default function QSkywayClient() {
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
+  const cityIdRef = useRef<string>("astana");
   const taxisRef = useRef<Taxi[]>([]);
   const heroRef = useRef<Taxi | null>(null);
   const rafRef = useRef<number>(0);
@@ -158,7 +159,8 @@ export default function QSkywayClient() {
     return { path, alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero, slow: 0 };
   }, [astar, edgeAlt]);
 
-  const newHero = useCallback(() => {
+  const heroBusyRef = useRef(false);
+  const localHero = useCallback(() => {
     const t = makeTaxi(true);
     if (!t) return;
     heroRef.current = t;
@@ -168,8 +170,35 @@ export default function QSkywayClient() {
     setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1) }));
   }, [makeTaxi]);
 
+  // ── hero route: real backend A* (obeys no-fly + wind ETA), falls back to
+  // local astar() above if the network call fails ─────────────────────────────
+  const newHero = useCallback(async () => {
+    const city = cityRef.current;
+    if (!city || heroBusyRef.current) return;
+    heroBusyRef.current = true;
+    try {
+      const n = city.vertiports.length;
+      if (n < 2) throw new Error("недостаточно вертипортов");
+      const from = Math.floor(Math.random() * n);
+      let to = from; while (to === from) to = Math.floor(Math.random() * n);
+      const res = await fetch(apiUrl("/api/qskyway/route"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, city: cityIdRef.current }),
+      });
+      if (!res.ok) throw new Error("route " + res.status);
+      const r = await res.json();
+      heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
+      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind }));
+    } catch {
+      localHero();
+    } finally {
+      heroBusyRef.current = false;
+    }
+  }, [localHero]);
+
   // ── city loading (switchable) ─────────────────────────────────────────────────
   const loadCity = useCallback(async (id: string) => {
+    cityIdRef.current = id;
     setLoaded(false); setErr(null);
     try {
       const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
@@ -239,7 +268,11 @@ export default function QSkywayClient() {
   }, []);
 
   function advance(t: Taxi, dt: number) {
-    if (t.seg >= t.path.length - 1) { const n = makeTaxi(t.hero); if (n) { Object.assign(t, n); } return; }
+    if (t.seg >= t.path.length - 1) {
+      if (t.hero) { newHero(); return; }
+      const n = makeTaxi(t.hero); if (n) { Object.assign(t, n); }
+      return;
+    }
     const sp = t.speed * (t.slow > 0 ? 0.35 : 1);
     t.u += sp * dt; if (t.slow > 0) t.slow -= dt;
     while (t.u >= 1 && t.seg < t.path.length - 1) { t.u -= 1; t.seg++; }

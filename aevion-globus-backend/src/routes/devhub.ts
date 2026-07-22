@@ -698,7 +698,9 @@ interface GeneratedCodeResult {
 /** Extract the {"files":[...]} shape a generation call was asked for, with
  * the same "not valid JSON → treat the whole reply as one file" fallback on
  * both the first attempt and any self-correction retry. */
-function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path: string; content: string; language: string }> {
+type ParsedGeneration = { files: Array<{ path: string; content: string; language: string }>; mode: "parsed" | "salvaged" | "fallback" };
+
+function parseGeneratedFiles(reply: string, targetFiles: string[]): ParsedGeneration {
   // Models wrap JSON in prose and fences in every combination — try the
   // likeliest extractions in order before giving up. The raw-text fallback
   // (whole reply into output.ts) is what a founder saw as a broken first
@@ -717,11 +719,14 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path
     try {
       const parsed = JSON.parse(candidate);
       if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-        return parsed.files.map((f: any) => ({
-          path: String(f.path || "output.ts"),
-          content: String(f.content || ""),
-          language: String(f.language || detectLanguage(f.path || "")),
-        }));
+        return {
+          mode: "parsed",
+          files: parsed.files.map((f: any) => ({
+            path: String(f.path || "output.ts"),
+            content: String(f.content || ""),
+            language: String(f.language || detectLanguage(f.path || "")),
+          })),
+        };
       }
     } catch { /* try the next extraction */ }
   }
@@ -729,9 +734,16 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): Array<{ path
   // 8.8KB reply ending inside a CSS value). Individual complete file objects
   // are still recoverable; parse them one by one and drop the cut-off tail.
   const salvaged = salvageCompleteFileObjects(raw);
-  if (salvaged.length > 0) return salvaged;
+  if (salvaged.length > 0) return { files: salvaged, mode: "salvaged" };
+  // Raw-dump fallback = a broken first impression for the user. Make every
+  // occurrence visible in monitoring instead of waiting for someone to open
+  // the file (that manual read is exactly how today's truncation bug was
+  // found — turn the accident into telemetry).
+  captureException(new Error("devhub generate: reply unparseable, raw-dump fallback"), {
+    route: "devhub/generate:parse", replyLength: reply.length, replyHead: reply.slice(0, 200),
+  });
   const path = targetFiles[0] || "output.ts";
-  return [{ path, content: reply, language: detectLanguage(path) }];
+  return { files: [{ path, content: reply, language: detectLanguage(path) }], mode: "fallback" };
 }
 
 /** Extract every COMPLETE {"path":…,"content":…} object from a (possibly
@@ -867,9 +879,10 @@ async function generateCodeWithAI(
     { role: "user", content: userMsg },
   ];
 
+  const GEN_MAX_TOKENS = 8192;
   let result;
   try {
-    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images);
+    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("NO_VISION_PROVIDER")) throw e;
     const path = targetFiles[0] || "generated.ts";
@@ -879,7 +892,32 @@ async function generateCodeWithAI(
     };
   }
 
-  let files = parseGeneratedFiles(result.reply, targetFiles);
+  let parsed = parseGeneratedFiles(result.reply, targetFiles);
+  // Salvage means the reply was cut off and its tail file was lost — ask the
+  // model to CONTINUE with just the missing files (one attempt; completed
+  // files are named so it doesn't regenerate them).
+  if (parsed.mode === "salvaged") {
+    try {
+      const done = parsed.files.map((f) => f.path).join(", ");
+      const contMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        ...messages,
+        { role: "assistant", content: result.reply },
+        {
+          role: "user",
+          content:
+            `Your reply was cut off before it finished. These files arrived complete: ${done}. ` +
+            `Return ONLY a JSON object {"files":[...]} with the REMAINING files (do not repeat the completed ones). No explanation.`,
+        },
+      ];
+      const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      const contParsed = parseGeneratedFiles(cont.reply, []);
+      if (contParsed.mode !== "fallback") {
+        const have = new Set(parsed.files.map((f) => f.path));
+        parsed = { mode: "parsed", files: [...parsed.files, ...contParsed.files.filter((f) => !have.has(f.path))] };
+      }
+    } catch { /* keep the salvaged prefix — better than losing everything */ }
+  }
+  let files = parsed.files;
   let syntaxProblems = await validateGeneratedFiles(files);
 
   // Self-correction: a generate-then-check-then-fix loop is a well-established
@@ -897,11 +935,11 @@ async function generateCodeWithAI(
         `\n\nReturn the corrected, complete files in the same JSON format. No explanation, just JSON.`,
     });
     try {
-      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images);
+      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
-    files = parseGeneratedFiles(result.reply, targetFiles);
+    files = parseGeneratedFiles(result.reply, targetFiles).files;
     syntaxProblems = await validateGeneratedFiles(files);
     selfCorrected += 1;
   }

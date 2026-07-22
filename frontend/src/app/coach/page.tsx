@@ -19,6 +19,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 
@@ -87,7 +88,6 @@ export default function CoachPage() {
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0); // forces re-render for live timer
 
   // Session form state
   const [topic, setTopic] = useState("");
@@ -155,9 +155,6 @@ export default function CoachPage() {
   useEffect(() => {
     if (!authToken) return;
     void refreshAll();
-    // Tick the live timer once a second while an active session exists.
-    const t = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
   }, [authToken, refreshAll]);
 
   async function startSession() {
@@ -284,9 +281,6 @@ export default function CoachPage() {
   const completedCount = goals.filter((g) => g.completed).length;
   const totalSessions = sessions.length;
   const totalSecCoached = sessions.reduce((sum, s) => sum + (s.durationSec || 0), 0);
-  const liveElapsed = activeSession ? formatElapsed(activeSession.startedAt) : null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = tick; // touch tick so React knows to re-render every second
 
   // ── Sign-in gate ─────────────────────────────────────────────────────────
   // We delay the gate until we've actually checked localStorage to avoid a
@@ -371,7 +365,7 @@ export default function CoachPage() {
           <StatCard
             label="Status"
             value={activeSession ? "Live" : "Idle"}
-            hint={activeSession ? liveElapsed ?? undefined : undefined}
+            hint={activeSession ? <LiveElapsed startedAt={activeSession.startedAt} /> : undefined}
             accent={activeSession ? "live" : undefined}
           />
         </section>
@@ -390,7 +384,7 @@ export default function CoachPage() {
                   in progress
                 </span>
                 <div className="font-mono text-2xl tabular-nums text-cyan-300">
-                  {liveElapsed}
+                  <LiveElapsed startedAt={activeSession.startedAt} />
                 </div>
               </div>
               <div className="mt-4 grid gap-2 text-sm">
@@ -630,6 +624,20 @@ export default function CoachPage() {
 }
 
 // ─── Subcomponents ──────────────────────────────────────────────────────────
+
+// Live elapsed-time display for the active session. Owns its own 1s ticker
+// so the re-render caused by the tick stays scoped to this tiny component
+// instead of the whole 680-line page (same setState-per-tick bug class fixed
+// in CyberChess PRs #721/#740/#746, QTrade #765, and aev/page.tsx).
+function LiveElapsed({ startedAt }: { startedAt: string }) {
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <>{formatElapsed(startedAt)}</>;
+}
+
 function StatCard({
   label,
   value,
@@ -638,7 +646,7 @@ function StatCard({
 }: {
   label: string;
   value: string | number;
-  hint?: string;
+  hint?: ReactNode;
   accent?: "live";
 }) {
   return (

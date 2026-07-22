@@ -270,9 +270,9 @@ export const NL_SEARCH_PARSER_SYSTEM_PROMPT = `Ты — парсер поиск�
     "region": "string | null — один из слагов: ${KZ_REGION_SLUGS}, или null",
     "workMode": ${WORK_MODES_UNION} | null,
     "educationLevel": ${EDUCATION_LEVELS_UNION} | null,
-    "role": ${ROLE_UNION} | null (только для mode=talent; "работник/рабочий"→WORKER, "подрядчик/бригада"→CONTRACTOR, "заказчик"→CLIENT),
-    "minExp": "number | null (только для mode=talent — минимальный опыт в годах)",
-    "maxExperience": "number | null (только для mode=vacancy — 'у меня N лет опыта, что мне подходит')",
+    "role": ${ROLE_UNION} | null (только для mode=talent; заполняй ТОЛЬКО если запрос явно называет тип: "работник/рабочий"→WORKER, "подрядчик/бригада"→CONTRACTOR, "заказчик"→CLIENT — специальность сама по себе, например "инженер-сметчик" или "прораб", НЕ определяет role, оставляй null),
+    "minExp": "number | null (ТОЛЬКО в mode=talent — минимальный опыт в годах; в mode=vacancy это поле ЗАПРЕЩЕНО, используй maxExperience)",
+    "maxExperience": "number | null (ТОЛЬКО в mode=vacancy — 'у меня N лет опыта' / 'без опыта' → 0, показывает вакансии, где требование ≤ N; в mode=talent это поле ЗАПРЕЩЕНО, используй minExp)",
     "minSalary": "number | null (только для mode=vacancy)",
     "maxSalary": "number | null (только для mode=vacancy)"
   },
@@ -282,17 +282,19 @@ export const NL_SEARCH_PARSER_SYSTEM_PROMPT = `Ты — парсер поиск�
 Правила:
 - "вахта"/"вахтой"/"fly-in-fly-out"/"FIFO" → workMode = FLY_IN_FLY_OUT. "удалённо"/"remote" → REMOTE. "на объекте"/"on-site" → ON_SITE.
 - Не заполняй поле, если запрос его явно не подразумевает — оставляй null.
-- Никогда не выдумывай регион по городу, которого нет в запросе.`;
+- Никогда не выдумывай регион по городу, которого нет в запросе.
+- Строго соблюдай mode-принадлежность minExp/maxExperience — перепутать их хуже, чем оставить null, потому что фронтенд читает только поле своего режима и молча теряет значение из другого.`;
 
 export const NL_SEARCH_CHECKER_SYSTEM_PROMPT = `Ты — контролёр качества для AI-парсера поисковых запросов AEVION QBuild.
 
-Тебе присылают: исходный запрос пользователя и JSON фильтров, который извлёк парсер. Проверь:
-- Каждое поле фильтра реально следует из текста запроса (не додумано).
+Тебе присылают: исходный запрос пользователя (включая mode=talent|vacancy) и JSON фильтров, который извлёк парсер. Проверь:
+- Каждое поле фильтра реально следует из текста запроса (не додумано). Особенно строго проверяй "role" — специальность/профессия сама по себе ("инженер-сметчик", "прораб", "разнорабочий") НЕ основание для role; обнуляй role, если в запросе нет явного указания "работник"/"подрядчик"/"заказчик" или аналогичного.
 - region — один из известных слагов (${KZ_REGION_SLUGS}) и соответствует упомянутому городу/региону.
 - workMode — один из: ${WORK_MODES.join(", ")}.
 - educationLevel — один из: ${EDUCATION_LEVELS.join(", ")}.
 - role — один из: CLIENT, CONTRACTOR, WORKER, ADMIN.
 - Числовые поля (minExp, maxExperience, minSalary, maxSalary) — реалистичные (0-80 лет, зарплата > 0).
+- **Mode-принадлежность minExp/maxExperience**: mode=talent разрешает только "minExp" (обнуляй "maxExperience" если парсер его всё же выставил, перенеся значение в "minExp"); mode=vacancy разрешает только "maxExperience" (обнуляй "minExp" если он есть, перенеся значение в "maxExperience"). Это самая частая ошибка парсера — специально проверяй её в каждом запросе.
 
 Верни СТРОГО JSON, без markdown:
 {

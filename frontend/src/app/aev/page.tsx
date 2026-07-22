@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -58,6 +58,26 @@ const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: s
     desc: "Никакого «майнинга» — только staking. Застейканный AEV получает дивиденд каждые 5 минут (≈ 7.2% APY). Долгосрочные держатели формируют base-load.",
   },
 };
+
+// Live-ticking pending-dividend display, isolated into its own tiny component.
+//
+// Same bug class already fixed in CyberChess (PRs #721/#740/#746) and currently being
+// fixed in QTrade (#765): a setState called every tick from inside a setInterval that
+// lives directly in a large page-level component forces the WHOLE tree (here: 3222 lines)
+// to re-render on every tick. The old version did `const [, setTick] = useState(0)` +
+// `setInterval(() => setTick(t => t+1), 1000)` right in AEVPage's body — unconditionally,
+// for as long as the /aev page stayed mounted (not just during some transient action) —
+// purely to force a recompute of `pendingDividend(wallet)` for display. Moving the ticking
+// state into this small child component (one instance per place `due` is shown) means only
+// this subtree re-renders each second; AEVPage itself no longer re-renders on this timer.
+function LiveDue({ wallet, children }: { wallet: AEVWallet; children: (due: number) => ReactNode }) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => bump((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{children(pendingDividend(wallet))}</>;
+}
 
 export default function AEVPage() {
   // Lazy-init avoids SSR hydration mismatch.
@@ -227,10 +247,6 @@ export default function AEVPage() {
     return () => clearInterval(id);
   }, [insightCount]);
 
-  // Live tick: refresh pending dividend display every second
-  const [, setTick] = useState(0);
-  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id) }, []);
-
   // Auto-claim on epoch boundaries (every 5 minutes when stewardship enabled and stake > 0)
   const lastAutoClaimRef = useRef<number>(0);
   useEffect(() => {
@@ -254,25 +270,35 @@ export default function AEVPage() {
 
   // Mode B simulated job state
   const [computeRunning, setComputeRunning] = useState(false);
-  const [computeProgress, setComputeProgress] = useState(0);
+  // Progress bar fill is painted imperatively via ref (see paintComputeProgress below)
+  // instead of a per-tick setState — same fix as the CyberChess AI think-time ticker
+  // (PR#746): the old `setComputeProgress(...)` every 100ms forced a re-render of this
+  // whole 3222-line page for the ~2s duration of every single compute job.
+  const computeProgressRef = useRef(0);
+  const computeBarRef = useRef<HTMLDivElement | null>(null);
   const [computeAgent, setComputeAgent] = useState("aevion-classify-v1");
   const [computeSize, setComputeSize] = useState(20); // units
+  const paintComputeProgress = useCallback((elapsed: number) => {
+    computeProgressRef.current = elapsed;
+    const el = computeBarRef.current;
+    if (el) el.style.width = `${(elapsed / Math.max(1, computeSize)) * 100}%`;
+  }, [computeSize]);
   const startCompute = useCallback(() => {
     if (!wallet || !wallet.modes.compute || computeRunning) return;
     setComputeRunning(true);
-    setComputeProgress(0);
+    paintComputeProgress(0);
     const total = computeSize;
     let elapsed = 0;
     const id = setInterval(() => {
       elapsed += 1;
-      setComputeProgress(Math.min(total, elapsed));
+      paintComputeProgress(Math.min(total, elapsed));
       if (elapsed >= total) {
         clearInterval(id);
         setWallet((w) => (w ? recordCompute(w, computeAgent, total) : w));
         setComputeRunning(false);
       }
     }, 100); // 100ms per unit → 20 units = 2s of "compute"
-  }, [wallet, computeRunning, computeAgent, computeSize]);
+  }, [wallet, computeRunning, computeAgent, computeSize, paintComputeProgress]);
 
   // Mode C: stake input
   const [stakeAmt, setStakeAmt] = useState("");
@@ -305,7 +331,6 @@ export default function AEVPage() {
     { key: "qcore_run_complete", module: "qcoreai" },
   ];
 
-  const due = wallet ? pendingDividend(wallet) : 0;
   const staked = wallet ? totalStaked(wallet) : 0;
   const supplyPct = wallet ? (wallet.globalSupplyMined / RATE_CARD.totalSupplyCap) * 100 : 0;
   const ageDays = wallet ? Math.max(1, Math.floor((Date.now() - wallet.startTs) / 86400000)) : 1;
@@ -429,7 +454,7 @@ export default function AEVPage() {
               <span>Намайнено всего: <strong style={{ color: "#fff" }}>{wallet.lifetimeMined.toFixed(4)}</strong></span>
               <span>Потрачено: <strong style={{ color: "#fff" }}>{wallet.lifetimeSpent.toFixed(4)}</strong></span>
               <span>Стейк: <strong style={{ color: "#fbbf24" }}>{staked.toFixed(4)}</strong></span>
-              <span>Дивиденд накоплен: <strong style={{ color: "#86efac" }}>+{due.toFixed(6)}</strong></span>
+              <span>Дивиденд накоплен: <LiveDue wallet={wallet}>{(due) => <strong style={{ color: "#86efac" }}>+{due.toFixed(6)}</strong>}</LiveDue></span>
               <span>Возраст кошелька: <strong style={{ color: "#fff" }}>{ageDays}d</strong></span>
               <span>Скорость: <strong style={{ color: "#fff" }}>{dailyRate.toFixed(3)} AEV/день</strong></span>
             </div>
@@ -705,9 +730,9 @@ export default function AEVPage() {
             </div>
             {computeRunning && (
               <div style={{ height: 8, borderRadius: 4, background: "#e2e8f0", overflow: "hidden" as const }}>
-                <div style={{
+                <div ref={computeBarRef} style={{
                   height: "100%",
-                  width: `${(computeProgress / Math.max(1, computeSize)) * 100}%`,
+                  width: `${(computeProgressRef.current / Math.max(1, computeSize)) * 100}%`,
                   background: "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)",
                   transition: "width 100ms linear",
                 }} />
@@ -733,7 +758,7 @@ export default function AEVPage() {
               </div>
               <div style={{ padding: 10, borderRadius: 8, background: "#ecfdf5", border: "1px solid #86efac" }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#14532d", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Pending dividend</div>
-                <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d" }}>+{due.toFixed(6)}</div>
+                <LiveDue wallet={wallet}>{(due) => <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d" }}>+{due.toFixed(6)}</div>}</LiveDue>
               </div>
               <div style={{ padding: 10, borderRadius: 8, background: "#f1f5f9", border: "1px solid #cbd5e1" }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Всего получено</div>
@@ -741,15 +766,17 @@ export default function AEVPage() {
               </div>
               <div style={{ padding: 10, borderRadius: 8, background: "#eff6ff", border: "1px solid #93c5fd", display: "flex", flexDirection: "column", justifyContent: "space-between" as const }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#1e40af", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Действия</div>
-                <button onClick={() => setWallet((w) => (w ? claimDividend(w) : w))} disabled={due <= 0}
-                  style={{
-                    padding: "6px 12px", borderRadius: 5, border: "none",
-                    background: due > 0 ? "#16a34a" : "#cbd5e1",
-                    color: "#fff", fontSize: 12, fontWeight: 800,
-                    cursor: due > 0 ? "pointer" : "default",
-                  }}>
-                  Claim {due > 0 ? `+${due.toFixed(6)}` : "—"}
-                </button>
+                <LiveDue wallet={wallet}>{(due) => (
+                  <button onClick={() => setWallet((w) => (w ? claimDividend(w) : w))} disabled={due <= 0}
+                    style={{
+                      padding: "6px 12px", borderRadius: 5, border: "none",
+                      background: due > 0 ? "#16a34a" : "#cbd5e1",
+                      color: "#fff", fontSize: 12, fontWeight: 800,
+                      cursor: due > 0 ? "pointer" : "default",
+                    }}>
+                    Claim {due > 0 ? `+${due.toFixed(6)}` : "—"}
+                  </button>
+                )}</LiveDue>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>

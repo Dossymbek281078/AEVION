@@ -123,7 +123,7 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 
 Тридцать минут на этой неделе?
 
-— Досымбек Жакия
+— Досымбек Жақия
 Основатель и Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/acquire
 ```
@@ -335,7 +335,7 @@ Officer на годы. Я зарабатываю только когда зар�
 
 Тридцать минут на этой неделе?
 
-— Досымбек Жакия
+— Досымбек Жақия
 Основатель и Chief Idea Officer, AEVION
 yahiin1978@gmail.com · https://aevion.app/partner
 ```

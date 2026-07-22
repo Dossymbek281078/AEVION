@@ -22985,6 +22985,38 @@ for (const [lang, keys] of Object.entries(_ext)) {
   if (tbl[lang]) Object.assign(tbl[lang], keys);
 }
 
+// ── QCoreAI chat suggestion deck (master-plan: translation parity) ────────
+const QCORE_CHAT_EXTRA_EN = {
+  "qcoreai.chat.welcome": "Welcome to QCoreAI",
+  "qcoreai.chat.intro": "Ask me anything about AEVION — IP protection, signatures, royalties, or how to get started.",
+  "qcoreai.suggest.1": "What is AEVION?",
+  "qcoreai.suggest.2": "How does QRight protect my IP?",
+  "qcoreai.suggest.3": "Explain Trust Graph",
+  "qcoreai.suggest.4": "How do automatic royalties work?",
+  "qcoreai.suggest.5": "What is the AEVION partnership offer?",
+};
+const QCORE_CHAT_EXTRA_RU = {
+  "qcoreai.chat.welcome": "Добро пожаловать в QCoreAI",
+  "qcoreai.chat.intro": "Спросите что угодно об AEVION — защита ИС, подписи, роялти или с чего начать.",
+  "qcoreai.suggest.1": "Что такое AEVION?",
+  "qcoreai.suggest.2": "Как QRight защищает мою интеллектуальную собственность?",
+  "qcoreai.suggest.3": "Объясни Trust Graph",
+  "qcoreai.suggest.4": "Как работают автоматические роялти?",
+  "qcoreai.suggest.5": "В чём партнёрское предложение AEVION?",
+};
+const QCORE_CHAT_EXTRA_KK = {
+  "qcoreai.chat.welcome": "QCoreAI-ға қош келдіңіз",
+  "qcoreai.chat.intro": "AEVION туралы кез келген сұрақ қойыңыз — ЗМ қорғау, қолтаңбалар, роялти немесе неден бастау керек.",
+  "qcoreai.suggest.1": "AEVION деген не?",
+  "qcoreai.suggest.2": "QRight менің зияткерлік меншігімді қалай қорғайды?",
+  "qcoreai.suggest.3": "Trust Graph түсіндір",
+  "qcoreai.suggest.4": "Автоматты роялти қалай жұмыс істейді?",
+  "qcoreai.suggest.5": "AEVION серіктестік ұсынысы қандай?",
+};
+Object.assign(translations.en, QCORE_CHAT_EXTRA_EN);
+Object.assign(translations.ru, QCORE_CHAT_EXTRA_RU);
+Object.assign(translations.kk, QCORE_CHAT_EXTRA_KK);
+
 export function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   let r = s;

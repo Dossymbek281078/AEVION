@@ -121,7 +121,8 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 831)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 831 --squash --delete-branch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 831 --json state,mergedAt)",
-      "Bash(railway --version)"
+      "Bash(railway --version)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'docs\\(pricing\\): add 60-90 day review checkpoint for penetration pricing' --body ' *)"
     ]
   }
 }

@@ -137,6 +137,34 @@ function uid() { return crypto.randomUUID(); }
 
 /* ── Движки: собственный слой прямых интеграций (services/qreal/engines) ── */
 
+/* ── Защита баланса: рендер стоит реальных денег ($0.13-0.30/с) ──
+ * Пер-IP суточный лимит + общий суточный колпак на процесс. Без этого
+ * прод-эндпоинт после мержа позволил бы анонимам жечь fal-баланс. */
+const RENDER_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_RENDER_IP_DAILY_LIMIT) || 3);
+const RENDER_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_RENDER_GLOBAL_DAILY_CAP) || 20);
+const renderCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
+
+function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> }): { ok: true } | { ok: false; error: string } {
+  const today = nowIso().slice(0, 10);
+  if (renderCounters.day !== today) {
+    renderCounters.day = today;
+    renderCounters.byIp.clear();
+    renderCounters.total = 0;
+  }
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = fwd || req.ip || "unknown";
+  if (renderCounters.total >= RENDER_GLOBAL_DAILY_CAP) {
+    return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+  }
+  const used = renderCounters.byIp.get(ip) || 0;
+  if (used >= RENDER_IP_DAILY_LIMIT) {
+    return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+  }
+  renderCounters.byIp.set(ip, used + 1);
+  renderCounters.total += 1;
+  return { ok: true };
+}
+
 /* ── QC: 14 критериев реализма (ядро know-how модуля) ── */
 
 const REALISM_CRITERIA: Array<{ id: string; label: string; weight: number }> = [
@@ -467,6 +495,12 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "storyboard failed" }); }
 });
 
+function isCachedShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): boolean {
+  if (!engine) return false;
+  const prompt = s.prompt || buildRenderPrompt(p, s);
+  return memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec));
+}
+
 /** Один кадр: кэш → мгновенно; иначе submit в движок с одним ретраем. */
 async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): Promise<string> {
   s.prompt = buildRenderPrompt(p, s);
@@ -527,6 +561,10 @@ qrealRouter.post("/projects/:id/shots/:sid/render", async (req, res) => {
     if (!p || !s) return res.status(404).json({ error: "not found" });
     const preferred = typeof req.body?.engine === "string" ? req.body.engine : undefined;
     const engine = pickVideoEngine(preferred);
+    if (engine && !isCachedShot(p, s, engine)) {
+      const quota = takeRenderQuota(req as any);
+      if (!quota.ok) return res.status(429).json({ error: "render_quota_exceeded", message: quota.error });
+    }
     const note = await submitShot(p, s, engine);
     p.updatedAt = nowIso();
     if (s.status === "failed") return res.status(502).json({ shot: s, note });
@@ -544,6 +582,10 @@ qrealRouter.post("/projects/:id/render-all", async (req, res) => {
     const notes: Array<{ shotId: string; note: string }> = [];
     for (const s of p.shots) {
       if (s.status === "rendered" || s.status === "queued") continue;
+      if (engine && !isCachedShot(p, s, engine)) {
+        const quota = takeRenderQuota(req as any);
+        if (!quota.ok) { notes.push({ shotId: s.id, note: quota.error }); continue; }
+      }
       notes.push({ shotId: s.id, note: await submitShot(p, s, engine) });
     }
     p.status = engine ? "rendering" : p.status;

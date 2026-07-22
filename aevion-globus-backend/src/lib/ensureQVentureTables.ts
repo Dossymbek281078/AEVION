@@ -47,6 +47,13 @@ export async function ensureQVentureTables(pool: PgPoolInstance): Promise<void> 
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // The analysed plan itself, kept so a past verdict can be re-derived when the
+    // rubric changes. Without it a stored analysis is unreproducible: the record
+    // holds only the derived scores, so an engine fix cannot be applied backwards
+    // and a founder cannot be shown why the number moved. Never served over the
+    // API — see redactInput() — because these are confidential business plans and
+    // analyses are public by default.
+    await pool.query(`ALTER TABLE qventure_analyses ADD COLUMN IF NOT EXISTS analysis_input JSONB;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_created ON qventure_analyses(created_at DESC);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_verdict ON qventure_analyses(verdict);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_sector ON qventure_analyses(sector);`);

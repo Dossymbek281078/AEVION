@@ -91,6 +91,36 @@ export function getModelPrice(provider: string, model: string): UsdPer1M | null 
   return m;
 }
 
+/**
+ * Frontier/premium models — priced high enough ($5+/1M output tokens at the
+ * time of writing) that a tier's overall token allowance shouldn't be
+ * spendable entirely on them. Used to size a smaller sub-cap within each
+ * tier's llmTokensPerMonth (see TierLimits.premiumTokensPerMonth in
+ * data/pricing.ts) — mirrors how Claude/ChatGPT plans give generous access
+ * to a cheaper model but a much smaller quota for their top model.
+ *
+ * Threshold, not a hand-picked list, so a newly added expensive model is
+ * automatically covered without a second place to remember to update.
+ */
+const PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD = 5.0;
+
+export function isPremiumModel(provider: string, model: string): boolean {
+  const price = getModelPrice(provider, model);
+  if (!price) return false; // unpriced (incl. free-fleet/local) — never premium
+  return price.output >= PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD;
+}
+
+/** Flat list of every premium model name across all providers — for SQL `= ANY(...)` filters. */
+export function getPremiumModelNames(): string[] {
+  const out: string[] = [];
+  for (const models of Object.values(TABLE)) {
+    for (const [model, price] of Object.entries(models)) {
+      if (price.output >= PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD) out.push(model);
+    }
+  }
+  return out;
+}
+
 /** Cost in USD for a single call. Returns 0 when tokens are unknown or model is unpriced. */
 export function costUsd(
   provider: string,

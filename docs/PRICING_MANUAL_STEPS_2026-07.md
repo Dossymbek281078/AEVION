@@ -1,0 +1,47 @@
+# Ручные шаги после репрайсинга — обновить платёжных провайдеров
+
+> Код (`data/pricing.ts`) уже посчитан на новые цифры (PR, влитый 2026-07-22, см.
+> `docs/PRICING_STRATEGY_2026-07.md`). Этот файл — то, что НЕЛЬЗЯ починить кодом:
+> у LemonSqueezy/Gumroad цена живёт на самом variant/product в их дашборде, и
+> `checkout.ts` её не переопределяет. Без этих шагов сайт покажет новую цену,
+> а спишут старую.
+
+## LemonSqueezy — 3 существующих variant'а нужно перепривязать на новую цену
+
+Дашборд: `lemonsqueezy.com/dashboard` → Store → Products.
+
+| Тариф | env-переменная (Railway) | Было | Стало (monthly) | Стало (annual) |
+|---|---|---|---|---|
+| Lite   | `LEMON_SQUEEZY_VARIANT_LITE_MONTHLY` / `_ANNUAL`   | $19 / $190 | **$24** | **$240** |
+| Medium | `LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY` / `_ANNUAL` | $29 / $290 | **$39** | **$390** |
+| Full   | `LEMON_SQUEEZY_VARIANT_FULL_MONTHLY` / `_ANNUAL`   | $49 / $490 | **$89** | **$890** |
+
+Для каждой из 6 (3 тарифа × monthly/annual):
+1. Открыть variant по текущему `LEMON_SQUEEZY_VARIANT_*` (Railway → Variables → скопировать id → `.../variants/<id>` в LS).
+2. Либо поменять цену на самом variant'е (проще, id не меняется — Railway трогать не нужно), либо создать новый variant с новой ценой и перепривязать env на новый id (чище для истории, но нужно обновить Railway).
+3. **Рекомендация: менять цену на существующем variant'е** — платящие клиенты обычно НЕ перевыставляются автоматически на новую цену (зависит от настройки LS "apply to existing subscribers" — проверить и явно выбрать "только новые подписки", если нужно оставить текущих клиентов на старой цене до их следующего апгрейда).
+
+## Отдельный variant для CyberChess (`app_cyberchess`)
+
+`LEMON_SQUEEZY_VARIANT_CYBERCHESS` — было $19, стало **$9.99**. Тот же процесс.
+
+## QCoreAI addon — та же логика, но variant пока не существует
+
+`qcoreai` addon ($29 → $9.99) не имеет отдельного `LEMON_SQUEEZY_VARIANT_*` — сейчас это просто прибавка к `totalUsd` в `checkout.ts`, реально списывается только через сумму базового tier-variant'а. Если нужно продавать QCoreAI-addon по LemonSqueezy отдельно (не только как надбавку к Lite-чекауту) — потребуется завести отдельный product+variant и добавить `app_qcoreai` в `lemonSqueezyVariants.ts`'s `LemonSqueezyReference` — это уже небольшая доработка кода, не просто дашборд.
+
+## Universe/"pro" — вообще нет LS variant'а
+
+Сейчас `tier_pro_monthly`/`tier_pro_annual` не значатся в `LemonSqueezyReference` → чекаут на Universe падает в Gumroad/stub, не в LS. Если хотим Universe на реальном LS-биллинге:
+1. Завести product+variant в LS на $249.99/мес (+ $2499.90/год).
+2. Добавить `tier_pro_monthly`/`tier_pro_annual` в `LemonSqueezyReference` (`lemonSqueezyVariants.ts`) и соответствующие env-имена.
+3. Прописать env `LEMON_SQUEEZY_VARIANT_PRO_MONTHLY`/`_ANNUAL` на Railway.
+
+## Gumroad (fallback) — проверить permalink-цены тоже
+
+Если для каких-то из этих tier:period уже настроен `GUMROAD_PERMALINK_TIER_*` (fallback, срабатывает когда LS не настроен) — тот Gumroad-продукт тоже хранит СВОЮ цену независимо, и её тоже нужно поправить на самом Gumroad-продукте.
+
+## Как проверить, что всё сошлось
+
+После правки — прогнать реальный тестовый чекаут (можно тестовой картой в LS test mode) на каждый изменённый tier и сверить итоговую сумму со страницы `/pricing` — если разошлось, значит variant не тот или цена на нём не обновилась.
+
+— написано 2026-07-22

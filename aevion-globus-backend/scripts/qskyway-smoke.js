@@ -116,6 +116,13 @@ async function main() {
   assert(vps.status === 200 && Array.isArray(vps.json?.vertiports) && vps.json.vertiports.length > 0, "vertiport scoring endpoint");
   assert(vps.json.vertiports.every((v) => typeof v.suitability === "number" && typeof v.class === "string"), "each pad has suitability + class");
 
+  // /city embeds the same scoring as vertiportScores (frontend suitability panel reads this,
+  // not the standalone /vertiports endpoint — both must agree)
+  const cityNyc = await jget("/api/qskyway/city?city=nyc");
+  const embedded = cityNyc.json?.vertiportScores ?? [];
+  assert(Array.isArray(embedded) && embedded.length === vps.json.vertiports.length, "/city embeds vertiportScores matching /vertiports count", `${embedded.length} vs ${vps.json.vertiports.length}`);
+  assert(embedded.every((v) => typeof v.suitability === "number" && typeof v.class === "string"), "embedded scores carry suitability + class");
+
   // ── Phase 5: height-data provenance + confidence-adjusted clearance ─────────
   const cs2 = await jget("/api/qskyway/cities");
   assert((cs2.json?.cities ?? []).every((c) => c.dataQuality && typeof c.dataQuality.measuredPct === "number" && typeof c.dataQuality.realPct === "number"), "each city reports height dataQuality");
@@ -144,6 +151,9 @@ async function main() {
 
   // slot market: capacity 4 then 409, non-overlapping ok
   const rid = "smoke-route-1";
+  const before = await jget("/api/qskyway/slots");
+  assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
+  assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
   let okCount = 0, conflict = false;
   for (let i = 0; i < 5; i++) {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });
@@ -154,6 +164,9 @@ async function main() {
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);
   assert(typeof late.json?.slot?.receipt === "string" && late.json.slot.receipt.startsWith("qright:"), "slot issues QRight receipt");
+  const after = await jget("/api/qskyway/slots");
+  assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
+  assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");
 
   console.log(`\n${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step} checks)`);
   process.exit(failed === 0 ? 0 : 1);

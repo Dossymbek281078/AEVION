@@ -38,12 +38,23 @@ export interface AnalysisInput {
   projections?: ProjectionPoint[];
 }
 
+/**
+ * Where a factor's number actually came from.
+ *
+ * Five of the eight factors are sector constants — identical for every company
+ * in that sector — so a reader comparing two deals in the same market is looking
+ * at the same numbers twice. Showing this makes that visible instead of implying
+ * all eight were assessed about this specific company.
+ */
+export type FactorBasis = "company-evidence" | "sector-prior" | "no-evidence";
+
 export interface ScoreFactor {
   key: string;
   label: string;
   weight: number; // 0–1, weights sum to 1
   score: number; // 0–100
   rationale: string;
+  basis: FactorBasis;
 }
 
 export interface EntryStrategy {
@@ -397,24 +408,32 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
 
   const factors: ScoreFactor[] = [
     { key: "market", label: "Market size & growth", weight: 0.14, score: round(marketScore),
+      basis: marketCompany ? "company-evidence" : "sector-prior",
       rationale: marketCompany
         ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
         : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
     { key: "timing", label: "Timing / tailwinds", weight: 0.05, score: round(timing),
+      basis: "sector-prior",
       rationale: `Sector growth ${round(sector.cagr * 100)}% vs. 12% neutral baseline.` },
     { key: "moat", label: "Moat / defensibility", weight: 0.16, score: round(moatScore),
+      basis: moatCompany ? "company-evidence" : "sector-prior",
       rationale: `${moat.replace(/-/g, " ")} is the category's mature moat (ceiling ${moatCeiling}), but ~${round(moatRealized * 100)}% realized at ${stage}${execCompany ? " given disclosed traction" : (rawInput.tractionNotes || "").trim() ? " given disclosed traction" : " with no disclosed traction"}${signals.mentionsPatent && moat === "ip-patents" ? " (patent claim credited)" : ""} — an unproven moat is discounted toward the ${MOAT_FLOOR} "no demonstrated defensibility" floor.` },
     { key: "economics", label: "Unit economics potential", weight: 0.15, score: round(econScore),
+      basis: econCompany ? "company-evidence" : "sector-prior",
       rationale: econCompany
         ? `Company metrics: ${econNotes.join(", ")} (capital intensity ${round(sector.capitalIntensity * 100)}%).`
         : `~${round(sector.grossMargin * 100)}% mature gross margin, capital intensity ${round(sector.capitalIntensity * 100)}% (sector reference).` },
     { key: "execution", label: "Team / execution signal", weight: 0.28, score: round(traction.score),
+      basis: execCompany ? "company-evidence" : ((rawInput.tractionNotes || "").trim() ? "company-evidence" : "no-evidence"),
       rationale: traction.note },
     { key: "science", label: "Scientific / tech feasibility", weight: 0.07, score: round(scienceScore),
+      basis: "sector-prior",
       rationale: sector.scienceFrontier },
     { key: "legal", label: "Regulatory / legal headroom", weight: 0.07, score: round(legalScore),
+      basis: "sector-prior",
       rationale: `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
     { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
+      basis: "sector-prior",
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
 

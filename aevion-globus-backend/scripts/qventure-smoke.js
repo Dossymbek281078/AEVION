@@ -152,6 +152,18 @@ async function run() {
   assert("no description leaks in the serialised record",
     !/"description"\s*:/.test(JSON.stringify(fetched.body?.data ?? {})));
 
+  // Five of eight factors are sector constants. The report must say which, or a
+  // reader assumes all eight were assessed about this specific company.
+  console.log("\n11. Factors declare where their number came from");
+  const BASES = ["company-evidence", "sector-prior", "no-evidence"];
+  assert("every factor declares a basis", d.result.factors.every((f) => BASES.includes(f.basis)),
+    JSON.stringify(d.result.factors.map((f) => f.basis)));
+  assert("sector-only factors are labelled as such",
+    ["timing", "science", "legal", "competition"].every((k) =>
+      d.result.factors.find((f) => f.key === k)?.basis === "sector-prior"));
+  assert("disclosed traction marks execution as company evidence",
+    d.result.factors.find((f) => f.key === "execution")?.basis === "company-evidence");
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

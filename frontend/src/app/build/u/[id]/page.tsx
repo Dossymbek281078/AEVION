@@ -9,6 +9,7 @@ import { ShareProfileButton } from "@/components/build/ShareProfileButton";
 import { ProfileShareQR } from "@/components/build/ProfileShareQR";
 import { ProfileExtras } from "@/components/build/ProfileExtras";
 import { fixDoubledScheme } from "@/lib/urls";
+import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS, type WorkMode, type EducationLevel } from "@/lib/build/geo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,10 @@ type Bundle = {
   userId: string;
   name: string;
   city: string | null;
+  region: string | null;
+  country: string | null;
+  workMode: string | null;
+  educationLevel: string | null;
   description: string | null;
   buildRole: string;
   title: string | null;
@@ -198,8 +203,10 @@ export default async function PublicProfilePage({ params }: Props) {
             </div>
             {data.title && <p className="mt-0.5 text-sm text-emerald-200">{data.title}</p>}
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-              {data.city && <span>📍 {data.city}</span>}
+              {data.city && <span>📍 {data.city}{data.region ? `, ${regionLabel(data.region)}` : ""}</span>}
+              {!data.city && data.region && <span>📍 {regionLabel(data.region)}</span>}
               {data.experienceYears > 0 && <span>⏱ {data.experienceYears}y experience</span>}
+              {data.workMode && <span>{WORK_MODE_LABELS[data.workMode as WorkMode]}</span>}
               {data.availability && <span>🟢 {data.availability}</span>}
               <span>💼 {data.buildRole}</span>
             </div>
@@ -286,6 +293,8 @@ export default async function PublicProfilePage({ params }: Props) {
         {(data.driversLicense ||
           data.shiftPreference ||
           data.availabilityType ||
+          data.workMode ||
+          data.educationLevel ||
           data.readyFromDate ||
           data.preferredLocations.length > 0 ||
           data.toolsOwned.length > 0 ||
@@ -295,6 +304,10 @@ export default async function PublicProfilePage({ params }: Props) {
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               {data.availabilityType && (
                 <KV k="Availability">{data.availabilityType.replace("_", " ")}</KV>
+              )}
+              {data.workMode && <KV k="Work mode">{WORK_MODE_LABELS[data.workMode as WorkMode]}</KV>}
+              {data.educationLevel && (
+                <KV k="Education">{EDUCATION_LEVEL_LABELS[data.educationLevel as EducationLevel]}</KV>
               )}
               {data.shiftPreference && <KV k="Shifts">{data.shiftPreference}</KV>}
               {data.readyFromDate && <KV k="Ready from">{data.readyFromDate}</KV>}

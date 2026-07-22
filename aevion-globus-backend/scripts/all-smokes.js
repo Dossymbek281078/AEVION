@@ -328,18 +328,30 @@ for (const sm of eligible) {
   // work on Windows and avoid backslash escaping inside NODE_OPTIONS.
   const preload = path.join(__dirname, "lib", "fetch-retry.cjs").replace(/\\/g, "/");
   const childNodeOptions = `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + " " : ""}--require ${preload}`;
-  const child = spawnSync("node", [path.join(__dirname, sm.script)], {
+  const runChild = () => spawnSync("node", [path.join(__dirname, sm.script)], {
     env: { ...process.env, BASE, NODE_OPTIONS: childNodeOptions, ...(sm.env || {}) },
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   });
+  let child = runChild();
+  let note = "";
+  // Retry once on failure that smells transient (timeouts / connection
+  // resets during a long prod run — cold starts, LB churn). A determinate
+  // assertion failure ("expected X got Y") reproduces on retry and still
+  // fails; a cold-start blip doesn't. pipeline-prod 2026-07-22 case.
+  const firstCombined = (child.stdout || "") + "\n" + (child.stderr || "");
+  if (child.status !== 0 && child.status !== WIN_EXIT_TEARDOWN_CRASH &&
+      /timeout|timed out|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up/i.test(firstCombined)) {
+    console.log(`  ↻ retrying ${sm.name} once — first run failed with transient network symptoms`);
+    child = runChild();
+    if (child.status === 0) note = " (passed on retry after transient network failure)";
+  }
   // Stream the captured output through, preserving the previous live-ish UX.
   if (child.stdout) process.stdout.write(child.stdout);
   if (child.stderr) process.stderr.write(child.stderr);
   const elapsed = Date.now() - start;
   const combined = (child.stdout || "") + "\n" + (child.stderr || "");
   let ok = child.status === 0;
-  let note = "";
   if (!ok && child.status === WIN_EXIT_TEARDOWN_CRASH && reportsZeroFailures(combined)) {
     ok = true;
     note = " (Node/Windows exit-teardown crash ignored — 0 failures reported)";

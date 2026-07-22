@@ -12,15 +12,26 @@
  *
  * Setup:
  *   1. LS dashboard → Store → Products → New product (subscription)
- *      - Lite   $19/mo  + $190/yr variant
- *      - Medium $29/mo  + $290/yr variant
- *      - Full   $49/mo  + $490/yr variant
+ *      - Lite   $24/mo  + $240/yr variant
+ *      - Medium $39/mo  + $390/yr variant
+ *      - Full   $89/mo  + $890/yr variant
  *   2. Open each variant; the numeric variant id is in the URL:
  *      lemonsqueezy.com/dashboard/.../products/<pid>/variants/<VARIANT_ID>
  *   3. Paste each id into the matching env var on Railway.
  *
  * Prices on the LS variant are the source of truth — they MUST match the tier
- * prices in data/pricing.ts (lite 19/190, medium 29/290, full 49/490).
+ * prices in data/pricing.ts (lite 24/240, medium 39/390, full 89/890).
+ *
+ * REPRICED 2026-07-22 (see docs/PRICING_STRATEGY_2026-07.md) — lite/medium/full
+ * moved up from 19/29/49. If LS variants for these tiers were already live
+ * with the old prices, the dashboard price on each variant MUST be updated
+ * (or a new variant created and the env var repointed) — this file only
+ * changes what data/pricing.ts *displays/computes*, it cannot change what an
+ * already-configured LS variant actually charges. Same applies to
+ * `app_cyberchess`'s variant if it's live: cyberchess's addonMonthly moved
+ * 19 → 9.99. There is currently no `tier_pro_*` reference for the Universe
+ * tier — a "pro" checkout falls through to Gumroad/stub, not LS, until one
+ * is added here.
  *
  * A checkout reference is "tier_<tier>_<period>" (built by routes/checkout.ts),
  * e.g. "tier_lite_monthly". The webhook reverse-maps an incoming variant_id

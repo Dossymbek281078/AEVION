@@ -23,8 +23,10 @@ export const checkoutRouter = Router();
  *   3. Stub — если ни один не настроен для данного tier:period.
  *
  * Цена фиксируется в продукте процессинга (LS variant / Gumroad product) — она
- * ДОЛЖНА совпадать с tier-ценой из data/pricing.ts (lite 19/190, medium 29/290,
- * full 49/490).
+ * ДОЛЖНА совпадать с tier-ценой из data/pricing.ts (lite 24/240, medium 39/390,
+ * full 89/890 — repriced 2026-07-22, см. docs/PRICING_STRATEGY_2026-07.md).
+ * Меняя цену в pricing.ts, не забудь обновить и сам LS variant / Gumroad
+ * permalink на дашборде процессинга — этот файл не меняет, что реально спишут.
  *
  * ENV:
  *   LemonSqueezy: LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID,

@@ -359,7 +359,11 @@ async function assembleFilm(p: Project): Promise<{ ok: true; filmPath: string } 
       localFiles.push(f);
     }
     const listFile = path.join(workDir, "concat.txt");
-    fs.writeFileSync(listFile, localFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"));
+    // Windows: у concat-демаксера '\' — escape-символ, пути отдаём с '/'.
+    fs.writeFileSync(
+      listFile,
+      localFiles.map((f) => `file '${f.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n")
+    );
     const out = path.join(workDir, "film.mp4");
     const res = await runFfmpeg([
       "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile,

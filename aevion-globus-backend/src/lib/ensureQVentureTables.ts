@@ -54,6 +54,12 @@ export async function ensureQVentureTables(pool: PgPoolInstance): Promise<void> 
     // API — see redactInput() — because these are confidential business plans and
     // analyses are public by default.
     await pool.query(`ALTER TABLE qventure_analyses ADD COLUMN IF NOT EXISTS analysis_input JSONB;`);
+    // Dedupe key over every scoring-relevant field (not content_hash, which covers
+    // only name/sector/stage/description). Lets re-submitting the same plan return
+    // the existing analysis instead of minting a duplicate that inflates the
+    // gallery and skews percentiles — and saves the council LLM calls.
+    await pool.query(`ALTER TABLE qventure_analyses ADD COLUMN IF NOT EXISTS dedupe_hash TEXT;`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_dedupe ON qventure_analyses(dedupe_hash);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_created ON qventure_analyses(created_at DESC);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_verdict ON qventure_analyses(verdict);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_qventure_sector ON qventure_analyses(sector);`);

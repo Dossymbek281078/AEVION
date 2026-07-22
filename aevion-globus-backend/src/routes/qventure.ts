@@ -151,6 +151,8 @@ interface StoredAnalysis {
    *  are confidential and analyses are public by default. */
   input?: AnalysisInput;
   contentHash: string;
+  /** Hash over all scoring inputs — returns an existing analysis instead of a duplicate. */
+  dedupeHash?: string;
   visibility: string;
   createdAt: string;
 }
@@ -192,6 +194,23 @@ function nowIso(): string {
 function contentHash(input: AnalysisInput): string {
   const basis = `${input.name}|${input.sector}|${input.stage}|${input.description}`.toLowerCase();
   return crypto.createHash("sha256").update(basis).digest("hex").slice(0, 32);
+}
+
+// Dedupe key over EVERY scoring input — content_hash covers only name/sector/
+// stage/description, so it would collide two plans that differ only in traction
+// or financials (which change the score). Stable JSON of the normalised fields.
+function dedupeHash(input: AnalysisInput): string {
+  const norm = {
+    name: (input.name || "").trim().toLowerCase(),
+    sector: input.sector || "",
+    stage: input.stage || "",
+    description: (input.description || "").trim().toLowerCase(),
+    traction: (input.tractionNotes || "").trim().toLowerCase(),
+    askUsd: input.askUsd ?? null,
+    financials: input.financials ?? null,
+    projections: input.projections ?? null,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(norm)).digest("hex").slice(0, 32);
 }
 
 function badRequest(res: Response, message: string): void {
@@ -382,6 +401,15 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
       projections: sanitizeProjections(body.projections),
     };
 
+    // Return an existing analysis for an identical plan instead of minting a
+    // duplicate — but only if it was scored by the current rubric. A stale-rubric
+    // match falls through to a fresh run so the score reflects today's engine.
+    const dedupe = dedupeHash(input);
+    const priorAnalysis = await getByDedupe(dedupe);
+    if (priorAnalysis && (priorAnalysis.result?.rubricVersion ?? 0) >= RUBRIC_VERSION) {
+      return res.json({ ok: true, data: redactInput(priorAnalysis), deduped: true });
+    }
+
     const engineResult = analyze(input);
     const council = await runCouncil(input, engineResult);
 
@@ -394,6 +422,7 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
       result: { ...engineResult, council },
       input,
       contentHash: contentHash(input),
+      dedupeHash: dedupe,
       visibility: "public",
       createdAt: nowIso(),
     };
@@ -969,13 +998,13 @@ async function persist(record: StoredAnalysis): Promise<void> {
     try {
       await pool.query(
         `INSERT INTO qventure_analyses
-         (id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, visibility, created_at, analysis_input)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         (id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, visibility, created_at, analysis_input, dedupe_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           record.id, record.name, record.sector, record.stage, record.geography,
           record.askUsd, record.composite, record.verdict,
           JSON.stringify(record.result), record.contentHash, record.visibility, record.createdAt,
-          record.input ? JSON.stringify(record.input) : null,
+          record.input ? JSON.stringify(record.input) : null, record.dedupeHash ?? null,
         ]
       );
       return;
@@ -1061,6 +1090,25 @@ async function getById(id: string): Promise<StoredAnalysis | null> {
     }
   }
   return memStore.find((r) => r.id === id) ?? null;
+}
+
+// Most-recent analysis with this dedupe hash, or null — short-circuits a
+// re-submitted plan back to its existing report.
+async function getByDedupe(hash: string): Promise<StoredAnalysis | null> {
+  if (isQVentureDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, name, sector, stage, geography, ask_usd, composite, verdict, result, content_hash, created_at
+         FROM qventure_analyses WHERE dedupe_hash = $1 ORDER BY created_at DESC LIMIT 1`,
+        [hash]
+      );
+      if (rows[0]) return rowToRecord(rows[0]);
+      return null;
+    } catch (e: unknown) {
+      captureQVentureError(e);
+    }
+  }
+  return memStore.find((r) => r.dedupeHash === hash) ?? null;
 }
 
 async function deleteById(id: string): Promise<void> {

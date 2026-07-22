@@ -422,8 +422,45 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   //    impair, capped per factor, and record the deduction in the rationale so
   //    every lost point stays explainable. ─────────────────────────────────────
   const adverse = detectAdverseDisclosures(`${rawInput.description || ""} ${rawInput.tractionNotes || ""}`, stage, sector);
+  // ── Deterministic red flags on disclosed metrics. ──────────────────────
+  // These were detected and displayed but carried no weight, so the report could
+  // warn that a TAM was inflated 3x while the market factor stayed untouched.
+  // The ones that already move a factor elsewhere are left as text, called out
+  // below, so a disclosure is never charged twice.
+  const metricFlags: AdverseSignal[] = [];
+  const sectorGmPct = round(sector.grossMargin * 100);
+  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
+    metricFlags.push({ factor: "economics", penalty: 10,
+      flag: `Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.` });
+  }
+  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd > sectorTamUsd * 2) {
+    metricFlags.push({ factor: "market", penalty: 14,
+      flag: `Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} exceeds 2x the entire ${sector.label} market (~$${sector.tamUsdBn}B) — likely top-down inflation.` });
+  }
+  if (signals.mentionsRevenueNoNumber && signals.revenueUsd === null) {
+    metricFlags.push({ factor: "execution", penalty: 10,
+      flag: `Revenue / monetization is referenced but no figure is disclosed — treat traction as unverified.` });
+  }
+  if (signals.growthPct !== null && signals.growthPeriod === "MoM" && signals.growthPct > 40) {
+    metricFlags.push({ factor: "execution", penalty: 8,
+      flag: `${signals.growthPct}% month-over-month growth is exceptionally high — confirm it is sustained, not a single-period spike.` });
+  }
+
+  // Already priced in elsewhere — surfaced as text only, deliberately unweighted:
+  //   LTV/CAC < 1  → econScoreRaw already takes -18 in the unit-economics factor
+  //   churn > 5    → quantifiedExecution already takes -6 in the execution factor
+  const textOnlyFlags: string[] = [];
+  if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
+    textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
+  }
+  if (signals.churnPct !== null && signals.churnPct > 8) {
+    textOnlyFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
+  }
+
+  const redFlags: string[] = [...adverse.map((a) => a.flag), ...metricFlags.map((f) => f.flag), ...textOnlyFlags];
+
   const penaltyByFactor = new Map<string, number>();
-  for (const a of adverse) {
+  for (const a of [...adverse, ...metricFlags]) {
     penaltyByFactor.set(a.factor, Math.min(ADVERSE_CAP_PER_FACTOR, (penaltyByFactor.get(a.factor) ?? 0) + a.penalty));
   }
   for (const f of factors) {
@@ -441,27 +478,6 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0);
   const signalCoverage = round(companyWeight, 2);
 
-  // ── Deterministic red flags: inconsistencies / weak disclosed metrics. ──
-  const redFlags: string[] = adverse.map((a) => a.flag);
-  const sectorGmPct = round(sector.grossMargin * 100);
-  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
-    redFlags.push(`Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.`);
-  }
-  if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
-    redFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
-  }
-  if (signals.bottomUpTamUsd !== null && signals.bottomUpTamUsd > sectorTamUsd * 2) {
-    redFlags.push(`Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} exceeds 2× the entire ${sector.label} market (~$${sector.tamUsdBn}B) — likely top-down inflation.`);
-  }
-  if (signals.mentionsRevenueNoNumber && signals.revenueUsd === null) {
-    redFlags.push(`Revenue / monetization is referenced but no figure is disclosed — treat traction as unverified.`);
-  }
-  if (signals.growthPct !== null && signals.growthPeriod === "MoM" && signals.growthPct > 40) {
-    redFlags.push(`${signals.growthPct}% month-over-month growth is exceptionally high — confirm it is sustained, not a single-period spike.`);
-  }
-  if (signals.churnPct !== null && signals.churnPct > 8) {
-    redFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
-  }
 
   const strategy = buildStrategy({ composite, stage, norms, sector, input: rawInput, factors, redFlags });
 

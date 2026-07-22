@@ -753,11 +753,18 @@ async function generateCodeWithAI(
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
   if (configured.length === 0) {
-    // Fallback — return a stub file
-    const path = targetFiles[0] || (stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html");
-    const language = detectLanguage(path);
+    // Fallback — one stub PER requested file, so multi-file callers (e.g.
+    // /database/design asking for schema + client) get the same shape a real
+    // generation would produce, just honestly marked aiGenerated:false.
+    const paths = targetFiles.length
+      ? targetFiles
+      : [stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html"];
     return {
-      files: [{ path, content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`, language }],
+      files: paths.map((path) => ({
+        path,
+        content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`,
+        language: detectLanguage(path),
+      })),
       aiGenerated: false,
     };
   }
@@ -1273,38 +1280,85 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
   try {
-    const existingFiles = await dbListFiles(project.id);
-    const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, resolvedStack, targetFiles, existingFiles);
-    const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
-    // Save each generated file
-    for (const gf of generatedFiles) {
-      const file: DevHubFile = {
-        id: crypto.randomUUID(),
-        projectId: project.id,
-        path: gf.path,
-        content: gf.content,
-        language: gf.language || detectLanguage(gf.path),
-        updatedAt: now(),
-      };
-      try {
-        await dbUpsertFile(file);
-      } catch {
-        const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === gf.path);
-        if (existing) {
-          existing.content = file.content;
-          existing.language = file.language;
-          existing.updatedAt = file.updatedAt;
-        } else {
-          memFiles.set(file.id, file);
-        }
-      }
-    }
-    res.json({
-      files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
-      checkpointId, projectId: project.id,
-    });
+    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles));
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "generation failed" });
+  }
+});
+
+/** Shared by /generate and /database/design: generate → checkpoint → save. */
+async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[]) {
+  const existingFiles = await dbListFiles(project.id);
+  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+  const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+  for (const gf of generatedFiles) {
+    const file: DevHubFile = {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      path: gf.path,
+      content: gf.content,
+      language: gf.language || detectLanguage(gf.path),
+      updatedAt: now(),
+    };
+    try {
+      await dbUpsertFile(file);
+    } catch {
+      const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === gf.path);
+      if (existing) {
+        existing.content = file.content;
+        existing.language = file.language;
+        existing.updatedAt = file.updatedAt;
+      } else {
+        memFiles.set(file.id, file);
+      }
+    }
+  }
+  return {
+    files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
+    checkpointId, projectId: project.id,
+  };
+}
+
+// POST /api/devhub/projects/:id/database/design — schema-by-prompt (Lovable-gap
+// feature #3, honest MVP): turns a plain-language description into db/schema.sql
+// + a typed client wired to the project's own DATABASE_URL. It does NOT
+// provision a live database — hosting needs a real isolation design and is a
+// separate feature; generating files that pretend otherwise would be the same
+// class of lie the deploy paths just got cured of.
+devhubRouter.post("/projects/:id/database/design", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  const { description } = req.body || {};
+  if (!description || typeof description !== "string" || !description.trim()) {
+    return res.status(400).json({ error: "description is required" });
+  }
+  if (description.trim().length > 4000) {
+    return res.status(400).json({ error: "description too long (max 4000 chars)" });
+  }
+  const clientFile = project.stack === "python" ? "db/client.py" : "db/client.ts";
+  const prompt =
+    `Design a PostgreSQL database for this application: ${description.trim()}\n\n` +
+    `Produce exactly two files:\n` +
+    `1. db/schema.sql — idempotent DDL (CREATE TABLE IF NOT EXISTS) with primary keys, ` +
+    `foreign keys with ON DELETE behavior, sensible column types, NOT NULL where appropriate, ` +
+    `created_at/updated_at timestamps, and indexes for the obvious query paths. Add a short comment above each table.\n` +
+    `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
+    `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
+    `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+  try {
+    const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
+    res.json({ ...result, note: "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned." });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "database design failed" });
   }
 });
 

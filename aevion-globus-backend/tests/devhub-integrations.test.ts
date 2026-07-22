@@ -415,6 +415,37 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
   });
 });
 
+describe("POST /api/devhub/projects/:id/database/design — schema by prompt", () => {
+  test("400 without a description; 404 for unknown project", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const id = cr.body.project.id as string;
+    expect((await request(app).post(`/api/devhub/projects/${id}/database/design`).send({})).status).toBe(400);
+    expect((await request(app).post("/api/devhub/projects/nope/database/design").send({ description: "x" })).status).toBe(404);
+  });
+
+  test("writes db/schema.sql + a stack-appropriate client and reports aiGenerated honestly", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "express" });
+    const id = cr.body.project.id as string;
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/database/design`)
+      .send({ description: "a todo app with users and tasks" });
+
+    expect(r.status).toBe(200);
+    // No AI provider mocked → the stub path must say so, not fake success.
+    expect(r.body.aiGenerated).toBe(false);
+    expect(r.body.note).toMatch(/No database was provisioned/);
+    const paths = r.body.files.map((f: { path: string }) => f.path);
+    expect(paths).toContain("db/schema.sql");
+    expect(paths).toContain("db/client.ts");
+    expect(r.body.checkpointId).toBeTruthy(); // undo works on schema design too
+    const listed = await request(app).get(`/api/devhub/projects/${id}/files`);
+    expect(listed.body.files.map((f: { path: string }) => f.path)).toEqual(expect.arrayContaining(["db/schema.sql", "db/client.ts"]));
+  });
+});
+
 describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
   test("flags a deployed project whose files were edited after the last deploy", async () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";

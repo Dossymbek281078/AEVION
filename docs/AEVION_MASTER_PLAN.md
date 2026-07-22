@@ -218,8 +218,8 @@ parity + docs/runbook.
 | ~~P2-2~~ | ~~CyberChess: drag/click/premove regression suite~~ ✅ premove move-gen contract locked in vitest (PR #436); drag/click are DOM-coupled, deferred | aevion-cyberchess |
 | P2-3 | QBuild UI polish merge from `port-qbuild-v3` | aevion-qbuild |
 | P2-4 | смета — Sentry + i18n + smoke | aevion-smeta |
-| P2-5 | QCoreAI usage accounting dashboard (per-provider OPEX) | frontend-qcore |
-| P2-6 | Multichat Engine — beta → MVP: parallel sessions UX + role isolation already shipped, just needs prod smoke | frontend-qcore |
+| ~~P2-5~~ | ~~QCoreAI usage accounting dashboard (per-provider OPEX)~~ ✅ DONE 2026-07-22 — `GET /api/qcoreai/opex` + `/qcoreai/opex` page (platform-wide per-provider/model spend, 30-day daily series) | frontend-qcore |
+| ~~P2-6~~ | ~~Multichat Engine — beta → MVP~~ ✅ DONE 2026-07-21 — prod smoke ran green: `BASE=https://aevion.app/api-backend node scripts/multichat-smoke.js` → 7/7 PASS (health, providers, register, runs-404-no-keys, sessions, analytics, account cleanup) | frontend-qcore |
 
 ### Phase 3 — Investor + GTM (2-3 weeks, after Phase 1)
 
@@ -279,8 +279,8 @@ If the user insists on more code work in this window, candidates are:
 2. If user insists on QSign work, propose: prod smoke run + Sentry alert wire-up
 
 ### `frontend-qcore`
-1. **P2-5** Per-provider OPEX accounting dashboard
-2. **P2-6** Multichat prod smoke
+1. ~~**P2-5** Per-provider OPEX accounting dashboard~~ ✅ 2026-07-22 — `/qcoreai/opex`
+2. ~~**P2-6** Multichat prod smoke~~ ✅ 2026-07-21 — 7/7 PASS against aevion.app
 3. Translation parity for QCoreAI suggestion deck
 
 ### `aevion-cyberchess` / `chess-tournaments` — P2 backlog ✅ cleared

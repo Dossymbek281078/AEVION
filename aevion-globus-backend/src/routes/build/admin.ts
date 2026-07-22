@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
+import { buildPool as pool, ok, fail, requireBuildAuth, safeParseJson } from "../../lib/build";
 
 export const adminRouter = Router();
 
@@ -559,6 +559,63 @@ adminRouter.get("/weekly-preview/:userId", async (req, res) => {
     });
   } catch (err: unknown) {
     return fail(res, 500, "weekly_preview_failed");
+  }
+});
+
+// GET /api/build/admin/ai-search-log — parse-search accuracy over time.
+// A non-empty "issues" array on a logged row means the CHECKER agent had to
+// correct the PARSER's output (see routes/build/ai.ts POST /parse-search) —
+// tracking this share over time is the automated counterpart to the manual
+// live-testing rounds that found the region/mode-field/salary-direction bugs.
+adminRouter.get("/ai-search-log", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const [summary, recent] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*)::int AS "total",
+          COUNT(*) FILTER (WHERE "issuesJson" <> '[]')::int AS "withIssues",
+          COUNT(*) FILTER (WHERE "mode" = 'talent')::int AS "talentCount",
+          COUNT(*) FILTER (WHERE "mode" = 'vacancy')::int AS "vacancyCount",
+          COUNT(*) FILTER (WHERE "createdAt" > NOW() - INTERVAL '7 days')::int AS "last7d"
+        FROM "BuildAiSearchLog"
+      `),
+      pool.query(
+        `SELECT "id","mode","queryText","filtersJson","issuesJson","createdAt"
+         FROM "BuildAiSearchLog"
+         ORDER BY "createdAt" DESC
+         LIMIT $1`,
+        [limit],
+      ),
+    ]);
+
+    const s = summary.rows[0];
+    return ok(res, {
+      summary: {
+        total: Number(s.total),
+        withIssues: Number(s.withIssues),
+        issueRate: Number(s.total) > 0 ? Number(s.withIssues) / Number(s.total) : 0,
+        talentCount: Number(s.talentCount),
+        vacancyCount: Number(s.vacancyCount),
+        last7d: Number(s.last7d),
+      },
+      recent: recent.rows.map((r: Record<string, unknown>) => ({
+        id: r.id,
+        mode: r.mode,
+        queryText: r.queryText,
+        filters: safeParseJson(r.filtersJson, {}),
+        issues: safeParseJson(r.issuesJson, [] as string[]),
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_search_log_failed");
   }
 });
 

@@ -1009,6 +1009,26 @@ async function _doEnsureBuildTables(): Promise<void> {
   );
 
   await backfillRegionsFromCity();
+
+  // Logs every /api/build/ai/parse-search call — query text, mode, the
+  // filters returned, and the checker's issues[] (non-empty issues means
+  // the checker had to correct the parser). Lets accuracy be tracked over
+  // time from real traffic instead of only manual spot-checks like the
+  // live-testing rounds that found the region/mode-field/salary-direction
+  // bugs fixed earlier this session.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildAiSearchLog" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT,
+      "mode" TEXT NOT NULL,
+      "queryText" TEXT NOT NULL,
+      "filtersJson" TEXT NOT NULL,
+      "issuesJson" TEXT NOT NULL DEFAULT '[]',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildAiSearchLog_created_idx" ON "BuildAiSearchLog" ("createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildAiSearchLog_mode_idx" ON "BuildAiSearchLog" ("mode");`);
 }
 
 // One-time (idempotent, WHERE region IS NULL) best-effort backfill: infer

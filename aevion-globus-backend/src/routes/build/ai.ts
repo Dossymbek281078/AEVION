@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
   buildPool as pool,
@@ -263,6 +264,23 @@ function normalizeModeFields(filtersRaw: unknown, mode: "talent" | "vacancy"): R
   return filters;
 }
 
+// Best-effort JWT sub extraction for analytics only (parse-search doesn't
+// require auth) — same inline decode as aiRateLimiter's keyGenerator above,
+// not a security check.
+function getOptionalUserId(req: import("express").Request): string | null {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+    ) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseJsonFence(raw: string): unknown | null {
   const stripped = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
   try {
@@ -407,13 +425,34 @@ aiRouter.post("/parse-search", aiRateLimiter, async (req, res) => {
       | { filters?: unknown; explanation?: unknown; issues?: unknown }
       | null;
 
+    const finalFilters = normalizeModeFields(checkerJson?.filters ?? parserJson.filters ?? {}, mode);
+    const finalIssues = Array.isArray(checkerJson?.issues) ? checkerJson.issues : [];
+
+    // Fire-and-forget: log every parse-search call so parser/checker
+    // accuracy can be tracked from real traffic (non-empty issues = the
+    // checker had to correct the parser) instead of only manual spot-checks.
+    void pool
+      .query(
+        `INSERT INTO "BuildAiSearchLog" ("id","userId","mode","queryText","filtersJson","issuesJson")
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          crypto.randomUUID(),
+          getOptionalUserId(req),
+          mode,
+          text.value,
+          JSON.stringify(finalFilters),
+          JSON.stringify(finalIssues),
+        ],
+      )
+      .catch(() => {});
+
     return ok(res, {
-      filters: normalizeModeFields(checkerJson?.filters ?? parserJson.filters ?? {}, mode),
+      filters: finalFilters,
       explanation:
         (typeof checkerJson?.explanation === "string" && checkerJson.explanation) ||
         (typeof parserJson.explanation === "string" && parserJson.explanation) ||
         "",
-      issues: Array.isArray(checkerJson?.issues) ? checkerJson.issues : [],
+      issues: finalIssues,
       usage: {
         input: parserReply.inputTokens + checkerReply.inputTokens,
         output: parserReply.outputTokens + checkerReply.outputTokens,

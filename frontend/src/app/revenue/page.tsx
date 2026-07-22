@@ -116,12 +116,14 @@ function formatCompactUsd(n: number): string {
   return `$${Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
 }
 
-function agoLabel(sinceMs: number, nowMs: number): string {
-  const s = Math.max(0, Math.round((nowMs - sinceMs) / 1000));
-  if (s < 60) return `${s} сек`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} мин`;
-  return `${Math.round(m / 60)} ч`;
+// Static "HH:MM:SS" — deliberately not a live-ticking "N sec ago": a text
+// node that re-renders every few seconds inside AutoTranslate's observed
+// subtree raced its live re-translation and produced garbled duplicated
+// text (same class of bug already worked around for CyberChess's move
+// clock). This only changes when new data actually lands (loadAll's 60s
+// refresh), so it can't collide with the translator mid-render.
+function clockLabel(ms: number): string {
+  return new Date(ms).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 export default function RevenuePage() {
@@ -136,7 +138,6 @@ export default function RevenuePage() {
   const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
   const [pace, setPace] = useState<RevenuePace | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
 
   // Each channel fetches independently — a slow/stuck one no longer blocks
   // the whole page; every section renders as soon as its own data lands.
@@ -163,16 +164,6 @@ export default function RevenuePage() {
     return () => clearInterval(t);
   }, []);
 
-  // Live "N сек назад" — ticks every 5s, not 1s: a faster churn on a text
-  // node inside AutoTranslate's observed subtree fought with its live
-  // re-translation and produced garbled concatenated text (same class of
-  // bug already worked around for CyberChess's move clock). The ticking
-  // value itself is also wrapped in translate="no" below, belt-and-suspenders.
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 5000);
-    return () => clearInterval(t);
-  }, []);
-
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;
 
@@ -196,7 +187,7 @@ export default function RevenuePage() {
               Gumroad · LemonSqueezy · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
               {lastUpdatedAt && (
                 <span className="ml-2 text-xs text-gray-500">
-                  · обновлено <span translate="no">{agoLabel(lastUpdatedAt, nowTick)}</span> назад
+                  · обновлено в <span translate="no">{clockLabel(lastUpdatedAt)}</span>
                 </span>
               )}
             </p>

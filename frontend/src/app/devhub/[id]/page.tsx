@@ -443,7 +443,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   type ChatFileChange = { path: string; language: string; isNew: boolean; added: number; removed: number; diff: string | null };
   type ChatMsg =
     | { role: "user"; text: string; at: string }
-    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string };
+    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
+    // Idea hook: the project clearly stores data but has no schema yet —
+    // one click designs it (POST /database/design) without retyping context.
+    | { role: "hint"; kind: "design_db"; description: string; at: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
   const aiImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -882,11 +885,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const generateBody = JSON.stringify({
         prompt: userText, stack: project.stack,
         // Prior turns give follow-ups their referent ("make the button blue").
-        history: chatHistory.slice(-8).map((m) =>
-          m.role === "user"
-            ? { role: "user", text: m.text }
-            : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
-        ),
+        history: chatHistory
+          .filter((m) => m.role !== "hint") // hints are UI affordances, not dialog
+          .slice(-8)
+          .map((m) =>
+            m.role === "user"
+              ? { role: "user", text: m.text }
+              : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+          ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
       const r = await fetchWithRedeployRetry(
@@ -920,6 +926,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(`Generated ${newGenerated.length} file(s)`, "success");
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
+      // Data-shaped idea + no schema yet → offer to design the database with
+      // the context already in hand (feature discovery for /database/design).
+      const DATA_SIGNALS = /трекер|список|заказ|товар|запис|заметк|расход|склад|учёт|учет|пользовател|юзер|todo|task|tracker|inventory|order|list|user|note|expense|habit|привыч/i;
+      const hasSchema = files.some((f) => f.path === "db/schema.sql");
+      setChatHistory((h) => {
+        if (hasSchema || h.some((m) => m.role === "hint")) return h;
+        if (!DATA_SIGNALS.test(userText) && !DATA_SIGNALS.test(project.description || "")) return h;
+        return [...h, { role: "hint", kind: "design_db", description: userText, at: new Date().toISOString() }];
+      });
       // Reload files list
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
@@ -1176,6 +1191,41 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Image generation failed", "error");
     } finally {
       setVisualEditImgBusy(false);
+    }
+  };
+
+  const [designingDb, setDesigningDb] = useState(false);
+  // One-click follow-through on the design_db hint: runs /database/design with
+  // the idea already in hand, renders the result as a normal assistant card
+  // (diffs, checkpoint — undo works), and retires the hint.
+  const designDbFromHint = async (description: string) => {
+    if (!project || designingDb) return;
+    setDesigningDb(true);
+    try {
+      const r = await fetchWithRedeployRetry(
+        apiUrl(`/api/devhub/projects/${project.id}/database/design`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) },
+        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Database design failed");
+      const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
+        const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
+        const d = diffLines(before, gf.content ?? "");
+        return { path: gf.path, language: gf.language || "text", isNew: before === "", added: d.added, removed: d.removed, diff: d.text };
+      });
+      setChatHistory((h) => [
+        ...h.filter((m) => m.role !== "hint"),
+        { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note: data.aiGenerated === false ? "No AI provider configured — placeholder schema" : data.note },
+      ]);
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast("Database designed — db/schema.sql + client are in the file tree", "success");
+    } catch (e: any) {
+      showToast(e.message || "Database design failed", "error");
+    } finally {
+      setDesigningDb(false);
     }
   };
 
@@ -2877,6 +2927,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         msg.role === "user" ? (
                           <div key={mi} style={{ alignSelf: "flex-end", maxWidth: "85%", background: "#0d9488", color: "#fff", borderRadius: "12px 12px 2px 12px", padding: "8px 12px", fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>
                             {msg.text}
+                          </div>
+                        ) : msg.role === "hint" ? (
+                          <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                            <div style={{ color: "#4c1d95", marginBottom: 8, lineHeight: 1.45 }}>
+                              🗄 Looks like this app stores data. Want a database designed for it — schema + typed client, wired to DATABASE_URL?
+                            </div>
+                            <button
+                              onClick={() => designDbFromHint(msg.description)}
+                              disabled={designingDb}
+                              style={{ padding: "7px 14px", background: designingDb ? "#c4b5fd" : "#7c3aed", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: designingDb ? "not-allowed" : "pointer" }}
+                            >
+                              {designingDb ? "Designing…" : "Спроектировать базу данных"}
+                            </button>
                           </div>
                         ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", width: "95%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13 }}>

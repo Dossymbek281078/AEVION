@@ -17,6 +17,7 @@ import {
   normalizeTier,
 } from "../lib/planGate";
 import { MODULES_PRICING } from "../data/pricing";
+import { funnelSummary } from "../lib/paywallDenyLog";
 
 export const entitlementsRouter = Router();
 
@@ -39,4 +40,16 @@ entitlementsRouter.get("/paywall/policy", (_req, res) => {
     enforcedCount: modules.filter((m) => m.enforced).length,
     generatedAt: new Date().toISOString(),
   });
+});
+
+/** Public deny funnel — aggregate demand signal for paid modules.
+ *  How many anonymous/free callers hit each module's 402 wall (module +
+ *  tier counts only, никаких user ids). ?days=N clamped 1–90, default 30. */
+entitlementsRouter.get("/paywall/funnel", async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 30;
+    res.json({ ...(await funnelSummary(days)), generatedAt: new Date().toISOString() });
+  } catch {
+    res.status(500).json({ error: "funnel failed" });
+  }
 });

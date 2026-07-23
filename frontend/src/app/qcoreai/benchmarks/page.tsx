@@ -14,6 +14,8 @@ interface ModelBenchmark {
   contextWindow: number;
   measuredLatencyMs?: number | null;
   latencySamples?: number;
+  providerLatencyMs?: number | null;
+  providerLatencySamples?: number;
 }
 
 interface BenchmarkData {
@@ -131,11 +133,15 @@ export default function BenchmarksPage() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider">{t("qcoreai.bench.row.speed")}</p>
-                          {typeof m.measuredLatencyMs === "number" && (
+                          {typeof m.measuredLatencyMs === "number" ? (
                             <span className="text-[10px] text-sky-400" title={t("qcoreai.bench.badge.title", { n: m.latencySamples ?? 0 })}>
                               ⏱ {(m.measuredLatencyMs / 1000).toFixed(1)}s · N={m.latencySamples}
                             </span>
-                          )}
+                          ) : typeof m.providerLatencyMs === "number" ? (
+                            <span className="text-[10px] text-sky-600" title={t("qcoreai.bench.badge.provider.title", { n: m.providerLatencySamples ?? 0 })}>
+                              ⏱ {(m.providerLatencyMs / 1000).toFixed(1)}s · {t("qcoreai.bench.badge.provider")}
+                            </span>
+                          ) : null}
                         </div>
                         <ScoreBar value={m.speedScore} color="#3b82f6" />
                       </div>

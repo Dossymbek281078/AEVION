@@ -4,6 +4,7 @@ import { CITY, CityData } from "./qskyway.city";
 import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
+import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -20,12 +21,18 @@ import { getPool } from "../lib/dbPool";
  * скоринг пригодности посадочных площадок (шаг к муниципальным вертипортам).
  * Фаза 5 (уже реализована): страховочный просвет по уверенности в высотных
  * данных (measured/derived/guessed, см. SRC_CLEARANCE) — выше уверенность в
- * данных → ниже коридор. Следующая фаза — подключение боевых фидов регулятора
- * (FAA/EASA/CAAC + METAR) вместо иллюстративных зон/ветра, см. дисклеймер ниже.
+ * данных → ниже коридор. Фаза 6 (уже реализована): наземный ветер — реальный
+ * METAR ближайшего аэропорта (aviationweather.gov, без ключа, см.
+ * qskyway.metar.ts), не иллюстрация; graceful fallback на демо-модель при
+ * недоступности фида. Следующая фаза — боевые фиды запретных зон регулятора
+ * (FAA UAS Facility Maps / NOTAM, EASA U-space, CAAC) вместо иллюстративных
+ * зон, см. дисклеймер ниже.
  *
  * Честно: движок/PoC, не сертифицированное авиационное ПО. Данные зданий —
- * OpenStreetMap (ODbL, открытые). Запретные зоны/ветер здесь ИЛЛЮСТРАТИВНЫ; в
- * проде подключаются к официальным фидам (FAA/EASA/CAAC + METAR/прогноз).
+ * OpenStreetMap (ODbL, открытые). Запретные зоны здесь ИЛЛЮСТРАТИВНЫ; в проде
+ * подключаются к официальным фидам регулятора (FAA/EASA/CAAC). Наземный ветер
+ * — реальный METAR с graceful fallback; послойный рост с высотой — иллюстративная
+ * экстраполяция (METAR не содержит данных о ветре на высоте).
  *
  * Endpoints:
  *   GET  /health          — статус + список городов
@@ -112,10 +119,20 @@ function noFlyTest(city: CityData, zones: ZoneXY[]) {
 }
 
 // ── layered wind ───────────────────────────────────────────────────────────
+// Ground reading prefers a live METAR observation (real, from the nearest
+// airport); the altitude-growth model above ground stays the illustrative
+// perBandMs slope (METAR carries no winds-aloft data). windSourceOf() below
+// reports which case applied for a given city, honestly.
 function windAt(cityId: string, altM: number): { fromDeg: number; speedMs: number } {
   const w = WIND[cityId] ?? { fromDeg: 270, baseMs: 3, perBandMs: 1 };
+  const real = getMetarWind(cityId);
+  const fromDeg = real?.fromDeg ?? w.fromDeg;
+  const baseMs = real ? real.speedMs : w.baseMs;
   const band = Math.max(0, (altM - FLOOR) / BAND);
-  return { fromDeg: w.fromDeg, speedMs: +(w.baseMs + band * w.perBandMs).toFixed(2) };
+  return { fromDeg, speedMs: +(baseMs + band * w.perBandMs).toFixed(2) };
+}
+function windSourceOf(cityId: string): "metar" | "illustrative" {
+  return getMetarWind(cityId) ? "metar" : "illustrative";
 }
 // tail-wind component (m/s, positive = помогает) for travel from (fc,fr)->(tc,tr) at altM
 function tailwind(cityId: string, fc: number, fr: number, tc: number, tr: number, altM: number): number {
@@ -432,6 +449,7 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance"],
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
+    wind: metarStatus(),
     disclaimer: DISCLAIMER,
   });
 });
@@ -457,7 +475,15 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
   res.json({
     ...city,
     nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null })),
-    wind: { fromDeg: WIND[id]?.fromDeg ?? 270, groundMs: windAt(id, FLOOR).speedMs, topMs: windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs, note: "иллюстративная послойная модель" },
+    wind: {
+      fromDeg: windAt(id, FLOOR).fromDeg,
+      groundMs: windAt(id, FLOOR).speedMs,
+      topMs: windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs,
+      source: windSourceOf(id),
+      note: windSourceOf(id) === "metar"
+        ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
+        : "иллюстративная послойная модель (METAR временно недоступен)",
+    },
     vertiportScores: suitability(id, city),
     _signature: signCity(id, city),
   });

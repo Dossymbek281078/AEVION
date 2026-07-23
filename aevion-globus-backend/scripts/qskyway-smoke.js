@@ -66,7 +66,13 @@ async function main() {
   const nofly = cityP4.json?.nofly ?? [];
   assert(Array.isArray(nofly) && nofly.length >= 1, "no-fly zones exposed", `n=${nofly.length}`);
   assert(cityP4.json?._signature?.alg === "Ed25519" && !!cityP4.json?._signature?.contentHash, "twin carries Ed25519 signature");
-  assert(cityP4.json?.wind?.groundMs > 0 && cityP4.json?.wind?.topMs >= cityP4.json?.wind?.groundMs, "layered wind (grows with altitude)", `g=${cityP4.json?.wind?.groundMs} t=${cityP4.json?.wind?.topMs}`);
+  // groundMs >= 0, not > 0: a real METAR reading can legitimately be calm (0 m/s).
+  assert(cityP4.json?.wind?.groundMs >= 0 && cityP4.json?.wind?.topMs >= cityP4.json?.wind?.groundMs, "layered wind (grows with altitude)", `g=${cityP4.json?.wind?.groundMs} t=${cityP4.json?.wind?.topMs}`);
+  assert(["metar", "illustrative"].includes(cityP4.json?.wind?.source), "wind reports its source", `source=${cityP4.json?.wind?.source}`);
+
+  // /health surfaces METAR fetch status (fails soft — this only checks shape, not that the feed is currently up)
+  const h2 = await jget("/api/qskyway/health");
+  assert(typeof h2.json?.wind?.lastFetchOk === "boolean" && h2.json?.wind?.cities, "/health reports METAR wind status");
 
   // no-fly avoidance: no path cell may fall inside a zone
   const cell = cityP4.json?.grid?.cell ?? 20;

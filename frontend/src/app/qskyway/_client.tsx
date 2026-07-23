@@ -19,7 +19,7 @@ interface CityData {
   buildings: { h: number; hs?: number; r: number[][] }[];
   vertiports: { c: number; r: number; x: number; y: number }[];
   nofly?: NoFly[];
-  wind?: { fromDeg: number; groundMs: number; topMs: number };
+  wind?: { fromDeg: number; groundMs: number; topMs: number; source?: "metar" | "illustrative" };
   vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number }[];
   dataQuality?: DataQuality;
   _signature?: { alg: string; contentHash: string };
@@ -74,7 +74,7 @@ export default function QSkywayClient() {
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
@@ -213,6 +213,7 @@ export default function QSkywayClient() {
       setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2, heightConfidencePct: null, avgConfClearM: null, etaStill: null });
       setMeta({
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
+        windSource: city.wind?.source ?? "illustrative",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
         nofly: city.nofly?.length ?? 0,
         heightPct: city.dataQuality?.measuredPct ?? 0,
@@ -486,7 +487,15 @@ export default function QSkywayClient() {
               </div>
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
-                  <span>🌬 ветер {meta.wind}</span>
+                  <span>
+                    🌬 ветер {meta.wind}
+                    <span
+                      title={meta.windSource === "metar" ? "Наземный ветер — реальный METAR ближайшего аэропорта" : "METAR недоступен — используется иллюстративная демо-модель"}
+                      style={{ marginLeft: 6, color: meta.windSource === "metar" ? "#2dd4bf" : "#5f7086" }}
+                    >
+                      · {meta.windSource === "metar" ? "METAR" : "демо"}
+                    </span>
+                  </span>
                   <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
                   <span
                     onClick={verify === "checking" ? undefined : verifySignature}

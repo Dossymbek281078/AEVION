@@ -292,10 +292,27 @@ function buildRenderPrompt(p: Project, s: Shot): string {
 
 const STORYBOARD_SYSTEM =
   "Ты — режиссёр раскадровки фотореалистичного видео. Разбей бриф на 3-6 кадров. " +
-  "Ответь СТРОГО JSON-массивом объектов: {\"title\":string,\"description\":string(на английском, кинематографично)," +
+  "ЖЕЛЕЗНОЕ ПРАВИЛО: раскадровка разворачивает ИМЕННО сцену из брифа — те же " +
+  "субъекты, то же место, те же звуки. Ничего не выдумывай сверх брифа; каждый " +
+  "кадр обязан прямо показывать сущности брифа (люди/животные/объекты/среда). " +
+  "Реплики — на языке брифа. " +
+  "Ответь СТРОГО JSON-объектом: {\"entities\":[перечисли ВСЕ сущности брифа: кто, что делает, где, когда, какие звуки]," +
+  "\"shots\":[{\"title\":string,\"description\":string(на английском, кинематографично; ОБЯЗАН содержать сущности из entities — то же действие, то же место)," +
   "\"subjects\":[{\"kind\":\"human|child|animal|bird|nature|object\",\"description\":string}]," +
-  "\"camera\":string,\"dialogue\":string|null,\"soundscape\":string,\"durationSec\":number}. " +
-  "Без markdown, без пояснений.";
+  "\"camera\":string,\"dialogue\":string|null,\"soundscape\":string(звуки из брифа),\"durationSec\":number}]}. " +
+  "Кадр, показывающий другое действие или место, — ошибка. Без markdown, без пояснений.";
+
+// Кэш раскадровок: одинаковый бриф → те же кадры без повторного LLM-вызова
+// (экономия opus-токенов; демо-брифы отвечают мгновенно).
+const memStoryboardCache = new Map<string, Shot[]>();
+
+function storyboardCacheKey(p: Project): string {
+  return crypto.createHash("sha256").update(`${p.format}|${p.language}|${p.brief}`).digest("hex");
+}
+
+function cloneShotsForProject(shots: Shot[]): Shot[] {
+  return shots.map((s) => ({ ...s, id: uid(), subjects: s.subjects.map((x) => ({ ...x })), qc: null, engineRequestId: null, resultUrl: null, status: "draft" as ShotStatus, engine: null }));
+}
 
 function stubStoryboard(p: Project): Shot[] {
   const base = p.brief.slice(0, 220);
@@ -313,8 +330,17 @@ function stubStoryboard(p: Project): Shot[] {
   ];
 }
 
-async function aiStoryboard(p: Project): Promise<Shot[] | null> {
+async function aiStoryboard(p: Project): Promise<{ shots: Shot[]; fromCache: boolean } | null> {
+  const cacheKey = storyboardCacheKey(p);
+  const cached = memStoryboardCache.get(cacheKey);
+  if (cached) return { shots: cloneShotsForProject(cached), fromCache: true };
   try {
+    const dbHit = await pool.query(`SELECT "shots" FROM "QRealStoryboardCache" WHERE "briefHash"=$1`, [cacheKey]).catch(() => null);
+    const dbShots = dbHit?.rows?.[0]?.shots;
+    if (Array.isArray(dbShots) && dbShots.length) {
+      memStoryboardCache.set(cacheKey, dbShots as Shot[]);
+      return { shots: cloneShotsForProject(dbShots as Shot[]), fromCache: true };
+    }
     const provider = pickConfiguredProvider();
     if (!provider || provider === "stub") return null;
     // Пустая модель давала 400 у Anthropic → тихий stub-фолбэк на проде
@@ -325,14 +351,15 @@ async function aiStoryboard(p: Project): Promise<Shot[] | null> {
       provider,
       [
         { role: "system", content: STORYBOARD_SYSTEM },
-        { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}):\n${p.brief}` },
+        { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}). Разбей ИМЕННО эту сцену, не выдумывай другую:\n${p.brief}` },
       ],
-      model, 0.7
+      model, 0.3
     );
     const jsonText = r.reply.replace(/```json|```/g, "").trim();
-    const arr = JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText);
+    const arr = Array.isArray(parsed) ? parsed : parsed?.shots;
     if (!Array.isArray(arr) || arr.length === 0) return null;
-    return arr.slice(0, 8).map((s: any, i: number): Shot => ({
+    const shots = arr.slice(0, 8).map((s: any, i: number): Shot => ({
       id: uid(),
       order: i + 1,
       title: String(s.title || `Shot ${i + 1}`).slice(0, 120),
@@ -349,6 +376,9 @@ async function aiStoryboard(p: Project): Promise<Shot[] | null> {
       durationSec: Number(s.durationSec) > 0 ? Math.min(20, Number(s.durationSec)) : 5,
       prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     }));
+    memStoryboardCache.set(cacheKey, shots);
+    pool.query(`INSERT INTO "QRealStoryboardCache" ("briefHash","shots") VALUES ($1,$2) ON CONFLICT ("briefHash") DO NOTHING`, [cacheKey, JSON.stringify(shots)]).catch(() => {});
+    return { shots: cloneShotsForProject(shots), fromCache: false };
   } catch {
     return null; // честный fallback на stub, без маскировки под AI
   }
@@ -494,6 +524,7 @@ qrealRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     module: "qreal",
+    commit: (process.env.RAILWAY_GIT_COMMIT_SHA || "").slice(0, 8) || null,
     label: "QReal Studio",
     tagline: "Полностью живое AI-видео без съёмки актёра — с неотключаемой AI-маркировкой",
     pipeline: ["brief", "storyboard", "render-prompts", "engine", "realism-qc", "assembly", "provenance"],
@@ -569,12 +600,12 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
     const p = memProjects.get(req.params.id);
     if (!p) return res.status(404).json({ error: "not found" });
     const viaAi = await aiStoryboard(p);
-    p.shots = viaAi ?? stubStoryboard(p);
+    p.shots = viaAi?.shots ?? stubStoryboard(p);
     for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
     p.status = "storyboarded";
     p.updatedAt = nowIso();
     saveProject(p);
-    res.json({ project: p, storyboardMethod: viaAi ? "llm" : "deterministic-stub" });
+    res.json({ project: p, storyboardMethod: viaAi ? (viaAi.fromCache ? "llm-cached" : "llm") : "deterministic-stub" });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "storyboard failed" }); }
 });
 

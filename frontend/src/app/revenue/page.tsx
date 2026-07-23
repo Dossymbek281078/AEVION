@@ -216,14 +216,21 @@ export default function RevenuePage() {
     ...(lsRecent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "lemonsqueezy", appId: "platform" })),
   ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
-  const combinedByApp: Record<string, { count: number; totalUsd: number }> = { ...(recent?.byApp ?? {}) };
+  // Normalizes keys (trim + lowercase) while merging so two sources that
+  // happen to spell the same appId differently (e.g. once LS gets its own
+  // attribution) land in one bucket instead of two side-by-side entries.
+  const combinedByApp: Record<string, { count: number; totalUsd: number }> = {};
+  const addByApp = (appId: string, count: number, totalUsd: number) => {
+    const key = appId.trim().toLowerCase();
+    const cur = combinedByApp[key] ?? { count: 0, totalUsd: 0 };
+    combinedByApp[key] = { count: cur.count + count, totalUsd: cur.totalUsd + totalUsd };
+  };
+  for (const [appId, data] of Object.entries(recent?.byApp ?? {})) {
+    addByApp(appId, data.count, data.totalUsd);
+  }
   const lsValidSales = (lsRecent?.sales ?? []).filter((s) => !s.refunded);
   if (lsValidSales.length > 0) {
-    const cur = combinedByApp.platform ?? { count: 0, totalUsd: 0 };
-    combinedByApp.platform = {
-      count: cur.count + lsValidSales.length,
-      totalUsd: cur.totalUsd + lsValidSales.reduce((sum, s) => sum + s.amountUsd, 0),
-    };
+    addByApp("platform", lsValidSales.length, lsValidSales.reduce((sum, s) => sum + s.amountUsd, 0));
   }
 
   return (

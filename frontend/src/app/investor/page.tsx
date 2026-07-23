@@ -114,9 +114,13 @@ export default function InvestorPage() {
             { label: "Planet submissions", value: stats.planetSubmissions.toString(), sub: "compliance pipeline" },
             { label: "LLM providers", value: stats.qcoreProviders.toString(), sub: "QCoreAI router" },
             {
+              // `revenue` stays null while loading AND if the fetch/parse
+              // failed — only render a dollar amount once it's genuinely
+              // loaded, so a channel outage shows "—" instead of an
+              // indistinguishable-from-real "$0.00".
               label: "Live revenue",
-              value: `$${(revenue?.grossUsd ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
-              sub: `cumulative · ${revenue?.saleCount ?? 0} sales, all channels`,
+              value: revenue ? `$${revenue.grossUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—",
+              sub: revenue ? `cumulative · ${revenue.saleCount} sales, all channels` : "channel unavailable",
             },
           ].map(m => (
             <div key={m.label} style={{ textAlign: "center" }}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { track } from "@/lib/track";
 
@@ -79,6 +79,7 @@ const STATUS_LABEL: Record<Status, string> = { live: "Live", new: "New", soon: "
 
 export default function ExplorePlanet() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [fromBig6, setFromBig6] = useState(false);
 
   // Outreach attribution: full query lands in `path`; utm_source is lifted
   // into `source` so /admin/events aggregates by campaign without parsing.
@@ -89,6 +90,7 @@ export default function ExplorePlanet() {
       source: params.get("utm_source") ?? undefined,
       meta: { campaign: params.get("utm_campaign") },
     });
+    if (params.get("utm_campaign") === "big6") setFromBig6(true);
   }, []);
 
   useEffect(() => {
@@ -140,6 +142,12 @@ export default function ExplorePlanet() {
     <div className="aevx-root">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <canvas ref={canvasRef} className="aevx-stars" aria-hidden="true" />
+      {fromBig6 && (
+        <div style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "10px 16px", fontSize: 13, background: "rgba(16,185,129,0.12)", borderBottom: "1px solid rgba(16,185,129,0.35)", color: "#d1fae5" }}>
+          Came from the benchmark invitation? The partnership brief is here →{" "}
+          <a href="/acquire" style={{ color: "#34d399", fontWeight: 700 }}>aevion.vercel.app/acquire</a>
+        </div>
+      )}
       <div className="aevx-wrap">
         <div className="aevx-top">
           <div className="aevx-brand"><span className="aevx-dot" />AEVION</div>

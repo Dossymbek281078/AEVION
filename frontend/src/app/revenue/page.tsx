@@ -21,20 +21,50 @@ interface RevenueOverview {
   apps: { appId: string; appName: string; channels: string[]; color: string }[];
 }
 
+interface GumroadSale {
+  id: string;
+  appId: string;
+  product: string;
+  email: string | null;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
+}
+
 interface GumroadRecent {
-  sales: {
-    id: string;
-    appId: string;
-    product: string;
-    email: string | null;
-    amountUsd: number;
-    currency: string;
-    refunded: boolean;
-    date: string | null;
-  }[];
+  sales: GumroadSale[];
   byApp: Record<string, { count: number; totalUsd: number }>;
   stub?: boolean;
   message?: string;
+}
+
+interface LsSale {
+  id: string;
+  product: string;
+  email: string | null;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
+}
+
+interface LsRecent {
+  sales: LsSale[];
+  stub?: boolean;
+  message?: string;
+}
+
+/** A sale row tagged with which channel it came from, for the combined table. */
+interface SaleRow {
+  id: string;
+  source: "gumroad" | "lemonsqueezy";
+  appId: string;
+  product: string;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
 }
 
 interface GumroadBalance {
@@ -45,6 +75,7 @@ interface GumroadBalance {
   saleCount?: number;
   refundedCount?: number;
   stub?: boolean;
+  error?: string;
   message?: string;
   setupGuide?: string;
 }
@@ -127,6 +158,8 @@ export default function RevenuePage() {
   const [lsLoading, setLsLoading] = useState(true);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [lsRecent, setLsRecent] = useState<LsRecent | null>(null);
+  const [lsRecentLoading, setLsRecentLoading] = useState(true);
   const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
   const [pace, setPace] = useState<RevenuePace | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
@@ -140,12 +173,17 @@ export default function RevenuePage() {
     const loadAll = () => {
       fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
         .then((d) => { setOverview(d); setOverviewLoading(false); touch(); });
-      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+      // Falls back to an explicit {error} shape (not null) on network failure —
+      // null and "real zero" both render as $0.00, which hid genuine channel
+      // outages behind an indistinguishable "no sales yet" state.
+      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => ({ error: "network_error" }))
         .then((d) => { setBalance(d); setBalanceLoading(false); touch(); });
       fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
         .then((d) => { setRecent(d); setRecentLoading(false); touch(); });
-      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => ({ error: "network_error" }))
         .then((d) => { setLsBalance(d); setLsLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/lemonsqueezy/recent")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setLsRecent(d); setLsRecentLoading(false); touch(); });
       fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
         .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
       fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
@@ -158,6 +196,8 @@ export default function RevenuePage() {
 
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;
+  const lemonsqueezyConfigured = providers?.lemonsqueezy?.configured;
+  const anyChannelConfigured = gumroadConfigured || lemonsqueezyConfigured;
 
   // Совокупная выручка по всем живым чекаутам (Gumroad + LemonSqueezy).
   const gGross = balance?.grossUsd ?? 0;
@@ -167,6 +207,24 @@ export default function RevenuePage() {
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
   const daysLeft = daysUntil(goals.deadline);
+
+  // Merge both channels' recent sales — LS orders don't carry an appId
+  // (all attributed to "platform" backend-side), so the /revenue table
+  // previously only ever showed Gumroad rows and silently dropped LS ones.
+  const combinedSales: SaleRow[] = [
+    ...(recent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "gumroad" })),
+    ...(lsRecent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "lemonsqueezy", appId: "platform" })),
+  ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  const combinedByApp: Record<string, { count: number; totalUsd: number }> = { ...(recent?.byApp ?? {}) };
+  const lsValidSales = (lsRecent?.sales ?? []).filter((s) => !s.refunded);
+  if (lsValidSales.length > 0) {
+    const cur = combinedByApp.platform ?? { count: 0, totalUsd: 0 };
+    combinedByApp.platform = {
+      count: cur.count + lsValidSales.length,
+      totalUsd: cur.totalUsd + lsValidSales.reduce((sum, s) => sum + s.amountUsd, 0),
+    };
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -236,6 +294,11 @@ export default function RevenuePage() {
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Всего · все чекауты <span className="ml-2 text-xs text-emerald-400 normal-case">(live)</span>
           </h2>
+          {!balanceLoading && !lsLoading && (balance?.error || lsBalance?.error) && (
+            <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-rose-500/10 border-rose-500/30 text-rose-300">
+              ⚠ {balance?.error && lsBalance?.error ? "Оба канала" : balance?.error ? "Gumroad" : "LemonSqueezy"} сейчас недоступны — цифры ниже могут быть занижены, это не обязательно «0 продаж»
+            </div>
+          )}
           {balanceLoading || lsLoading ? (
             <SkeletonGrid cols={3} />
           ) : (
@@ -268,6 +331,10 @@ export default function RevenuePage() {
           </h2>
           {balanceLoading ? (
             <SkeletonGrid cols={4} />
+          ) : balance?.error ? (
+            <div className="bg-gray-900 border border-rose-500/30 rounded-xl p-5 text-sm text-rose-300">
+              ✗ Gumroad API сейчас недоступен ({balance.error}) — это не значит, что продаж не было, просто не смогли их получить прямо сейчас
+            </div>
           ) : balance?.stub ? (
             <GumroadSetupCard />
           ) : (
@@ -285,7 +352,7 @@ export default function RevenuePage() {
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">Комиссия Gumroad</div>
-                <div className="text-3xl font-semibold text-gray-400">${(balance?.feesUsd ?? 0).toFixed(2)}</div>
+                <div className="text-3xl font-semibold text-rose-400/80">-${(balance?.feesUsd ?? 0).toFixed(2)}</div>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">Продаж</div>
@@ -301,17 +368,17 @@ export default function RevenuePage() {
         {/* Revenue trend (Postgres snapshots) */}
         <RevenueTrend />
 
-        {/* Recent Sales */}
-        {(overviewLoading || gumroadConfigured) && (
+        {/* Recent Sales — merged Gumroad + LemonSqueezy */}
+        {(overviewLoading || anyChannelConfigured) && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние продажи</h2>
-            {overviewLoading || recentLoading ? (
+            {overviewLoading || recentLoading || lsRecentLoading ? (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем продажи…</div>
-            ) : recent?.stub ? (
-              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Gumroad не настроен</div>
+            ) : recent?.stub && lsRecent?.stub ? (
+              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Ни один канал не настроен</div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                {(recent?.sales ?? []).length === 0 ? (
+                {combinedSales.length === 0 ? (
                   <div className="p-4 text-sm text-gray-500">Нет продаж пока</div>
                 ) : (
                   <table className="w-full text-sm">
@@ -319,17 +386,23 @@ export default function RevenuePage() {
                       <tr className="border-b border-gray-800 text-gray-400 text-xs">
                         <th className="text-left px-4 py-2.5">Продукт</th>
                         <th className="text-left px-4 py-2.5">Приложение</th>
+                        <th className="text-left px-4 py-2.5">Канал</th>
                         <th className="text-left px-4 py-2.5">Сумма</th>
                         <th className="text-left px-4 py-2.5">Статус</th>
                         <th className="text-left px-4 py-2.5">Дата</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(recent?.sales ?? []).map((s) => (
-                        <tr key={s.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                      {combinedSales.map((s) => (
+                        <tr key={`${s.source}-${s.id}`} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                           <td className="px-4 py-2 text-gray-200">{s.product}</td>
                           <td className="px-4 py-2">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{s.appId}</span>
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${s.source === "gumroad" ? "bg-pink-500/20 text-pink-300" : "bg-teal-500/20 text-teal-300"}`}>
+                              {s.source === "gumroad" ? "Gumroad" : "LemonSqueezy"}
+                            </span>
                           </td>
                           <td className="px-4 py-2 font-medium">${s.amountUsd.toFixed(2)}</td>
                           <td className="px-4 py-2">
@@ -348,12 +421,13 @@ export default function RevenuePage() {
           </section>
         )}
 
-        {/* By-App breakdown */}
-        {gumroadConfigured && recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
+        {/* By-App breakdown — merged Gumroad + LemonSqueezy (LS orders have no
+            per-app attribution backend-side, so they land in "platform"). */}
+        {anyChannelConfigured && Object.keys(combinedByApp).length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">По приложениям</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {Object.entries(recent.byApp).map(([appId, data]) => (
+              {Object.entries(combinedByApp).map(([appId, data]) => (
                 <div key={appId} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-400 mb-1">{appId}</div>
                   <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>

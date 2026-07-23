@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getApiBase } from "@/lib/apiBase";
+import { serverFetch } from "@/lib/apiBase";
 
 export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
@@ -37,11 +37,10 @@ type AnalysisView = {
 
 async function fetchAnalysis(id: string): Promise<AnalysisView | null> {
   try {
-    const res = await fetch(
-      `${getApiBase()}/api/qventure/analyses/${encodeURIComponent(id)}`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return null;
+    // serverFetch retries a cold backend, so a deploy-time render doesn't cache a
+    // placeholder card (the "Report demo-neu" bug that motivated revalidate).
+    const res = await serverFetch(`/api/qventure/analyses/${encodeURIComponent(id)}`);
+    if (!res || !res.ok) return null;
     const json = (await res.json()) as { ok?: boolean; data?: AnalysisView };
     if (!json?.data) return null;
     return json.data;

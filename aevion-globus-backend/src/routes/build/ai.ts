@@ -8,6 +8,9 @@ import {
   requireBuildAuth,
   vString,
   safeParseJson,
+  WORK_MODES,
+  EDUCATION_LEVELS,
+  WORK_REGIONS_KZ,
 } from "../../lib/build";
 
 export const aiRouter = Router();
@@ -1186,5 +1189,188 @@ aiRouter.post("/dm-suggest", aiRateLimiter, async (req, res) => {
     });
   } catch (err: unknown) {
     return aiFail(res, err, "ai_dm_suggest_failed");
+  }
+});
+
+// ── Restored routes ──────────────────────────────────────────────────
+// generate-vacancy, match-vacancy, and cover-letter-freeform existed at
+// some point (git history: commits a09ed793/cce6fe40 for generate-vacancy,
+// e98281dd for match-vacancy + the original text-based cover-letter) but
+// were dropped from this file in a later refactor while the frontend
+// callers (AiVacancyGen.tsx, /build/ai-match) were left pointing at them —
+// confirmed 404/400 live on prod. Restored below with the original prompts
+// (generate-vacancy additionally extended for region/workMode/education,
+// which didn't exist when it was first written). cover-letter itself was
+// NOT touched — it now has a different, still-live vacancyId-based
+// contract used by ApplicationForm.tsx, so the free-text ai-match variant
+// gets its own route name instead of overloading that one.
+
+const KZ_REGION_SLUGS_LIST = WORK_REGIONS_KZ.map((r) => r.slug).join(", ");
+
+// POST /api/build/ai/generate-vacancy — turn a one-line brief into a
+// structured BuildVacancy draft. Recruiter UI (AiVacancyGen.tsx, used from
+// the "+ Add vacancy" form) calls this so they don't have to fight a blank
+// textarea.
+aiRouter.post("/generate-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const brief = vString(req.body?.brief, "brief", { min: 5, max: 800 });
+    if (!brief.ok) return fail(res, 400, brief.error);
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100);
+    const localeRaw = typeof req.body?.locale === "string" ? req.body.locale : "ru";
+    const locale = ["ru", "en", "kz"].includes(localeRaw) ? localeRaw : "ru";
+
+    const { callClaude } = await import("../../lib/build/ai");
+
+    const sys = `Ты — HR-эксперт стройплощадки на платформе AEVION QBuild.
+Получаешь короткий бриф вакансии от работодателя и возвращаешь СТРОГИЙ JSON со схемой:
+{
+  "title": string,            // 4–80 символов, конкретно (не "Сотрудник", а "Сварщик 5 разряда")
+  "skills": string[],         // 3–8 конкретных навыков
+  "description": string,      // 60–800 символов: задачи, требования, условия (смены, оплата, тип занятости)
+  "salaryMin": number|null,   // оценка по рынку, ${city ? `город: ${city}` : "Казахстан/СНГ"}
+  "salaryMax": number|null,
+  "salaryCurrency": "RUB"|"KZT"|"USD",
+  "questions": string[],      // 3–5 коротких квалификационных вопросов кандидату
+  "region": string | null,    // один из слагов: ${KZ_REGION_SLUGS_LIST}, только если город/регион явно назван в брифе или передан отдельно
+  "workMode": ${WORK_MODES.map((m) => `"${m}"`).join(" | ")} | null,
+  "minExperienceYears": number | null,
+  "educationLevel": ${EDUCATION_LEVELS.map((l) => `"${l}"`).join(" | ")} | null
+}
+
+Правила:
+- Не выдумывай факты, которых нет в брифе. Если не указано "сменно/вахта" — пиши "обсуждаемо" в description, а workMode оставляй null.
+- Зарплата — вилка по рынку, не точная цифра. Если бриф не упоминает уровень — bias к низу–середине.
+- region/workMode/minExperienceYears/educationLevel заполняй ТОЛЬКО если бриф явно это подразумевает ("вахта" → FLY_IN_FLY_OUT, "от N лет опыта" → minExperienceYears, город → region по списку слагов); иначе null.
+- Язык всех полей: ${locale === "en" ? "English" : locale === "kz" ? "Kazakh (cyrillic)" : "Russian"}.
+- Никакого markdown, никакого text вне JSON. Только raw JSON.
+- Не пиши \`\`\`json\`\`\`-обёртку.`;
+
+    const reply = await callClaude({
+      systemPrompt: sys,
+      messages: [{ role: "user", content: brief.value }],
+      maxTokens: 1024,
+      cacheSystem: true,
+    });
+
+    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: cleaned.slice(0, 200),
+      });
+    }
+    return ok(res, {
+      draft: parsed,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_generate_vacancy_failed");
+  }
+});
+
+// POST /api/build/ai/match-vacancy — score how well a candidate profile
+// matches a vacancy from pasted text (no DB lookup — /build/ai-match lets
+// anyone paste two blocks of text and compare them free-form).
+aiRouter.post("/match-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
+    if (!profileText.ok) return fail(res, 400, profileText.error);
+    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
+    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const sys = `Ты — рекрутер на стройплощадке платформы AEVION QBuild.
+Получаешь два блока текста: профиль кандидата и описание вакансии. Возвращаешь СТРОГИЙ JSON:
+{
+  "score": number,             // 0-100, насколько профиль подходит
+  "label": string,              // короткая метка ("Сильное совпадение", "Частичное", "Не подходит")
+  "strengths": string[],        // 2-5 пунктов, что у кандидата совпадает с требованиями
+  "gaps": string[],             // 0-5 пунктов, чего не хватает
+  "tip": string                 // одно предложение совета кандидату для отклика
+}
+
+Правила:
+- Не выдумывай факты, которых нет в текстах. Если в профиле нет упоминания навыка — это gap.
+- score < 50 ⇒ label "Не подходит"; 50-79 ⇒ "Частичное совпадение"; 80+ ⇒ "Сильное совпадение".
+- Никакого markdown, никакой обёртки \`\`\`json\`\`\`. Только raw JSON.
+- Язык ответа: русский.`;
+
+    const reply = await callClaude({
+      systemPrompt: sys,
+      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+
+    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return fail(res, 502, "ai_returned_invalid_json", { sample: cleaned.slice(0, 200) });
+    }
+    return ok(res, {
+      match: parsed,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_match_vacancy_failed");
+  }
+});
+
+// POST /api/build/ai/cover-letter-freeform — generate a cover letter from
+// two pasted text blocks (profile + vacancy), no DB lookup. Distinct from
+// /cover-letter (which looks up a real vacancyId + the caller's saved
+// profile for the apply-flow in ApplicationForm.tsx) — /build/ai-match
+// lets a user paste arbitrary text on both sides instead.
+aiRouter.post("/cover-letter-freeform", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
+    if (!profileText.ok) return fail(res, 400, profileText.error);
+    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
+    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
+    const toneRaw = typeof req.body?.tone === "string" ? req.body.tone : "professional";
+    const tone = ["professional", "friendly", "concise"].includes(toneRaw) ? toneRaw : "professional";
+
+    const toneGuide: Record<string, string> = {
+      professional: "Деловой тон. Сухо, по делу, без эмоций. 4-6 предложений.",
+      friendly: "Тёплый дружелюбный тон, но без панибратства. 4-6 предложений.",
+      concise: "Максимально коротко: 2-3 предложения. Только опыт + готов начать.",
+    };
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — редактор сопроводительных писем для строителей на платформе AEVION QBuild.
+Получаешь профиль кандидата и описание вакансии. Возвращаешь готовое сопроводительное письмо ПРОСТЫМ ТЕКСТОМ (без markdown, без подписи "С уважением, ...", без email-шапки).
+
+${toneGuide[tone]}
+
+Правила:
+- Используй только факты из профиля. Не выдумывай работодателей, годы, проекты.
+- Связывай конкретные навыки кандидата с конкретными требованиями вакансии.
+- Без преамбулы вроде "Вот письмо:". Только сам текст.
+- Язык: русский.`,
+      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+
+    return ok(res, {
+      coverLetter: reply.text.trim(),
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return aiFail(res, err, "ai_cover_letter_failed");
   }
 });

@@ -112,11 +112,42 @@ async function ensureExampleAnalyses(): Promise<void> {
   }
 }
 
+// Backfill dedupe_hash on rows that predate the column but kept their input.
+// Dedup only catches future submissions; without this, a plan first analysed
+// before the column existed would still mint a duplicate on resubmit. Rows with
+// no analysis_input (pre-#735) cannot be backfilled — their input was never
+// stored — and are left as-is. Idempotent: only touches NULL dedupe_hash rows,
+// so it is a no-op after the first run.
+async function backfillDedupeHashes(): Promise<void> {
+  if (!isQVentureDbReady()) return;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, analysis_input FROM qventure_analyses
+       WHERE dedupe_hash IS NULL AND analysis_input IS NOT NULL LIMIT 1000`
+    );
+    for (const row of rows) {
+      try {
+        const input = (typeof row.analysis_input === "string"
+          ? JSON.parse(row.analysis_input)
+          : row.analysis_input) as AnalysisInput;
+        await pool.query(
+          `UPDATE qventure_analyses SET dedupe_hash = $1 WHERE id = $2 AND dedupe_hash IS NULL`,
+          [dedupeHash(input), row.id]
+        );
+      } catch { /* skip a row with unparseable input rather than abort the batch */ }
+    }
+    if (rows.length > 0) console.log(`[qventure] backfilled dedupe_hash on ${rows.length} row(s)`);
+  } catch (e: unknown) {
+    captureQVentureError(e);
+  }
+}
+
 (async () => {
   try { await ensureQVentureTables(pool); }
   catch { /* silent — in-memory fallback active */ }
   await ensureDemoAnalysis();
   void ensureExampleAnalyses();
+  void backfillDedupeHashes();
 })();
 
 // ── Limiters ────────────────────────────────────────────────────────────────
@@ -249,13 +280,30 @@ function sanitizeProjections(raw: unknown): ProjectionPoint[] | undefined {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-qventureRouter.get("/health", (_req: Request, res: Response) => {
+// Lightweight row count for health — COUNT(*) on an indexed table, not a scan of
+// rows like /stats does. Returns null if the count itself errors, so health never
+// fails on a metrics hiccup.
+async function countAnalyses(): Promise<number | null> {
+  if (!isQVentureDbReady()) return memStore.length;
+  try {
+    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM qventure_analyses`);
+    return rows[0]?.n ?? null;
+  } catch {
+    return null;
+  }
+}
+
+qventureRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     service: "qventure",
     storage: isQVentureDbReady() ? "postgres" : "in-memory",
     sectors: listSectors().length,
     stages: STAGES,
+    // Observability: which rubric is live and how much data sits behind it, so a
+    // monitor can spot a stuck showcase or a bad deploy without opening a report.
+    rubricVersion: RUBRIC_VERSION,
+    analyses: await countAnalyses(),
   });
 });
 

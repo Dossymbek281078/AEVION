@@ -99,6 +99,15 @@ access"). Not implemented in this pass — flagged here so it isn't lost.
   policy — revisit pricing once traction data exists.
 - Enterprise stays "contact sales" / custom — no change.
 
+## ⏰ Review checkpoint — 2026-09-22 (60-90 days out)
+
+CyberChess ($9.99) and QCoreAI-standalone ($9.99) are explicitly *penetration*
+pricing, not a permanent stance — re-check by ~2026-09-22 (60-90 days from
+this pass): has either module gained enough real traction/market share that
+the discount should be trimmed back toward (or above) parity with
+chess.com / Claude Pro-ChatGPT Plus? If nobody revisits this, it silently
+becomes the permanent price by inertia — don't let that happen unchecked.
+
 ## Update 2026-07-22 (same day) — premium-model sub-cap shipped, other modules checked
 
 **Premium/frontier-model token sub-cap — implemented.** The "open follow-up"

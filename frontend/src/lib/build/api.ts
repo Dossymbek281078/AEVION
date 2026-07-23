@@ -18,6 +18,10 @@ export type AiVacancyDraft = {
   questions?: string[];
   tasks?: string[];
   requirements?: string[];
+  region?: string | null;
+  workMode?: WorkMode | null;
+  minExperienceYears?: number | null;
+  educationLevel?: EducationLevel | null;
 };
 
 export type BuildStory = {
@@ -1202,6 +1206,14 @@ export const buildApi = {
       skillsOverlap?: string[];
       usage?: { input: number; output: number };
     }>("POST", "/api/build/ai/cover-letter", input),
+  // Distinct from aiCoverLetter: that one looks up a real vacancyId + the
+  // caller's saved profile (used by ApplicationForm's apply-flow); this one
+  // takes two pasted text blocks with no DB lookup (used by /build/ai-match).
+  aiCoverLetterFreeform: (input: { profileText: string; vacancyText: string; tone?: string }) =>
+    call<{
+      coverLetter: string;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/cover-letter-freeform", input),
   aiWhyMatch: (applicationId: string, force = false) =>
     call<{
       explanation: string;

@@ -11,13 +11,22 @@ export interface GoalPace {
 }
 
 const TOO_FAR_DAYS = 3650; // 10 years — beyond this, show "слишком медленный темп" instead of a number.
+const LOW_CONFIDENCE_POINTS = 5; // fewer snapshots than this = one noisy interval, not an established trend yet.
 
-export function etaLabel(target: number, current: number, pace: GoalPace | null): string | null {
+export function etaLabel(target: number, current: number, pace: GoalPace | null, lang: "en" | "ru" = "en"): string | null {
   if (current >= target) return "🎉 цель достигнута";
   if (!pace?.change || pace.points < 2) return null;
+  const lowConfidence = pace.points < LOW_CONFIDENCE_POINTS;
   const perDay = pace.change.grossUsd / pace.windowDays;
-  if (perDay <= 0) return "нет роста за 30 дней";
+  if (perDay <= 0) {
+    return lowConfidence ? "пока мало данных — роста за 30 дней не видно" : "нет роста за 30 дней";
+  }
   const days = Math.ceil((target - current) / perDay);
-  if (days > TOO_FAR_DAYS) return "текущего темпа надолго не хватит — >10 лет";
-  return `в темпе — ~${days.toLocaleString("en-US")} дн.`;
+  if (days > TOO_FAR_DAYS) {
+    return lowConfidence
+      ? "пока мало данных для прогноза, но темпа уже не хватает"
+      : "текущего темпа надолго не хватит — >10 лет";
+  }
+  const daysStr = days.toLocaleString(lang === "ru" ? "ru-RU" : "en-US");
+  return `в темпе — ~${daysStr} дн.`;
 }

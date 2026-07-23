@@ -129,7 +129,20 @@ const PORT = process.env.PORT || 4001;
 // express-rate-limit reads the real client IP from X-Forwarded-For.
 app.set("trust proxy", 1);
 
-app.use(cors());
+// CORS_ALLOWED_ORIGINS: comma-separated allow-list (e.g. "https://aevion.app,https://aevion.vercel.app").
+// Falls back to permissive (reflect any origin) when unset, matching prior
+// behavior for local dev / environments that haven't configured it yet.
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(
+  cors(
+    corsAllowedOrigins.length > 0
+      ? { origin: corsAllowedOrigins }
+      : undefined
+  )
+);
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 //

@@ -30,6 +30,10 @@ async function run() {
   assert("ok === true", h.body?.ok === true);
   assert("reports storage mode", typeof h.body?.storage === "string", JSON.stringify(h.body).slice(0, 120));
   assert("exposes stages", Array.isArray(h.body?.stages) && h.body.stages.length >= 4);
+  assert("health reports the live rubric version", typeof h.body?.rubricVersion === "number" && h.body.rubricVersion >= 3,
+    String(h.body?.rubricVersion));
+  assert("health reports an analyses count", typeof h.body?.analyses === "number" || h.body?.analyses === null,
+    String(h.body?.analyses));
 
   console.log("\n2. Sectors catalog");
   const sec = await req("GET", "/api/qventure/sectors");

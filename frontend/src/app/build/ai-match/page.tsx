@@ -53,8 +53,8 @@ export default function AiMatchPage() {
     }
     setLoading(true); setError(""); setCoverLetter(null);
     try {
-      const r = await buildApi.aiCoverLetter({ profileText, vacancyText, tone });
-      setCoverLetter(r.coverLetter ?? r.letter ?? null);
+      const r = await buildApi.aiCoverLetterFreeform({ profileText, vacancyText, tone });
+      setCoverLetter(r.coverLetter ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("build.aiMatch.aiError"));
     } finally { setLoading(false); }

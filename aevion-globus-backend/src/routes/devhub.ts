@@ -683,6 +683,10 @@ const TEMPLATES = [
 interface GeneratedCodeResult {
   files: Array<{ path: string; content: string; language: string }>;
   aiGenerated: boolean; // false = no provider configured / call failed, caller got a placeholder stub
+  // Present when the model's reply hit the token cap mid-write: complete files
+  // were salvaged and one continuation call fetched (or tried to fetch) the
+  // rest. Surfaces in the chat as an honest process note, not hidden.
+  continued?: boolean;
   // Present (non-empty) only when a generated JS/TS/JSON file STILL fails a
   // syntax check after self-correction was attempted — the file is still
   // written (the model may have gotten close, and an empty diff is worse
@@ -892,6 +896,7 @@ async function generateCodeWithAI(
     };
   }
 
+  let wasContinued = false;
   let parsed = parseGeneratedFiles(result.reply, targetFiles);
   // Salvage means the reply was cut off and its tail file was lost — ask the
   // model to CONTINUE with just the missing files (one attempt; completed
@@ -916,6 +921,7 @@ async function generateCodeWithAI(
         parsed = { mode: "parsed", files: [...parsed.files, ...contParsed.files.filter((f) => !have.has(f.path))] };
       }
     } catch { /* keep the salvaged prefix — better than losing everything */ }
+    wasContinued = true;
   }
   let files = parsed.files;
   let syntaxProblems = await validateGeneratedFiles(files);
@@ -947,6 +953,7 @@ async function generateCodeWithAI(
   return {
     files,
     aiGenerated: true,
+    ...(wasContinued ? { continued: true } : {}),
     ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
     ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
   };
@@ -1440,7 +1447,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[]) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history);
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history);
   const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
   for (const gf of generatedFiles) {
     const file: DevHubFile = {
@@ -1465,7 +1472,8 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     }
   }
   return {
-    files: generatedFiles, aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
+    files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
+    ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
     checkpointId, projectId: project.id,
   };
 }

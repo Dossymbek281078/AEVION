@@ -508,6 +508,7 @@ describe("truncated model reply — complete files are salvaged, not dumped to o
     const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({ prompt: "pomodoro" });
     expect(r.status).toBe(200);
     expect(r.body.files.map((f: { path: string }) => f.path).sort()).toEqual(["src/App.jsx", "src/big.css"]);
+    expect(r.body.continued).toBe(true); // honest process note reaches the UI
     // Continuation prompt names the completed files and asks only for the rest.
     const contCall = vi.mocked(callProvider).mock.calls[1];
     const contUser = (contCall[1] as Array<{ role: string; content: string }>).filter((m) => m.role === "user").pop()!;

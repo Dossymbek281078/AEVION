@@ -906,6 +906,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         return { path: gf.path, language: gf.language || "text", isNew: before === "", added: d.added, removed: d.removed, diff: d.text };
       });
       let note: string | undefined;
+      if (data.continued) {
+        note = "Reply hit the length cap — the missing files were fetched in a follow-up call";
+      }
       if (data.aiGenerated === false) {
         note = "No AI provider configured — placeholder inserted instead of real code";
         showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");

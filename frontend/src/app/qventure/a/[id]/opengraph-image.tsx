@@ -5,6 +5,13 @@ export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = "AEVION QVenture investment analysis";
+// The card renders from a server-side fetch of the analysis. If the very first
+// render after a deploy hits a cold backend, the fetch returns null and the
+// name/score fall back to placeholders — and without revalidation that broken
+// card is cached and served indefinitely (seen live: a deploy left the demo
+// card showing "Report demo-neu" instead of "NeuroDx · 68/100"). Revalidating
+// lets a stale-fallback card self-heal on the next request after the window.
+export const revalidate = 300;
 
 // Newspaper palette — mirrors styles/aevionPaper.module.css. next/og renders a
 // bundled sans by default and will not produce serif without a font file, so the

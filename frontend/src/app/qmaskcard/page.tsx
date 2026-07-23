@@ -85,6 +85,7 @@ export default function QMaskCardPage() {
   const [authed, setAuthed] = useState(false);
   const [masks, setMasks] = useState<Mask[]>([]);
   const [charges, setCharges] = useState<Charge[]>([]);
+  const [chargesLoading, setChargesLoading] = useState(true);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -127,11 +128,13 @@ export default function QMaskCardPage() {
     } catch { /* ignore */ }
   }, []);
   const loadCharges = useCallback(async () => {
-    if (!hasToken()) return;
+    if (!hasToken()) { setChargesLoading(false); return; }
+    setChargesLoading(true);
     try {
       const r = await fetch(apiUrl("/api/qmaskcard/charges"), { headers: bearer(), cache: "no-store" });
       if (r.ok) { const j = await r.json(); setCharges(j.charges ?? []); }
     } catch { /* ignore */ }
+    finally { setChargesLoading(false); }
   }, []);
 
   useEffect(() => { void loadStats(); void loadMasks(); void loadCharges(); }, [loadStats, loadMasks, loadCharges]);
@@ -472,10 +475,24 @@ export default function QMaskCardPage() {
           </section>
 
           {/* Charges history */}
-          {charges.length > 0 && (
-            <section className="mx-auto max-w-6xl px-5 pb-8">
-              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 backdrop-blur">
-                <div className="text-sm font-semibold text-amber-200 mb-4">📜 История чарджей</div>
+          <section className="mx-auto max-w-6xl px-5 pb-8">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 backdrop-blur">
+              <div className="text-sm font-semibold text-amber-200 mb-4">
+                📜 История чарджей{charges.length > 0 && <span className="text-slate-500 font-normal ml-2">({charges.length})</span>}
+              </div>
+              {chargesLoading && (
+                <div className="space-y-2" aria-busy="true" aria-label="Загрузка истории чарджей">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-8 bg-slate-800/40 border border-slate-800 rounded animate-pulse" />
+                  ))}
+                </div>
+              )}
+              {!chargesLoading && charges.length === 0 && (
+                <div className="text-slate-500 text-center py-8 text-sm">
+                  Пока нет чарджей. Создай маску слева, потом протестируй авторизацию через форму «Test charge».
+                </div>
+              )}
+              {!chargesLoading && charges.length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -510,9 +527,9 @@ export default function QMaskCardPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </section>
-          )}
+              )}
+            </div>
+          </section>
         </>
       )}
 

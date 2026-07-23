@@ -188,14 +188,16 @@ backend further without explicit user direction.
 **P0 COMPLETE as of 2026-06-22.** `aevion.app` is publicly live, SSO gate removed,
 DNS wired, 40/40 prod smokes green. Proceed with Phase 1 hardening.
 
-> **Prod smoke baseline refresh 2026-07-22:** the full `all-smokes` suite
-> (88 scripts) ran against `aevion.app` after the paywall flip: **84/88**,
-> and the 4 remaining were 2 transients (pass on rerun; suite now retries
-> transient network failures once) + 2 stale checks fixed same day
-> (PR #804/#825 + follow-up). Smokes are paywall-aware (`scripts/lib/
-> paywallAware.js`) — a gated module's 402 is verified as a contract, not
-> counted as failure. After ANY future `PAYWALL_MODULES` change, rerun the
-> suite (now a checklist item in `docs/PAYWALL_FLIP_READINESS.md`).
+> **Prod smoke baseline: 88/88 GREEN, verified 2026-07-23.** Three repair
+> waves (PR #804/#825/#841) after the paywall flip: 6 smokes made
+> paywall-aware (`scripts/lib/paywallAware.js` verifies the 402 contract
+> instead of failing), a real shadownet by-id prod bug fixed, Paddle debris
+> fully purged (routes/spec/audits), stale checks aligned with deliberate
+> hardenings (aev Bearer mint, qshield owner-only shards, deleted
+> /api/aevion/pricing), and the suite retries transient network failures
+> once. After ANY future `PAYWALL_MODULES` change, rerun the suite (now a
+> checklist item in `docs/PAYWALL_FLIP_READINESS.md`). Daily coverage: the
+> `prod-readonly-sweep` job uploads its full log as a CI artifact.
 
 ### Phase 1 — Tier 1 prod-ready hardening (1-2 weeks)
 

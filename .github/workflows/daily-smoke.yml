@@ -276,7 +276,21 @@ jobs:
       - name: Install backend deps
         run: npm install --ignore-scripts
 
+      # tee the full output into a file AND fail on the orchestrator's exit
+      # code (pipefail) — 2026-07-22 lesson: reading a truncated tail hid 10
+      # failing scripts for a day. The artifact preserves every assertion line.
       - name: Read-only smoke sweep against live prod
-        run: BASE="$PROD_BASE" READ_ONLY=1 node scripts/all-smokes.js
+        shell: bash
+        run: |
+          set -o pipefail
+          BASE="$PROD_BASE" READ_ONLY=1 node scripts/all-smokes.js 2>&1 | tee prod-sweep-full.log
         env:
           PROD_BASE: ${{ secrets.PROD_SMOKE_BASE || 'https://aevion-production-a70c.up.railway.app' }}
+
+      - name: Upload full sweep log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prod-readonly-sweep-log
+          path: aevion-globus-backend/prod-sweep-full.log
+          retention-days: 30

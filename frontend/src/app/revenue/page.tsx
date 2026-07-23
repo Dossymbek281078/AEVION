@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { etaLabel, type GoalPace } from "@/lib/goalEta";
+import { fmtNum, intlLocale, type NumLang } from "@/lib/locale";
 
 interface RevenueOverview {
   totalApps: number;
@@ -100,10 +101,9 @@ function daysUntil(deadline: string): number {
 }
 
 /** Compact form for large dollar amounts ($19,999,821 → $20.0M); small ones stay exact. */
-function formatCompactUsd(n: number, lang: "en" | "ru" = "en"): string {
-  const locale = lang === "ru" ? "ru-RU" : "en-US";
-  if (n < 10_000) return `$${n.toLocaleString(locale, { maximumFractionDigits: 2 })}`;
-  return `$${Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
+function formatCompactUsd(n: number, lang: NumLang = "en"): string {
+  if (n < 10_000) return `$${fmtNum(n, lang, { maximumFractionDigits: 2 })}`;
+  return `$${Intl.NumberFormat(intlLocale(lang), { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
 }
 
 // Static "HH:MM:SS" — deliberately not a live-ticking "N sec ago": a text
@@ -118,7 +118,7 @@ function clockLabel(ms: number): string {
 
 export default function RevenuePage() {
   const { lang } = useI18n();
-  const numLang: "en" | "ru" = lang === "ru" ? "ru" : "en";
+  const numLang: NumLang = lang === "ru" ? "ru" : "en";
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
@@ -418,6 +418,10 @@ function RevenueTrend() {
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Synchronous guard alongside `capturing`: setState is async, so a very
+  // fast double-click can fire two POSTs before the button re-renders
+  // disabled. A plain ref updates immediately, closing that gap.
+  const inFlightRef = useRef(false);
 
   const load = () => {
     setLoading(true);
@@ -430,6 +434,8 @@ function RevenueTrend() {
   useEffect(() => { load(); }, []);
 
   const capture = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setCapturing(true); setNote(null);
     try {
       const r = await fetch(apiUrl("/api/revenue/snapshot"), { method: "POST", headers: { "Content-Type": "application/json" } });
@@ -448,7 +454,7 @@ function RevenueTrend() {
         setNote(`✗ ${j.error ?? "snapshot_failed"}`);
       }
     } catch { setNote("✗ Network error"); }
-    finally { setCapturing(false); }
+    finally { inFlightRef.current = false; setCapturing(false); }
   };
 
   const series = trend?.series ?? [];
@@ -569,18 +575,31 @@ function SkeletonGrid({ cols }: { cols: number }) {
   );
 }
 
-function GoalBar({ label, target, current, colorClass, eta, lang = "en" }: { label: string; target: number; current: number; colorClass: string; eta?: string | null; lang?: "en" | "ru" }) {
+function GoalBar({ label, target, current, colorClass, eta, lang = "en" }: { label: string; target: number; current: number; colorClass: string; eta?: string | null; lang?: NumLang }) {
   const [exact, setExact] = useState(false);
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
   const reached = pct >= 100;
-  const locale = lang === "ru" ? "ru-RU" : "en-US";
-  const currentStr = exact ? `$${current.toLocaleString(locale, { maximumFractionDigits: 2 })}` : formatCompactUsd(current, lang);
-  const remainingStr = exact ? `$${remaining.toLocaleString(locale, { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining, lang);
+  const currentStr = exact ? `$${fmtNum(current, lang, { maximumFractionDigits: 2 })}` : formatCompactUsd(current, lang);
+  const remainingStr = exact ? `$${fmtNum(remaining, lang, { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining, lang);
+
+  // Pulse for a short celebration window, then settle into a plain static
+  // glow — an indefinite animate-pulse reads as "something's wrong" to a
+  // visitor who reopens the page months after the goal was actually hit.
+  const [celebrating, setCelebrating] = useState(false);
+  useEffect(() => {
+    if (!reached) { setCelebrating(false); return; }
+    setCelebrating(true);
+    const t = setTimeout(() => setCelebrating(false), 10_000);
+    return () => clearTimeout(t);
+  }, [reached]);
+
   return (
     <div
       className={`bg-gray-900 border rounded-xl p-5 transition-shadow ${
-        reached ? "border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.35)] animate-pulse" : "border-gray-800"
+        reached
+          ? `border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.35)]${celebrating ? " animate-pulse" : ""}`
+          : "border-gray-800"
       }`}
     >
       <div className="flex items-baseline justify-between mb-2">

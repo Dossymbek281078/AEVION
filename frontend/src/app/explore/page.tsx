@@ -23,6 +23,7 @@ const REGIONS: Region[] = [
     name: "Artificial Intelligence",
     code: "AI",
     items: [
+      { name: "QReal Studio", slug: "qreal", desc: "Fully-alive AI video from a text brief — no actor, realism QC, built-in provenance.", status: "live" },
       { name: "QVenture", slug: "qventure", desc: "AI investment analyst: quant score, four-role council, entry strategy.", status: "live" },
       { name: "QCoreAI", slug: "qcoreai", desc: "Multi-agent pipeline — Analyst → Writer → Critic, eval harness, batch runs.", status: "live" },
       { name: "QFusionAI", slug: "qfusionai", desc: "Hybrid router across OpenAI, Anthropic, Gemini, DeepSeek and Grok.", status: "live" },

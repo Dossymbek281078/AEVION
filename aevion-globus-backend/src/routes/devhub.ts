@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
+import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
@@ -705,44 +706,32 @@ interface GeneratedCodeResult {
 type ParsedGeneration = { files: Array<{ path: string; content: string; language: string }>; mode: "parsed" | "salvaged" | "fallback" };
 
 function parseGeneratedFiles(reply: string, targetFiles: string[]): ParsedGeneration {
-  // Models wrap JSON in prose and fences in every combination — try the
-  // likeliest extractions in order before giving up. The raw-text fallback
-  // (whole reply into output.ts) is what a founder saw as a broken first
-  // impression, so it's a genuinely last resort now.
+  // Extraction + truncation salvage live in the shared qcoreai/jsonReply
+  // module now — this wrapper just maps the result onto DevHub's file shape.
   const raw = reply.trim();
-  const candidates: string[] = [];
-  if (raw.startsWith("{")) candidates.push(raw);
-  const fence = raw.match(/```(?:json)?\s*\n?([\s\S]+?)```/);
-  if (fence) candidates.push(fence[1].trim());
-  // First '{' through last '}' — JSON preceded/followed by prose.
-  const first = raw.indexOf("{");
-  const last = raw.lastIndexOf("}");
-  if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-        return {
-          mode: "parsed",
-          files: parsed.files.map((f: any) => ({
-            path: String(f.path || "output.ts"),
-            content: String(f.content || ""),
-            language: String(f.language || detectLanguage(f.path || "")),
-          })),
-        };
-      }
-    } catch { /* try the next extraction */ }
+  const parsedObj = extractJsonObject(raw) as { files?: unknown } | null;
+  if (parsedObj && Array.isArray(parsedObj.files) && parsedObj.files.length > 0) {
+    return {
+      mode: "parsed",
+      files: parsedObj.files.map((f: any) => ({
+        path: String(f.path || "output.ts"),
+        content: String(f.content || ""),
+        language: String(f.language || detectLanguage(f.path || "")),
+      })),
+    };
   }
   // Truncation salvage: max_tokens can cut a reply mid-string (seen live —
-  // 8.8KB reply ending inside a CSS value). Individual complete file objects
-  // are still recoverable; parse them one by one and drop the cut-off tail.
-  const salvaged = salvageCompleteFileObjects(raw);
+  // 8.8KB reply ending inside a CSS value). Complete file objects are still
+  // recoverable; the cut-off tail is dropped.
+  const salvaged = salvageCompleteArrayObjects(raw, "files")
+    .filter((o): o is { path: string; content: string; language?: string } =>
+      !!o && typeof (o as any).path === "string" && typeof (o as any).content === "string")
+    .map((o) => ({ path: o.path, content: o.content, language: String(o.language || detectLanguage(o.path)) }));
   if (salvaged.length > 0) return { files: salvaged, mode: "salvaged" };
   // Raw-dump fallback = a broken first impression for the user. Make every
   // occurrence visible in monitoring instead of waiting for someone to open
-  // the file (that manual read is exactly how today's truncation bug was
-  // found — turn the accident into telemetry).
+  // the file (that manual read is exactly how the truncation bug was found —
+  // turn the accident into telemetry).
   captureException(new Error("devhub generate: reply unparseable, raw-dump fallback"), {
     route: "devhub/generate:parse", replyLength: reply.length, replyHead: reply.slice(0, 200),
   });
@@ -750,46 +739,6 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): ParsedGenera
   return { files: [{ path, content: reply, language: detectLanguage(path) }], mode: "fallback" };
 }
 
-/** Extract every COMPLETE {"path":…,"content":…} object from a (possibly
- * truncated) files-array reply. Walks strings with escape awareness so braces
- * inside code content don't fool the depth counter. */
-function salvageCompleteFileObjects(raw: string): Array<{ path: string; content: string; language: string }> {
-  const arrStart = raw.indexOf('"files"');
-  if (arrStart < 0) return [];
-  const out: Array<{ path: string; content: string; language: string }> = [];
-  let i = raw.indexOf("[", arrStart);
-  if (i < 0) return [];
-  const n = raw.length;
-  while (i < n) {
-    const objStart = raw.indexOf("{", i);
-    if (objStart < 0) break;
-    let depth = 0;
-    let inStr = false;
-    let esc = false;
-    let end = -1;
-    for (let j = objStart; j < n; j++) {
-      const ch = raw[j];
-      if (esc) { esc = false; continue; }
-      if (ch === "\\") { esc = true; continue; }
-      if (ch === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (ch === "{") depth++;
-      else if (ch === "}") {
-        depth--;
-        if (depth === 0) { end = j; break; }
-      }
-    }
-    if (end < 0) break; // truncated tail — stop here
-    try {
-      const obj = JSON.parse(raw.slice(objStart, end + 1));
-      if (obj && typeof obj.path === "string" && typeof obj.content === "string") {
-        out.push({ path: obj.path, content: obj.content, language: String(obj.language || detectLanguage(obj.path)) });
-      }
-    } catch { /* malformed object — skip */ }
-    i = end + 1;
-  }
-  return out;
-}
 
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
@@ -1009,9 +958,8 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
       { role: "system", content: systemPrompt },
       { role: "user", content: userMsg },
     ], provider.defaultModel, 0.3);
-    const raw = result.reply.trim();
-    const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractJsonObject(result.reply) as any;
+    if (!parsed) throw new Error("unparseable plan reply");
     const milestones = Array.isArray(parsed.milestones)
       ? parsed.milestones.map((m: any) => ({ title: String(m?.title || ""), prompt: String(m?.prompt || "") }))
       : [];

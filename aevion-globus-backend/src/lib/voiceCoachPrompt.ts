@@ -530,7 +530,7 @@ const PIECE_RU: Record<string, string> = {
  * enumerate them (issue #858). Computed server-side from the FEN itself so
  * every caller gets it automatically, with no frontend changes required.
  */
-function describeBoardPieces(fen: string): string | null {
+export function describeBoardPieces(fen: string): string | null {
   let chess: Chess;
   try {
     chess = new Chess(fen);

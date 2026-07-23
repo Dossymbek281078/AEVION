@@ -5,7 +5,7 @@ import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/paybox
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
-  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES,
+  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
@@ -115,12 +115,13 @@ checkoutRouter.post("/session", async (req, res) => {
     // Promo code discount
     let discountUsd = 0;
     if (body.promoCode) {
-      const { promo } = resolvePromoCode(body.promoCode, tier.id);
+      const { promo } = resolvePromoCode(body.promoCode, tier.id, period);
       if (promo) {
         const subtotal = totalUsd;
-        discountUsd = promo.kind === "percent"
+        const rawDiscount = promo.kind === "percent"
           ? Math.round(subtotal * promo.amount) / 100
           : Math.min(subtotal, promo.amount * (period === "annual" ? 12 : 1));
+        discountUsd = Math.min(rawDiscount, subtotal * MAX_PROMO_DISCOUNT_RATIO);
         totalUsd = Math.max(0, totalUsd - discountUsd);
       }
     }

@@ -131,6 +131,15 @@ export interface PricingBundle {
   savingsPercent: number;
 }
 
+/**
+ * Максимальная доля subtotal, которую может снять ОДИН промо-код — платформенный
+ * потолок, а не решение про конкретный код. Защищает от того, что fixed-скидка
+ * (умножается на 12 для annual — см. checkout.ts/buildQuote) обнулит/почти
+ * обнулит тариф целиком просто потому, что его цена оказалась ниже суммы
+ * скидки (нашли на TEAM100 −$100 против Full $89/890 — оба periода ≥ него).
+ */
+export const MAX_PROMO_DISCOUNT_RATIO = 0.5;
+
 /** Курсы для отображения на фронте (фиксированные, обновляются вручную). */
 export const CURRENCY_RATES: Record<CurrencyCode, { rate: number; symbol: string; label: string }> = {
   USD: { rate: 1, symbol: "$", label: "US Dollar" },
@@ -645,10 +654,19 @@ export const MODULES_PRICING: ModulePrice[] = [
 /**
  * Промо-коды. Применяются на subtotal сметы.
  * - kind='percent' → скидка в процентах
- * - kind='fixed' → фикс в USD
+ * - kind='fixed' → фикс в USD (на monthly — умножается на 12 для annual, см. checkout.ts)
  * - validUntil ISO дата (опционально)
  * - maxUses null = без ограничений (counter не ведём здесь — это GTM-список)
  * - tiers — на каких тарифах применим (пустой массив = на всех платных)
+ * - annualOnly — промо применим только при годовой оплате (напр. флагманские
+ *   годовые акции). NOTE: fixed-скидка сама умножается на 12 для annual (см.
+ *   checkout.ts) — annualOnly НЕ защищает от обнуления тарифа, только
+ *   ограничивает период применения. Обнуление предотвращает отдельный
+ *   потолок в checkout.ts/buildQuote (не более MAX_PROMO_DISCOUNT_RATIO от
+ *   subtotal) — см. там. Найдено 2026-07-23: TEAM100 (−$100 fixed) обнулял
+ *   Full целиком в обоих периодах (89 и 890×12=1200 — оба ≥ subtotal) —
+ *   баг существовал и до репрайсинга (тоже обнулял monthly Full при старой
+ *   цене $49), просто не был замечен раньше.
  */
 export interface PromoCode {
   code: string;
@@ -658,6 +676,7 @@ export interface PromoCode {
   validUntil?: string;
   tiers?: TierId[];
   maxUses?: number | null;
+  annualOnly?: boolean;
 }
 
 export const PROMO_CODES: PromoCode[] = [
@@ -743,10 +762,12 @@ export function getModulePrice(id: string): ModulePrice | null {
  *   - не существует
  *   - истёк (validUntil < now)
  *   - не применим к данному тарифу (tiers задан и tier не входит)
+ *   - annualOnly=true, а period !== "annual"
  */
 export function resolvePromoCode(
   raw: string | undefined,
   tierId: TierId,
+  period: BillingPeriod = "monthly",
 ): { promo: PromoCode | null; reason?: string } {
   if (!raw) return { promo: null };
   const code = raw.trim().toUpperCase();
@@ -754,6 +775,9 @@ export function resolvePromoCode(
   if (!promo) return { promo: null, reason: "promo_not_found" };
   if (promo.validUntil && new Date(promo.validUntil) < new Date()) {
     return { promo: null, reason: "promo_expired" };
+  }
+  if (promo.annualOnly && period !== "annual") {
+    return { promo: null, reason: "promo_annual_only" };
   }
   if (promo.tiers && promo.tiers.length > 0 && !promo.tiers.includes(tierId)) {
     return { promo: null, reason: "promo_tier_mismatch" };
@@ -906,13 +930,14 @@ export function buildQuote(input: {
   let promoApplied: AppliedPromo | null = null;
   let promoUsd = 0;
   if (input.promoCode) {
-    const { promo, reason } = resolvePromoCode(input.promoCode, tier.id);
+    const { promo, reason } = resolvePromoCode(input.promoCode, tier.id, period);
     if (promo) {
       const base = Math.max(0, subtotal - discount);
-      promoUsd =
+      const rawPromoUsd =
         promo.kind === "percent"
           ? Math.round((base * promo.amount) / 100)
           : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
+      promoUsd = Math.min(rawPromoUsd, base * MAX_PROMO_DISCOUNT_RATIO);
       const rate = CURRENCY_RATES[currency].rate;
       promoApplied = {
         code: promo.code,

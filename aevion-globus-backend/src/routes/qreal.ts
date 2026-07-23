@@ -306,8 +306,8 @@ const STORYBOARD_SYSTEM =
 // (экономия opus-токенов; демо-брифы отвечают мгновенно).
 const memStoryboardCache = new Map<string, Shot[]>();
 
-function storyboardCacheKey(p: Project): string {
-  return crypto.createHash("sha256").update(`${p.format}|${p.language}|${p.brief}`).digest("hex");
+function storyboardCacheKey(p: Project, variation: number): string {
+  return crypto.createHash("sha256").update(`${p.format}|${p.language}|v${variation}|${p.brief}`).digest("hex");
 }
 
 function cloneShotsForProject(shots: Shot[]): Shot[] {
@@ -330,8 +330,8 @@ function stubStoryboard(p: Project): Shot[] {
   ];
 }
 
-async function aiStoryboard(p: Project): Promise<{ shots: Shot[]; fromCache: boolean } | null> {
-  const cacheKey = storyboardCacheKey(p);
+async function aiStoryboard(p: Project, variation: number): Promise<{ shots: Shot[]; fromCache: boolean } | null> {
+  const cacheKey = storyboardCacheKey(p, variation);
   const cached = memStoryboardCache.get(cacheKey);
   if (cached) return { shots: cloneShotsForProject(cached), fromCache: true };
   try {
@@ -351,7 +351,8 @@ async function aiStoryboard(p: Project): Promise<{ shots: Shot[]; fromCache: boo
       provider,
       [
         { role: "system", content: STORYBOARD_SYSTEM },
-        { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}). Разбей ИМЕННО эту сцену, не выдумывай другую:\n${p.brief}` },
+        { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}). Разбей ИМЕННО эту сцену, не выдумывай другую:\n${p.brief}` + (variation > 1 ? `
+Вариация №${variation}: та же сцена и сущности, но ДРУГОЙ монтажный ритм — иной порядок планов, другая крупность и движение камеры.` : "") },
       ],
       model, 0.3
     );
@@ -599,7 +600,8 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
   try {
     const p = memProjects.get(req.params.id);
     if (!p) return res.status(404).json({ error: "not found" });
-    const viaAi = await aiStoryboard(p);
+    const variation = Math.min(5, Math.max(1, Number(req.body?.variation) || 1));
+    const viaAi = await aiStoryboard(p, variation);
     p.shots = viaAi?.shots ?? stubStoryboard(p);
     for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
     p.status = "storyboarded";

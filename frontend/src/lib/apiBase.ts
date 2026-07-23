@@ -60,3 +60,56 @@ export function apiUrl(apiPath: string): string {
   const base = getApiBase();
   return `${base}${p}`;
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Server-side fetch of a backend API path, with retry on a cold backend.
+ *
+ * The first request to hit the API right after a deploy often fails — the
+ * backend is still spinning up (network error or a 5xx) — and a single-shot
+ * server fetch then bakes that failure into whatever it renders: an OG card
+ * cached with placeholder text, a page rendered as not-found. This was seen
+ * live: a deploy left the QVenture demo OG card showing "Report demo-neu"
+ * because the very first render fetched null and got cached.
+ *
+ * Retries ONLY transient failures — a thrown fetch (network/timeout/abort) and
+ * 5xx responses. A 4xx (notably 404) is a real answer and returns immediately.
+ * Returns the Response, or null once retries are exhausted, so callers keep
+ * their existing `if (!res) / if (!res.ok)` handling. Server-only (uses
+ * getApiBase, which resolves to an absolute base off the window).
+ */
+export async function serverFetch(
+  apiPath: string,
+  opts: RequestInit & { retries?: number; timeoutMs?: number } = {},
+): Promise<Response | null> {
+  const { retries = 2, timeoutMs = 4000, ...init } = opts;
+  const p = apiPath.startsWith("/") ? apiPath : `/${apiPath}`;
+  const url = `${getApiBase()}${p}`;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      let res: Response;
+      try {
+        res = await fetch(url, { cache: "no-store", ...init, signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      // A cold backend answers 5xx; retry those. A 4xx is a real answer — return it.
+      if (res.status >= 500 && attempt < retries) {
+        await sleep(250 * (attempt + 1));
+        continue;
+      }
+      return res;
+    } catch {
+      // Network error / timeout / abort — the classic cold-start symptom.
+      if (attempt < retries) {
+        await sleep(250 * (attempt + 1));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}

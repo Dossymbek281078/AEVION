@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { track } from "@/lib/track";
+import { apiUrl } from "@/lib/apiBase";
 
 type Status = "live" | "new" | "soon";
 type Item = { name: string; slug: string; desc: string; status: Status };
@@ -81,6 +82,19 @@ const STATUS_LABEL: Record<Status, string> = { live: "Live", new: "New", soon: "
 export default function ExplorePlanet() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fromBig6, setFromBig6] = useState(false);
+  const [liveModules, setLiveModules] = useState<number | null>(null);
+
+  // Same live registry counter /acquire shows - the two landing pages used to
+  // disagree (static "25+" here vs live "30+" there), which reads as sloppy
+  // to exactly the visitors outreach brings.
+  useEffect(() => {
+    fetch(apiUrl("/api/aevion/stats"))
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d?.totalModules === "number" && d.totalModules > 0) setLiveModules(d.totalModules);
+      })
+      .catch(() => {});
+  }, []);
 
   // Outreach attribution: full query lands in `path`; utm_source is lifted
   // into `source` so /admin/events aggregates by campaign without parsing.
@@ -144,9 +158,9 @@ export default function ExplorePlanet() {
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <canvas ref={canvasRef} className="aevx-stars" aria-hidden="true" />
       {fromBig6 && (
-        <div style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "10px 16px", fontSize: 13, background: "rgba(16,185,129,0.12)", borderBottom: "1px solid rgba(16,185,129,0.35)", color: "#d1fae5" }}>
+        <div style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "10px 16px", fontSize: 13, background: "#0E766E", borderBottom: "1px solid #0B5D57", color: "#FFFFFF" }}>
           Came from the benchmark invitation? The partnership brief is here →{" "}
-          <a href="/acquire" style={{ color: "#34d399", fontWeight: 700 }}>aevion.vercel.app/acquire</a>
+          <a href="/acquire" style={{ color: "#A7F3D0", fontWeight: 700, textDecoration: "underline" }}>aevion.vercel.app/acquire</a>
         </div>
       )}
       <div className="aevx-wrap">
@@ -170,7 +184,7 @@ export default function ExplorePlanet() {
             <a className="aevx-btn aevx-btn-ghost" href="/pricing">Start free</a>
           </div>
           <div className="aevx-stats">
-            <div className="aevx-stat"><b>25+</b><span>Live modules</span></div>
+            <div className="aevx-stat"><b>{liveModules ? `${liveModules}` : "25+"}</b><span>Live modules</span></div>
             <div className="aevx-stat"><b>1</b><span>Trust core (IP · signing)</span></div>
             <div className="aevx-stat"><b>0→100</b><span>QVenture quant score</span></div>
             <div className="aevx-stat"><b>Ed25519</b><span>Signed authorship</span></div>

@@ -52,6 +52,21 @@ async function run() {
   const posts = await req("GET", `/api/shadownet/posts/${alias}`);
   assert("GET /posts/:alias → 200", posts.status === 200);
 
+  // Single-store consolidation (2026-07-23): id lookup + list live in the
+  // SAME store the POST wrote to — the exact contract the dual-store setup
+  // used to break (200 with empty data for an existing id).
+  const createdId = post.body?.data?.id ?? post.body?.id;
+  assert("POST returned an id", createdId != null);
+  if (createdId != null) {
+    const byId = await req("GET", `/api/shadownet/posts/${createdId}`);
+    const item = byId.body?.data ?? byId.body;
+    assert("GET /posts/:id → 200 + same id", byId.status === 200 && String(item?.id) === String(createdId));
+  }
+  const list = await req("GET", "/api/shadownet/posts?limit=10");
+  const listData = list.body?.data ?? list.body;
+  assert("GET /posts list → 200 + items[]", list.status === 200 && Array.isArray(listData?.items));
+  assert("list contains the created alias", (listData?.items || []).some((p) => p.alias === alias));
+
   const stats = await req("GET", "/api/shadownet/stats");
   assert("GET /stats → 200", stats.status === 200);
 

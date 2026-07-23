@@ -66,10 +66,11 @@ const CONCEPTS: ConceptConfig[] = [
   { id: "deepsan", noun: "runs", titleField: "facility",
     summaryField: "method", requiredFields: ["facility", "method"],
     defaultTags: ["sanitation"] },
-  // shadownet: anonymous post stubs
-  { id: "shadownet", noun: "posts", titleField: "title",
-    summaryField: "body", requiredFields: ["title", "body"],
-    defaultTags: ["anon"] },
+  // shadownet graduated out of the concept scaffold 2026-07-23: it has a real
+  // domain router (routes/shadownet.ts — E2E-encrypted alias posts with its
+  // own SERIAL-id store). Registering it here too created a SECOND store with
+  // a different id scheme behind the same /api/shadownet/posts prefix, which
+  // produced the "200 with empty data for an existing id" prod bug.
   // lifebox: family-archive capsule stubs (metadata only, no payload PII)
   { id: "lifebox", noun: "capsules", titleField: "label",
     summaryField: "occasion", requiredFields: ["label", "year"],

@@ -15,6 +15,8 @@ interface LikeItem { type: "track" | "video"; id: string; title: string; artist?
 export default function QMediaLikesPage() {
   const [likes, setLikes] = useState<LikeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(apiUrl("/api/qmedia/me/likes"), { headers: ah() })
@@ -25,8 +27,25 @@ export default function QMediaLikesPage() {
   }, []);
 
   async function unlike(type: string, id: string) {
-    await fetch(apiUrl(`/api/qmedia/${type}s/${id}/like`), { method: "POST", headers: ah() });
+    const key = `${type}-${id}`;
+    if (pending.has(key)) return;
+    const snapshot = likes;
+    setPending(prev => new Set(prev).add(key));
     setLikes(prev => prev.filter(l => !(l.id === id && l.type === type)));
+    setError(null);
+    try {
+      const r = await fetch(apiUrl(`/api/qmedia/${type}s/${id}/like`), { method: "POST", headers: ah() });
+      if (!r.ok) throw new Error("failed");
+    } catch {
+      setLikes(snapshot);
+      setError("Не удалось убрать. Попробуйте ещё раз.");
+    } finally {
+      setPending(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
   }
 
   return (
@@ -37,6 +56,11 @@ export default function QMediaLikesPage() {
         <span className="text-sm font-semibold">Понравившееся</span>
       </header>
       <div className="max-w-2xl mx-auto px-4 py-8">
+        {error && (
+          <div role="alert" className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+            {error}
+          </div>
+        )}
         {loading && <div className="text-center py-12 text-slate-500 animate-pulse text-sm">Загрузка…</div>}
         {!loading && likes.length === 0 && (
           <div className="text-center py-16 text-slate-500">
@@ -62,7 +86,15 @@ export default function QMediaLikesPage() {
                   <span className="text-violet-400 capitalize">{item.type}</span>
                 </p>
               </div>
-              <button onClick={() => unlike(item.type, item.id)} title="Убрать из понравившихся" className="text-rose-400 hover:text-rose-300 transition-colors shrink-0 text-lg">❤️</button>
+              <button
+                onClick={() => unlike(item.type, item.id)}
+                disabled={pending.has(`${item.type}-${item.id}`)}
+                aria-label={`Убрать «${item.title}» из понравившихся`}
+                title="Убрать из понравившихся"
+                className="text-rose-400 hover:text-rose-300 disabled:opacity-40 disabled:cursor-wait transition-colors shrink-0 text-lg"
+              >
+                ❤️
+              </button>
             </div>
           ))}
         </div>

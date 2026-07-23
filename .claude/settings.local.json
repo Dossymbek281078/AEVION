@@ -127,7 +127,10 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 844 --squash --delete-branch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 844 --json state,mergedAt)",
       "Bash(node -e ' *)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): cap promo-code discounts so none can zero out a tier'\\\\''s price' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): cap promo-code discounts so none can zero out a tier'\\\\''s price' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 857 --watch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 857 --squash --delete-branch)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'docs\\(pricing\\): public changelog entries + QCoreAI quota flip-readiness doc' --body ' *)"
     ]
   }
 }

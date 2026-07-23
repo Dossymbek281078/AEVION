@@ -126,7 +126,8 @@
       "Bash(/c/Program Files/GitHub CLI/gh.exe workflow *)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run view 29979581578)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X PUT repos/Dossymbek281078/AEVION/pulls/845/merge -f merge_method=squash)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/qbuild-nl-search-analytics)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/qbuild-nl-search-analytics)",
+      "Bash(node -e 'console.log\\(JSON.stringify\\({brief:\"сварщик вахтой в Атырау, от 3 лет опыта\", city:null}\\)\\)')"
     ]
   }
 }

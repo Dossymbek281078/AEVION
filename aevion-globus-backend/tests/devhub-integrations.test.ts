@@ -489,6 +489,35 @@ describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the
 });
 
 describe("truncated model reply — complete files are salvaged, not dumped to output.ts", () => {
+  test("salvage triggers a continuation call that recovers the missing tail file", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    const truncated =
+      '{"files":[' +
+      '{"path":"src/App.jsx","content":"export default () => null","language":"jsx"},' +
+      '{"path":"src/big.css","content":".progress { transition: width 1s lin';
+    vi.mocked(callProvider)
+      .mockResolvedValueOnce({ reply: truncated, model: "m", usage: null } as never)
+      .mockResolvedValueOnce({
+        reply: JSON.stringify({ files: [{ path: "src/big.css", content: ".progress { width: 100%; }", language: "css" }] }),
+        model: "m", usage: null,
+      } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "C" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({ prompt: "pomodoro" });
+    expect(r.status).toBe(200);
+    expect(r.body.files.map((f: { path: string }) => f.path).sort()).toEqual(["src/App.jsx", "src/big.css"]);
+    // Continuation prompt names the completed files and asks only for the rest.
+    const contCall = vi.mocked(callProvider).mock.calls[1];
+    const contUser = (contCall[1] as Array<{ role: string; content: string }>).filter((m) => m.role === "user").pop()!;
+    expect(contUser.content).toContain("cut off");
+    expect(contUser.content).toContain("src/App.jsx");
+    // Codegen calls carry the raised token cap.
+    expect(contCall[5]).toBe(8192);
+    vi.mocked(callProvider).mockReset();
+  });
+
   test("a reply cut mid-string yields the complete leading files", async () => {
     vi.mocked(getProviders).mockReturnValue([
       { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },

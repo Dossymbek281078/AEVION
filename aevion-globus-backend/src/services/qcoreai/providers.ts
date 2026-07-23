@@ -535,7 +535,7 @@ function anthropicRejectsSampling(model: string): boolean {
   );
 }
 
-async function callAnthropic(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[]): Promise<CallResult> {
+async function callAnthropic(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[], maxTokens?: number): Promise<CallResult> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
 
@@ -546,7 +546,7 @@ async function callAnthropic(messages: ChatMessage[], model: string, temperature
     model,
     // 4096 silently truncated multi-file code generations mid-JSON (found
     // live 2026-07-22: an 8.8KB reply cut off inside a CSS string).
-    max_tokens: 8192,
+    max_tokens: maxTokens ?? 8192,
     messages: chatMsgs.map((m, i) => {
       if (images?.length && m.role === "user" && i === chatMsgs.length - 1) {
         return {
@@ -598,7 +598,8 @@ async function callOpenAICompat(
   messages: ChatMessage[],
   model: string,
   temperature: number,
-  images?: ChatImage[]
+  images?: ChatImage[],
+  maxTokens?: number
 ): Promise<CallResult> {
   const { url, headers } = openAICompatCfg(providerId);
   const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
@@ -618,7 +619,7 @@ async function callOpenAICompat(
   const r = await fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify({ model, messages: wireMessages, temperature }),
+    body: JSON.stringify({ model, messages: wireMessages, temperature, ...(maxTokens ? { max_tokens: maxTokens } : {}) }),
   });
   const data = (await r.json()) as any;
   if (!r.ok) {
@@ -634,7 +635,7 @@ async function callOpenAICompat(
   return { reply, model: data.model || model, usage: data.usage || null };
 }
 
-async function callGemini(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[]): Promise<CallResult> {
+async function callGemini(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[], maxTokens?: number): Promise<CallResult> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error("GEMINI_API_KEY not configured");
   const systemMsg = messages.find((m) => m.role === "system");
@@ -652,7 +653,7 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
   }));
   const body: any = {
     contents,
-    generationConfig: { temperature, maxOutputTokens: 4096 },
+    generationConfig: { temperature, maxOutputTokens: maxTokens ?? 4096 },
   };
   if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
   const r = await fetch(
@@ -697,15 +698,16 @@ export async function callProvider(
   messages: ChatMessage[],
   model: string,
   temperature: number,
-  images?: ChatImage[]
+  images?: ChatImage[],
+  maxTokens?: number
 ): Promise<CallResult> {
   if (providerId === "stub") {
     const reply = stubReply(messages);
     return { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
   }
-  if (providerId === "anthropic") return callAnthropic(messages, model, temperature, images);
-  if (providerId === "gemini") return callGemini(messages, model, temperature, images);
-  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature, images);
+  if (providerId === "anthropic") return callAnthropic(messages, model, temperature, images, maxTokens);
+  if (providerId === "gemini") return callGemini(messages, model, temperature, images, maxTokens);
+  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature, images, maxTokens);
   throw new Error("No AI provider configured");
 }
 

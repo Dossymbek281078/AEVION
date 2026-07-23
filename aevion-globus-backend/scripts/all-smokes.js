@@ -110,6 +110,7 @@ const SMOKES = [
   { name: "mvp-concepts-prod", script: "mvp-concepts-prod-smoke.js", readOnly: true },
   // QMaskCard PROD — 14 checks: health, stats, auth-gates.
   { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
+  { name: "qreal-prod", script: "qreal-prod-smoke.js", readOnly: true },
   // OpenAPI completeness — guards /api/openapi.json against silent route drops.
   // 19 critical module prefixes must be documented; 20 soft prefixes tracked
   // for awareness (after 2026-05-19 expansion: all 20 present).

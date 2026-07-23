@@ -1,3 +1,5 @@
+import { Chess } from 'chess.js';
+
 /**
  * voiceCoachPrompt.ts
  *
@@ -317,7 +319,10 @@ const SYSTEM_PROMPT_QA =
   'ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не ' +
   'уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ' +
   'ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его ' +
-  'как основу для конкретных рекомендаций. Если вопрос не про шахматы — мягко верни диалог к партии.';
+  'как основу для конкретных рекомендаций. Если вопрос про состав доски (какие фигуры где ' +
+  'стоят, перечисли фигуры/пешки) — бери ответ ДОСЛОВНО из строки «Фигуры на доске» в ' +
+  'контексте, не воображай позицию по памяти и не пересчитывай FEN самостоятельно — там уже ' +
+  'детерминированный список. Если вопрос не про шахматы — мягко верни диалог к партии.';
 
 function joinSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
   const ctrl = new AbortController();
@@ -508,6 +513,46 @@ function describeMove(m: string | MoveInfo | null | undefined): string | null {
   return null;
 }
 
+const PIECE_RU: Record<string, string> = {
+  k: 'Кр',
+  q: 'Ф',
+  r: 'Л',
+  b: 'С',
+  n: 'К',
+  p: 'п',
+};
+
+/**
+ * Deterministic, chess.js-derived piece list for the current FEN — same
+ * grounding pattern as `legalMoves`/`bestMove`. Descriptive "what's on the
+ * board" questions aren't covered by legalMoves (that only fixes move
+ * selection), so the model was omitting/inventing pieces when asked to
+ * enumerate them (issue #858). Computed server-side from the FEN itself so
+ * every caller gets it automatically, with no frontend changes required.
+ */
+function describeBoardPieces(fen: string): string | null {
+  let chess: Chess;
+  try {
+    chess = new Chess(fen);
+  } catch {
+    return null;
+  }
+  const white: string[] = [];
+  const black: string[] = [];
+  for (const row of chess.board()) {
+    for (const cell of row) {
+      if (!cell) continue;
+      const label = `${PIECE_RU[cell.type] ?? cell.type}${cell.square}`;
+      (cell.color === 'w' ? white : black).push(label);
+    }
+  }
+  if (!white.length && !black.length) return null;
+  return (
+    `Фигуры на доске (детерминированно из FEN, используй дословно при перечислении): ` +
+    `белые (${white.length}) — ${white.join(', ')}; чёрные (${black.length}) — ${black.join(', ')}.`
+  );
+}
+
 /**
  * Multi-turn Q&A: user asks "почему мой ход плохой?" etc.
  * Throws on LLM failure — caller decides how to surface the error.
@@ -521,7 +566,11 @@ export async function answerQuestion(
   if (!q) throw new Error('answerQuestion: empty question');
 
   const contextLines: string[] = [];
-  if (context.fen) contextLines.push(`FEN: ${context.fen}`);
+  if (context.fen) {
+    contextLines.push(`FEN: ${context.fen}`);
+    const pieces = describeBoardPieces(context.fen);
+    if (pieces) contextLines.push(pieces);
+  }
   if (context.userSide) {
     contextLines.push(
       `Игрок играет: ${context.userSide === 'w' ? 'белыми' : 'чёрными'}`,

@@ -42,7 +42,8 @@ const MODULES = [
   { name: "qfusionai",        health: "/api/qfusionai/health",       list: "/api/qfusionai/stats" },
   { name: "qlife",            health: "/api/qlife/health",           list: "/api/qlife/prompts" },
   { name: "qpersona",         health: "/api/qpersona/health",        list: "/api/qpersona/personas" },
-  { name: "shadownet",        health: "/api/shadownet/health",       list: "/api/shadownet/posts" },
+  // shadownet removed 2026-07-23 — graduated out of the concept scaffold;
+  // its own store/routes are covered by scripts/shadownet-smoke.js.
   { name: "startupx",         health: "/api/startupx/health",        list: "/api/startupx/ideas" },
   { name: "voice-of-earth",   health: "/api/voice-of-earth/health",  list: "/api/voice-of-earth/tracks" },
   { name: "lifebox",          health: "/api/lifebox/health",         list: "/api/lifebox/capsules" },

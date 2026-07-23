@@ -411,16 +411,38 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
   );
 });
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Recent posts across all aliases — metadata + ciphertext only (the payload
+// is E2E-encrypted; without the passphrase the ciphertext reveals nothing).
+// Gives the module a real list surface now that the generic mvpConcepts
+// scaffold no longer shadows this prefix (single-store consolidation).
+shadownetRouter.get("/posts", async (req: Request, res: Response) => {
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  if (isShadowNetDbReady()) {
+    try {
+      const result = await pool.query(
+        `SELECT id, alias, ciphertext, iv, salt, size_bytes, created_at
+         FROM shadownet_posts
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit],
+      );
+      return ok(res, { items: result.rows, total: result.rows.length });
+    } catch (e) {
+      console.error("[ShadowNet] GET /posts db error:", e);
+      // fall through to memory
+    }
+  }
+  const rows = Array.from(memPosts.values())
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, limit);
+  ok(res, { items: rows, total: rows.length });
+});
 
-shadownetRouter.get("/posts/:alias", async (req: Request, res: Response, next) => {
+shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
   const alias = String(req.params.alias);
   // POST /posts answers with a numeric `id` (SERIAL / memory counter), and a
   // numeric string is also a valid alias — so fetch-by-id used to "succeed"
   // with an empty alias match. Treat an all-digit param as an id lookup.
-  // A UUID param belongs to the generic mvpConcepts store (mounted after this
-  // router) — pass it along instead of swallowing it as an alias miss.
-  if (UUID_RE.test(alias)) return next();
   if (/^\d+$/.test(alias)) {
     if (isShadowNetDbReady()) {
       try {

@@ -5838,7 +5838,19 @@ qcoreaiRouter.get("/benchmarks", (_req, res) => {
     const blend = price ? blendedPrice(price) : 0;
     const costScore = blend <= 0 ? 100 : Math.round(Math.min(100, (cheapest / blend) * 100));
     const lat = latencySummary(m.provider, m.model);
-    return { ...m, costScore, measuredLatencyMs: lat.p50Ms, latencySamples: lat.samples };
+    // Real traffic often hits other models of the same provider (e.g. the
+    // orchestrator's flagship pick) — fall back to the provider-level median
+    // so the page shows measured data instead of null. Flagged separately so
+    // the UI can label the scope honestly.
+    const provLat = lat.p50Ms == null ? providerLatencySummary(m.provider) : null;
+    return {
+      ...m,
+      costScore,
+      measuredLatencyMs: lat.p50Ms,
+      latencySamples: lat.samples,
+      providerLatencyMs: provLat?.p50Ms ?? null,
+      providerLatencySamples: provLat?.samples ?? 0,
+    };
   });
   res.json({
     models,

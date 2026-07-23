@@ -32,6 +32,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
+import { recordDeny } from "./paywallDenyLog";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -251,6 +252,9 @@ function isExemptPath(req: Request): boolean {
 function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
   const requiredTiers = tiersForModule(moduleId).map(normalizeTier)
     .filter((t) => TIER_RANK[t] > TIER_RANK.free);
+  // Demand signal: every 402 is someone who WANTED a paid module. Aggregate-
+  // only (module + tier, no user id), fire-and-forget — see paywallDenyLog.
+  recordDeny(moduleId, plan.tier);
   res.status(402).json({
     error: "upgrade_required",
     module: moduleId,

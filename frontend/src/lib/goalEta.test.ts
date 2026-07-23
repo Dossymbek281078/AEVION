@@ -39,4 +39,14 @@ describe("etaLabel", () => {
     // remaining = 900, perDay = 900/30 = 30/day → 30 days.
     expect(etaLabel(1000, 100, { windowDays: 30, points: 10, change: { grossUsd: 900 } })).toBe("в темпе — ~30 дн.");
   });
+
+  it("formats the day count per the requested locale, defaulting to en-US", () => {
+    const pace = { windowDays: 1, points: 10, change: { grossUsd: 10 } };
+    // remaining = 36500, perDay = 10 → 3650 days.
+    const enResult = etaLabel(36510, 10, pace);
+    const ruResult = etaLabel(36510, 10, pace, "ru");
+    expect(enResult).toBe(`в темпе — ~${(3650).toLocaleString("en-US")} дн.`);
+    expect(ruResult).toBe(`в темпе — ~${(3650).toLocaleString("ru-RU")} дн.`);
+    expect(ruResult).not.toBe(enResult); // sanity: the two locales must actually differ here
+  });
 });

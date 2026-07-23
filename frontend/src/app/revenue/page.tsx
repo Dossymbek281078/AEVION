@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import { etaLabel, type GoalPace } from "@/lib/goalEta";
 
 interface RevenueOverview {
@@ -99,9 +100,10 @@ function daysUntil(deadline: string): number {
 }
 
 /** Compact form for large dollar amounts ($19,999,821 → $20.0M); small ones stay exact. */
-function formatCompactUsd(n: number): string {
-  if (n < 10_000) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-  return `$${Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
+function formatCompactUsd(n: number, lang: "en" | "ru" = "en"): string {
+  const locale = lang === "ru" ? "ru-RU" : "en-US";
+  if (n < 10_000) return `$${n.toLocaleString(locale, { maximumFractionDigits: 2 })}`;
+  return `$${Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
 }
 
 // Static "HH:MM:SS" — deliberately not a live-ticking "N sec ago": a text
@@ -115,6 +117,8 @@ function clockLabel(ms: number): string {
 }
 
 export default function RevenuePage() {
+  const { lang } = useI18n();
+  const numLang: "en" | "ru" = lang === "ru" ? "ru" : "en";
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
@@ -207,14 +211,16 @@ export default function RevenuePage() {
                 target={goals.primaryUsd}
                 current={totalGross}
                 colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
-                eta={etaLabel(goals.primaryUsd, totalGross, pace)}
+                eta={etaLabel(goals.primaryUsd, totalGross, pace, numLang)}
+                lang={numLang}
               />
               <GoalBar
                 label="$20M — стретч-цель"
                 target={goals.stretchUsd}
                 current={totalGross}
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                eta={etaLabel(goals.stretchUsd, totalGross, pace)}
+                eta={etaLabel(goals.stretchUsd, totalGross, pace, numLang)}
+                lang={numLang}
               />
             </div>
           )}
@@ -435,6 +441,9 @@ function RevenueTrend() {
         setNote("✗ Нет живого канала (не настроены GUMROAD_ACCESS_TOKEN / LEMON_SQUEEZY_API_KEY)");
       } else if (r.status === 401) {
         setNote("✗ Требуется x-revenue-token (снапшоты снимает cron)");
+      } else if (r.status === 429) {
+        const retryAfter = r.headers.get("retry-after");
+        setNote(retryAfter ? `✗ Слишком часто — подожди ${retryAfter} сек` : "✗ Слишком часто — лимит 6 снапшотов в минуту, попробуй через минуту");
       } else {
         setNote(`✗ ${j.error ?? "snapshot_failed"}`);
       }
@@ -560,13 +569,14 @@ function SkeletonGrid({ cols }: { cols: number }) {
   );
 }
 
-function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
+function GoalBar({ label, target, current, colorClass, eta, lang = "en" }: { label: string; target: number; current: number; colorClass: string; eta?: string | null; lang?: "en" | "ru" }) {
   const [exact, setExact] = useState(false);
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
   const reached = pct >= 100;
-  const currentStr = exact ? `$${current.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(current);
-  const remainingStr = exact ? `$${remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining);
+  const locale = lang === "ru" ? "ru-RU" : "en-US";
+  const currentStr = exact ? `$${current.toLocaleString(locale, { maximumFractionDigits: 2 })}` : formatCompactUsd(current, lang);
+  const remainingStr = exact ? `$${remaining.toLocaleString(locale, { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining, lang);
   return (
     <div
       className={`bg-gray-900 border rounded-xl p-5 transition-shadow ${

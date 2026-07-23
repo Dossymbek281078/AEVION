@@ -18,6 +18,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
   { path: "/awards", changeFrequency: "daily", priority: 0.8 },
+  { path: "/qreal", changeFrequency: "weekly", priority: 0.8 },
   { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
   { path: "/qcoreai/multi", changeFrequency: "weekly", priority: 0.65 },
   { path: "/qcoreai/playground", changeFrequency: "weekly", priority: 0.6 },

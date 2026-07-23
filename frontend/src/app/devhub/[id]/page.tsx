@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { apiUrl } from "@/lib/apiBase";
+import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
@@ -889,21 +889,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
-      const fireGenerate = () =>
-        fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: generateBody,
-        });
-      let r = await fireGenerate();
-      // 502/503/504 here is almost always the backend mid-redeploy (Railway
-      // rolls a new pod on every merge) — one delayed retry rides it out
-      // instead of failing the founder's first impression.
-      if ([502, 503, 504].includes(r.status)) {
-        showToast("Backend is redeploying — retrying in 20s…", "info");
-        await new Promise((resolve) => setTimeout(resolve, 20_000));
-        r = await fireGenerate();
-      }
+      const r = await fetchWithRedeployRetry(
+        apiUrl(`/api/devhub/projects/${project.id}/generate`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
+        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+      );
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Generation failed");
       const newGenerated = data.files || [];
@@ -1148,7 +1138,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project || !visualEditSelected || !visualEditHtmlPath || !visualEditSourceDocRef.current || !visualEditImgPrompt.trim()) return;
     setVisualEditImgBusy(true);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/media/image`), {
+      const r = await fetchWithRedeployRetry(apiUrl(`/api/devhub/media/image`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
@@ -1205,7 +1195,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         : `On the deployed preview of this project, the user visually selected a <${sel.tagName.toLowerCase()}> element` +
           (sel.text.trim() ? ` whose rendered text is: "${sel.text.trim().slice(0, 200)}"` : "") +
           `. Find the source file(s) that produce this element and apply this change there, keeping everything else intact: ${visualEditAiPrompt.trim()}`;
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
+      const r = await fetchWithRedeployRetry(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),

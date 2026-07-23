@@ -214,6 +214,18 @@ C) [третий вариант]
 
 ---
 
+## 🧩 ТЕХНИЧЕСКИЙ ПАТТЕРН — `gh pr checks` пустой (только Vercel), CI будто не запустился
+
+**Обнаружено 2026-07-23 (CyberChess PR #863):** PR открыт, `gh pr checks <N>` несколько минут показывает ТОЛЬКО `Vercel`/`Vercel Preview Comments` — ни `Backend`, ни `Frontend`, ни `Payments Rail` вообще не появляются как check-runs. Не «pending», а полностью отсутствуют. Проверка через API (`gh api repos/.../actions/runs?branch=<ветка>`) подтверждает: ноль запусков `ci.yml` для этого коммита — `pull_request`-событие GitHub просто не долетело до воркфлоу. Похоже на побочный эффект сегодняшней очень высокой параллельной нагрузки на репо (десятки сессий/PR одновременно).
+
+**Что НЕ работает:** `gh workflow run CI --ref <ветка>` (ручной `workflow_dispatch`) РЕАЛЬНО гоняет джобы и они зелёные — видно через `gh api repos/.../commits/<sha>/check-runs` (`success`). Но branch protection их не признаёт: `gh pr merge --admin` падает с `GraphQL: 2 of 2 required status checks are expected` — защита ветки требует чек именно из `pull_request`-контекста, `workflow_dispatch`-ран для неё не считается, даже если висит на том же SHA с тем же именем.
+
+**Лечение (проверено, сработало с первого раза):** `git commit --allow-empty -m "chore: retrigger CI"` + `git push` на своей ветке — форсирует настоящий `synchronize`-евент, `ci.yml` запускается по-нормальному в `pull_request`-контексте, branch protection засчитывает, `mergeStateStatus` переходит в `CLEAN`, обычный `gh pr merge` проходит.
+
+**Диагностика перед лечением:** `gh api repos/Dossymbek281078/AEVION/actions/runs?branch=<ветка> -q '.workflow_runs[]'` — если пусто дольше пары минут при зелёном `push`, это оно; не трать время на `gh pr checks`/ожидание.
+
+---
+
 ## 🔴 WIP — ТЕКУЩАЯ АКТИВНАЯ РАБОТА (обновляется каждые 5 минут)
 
 > ⚠️ Перед началом любой задачи — прочитай этот раздел. Если файл/модуль уже в чьём-то WIP — НЕ БЕРИ. Запись протухает через 10 минут — если сессия не обновила WIP, значит она закончила или упала.

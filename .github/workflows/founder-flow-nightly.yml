@@ -37,3 +37,12 @@ jobs:
           name: founder-flow-traces
           path: frontend/test-results/
           retention-days: 7
+      - name: Open an issue so the failure reaches a human by morning
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "🔴 Founder flow nightly failed — describe→app is broken on prod" \
+            --body "The flagship flow failed against production. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (traces attached as artifact). This is the product's front door — triage before anything else."

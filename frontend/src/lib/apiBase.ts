@@ -51,6 +51,27 @@ export function getBackendOrigin(): string {
   return "http://127.0.0.1:4001";
 }
 
+/**
+ * fetch с одним отложенным ретраем на 502/503/504 — Railway перекатывает под
+ * на каждом мерже в main, и долгий запрос (AI-генерация, скоринг), попавший в
+ * это окно, умирает с 502. Один повтор через delayMs почти всегда переживает
+ * перекат; onRetry даёт UI показать честное «бэкенд передеплоивается».
+ * Живой прецедент: два ложных провала ретестов DevHub-флоу 2026-07-22/23.
+ * Клиентская пара к serverFetch() ниже (тот — для RSC/SSR с cold-start
+ * ретраем и таймаутом; этот — для долгих браузерных вызовов с UI-коллбэком).
+ */
+export async function fetchWithRedeployRetry(
+  input: string,
+  init?: RequestInit,
+  opts?: { delayMs?: number; onRetry?: () => void }
+): Promise<Response> {
+  const r = await fetch(input, init);
+  if (![502, 503, 504].includes(r.status)) return r;
+  opts?.onRetry?.();
+  await new Promise((resolve) => setTimeout(resolve, opts?.delayMs ?? 20_000));
+  return fetch(input, init);
+}
+
 /** Путь вида `/api/...` → полный URL для fetch. */
 export function apiUrl(apiPath: string): string {
   const p = apiPath.startsWith("/") ? apiPath : `/${apiPath}`;

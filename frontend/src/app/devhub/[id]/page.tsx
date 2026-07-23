@@ -879,20 +879,31 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setAiImage(null);
     setChatHistory((h) => [...h, { role: "user", text: (sentImage ? "🖼 " : "") + userText, at: new Date().toISOString() }]);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: userText, stack: project.stack,
-          // Prior turns give follow-ups their referent ("make the button blue").
-          history: chatHistory.slice(-8).map((m) =>
-            m.role === "user"
-              ? { role: "user", text: m.text }
-              : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
-          ),
-          ...(aiImage ? { imageBase64: aiImage.dataBase64, imageMediaType: aiImage.mediaType } : {}),
-        }),
+      const generateBody = JSON.stringify({
+        prompt: userText, stack: project.stack,
+        // Prior turns give follow-ups their referent ("make the button blue").
+        history: chatHistory.slice(-8).map((m) =>
+          m.role === "user"
+            ? { role: "user", text: m.text }
+            : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+        ),
+        ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
+      const fireGenerate = () =>
+        fetch(apiUrl(`/api/devhub/projects/${project.id}/generate`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: generateBody,
+        });
+      let r = await fireGenerate();
+      // 502/503/504 here is almost always the backend mid-redeploy (Railway
+      // rolls a new pod on every merge) — one delayed retry rides it out
+      // instead of failing the founder's first impression.
+      if ([502, 503, 504].includes(r.status)) {
+        showToast("Backend is redeploying — retrying in 20s…", "info");
+        await new Promise((resolve) => setTimeout(resolve, 20_000));
+        r = await fireGenerate();
+      }
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Generation failed");
       const newGenerated = data.files || [];

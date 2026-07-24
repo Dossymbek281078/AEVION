@@ -73,6 +73,9 @@ type Pillar = {
 };
 
 type RegistryStats = {
+  // /api/aevion/stats shape: { total, byStatus: { live, mvp }, ... }
+  total?: number;
+  byStatus?: { live?: number; mvp?: number };
   totalModules?: number;
   coverage?: {
     withFrontend?: number;
@@ -191,7 +194,7 @@ export default function AcquirePage() {
     });
   }, []);
 
-  const totalModules = registry?.totalModules ?? 30;
+  const totalModules = registry?.total ?? registry?.totalModules ?? 30;
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #050810 0%, #0a0e1a 40%, #0f172a 100%)", color: "#f8fafc", fontFamily: "Inter, system-ui, -apple-system, sans-serif" }}>

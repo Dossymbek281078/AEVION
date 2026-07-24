@@ -410,6 +410,10 @@ function ChargeView({ charge }: { charge: Charge }) {
           <div style={{ fontSize: 36, fontWeight: 900, color: rColor }}>{score}</div>
         </div>
         <div
+          role="progressbar"
+          aria-valuenow={score}
+          aria-valuemin={0}
+          aria-valuemax={100}
           aria-label={`Risk gauge ${score} of 100`}
           style={{
             position: "relative",

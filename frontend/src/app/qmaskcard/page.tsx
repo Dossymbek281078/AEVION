@@ -430,7 +430,14 @@ export default function QMaskCardPage() {
                           <span className={`font-mono ${isFrozen ? "text-sky-300" : "text-emerald-300"}`}>{fmtMoney(remaining, m.currency)}</span>
                           <span className="text-slate-500">из {fmtMoney(limit, m.currency)}</span>
                         </div>
-                        <div className="h-1.5 bg-white/5 rounded overflow-hidden">
+                        <div
+                          role="progressbar"
+                          aria-valuenow={Math.round(pct)}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`Осталось ${Math.round(pct)}% лимита`}
+                          className="h-1.5 bg-white/5 rounded overflow-hidden"
+                        >
                           <div className={`h-full ${isFrozen ? "bg-gradient-to-r from-sky-400 to-sky-500" : "bg-gradient-to-r from-emerald-400 to-amber-400"}`} style={{ width: `${pct}%` }} />
                         </div>
                         {(m.lockedToMerchant || m.lockedToCategory) && (

@@ -468,7 +468,9 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
       : providerMeta.defaultModel;
 
   const temperature = typeof body.temperature === "number" ? body.temperature : 0.7;
-  const context = typeof body.context === "string" ? body.context.trim() : null;
+  // Cap context to 8k chars — user-supplied text folded into system prompt.
+  // Without a cap, an attacker could inflate tokens to burn the router budget.
+  const context = typeof body.context === "string" ? body.context.trim().slice(0, 8000) : null;
 
   const messages: ChatMessage[] =
     sanitizeMessages(body.messages) ?? [

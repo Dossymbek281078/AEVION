@@ -38,11 +38,13 @@ MAX_POLLS="${MAX_POLLS:-80}"
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 # Read the conclusion/status of one named check from a PR's statusCheckRollup.
+# gh's --jq takes ONLY a filter — it does not accept jq's --arg (that flag belongs
+# to standalone jq, which isn't guaranteed present), so the check name is embedded
+# into the filter instead. Check names here have no double-quotes, so this is safe.
 check_state() {
   local pr="$1" name="$2"
   gh pr view "$pr" --json statusCheckRollup --jq \
-    --arg n "$name" \
-    '[.statusCheckRollup[] | select((.name // .context) == $n) | (.conclusion // .status // "MISSING")][0] // "MISSING"' \
+    '[.statusCheckRollup[] | select((.name // .context) == "'"$name"'") | (.conclusion // .status // "MISSING")][0] // "MISSING"' \
     2>/dev/null
 }
 

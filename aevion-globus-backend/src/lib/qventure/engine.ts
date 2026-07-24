@@ -568,8 +568,8 @@ function buildStrategy(args: {
     high: round(norms.preMoneyHigh * scoreMul, 0),
   };
 
-  // Ownership target scales mildly with conviction.
-  const ownershipTargetPct = round(
+  // Ideal ownership target scales mildly with conviction.
+  const idealOwnershipPct = round(
     norms.ownershipTarget * (conviction === "high" ? 1.25 : conviction === "medium" ? 1.0 : 0.6) * 100,
     1
   );
@@ -578,12 +578,21 @@ function buildStrategy(args: {
   // assume round ≈ 25% of pre-money (typical dilution).
   const roundSize = input.askUsd && input.askUsd > 0 ? input.askUsd : round(valuationBandUsd.base * 0.25, 0);
   const postMoney = valuationBandUsd.base + roundSize;
-  const targetTicket = round((ownershipTargetPct / 100) * postMoney, 0);
+  // Never lead more than half the round. When the ideal ownership would need a
+  // bigger cheque than that (a small round relative to the target stake), the
+  // achievable ticket is the lead cap — and the ownership it buys is less than
+  // ideal. Cap the target here rather than letting it exceed its own max.
+  const roundLeadCap = round(roundSize * 0.5, 0);
+  const idealTicket = (idealOwnershipPct / 100) * postMoney;
+  const targetTicket = round(Math.min(idealTicket, roundLeadCap), 0);
   const ticketUsd = {
     min: round(targetTicket * 0.5, 0),
     target: targetTicket,
-    max: round(Math.min(targetTicket * 1.6, roundSize * 0.5), 0), // don't lead >50% of a round
+    max: round(Math.min(targetTicket * 1.6, roundLeadCap), 0),
   };
+  // Report the ownership the *actual* ticket buys, not the (possibly infeasible)
+  // ideal — so "$X for ~Y%" is internally consistent.
+  const ownershipTargetPct = round((targetTicket / postMoney) * 100, 1);
 
   // Tranche schedule — sharper staging for weaker/earlier deals.
   const tranches = buildTranches(verdict, stage);

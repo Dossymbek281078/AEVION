@@ -89,6 +89,7 @@ type Project = {
   shots: Shot[];
   filmPath: string | null;
   assembledAt: string | null;
+  qrightObjectId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -459,7 +460,7 @@ function seedDemo() {
     brief: "Утро казахской семьи в степи: рассвет, мальчик с собакой, бабушка с чаем в юрте, беркут. Полностью живое видео без единой съёмки — люди, ребёнок, животные, птица, ветер и звук сгенерированы.",
     format: "scene", targetDurationSec: 24, language: "kk",
     depictsRealPeople: false, consentConfirmed: false,
-    status: "storyboarded", shots, filmPath: null, assembledAt: null,
+    status: "storyboarded", shots, filmPath: null, assembledAt: null, qrightObjectId: null,
     createdAt: created, updatedAt: created,
   };
   for (const s of demo.shots) s.prompt = buildRenderPrompt(demo, s);
@@ -570,7 +571,7 @@ qrealRouter.post("/projects", (req, res) => {
       language: typeof language === "string" && language ? language.slice(0, 8) : "ru",
       depictsRealPeople: depictsRealPeople === true,
       consentConfirmed: consentConfirmed === true,
-      status: "draft", shots: [], filmPath: null, assembledAt: null,
+      status: "draft", shots: [], filmPath: null, assembledAt: null, qrightObjectId: null,
       createdAt: nowIso(), updatedAt: nowIso(),
     };
     memProjects.set(p.id, p);
@@ -813,6 +814,42 @@ qrealRouter.get("/projects/:id/film", async (req, res) => {
     res.setHeader("Content-Length", stat.size);
     fs.createReadStream(p.filmPath).pipe(res);
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "film failed" }); }
+});
+
+// «Создал → защитил»: провенанс-манифест уходит объектом в QRight —
+// первый живой мост контента в Trust Graph платформы.
+qrealRouter.post("/projects/:id/register", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    if (p.qrightObjectId) {
+      return res.json({ ok: true, qrightObjectId: p.qrightObjectId, alreadyRegistered: true });
+    }
+    const manifest = provenanceManifest(p);
+    const auth = verifyBearerOptional(req);
+    const objectId = uid();
+    await pool.query(`CREATE TABLE IF NOT EXISTS "QRightObject" (
+      "id" TEXT PRIMARY KEY, "title" TEXT NOT NULL, "description" TEXT NOT NULL,
+      "kind" TEXT NOT NULL, "contentHash" TEXT NOT NULL,
+      "ownerName" TEXT, "ownerEmail" TEXT, "ownerUserId" TEXT,
+      "country" TEXT, "city" TEXT, "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );`);
+    await pool.query(
+      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerUserId")
+       VALUES ($1,$2,$3,'ai-video',$4,$5)`,
+      [
+        objectId,
+        p.title.slice(0, 200),
+        `AEVION QReal film. AI-generated (${manifest.standard}). Shots: ${p.shots.length}. Brief: ${p.brief.slice(0, 300)}`,
+        manifest.sha256,
+        auth?.sub || p.userId,
+      ]
+    );
+    p.qrightObjectId = objectId;
+    p.updatedAt = nowIso();
+    saveProject(p);
+    res.status(201).json({ ok: true, qrightObjectId: objectId, contentHash: manifest.sha256, link: "/qright" });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "register failed" }); }
 });
 
 qrealRouter.get("/projects/:id/provenance", (req, res) => {

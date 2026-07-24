@@ -38,6 +38,7 @@ export default function QRealClient() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [filmUrl, setFilmUrl] = useState<string | null>(null);
   const [variation, setVariation] = useState(1);
+  const [qrightId, setQrightId] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -95,6 +96,18 @@ export default function QRealClient() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: '{"engine":"kling"}',
       });
       window.open(apiUrl("/api/qreal/projects/demo-steppe-morning/film"), "_blank");
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
+  async function registerAuthorship() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/register`), { method: "POST" });
+      const d = await r.json();
+      if (d?.qrightObjectId) setQrightId(d.qrightObjectId);
+      else setNote(d?.error || t("qreal.note.backend.down"));
     } catch { setNote(t("qreal.note.backend.down")); }
     finally { setBusy(false); }
   }
@@ -400,6 +413,23 @@ export default function QRealClient() {
             <div className="mt-4 border-l-4 border-teal-700 bg-white p-4">
               <p className="text-sm leading-relaxed text-neutral-700">{provenance.disclosure}</p>
               <p className="mt-2 break-all font-mono text-[11px] text-neutral-500">sha256: {provenance.sha256}</p>
+              <div className="mt-3 flex items-center gap-3">
+                {!qrightId ? (
+                  <button
+                    onClick={registerAuthorship}
+                    disabled={busy || !project}
+                    className="border border-teal-800 bg-white px-4 py-1.5 text-sm text-teal-800 transition hover:bg-teal-800 hover:text-white disabled:opacity-40"
+                  >
+                    {t("qreal.prov.register")}
+                  </button>
+                ) : (
+                  <span className="text-sm text-teal-800">
+                    {t("qreal.prov.registered")}{" "}
+                    <a href="/qright" className="underline underline-offset-2">QRight</a>
+                    <span className="ml-2 font-mono text-[11px] text-neutral-500">{qrightId.slice(0, 8)}…</span>
+                  </span>
+                )}
+              </div>
             </div>
           </section>
         )}

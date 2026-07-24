@@ -139,7 +139,7 @@ export default function QMediaVideosPage() {
               aria-label={`Play video: ${v.title}`}
               style={{ display: "block", textAlign: "left", padding: 0, borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
             >
-              <div style={{ height: 120, background: v.thumbnailUrl ? `url(${v.thumbnailUrl}) center/cover` : "linear-gradient(135deg, #7c3aed, #0d9488)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>
+              <div style={{ height: 120, background: v.thumbnailUrl ? `url("${encodeURI(v.thumbnailUrl).replace(/"/g, "%22")}") center/cover` : "linear-gradient(135deg, #7c3aed, #0d9488)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>
                 {!v.thumbnailUrl && "▶"}
               </div>
               <div style={{ padding: "10px 12px" }}>

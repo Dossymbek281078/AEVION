@@ -91,7 +91,9 @@ export default function ExplorePlanet() {
     fetch(apiUrl("/api/aevion/stats"))
       .then((r) => r.json())
       .then((d) => {
-        if (typeof d?.totalModules === "number" && d.totalModules > 0) setLiveModules(d.totalModules);
+        // /api/aevion/stats shape: { total, byStatus: { live, mvp }, ... }
+        const live = d?.byStatus?.live ?? d?.total;
+        if (typeof live === "number" && live > 0) setLiveModules(live);
       })
       .catch(() => {});
   }, []);

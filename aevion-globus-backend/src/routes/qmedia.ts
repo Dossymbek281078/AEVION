@@ -42,6 +42,17 @@ function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
 /**
+ * Remove any orphaned like entries for a deleted resource so memLikes doesn't
+ * grow unbounded. Keys are formatted as `${userId}:${type}:${resourceId}`.
+ */
+function cascadeDeleteLikes(type: "track" | "video" | "playlist", id: string): void {
+  const suffix = `:${type}:${id}`;
+  for (const key of memLikes.keys()) {
+    if (key.endsWith(suffix)) memLikes.delete(key);
+  }
+}
+
+/**
  * Server-side URL scheme validation.
  * Rejects javascript:, data:, file:, vbscript:, etc. that would XSS if <audio src=> / <img src=> uses them.
  * Frontend validates too, but defense-in-depth for direct API callers.
@@ -118,9 +129,11 @@ qmediaRouter.delete("/me/tracks/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(String(req.params.id));
+    const id = String(req.params.id);
+    const track = memTracks.get(id);
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memTracks.delete(String(req.params.id));
+    memTracks.delete(id);
+    cascadeDeleteLikes("track", id);
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete track failed" }); }
 });
@@ -192,13 +205,15 @@ qmediaRouter.delete("/me/playlists/:id/tracks/:trackId", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "remove track failed" }); }
 });
 
-qmediaRouter.delete("/me/playlists/:id", async (req, res) => {
+qmediaRouter.delete("/me/playlists/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
+    const id = String(req.params.id);
+    const playlist = memPlaylists.get(id);
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memPlaylists.delete(req.params.id);
+    memPlaylists.delete(id);
+    cascadeDeleteLikes("playlist", id);
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete playlist failed" }); }
 });
@@ -268,21 +283,30 @@ qmediaRouter.delete("/me/videos/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(String(req.params.id));
+    const id = String(req.params.id);
+    const video = memVideos.get(id);
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memVideos.delete(String(req.params.id));
+    memVideos.delete(id);
+    cascadeDeleteLikes("video", id);
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete video failed" }); }
 });
 
 /* ── Likes ── */
 
-qmediaRouter.post("/:type/:id/like", async (req, res) => {
+qmediaRouter.post("/:type/:id/like", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const { type, id } = req.params;
+    const type = String(req.params.type);
+    const id = String(req.params.id);
     if (!["track", "video", "playlist"].includes(type)) return res.status(400).json({ error: "invalid type" });
+    // Reject like on a non-existent resource — otherwise memLikes fills with orphaned keys
+    const exists =
+      (type === "track" && memTracks.has(id)) ||
+      (type === "video" && memVideos.has(id)) ||
+      (type === "playlist" && memPlaylists.has(id));
+    if (!exists) return res.status(404).json({ error: "not_found", type, id });
     const key = `${auth.sub}:${type}:${id}`;
     const liked = !memLikes.get(key);
     if (liked) memLikes.set(key, true); else memLikes.delete(key);

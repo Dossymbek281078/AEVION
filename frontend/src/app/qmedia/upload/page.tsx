@@ -29,8 +29,17 @@ export default function QMediaUploadPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  function isHttpsUrl(s: string): boolean {
+    try {
+      const u = new URL(s);
+      return u.protocol === "https:" || u.protocol === "http:";
+    } catch { return false; }
+  }
+
   async function submit() {
     if (!title.trim() || !url.trim()) { setError("Название и URL обязательны"); return; }
+    if (!isHttpsUrl(url.trim())) { setError("URL должен начинаться с https:// (или http://)"); return; }
+    if (coverUrl.trim() && !isHttpsUrl(coverUrl.trim())) { setError("URL обложки должен быть валидной ссылкой"); return; }
     setSubmitting(true); setError("");
     try {
       const endpoint = type === "track" ? "/api/qmedia/me/tracks" : "/api/qmedia/me/videos";
@@ -88,14 +97,32 @@ export default function QMediaUploadPage() {
             <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Описание видео" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none" />
           </>
         )}
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input
+          type="url"
+          inputMode="url"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="URL файла * (https://...)"
+          aria-label={type === "track" ? "URL аудиофайла" : "URL видеофайла"}
+          aria-invalid={!!(url && !isHttpsUrl(url))}
+          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500"
+        />
+        <input
+          type="url"
+          inputMode="url"
+          value={coverUrl}
+          onChange={e => setCoverUrl(e.target.value)}
+          placeholder="URL обложки (опционально)"
+          aria-label="URL обложки"
+          aria-invalid={!!(coverUrl && !isHttpsUrl(coverUrl))}
+          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500"
+        />
         <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         <label className="flex items-center gap-3 cursor-pointer">
           <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="w-4 h-4 accent-violet-500" />
           <span className="text-sm text-slate-300">Публичный доступ</span>
         </label>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" aria-live="assertive" className="text-sm text-red-400">{error}</p>}
         <button onClick={submit} disabled={submitting || !title.trim() || !url.trim()} className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-colors">
           {submitting ? "Загрузка…" : "Опубликовать"}
         </button>

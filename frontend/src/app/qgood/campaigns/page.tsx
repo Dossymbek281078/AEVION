@@ -155,7 +155,14 @@ function CampaignCard({ c, t }: { c: Campaign; t: TFn }) {
       <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, marginBottom: 10, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {c.description}
       </p>
-      <div style={{ height: 5, background: "#0f172a", borderRadius: 999, overflow: "hidden", marginBottom: 6 }}>
+      <div
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Собрано ${pct}% от цели`}
+        style={{ height: 5, background: "#0f172a", borderRadius: 999, overflow: "hidden", marginBottom: 6 }}
+      >
         <div style={{ height: "100%", width: `${pct}%`, background: "#10b981" }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8" }}>

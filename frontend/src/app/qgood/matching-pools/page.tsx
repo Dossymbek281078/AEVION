@@ -294,6 +294,11 @@ function PoolCard({ p, t }: { p: MatchingPool; t: TFn }) {
       </div>
 
       <div
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Использовано ${pct}% пула`}
         style={{
           height: 6,
           background: "#0f172a",

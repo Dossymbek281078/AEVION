@@ -220,6 +220,8 @@ export default function QMediaPage() {
                   <button
                     key={t.id}
                     onClick={() => onPlayTrack(recoListSrc, t)}
+                    aria-label={`${isActive && playing ? "Пауза" : "Играть"}: ${t.title}${t.artist ? ` — ${t.artist}` : ""}`}
+                    aria-pressed={isActive && playing}
                     style={{
                       all: "unset",
                       cursor: "pointer",
@@ -232,8 +234,8 @@ export default function QMediaPage() {
                       gap: 12,
                     }}
                   >
-                    <span style={{ width: 20, fontSize: 11, color: "#94a3b8", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
-                    <span style={{ fontSize: 18 }}>{isActive && playing ? "⏸" : "▶"}</span>
+                    <span aria-hidden="true" style={{ width: 20, fontSize: 11, color: "#94a3b8", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
+                    <span aria-hidden="true" style={{ fontSize: 18 }}>{isActive && playing ? "⏸" : "▶"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
                       <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
@@ -272,6 +274,8 @@ export default function QMediaPage() {
                   <button
                     key={t.id}
                     onClick={() => onPlayTrack(tracks, t)}
+                    aria-label={`${isActive && playing ? "Пауза" : "Играть"}: ${t.title}${t.artist ? ` — ${t.artist}` : ""}`}
+                    aria-pressed={isActive && playing}
                     style={{
                       all: "unset",
                       cursor: "pointer",
@@ -284,7 +288,7 @@ export default function QMediaPage() {
                       gap: 12,
                     }}
                   >
-                    <span style={{ fontSize: 20 }}>{isActive && playing ? "⏸" : "🎵"}</span>
+                    <span aria-hidden="true" style={{ fontSize: 20 }}>{isActive && playing ? "⏸" : "🎵"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a" }}>{t.title}</div>
                       <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
@@ -346,9 +350,9 @@ export default function QMediaPage() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={goPrev} title="Previous" style={btnIcon}>⏮</button>
-              <button onClick={togglePlay} title={playing ? "Pause" : "Play"} style={{ ...btnIcon, width: 42, height: 42, background: "#0d9488", color: "#fff", fontSize: 18 }}>{playing ? "⏸" : "▶"}</button>
-              <button onClick={goNext} title="Next" style={btnIcon}>⏭</button>
+              <button onClick={goPrev} aria-label="Предыдущий трек" title="Previous" style={btnIcon}>⏮</button>
+              <button onClick={togglePlay} aria-label={playing ? "Пауза" : "Играть"} aria-pressed={playing} title={playing ? "Pause" : "Play"} style={{ ...btnIcon, width: 42, height: 42, background: "#0d9488", color: "#fff", fontSize: 18 }}>{playing ? "⏸" : "▶"}</button>
+              <button onClick={goNext} aria-label="Следующий трек" title="Next" style={btnIcon}>⏭</button>
             </div>
 
             <div style={{ flex: "2 1 320px", display: "flex", alignItems: "center", gap: 10, minWidth: 220 }}>
@@ -367,7 +371,7 @@ export default function QMediaPage() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={cycleSpeed} title="Playback speed" style={{ ...btnIcon, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{speed}x</button>
+              <button onClick={cycleSpeed} aria-label={`Скорость воспроизведения: ${speed}x, нажми чтобы поменять`} title="Playback speed" style={{ ...btnIcon, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{speed}x</button>
               <span title="Volume" style={{ fontSize: 14 }}>{volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}</span>
               <input
                 type="range"

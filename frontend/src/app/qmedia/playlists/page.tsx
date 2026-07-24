@@ -22,6 +22,7 @@ export default function PlaylistsPage() {
   const [desc, setDesc] = useState("");
   const [pub, setPub] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -40,20 +41,30 @@ export default function PlaylistsPage() {
   async function create() {
     if (!name.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       const r = await fetch(apiUrl("/api/qmedia/me/playlists"), {
         method: "POST", headers: { "Content-Type": "application/json", ...ah() },
         body: JSON.stringify({ name: name.trim(), description: desc.trim() || null, isPublic: pub }),
       });
       if (r.ok) { setName(""); setDesc(""); setCreating(false); await load(); }
-    } catch { /**/ }
+      else { setError(`Не удалось создать (HTTP ${r.status}). Попробуй ещё раз.`); }
+    } catch { setError("Сеть недоступна. Попробуй ещё раз."); }
     finally { setSaving(false); }
   }
 
   async function del(id: string) {
     if (!confirm("Удалить плейлист?")) return;
-    await fetch(apiUrl(`/api/qmedia/me/playlists/${id}`), { method: "DELETE", headers: ah() });
+    const snapshot = mine;
     setMine(prev => prev.filter(p => p.id !== id));
+    setError(null);
+    try {
+      const r = await fetch(apiUrl(`/api/qmedia/me/playlists/${id}`), { method: "DELETE", headers: ah() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch {
+      setMine(snapshot);
+      setError("Не удалось удалить плейлист. Список восстановлен.");
+    }
   }
 
   const list = tab === "mine" ? mine : public_;
@@ -69,6 +80,11 @@ export default function PlaylistsPage() {
         <button onClick={() => setCreating(true)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 rounded-lg text-xs font-semibold">+ Создать</button>
       </header>
       <div className="max-w-2xl mx-auto px-4 py-8">
+        {error && (
+          <div role="alert" className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+            {error}
+          </div>
+        )}
         <div className="flex gap-1 bg-slate-900 p-1 rounded-xl mb-6 border border-slate-800">
           {([["mine", "Мои"], ["public", "Публичные"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-colors ${tab === k ? "bg-slate-700 text-white" : "text-slate-400"}`}>{l}</button>
@@ -78,8 +94,22 @@ export default function PlaylistsPage() {
         {creating && (
           <div className="bg-slate-900 border border-violet-700/40 rounded-2xl p-5 mb-6 space-y-3">
             <h3 className="text-sm font-bold">Новый плейлист</h3>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Название *" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Описание (опционально)" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Название *"
+              maxLength={120}
+              aria-label="Название плейлиста"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500"
+            />
+            <input
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="Описание (опционально)"
+              maxLength={500}
+              aria-label="Описание плейлиста"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500"
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={pub} onChange={e => setPub(e.target.checked)} className="w-4 h-4 accent-violet-500" />
               <span className="text-sm text-slate-300">Публичный</span>
@@ -107,7 +137,13 @@ export default function PlaylistsPage() {
                 <p className="text-xs text-slate-500">{p.trackIds.length} треков · {p.isPublic ? "Публичный" : "Приватный"}</p>
               </div>
               {tab === "mine" && (
-                <button onClick={() => del(p.id)} className="text-xs text-slate-600 hover:text-red-400 transition-colors shrink-0">Удалить</button>
+                <button
+                  onClick={() => del(p.id)}
+                  aria-label={`Удалить плейлист «${p.name}»`}
+                  className="text-xs text-slate-600 hover:text-red-400 transition-colors shrink-0"
+                >
+                  Удалить
+                </button>
               )}
             </div>
           ))}

@@ -16,10 +16,26 @@ import {
   paywallEnabledFor,
   normalizeTier,
 } from "../lib/planGate";
-import { MODULES_PRICING } from "../data/pricing";
+import { MODULES_PRICING, TIERS } from "../data/pricing";
 import { funnelSummary } from "../lib/paywallDenyLog";
 
 export const entitlementsRouter = Router();
+
+/** Cheapest monthly USD price among the tiers that unlock a module (excluding
+ *  free). This is what one denied caller would pay to get in — the unit for
+ *  the funnel's revenue-opportunity estimate. Null when nothing paid unlocks
+ *  it (shouldn't happen for a gated module, but stays honest if pricing is
+ *  misconfigured). */
+function minUnlockPriceUsd(moduleId: string): number | null {
+  const paidTiers = new Set<string>(
+    tiersForModule(moduleId).map(normalizeTier).filter((t) => t !== "free")
+  );
+  const prices = TIERS
+    .filter((t) => paidTiers.has(normalizeTier(t.id)))
+    .map((t) => t.priceMonthly)
+    .filter((p): p is number => typeof p === "number" && p > 0);
+  return prices.length ? Math.min(...prices) : null;
+}
 
 /** Caller-specific entitlements (resolves JWT / subscription). */
 entitlementsRouter.get("/me/entitlements", (req, res) => {
@@ -48,7 +64,23 @@ entitlementsRouter.get("/paywall/policy", (_req, res) => {
 entitlementsRouter.get("/paywall/funnel", async (req, res) => {
   try {
     const days = Number(req.query.days) || 30;
-    res.json({ ...(await funnelSummary(days)), generatedAt: new Date().toISOString() });
+    const summary = await funnelSummary(days);
+    // Enrich each module with a revenue-opportunity ceiling: how many callers
+    // hit the wall × the cheapest unlock price. It's a CEILING (denies are
+    // requests, not unique would-be buyers, and not everyone converts) —
+    // labeled as such in the UI — but it turns "N denials" into "up to $X/mo
+    // if we convert this demand", which is the number that actually drives
+    // which module to unblock/discount next.
+    const byModule = summary.byModule.map((m) => {
+      const unlockPriceUsd = minUnlockPriceUsd(m.module);
+      return {
+        ...m,
+        unlockPriceUsd,
+        mrrCeilingUsd: unlockPriceUsd != null ? m.denies * unlockPriceUsd : null,
+      };
+    });
+    const mrrCeilingUsd = byModule.reduce((s, m) => s + (m.mrrCeilingUsd ?? 0), 0);
+    res.json({ ...summary, byModule, mrrCeilingUsd, generatedAt: new Date().toISOString() });
   } catch {
     res.status(500).json({ error: "funnel failed" });
   }

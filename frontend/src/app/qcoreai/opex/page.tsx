@@ -40,6 +40,8 @@ interface FunnelRow {
   denies: number;
   last24h: number;
   byPlan: Record<string, number>;
+  unlockPriceUsd?: number | null;
+  mrrCeilingUsd?: number | null;
 }
 
 interface FunnelData {
@@ -48,6 +50,7 @@ interface FunnelData {
   byModule: FunnelRow[];
   windowDays: number;
   source: "db" | "memory";
+  mrrCeilingUsd?: number;
 }
 
 const PROVIDER_COLOR: Record<string, string> = {
@@ -174,6 +177,9 @@ export default function OpexPage() {
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-3">
                   {t("qcoreai.opex.funnel")} · {funnel.totalDenies} {t("qcoreai.opex.funnel.total")} · {funnel.last24h} {t("qcoreai.opex.funnel.last24h")}
+                  {typeof funnel.mrrCeilingUsd === "number" && funnel.mrrCeilingUsd > 0 && (
+                    <span className="text-emerald-400"> · ≤${funnel.mrrCeilingUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr")}</span>
+                  )}
                 </p>
                 <div className="space-y-3">
                   {funnel.byModule.map((f) => {
@@ -184,6 +190,9 @@ export default function OpexPage() {
                           <span className="font-semibold">{f.module}</span>
                           <span className="text-slate-400 text-xs">
                             {f.denies} · {share.toFixed(0)}% · {f.last24h} {t("qcoreai.opex.funnel.last24h")}
+                            {typeof f.mrrCeilingUsd === "number" && f.mrrCeilingUsd > 0 && (
+                              <span className="text-emerald-400"> · ≤${f.mrrCeilingUsd.toLocaleString()}/mo</span>
+                            )}
                           </span>
                         </div>
                         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -193,6 +202,7 @@ export default function OpexPage() {
                     );
                   })}
                 </div>
+                <p className="text-[10px] text-slate-600 mt-3">{t("qcoreai.opex.funnel.mrr.note")}</p>
               </div>
             )}
             {funnel && funnel.byModule.length === 0 && (

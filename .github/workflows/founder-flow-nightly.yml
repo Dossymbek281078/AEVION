@@ -37,6 +37,17 @@ jobs:
           name: founder-flow-traces
           path: frontend/test-results/
           retention-days: 7
+      - name: Close stale failure issues once the flow is green again
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "Founder flow nightly failed in:title" --json number -q '.[].number' |
+          while read -r n; do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+              --comment "Nightly founder flow is green again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} — closing."
+          done
       - name: Open an issue so the failure reaches a human by morning
         if: failure()
         env:

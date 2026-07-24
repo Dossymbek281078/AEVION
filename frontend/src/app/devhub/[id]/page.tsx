@@ -7,7 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
-import { shouldOfferDbHint } from "@/lib/devhubHints";
+import { shouldOfferDbHint, shouldOfferDeployHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -450,7 +450,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
-    | { role: "hint"; kind: "design_db"; description: string; at: string };
+    | { role: "hint"; kind: "design_db" | "deploy"; description: string; at: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
   const aiImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -968,13 +968,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // Data-shaped idea + no schema yet → offer to design the database with
       // the context already in hand (rules live in lib/devhubHints — tested).
       setChatHistory((h) => {
-        const offer = shouldOfferDbHint({
+        const offerDb = shouldOfferDbHint({
           userText,
           projectDescription: project.description,
           filePaths: files.map((f) => f.path),
-          historyHasHint: h.some((m) => m.role === "hint"),
+          historyHasHint: h.some((m) => m.role === "hint" && (m as any).kind === "design_db"),
         });
-        return offer ? [...h, { role: "hint", kind: "design_db", description: userText, at: new Date().toISOString() }] : h;
+        if (offerDb) return [...h, { role: "hint", kind: "design_db", description: userText, at: new Date().toISOString() }];
+        const offerDeploy = shouldOfferDeployHint({
+          stack: project.stack,
+          deployUrl: project.deployUrl,
+          historyHasDeployHint: h.some((m) => m.role === "hint" && (m as any).kind === "deploy"),
+        });
+        if (offerDeploy) return [...h, { role: "hint", kind: "deploy", description: userText, at: new Date().toISOString() }];
+        return h;
       });
       // Reload files list
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -2977,6 +2984,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
+                          msg.kind === "deploy" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                              <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
+                                🚀 Ready to go live? One click deploys this to Cloudflare with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL — marked live only after the page actually serves.
+                              </div>
+                              <button
+                                onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
+                                style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+                              >
+                                Задеплоить
+                              </button>
+                            </div>
+                          ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                             <div style={{ color: "#4c1d95", marginBottom: 8, lineHeight: 1.45 }}>
                               🗄 Looks like this app stores data. Want a database designed for it — schema + typed client, wired to DATABASE_URL?
@@ -2989,6 +3009,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               {designingDb ? "Designing…" : "Спроектировать базу данных"}
                             </button>
                           </div>
+                          )
                         ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", width: "95%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13 }}>
                             {msg.files.length === 0 ? (

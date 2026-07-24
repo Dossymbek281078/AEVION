@@ -787,7 +787,8 @@ async function generateCodeWithAI(
   targetFiles: string[] = [],
   existingFiles: Array<{ path: string; content: string }> = [],
   images?: ChatImage[],
-  history?: ChatTurn[]
+  history?: ChatTurn[],
+  onProgress?: (stage: string) => void
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -833,6 +834,7 @@ async function generateCodeWithAI(
   ];
 
   const GEN_MAX_TOKENS = 8192;
+  onProgress?.("calling_model");
   let result;
   try {
     result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
@@ -851,6 +853,7 @@ async function generateCodeWithAI(
   // model to CONTINUE with just the missing files (one attempt; completed
   // files are named so it doesn't regenerate them).
   if (parsed.mode === "salvaged") {
+    onProgress?.("continuation");
     try {
       const done = parsed.files.map((f) => f.path).join(", ");
       const contMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -873,6 +876,7 @@ async function generateCodeWithAI(
     wasContinued = true;
   }
   let files = parsed.files;
+  onProgress?.("syntax_check");
   let syntaxProblems = await validateGeneratedFiles(files);
 
   // Self-correction: a generate-then-check-then-fix loop is a well-established
@@ -881,6 +885,7 @@ async function generateCodeWithAI(
   // MAX_SYNTAX_FIX_ATTEMPTS so a stubborn model can't loop forever on our bill.
   let selfCorrected = 0;
   while (syntaxProblems.length > 0 && selfCorrected < MAX_SYNTAX_FIX_ATTEMPTS) {
+    onProgress?.("self_correcting");
     messages.push({ role: "assistant", content: result.reply });
     messages.push({
       role: "user",
@@ -1393,9 +1398,10 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
 });
 
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
-async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[]) {
+async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history);
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
+  onProgress?.("saving");
   const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
   for (const gf of generatedFiles) {
     const file: DevHubFile = {
@@ -1425,6 +1431,81 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     checkpointId, projectId: project.id,
   };
 }
+
+// POST /api/devhub/projects/:id/generate/stream — the same generation as
+// /generate, but with SSE status events so the 1-3 minutes of model time
+// aren't a silent spinner. Events: {type:"status", stage} at each phase
+// (calling_model → [continuation] → syntax_check → [self_correcting] →
+// saving), then {type:"result", ...same payload as /generate} or
+// {type:"error", error}. Honest stages only — every event corresponds to
+// something actually happening, never a fake progress animation.
+devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
+  if (!prompt || typeof prompt !== "string") {
+    return res.status(400).json({ error: "prompt is required" });
+  }
+  let images: ChatImage[] | undefined;
+  if (imageBase64 !== undefined) {
+    if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
+      return res.status(400).json({ error: "imageBase64 must be a non-empty base64 string" });
+    }
+    if (imageBase64.length > 7_000_000) {
+      return res.status(400).json({ error: "image too large (max ~5MB)" });
+    }
+    const mediaType = typeof imageMediaType === "string" && imageMediaType ? imageMediaType : "image/png";
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType)) {
+      return res.status(400).json({ error: "imageMediaType must be image/png, image/jpeg, image/webp or image/gif" });
+    }
+    images = [{ mediaType, dataBase64: imageBase64.replace(/^data:[^,]+,/, "") }];
+  }
+  let history: ChatTurn[] | undefined;
+  if (Array.isArray(historyRaw)) {
+    history = historyRaw
+      .filter((h: unknown): h is { role: string; text: string } =>
+        !!h && typeof (h as any).role === "string" && typeof (h as any).text === "string")
+      .filter((h) => h.role === "user" || h.role === "assistant")
+      .slice(-8)
+      .map((h) => ({ role: h.role as "user" | "assistant", text: h.text.slice(0, 500) }));
+    if (history.length === 0) history = undefined;
+  }
+  const targetFiles: string[] = Array.isArray(targetFilesRaw)
+    ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
+    : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  const send = (event: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
+  try {
+    const result = await runProjectGeneration(
+      project, userId, prompt, stack || project.stack, targetFiles, images, history,
+      (stage) => send({ type: "status", stage })
+    );
+    send({ type: "result", ...result });
+  } catch (e: any) {
+    if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
+      send({ type: "error", error: e.message.replace("NO_VISION_PROVIDER: ", "") });
+    } else {
+      send({ type: "error", error: e?.message || "generation failed" });
+    }
+  }
+  res.end();
+});
 
 // POST /api/devhub/projects/:id/database/design — schema-by-prompt (Lovable-gap
 // feature #3, honest MVP): turns a plain-language description into db/schema.sql

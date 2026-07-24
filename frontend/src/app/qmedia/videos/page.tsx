@@ -13,28 +13,49 @@ function bearerHeader(): HeadersInit {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
+function isHttpUrl(s: string): boolean {
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch { return false; }
+}
+
 export default function QMediaVideosPage() {
   const [videos, setVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("All");
   const [playing, setPlaying] = useState<any | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" });
+  const [addError, setAddError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // v0.8: load videos via @aevion-io/catalog-client SDK (cat.qmedia.videos).
   useEffect(() => {
     const c = category === "All" ? undefined : category.toLowerCase().replace(/ /g, "-");
+    setLoading(true);
     catalog.qmedia
       .videos({ limit: 50, category: c })
       .then((d) => {
         if (d.items) setVideos(d.items);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [category]);
 
   const addVideo = async () => {
-    if (!form.title) return;
-    const r = await fetch(apiUrl("/api/qmedia/me/videos"), { method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ ...form, isPublic: true }) });
-    if (r.ok) { const d = await r.json(); setVideos(prev => [d, ...prev]); setAddOpen(false); setForm({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" }); }
+    if (!form.title.trim()) { setAddError("Название обязательно"); return; }
+    if (!isHttpUrl(form.url.trim())) { setAddError("URL видео должен начинаться с https://"); return; }
+    if (form.thumbnailUrl.trim() && !isHttpUrl(form.thumbnailUrl.trim())) { setAddError("URL обложки должен быть валидной ссылкой"); return; }
+    setAddError(null);
+    setSaving(true);
+    try {
+      const r = await fetch(apiUrl("/api/qmedia/me/videos"), { method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ ...form, isPublic: true }) });
+      if (r.ok) { const d = await r.json(); setVideos(prev => [d, ...prev]); setAddOpen(false); setForm({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" }); }
+      else { setAddError(`Не удалось сохранить (HTTP ${r.status})`); }
+    } catch { setAddError("Сеть недоступна"); }
+    finally { setSaving(false); }
   };
 
   const isYoutube = (url: string) => url?.includes("youtube.com") || url?.includes("youtu.be");
@@ -61,11 +82,26 @@ export default function QMediaVideosPage() {
                 {["tutorial", "music-video", "short-film", "documentary", "other"].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} placeholder="Video URL (YouTube, mp4…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+            <input
+              type="url"
+              inputMode="url"
+              value={form.url}
+              onChange={e => setForm(p => ({ ...p, url: e.target.value }))}
+              placeholder="Video URL (YouTube, mp4…)"
+              aria-label="URL видео"
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }}
+            />
             <div style={{ display: "flex", gap: 8 }}>
-              <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Description" style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
-              <button onClick={addVideo} style={{ padding: "8px 16px", borderRadius: 8, background: "#7c3aed", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+              <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Description" maxLength={500} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <button onClick={addVideo} disabled={saving} aria-busy={saving} style={{ padding: "8px 16px", borderRadius: 8, background: "#7c3aed", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
+                {saving ? "…" : "Save"}
+              </button>
             </div>
+            {addError && (
+              <p role="alert" style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+                {addError}
+              </p>
+            )}
           </div>
         )}
 
@@ -87,9 +123,22 @@ export default function QMediaVideosPage() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-          {videos.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13, gridColumn: "1/-1" }}>No videos yet. Be the first to add one!</p>}
+          {loading && videos.length === 0 && (
+            <>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} aria-busy="true" style={{ borderRadius: 12, height: 180, background: "#f1f5f9", border: "1px solid rgba(15,23,42,0.08)", animation: "pulse 1.5s ease-in-out infinite" }} />
+              ))}
+            </>
+          )}
+          {!loading && videos.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13, gridColumn: "1/-1" }}>No videos yet. Be the first to add one!</p>}
           {videos.map(v => (
-            <div key={v.id} onClick={() => { setPlaying(v); fetch(apiUrl(`/api/qmedia/videos/${v.id}/view`), { method: "POST" }).catch(() => {}); }} style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer" }}>
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => { setPlaying(v); fetch(apiUrl(`/api/qmedia/videos/${v.id}/view`), { method: "POST" }).catch(() => {}); }}
+              aria-label={`Play video: ${v.title}`}
+              style={{ display: "block", textAlign: "left", padding: 0, borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+            >
               <div style={{ height: 120, background: v.thumbnailUrl ? `url(${v.thumbnailUrl}) center/cover` : "linear-gradient(135deg, #7c3aed, #0d9488)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>
                 {!v.thumbnailUrl && "▶"}
               </div>
@@ -100,7 +149,7 @@ export default function QMediaVideosPage() {
                   <span style={{ fontSize: 11, color: "#94a3b8" }}>👁 {v.viewCount}</span>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </ProductPageShell>

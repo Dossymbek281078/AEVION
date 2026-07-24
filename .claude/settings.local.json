@@ -144,7 +144,8 @@
       "Bash(BASE=http://localhost:4001 EXPECT_TIER=1 node scripts/qcoreai-quota-policy-smoke.js)",
       "Bash(echo \"exit code: $?\")",
       "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq *\")",
-      "Bash(taskkill *)"
+      "Bash(taskkill *)",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): public quota-policy endpoint + flip-readiness smoke script' --body ' *)"
     ]
   }
 }

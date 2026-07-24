@@ -145,7 +145,9 @@
       "Bash(echo \"exit code: $?\")",
       "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq *\")",
       "Bash(taskkill *)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): public quota-policy endpoint + flip-readiness smoke script' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(qcoreai\\): public quota-policy endpoint + flip-readiness smoke script' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 898 --watch)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 898 --squash --delete-branch)"
     ]
   }
 }

@@ -85,7 +85,30 @@ no-op instantly, same as `PAYWALL_MODULES`.
 ## Open follow-up
 
 - `QCOREAI_PREMIUM_QUOTA` only covers `/chat` + `/chat-stream` — extending
-  it to the multi-agent orchestrator's dispatch points is separate work,
-  tracked in `docs/PRICING_STRATEGY_2026-07.md`.
+  it to the multi-agent orchestrator is separate work. Scoped (not yet
+  implemented) 2026-07-24:
+  - `services/qcoreai/orchestrator.ts`'s `streamAgent()` (~line 196) is the
+    **single choke point** every strategy (sequential/parallel/debate/
+    moderator/judge/etc.) funnels through — good news, only one function
+    needs the check, not a dozen call sites.
+  - The hard part: `streamAgent()` is an async generator with **no user/tier
+    context at all** today — `OrchestratorInput` doesn't carry a userId or
+    resolved tier. Adding the check means threading that through
+    `OrchestratorInput` → every strategy function → `streamAgent()`, not a
+    one-line addition.
+  - There's already a directly-analogous precedent to mirror instead of
+    inventing a new mechanism: `effectiveBudget()`/`bailBudget()` (same
+    file, ~line 266) already gracefully stops a run mid-stream when a
+    per-run `maxCostUsd` cap is crossed, yielding a `budget_exceeded` event
+    the route handler forwards to the client. A premium-quota check should
+    yield an equivalent `premium_quota_exceeded` event via the same
+    generator-yield idiom, NOT try to call `res.status(402)` directly from
+    inside the generator (it has no `res`).
+  - Open design question that needs a real decision before implementing,
+    not a code change: if agent A already produced output before agent B's
+    call would exceed the quota, does the run keep A's partial output (like
+    `bailBudget` does — it yields `final` with `lastContent`) or discard
+    it? Recommend following `bailBudget`'s existing precedent (keep partial
+    output) for consistency, but confirm before implementing.
 
-— written 2026-07-23, smoke script added 2026-07-23
+— written 2026-07-23, smoke script added 2026-07-23, orchestrator scoped 2026-07-24

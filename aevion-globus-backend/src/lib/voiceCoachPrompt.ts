@@ -306,7 +306,10 @@ const SYSTEM_PROMPT_COACH =
   'открытые линии, планы обеих сторон.\n' +
   '- Если ход сильный или слабый — объясни ПОЧЕМУ (что он даёт или чего лишает), ' +
   'а не «хороший ход» / «позиция развивается».\n' +
-  '- Где уместно — подскажи идею следующего хода или план в 1-2 словах.\n' +
+  '- Где уместно — подскажи идею следующего хода или план в 1-2 словах. Если называешь ' +
+  'конкретный ход-идею — он ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ' +
+  'ходы» из контекста; если не уверен в конкретной нотации — говори про план словами, не ' +
+  'выдумывай ход.\n' +
   '- Стандартная нотация (e4, Nf3, O-O). Без воды, без англицизмов, без пустых фраз.';
 
 const SYSTEM_PROMPT_QA =
@@ -424,7 +427,13 @@ function buildCoachUserMessage(input: BuildCommentInput): string {
   if (input.isPromotion) flags.push('превращение пешки');
 
   const lines: string[] = [];
-  if (input.fen) lines.push(`FEN: ${input.fen}`);
+  if (input.fen) {
+    lines.push(`FEN: ${input.fen}`);
+    const legal = legalMovesFromFen(input.fen);
+    if (legal.length) {
+      lines.push(`Легальные ходы в этой позиции (${legal.length}): ${legal.join(', ')}`);
+    }
+  }
   if (move?.san) {
     const fromTo =
       move.from && move.to ? ` (${move.from}-${move.to})` : '';
@@ -521,6 +530,24 @@ const PIECE_RU: Record<string, string> = {
   n: 'К',
   p: 'п',
 };
+
+/**
+ * Deterministic legal-move list for `buildCommentLLM`'s per-move commentary,
+ * computed server-side from the FEN alone (same trick as `describeBoardPieces`
+ * below). `answerQuestion`'s hallucinated-move fix (#794/#803) relied on the
+ * frontend passing `legalMoves`/`bestMove` — but `buildCommentLLM` is a
+ * separate LLM touchpoint (per-move "GM разбор" remark, fired after every
+ * move) that never got that grounding, even though its prompt explicitly
+ * invites the model to suggest a next-move idea. Returns [] (not undefined)
+ * on an invalid FEN so callers can treat "no moves" and "bad FEN" the same.
+ */
+export function legalMovesFromFen(fen: string): string[] {
+  try {
+    return new Chess(fen).moves();
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Deterministic, chess.js-derived piece list for the current FEN — same

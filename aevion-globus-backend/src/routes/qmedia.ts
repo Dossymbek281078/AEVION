@@ -27,6 +27,17 @@ const memLikes = new Map<string, boolean>();
 const aiLimit = rateLimit({ windowMs: 60_000, max: 12, standardHeaders: true, legacyHeaders: false });
 const writeLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
 
+/**
+ * Bound a user string field before interpolation into an AI provider prompt.
+ * Strips newlines (prompt-injection break-out via "\n\nIgnore prior instructions"),
+ * strips control chars, hard-caps length. Falls back to fallback if not a usable string.
+ */
+function boundedPromptField(v: unknown, maxLen: number, fallback: string): string {
+  if (typeof v !== "string" || v.length === 0) return fallback;
+  const cleaned = v.replace(/[\r\n\t\x00-\x1f]/g, " ").trim().slice(0, maxLen);
+  return cleaned.length > 0 ? cleaned : fallback;
+}
+
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
@@ -294,16 +305,20 @@ qmediaRouter.get("/me/likes", async (req, res) => {
 qmediaRouter.post("/ai/generate-lyrics", aiLimit, async (req, res) => {
   try {
     const { genre, mood, theme, lines } = req.body || {};
+    const safeGenre = boundedPromptField(genre, 50, "pop");
+    const safeMood = boundedPromptField(mood, 50, "upbeat");
+    const safeTheme = boundedPromptField(theme, 200, "life");
+    const numLines = Math.max(2, Math.min(40, typeof lines === "number" && Number.isFinite(lines) ? Math.floor(lines) : 8));
+    const stubReply = `[Verse 1]\nIn the ${safeMood} ${safeGenre} night\nEvery beat feels just right\n${safeTheme} under stars above\n\n[Chorus]\nOh ${safeTheme}, carry me away\nThrough the ${safeMood} day`;
     const provider = getProviders().find(p => p.configured);
     if (!provider) {
-      return res.json({ lyrics: `[Verse 1]\nIn the ${mood || "bright"} ${genre || "music"} night\nEvery beat feels just right\n${theme || "We dance"} under stars above\n\n[Chorus]\nOh ${theme || "music"}, carry me away\nThrough the ${mood || "beautiful"} day`, mode: "stub" });
+      return res.json({ lyrics: stubReply, mode: "stub" });
     }
-    const numLines = typeof lines === "number" ? lines : 8;
     try {
-      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${safeGenre} song lyrics with a ${safeMood} mood about: ${safeTheme}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
       res.json({ lyrics: result.reply });
     } catch {
-      res.json({ lyrics: `[Verse 1]\nIn the ${mood || "bright"} ${genre || "music"} night\nEvery beat feels just right\n${theme || "We dance"} under stars above\n\n[Chorus]\nOh ${theme || "music"}, carry me away\nThrough the ${mood || "beautiful"} day`, mode: "stub" });
+      res.json({ lyrics: stubReply, mode: "stub" });
     }
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate lyrics failed" }); }
 });
@@ -311,15 +326,18 @@ qmediaRouter.post("/ai/generate-lyrics", aiLimit, async (req, res) => {
 qmediaRouter.post("/ai/generate-title", aiLimit, async (req, res) => {
   try {
     const { genre, mood } = req.body || {};
+    const safeGenre = boundedPromptField(genre, 50, "pop");
+    const safeMood = boundedPromptField(mood, 50, "upbeat");
+    const stubTitles = [`${safeMood} ${safeGenre}`, `The ${safeMood} Beat`, `${safeGenre} Dreams`, `${safeMood} Harmony`, `Sound of Life`];
     const provider = getProviders().find(p => p.configured);
     if (!provider) {
-      return res.json({ titles: [`${mood || "Beautiful"} ${genre || "Song"}`, `The ${mood || "Magic"} Beat`, `${genre || "Music"} Dreams`, `${mood || "Pure"} Harmony`, `Sound of Life`], mode: "stub" });
+      return res.json({ titles: stubTitles, mode: "stub" });
     }
     let result;
     try {
-      result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${genre || "pop"} song with a ${mood || "upbeat"} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8);
+      result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${safeGenre} song with a ${safeMood} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8);
     } catch {
-      return res.json({ titles: [`${mood || "Beautiful"} ${genre || "Song"}`, `The ${mood || "Magic"} Beat`, `${genre || "Music"} Dreams`, `${mood || "Pure"} Harmony`, `Sound of Life`], mode: "stub" });
+      return res.json({ titles: stubTitles, mode: "stub" });
     }
     try {
       const raw = result.reply.trim();
@@ -342,21 +360,26 @@ qmediaRouter.post("/ai/generate-color-palette", aiLimit, async (req, res) => {
       romantic: ["#FF69B4", "#FFB6C1", "#FF1493", "#C71585", "#FF6EB4"],
       dark: ["#1A1A2E", "#16213E", "#0F3460", "#533483", "#E94560"],
     };
-    const colors = palettes[mood as string] || palettes.happy;
-    res.json({ colors, mood: mood || "happy" });
+    // Only accept whitelisted mood keys — never index the object by arbitrary user input
+    // (would expose __proto__ / constructor prototype chain and return function references).
+    const safeMood = typeof mood === "string" && Object.prototype.hasOwnProperty.call(palettes, mood) ? mood : "happy";
+    res.json({ colors: palettes[safeMood], mood: safeMood });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate palette failed" }); }
 });
 
 qmediaRouter.post("/ai/describe-video", aiLimit, async (req, res) => {
   try {
     const { title, category } = req.body || {};
+    const safeTitle = boundedPromptField(title, 200, "Untitled");
+    const safeCategory = boundedPromptField(category, 50, "video");
+    const stubDescription = `A compelling ${safeCategory} titled "${safeTitle}". Watch as the story unfolds in this captivating piece.`;
     const provider = getProviders().find(p => p.configured);
-    if (!provider) return res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
+    if (!provider) return res.json({ description: stubDescription, mode: "stub" });
     try {
-      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${safeCategory} titled "${safeTitle}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
       res.json({ description: result.reply.trim() });
     } catch {
-      res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
+      res.json({ description: stubDescription, mode: "stub" });
     }
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "describe video failed" }); }
 });

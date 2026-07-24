@@ -384,6 +384,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<"chat" | "visual" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+  // Live phase of the current generation (SSE) — honest states only, each
+  // corresponds to something the backend is actually doing right now.
+  const [genStage, setGenStage] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
 
   // AI-change history (checkpoints) — undo one step, or jump to any past point
@@ -896,13 +899,48 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
-      const r = await fetchWithRedeployRetry(
-        apiUrl(`/api/devhub/projects/${project.id}/generate`),
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
-        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
-      );
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Generation failed");
+      // Stream-first: live phase events instead of a silent multi-minute
+      // spinner. Falls back to the plain endpoint when the stream isn't
+      // available (older pod mid-deploy) — same payload either way.
+      let data: any = null;
+      try {
+        const streamR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/stream`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: generateBody,
+        });
+        if (streamR.ok && streamR.body && (streamR.headers.get("content-type") || "").includes("text/event-stream")) {
+          const reader = streamR.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split("\n\n");
+            buffer = events.pop() ?? "";
+            for (const e of events) {
+              if (!e.startsWith("data: ")) continue;
+              const evt = JSON.parse(e.slice(6));
+              if (evt.type === "status") setGenStage(evt.stage);
+              else if (evt.type === "result") data = evt;
+              else if (evt.type === "error") throw new Error(evt.error);
+            }
+          }
+        }
+      } catch (streamErr) {
+        if (streamErr instanceof Error && data === null && streamErr.message && !/fetch|network/i.test(streamErr.message)) throw streamErr;
+        data = null; // network-level stream failure — fall through to plain POST
+      }
+      if (data === null) {
+        const r = await fetchWithRedeployRetry(
+          apiUrl(`/api/devhub/projects/${project.id}/generate`),
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
+          { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+        );
+        data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Generation failed");
+      }
       const newGenerated = data.files || [];
       setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
       // Diffs are computed against the files as they were BEFORE this
@@ -948,6 +986,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(e.message || "Generation failed", "error");
     } finally {
       setGenerating(false);
+      setGenStage(null);
     }
   };
 
@@ -3132,6 +3171,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   >
                     {generating ? "Generating..." : "Generate Code (Ctrl+Enter)"}
                   </button>
+                  {generating && genStage && (
+                    <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
+                      {genStage === "calling_model" ? "⚙ Вызываю модель…"
+                        : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
+                        : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
+                        : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
+                        : genStage === "saving" ? "💾 Сохраняю файлы…"
+                        : genStage}
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
                       onClick={undoLastGeneration}

@@ -488,6 +488,31 @@ describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the
   });
 });
 
+describe("POST /api/devhub/projects/:id/generate/stream — honest status events", () => {
+  test("streams real phase events and ends with the full /generate payload", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "src/App.jsx", content: "export default () => null", language: "jsx" }] }),
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "S" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/generate/stream`)
+      .send({ prompt: "a page" });
+
+    const events = r.text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+    const stages = events.filter((e) => e.type === "status").map((e) => e.stage);
+    expect(stages).toEqual(expect.arrayContaining(["calling_model", "syntax_check", "saving"]));
+    const result = events.find((e) => e.type === "result");
+    expect(result.files.map((f: { path: string }) => f.path)).toEqual(["src/App.jsx"]);
+    expect(result.checkpointId).toBeTruthy();
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
 describe("truncated model reply — complete files are salvaged, not dumped to output.ts", () => {
   test("salvage triggers a continuation call that recovers the missing tail file", async () => {
     vi.mocked(getProviders).mockReturnValue([

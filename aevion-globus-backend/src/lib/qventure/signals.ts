@@ -193,7 +193,10 @@ export function parsePlanSignals(text: string): PlanSignals {
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
   }
   // ── CAC / LTV absolute: "CAC of $400", "LTV $3,000" ──
-  const cac = firstMatch(t, new RegExp(String.raw`cac\s*(?:of|=|:|at|is)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
+  // The negative lookbehind stops "LTV/CAC 4.2" from also matching here and
+  // reading the ratio's 4.2 as a $4.20 CAC — which was nonsense data and
+  // inflated fieldsFound / signalCoverage with a metric the plan never disclosed.
+  const cac = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
   if (cac) { const v = parseMoney(cac[1], cac[2]); if (v && v > 0) s.cacUsd = v; }
   const ltv = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
   if (ltv) { const v = parseMoney(ltv[1], ltv[2]); if (v && v > 0) s.ltvUsd = v; }

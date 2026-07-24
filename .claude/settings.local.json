@@ -134,7 +134,9 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 869 --watch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 869 --squash --delete-branch)",
       "Bash(grep -n \"Команды — \\\\$100 на Full\" aevion-globus-backend/src/data/pricing.ts)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): make the public promo banner honest about the discount cap' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): make the public promo banner honest about the discount cap' --body ' *)",
+      "Bash(git stash *)",
+      "Bash(gh run *)"
     ]
   }
 }

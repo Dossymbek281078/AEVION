@@ -20,6 +20,10 @@ let lastFetchOk = false;
 let lastFetchAt: string | null = null;
 
 const KT_TO_MS = 0.514444;
+// METAR stations report roughly hourly; if the public feed has been down long
+// enough that a cached reading is older than this, treat it as gone rather
+// than silently claiming "metar" on hours/days-stale wind.
+const MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
 async function refresh(): Promise<void> {
   const ids = Object.values(CITY_STATION).join(",");
@@ -54,12 +58,21 @@ async function refresh(): Promise<void> {
 refresh();
 setInterval(refresh, 10 * 60 * 1000).unref?.();
 
-export function getMetarWind(cityId: string): MetarWind | null {
-  return cache.get(cityId) ?? null;
+function isFresh(w: MetarWind): boolean {
+  const age = Date.now() - Date.parse(w.obsTime);
+  return Number.isFinite(age) && age <= MAX_AGE_MS;
 }
 
-export function metarStatus(): { lastFetchOk: boolean; lastFetchAt: string | null; cities: Record<string, MetarWind | null> } {
-  const cities: Record<string, MetarWind | null> = {};
-  for (const cityId of Object.keys(CITY_STATION)) cities[cityId] = cache.get(cityId) ?? null;
+export function getMetarWind(cityId: string): MetarWind | null {
+  const w = cache.get(cityId);
+  return w && isFresh(w) ? w : null;
+}
+
+export function metarStatus(): { lastFetchOk: boolean; lastFetchAt: string | null; cities: Record<string, (MetarWind & { stale: boolean }) | null> } {
+  const cities: Record<string, (MetarWind & { stale: boolean }) | null> = {};
+  for (const cityId of Object.keys(CITY_STATION)) {
+    const w = cache.get(cityId);
+    cities[cityId] = w ? { ...w, stale: !isFresh(w) } : null;
+  }
   return { lastFetchOk, lastFetchAt, cities };
 }

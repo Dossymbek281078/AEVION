@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -127,6 +127,11 @@ export default function QMediaPage() {
     playList(list, idx >= 0 ? idx : 0);
   }, [playList]);
 
+  // Stable callbacks per-list — required so memo'd TrackRow sees the same
+  // onPlay prop across audio-progress re-renders and skips re-render.
+  // Depend only on the LIST identity; capturing the list in the closure ensures
+  // freshness when a new fetch replaces recoListSrc/tracks arrays.
+
   const togglePlay = useCallback(() => {
     if (!active) return;
     setPlaying((p) => !p);
@@ -167,6 +172,8 @@ export default function QMediaPage() {
 
   const progressPct = useMemo(() => (duration > 0 ? (current / duration) * 100 : 0), [current, duration]);
   const recoListSrc = recos.length > 0 ? recos : tracks;
+  const onPlayReco = useCallback((t: Track) => onPlayTrack(recoListSrc, t), [onPlayTrack, recoListSrc]);
+  const onPlayPopular = useCallback((t: Track) => onPlayTrack(tracks, t), [onPlayTrack, tracks]);
 
   if (paywall) {
     return <PaywallScreen payload={paywall} backHref="/modules" backLabel="← Модули" />;
@@ -214,37 +221,17 @@ export default function QMediaPage() {
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {recoListSrc.slice(0, 8).map((t, i) => {
-                const isActive = active?.id === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => onPlayTrack(recoListSrc, t)}
-                    aria-label={`${isActive && playing ? "Пауза" : "Играть"}: ${t.title}${t.artist ? ` — ${t.artist}` : ""}`}
-                    aria-pressed={isActive && playing}
-                    style={{
-                      all: "unset",
-                      cursor: "pointer",
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      background: isActive ? "#0d948811" : "#f8fafc",
-                      border: isActive ? "1px solid #0d948866" : "1px solid rgba(15,23,42,0.08)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
-                    <span aria-hidden="true" style={{ width: 20, fontSize: 11, color: "#94a3b8", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
-                    <span aria-hidden="true" style={{ fontSize: 18 }}>{isActive && playing ? "⏸" : "▶"}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
-                    </div>
-                    <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>▶ {t.playCount}</span>
-                    <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums", width: 38, textAlign: "right" }}>{fmtTime(t.duration)}</span>
-                  </button>
-                );
-              })}
+              {recoListSrc.slice(0, 8).map((t, i) => (
+                <TrackRow
+                  key={t.id}
+                  track={t}
+                  index={i}
+                  isActive={active?.id === t.id}
+                  isPlaying={playing}
+                  onPlay={onPlayReco}
+                  variant="reco"
+                />
+              ))}
             </div>
           </div>
         )}
@@ -268,35 +255,17 @@ export default function QMediaPage() {
           <div style={{ marginBottom: 24 }}>
             <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>🎵 Most played</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {tracks.map((t) => {
-                const isActive = active?.id === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => onPlayTrack(tracks, t)}
-                    aria-label={`${isActive && playing ? "Пауза" : "Играть"}: ${t.title}${t.artist ? ` — ${t.artist}` : ""}`}
-                    aria-pressed={isActive && playing}
-                    style={{
-                      all: "unset",
-                      cursor: "pointer",
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      background: isActive ? "#0d948811" : "#f8fafc",
-                      border: isActive ? "1px solid #0d948866" : "1px solid rgba(15,23,42,0.08)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
-                    <span aria-hidden="true" style={{ fontSize: 20 }}>{isActive && playing ? "⏸" : "🎵"}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a" }}>{t.title}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
-                    </div>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {t.playCount}</span>
-                  </button>
-                );
-              })}
+              {tracks.map((t, i) => (
+                <TrackRow
+                  key={t.id}
+                  track={t}
+                  index={i}
+                  isActive={active?.id === t.id}
+                  isPlaying={playing}
+                  onPlay={onPlayPopular}
+                  variant="popular"
+                />
+              ))}
             </div>
           </div>
         )}
@@ -405,3 +374,61 @@ const btnIcon: React.CSSProperties = {
   fontSize: 14,
   flexShrink: 0,
 };
+
+/**
+ * Memoized track row. Isolated from parent so audio-progress ticks
+ * (setCurrent every ~250ms via onTimeUpdate) don't re-render the whole list.
+ * Only re-renders when track / isActive / isPlaying / index changes.
+ */
+type TrackRowProps = {
+  track: Track;
+  index: number;
+  isActive: boolean;
+  isPlaying: boolean;
+  onPlay: (t: Track) => void;
+  variant: "reco" | "popular";
+};
+
+const TrackRow = memo(function TrackRow({ track, index, isActive, isPlaying, onPlay, variant }: TrackRowProps) {
+  const label = `${isActive && isPlaying ? "Пауза" : "Играть"}: ${track.title}${track.artist ? ` — ${track.artist}` : ""}`;
+  return (
+    <button
+      onClick={() => onPlay(track)}
+      aria-label={label}
+      aria-pressed={isActive && isPlaying}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: isActive ? "#0d948811" : "#f8fafc",
+        border: isActive ? "1px solid #0d948866" : "1px solid rgba(15,23,42,0.08)",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      {variant === "reco" ? (
+        <>
+          <span aria-hidden="true" style={{ width: 20, fontSize: 11, color: "#94a3b8", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{index + 1}</span>
+          <span aria-hidden="true" style={{ fontSize: 18 }}>{isActive && isPlaying ? "⏸" : "▶"}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</div>
+            <div style={{ fontSize: 11, color: "#64748b" }}>{track.artist || "Unknown"} · {track.genre}</div>
+          </div>
+          <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>▶ {track.playCount}</span>
+          <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums", width: 38, textAlign: "right" }}>{fmtTime(track.duration)}</span>
+        </>
+      ) : (
+        <>
+          <span aria-hidden="true" style={{ fontSize: 20 }}>{isActive && isPlaying ? "⏸" : "🎵"}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a" }}>{track.title}</div>
+            <div style={{ fontSize: 11, color: "#64748b" }}>{track.artist || "Unknown"} · {track.genre}</div>
+          </div>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {track.playCount}</span>
+        </>
+      )}
+    </button>
+  );
+});

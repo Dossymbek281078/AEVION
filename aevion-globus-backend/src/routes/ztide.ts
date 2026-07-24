@@ -276,8 +276,14 @@ ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
       const elapsedMs = Date.now() - new Date(last).getTime();
       const cooldownMs = 20 * 3600 * 1000;
       if (elapsedMs < cooldownMs) {
-        const nextAvailableAt = new Date(new Date(last).getTime() + cooldownMs).toISOString();
-        return res.status(429).json({ error: "streak_cooldown", nextAvailableAt });
+        const nextAvailableAtMs = new Date(last).getTime() + cooldownMs;
+        const retryAfterSec = Math.max(1, Math.ceil((nextAvailableAtMs - Date.now()) / 1000));
+        res.setHeader("Retry-After", String(retryAfterSec));
+        return res.status(429).json({
+          error: "streak_cooldown",
+          nextAvailableAt: new Date(nextAvailableAtMs).toISOString(),
+          retryAfterSec,
+        });
       }
     }
 

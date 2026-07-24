@@ -1,6 +1,7 @@
 ﻿import { Router } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
+import rateLimit from "express-rate-limit";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureQMediaTables } from "../lib/ensureQMediaTables";
 import { getPool } from "../lib/dbPool";
@@ -20,6 +21,11 @@ const memTracks = new Map<string, TrackRow>();
 const memPlaylists = new Map<string, PlaylistRow>();
 const memVideos = new Map<string, VideoRow>();
 const memLikes = new Map<string, boolean>();
+
+// Rate limits — matches pattern used by qgood/qmaskcard/qchaingov. AI is stricter
+// because those endpoints call external paid providers.
+const aiLimit = rateLimit({ windowMs: 60_000, max: 12, standardHeaders: true, legacyHeaders: false });
+const writeLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
 
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
@@ -65,7 +71,7 @@ qmediaRouter.get("/me/tracks", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my tracks failed" }); }
 });
 
-qmediaRouter.post("/me/tracks", async (req, res) => {
+qmediaRouter.post("/me/tracks", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -77,11 +83,11 @@ qmediaRouter.post("/me/tracks", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create track failed" }); }
 });
 
-qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
+qmediaRouter.patch("/me/tracks/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(req.params.id);
+    const track = memTracks.get(String(req.params.id));
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, artist, genre, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
     if (title) track.title = String(title).slice(0, 200);
@@ -97,20 +103,20 @@ qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "update track failed" }); }
 });
 
-qmediaRouter.delete("/me/tracks/:id", async (req, res) => {
+qmediaRouter.delete("/me/tracks/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(req.params.id);
+    const track = memTracks.get(String(req.params.id));
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memTracks.delete(req.params.id);
+    memTracks.delete(String(req.params.id));
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete track failed" }); }
 });
 
 qmediaRouter.post("/tracks/:id/play", async (req, res) => {
   try {
-    const track = memTracks.get(req.params.id);
+    const track = memTracks.get(String(req.params.id));
     if (!track) return res.status(404).json({ error: "not found" });
     track.playCount++;
     res.json({ playCount: track.playCount });
@@ -133,7 +139,7 @@ qmediaRouter.get("/me/playlists", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my playlists failed" }); }
 });
 
-qmediaRouter.post("/me/playlists", async (req, res) => {
+qmediaRouter.post("/me/playlists", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -208,7 +214,7 @@ qmediaRouter.get("/me/videos", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my videos failed" }); }
 });
 
-qmediaRouter.post("/me/videos", async (req, res) => {
+qmediaRouter.post("/me/videos", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -220,11 +226,11 @@ qmediaRouter.post("/me/videos", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create video failed" }); }
 });
 
-qmediaRouter.patch("/me/videos/:id", async (req, res) => {
+qmediaRouter.patch("/me/videos/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(req.params.id);
+    const video = memVideos.get(String(req.params.id));
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, description, url, thumbnailUrl, isPublic, category } = req.body || {};
     if (title) video.title = String(title).slice(0, 200);
@@ -240,20 +246,20 @@ qmediaRouter.patch("/me/videos/:id", async (req, res) => {
 
 qmediaRouter.post("/videos/:id/view", async (req, res) => {
   try {
-    const video = memVideos.get(req.params.id);
+    const video = memVideos.get(String(req.params.id));
     if (!video) return res.status(404).json({ error: "not found" });
     video.viewCount++;
     res.json({ viewCount: video.viewCount });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "view failed" }); }
 });
 
-qmediaRouter.delete("/me/videos/:id", async (req, res) => {
+qmediaRouter.delete("/me/videos/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(req.params.id);
+    const video = memVideos.get(String(req.params.id));
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memVideos.delete(req.params.id);
+    memVideos.delete(String(req.params.id));
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete video failed" }); }
 });
@@ -285,7 +291,7 @@ qmediaRouter.get("/me/likes", async (req, res) => {
 
 /* ── AI Tools ── */
 
-qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
+qmediaRouter.post("/ai/generate-lyrics", aiLimit, async (req, res) => {
   try {
     const { genre, mood, theme, lines } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -302,7 +308,7 @@ qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate lyrics failed" }); }
 });
 
-qmediaRouter.post("/ai/generate-title", async (req, res) => {
+qmediaRouter.post("/ai/generate-title", aiLimit, async (req, res) => {
   try {
     const { genre, mood } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -325,7 +331,7 @@ qmediaRouter.post("/ai/generate-title", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate title failed" }); }
 });
 
-qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
+qmediaRouter.post("/ai/generate-color-palette", aiLimit, async (req, res) => {
   try {
     const { mood } = req.body || {};
     const palettes: Record<string, string[]> = {
@@ -341,7 +347,7 @@ qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate palette failed" }); }
 });
 
-qmediaRouter.post("/ai/describe-video", async (req, res) => {
+qmediaRouter.post("/ai/describe-video", aiLimit, async (req, res) => {
   try {
     const { title, category } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -519,7 +525,7 @@ qmediaRouter.get("/radio/:genre", async (req, res) => {
 
 qmediaRouter.get("/tracks/:id/similar", async (req, res) => {
   try {
-    const track = memTracks.get(req.params.id);
+    const track = memTracks.get(String(req.params.id));
     if (!track) return res.status(404).json({ error: "not found" });
     const similar = Array.from(memTracks.values())
       .filter((t) => t.isPublic && t.genre === track.genre && t.id !== track.id)

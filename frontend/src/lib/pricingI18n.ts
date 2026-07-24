@@ -44,6 +44,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Promo */
     "promo.activeBanner": "АКТИВНЫЕ ПРОМО:",
     "promo.copied": "✓ Скопировано",
+    "promo.upTo": "до",
 
     /* Tier CTA */
     "tier.popular": "ПОПУЛЯРНЫЙ",
@@ -539,6 +540,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "promo.activeBanner": "ACTIVE PROMOS:",
     "promo.copied": "✓ Copied",
+    "promo.upTo": "up to",
 
     "tier.popular": "POPULAR",
     "tier.perMonth": "/mo",

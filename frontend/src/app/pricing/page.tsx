@@ -666,7 +666,7 @@ export default function PricingPage() {
             >
               {copiedPromo === p.code ? tp("promo.copied") : p.code} ·{" "}
               <span style={{ opacity: 0.7 }}>
-                {p.kind === "percent" ? `−${p.amount}%` : `−$${p.amount}`}
+                {p.kind === "percent" ? `−${p.amount}%` : `${tp("promo.upTo")} −$${p.amount}`}
               </span>
             </button>
           ))}

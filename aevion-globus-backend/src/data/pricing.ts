@@ -712,7 +712,7 @@ export const PROMO_CODES: PromoCode[] = [
     code: "TEAM100",
     kind: "fixed",
     amount: 100,
-    description: "Команды — $100 на Full",
+    description: "Команды — до $100 на Full (не более 50% от суммы заказа)",
     tiers: ["full"],
   },
 ];

@@ -7,6 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
+import { shouldOfferDbHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -927,13 +928,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
       // Data-shaped idea + no schema yet → offer to design the database with
-      // the context already in hand (feature discovery for /database/design).
-      const DATA_SIGNALS = /трекер|список|заказ|товар|запис|заметк|расход|склад|учёт|учет|пользовател|юзер|todo|task|tracker|inventory|order|list|user|note|expense|habit|привыч/i;
-      const hasSchema = files.some((f) => f.path === "db/schema.sql");
+      // the context already in hand (rules live in lib/devhubHints — tested).
       setChatHistory((h) => {
-        if (hasSchema || h.some((m) => m.role === "hint")) return h;
-        if (!DATA_SIGNALS.test(userText) && !DATA_SIGNALS.test(project.description || "")) return h;
-        return [...h, { role: "hint", kind: "design_db", description: userText, at: new Date().toISOString() }];
+        const offer = shouldOfferDbHint({
+          userText,
+          projectDescription: project.description,
+          filePaths: files.map((f) => f.path),
+          historyHasHint: h.some((m) => m.role === "hint"),
+        });
+        return offer ? [...h, { role: "hint", kind: "design_db", description: userText, at: new Date().toISOString() }] : h;
       });
       // Reload files list
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -2707,6 +2710,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
                 title="Import ZIP (symmetric to export)"
               >{zipImporting ? "..." : "📦"}</button>
+              <button
+                onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
+                disabled={!project || files.length === 0}
+                style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
+                title="Download the whole project as a ZIP — the code is yours"
+              >⬇</button>
               <button
                 onClick={() => setShowNewFile(true)}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}

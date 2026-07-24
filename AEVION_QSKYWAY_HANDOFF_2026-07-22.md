@@ -6,7 +6,7 @@
 > modules** (smeta-trainer / CyberChess content) — ignore them, this file is the
 > real state for QSkyway as of this session.
 
-## What shipped (9 PRs, all merged + prod-verified)
+## What shipped (11 PRs, all merged + prod-verified)
 
 | PR | What |
 |---|---|
@@ -19,6 +19,8 @@
 | #801 | Wind's ETA delta (`etaMinStill` vs `etaMinWind`) shown next to the flight time |
 | #817 | Per-vertiport detail line (`openRadiusM`/`clearanceM`/`distNoFlyM`) — same "computed but discarded" pattern as #793 |
 | #836 | Fixed `qskyway-smoke.js`: hardcoded `routeId: "smoke-route-1"` collided with slots from earlier prod runs once the store went Postgres-persistent; now unique per invocation |
+| #854 | This handoff doc (first version) |
+| #870 | **Real METAR ground wind** (`qskyway.metar.ts`, aviationweather.gov, no API key) replaces the illustrative ground reading for all 3 cities; altitude-growth slope stays a simplified model since METAR has no winds-aloft data. Fails soft to the old synthetic `WindConfig` on any fetch error. `wind.source: "metar"|"illustrative"` exposed honestly in `/city` + `/health`; UI shows a colored METAR/demo tag. Prod-verified live for all 3 cities. |
 
 ## Verified state (2026-07-22, end of session)
 
@@ -37,7 +39,12 @@
 
 ## What's next (not started)
 
-- **Regulator feed adapter (FAA/EASA/CAAC + METAR)** — the code's own disclaimer names this as the real next phase (no-fly zones/wind are currently illustrative). Needs external API credentials the assistant did not have access to this session; user deferred it explicitly.
+- **Real no-fly zones**: wind is now real (METAR, #870); no-fly zones are still the illustrative point+radius `NOFLY` config in `qskyway.zones.ts`. A viable free source was found and confirmed live (no key needed): FAA's `FAA_UAS_FacilityMap_Data` ArcGIS FeatureServer —
+  `https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer`
+  — returns grid-cell polygons with a `CEILING` field (max authorized altitude). Two real constraints before building this:
+  1. **US-only** (FAA jurisdiction) — only benefits the NYC twin; Astana and Tokyo would stay illustrative regardless (no equivalent free/keyless EASA or CAAC feed found yet).
+  2. **Different data shape** — a ceiling grid, not point+radius zones like the current `NOFLY` model. The architecturally correct integration is probably folding it into the existing height-obstacle grid (as an additional altitude constraint per cell, same mechanism as building heights) rather than converting it into fake circular zones. That's a real design decision, not a drop-in swap like METAR was — flag it to the user before starting.
+  - EASA (Europe) and CAAC (China) equivalents not researched — moot for this app's 3 cities (Astana/NYC/Tokyo) anyway; Tokyo would need a JCAB (Japan Civil Aviation Bureau) feed instead, not researched.
 - Everything else from the original code-audit (unused `/health` and `/vertiports` standalone endpoints, `avoidsNoFly` field) was judged low-value or already covered via the embedded `/city` data and was not pursued further.
 
 ## Operational note (adjacent, not acted on)

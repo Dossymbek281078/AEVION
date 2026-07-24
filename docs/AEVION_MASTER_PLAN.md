@@ -90,7 +90,7 @@ window's auto-memory `MEMORY.md`:
 | ~~`frontend-qcore`~~ | — | QCoreAI multi-agent + Multichat Engine | **directory no longer exists (confirmed missing 2026-07-16).** Routes (`aevion-globus-backend/src/routes/{qcoreai,multichat}.ts`) live in the main monorepo checkout — work them via `aevion-core` or a dedicated isolated worktree, not an assumed `frontend-qcore` checkout. |
 | `aevion-bank` | `main` (`frontend/src/app/bank/`) | Bank UI + AEC ledger | active — branch archived, work continues on main |
 | `aevion-smeta` | `feat/smeta-trainer` | смета (construction estimates) | active |
-| ~~`aevion-qbuild-fix`~~ | ~~`feat/qbuild-i18n`~~ | qbuild (construction hiring) | **superseded the old `aevion-qbuild`/`port-qbuild-v3` entry, then itself removed 2026-07-20** once its i18n fix was confirmed already merged to main. If you need QBuild work, start a fresh worktree off `main` — there is currently no canonical QBuild worktree. |
+| `aevion-qbuild-lighten` | `main`-derived feature branches | qbuild (construction hiring) | active since 2026-07-21 — supersedes the removed `aevion-qbuild-fix`. Light theme, region/workMode/education taxonomy, 2-agent AI resume-builder/NL-search, 3 restored dead AI endpoints all shipped (PRs #710→#866, see § 5 backlog). |
 | `aevion-cyberchess` | `chess-tournaments` | CyberChess UX | active |
 | `aevion-globus` | various | globus / 27-node visualisation | active |
 
@@ -128,7 +128,7 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 |---|---|---|---|---|---|---|---|---|---|
 | 12 | Awards | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Music + Film tracks; admin bulk #59; Sentry #86 |
 | 13 | CyberChess | (n/a) | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | tournaments + variants + brilliancy + bot personas; June layout/polish + in-game PiP + puzzles-flow (#372-#377); active in `feat/cyberchess-polish-0613` |
-| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | 10 killer features (#62); docs/portfolio + push events (#184-#185); i18n live-translate on `/build` confirmed merged to main 2026-07-16 (worktree renamed to `aevion-qbuild-fix`, see § 2); SEO amplifier still not applied to qbuild landings |
+| 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ✅ | ✅ | ⚠ | 10 killer features (#62); docs/portfolio + push events (#184-#185); i18n live-translate on `/build` confirmed merged to main 2026-07-16; SEO amplifier + per-page metadata/JSON-LD confirmed already shipped (PR #433, `qbuild-seo-smoke.js` live in `all-smokes.js`) — the ⚠ below was stale, corrected 2026-07-23; region/workMode/educationLevel taxonomy + 2-agent AI resume-builder/NL-search + 3 restored dead AI endpoints shipped 2026-07-21/22 (PRs #710→#866, worktree `aevion-qbuild-lighten`) |
 | 15 | смета (smeta) | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ✅ | ⚠ | **full product now** — exam mode + auto-graded LSR/AI scoring, 499 rates catalog + facets, volume calc, 15 pre-exam lessons, 3-tier QR cert, 250+ object corpus batches (#317-#360, May 18-25) |
 
 ### Tier 3 — Intelligence + cross-platform
@@ -303,11 +303,14 @@ If the user insists on more code work in this window, candidates are:
 1. **P2-4** Sentry + smoke + i18n
 2. Export format audit — RK construction codes coverage
 
-### `aevion-qbuild-fix` / `feat/qbuild-i18n` (worktree renamed — see § 2)
+### QBuild (worktree `aevion-qbuild-lighten`, 2026-07-21/22 session — see § 6 for full PR list)
 1. ~~i18n live-translate on `/build`~~ ✅ confirmed already merged to main (2026-07-16) — don't redo
-2. **P2-3** Merge remaining `port-qbuild-v3`-era UI polish into main (re-verify what's still outstanding — the i18n piece already landed)
-3. Vacancy / application e2e smoke
-4. SEO meta on qbuild landings (Tier 3 amplifier pattern not yet applied)
+2. ~~Vacancy / application e2e smoke~~ ✅ already existed and already wired into `daily-smoke.yml` (`qbuild-prod-smoke.js` — create project→vacancy→apply→owner-sees→accept) — this backlog line was stale, don't redo
+3. ~~SEO meta on qbuild landings~~ ✅ already shipped (PR #433) — this backlog line was stale, don't redo
+4. **P2-3** Merge remaining `port-qbuild-v3`-era UI polish into main — still genuinely unverified (vague scope, pre-dates the light-theme work below; re-scope before starting, don't assume it's stale like the other 3 turned out to be)
+5. Light "newspaper" theme (home/shell/guide/onboarding/help/profile/vacancy-detail) shipped 2026-07-21/22; shared design tokens in `globals.css` `@theme inline` (`paper-*` colors) — not yet extended to other modules, deliberately (see PR #773)
+6. region/country/workMode/educationLevel taxonomy + search filters + AI resume-interview + AI NL-search (2-agent pipelines) shipped; `BuildAiSearchLog` + `/api/build/admin/ai-search-log` added for ongoing accuracy tracking
+7. Found + fixed 3 dead-since-refactor AI endpoints (`generate-vacancy`/`match-vacancy`/`cover-letter` contract drift) that had been 404ing/400ing in prod undetected — see `feedback_orphaned_endpoints_pattern` in Claude memory; worth a platform-wide sweep of other modules' `frontend/src/lib/*/api.ts` vs actual route registrations if this recurs
 
 ---
 
@@ -316,6 +319,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-07-23  audit: QBuild § 5 backlog (P2-3 UI polish / vacancy e2e smoke / SEO meta) re-verified against disk — vacancy/application e2e smoke and SEO meta were BOTH already shipped and the backlog lines were stale (don't redo); only P2-3's UI-polish merge remains genuinely unverified. Master plan §2/§5 rows for QBuild corrected to point at the current worktree `aevion-qbuild-lighten` (old `aevion-qbuild-fix` entry was itself stale).
+2026-07-21/22  #710→#866 (11 PRs, worktree `aevion-qbuild-lighten`) feat(build): light "newspaper" theme (home/shell/guide/onboarding/help/profile/vacancy-detail, shared `paper-*` tokens in globals.css) + region/country/workMode/educationLevel taxonomy with search filters on talent/vacancy search + 2-agent AI pipelines (resume-interview, NL-search parse+check) + `BuildAiSearchLog` accuracy tracking. Live-testing (not just code review) found and fixed 3 real bugs: vacancies not inheriting region from their project, parse-search mode/field mismatches, one-sided salary-direction instability. Also found and restored 3 AI endpoints (generate-vacancy/match-vacancy/cover-letter) that had silently 404'd/400'd in prod since an earlier refactor dropped them while frontend callers kept pointing at them — see `feedback_orphaned_endpoints_pattern` in Claude memory for the generalizable lesson.
 2026-07-20  #693 fix(paywall): UNSAFE_TO_GATE guard — planGate.ts now strips qcoreai/qright/qsign from enforcement server-side regardless of PAYWALL_MODULES (they promise a free quota with no metering to back a 402 fallback), plus an independent paywall-policy-smoke.js assertion wired into the daily 08:00 UTC prod cron. Written after qcoreai briefly went live-enforced for ~44min on 2026-07-16 via a manual flip that skipped this doc — see the incident callout at the top of docs/PAYWALL_FLIP_READINESS.md.
 2026-07-20  #654/#667/#672 — worktree audit cleanup: 34 stale/empty aevion-* scratch dirs removed; 3 had real unshipped work, ported via dedicated PRs instead of merging stale branches wholesale — mapreality i18n (#654), qgood i18n (#667), bureau protect-batch/verify-log/seed-script/CSV/lookup (#672). aevion-qsign + aevion-smeta-iso worktrees separately confirmed byte-identical to main (no port needed) and removed. aevion-qrenew found to be live third-party (DevHub codegen agent) work — left alone. Full detail in § 2's audit note.
 2026-07-16  #624 fix(qcoreai,multichat): Sentry capture gap-fill — captureQCoreAIError wired from 16 to 232/232 real catch blocks in qcoreai.ts, captureMultichatError from 13 to 15/15 in multichat.ts (5 previously-unbound `catch {}` blocks fixed to bind+capture). Closes the QCoreAI/Multichat Sentry ⚠ in §3. Intentional best-effort swallows (health probes, JSON-parse fallbacks) left untouched by design.

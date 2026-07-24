@@ -37,6 +37,7 @@ export default function QRealClient() {
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [filmUrl, setFilmUrl] = useState<string | null>(null);
+  const [variation, setVariation] = useState(1);
   const [brief, setBrief] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,6 +95,20 @@ export default function QRealClient() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: '{"engine":"kling"}',
       });
       window.open(apiUrl("/api/qreal/projects/demo-steppe-morning/film"), "_blank");
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
+  async function nextVariation() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const v = variation >= 3 ? 1 : variation + 1;
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/storyboard`), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variation: v }),
+      });
+      const d = await r.json();
+      if (d?.project) { setProject(d.project); setVariation(v); setNote(d.storyboardMethod === "llm-cached" ? t("qreal.note.storyboard.llm") : t("qreal.note.storyboard.llm")); }
     } catch { setNote(t("qreal.note.backend.down")); }
     finally { setBusy(false); }
   }
@@ -223,6 +238,17 @@ export default function QRealClient() {
             placeholder={t("qreal.brief.brief.ph")}
             className="mt-2 w-full border border-neutral-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-teal-700"
           />
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <button
+                key={n}
+                onClick={() => setBrief(t(`qreal.preset.${n}`))}
+                className="border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-700 transition hover:border-teal-700 hover:text-teal-800"
+              >
+                {t(`qreal.preset.${n}.label`)}
+              </button>
+            ))}
+          </div>
           <div className="mt-3 flex items-center gap-4">
             <button
               onClick={createFromBrief}
@@ -240,8 +266,11 @@ export default function QRealClient() {
           <section className="mt-8 border-b border-neutral-300 pb-8">
             <div className="flex items-baseline justify-between">
               <h2 className="font-serif text-2xl">{t("qreal.storyboard.h")} — «{project.title}»</h2>
-              <span className="text-xs uppercase tracking-widest text-neutral-500">
+              <span className="flex items-center gap-3 text-xs uppercase tracking-widest text-neutral-500">
                 {project.shots.length} {t("qreal.storyboard.shots")} · ~{project.shots.reduce((a, s) => a + s.durationSec, 0)}s
+                <button onClick={nextVariation} disabled={busy} className="border border-neutral-300 bg-white px-2 py-0.5 normal-case tracking-normal text-teal-800 transition hover:border-teal-700 disabled:opacity-40">
+                  {t("qreal.storyboard.variation")} {variation}/3
+                </button>
               </span>
             </div>
             {estimate && estimate.engines.length > 0 && (

@@ -50,6 +50,21 @@ const createLimit = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true
 const donateLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
 const readLimit = rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false });
 
+/**
+ * Server-side URL scheme validation.
+ * Rejects javascript:, data:, file:, vbscript: schemes that would XSS if the URL later
+ * becomes attribute on <img src=...> or CSS `background: url(...)`.
+ * Mirrors qmedia.ts safeUrlOrNull — should be extracted to shared lib later.
+ */
+function safeHttpUrl(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0) return null;
+  if (v.length > 500) return null;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") ? v : null;
+  } catch { return null; }
+}
+
 const CAMPAIGN_STATUSES = new Set(["draft", "active", "closed", "rejected"]);
 const CATEGORY_OPTIONS = new Set([
   "health", "education", "disaster-relief", "environment",
@@ -228,7 +243,7 @@ qgoodRouter.post("/campaigns", createLimit, async (req, res) => {
         title.trim(), description.trim(), category,
         country ? String(country).slice(0, 80) : null,
         target, String(currency).slice(0, 8).toUpperCase(),
-        imageUrl ? String(imageUrl).slice(0, 500) : null,
+        safeHttpUrl(imageUrl),
       ],
     );
     res.status(201).json({ id, status: "draft", message: "Submitted for review." });

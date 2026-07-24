@@ -50,6 +50,7 @@ const GOAL_DEADLINE = () => process.env.REVENUE_GOAL_DEADLINE?.trim() || "2027-0
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
   currency: string; created_at: string; email: string; product: string;
+  variantId: string;
 }
 /**
  * Fetch all pages of GET /v1/orders, following the JSON:API `links.next` URL.
@@ -85,6 +86,7 @@ async function lsOrdersUncached(maxPages = 10): Promise<LsOrder[] | null> {
           created_at: String(a.created_at ?? ""),
           email: String(a.user_email ?? ""),
           product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+          variantId: String(foi.variant_id ?? ""),
         });
       }
       pages++;
@@ -143,6 +145,50 @@ function appIdForPermalink(permalink?: string | null): string {
     process.env[`GUMROAD_APP_${slug}`]?.trim() ||
     process.env[`GUMROAD_PRODUCT_${slug}`]?.trim() ||
     GUMROAD_PERMALINK_APP[permalink.toLowerCase()] ||
+    "platform"
+  );
+}
+
+/**
+ * LemonSqueezy variant → appId, mirroring appIdForPermalink's approach for
+ * Gumroad. LS checkout already sets one `LEMON_SQUEEZY_VARIANT_<NAME>` env
+ * var per product (see aevion-globus-backend/.env.example) to know which
+ * variant ID to charge for a given purchase — this just reads the same
+ * vars in reverse to recover the appId from an order's variant_id.
+ *
+ * Deliberately excludes the generic plan-tier variants (LITE/MEDIUM/FULL,
+ * DEFAULT_VARIANT_ID) — a "Full plan" subscription is a platform-wide
+ * bundle, not one specific app's revenue, so those stay bucketed under
+ * "platform" same as before.
+ */
+const LS_VARIANT_APP_ENV_SUFFIXES: Record<string, string> = {
+  DEVHUB_STUDIO_PRO: "devhub",
+  CYBERCHESS: "cyberchess",
+  CONSTITUTION: "constitution",
+  QVENTURE: "qventure",
+  QCONTRACT: "qcontract",
+  QPAYNET: "qpaynet-embedded",
+  SMETA: "smeta-trainer",
+  IP_BUREAU: "ip-bureau",
+  QRENEW: "qrenew",
+  PLANET_MONTHLY: "planet",
+  PLANET_ANNUAL: "planet",
+};
+
+let lsVariantAppCache: Record<string, string> | null = null;
+
+function appIdForLsVariant(variantId?: string | null): string {
+  if (!variantId) return "platform";
+  if (!lsVariantAppCache) {
+    lsVariantAppCache = {};
+    for (const [suffix, appId] of Object.entries(LS_VARIANT_APP_ENV_SUFFIXES)) {
+      const v = process.env[`LEMON_SQUEEZY_VARIANT_${suffix}`]?.trim();
+      if (v) lsVariantAppCache[v] = appId;
+    }
+  }
+  return (
+    process.env[`LEMON_SQUEEZY_APP_${variantId}`]?.trim() ||
+    lsVariantAppCache[variantId] ||
     "platform"
   );
 }
@@ -402,10 +448,13 @@ async function computeLiveTotals(): Promise<LiveTotals> {
       t.refundedCount += orders.length - valid.length;
       t.byChannel.lemonsqueezy = { grossUsd: round2(gross), netUsd: round2(gross), count: valid.length };
       t.channelsUsed.push("lemonsqueezy");
-      const cur = t.byApp.platform ?? { count: 0, grossUsd: 0 };
-      cur.count += valid.length;
-      cur.grossUsd = round2(cur.grossUsd + gross);
-      t.byApp.platform = cur;
+      for (const o of valid) {
+        const appId = appIdForLsVariant(o.variantId);
+        const cur = t.byApp[appId] ?? { count: 0, grossUsd: 0 };
+        cur.count += 1;
+        cur.grossUsd = round2(cur.grossUsd + o.total / 100);
+        t.byApp[appId] = cur;
+      }
     }
   }
 
@@ -768,6 +817,7 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
   if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
   const recent = orders.slice(0, 20).map((o) => ({
     id: o.id,
+    appId: appIdForLsVariant(o.variantId),
     product: o.product,
     email: o.email || null,
     amountUsd: o.total / 100,
@@ -949,6 +999,14 @@ revenueRouter.get("/env-guide", (_req, res) => {
         appId: a.appId,
         appName: a.appName,
         envKeyPattern: `GUMROAD_APP_<PERMALINK>=${a.appId}`,
+      })),
+    },
+    lemonsqueezyAttribution: {
+      note: "Уже читает существующие LEMON_SQUEEZY_VARIANT_<NAME> переменные (те же, что использует checkout) в обратную сторону — variant_id продажи → appId. Ручной оверрайд: LEMON_SQUEEZY_APP_<VARIANT_ID>=<appId>. Тарифные варианты (LITE/MEDIUM/FULL/DEFAULT) намеренно не маппятся — это бандл всей платформы, не одно приложение, остаются в 'platform'.",
+      example: "LEMON_SQUEEZY_APP_1902349=devhub",
+      mappedVariants: Object.keys(LS_VARIANT_APP_ENV_SUFFIXES).map((suffix) => ({
+        envKey: `LEMON_SQUEEZY_VARIANT_${suffix}`,
+        appId: LS_VARIANT_APP_ENV_SUFFIXES[suffix],
       })),
     },
   });

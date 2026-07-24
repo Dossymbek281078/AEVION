@@ -41,6 +41,7 @@ interface GumroadRecent {
 
 interface LsSale {
   id: string;
+  appId: string;
   product: string;
   email: string | null;
   amountUsd: number;
@@ -208,17 +209,18 @@ export default function RevenuePage() {
   const totalCount = gCount + lsCount;
   const daysLeft = daysUntil(goals.deadline);
 
-  // Merge both channels' recent sales — LS orders don't carry an appId
-  // (all attributed to "platform" backend-side), so the /revenue table
-  // previously only ever showed Gumroad rows and silently dropped LS ones.
+  // Merge both channels' recent sales — the backend now attributes LS
+  // orders to an appId too (via LEMON_SQUEEZY_VARIANT_* env vars, same
+  // idea as Gumroad's permalink mapping), falling back to "platform" for
+  // generic plan-tier variants that aren't one specific app.
   const combinedSales: SaleRow[] = [
     ...(recent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "gumroad" })),
-    ...(lsRecent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "lemonsqueezy", appId: "platform" })),
+    ...(lsRecent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "lemonsqueezy" })),
   ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
   // Normalizes keys (trim + lowercase) while merging so two sources that
-  // happen to spell the same appId differently (e.g. once LS gets its own
-  // attribution) land in one bucket instead of two side-by-side entries.
+  // happen to spell the same appId differently land in one bucket instead
+  // of two side-by-side entries.
   const combinedByApp: Record<string, { count: number; totalUsd: number }> = {};
   const addByApp = (appId: string, count: number, totalUsd: number) => {
     const key = appId.trim().toLowerCase();
@@ -228,9 +230,8 @@ export default function RevenuePage() {
   for (const [appId, data] of Object.entries(recent?.byApp ?? {})) {
     addByApp(appId, data.count, data.totalUsd);
   }
-  const lsValidSales = (lsRecent?.sales ?? []).filter((s) => !s.refunded);
-  if (lsValidSales.length > 0) {
-    addByApp("platform", lsValidSales.length, lsValidSales.reduce((sum, s) => sum + s.amountUsd, 0));
+  for (const s of (lsRecent?.sales ?? []).filter((sale) => !sale.refunded)) {
+    addByApp(s.appId, 1, s.amountUsd);
   }
 
   return (

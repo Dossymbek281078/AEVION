@@ -28,16 +28,24 @@ same `upgrade_required` shape the paywall uses.
 
 ## Pre-flip checklist
 
-- [ ] **Read the real numbers first.** `GET /api/qcoreai/me/token-quota`
-  (authenticated) reports `usedTokens`/`limitTokens` and
-  `premiumUsedTokens`/`premiumLimitTokens` for the caller's own account
-  **even while both gates are dormant** (`metered`/`premiumMetered` will
-  read `false`, but the underlying numbers are already live). Check this
-  for a sample of real paid accounts across each tier before flipping —
-  this is the "would today's real usage 402 someone unexpectedly" check,
-  equivalent to the paywall's `paywall-policy-smoke.js --wait` step, except
-  there is no dedicated smoke script for this gate yet (worth adding one,
-  modeled on `paywall-policy-smoke.js`, before a prod flip).
+- [ ] **Confirm the flip landed** — `node scripts/qcoreai-quota-policy-smoke.js`
+  (added 2026-07-23, modeled directly on `paywall-policy-smoke.js`). Hits the
+  new public `GET /api/qcoreai/quota-policy` (no auth needed, safe to cache)
+  and asserts the three gate flags + the per-tier cap table shape. Supports
+  the same `--wait` polling mode:
+  ```bash
+  BASE=https://<preview>.up.railway.app EXPECT_TIER=1 \
+    node aevion-globus-backend/scripts/qcoreai-quota-policy-smoke.js --wait
+  ```
+- [ ] **Read the real per-account numbers before flipping.**
+  `GET /api/qcoreai/me/token-quota` (authenticated) reports
+  `usedTokens`/`limitTokens` and `premiumUsedTokens`/`premiumLimitTokens` for
+  the caller's own account **even while both gates are dormant**
+  (`metered`/`premiumMetered` will read `false`, but the underlying numbers
+  are already live). Check this for a sample of real paid accounts across
+  each tier — this is the "would today's real usage 402 someone
+  unexpectedly" check; unlike the policy smoke above, it needs a per-account
+  token, so it's a manual spot-check, not automatable the same way.
 - [ ] **Railway env access required.** This dev machine's `railway` CLI is
   unauthenticated (`railway login` needed) — verifying live Railway env
   state and querying the real production DB for aggregate usage can't be
@@ -76,12 +84,8 @@ no-op instantly, same as `PAYWALL_MODULES`.
 
 ## Open follow-up
 
-- No dedicated smoke script yet (unlike `paywall-policy-smoke.js`) — would
-  need one that hits `/me/token-quota` for a known test account and asserts
-  `metered`/`premiumMetered` match `EXPECT_*` env vars, mirroring the
-  paywall smoke's `--wait` polling mode.
 - `QCOREAI_PREMIUM_QUOTA` only covers `/chat` + `/chat-stream` — extending
   it to the multi-agent orchestrator's dispatch points is separate work,
   tracked in `docs/PRICING_STRATEGY_2026-07.md`.
 
-— written 2026-07-23
+— written 2026-07-23, smoke script added 2026-07-23

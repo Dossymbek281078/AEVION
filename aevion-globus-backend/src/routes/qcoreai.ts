@@ -6,7 +6,7 @@ const captureQCoreAIError = makeServiceCapture("qcoreai");
 import { verifyBearerOptional } from "../lib/authJwt";
 import { enforceFreeTokenQuota, enforcePremiumModelQuota, freeTokenLimit } from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
-import { getTier } from "../data/pricing";
+import { getTier, TIERS } from "../data/pricing";
 import {
   callProvider,
   callProviderResilient,
@@ -1163,6 +1163,28 @@ qcoreaiRouter.get("/me/token-quota", async (req, res) => {
     captureQCoreAIError(err, { route: "list-token-quota" });
     res.status(500).json({ error: "token quota summary failed" });
   }
+});
+
+/*
+ * Public, unauthenticated quota policy — mirrors GET /api/paywall/policy's
+ * pattern (entitlements.ts) for the three qcoreQuota.ts gates. Unlike
+ * /me/token-quota (per-caller, needs a Bearer token), this reports the
+ * PLATFORM'S current enforcement state and the per-tier caps table — safe
+ * to cache on the edge, and usable by a smoke script with no test account.
+ */
+qcoreaiRouter.get("/quota-policy", (_req, res) => {
+  res.json({
+    freeQuotaEnforced: process.env.QCOREAI_FREE_QUOTA === "1",
+    tierQuotaEnforced: process.env.QCOREAI_TIER_QUOTA === "1",
+    premiumQuotaEnforced: process.env.QCOREAI_PREMIUM_QUOTA === "1",
+    freeTokenLimit: freeTokenLimit(),
+    tiers: TIERS.map((t) => ({
+      tier: t.id,
+      llmTokensPerMonth: t.limits.llmTokensPerMonth,
+      premiumTokensPerMonth: t.limits.premiumTokensPerMonth,
+    })),
+    generatedAt: new Date().toISOString(),
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

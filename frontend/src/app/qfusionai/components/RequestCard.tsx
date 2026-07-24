@@ -53,12 +53,19 @@ function ProviderBar({ provider, cnt, max }: { provider: string; cnt: number; ma
 export default function RequestCard({ refreshTick }: { refreshTick?: number }) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     fetch("/api-backend/api/qfusionai/stats")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d) => setStats(d as StatsResponse))
-      .catch(() => void 0)
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : "Network error");
+      })
       .finally(() => setLoading(false));
   }, [refreshTick]);
 
@@ -88,6 +95,23 @@ export default function RequestCard({ refreshTick }: { refreshTick?: number }) {
 
       {loading && (
         <div style={{ color: "#334433", fontFamily: "monospace", fontSize: 12 }}>Loading stats...</div>
+      )}
+
+      {!loading && error && !stats && (
+        <div
+          role="alert"
+          style={{
+            color: "#ff6b6b",
+            background: "#2a0a0a",
+            border: "1px solid #4a1a1a",
+            borderRadius: 6,
+            padding: "10px 12px",
+            fontFamily: "monospace",
+            fontSize: 12,
+          }}
+        >
+          Stats недоступны ({error}). Попробуй обновить страницу.
+        </div>
       )}
 
       {stats && (

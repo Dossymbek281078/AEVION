@@ -77,8 +77,14 @@ export default function ProvidersPanel() {
       )}
 
       {error && (
-        <div style={{ color: "#ff4444", fontFamily: "monospace", fontSize: 12 }}>
+        <div role="alert" style={{ color: "#ff4444", fontFamily: "monospace", fontSize: 12 }}>
           {error}
+        </div>
+      )}
+
+      {!loading && !error && data && data.providers.length === 0 && (
+        <div style={{ color: "#334433", fontFamily: "monospace", fontSize: 12, padding: "10px 0" }}>
+          Ни одного AI-провайдера не настроено на сервере.
         </div>
       )}
 

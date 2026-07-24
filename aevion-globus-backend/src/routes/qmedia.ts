@@ -24,6 +24,20 @@ const memLikes = new Map<string, boolean>();
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
+/**
+ * Server-side URL scheme validation.
+ * Rejects javascript:, data:, file:, vbscript:, etc. that would XSS if <audio src=> / <img src=> uses them.
+ * Frontend validates too, but defense-in-depth for direct API callers.
+ */
+function safeUrlOrNull(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0) return null;
+  if (v.length > 2048) return null;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") ? v : null;
+  } catch { return null; }
+}
+
 qmediaRouter.use(async (_req, _res, next) => {
   await ensureQMediaTables(pool).catch(() => {});
   next();
@@ -57,7 +71,7 @@ qmediaRouter.post("/me/tracks", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, artist, genre, duration, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
-    const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: typeof duration === "number" ? duration : 0, url: typeof url === "string" ? url : null, coverUrl: typeof coverUrl === "string" ? coverUrl : null, lyrics: typeof lyrics === "string" ? lyrics.slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
+    const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: typeof duration === "number" ? duration : 0, url: safeUrlOrNull(url), coverUrl: safeUrlOrNull(coverUrl), lyrics: typeof lyrics === "string" ? lyrics.slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memTracks.set(track.id, track);
     res.status(201).json(track);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create track failed" }); }
@@ -73,8 +87,8 @@ qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
     if (title) track.title = String(title).slice(0, 200);
     if (artist !== undefined) track.artist = String(artist).slice(0, 200);
     if (genre) track.genre = String(genre);
-    if (url !== undefined) track.url = url ? String(url) : null;
-    if (coverUrl !== undefined) track.coverUrl = coverUrl ? String(coverUrl) : null;
+    if (url !== undefined) track.url = safeUrlOrNull(url);
+    if (coverUrl !== undefined) track.coverUrl = safeUrlOrNull(coverUrl);
     if (lyrics !== undefined) track.lyrics = lyrics ? String(lyrics).slice(0, 10000) : null;
     if (isPublic !== undefined) track.isPublic = Boolean(isPublic);
     if (Array.isArray(tags)) track.tags = tags.slice(0, 10).map(String);
@@ -200,7 +214,7 @@ qmediaRouter.post("/me/videos", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, description, url, thumbnailUrl, duration, category, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
-    const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: url ? String(url) : null, thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null, duration: typeof duration === "number" ? duration : 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
+    const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: safeUrlOrNull(url), thumbnailUrl: safeUrlOrNull(thumbnailUrl), duration: typeof duration === "number" ? duration : 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memVideos.set(video.id, video);
     res.status(201).json(video);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create video failed" }); }
@@ -215,8 +229,8 @@ qmediaRouter.patch("/me/videos/:id", async (req, res) => {
     const { title, description, url, thumbnailUrl, isPublic, category } = req.body || {};
     if (title) video.title = String(title).slice(0, 200);
     if (description !== undefined) video.description = description ? String(description).slice(0, 1000) : null;
-    if (url !== undefined) video.url = url ? String(url) : null;
-    if (thumbnailUrl !== undefined) video.thumbnailUrl = thumbnailUrl ? String(thumbnailUrl) : null;
+    if (url !== undefined) video.url = safeUrlOrNull(url);
+    if (thumbnailUrl !== undefined) video.thumbnailUrl = safeUrlOrNull(thumbnailUrl);
     if (isPublic !== undefined) video.isPublic = Boolean(isPublic);
     if (category) video.category = String(category);
     video.updatedAt = nowIso();

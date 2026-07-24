@@ -36,6 +36,8 @@ import {
   getWallet,
   getWalletLeaderboard,
 } from "./cyberchessMatchStore";
+import { computeServerTimeStats, classifyServerTimeSignal } from "../lib/cyberchessServerTimeSignal";
+import { submitServerReport } from "./cyberchessAnticheat";
 
 const router = Router();
 
@@ -238,6 +240,37 @@ function remainingMs(m: Match, color: Color): number {
 // Broadcast + persist a match's end exactly once (idempotent on m.status),
 // shared by the auto-finalize path (server detects checkmate on its own
 // board right after a /move) and the manual /end route.
+/**
+ * Server-truth move-time anti-cheat signal — computed here (not in a
+ * separate job) because `m.moves[].at` only exists while the match is still
+ * in the in-memory MATCHES map; it's never persisted (CyberMatch only stores
+ * SAN, no timestamps) and the match is evicted MATCH_TTL_MS after creation.
+ * settleMatch() runs exactly once per match (guarded by `firstEnd` at the
+ * call site) right as the match ends, while `m.moves` is still populated —
+ * the only point in the match's lifecycle this data is available at all.
+ */
+function submitServerAnticheatSignals(m: Match): void {
+  try {
+    for (const side of [m.white.userId, m.black.userId]) {
+      const stats = computeServerTimeStats(m.moves, m.createdAt, side);
+      if (!stats) continue;
+      const { verdict, suspicionScore, confidence } = classifyServerTimeSignal(stats);
+      submitServerReport({
+        gameId: m.matchId,
+        userId: side,
+        verdict,
+        suspicionScore,
+        confidence,
+        timeCoV: stats.timeCoV,
+        diagnosticMoves: stats.diagnosticMoves,
+        instantMoves: stats.instantMoves,
+      });
+    }
+  } catch {
+    // Anti-cheat signal is best-effort — never let it affect match settlement.
+  }
+}
+
 async function settleMatch(
   m: Match,
   result: "white" | "black" | "draw",
@@ -257,6 +290,7 @@ async function settleMatch(
   }
   m.subscribers.clear();
   if (!firstEnd) return null;
+  submitServerAnticheatSignals(m);
   return finalizeMatch(m.matchId, {
     whiteUserId: m.white.userId,
     whiteName: m.white.displayName,

@@ -18,8 +18,25 @@ import { getPool } from "./dbPool";
 
 const PRUNE_DAYS = 180;
 
-let ensured = false;
+/**
+ * Состояние доступности базы + КОГДА проверяли.
+ *
+ * Раньше здесь стоял одноразовый флаг `ensured`: первая неудачная попытка
+ * выключала запись метрики НАВСЕГДА — до редеплоя. А неудачная первая попытка
+ * это не гипотеза: 2026-07-26 в живом прогоне первый запрос к Postgres после
+ * старта процесса падал (холодный пул), и это же наблюдение заставило добавить
+ * ретрай в lib/appSubscriptions.ts. То есть один блип на старте — и расхождений
+ * «обещали/списали» мы бы не видели весь срок жизни процесса, ничего при этом
+ * не заметив.
+ *
+ * Теперь: успех кэшируется навсегда (дёшево), неудача — не более чем на минуту.
+ *
+ * ⚠️ Тот же одноразовый флаг есть в lib/paywallDenyLog.ts (чужой код, шаблон
+ * которого я здесь повторял). Там ровно та же дыра — стоит поправить владельцу.
+ */
 let dbUsable: boolean | null = null;
+let lastEnsureAt = 0;
+const ENSURE_RETRY_MS = 60_000;
 
 /** Счётчики в памяти процесса: и фолбэк, и быстрый ответ «с момента старта». */
 const mem = {
@@ -32,8 +49,9 @@ const mem = {
 };
 
 async function ensureTable(): Promise<boolean> {
-  if (ensured) return dbUsable === true;
-  ensured = true;
+  if (dbUsable === true) return true;
+  if (dbUsable === false && Date.now() - lastEnsureAt < ENSURE_RETRY_MS) return false;
+  lastEnsureAt = Date.now();
   try {
     const pool = getPool();
     await pool.query("SELECT 1");

@@ -28,7 +28,7 @@ const REGIONS: Region[] = [
     code: "AI",
     items: [
       { name: "Multichat Engine", slug: "multichat-engine", desc: "Консилиум ИИ: агенты отвечают независимо, карта разногласий показывает, где им нельзя верить, и каждый ответ идёт с проверяемым чеком.", status: "live", noAuth: "Пример разногласий — без входа" },
-      { name: "QReal Studio", slug: "qreal", desc: "Fully-alive AI video from a text brief — no actor, one face across every shot, scored realism QC, built-in provenance.", status: "live" },
+      { name: "QReal Studio", slug: "qreal", desc: "Fully-alive AI video from a text brief — no actor, one face across every shot, scored realism QC, built-in provenance.", status: "live", noAuth: "Готовый проект-пример — без входа" },
       { name: "QVenture", slug: "qventure", desc: "AI investment analyst: quant score, four-role council, entry strategy.", status: "live" },
       { name: "QCoreAI", slug: "qcoreai", desc: "Multi-agent pipeline — Analyst → Writer → Critic, eval harness, batch runs.", status: "live" },
       { name: "QFusionAI", slug: "qfusionai", desc: "Hybrid router across OpenAI, Anthropic, Gemini, DeepSeek and Grok.", status: "live" },

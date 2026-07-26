@@ -38,6 +38,7 @@ import {
 } from "../lib/cosign/authorCosign";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 const capturePipelineError = makeServiceCapture("pipeline");
 
 export const pipelineRouter = Router();
@@ -1674,7 +1675,7 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
     );
 
     const esc = (v: unknown): string => {
-      const s = v === null || v === undefined ? "" : String(v);
+      const s = csvNeutralizeFormula(v === null || v === undefined ? "" : String(v));
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = [

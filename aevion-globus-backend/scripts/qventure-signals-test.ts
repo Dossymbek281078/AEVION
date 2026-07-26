@@ -2,6 +2,7 @@
  *   npx ts-node --transpile-only scripts/qventure-signals-test.ts
  */
 import { parsePlanSignals, mergeStructuredSignals } from "../src/lib/qventure/signals";
+import { parseLocaleNumber } from "../src/lib/metrics/periods";
 import { analyze } from "../src/lib/qventure/engine";
 import { stressTest } from "../src/lib/qventure/stress";
 import { triangulateTam } from "../src/lib/qventure/tam";
@@ -215,6 +216,20 @@ ok("first currency named wins as the plan currency", mixed.currency === "EUR", S
 ok("a locally marked USD figure stays USD", mixed.bottomUpTamUsd === null || mixed.bottomUpTamUsd === 40e9, String(mixed.bottomUpTamUsd));
 const eurDeal = analyze({ name: "E", sector: "saas", stage: "seed", description: "Berlin SaaS, €4M ARR, 2,000 customers, 85% gross margin, LTV:CAC 4." });
 ok("non-USD plan discloses the conversion in assumptions", eurDeal.assumptions.some((a) => /converted to USD/i.test(a)), eurDeal.assumptions.join(" | ").slice(0, 200));
+
+console.log("\n13. How the world actually writes numbers");
+// Every case below came from probing the parser with real-world notations.
+const decimalComma = parsePlanSignals("Berlin SaaS with €1,5M ARR.");
+ok("'€1,5M' is 1.5 million, not 15 million", decimalComma.revenueUsd !== null && decimalComma.revenueUsd > 1_600_000 && decimalComma.revenueUsd < 1_800_000, String(decimalComma.revenueUsd));
+ok("'$1,500,000' still reads as 1.5 million", parsePlanSignals("ARR of $1,500,000.").revenueUsd === 1_500_000, String(parsePlanSignals("ARR of $1,500,000.").revenueUsd));
+ok("'$1 500 000' (space groups) reads as 1.5 million", parsePlanSignals("ARR of $1 500 000 this year.").revenueUsd === 1_500_000, String(parsePlanSignals("ARR of $1 500 000 this year.").revenueUsd));
+ok("'1.234,56' European full form", parseLocaleNumber("1.234,56") === 1234.56, String(parseLocaleNumber("1.234,56")));
+ok("'1,234.56' English full form", parseLocaleNumber("1,234.56") === 1234.56, String(parseLocaleNumber("1,234.56")));
+ok("a year is not swallowed as a thousands group", parsePlanSignals("ARR of $3 2026 plan").revenueUsd === 3, String(parsePlanSignals("ARR of $3 2026 plan").revenueUsd));
+ok("parenthesised churn parses", parsePlanSignals("Retention is good, churn (2% monthly).").churnPct === 2);
+const twoCurrencies = parsePlanSignals("$1M ARR in the US and €2M ARR in the EU.");
+ok("a dollar figure is not converted at the euro rate", twoCurrencies.revenueUsd === 1_000_000, String(twoCurrencies.revenueUsd));
+ok("'2,5% churn' reads as 2.5, not 25", parsePlanSignals("Churn of 2,5% per month.").churnPct === 2.5, String(parsePlanSignals("Churn of 2,5% per month.").churnPct));
 const structuredChurn = mergeStructuredSignals(parsePlanSignals("vague pitch"), { churnPct: 24, churnPeriod: "annual" });
 ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPct !== null && structuredChurn.churnMonthlyPct < 3, String(structuredChurn.churnMonthlyPct));
 ok("unspecified-period churn is disclosed in assumptions",

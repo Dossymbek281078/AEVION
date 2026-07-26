@@ -19,7 +19,7 @@
 import { mentionsUnnegated } from "../textNegation";
 import {
   monthlyRateFrom, ratePeriodFromWords, growthPeriodFromWords, parseMoney,
-  NUMBER_PATTERN, MONEY_UNIT_PATTERN, type RatePeriod,
+  NUMBER_PATTERN, MONEY_UNIT_PATTERN, parseLocaleNumber, type RatePeriod,
 } from "../metrics/periods";
 import {
   CURRENCY_PREFIX_PATTERN, detectCurrency, detectCurrencyFirst, toUsd, type MoneyCurrency,
@@ -216,8 +216,11 @@ function moneyUsd(
   const raw = parseMoney(numStr, unitStr);
   if (raw === null || !isFinite(raw)) return null;
   const at = m.index ?? 0;
-  const near = t.slice(Math.max(0, at - 14), at + m[0].length + 16);
-  return toUsd(raw, detectCurrency(near) ?? planCurrency);
+  // Tight window, and first-by-position inside it. A wide window scanned in
+  // table order made "$1M ARR in the US and €2M ARR in the EU" convert the
+  // dollar figure at the euro rate, because EUR is checked before USD.
+  const tight = t.slice(Math.max(0, at - 8), at + m[0].length);
+  return toUsd(raw, detectCurrencyFirst(tight) ?? planCurrency);
 }
 
 export function parsePlanSignals(text: string): PlanSignals {
@@ -266,7 +269,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (growth) {
     const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
-    const g = value !== undefined ? parseFloat(value.replace(/,/g, "")) : NaN;
+    const g = value !== undefined ? parseLocaleNumber(value) : NaN;
     if (isFinite(g)) {
       s.growthPct = g;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
@@ -276,16 +279,16 @@ export function parsePlanSignals(text: string): PlanSignals {
 
   // ── Gross margin: "80% gross margin" / "gross margin of 72%" ──
   const gm = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*gross\s*margin`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*${NUM}\s*%`, "i"));
+    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*\(?\s*${NUM}\s*%`, "i"));
   if (gm) {
-    const m = parseFloat(gm[1].replace(/,/g, ""));
+    const m = parseLocaleNumber(gm[1]);
     if (isFinite(m) && m > 0 && m <= 100) s.grossMarginPct = m;
   }
 
   // ── LTV:CAC ratio stated directly: "LTV:CAC of 4:1" / "LTV/CAC 3.5" ──
   const ratio = firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?::\s*1)?`, "i"));
   if (ratio) {
-    const r = parseFloat(ratio[1].replace(/,/g, ""));
+    const r = parseLocaleNumber(ratio[1]);
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
   }
   // ── CAC / LTV absolute: "CAC of $400", "LTV $3,000" ──
@@ -303,17 +306,17 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ── Payback: "payback of 8 months" / "8-month payback" ──
   const pb = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*[- ]?months?`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"));
-  if (pb) { const v = parseFloat(pb[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
+  if (pb) { const v = parseLocaleNumber(pb[1]); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
 
   // ── Churn / retention / NRR ──
   // The period matters as much as the number: "4% annual churn" is excellent,
   // "4% churn" read as monthly is ~39%/yr. Capture whichever side states it.
   const churn = firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
   if (churn) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
-    const v = value !== undefined ? parseFloat(value.replace(/,/g, "")) : NaN;
+    const v = value !== undefined ? parseLocaleNumber(value) : NaN;
     if (isFinite(v) && v >= 0 && v <= 100) {
       const words = groups.filter((g) => !/^\d/.test(g)).join(" ").toLowerCase();
       s.churnPct = v;
@@ -322,8 +325,8 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:net\s*)?(?:revenue\s*)?retention`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:net\s*revenue\s*retention|nrr|retention)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"));
-  if (ret) { const v = parseFloat(ret[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
+    || firstMatch(t, new RegExp(String.raw`(?:net\s*revenue\s*retention|nrr|retention)\s*(?:of|=|:|at|is)?\s*\(?\s*${NUM}\s*%`, "i"));
+  if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
   const cust = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:paying\s*)?(?:customers|users|clients|subscribers|merchants|seats)`, "i"));
@@ -372,7 +375,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
 
   const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
-  if (take) { const v = parseFloat(take[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
+  if (take) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 
   // Revenue the plan never stated directly but implied: GMV × take rate.
   if (s.revenueUsd === null && s.gmvUsd !== null && s.takeRatePct !== null) {
@@ -405,7 +408,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // ── Pilots, LOIs, design wins, deployments ──
   const pilots = firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:paid\s*|active\s*|commercial\s*)?(?:pilots?|lois?|letters of intent|design wins?|deployments?|installations?|production sites?|customer trials?)`, "i"));
   if (pilots) {
-    const v = parseFloat(pilots[1].replace(/,/g, ""));
+    const v = parseLocaleNumber(pilots[1]);
     if (isFinite(v) && v >= 1 && v < 100000) s.pilots = Math.round(v);
   }
 

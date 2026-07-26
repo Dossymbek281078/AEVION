@@ -82,8 +82,40 @@ export const MONEY_MULTIPLIER: Record<string, number> = {
   тыс: 1e3, млн: 1e6, млрд: 1e9, трлн: 1e12,
 };
 
-/** Regex source for a number, capturing one group. */
-export const NUMBER_PATTERN = String.raw`(\d[\d,]*(?:\.\d+)?)`;
+/**
+ * Regex source for a number, capturing one group.
+ *
+ * Accepts the three ways a deck writes a thousand separator — none, comma, or a
+ * (possibly non-breaking) space — and either decimal mark. The space branch
+ * comes first and demands exact 3-digit groups, so "$1 500 000" parses as one
+ * and a half million instead of the digit 1, without "$3 2026" swallowing a year.
+ */
+export const NUMBER_PATTERN = String.raw`(\d{1,3}(?:[  ]\d{3})+(?!\d)(?:[.,]\d+)?|\d[\d,]*(?:\.\d+)?)`;
+
+/**
+ * Parse a numeric token that may use European conventions.
+ *
+ * "€1,5M" is one and a half million euros everywhere that writes a decimal
+ * comma — read as an English thousands separator it became €15M, a 10x error on
+ * every continental deck. The rule that separates them: a comma followed by
+ * exactly three digits (and nothing more) is a thousands separator; a comma
+ * followed by one or two digits is a decimal mark.
+ */
+export function parseLocaleNumber(raw: string): number {
+  const t = String(raw).replace(/[  ]/g, "").trim();
+  if (!t) return NaN;
+  if (t.includes(".") && t.includes(",")) {
+    // Both present: the LAST one is the decimal mark ("1,234.56" / "1.234,56").
+    return t.lastIndexOf(",") > t.lastIndexOf(".")
+      ? parseFloat(t.replace(/\./g, "").replace(",", "."))
+      : parseFloat(t.replace(/,/g, ""));
+  }
+  if (t.includes(",")) {
+    const decimalComma = /^\d+,\d{1,2}$/.test(t);
+    return decimalComma ? parseFloat(t.replace(",", ".")) : parseFloat(t.replace(/,/g, ""));
+  }
+  return parseFloat(t);
+}
 
 /**
  * Regex source for an optional money unit, capturing one group.
@@ -94,9 +126,9 @@ export const NUMBER_PATTERN = String.raw`(\d[\d,]*(?:\.\d+)?)`;
  */
 export const MONEY_UNIT_PATTERN = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion|тыс|млн|млрд|трлн)(?![a-zа-я]))?`;
 
-/** Parse a money-ish token like "$1.2M", "500k", "2 million", "1,500,000". */
+/** Parse a money-ish token like "$1.2M", "500k", "2 million", "1,500,000", "€1,5M". */
 export function parseMoney(numRaw: string, unitRaw?: string): number | null {
-  const n = parseFloat(String(numRaw).replace(/,/g, ""));
+  const n = parseLocaleNumber(numRaw);
   if (!isFinite(n)) return null;
   const unit = (unitRaw || "").trim().toLowerCase();
   return n * (MONEY_MULTIPLIER[unit] ?? 1);

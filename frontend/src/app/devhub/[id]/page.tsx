@@ -7,7 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
-import { shouldOfferDbHint, shouldOfferDeployHint } from "@/lib/devhubHints";
+import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 
@@ -995,6 +995,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           historyHasDeployHint: h.some((m) => m.role === "hint" && (m as any).kind === "deploy"),
         });
         if (offerDeploy) return [...h, { role: "hint", kind: "deploy", description: userText, at: new Date().toISOString() }];
+        const offerManifest = shouldOfferManifestHint({
+          stack: project.stack,
+          filePaths: [...files.map((f) => f.path), ...newGenerated.map((f: { path: string }) => f.path)],
+          historyHasManifestHint: h.some((m) => m.role === "hint" && (m as any).kind === "manifest"),
+        });
+        if (offerManifest) return [...h, { role: "hint", kind: "manifest", description: userText, at: new Date().toISOString() }];
         return h;
       });
       // Reload files list
@@ -3025,7 +3031,24 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
-                          msg.kind === "deploy" ? (
+                          msg.kind === "manifest" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                              <div style={{ color: "#92400e", marginBottom: 8, lineHeight: 1.45 }}>
+                                📦 This project has no <span style={{ fontFamily: "monospace" }}>package.json</span> — the live preview works, but an export can&apos;t be installed or run. Generate one from what the code actually imports?
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "manifest")));
+                                  // Fills the prompt rather than firing: same
+                                  // "you see it before it runs" rule as plan milestones.
+                                  setAiPrompt("Add a package.json listing the exact dependencies these files import, with scripts to run the app, plus the entry HTML if it is missing.");
+                                }}
+                                style={{ padding: "7px 14px", background: "#d97706", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+                              >
+                                Собрать package.json
+                              </button>
+                            </div>
+                          ) : msg.kind === "deploy" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
                                 🚀 Ready to go live? One click deploys this to Cloudflare with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL — marked live only after the page actually serves.

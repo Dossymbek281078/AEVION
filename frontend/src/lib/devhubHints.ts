@@ -23,6 +23,22 @@ export function shouldOfferDeployHint(args: {
   return !args.deployUrl;
 }
 
+/** Offer the "add a manifest" card when a JS project has real source files
+ * but no package.json. The live preview hides this (react comes from esm.sh),
+ * so the gap only bites at Export/clone time — issue #918. We never synthesise
+ * the manifest ourselves: dependencies must come from the files' real imports,
+ * which the model sees and we would only be guessing at. */
+export function shouldOfferManifestHint(args: {
+  stack: string;
+  filePaths: string[];
+  historyHasManifestHint: boolean;
+}): boolean {
+  if (args.historyHasManifestHint) return false;
+  if (args.stack === "static") return false; // static sites legitimately have none
+  if (args.filePaths.some((p) => p === "package.json" || p.endsWith("/package.json"))) return false;
+  return args.filePaths.some((p) => /\.(jsx|tsx|js|ts|mjs)$/i.test(p));
+}
+
 export function shouldOfferDbHint(args: {
   userText: string;
   projectDescription: string | null | undefined;

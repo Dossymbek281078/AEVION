@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldOfferDbHint, shouldOfferDeployHint } from "../devhubHints";
+import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "../devhubHints";
 
 const base = { userText: "", projectDescription: "", filePaths: [] as string[], historyHasHint: false };
 
@@ -29,5 +29,29 @@ describe("shouldOfferDeployHint", () => {
     expect(shouldOfferDeployHint({ stack: "static", deployUrl: "https://x.pages.dev", historyHasDeployHint: false })).toBe(false);
     expect(shouldOfferDeployHint({ stack: "static", deployUrl: null, historyHasDeployHint: true })).toBe(false);
     expect(shouldOfferDeployHint({ stack: "react", deployUrl: null, historyHasDeployHint: false })).toBe(false);
+  });
+});
+
+describe("shouldOfferManifestHint", () => {
+  const base = { stack: "react", filePaths: ["src/App.js", "src/index.js"], historyHasManifestHint: false };
+
+  it("offers on the exact shape the 2026-07-26 prod smoke produced", () => {
+    // src/App.js + components + index.js, no package.json anywhere.
+    expect(shouldOfferManifestHint(base)).toBe(true);
+  });
+
+  it("stays quiet when a manifest already exists, anywhere in the tree", () => {
+    expect(shouldOfferManifestHint({ ...base, filePaths: [...base.filePaths, "package.json"] })).toBe(false);
+    expect(shouldOfferManifestHint({ ...base, filePaths: [...base.filePaths, "app/package.json"] })).toBe(false);
+  });
+
+  it("never nags: one offer per project, and never for static sites", () => {
+    expect(shouldOfferManifestHint({ ...base, historyHasManifestHint: true })).toBe(false);
+    expect(shouldOfferManifestHint({ ...base, stack: "static", filePaths: ["index.html", "app.js"] })).toBe(false);
+  });
+
+  it("needs actual JS/TS sources — an empty or asset-only project is not missing a manifest", () => {
+    expect(shouldOfferManifestHint({ ...base, filePaths: [] })).toBe(false);
+    expect(shouldOfferManifestHint({ ...base, filePaths: ["README.md", "styles.css"] })).toBe(false);
   });
 });

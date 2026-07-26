@@ -133,11 +133,16 @@ checkoutRouter.post("/session", async (req, res) => {
     // считает сам. Веерные скидки (data/fanDiscounts.ts) приходят тем же путём.
     const quote = buildQuoteWithFan({
       tierId: tier.id,
-      modules: body.modules ?? [],
+      // `modules` приходит из тела так же, как ownedModules. Проверено
+      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
+      // поведение было и ДО веерных скидок, просто никто не слал мусор.
+      modules: Array.isArray(body.modules)
+        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
+        : [],
       seats,
       period,
       currency: "USD",
-      promoCode: body.promoCode,
+      promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined,
       // Валидируем так же, как POST /api/pricing/quote: тело приходит от
       // клиента, а движок веера стоит на пути к оплате. Вторая линия обороны —
       // в самом computeFan(), но чекаут не должен на неё полагаться.
@@ -217,8 +222,13 @@ checkoutRouter.post("/session", async (req, res) => {
       if (body.email) {
         provisionSubscription({
           email: body.email, tierId: tier.id, period, seats,
-          modules: body.modules ?? [], trialDays, amountUsd: 0,
-          promoCode: body.promoCode, source: "gumroad_zero",
+          // `modules` приходит из тела так же, как ownedModules. Проверено
+      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
+      // поведение было и ДО веерных скидок, просто никто не слал мусор.
+      modules: Array.isArray(body.modules)
+        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
+        : [], trialDays, amountUsd: 0,
+          promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined, source: "gumroad_zero",
         }).catch((e) => console.error("[provisioning] zero-price failed", e));
       }
       return res.json({
@@ -324,13 +334,18 @@ checkoutRouter.post("/session", async (req, res) => {
         tierId: tier.id,
         period,
         seats,
-        modules: body.modules ?? [],
+        // `modules` приходит из тела так же, как ownedModules. Проверено
+      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
+      // поведение было и ДО веерных скидок, просто никто не слал мусор.
+      modules: Array.isArray(body.modules)
+        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
+        : [],
         trialDays,
         // Реально списанная сумма, а не «обещанная». На каналах, которые скидку
         // не применяют, эти числа расходятся — в подписке должно лежать то, что
         // ушло со счёта, иначе вся выручка в отчётах поедет.
         amountUsd: Math.round(paidStub.cents) / 100,
-        promoCode: body.promoCode,
+        promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined,
         source: "stub_checkout",
       }).catch((e) => console.error("[stub_provisioning] failed", e));
     }

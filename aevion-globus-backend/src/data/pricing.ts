@@ -769,7 +769,10 @@ export function resolvePromoCode(
   tierId: TierId,
   period: BillingPeriod = "monthly",
 ): { promo: PromoCode | null; reason?: string } {
-  if (!raw) return { promo: null };
+  // `raw` приходит из тела HTTP-запроса: не-строка (число, объект) роняла
+  // `.trim()` и вместе с ним весь путь к оплате — найдено 2026-07-26 прогоном
+  // враждебных входов. Не-строку считаем «промокода нет», а не поводом упасть.
+  if (!raw || typeof raw !== "string") return { promo: null };
   const code = raw.trim().toUpperCase();
   const promo = PROMO_CODES.find((p) => p.code === code);
   if (!promo) return { promo: null, reason: "promo_not_found" };
@@ -930,7 +933,13 @@ export function buildQuote(input: {
   // routes/checkout.ts, чтобы quote == итоговый charge.
   const freeChoiceSlots = tier.id === "lite" ? (tier.limits.modules ?? 0) : 0;
   let usedChoiceSlots = 0;
-  for (const mid of input.modules ?? []) {
+  // Вторая линия обороны: смету зовут из чекаута и из /quote, и тело запроса
+  // может принести что угодно. Не-массив или не-строки роняли бы цикл (найдено
+  // 2026-07-26 прогоном враждебных входов на платёжном пути).
+  const requestedModules = Array.isArray(input.modules)
+    ? input.modules.filter((m): m is string => typeof m === "string")
+    : [];
+  for (const mid of requestedModules) {
     const m = getModulePrice(mid);
     if (!m) {
       notes.push(`Модуль "${mid}" не найден`);

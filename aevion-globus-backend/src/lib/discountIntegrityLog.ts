@@ -36,6 +36,8 @@ const PRUNE_DAYS = 180;
  */
 let dbUsable: boolean | null = null;
 let lastEnsureAt = 0;
+/** Сколько вставок подряд не прошло — для нешумного лога. */
+let insertFailures = 0;
 const ENSURE_RETRY_MS = 60_000;
 
 /** Счётчики в памяти процесса: и фолбэк, и быстрый ответ «с момента старта». */
@@ -108,8 +110,23 @@ export function recordCheckoutSession(input: {
         `INSERT INTO "discount_integrity_log" ("provider","tier","droppedUsd","quotedUsd") VALUES ($1,$2,$3,$4)`,
         [input.provider, input.tier, input.incentiveUsd, input.quotedUsd],
       );
-    } catch {
-      /* best-effort — drop silently */
+      insertFailures = 0;
+    } catch (e: any) {
+      // НЕ молча. Раньше здесь стоял пустой catch, и это была та же ловушка,
+      // что с одноразовым флагом: `ensureTable()` однажды прошёл, `dbUsable`
+      // остался true, а каждая вставка тихо падала бы вечно — метрику про
+      // потерянные скидки мы бы «вели», не записывая ни строки.
+      //
+      // Теперь: первая ошибка и далее каждая 20-я пишутся в лог, а сама база
+      // помечается недоступной — периодический ensureTable() пере-создаст
+      // таблицу (CREATE TABLE IF NOT EXISTS) и восстановит запись сам.
+      insertFailures += 1;
+      if (insertFailures === 1 || insertFailures % 20 === 0) {
+        console.warn(
+          `[discountIntegrity] запись не удалась (${insertFailures}-я подряд): ${e?.message || e}`,
+        );
+      }
+      dbUsable = false;
     }
   })();
 }

@@ -14,19 +14,22 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
  * `source: "memory"`, но при восстановлении базы метрика возвращается сама.
  */
 
-const db = { fail: true, calls: 0 };
+const db = { fail: true, calls: 0, failInsertsOnly: false };
 
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
-    query: async () => {
+    query: async (sql: string) => {
       db.calls += 1;
-      if (db.fail) throw new Error("connection refused (имитация)");
+      const isInsert = /INSERT INTO/i.test(sql ?? "");
+      if (db.fail || (db.failInsertsOnly && isInsert)) {
+        throw new Error(isInsert ? "relation does not exist (имитация)" : "connection refused (имитация)");
+      }
       return { rows: [], rowCount: 0 };
     },
   }),
 }));
 
-const { integritySummary } = await import("../src/lib/discountIntegrityLog");
+const { integritySummary, recordCheckoutSession } = await import("../src/lib/discountIntegrityLog");
 
 beforeEach(() => {
   db.calls = 0;
@@ -48,13 +51,47 @@ describe("метрика восстанавливается после сбоя 
     expect(db.calls).toBe(callsAfterFirst);
   });
 
+  test("🔴 упавшая ВСТАВКА не молчит: база помечается недоступной, метрика чинится сама", async () => {
+    // Ловушка того же класса: ensureTable однажды прошёл, dbUsable = true, а
+    // каждая вставка тихо падает вечно — «ведём» метрику, не записав ни строки.
+    const warns: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...a: unknown[]) => void warns.push(a.join(" "));
+    const realNow = Date.now;
+    try {
+      db.fail = false;
+      db.failInsertsOnly = false;
+      Date.now = () => realNow() + 200_000; // сбрасываем кулдаун
+      expect((await integritySummary(30)).source).toBe("db"); // база «жива»
+
+      db.failInsertsOnly = true;
+      recordCheckoutSession({
+        provider: "gumroad", tier: "medium", incentiveUsd: 21.8, quotedUsd: 45.2, honoured: false,
+      });
+      await new Promise((r) => setTimeout(r, 30));
+
+      expect(warns.some((w) => w.includes("[discountIntegrity]"))).toBe(true); // не молча
+      // И база помечена недоступной → следующий ensureTable пере-создаст таблицу.
+      Date.now = realNow;
+      expect((await integritySummary(30)).source).toBe("memory");
+    } finally {
+      console.warn = realWarn;
+      Date.now = realNow;
+      db.failInsertsOnly = false;
+    }
+  });
+
   test("🔴 база вернулась → метрика возвращается сама, без редеплоя", async () => {
-    // Проматываем минуту кулдауна: одноразовый флаг здесь бы навсегда оставил
+    // Проматываем кулдаун: одноразовый флаг здесь бы навсегда оставил
     // source "memory", и никто бы не заметил.
+    //
+    // Смещение больше, чем у предыдущего теста (200 с): состояние модуля общее
+    // на файл, и «минуты вперёд» не хватило бы — кулдаун был бы ещё в будущем.
+    // Ровно та ловушка, из-за которой этот тест сначала покраснел.
     db.fail = false;
     const realNow = Date.now;
     try {
-      Date.now = () => realNow() + 61_000;
+      Date.now = () => realNow() + 400_000;
       const s = await integritySummary(30);
       expect(s.source).toBe("db");
       expect(s.bootedAt).toBeUndefined(); // из базы — не «с момента старта»

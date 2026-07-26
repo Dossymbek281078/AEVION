@@ -9,6 +9,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
 import { useI18n, type Lang } from "@/lib/i18n";
+import { CouncilConsole } from "./CouncilConsole";
 
 /* ─────────────────────────────────────────────────────────────────
  * Module-local i18n — lives next to the module instead of bloating
@@ -1249,6 +1250,10 @@ export default function MultichatEnginePage() {
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <ModulePricingChip moduleId="multichat-engine" theme="dark" />
         </div>
+
+        {/* Рабочая консоль стоит первой: модуль должен открываться промтом
+            «опиши — сделаю», а не описанием возможностей. */}
+        <CouncilConsole />
 
         <div
           style={{

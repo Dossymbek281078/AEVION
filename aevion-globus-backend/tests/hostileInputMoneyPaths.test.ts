@@ -30,6 +30,9 @@ const IMPORT_TIMEOUT_MS = 30_000;
  * рабочую копию, рано или поздно будет «починен» удалением.
  */
 const TMP = mkdtempSync(join(tmpdir(), "aevion-hostile-"));
+// Секрет нужен, чтобы 401 означал «токен отвергнут», а не «ручка сломана для
+// всех»: без него отказ был бы неотличим от поломки, и тест ничего бы не доказал.
+process.env.AUTH_JWT_SECRET = "hostile-test-secret-at-least-32-chars-long-000";
 process.env.SUBSCRIPTIONS_FILE = join(TMP, "subscriptions.jsonl");
 process.env.LEADS_FILE = join(TMP, "leads.jsonl");
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));
@@ -145,6 +148,51 @@ describe("денежные пути переживают враждебный в
         await expectNo5xx("/api/pricing/promo/validate", { code: "AEVION20", tierId: "medium", [field]: junk });
       }
     }
+  }, IMPORT_TIMEOUT_MS);
+
+  test("GET /fan/me с кривым токеном и заголовками — 401, а не 500", async () => {
+    // Единственная веерная ручка с авторизацией. Заголовок Authorization
+    // приходит снаружи так же, как тело: пустой, обрезанный, не-JWT, чужой
+    // алгоритм, гигантский. Ответ должен быть 401, а не падение.
+    const app = await getApp();
+    const headers = [
+      undefined,
+      "",
+      "Bearer",
+      "Bearer ",
+      "Bearer not.a.jwt",
+      "Bearer " + "x".repeat(4000),
+      "Basic dXNlcjpwYXNz",
+      // JWT с alg:none — классическая попытка обойти проверку подписи.
+      // ВАЖНО про силу этой строки: снятие `algorithms: ["HS256"]` в роуте её
+      // НЕ роняет — установленная версия jsonwebtoken сама отвергает alg:none
+      // при переданном секрете. То есть здесь проверяется поведение библиотеки,
+      // а пиннинг алгоритма сторожит отдельный tests/sharedSecretsHardening
+      // (проверено мутацией: снятие пиннинга роняет именно его). Не считать эту
+      // строку доказательством пиннинга.
+      "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJlbWFpbCI6ImF0dGFja2VyQHRlc3QuZGV2In0.",
+      "Bearer null",
+    ];
+    for (const h of headers) {
+      const req = request(app).get("/api/pricing/fan/me");
+      if (h !== undefined) req.set("Authorization", h);
+      const r = await req;
+      expect(r.status, `заголовок ${JSON.stringify(h)} дал ${r.status}`).toBe(401);
+      // И ни при каких обстоятельствах не отдаём чужой веер.
+      expect(JSON.stringify(r.body ?? {})).not.toMatch(/offers|ownedPaid/);
+    }
+
+    // Контрольная проверка: ВАЛИДНЫЙ токен проходит. Без неё все 401 выше
+    // ничего не доказывают — ручка могла бы просто не работать ни для кого.
+    const jwt = (await import("jsonwebtoken")).default;
+    const good = jwt.sign(
+      { sub: "u1", email: "valid@test.dev" },
+      process.env.AUTH_JWT_SECRET as string,
+      { algorithm: "HS256" },
+    );
+    const ok = await request(app).get("/api/pricing/fan/me").set("Authorization", `Bearer ${good}`);
+    expect(ok.status, "валидный токен не прошёл — тогда 401 выше ничего не значат").toBe(200);
+    expect(ok.body).toHaveProperty("offers");
   }, IMPORT_TIMEOUT_MS);
 
   test("пустое и не-объектное тело не роняют ручки", async () => {

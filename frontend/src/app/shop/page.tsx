@@ -1,157 +1,228 @@
 import type { Metadata } from "next";
+import {
+  SUBSCRIPTIONS,
+  GUIDES,
+  MODULES,
+  MODULES_TOTAL_USD,
+  type Product,
+} from "@/lib/products";
 
-// AEVION Shop — единая витрина всех цифровых товаров (Gumroad).
-// Одна точка продаж, на которую могут ссылаться любые модули-планеты.
-// Статическая серверная страница: только внешние ссылки на живой чекаут Gumroad.
+// AEVION Shop — единая витрина всех покупаемых товаров.
+//
+// Товары берутся из `@/lib/products` — единого каталога, а не из списка в этом файле.
+// До 2026-07-26 здесь было 3 позиции хардкодом при 15 живых чекаутах: покупатель
+// видел книгу и два гайда, а подписки ($59/$49/$9 в мес) и семь модулей с рабочей
+// оплатой на витрину не попадали вовсе.
+//
+// Стиль — светлый газетный (память feedback_aevion_light_newspaper_ui): бумага,
+// serif-заголовки, тонкие линейки, золото акцентом. Раньше страница была тёмной.
 
 export const metadata: Metadata = {
-  title: "Магазин AEVION — гайды и книги",
+  title: "Магазин AEVION — подписки, гайды, модули",
   description:
-    "Цифровые товары AEVION: научные гайды о долголетии и седине, книга. Мгновенная доставка через Gumroad. Wellness, не медицина.",
+    "Все товары AEVION в одном месте: подписка на всю экосистему, научные гайды о долголетии, книга и модули с разовой лицензией. Мгновенная выдача. Wellness и образование, не медицина.",
 };
 
-interface Product {
-  title: string;
-  format: string;
-  desc: string;
-  price: string;
-  href: string;
-  badge?: string;
+const CURRENCY = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+function Card({ p }: { p: Product }) {
+  const isSub = p.kind === "subscription";
+  return (
+    <a href={p.href} target="_blank" rel="noopener noreferrer" style={styles.card}>
+      <div style={styles.cardTop}>
+        {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
+        <span style={styles.format}>{p.format}</span>
+      </div>
+
+      <h3 style={styles.cardTitle}>{p.title}</h3>
+      <p style={styles.cardDesc}>{p.desc}</p>
+
+      {p.includes?.length ? (
+        <ul style={styles.includes}>
+          {p.includes.map((line) => (
+            <li key={line} style={styles.includesItem}>
+              {line}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div style={styles.spacer} />
+      )}
+
+      <div style={styles.cardFoot}>
+        <span style={styles.price}>
+          {CURRENCY.format(p.priceUsd)}
+          {isSub ? <span style={styles.per}>/мес</span> : null}
+        </span>
+        <span style={styles.buy}>{isSub ? "Подписаться" : "Купить"}&nbsp;→</span>
+      </div>
+    </a>
+  );
 }
 
-const PRODUCTS: Product[] = [
-  {
-    title: "Протокол «Анти-седина»",
-    format: "PDF · гайд · RU",
-    desc: "Наука о том, почему волос седеет и что реально её замедляет — без хайпа. Медь/цинк, спермидин, окислительный стресс + 12-недельный протокол.",
-    price: "$9",
-    href: "https://aevion.gumroad.com/l/tmuyxw",
-    badge: "Новое",
-  },
-  {
-    title: "The Anti-Grey Protocol",
-    format: "PDF · guide · EN",
-    desc: "The evidence-first science of pigment aging and what actually slows it. Copper/zinc, spermidine, oxidative stress + a 12-week protocol.",
-    price: "$19",
-    href: "https://aevion.gumroad.com/l/kkiavh",
-    badge: "New",
-  },
-  {
-    title: "Gratitude ∞ Forever Young",
-    format: "PDF + EPUB · книга",
-    desc: "90-дневная практика благодарности и молодости: 4 минуты в день. Полный пакет.",
-    price: "$29.99",
-    href: "https://aevion.gumroad.com/l/ghvzq",
-  },
-];
+function Section({ title, note, items }: { title: string; note?: string; items: Product[] }) {
+  return (
+    <section style={styles.section}>
+      <div style={styles.sectionHead}>
+        <h2 style={styles.h2}>{title}</h2>
+        {note ? <p style={styles.sectionNote}>{note}</p> : null}
+      </div>
+      <div style={styles.grid}>
+        {items.map((p) => (
+          <Card key={p.id} p={p} />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function ShopPage() {
   return (
     <main style={styles.page}>
       <div style={styles.wrap}>
-        <div style={styles.eyebrow}>AEVION · Shop</div>
-        <h1 style={styles.h1}>Магазин AEVION</h1>
+        <div style={styles.eyebrow}>AEVION · Магазин</div>
+        <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>
         <p style={styles.lede}>
-          Цифровые товары с мгновенной доставкой — научные гайды и книга. Оплата и выдача через Gumroad.
-          Wellness и образование, не медицина.
+          Подписка на экосистему, научные гайды и книга, отдельные модули с разовой лицензией.
+          Оплата и мгновенная выдача — через Gumroad и LemonSqueezy.
         </p>
 
-        <div style={styles.grid}>
-          {PRODUCTS.map((p) => (
-            <a
-              key={p.href}
-              href={p.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={styles.card}
-            >
-              <div style={styles.cardTop}>
-                {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
-                <span style={styles.format}>{p.format}</span>
-              </div>
-              <h2 style={styles.cardTitle}>{p.title}</h2>
-              <p style={styles.cardDesc}>{p.desc}</p>
-              <div style={styles.cardFoot}>
-                <span style={styles.price}>{p.price}</span>
-                <span style={styles.buy}>Купить&nbsp;→</span>
-              </div>
-            </a>
-          ))}
-        </div>
+        <Section
+          title="Подписки"
+          note={`Те же модули по отдельности — ${CURRENCY.format(
+            MODULES_TOTAL_USD,
+          )} разовыми платежами.`}
+          items={SUBSCRIPTIONS}
+        />
+
+        <Section
+          title="Гайды и книги"
+          note="Разовая покупка, файл приходит сразу после оплаты."
+          items={GUIDES}
+        />
+
+        <Section
+          title="Модули"
+          note="Разовая лицензия на отдельный продукт — если нужен один инструмент, а не вся экосистема."
+          items={MODULES}
+        />
 
         <p style={styles.foot}>
-          Все продукты — образовательные/wellness-материалы. Не предназначены для диагностики, лечения
-          или профилактики заболеваний.
+          Материалы о здоровье и долголетии — образовательные и wellness-материалы. Не предназначены
+          для диагностики, лечения или профилактики заболеваний.
         </p>
       </div>
     </main>
   );
 }
 
+/* ── Светлый газетный стиль ─────────────────────────────────────────────────── */
+const PAPER = "#f7f6f2";
+const INK = "#16161a";
+const MUTED = "#5d5f66";
+const RULE = "#ddd9cf";
+const GOLD = "#a9781a";
+
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: "#070b14", color: "#e8eef6", padding: "48px 20px" },
-  wrap: { maxWidth: 980, margin: "0 auto" },
+  page: { minHeight: "100vh", background: PAPER, color: INK, padding: "48px 20px 64px" },
+  wrap: { maxWidth: 1040, margin: "0 auto" },
   eyebrow: {
     fontFamily: "monospace",
     fontSize: 12,
     letterSpacing: "0.16em",
     textTransform: "uppercase",
-    color: "#c8823f",
+    color: GOLD,
   },
-  h1: { fontSize: 36, margin: "10px 0 0", fontWeight: 700 },
-  lede: { color: "#9fb0c4", marginTop: 14, lineHeight: 1.6, maxWidth: 640 },
+  h1: {
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontSize: 40,
+    lineHeight: 1.15,
+    margin: "10px 0 0",
+    fontWeight: 700,
+  },
+  lede: { color: MUTED, marginTop: 14, lineHeight: 1.65, maxWidth: 660, fontSize: 16 },
+
+  section: { marginTop: 44 },
+  sectionHead: { borderTop: `2px solid ${INK}`, paddingTop: 12 },
+  h2: { fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, margin: 0, fontWeight: 700 },
+  sectionNote: { color: MUTED, fontSize: 13.5, lineHeight: 1.6, margin: "6px 0 0", maxWidth: 620 },
+
   grid: {
-    marginTop: 32,
+    marginTop: 20,
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
     gap: 18,
   },
   card: {
     display: "flex",
     flexDirection: "column",
-    background: "#0d1422",
-    border: "1px solid #1c2942",
-    borderRadius: 16,
+    background: "#fffdf8",
+    border: `1px solid ${RULE}`,
+    borderRadius: 4,
     padding: 22,
     textDecoration: "none",
-    color: "#e8eef6",
+    color: INK,
   },
-  cardTop: { display: "flex", alignItems: "center", gap: 10 },
+  cardTop: { display: "flex", alignItems: "center", gap: 10, minHeight: 22 },
   badge: {
     fontFamily: "monospace",
     fontSize: 11,
     letterSpacing: "0.08em",
     textTransform: "uppercase",
-    background: "#c8823f",
-    color: "#0a0a0a",
-    borderRadius: 6,
+    background: GOLD,
+    color: "#fffdf8",
+    borderRadius: 3,
     padding: "2px 8px",
     fontWeight: 700,
   },
-  format: { fontFamily: "monospace", fontSize: 11.5, color: "#6c7d92" },
-  cardTitle: { fontSize: 19, fontWeight: 700, margin: "12px 0 0" },
-  cardDesc: { color: "#9fb0c4", fontSize: 13.5, lineHeight: 1.55, marginTop: 8, flex: 1 },
+  format: { fontFamily: "monospace", fontSize: 11.5, color: MUTED },
+  cardTitle: {
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontSize: 20,
+    fontWeight: 700,
+    margin: "12px 0 0",
+    lineHeight: 1.25,
+  },
+  cardDesc: { color: MUTED, fontSize: 13.5, lineHeight: 1.6, marginTop: 8 },
+  spacer: { flex: 1, minHeight: 8 },
+  includes: {
+    listStyle: "none",
+    padding: "12px 0 0",
+    margin: "14px 0 0",
+    borderTop: `1px solid ${RULE}`,
+    flex: 1,
+  },
+  includesItem: { fontSize: 13, lineHeight: 1.5, color: INK, marginBottom: 6 },
   cardFoot: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
     marginTop: 18,
+    borderTop: `1px solid ${RULE}`,
+    paddingTop: 16,
   },
-  price: { fontSize: 20, fontWeight: 700 },
+  price: { fontSize: 22, fontWeight: 700, fontFamily: "Georgia, 'Times New Roman', serif" },
+  per: { fontSize: 13, fontWeight: 400, color: MUTED, marginLeft: 2 },
   buy: {
-    background: "#c8823f",
-    color: "#0a0a0a",
-    borderRadius: 10,
+    background: GOLD,
+    color: "#fffdf8",
+    borderRadius: 3,
     padding: "10px 18px",
     fontSize: 14,
     fontWeight: 700,
     whiteSpace: "nowrap",
   },
   foot: {
-    marginTop: 28,
+    marginTop: 40,
     fontSize: 12.5,
-    color: "#8b9bb0",
-    borderTop: "1px solid #1c2942",
+    color: MUTED,
+    borderTop: `1px solid ${RULE}`,
     paddingTop: 16,
   },
 };

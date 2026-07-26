@@ -68,6 +68,43 @@ const TIER_PERMALINK_ENV: Record<string, string> = {
   GUMROAD_PERMALINK_TIER_FULL_ANNUAL: "tier_full_annual",
 };
 
+/**
+ * Code-level defaults for the permalinks that actually exist in the AEVION
+ * Gumroad account (verified against the live dashboard 2026-07-26 — 8 products
+ * Published). Env still wins: this map is consulted only AFTER the env-driven
+ * branches, and only replaces the legacy `constitution-pro` catch-all below.
+ *
+ * WHY THIS EXISTS — without it, entitlement depended on env vars nobody had set,
+ * and the catch-all silently mis-provisioned real money:
+ *   - a $9.99 BOOK buyer fell through to "constitution-pro" → tierForReference()
+ *     → "lite", i.e. a book purchase handed out a paid subscription tier. The
+ *     comment on branch 0 already warned about exactly this, but the protection
+ *     was opt-in via GUMROAD_EXTERNAL_PERMALINKS. Three book sales have already
+ *     gone through this path (27/29 May, 2 June).
+ *   - an "AEVION All-Access" $59/mo buyer likewise landed on "lite" unless
+ *     GUMROAD_PERMALINK_TIER_FULL_MONTHLY happened to be set to xpxzam.
+ *
+ * Deliberately NOT listed: `wjvquw` (Constitution Team $49/mo). tierForReference()
+ * maps anything containing "team" to `full` = the whole ecosystem, which is very
+ * likely not what a Constitution-scoped product should grant. Leaving it on the
+ * catch-all keeps today's behaviour; deciding what Team actually unlocks is a
+ * product call, not a silent code change.
+ */
+const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
+  // Books and one-off guides — files, not subscriptions. "external" stops
+  // provisioning from granting any tier at all.
+  orcfbo: "external", // Gratitude ∞ Forever Young — Book (PDF + EPUB) $9.99
+  lelzw: "external",  // Gratitude ∞ Forever Young — Book + Audiobook $14.99
+  ghvzq: "external",  // Gratitude ∞ Forever Young — Complete Pack $29.99
+  tmuyxw: "external", // Протокол «Анти-седина» (RU) $9
+  oijxmq: "external", // Протокол долголетия — 12 недель (RU) $19
+  kkiavh: "external", // The Anti-Grey Protocol (EN) $19
+  // Platform bundle — the whole ecosystem.
+  xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
+  // Constitution entry tier — same as the legacy default, made explicit.
+  pyiaz: "constitution-pro", // Constitution Pro $9/mo
+};
+
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
  *  "https://aevion.gumroad.com/l/xpxzam?x=1" → "xpxzam"; "xpxzam" → "xpxzam". */
 function permalinkSlug(v?: string | null): string {
@@ -108,7 +145,13 @@ function resolveReference(raw: Record<string, string>): string {
   const studioPro = permalinkSlug(process.env.GUMROAD_PERMALINK_DEVHUB_STUDIO_PRO ?? "studio-pro");
   if (pingSlug && pingSlug === studioPro) return "devhub-studio-pro";
 
-  // 4. Legacy catch-all — keep Constitution Pro working without explicit mapping.
+  // 4. Known AEVION permalinks — code-level default so entitlement never depends
+  //    on an env var that was never set. See KNOWN_PERMALINK_REFERENCE above.
+  if (pingSlug && KNOWN_PERMALINK_REFERENCE[pingSlug]) {
+    return KNOWN_PERMALINK_REFERENCE[pingSlug];
+  }
+
+  // 5. Legacy catch-all — keep Constitution Pro working without explicit mapping.
   return "constitution-pro";
 }
 

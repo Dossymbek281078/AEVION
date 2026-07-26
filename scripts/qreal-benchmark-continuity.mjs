@@ -115,6 +115,16 @@ async function loadEngine() {
   return f;
 }
 
+/** Чтение манифеста с внятным отказом. Раньше каждая фаза падала сырым ENOENT
+ *  с абсолютным путём, если её запустили не в том порядке, — а порядок фаз
+ *  берут из документа и легко перепутать. Одна функция вместо заплаток в
+ *  каждой фазе: дефект не вернётся вместе с новой фазой. */
+function loadManifest() {
+  const mp = path.join(OUT, "manifest.json");
+  if (!existsSync(mp)) throw new Error("Нет manifest.json — сначала prepare (и render/poll, если нужны клипы).");
+  return readJson(mp);
+}
+
 const loadScenes = () => readJson(path.join(HERE, "qreal-benchmark.scenes.json"));
 
 /* ── plan ─────────────────────────────────────────────────────────────── */
@@ -202,7 +212,7 @@ async function cmdRender(argv) {
   if (!key) throw new Error("FAL_KEY не задан.");
   const mp = path.join(OUT, "manifest.json");
   if (!existsSync(mp)) throw new Error("Сначала prepare.");
-  const manifest = readJson(mp);
+  const manifest = loadManifest();
   const engine = await loadEngine();
   const pending = manifest.items.filter((i) => i.status === "prompt_ready");
   const usd = pending.length * manifest.durationSec * engine.usdPerSecond;
@@ -228,7 +238,7 @@ async function cmdPoll() {
   const key = process.env.FAL_KEY?.trim();
   if (!key) throw new Error("FAL_KEY не задан.");
   const mp = path.join(OUT, "manifest.json");
-  const manifest = readJson(mp);
+  const manifest = loadManifest();
   const engine = await loadEngine();
   const base = falRequestsBase(engine.falModelId);
   for (let round = 0; round < 80; round++) {
@@ -259,11 +269,7 @@ async function cmdSheet(argv) {
   if (!judge || judge.startsWith("--")) throw new Error("Укажи судью: --judge <имя>");
   const { scenes } = loadScenes();
   const { criteria } = await loadContinuityCriteria();
-  const mp = path.join(OUT, "manifest.json");
-  // Внятный отказ вместо сырого ENOENT: по документу легко запустить
-  // фазу не в том порядке.
-  if (!existsSync(mp)) throw new Error("Нет manifest.json — сначала prepare (и render/poll, если нужны клипы).");
-  const manifest = readJson(path.join(OUT, "manifest.json"));
+  const manifest = loadManifest();
   const titleById = Object.fromEntries(scenes.map((s) => [s.id, s.title]));
 
   // Судят ПОСЛЕДОВАТЕЛЬНОСТЬ кадров, а не клип: непрерывность видна только
@@ -319,7 +325,7 @@ async function cmdScore() {
   const { scenes } = loadScenes();
   const { criteria, threshold } = await loadContinuityCriteria();
   const weight = Object.fromEntries(criteria.map((c) => [c.id, c.weight]));
-  const manifest = readJson(path.join(OUT, "manifest.json"));
+  const manifest = loadManifest();
   const armByGroup = {}, sceneByGroup = {};
   for (const it of manifest.items) { armByGroup[it.sceneClipId] = it.arm; sceneByGroup[it.sceneClipId] = it.sceneId; }
 

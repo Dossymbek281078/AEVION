@@ -7,8 +7,9 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
-import { shouldOfferDbHint, shouldOfferDeployHint } from "@/lib/devhubHints";
-import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
+import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
+import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
+import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -450,7 +451,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
-    | { role: "hint"; kind: "design_db" | "deploy"; description: string; at: string };
+    | { role: "hint"; kind: "design_db" | "deploy" | "manifest" | "provision_db"; description: string; at: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
   const aiImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -670,6 +671,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Vercel deploy state
   const [vercelDeploying, setVercelDeploying] = useState(false);
 
+  // Which server-side integrations are actually configured — so a deploy
+  // button says "needs VERCEL_API_TOKEN" instead of firing a doomed request.
+  const [caps, setCaps] = useState<CapabilityIndex | null>(null);
+
   // Settings state
   const [settingsName, setSettingsName] = useState("");
   const [settingsDesc, setSettingsDesc] = useState("");
@@ -711,6 +716,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     fetch(apiUrl("/api/devhub/templates"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Failure stays silent on purpose: caps === null means "fail open", the
+    // buttons behave exactly as they did before this feature existed.
+    fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCaps(indexCapabilities(d.capabilities)))
       .catch(() => {});
   }, []);
 
@@ -981,6 +995,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           historyHasDeployHint: h.some((m) => m.role === "hint" && (m as any).kind === "deploy"),
         });
         if (offerDeploy) return [...h, { role: "hint", kind: "deploy", description: userText, at: new Date().toISOString() }];
+        const offerManifest = shouldOfferManifestHint({
+          stack: project.stack,
+          filePaths: [...files.map((f) => f.path), ...newGenerated.map((f: { path: string }) => f.path)],
+          historyHasManifestHint: h.some((m) => m.role === "hint" && (m as any).kind === "manifest"),
+        });
+        if (offerManifest) return [...h, { role: "hint", kind: "manifest", description: userText, at: new Date().toISOString() }];
         return h;
       });
       // Reload files list
@@ -1119,7 +1139,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Client-side live preview for React SPA projects — transform in the parent,
   // module graph via import map, no deploy needed (see lib/reactPreview.ts).
   useEffect(() => {
-    if (activeTab !== "visual" || !project || project.stack !== "react") return;
+    if (activeTab !== "visual" || !project || !isClientPreviewStack(project.stack)) return;
     let cancelled = false;
     setReactPreviewError(null);
     buildReactPreviewSrcdoc(
@@ -1244,6 +1264,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   };
 
   const [designingDb, setDesigningDb] = useState(false);
+  const [provisioningDb, setProvisioningDb] = useState(false);
   // One-click follow-through on the design_db hint: runs /database/design with
   // the idea already in hand, renders the result as a normal assistant card
   // (diffs, checkpoint — undo works), and retires the hint.
@@ -1271,10 +1292,55 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listData = await listR.json();
       setFiles(listData.files || []);
       showToast("Database designed — db/schema.sql + client are in the file tree", "success");
+      // Schema on disk is only half the job; offer to create the real database
+      // right here when the server can (capability "database" is live).
+      if (data.canProvision) {
+        setChatHistory((h) => [...h, { role: "hint", kind: "provision_db", description, at: new Date().toISOString() }]);
+      }
     } catch (e: any) {
       showToast(e.message || "Database design failed", "error");
     } finally {
       setDesigningDb(false);
+    }
+  };
+
+  // Create the project's real database: schema + login role on the projects
+  // instance, schema.sql applied, DATABASE_URL saved into this project's env.
+  const provisionDatabase = async () => {
+    if (!project || provisioningDb) return;
+    if (isCapabilityBlocked(caps, "database")) {
+      showToast(capabilityHint(caps, "database", "Database provisioning"), "warning");
+      return;
+    }
+    setProvisioningDb(true);
+    try {
+      const r = await fetchWithRedeployRetry(
+        apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+      );
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error || "Provisioning failed");
+      setChatHistory((h) => [
+        ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
+        {
+          role: "assistant",
+          at: new Date().toISOString(),
+          files: [],
+          note: data.appliedSchemaSql
+            ? `Database ready — schema ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
+            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+        },
+      ]);
+      // Refresh the project so the Env Vars tab shows DATABASE_URL.
+      const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+      const pd = await pr.json();
+      setProject(pd.project);
+      showToast(data.appliedSchemaSql ? "Database created and schema applied" : "Database created", "success");
+    } catch (e: any) {
+      showToast(e.message || "Provisioning failed", "error");
+    } finally {
+      setProvisioningDb(false);
     }
   };
 
@@ -1378,6 +1444,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deploy = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "railway")) {
+      showToast(capabilityHint(caps, "railway", "Railway deploy"), "warning");
+      return;
+    }
     setDeploying(true);
     showToast("Building...", "info");
     try {
@@ -1600,6 +1670,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deployToPages = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "pages")) {
+      showToast(capabilityHint(caps, "pages", "Cloudflare Pages deploy"), "warning");
+      return;
+    }
     setPagesDeploying(true);
     setPagesResult(null);
     showToast("Deploying to Cloudflare Pages...", "info");
@@ -1626,6 +1700,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deployToVercel = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "vercel")) {
+      showToast(capabilityHint(caps, "vercel", "Vercel deploy"), "warning");
+      return;
+    }
     setVercelDeploying(true);
     showToast("Deploying to Vercel...", "info");
     try {
@@ -1743,6 +1821,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
+    if (isCapabilityBlocked(caps, "image")) {
+      setImgError(capabilityHint(caps, "image", "Image generation"));
+      return;
+    }
     setImgLoading(true);
     setImgError(null);
     setImgResult(null);
@@ -1800,6 +1882,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
+    if (isCapabilityBlocked(caps, "audio_music")) {
+      setMusicError(capabilityHint(caps, "audio_music", "Music generation"));
+      return;
+    }
     setMusicLoading(true);
     setMusicError(null);
     setMusicUrl(null);
@@ -2570,6 +2656,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
+    if (isCapabilityBlocked(caps, "audio_tts")) {
+      setMediaTtsError(capabilityHint(caps, "audio_tts", "Voice (TTS)"));
+      return;
+    }
     setMediaTtsLoading(true);
     setMediaTtsError(null);
     setMediaTtsUrl(null);
@@ -2660,11 +2750,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title="Deploy to Railway"
+            title={capabilityHint(caps, "railway", "Deploy to Railway")}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
               cursor: deploying ? "not-allowed" : "pointer",
+              opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
             }}
           >
             {deploying ? "Deploying..." : "Deploy"}
@@ -2672,12 +2763,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title="Deploy to Vercel"
+            title={capabilityHint(caps, "vercel", "Deploy to Vercel")}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
               cursor: vercelDeploying ? "not-allowed" : "pointer",
               display: "flex", alignItems: "center", gap: 6,
+              // Dimmed, not disabled: clicking still explains what is missing.
+              opacity: isCapabilityBlocked(caps, "vercel") ? 0.45 : 1,
             }}
           >
             <svg width="14" height="14" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
@@ -2867,7 +2960,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
             {activeTab === "visual" ? (
               project?.stack !== "static" ? (
-                project?.stack === "react" && reactPreviewSrcdoc ? (
+                isClientPreviewStack(project?.stack) && reactPreviewSrcdoc ? (
                   <iframe
                     ref={visualEditIframeRef}
                     srcDoc={reactPreviewSrcdoc}
@@ -2875,7 +2968,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
                     title="Visual Edit preview"
                   />
-                ) : project?.stack === "react" ? (
+                ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                     <div style={{ maxWidth: 460 }}>
                       <div style={{ fontSize: 32, marginBottom: 12 }}>⚛️</div>
@@ -2984,7 +3077,38 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
-                          msg.kind === "deploy" ? (
+                          msg.kind === "provision_db" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                              <div style={{ color: "#3730a3", marginBottom: 8, lineHeight: 1.45 }}>
+                                🗃 Schema is on disk — create the real database now? You get your own Postgres schema, a login role only you can use, the tables from <span style={{ fontFamily: "monospace" }}>db/schema.sql</span>, and <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span> in Env Vars.
+                              </div>
+                              <button
+                                onClick={provisionDatabase}
+                                disabled={provisioningDb}
+                                title={capabilityHint(caps, "database", "Create the database")}
+                                style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
+                              >
+                                {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
+                              </button>
+                            </div>
+                          ) : msg.kind === "manifest" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                              <div style={{ color: "#92400e", marginBottom: 8, lineHeight: 1.45 }}>
+                                📦 This project has no <span style={{ fontFamily: "monospace" }}>package.json</span> — the live preview works, but an export can&apos;t be installed or run. Generate one from what the code actually imports?
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "manifest")));
+                                  // Fills the prompt rather than firing: same
+                                  // "you see it before it runs" rule as plan milestones.
+                                  setAiPrompt("Add a package.json listing the exact dependencies these files import, with scripts to run the app, plus the entry HTML if it is missing.");
+                                }}
+                                style={{ padding: "7px 14px", background: "#d97706", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+                              >
+                                Собрать package.json
+                              </button>
+                            </div>
+                          ) : msg.kind === "deploy" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
                                 🚀 Ready to go live? One click deploys this to Cloudflare with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL — marked live only after the page actually serves.
@@ -3785,6 +3909,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <button
                           onClick={async () => {
                             if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            if (isCapabilityBlocked(caps, "video")) {
+                              setVideoError(capabilityHint(caps, "video", "Video generation"));
+                              return;
+                            }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
                             try {
                               const r = await fetch(apiUrl("/api/devhub/media/video"), {
@@ -3814,7 +3942,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap" }}
+                          title={capabilityHint(caps, "video", "Generate video")}
+                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
                         </button>

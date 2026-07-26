@@ -53,12 +53,14 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
-      # 482 tests across 41 files that nothing was running. They were also
-      # unrunnable locally until @testing-library/dom was declared - vitest.setup
-      # imports @testing-library/react, whose peer was missing, so every test
-      # file failed to load, including ones that never touch the DOM.
-      - name: Frontend tests (vitest)
-        run: npm run test:run
+      # The suite existed and passed locally, but nothing ever executed it here:
+      # this job used to go install → i18n → build and stop. 476 tests across 40
+      # files gated exactly nothing, which is why pitchFacts could publish a
+      # stale module count for months while a guard test written to catch that
+      # very drift sat unrun. A test that is never invoked reads identically to
+      # a test that passes.
+      - name: Frontend unit tests
+        run: npm run test -- --run
       - run: npm run build
       # Route typing is NOT covered by the Turbopack build this job runs: the
       # PageProps/LayoutProps constraints live in .next/types, and only the

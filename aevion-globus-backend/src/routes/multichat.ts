@@ -26,6 +26,8 @@ import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { buildDissentMap } from "../services/multichat/dissent";
+import { buildReceipt, signReceipt, verifyReceipt } from "../services/multichat/receipt";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
@@ -448,12 +450,34 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   });
 
   const results = await Promise.all(calls);
+
+  // Карта разногласий считается ЗДЕСЬ же, из уже полученных ответов: ни одного
+  // дополнительного вызова модели, поэтому она бесплатна и воспроизводима.
+  // Разногласие — то, что все остальные продукты выбрасывают при синтезе, а оно
+  // и есть указание, где смотреть человеку.
+  const dissent = buildDissentMap(results as never);
+
+  // Чек: канонический артефакт с составом панели, хешами ответов, картой
+  // разногласий и стоимостью. Ответ без происхождения — это мнение; ответ с
+  // чеком можно предъявить. Подпись берётся из реестра QSign v2, а если ключей
+  // нет — чек честно уходит неподписанным, но с проверяемым хешем.
+  const signedReceipt = await signReceipt(
+    buildReceipt({
+      conversationId,
+      prompt,
+      answers: results as never,
+      dissent,
+      askedAt: new Date().toISOString(),
+    })
+  );
   await touchConv(conversationId);
 
   res.json({
     conversationId,
     prompt,
     results,
+    dissent,
+    receipt: signedReceipt,
     completedAt: new Date().toISOString(),
   });
 });
@@ -856,6 +880,81 @@ multichatRouter.post("/presets/:id/launch", async (req, res) => {
 // to keep cost data private). Mounted as a separate sub-route to bypass the
 // router-wide requireAuth.
 export const multichatPublicRouter = Router();
+// POST /api/multichat/dissent/preview — ПУБЛИЧНЫЙ разбор готовых ответов.
+//
+// Карта разногласий считается из уже полученных ответов и не делает ни одного
+// вызова модели — значит её можно отдать бесплатно и без аккаунта. Это снимает
+// главное трение витрины: гость упирался в sign-in и не понимал, в чём суть
+// модуля. Теперь демо работает на НАСТОЯЩЕМ коде карты, а не на нарисованных
+// числах, которые разошлись бы с алгоритмом при первой же правке.
+//
+// Побочно это самостоятельная польза: чужие ответы можно принести свои и
+// получить разбор, ничего у нас не запуская.
+const dissentPreviewLimiter = rateLimit({
+  capacity: 30,
+  refillPerSec: 0.5,
+  keyFn: (req) => `mc-dissent:${req.ip || "anon"}`,
+});
+
+multichatPublicRouter.post("/dissent/preview", dissentPreviewLimiter, (req, res) => {
+  try {
+    const answers = Array.isArray(req.body?.answers) ? req.body.answers : null;
+    if (!answers || answers.length === 0) {
+      return res.status(400).json({ error: "answers_required", message: "Ожидается { answers: [{ agentId, ok, reply }] }." });
+    }
+    if (answers.length > 8) {
+      return res.status(400).json({ error: "too_many", message: "Не больше 8 ответов за раз." });
+    }
+    // Обрезаем вход: разбор бесплатный, но не должен превращаться в способ
+    // заставить сервер жевать мегабайты.
+    const trimmed = answers.slice(0, 8).map((a: any, i: number) => ({
+      agentId: typeof a?.agentId === "string" ? a.agentId.slice(0, 60) : `agent_${i + 1}`,
+      ok: a?.ok !== false,
+      reply: typeof a?.reply === "string" ? a.reply.slice(0, 20_000) : undefined,
+      error: typeof a?.error === "string" ? a.error.slice(0, 200) : undefined,
+    }));
+    res.json({ dissent: buildDissentMap(trimmed as never) });
+  } catch (err) {
+    captureMultichatError(err, { route: "dissent-preview" });
+    res.status(500).json({ error: "preview failed" });
+  }
+});
+
+// POST /api/multichat/receipt/verify — ПУБЛИЧНАЯ проверка чека.
+//
+// Живёт именно здесь, а не в основном роутере: тот монтируется через
+// requireModule("multichat-engine"), то есть за платной стеной. Проверка чека
+// за стеной бессмысленна — предъявляют его тому, у кого нет ни аккаунта, ни
+// подписки. (Первая версия по ошибке стояла в приватном роутере и на проде
+// упёрлась бы в 402.)
+//
+// Состояние не меняется, работы ровно на канонизацию и хеш.
+const receiptVerifyLimiter = rateLimit({
+  capacity: 60,
+  refillPerSec: 1,
+  keyFn: (req) => `mc-verify:${req.ip || "anon"}`,
+});
+
+multichatPublicRouter.post("/receipt/verify", receiptVerifyLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    // Принимаем и целиком скачанный файл {receipt, hash, signature}, и голый чек.
+    const receipt = body.receipt ?? body;
+    if (!receipt || typeof receipt !== "object" || !("panel" in receipt)) {
+      return res.status(400).json({ error: "not_a_receipt", message: "Ожидается чек мультичата (JSON со списком panel)." });
+    }
+    const out = await verifyReceipt({
+      receipt: receipt as never,
+      hash: typeof body.hash === "string" ? body.hash : undefined,
+      signature: body.signature ?? null,
+    });
+    res.json(out);
+  } catch (err) {
+    captureMultichatError(err, { route: "receipt-verify" });
+    res.status(500).json({ error: "verify failed" });
+  }
+});
+
 multichatPublicRouter.get("/shared/:token", async (req, res) => {
   const token = String(req.params.token).trim();
   if (!token) return res.status(400).json({ error: "token_required" });

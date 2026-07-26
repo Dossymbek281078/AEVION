@@ -824,7 +824,7 @@ async function generateCodeWithAI(
       ? `You are an expert developer. Generate complete, working code for a single file. When given the file's current content, edit it in place rather than starting over. Return ONLY a JSON object: {"files": [{"path": "${targetFiles[0]}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
       : targetFiles.length > 1
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
-        : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
+        : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Any file containing JSX must use a .jsx extension (.tsx for TypeScript) — the in-browser live preview keys off the extension. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
   const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
@@ -1119,6 +1119,35 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  // Drop the project's database FIRST. A deleted project whose schema and
+  // login role survive is worse than a leak: live credentials pointing at data
+  // nobody owns any more, and nothing left in the UI to clean them up with.
+  let databaseDropped: boolean | undefined;
+  let databaseDropError: string | undefined;
+  if (process.env.DEVHUB_DB_ADMIN_URL && project.envVars?.DATABASE_URL) {
+    try {
+      const { deprovisionProjectDatabase } = await import("../lib/devhubDbProvision");
+      const dropped = await deprovisionProjectDatabase({ projectId: project.id });
+      databaseDropped = dropped.ok;
+      if (!dropped.ok) databaseDropError = dropped.error;
+    } catch (e) {
+      databaseDropped = false;
+      databaseDropError = e instanceof Error ? e.message : String(e);
+    }
+    if (databaseDropped === false) {
+      // Deleting the project anyway would orphan the schema with no way back
+      // to it, so this fails loudly instead.
+      captureException(new Error(`devhub: database deprovision failed: ${databaseDropError}`), {
+        route: "devhub/projects:delete",
+        projectId: project.id,
+      });
+      return res.status(502).json({
+        error: `project not deleted — its database could not be dropped: ${databaseDropError}`,
+        hint: "retry, or drop it explicitly with DELETE /projects/:id/database first",
+      });
+    }
+  }
+
   try {
     await dbDeleteProject(req.params.id);
   } catch (e) {
@@ -1128,7 +1157,7 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
       if (f.projectId === req.params.id) memFiles.delete(fid);
     }
   }
-  res.json({ ok: true });
+  res.json({ ok: true, ...(databaseDropped !== undefined ? { databaseDropped } : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1544,10 +1573,109 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
     `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
   try {
     const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
-    res.json({ ...result, note: "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned." });
+    const canProvision = !!process.env.DEVHUB_DB_ADMIN_URL;
+    res.json({
+      ...result,
+      canProvision,
+      note: canProvision
+        ? "Files generated — POST /database/provision to create the real database and get DATABASE_URL."
+        : "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned.",
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "database design failed" });
   }
+});
+
+// POST /api/devhub/projects/:id/database/provision — create the real database.
+// One schema + one login role per project on an instance dedicated to user
+// projects (see lib/devhubDbProvision.ts). Applies db/schema.sql if the project
+// has one, then stores DATABASE_URL in the project's env vars.
+devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!process.env.DEVHUB_DB_ADMIN_URL) {
+    return res.status(503).json({
+      error: "database provisioning is not configured — set DEVHUB_DB_ADMIN_URL on the server",
+      envVar: "DEVHUB_DB_ADMIN_URL",
+    });
+  }
+
+  // Apply the project's own schema if it designed one — that is the whole
+  // point of the flow: design → provision → the tables actually exist.
+  let schemaSql: string | null = null;
+  try {
+    const f = await dbGetFile(project.id, "db/schema.sql");
+    schemaSql = f?.content ?? null;
+  } catch {
+    schemaSql = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === "db/schema.sql")?.content ?? null;
+  }
+
+  const { provisionProjectDatabase } = await import("../lib/devhubDbProvision");
+  const result = await provisionProjectDatabase({ projectId: project.id, schemaSql });
+  if (!result.ok) return res.status(502).json({ error: result.error });
+
+  project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };
+  project.updatedAt = now();
+  try {
+    await dbSaveProject(project);
+  } catch {
+    memProjects.set(project.id, project);
+  }
+
+  // The URL contains the credential — returned once so the caller can show it,
+  // never logged.
+  res.json({
+    ok: true,
+    schema: result.schema,
+    role: result.role,
+    appliedSchemaSql: result.appliedSchemaSql,
+    databaseUrl: result.databaseUrl,
+    note: result.appliedSchemaSql
+      ? "Database created, schema applied, DATABASE_URL saved to this project's env vars."
+      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.",
+  });
+});
+
+// DELETE /api/devhub/projects/:id/database — drop the project's schema, role
+// and stored DATABASE_URL. Destructive and irreversible, hence its own route.
+devhubRouter.delete("/projects/:id/database", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!process.env.DEVHUB_DB_ADMIN_URL) {
+    return res.status(503).json({ error: "database provisioning is not configured" });
+  }
+
+  const { deprovisionProjectDatabase } = await import("../lib/devhubDbProvision");
+  const result = await deprovisionProjectDatabase({ projectId: project.id });
+  if (!result.ok) return res.status(502).json({ error: result.error });
+
+  const { DATABASE_URL: _dropped, ...rest } = project.envVars || {};
+  project.envVars = rest;
+  project.updatedAt = now();
+  try {
+    await dbSaveProject(project);
+  } catch {
+    memProjects.set(project.id, project);
+  }
+  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone." });
 });
 
 // POST /api/devhub/projects/:id/generate/undo — revert the project's most
@@ -4773,7 +4901,16 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
+/** ZIP general purpose bit 11 — "the file name is encoded in UTF-8". */
+const UTF8_NAME_FLAG = 0x0800;
+
+/** True when the bytes really are UTF-8 — a lossy decode would introduce
+ * U+FFFD, so a round-trip that changes the bytes proves they were not. */
+function isValidUtf8(buf: Buffer): boolean {
+  return Buffer.compare(Buffer.from(buf.toString("utf8"), "utf8"), buf) === 0;
+}
+
+export function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
@@ -4788,7 +4925,11 @@ function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buff
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0); // signature
     local.writeUInt16LE(20, 4); // version needed
-    local.writeUInt16LE(0, 6); // flags
+    // Bit 11 = UTF-8 name. Names are written as UTF-8 above, and without this
+    // flag APPNOTE 4.4.4 says a reader must treat them as CP437 — which is why
+    // "src/компоненты/Таймер.jsx" unzipped as "src/╨║╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤é╤ï/…"
+    // in every standard tool (confirmed against prod, 2026-07-26).
+    local.writeUInt16LE(UTF8_NAME_FLAG, 6); // flags
     local.writeUInt16LE(0, 8); // method (0=stored)
     local.writeUInt16LE(0, 10); // mtime
     local.writeUInt16LE(0, 12); // mdate
@@ -4806,7 +4947,7 @@ function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buff
     central.writeUInt32LE(0x02014b50, 0); // signature
     central.writeUInt16LE(20, 4); // version made by
     central.writeUInt16LE(20, 6); // version needed
-    central.writeUInt16LE(0, 8); // flags
+    central.writeUInt16LE(UTF8_NAME_FLAG, 8); // flags — must match the local header
     central.writeUInt16LE(0, 10); // method
     central.writeUInt16LE(0, 12); // mtime
     central.writeUInt16LE(0, 14); // mdate
@@ -5412,7 +5553,23 @@ function parseZipStored(buf: Buffer): Array<{ path: string; content: Buffer }> |
     const localOffset = buf.readUInt32LE(p + 42);
     if (method !== 0) return { error: `unsupported compression method ${method} (only stored=0)` };
     if (compSize !== uncompSize) return { error: "stored entry size mismatch" };
-    const name = buf.slice(p + 46, p + 46 + nameLen).toString("utf8");
+    const flags = buf.readUInt16LE(p + 8);
+    const nameBytes = buf.slice(p + 46, p + 46 + nameLen);
+    // Mirror of the export bug (#923), read side: without bit 11 the name is
+    // NOT UTF-8 by spec. Decoding it as UTF-8 anyway yields U+FFFD in paths —
+    // files land under names that no import in the code will ever resolve.
+    // We do not guess the real code page (the spec says CP437, Russian
+    // Windows tools actually write CP866, and picking wrong is silently
+    // wrong): non-ASCII bytes with no UTF-8 flag are refused with a fix.
+    if (!(flags & UTF8_NAME_FLAG) && !isValidUtf8(nameBytes) ) {
+      return {
+        error:
+          "ZIP file names are not UTF-8 and the archive does not say which encoding they use " +
+          "(general purpose bit 11 unset). Re-create the archive with UTF-8 names — " +
+          "otherwise the imported paths would not match the imports inside the code.",
+      };
+    }
+    const name = nameBytes.toString("utf8");
     p += 46 + nameLen + extraLen + commentLen;
 
     // Local header at localOffset
@@ -5703,6 +5860,7 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
     { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },

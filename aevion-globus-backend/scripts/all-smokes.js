@@ -58,9 +58,12 @@ const SMOKES = [
   { name: "aev", script: "aev-smoke.js", readOnly: false },
   { name: "build", script: "build-smoke.js", readOnly: false, env: { BUILD_PAYMENT_WEBHOOK_SECRET: process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "4wSqkQHVbttaDO02zDJiPZcmyRVU3gO9fhSY6nicb9kIYxFI" } },
   // Offline: exercises the QCoreAI free fleet + council assembly against dist (no server/DB/keys).
-  { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true },
+  // `offline` because it require()s the COMPILED backend (dist/services/...), not the
+  // target BASE. It is read-only, but running it in the prod sweep — a job that never
+  // builds — crashed with "Cannot find module .../dist/..." every single day.
+  { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true, offline: true },
   // Offline: exercises the QCoreAI "auto" router (classify → council vs single) via the stub.
-  { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true },
+  { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true, offline: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.
@@ -262,11 +265,20 @@ const SMOKES = [
 // target actually looks like prod.
 const isProdTarget = !/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(BASE);
 const prodSkipped = [];
+// `offline` smokes assert against the COMPILED backend in dist/, not against BASE.
+// They are read-only, so `readOnly: true` used to let them into the prod sweep — a
+// job that only queries live Railway and never builds. They crashed on a missing
+// dist/ every day and turned the whole daily smoke red for a reason unrelated to prod.
+const offlineSkipped = [];
 
 const eligible = SMOKES.filter((sm) => {
   if (ONLY.length > 0 && !ONLY.includes(sm.name)) return false;
   if (SKIP.includes(sm.name)) return false;
   if (READ_ONLY && !sm.readOnly) return false;
+  if (sm.offline && isProdTarget && !ONLY.includes(sm.name)) {
+    offlineSkipped.push(sm.name);
+    return false;
+  }
   if (!isProdTarget && /-prod$/.test(sm.name) && !ONLY.includes(sm.name)) {
     prodSkipped.push(sm.name);
     return false;
@@ -285,6 +297,10 @@ console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
 if (prodSkipped.length > 0) {
   console.log(`  skipped    = ${prodSkipped.length} *-prod smoke(s) (BASE is not prod): ${prodSkipped.join(", ")}`);
+}
+if (offlineSkipped.length > 0) {
+  console.log(`  skipped    = ${offlineSkipped.length} offline smoke(s) (they assert against the compiled backend, not ${BASE}): ${offlineSkipped.join(", ")}`);
+  console.log(`               these still run in the ephemeral-backend job, where dist/ exists.`);
 }
 console.log("");
 

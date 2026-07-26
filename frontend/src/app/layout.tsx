@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClientProviders } from "@/components/ClientProviders";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
 
 const SITE = getSiteUrl();
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
     template: "%s · AEVION",
   },
   description:
-    "Global platform for IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking and more. 37 product nodes on interactive Globus map.",
+    `Global platform for IP registration (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking and more. ${MODULE_NODES} product nodes on interactive Globus map.`,
   openGraph: {
     title: "AEVION — Trust infrastructure & Globus",
     description:
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION — Trust OS",
-    description: "Registry · signatures · bureau · compliance · bank · awards · 37 nodes.",
+    description: `Registry · signatures · bureau · compliance · bank · awards · ${MODULE_NODES} nodes.`,
   },
   verification: {
     google: "IVmBbcLIbs_TR7SC3TrPQkFiQOhf1wVbzSB9Q5d9_d0",

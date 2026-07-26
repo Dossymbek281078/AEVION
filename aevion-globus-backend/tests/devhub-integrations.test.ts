@@ -3442,3 +3442,264 @@ describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 24. Export ZIP — non-ASCII file names (confirmed broken on prod 2026-07-26)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("export zip: UTF-8 file names", () => {
+  test("sets general purpose bit 11 so readers decode names as UTF-8, not CP437", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const zip = buildZipStored([
+      { path: "src/компоненты/Таймер.jsx", content: Buffer.from("export default 1;", "utf8") },
+      { path: "README.md", content: Buffer.from("# hi", "utf8") },
+    ]);
+
+    // Local header: signature at 0, flags at offset 6.
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.readUInt16LE(6) & 0x0800).toBe(0x0800);
+
+    // Every central directory entry must agree — a mismatch makes some tools
+    // trust the local header and others the central one.
+    for (let i = 0; i < zip.length - 4; i++) {
+      if (zip.readUInt32LE(i) === 0x02014b50) {
+        expect(zip.readUInt16LE(i + 8) & 0x0800).toBe(0x0800);
+      }
+    }
+
+    // The name really is UTF-8 bytes in the archive.
+    expect(zip.includes(Buffer.from("src/компоненты/Таймер.jsx", "utf8"))).toBe(true);
+  });
+
+  test("round-trips a Cyrillic name through our own import endpoint", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Utf8Zip", stack: "next" });
+    const id = cr.body.project.id;
+    const zip = buildZipStored([{ path: "проект/файл.txt", content: Buffer.from("данные", "utf8") }]);
+
+    const up = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+    expect(up.status).toBe(200);
+    expect(up.body.imported.map((x: { path: string }) => x.path)).toContain("проект/файл.txt");
+  });
+});
+
+describe("import zip: file name encoding", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ImpEnc", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("refuses non-UTF-8 names with an actionable message instead of importing U+FFFD paths", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    // "файл.txt" as CP866 bytes — what a Russian Windows archiver writes when
+    // it does not set bit 11. Decoded as UTF-8 these become replacement chars.
+    const cp866Name = Buffer.from([0xa4, 0xa0, 0xa9, 0xab, 0x2e, 0x74, 0x78, 0x74]);
+    // Swap the name bytes in place: same length, and CRC covers data only, so
+    // the archive stays structurally valid — only its name encoding changes.
+    const zip = buildSimpleZip([{ name: "aaaa.txt", data: Buffer.from("data", "utf8") }]);
+    const placeholder = Buffer.from("aaaa.txt", "utf8");
+    let at = zip.indexOf(placeholder);
+    while (at !== -1) {
+      cp866Name.copy(zip, at);
+      at = zip.indexOf(placeholder, at + 1);
+    }
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/not UTF-8/);
+    expect(r.body.error).toMatch(/Re-create the archive/);
+  });
+
+  test("plain ASCII names still import from archives with no UTF-8 flag (the common case)", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    const zip = buildSimpleZip([{ name: "src/App.jsx", data: Buffer.from("export default 1;", "utf8") }]);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(200);
+    expect(r.body.imported.map((x: { path: string }) => x.path)).toContain("src/App.jsx");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 26. Export → Import round trip (both sides were fixed separately: #923/#924)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("zip round trip: export → import", () => {
+  test("a project survives a full export/import cycle, Cyrillic paths included", async () => {
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RtSrc", stack: "react" })).body.project.id;
+
+    const files = [
+      { path: "src/компоненты/Таймер.jsx", content: "export default function Таймер(){ return null; }" },
+      { path: "src/App.jsx", content: "import T from './компоненты/Таймер';\nexport default T;" },
+      { path: "README.md", content: "# проект\nописание" },
+    ];
+    for (const f of files) {
+      const put = await request(app)
+        .put(`/api/devhub/projects/${src}/file?path=${encodeURIComponent(f.path)}`)
+        .send({ content: f.content, language: "javascript" });
+      expect(put.status).toBe(200);
+    }
+
+    const exported = await request(app)
+      .get(`/api/devhub/projects/${src}/export`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(exported.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RtDst", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exported.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    // Paths AND contents must match — a mangled name would still "import".
+    const listed = await request(app).get(`/api/devhub/projects/${dst}/files`);
+    const got: Record<string, string> = {};
+    for (const f of listed.body.files) got[f.path] = f.content;
+    for (const f of files) expect(got[f.path]).toBe(f.content);
+    expect(Object.keys(got).sort()).toEqual(files.map((f) => f.path).sort());
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 27. Real database provisioning (schema + role per project)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("database provisioning", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DbProj", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("503 with the env var named when provisioning is not configured", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const id = await proj(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/database/provision`).send({});
+    expect(r.status).toBe(503);
+    expect(r.body.envVar).toBe("DEVHUB_DB_ADMIN_URL");
+  });
+
+  test("refuses to provision on the platform's own database", async () => {
+    const { refusesPlatformDatabase } = await import("../src/lib/devhubDbProvision");
+    const same = "postgres://admin:x@db.internal:5432/aevion";
+    expect(refusesPlatformDatabase(same, "postgres://other:y@db.internal:5432/aevion")).toBe(true);
+    expect(refusesPlatformDatabase(same, "postgres://admin:x@projects.internal:5432/aevion")).toBe(false);
+    expect(refusesPlatformDatabase(same, undefined)).toBe(false);
+  });
+
+  test("derives safe identifiers and a scoped connection string", async () => {
+    const m = await import("../src/lib/devhubDbProvision");
+    const pid = "e35bc59c-56e1-4467-bc01-dc1cb5ed5abe";
+    expect(m.schemaNameFor(pid)).toBe("p_e35bc59c56e1");
+    expect(m.roleNameFor(pid)).toBe("u_e35bc59c56e1");
+    const url = m.buildProjectUrl("postgres://admin:pw@host:5432/db", "u_x", "s3cret", "p_x");
+    expect(url).toContain("u_x:s3cret@host:5432/db");
+    // URLSearchParams encodes the space as "+", so normalise before asserting.
+    expect(decodeURIComponent(url).replace(/\+/g, " ")).toContain("options=-c search_path=p_x");
+  });
+
+  test("creates role + schema, locks it out of public, applies the project's schema.sql", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      schemaSql: "CREATE TABLE IF NOT EXISTS todos (id serial primary key);",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      platformUrl: "postgres://admin:pw@platform.internal:5432/aevion",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.appliedSchemaSql).toBe(true);
+    const joined = executed.join(" | ");
+    expect(joined).toContain("CREATE ROLE u_aaaaaaaabbbb LOGIN PASSWORD");
+    expect(joined).toContain("CREATE SCHEMA IF NOT EXISTS p_aaaaaaaabbbb AUTHORIZATION u_aaaaaaaabbbb");
+    expect(joined).toContain("REVOKE ALL ON SCHEMA public FROM u_aaaaaaaabbbb");
+    expect(joined).toContain("SET ROLE u_aaaaaaaabbbb"); // DDL runs as the project, not as admin
+    expect(joined).toContain("RESET ROLE");
+    expect(r.databaseUrl).not.toContain("admin:pw@"); // admin credential never leaks to the project
+  });
+
+  test("rotates the password instead of failing when the role already exists", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [{ "?column?": 1 }] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed.join(" | ")).toContain("ALTER ROLE u_aaaaaaaabbbb WITH LOGIN PASSWORD");
+    expect(executed.join(" | ")).not.toContain("CREATE ROLE");
+  });
+
+  test("deprovision drops schema, owned objects and role", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.deprovisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim());
+        return { rows: [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed).toContain("DROP SCHEMA IF EXISTS p_aaaaaaaabbbb CASCADE");
+    expect(executed).toContain("DROP ROLE IF EXISTS u_aaaaaaaabbbb");
+  });
+});
+
+describe("deleting a project drops its database", () => {
+  test("no DATABASE_URL on the project → delete proceeds untouched", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoDb", stack: "next" });
+    const r = await request(app).delete(`/api/devhub/projects/${cr.body.project.id}`);
+    expect(r.status).toBe(200);
+    expect(r.body.databaseDropped).toBeUndefined();
+  });
+
+  test("if the drop fails the project is NOT deleted — no orphan schema left behind", async () => {
+    // A port nothing listens on: the real deprovision path fails fast, which
+    // is exactly the situation that used to silently orphan a schema.
+    process.env.DEVHUB_DB_ADMIN_URL = "postgres://admin:pw@127.0.0.1:1/pool";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DropFails", stack: "next" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/env`).send({ key: "DATABASE_URL", value: "postgres://u:p@h/db" });
+
+    const r = await request(app).delete(`/api/devhub/projects/${id}`);
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/could not be dropped/);
+    expect(r.body.hint).toMatch(/DELETE \/projects\/:id\/database/);
+
+    // Still there, so the user can retry instead of losing track of the schema.
+    const still = await request(app).get(`/api/devhub/projects/${id}`);
+    expect(still.status).toBe(200);
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+  }, 20_000);
+});

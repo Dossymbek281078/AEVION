@@ -21,7 +21,13 @@
 const fs = require("fs");
 const path = require("path");
 
-const CATALOG = path.resolve(__dirname, "../../frontend/src/lib/products.ts");
+// Путь к каталогу переопределяется переменной CATALOG_PATH — нужно для негативного
+// теста: подсовываем копию с намеренно испорченной ценой и убеждаемся, что скрипт
+// краснеет. Без такой проверки «16 OK» ничего не доказывает — зелёным может быть и
+// сломанный детектор (за это окно так случалось трижды).
+const CATALOG = process.env.CATALOG_PATH
+  ? path.resolve(process.env.CATALOG_PATH)
+  : path.resolve(__dirname, "../../frontend/src/lib/products.ts");
 
 /** Разбор каталога регуляркой: фронт и бэк — раздельные TS-проекты, импорта нет. */
 function readCatalog() {

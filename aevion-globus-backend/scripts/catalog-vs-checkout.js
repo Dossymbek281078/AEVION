@@ -13,10 +13,9 @@
  * Запуск:  node scripts/catalog-vs-checkout.js
  * Код возврата 1 — есть расхождения (годится для CI/еженедельного крона).
  *
- * ЧЕГО СКРИПТ НЕ ПРОВЕРЯЕТ (и честно об этом говорит вместо молчаливого «ок»):
- * чекауты LemonSqueezy рисуются джаваскриптом, из Node их текст не виден. Такие
- * позиции помечаются SKIP и требуют браузерной проверки (Playwright). Молча
- * засчитывать их успехом нельзя — именно так и рождается ложное «всё сходится».
+ * ОБА процессора проверяются без браузера: и Gumroad, и LemonSqueezy кладут данные
+ * товара прямо в HTML — Gumroad экранированным JSON с price_cents, LS объектом заказа
+ * с "price"/"is_subscription"/"interval".
  */
 
 const fs = require("fs");
@@ -33,10 +32,11 @@ function readCatalog() {
   while ((m = re.exec(src))) {
     items.push({ id: m[1], priceUsd: parseFloat(m[2]), billing: m[3] });
   }
-  const gumroad = new Set();
-  const gre = /GUM\("([^"]+)"\)/g;
-  while ((m = gre.exec(src))) gumroad.add(m[1]);
-  return items.map((i) => ({ ...i, processor: gumroad.has(i.id) ? "gumroad" : "lemonsqueezy" }));
+  // К каждой позиции — её реальная ссылка оплаты: у Gumroad permalink, у LS uuid варианта.
+  const links = {};
+  const lre = /id:\s*"([^"]+)",[\s\S]*?href:\s*(GUM|LS)\("([^"]+)"\)/g;
+  while ((m = lre.exec(src))) links[m[1]] = { processor: m[2] === "GUM" ? "gumroad" : "lemonsqueezy", ref: m[3] };
+  return items.map((i) => ({ ...i, ...(links[i.id] || { processor: "unknown", ref: null }) }));
 }
 
 async function checkGumroad(item) {
@@ -70,6 +70,43 @@ async function checkGumroad(item) {
   return problems.length ? { status: "FAIL", why: problems.join("; ") } : { status: "OK", why: "" };
 }
 
+async function checkLemonSqueezy(item) {
+  const url = `https://aevion.lemonsqueezy.com/checkout/buy/${item.ref}`;
+
+  // ⚠️ КОНТРИНТУИТИВНО, но воспроизведено 26.07.2026: LS отдаёт настоящую страницу
+  // только НЕ-браузерному User-Agent. С «Mozilla/5.0 Chrome» и вовсе без UA приходит
+  // 404 — причём телом на 261 КБ, то есть страница-обманка, а не пустой ответ.
+  // С «curl/8.7.1» приходит 200 и 282 КБ с объектом заказа. Не «упрощать» этот
+  // заголовок: без него скрипт выдаёт семь несуществующих 404.
+  const r = await fetch(url, {
+    headers: { Accept: "*/*", "User-Agent": "curl/8.7.1" },
+    redirect: "follow",
+  });
+  if (!r.ok) return { status: "FAIL", why: `чекаут отдал HTTP ${r.status}` };
+  const data = (await r.text()).replace(/&quot;/g, '"');
+
+  const problems = [];
+  const cents = Math.round(item.priceUsd * 100);
+
+  const priceMatch = data.match(/"price":\s*(\d+)\s*,\s*"is_subscription":\s*(true|false)/);
+  if (!priceMatch) {
+    return { status: "FAIL", why: "полей price/is_subscription нет — формат страницы изменился" };
+  }
+  const [, gotCents, isSub] = priceMatch;
+  if (Number(gotCents) !== cents) problems.push(`ожидалась цена ${cents}¢, в чекауте ${gotCents}¢`);
+
+  const interval = (data.match(/"interval":"([a-z]+)"/) || [])[1];
+  const monthly = isSub === "true" && interval === "month";
+  if (item.billing === "monthly" && !monthly) {
+    problems.push(`в каталоге помесячно, а чекаут: is_subscription=${isSub}, interval=${interval || "нет"}`);
+  }
+  if (item.billing === "once" && monthly) {
+    problems.push("в каталоге разовая покупка, а чекаут объявляет ежемесячную подписку");
+  }
+
+  return problems.length ? { status: "FAIL", why: problems.join("; ") } : { status: "OK", why: "" };
+}
+
 (async () => {
   const catalog = readCatalog();
   if (!catalog.length) {
@@ -85,20 +122,20 @@ async function checkGumroad(item) {
   const failures = [];
 
   for (const item of catalog) {
-    if (item.processor !== "gumroad") {
+    if (!item.ref) {
       skip++;
-      console.log(`SKIP  ${item.id.padEnd(10)} $${item.priceUsd} — чекаут LemonSqueezy рисуется JS, нужна браузерная проверка`);
+      console.log(`SKIP  ${item.id.padEnd(10)} ссылку оплаты в каталоге разобрать не удалось`);
       continue;
     }
     let res;
     try {
-      res = await checkGumroad(item);
+      res = item.processor === "gumroad" ? await checkGumroad(item) : await checkLemonSqueezy(item);
     } catch (e) {
       res = { status: "FAIL", why: `запрос не прошёл: ${e.message}` };
     }
     if (res.status === "OK") {
       ok++;
-      console.log(`OK    ${item.id.padEnd(10)} $${item.priceUsd} ${item.billing === "monthly" ? "/мес" : ""}`);
+      console.log(`OK    ${item.id.padEnd(10)} $${item.priceUsd}${item.billing === "monthly" ? "/мес" : ""}  (${item.processor})`);
     } else {
       fail++;
       failures.push(`${item.id}: ${res.why}`);
@@ -107,7 +144,7 @@ async function checkGumroad(item) {
   }
 
   console.log(
-    `\ncatalog-vs-checkout: ${ok} OK, ${fail} FAIL, ${skip} SKIP (LemonSqueezy — только через браузер)`,
+    `\ncatalog-vs-checkout: ${ok} OK, ${fail} FAIL, ${skip} SKIP`,
   );
   if (failures.length) {
     console.log("\nРасхождения:");

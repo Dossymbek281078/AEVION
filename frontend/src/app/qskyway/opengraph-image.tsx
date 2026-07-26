@@ -1,15 +1,16 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "QSkyway — navigation layer for the urban sky: 3D air taxi corridors routed against real FAA airspace ceilings and live METAR wind";
+export const alt = "QSkyway — navigation layer for the urban sky: air-taxi corridors routed against the rules three regulators actually publish (FAA, MLIT, AIP Kazakhstan)";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 // The card is the first thing anyone following the shared link sees, so it
-// advertises what is REAL rather than what is merely built: the two chips that
-// name an outside authority (FAA, METAR) carry the weight, and the illustrative
-// no-fly zones deliberately no longer appear here as if they were on par.
-const CHIPS = ["FAA airspace ceilings", "live METAR wind", "4D routing", "3D corridors", "height provenance", "QRight slots", "Ed25519-signed"];
+// advertises what is REAL rather than what is merely built: the chips that name
+// an outside authority carry the weight, and the illustrative no-fly zones
+// deliberately do not appear here as if they were on par. Three regulators, not
+// one — the spread of forms is the point, and naming only the FAA hid it.
+const CHIPS = ["FAA ceilings", "MLIT permission regime", "AIP Kazakhstan zone", "live METAR wind", "4D routing", "signed flight justification", "Bitcoin-anchored"];
 
 export default function QSkywayOg() {
   return new ImageResponse(
@@ -48,8 +49,8 @@ export default function QSkywayOg() {
             <span style={{ color: "#22d3ee" }}>for the urban sky</span>
           </div>
           <div style={{ fontSize: 26, color: "#c3d0e2", maxWidth: 1000, lineHeight: 1.4, display: "flex" }}>
-            3D air corridors for air taxis on real buildings in Astana, NYC &amp; Tokyo — routed against
-            the FAA&rsquo;s published airspace ceilings and live METAR wind, not illustrations.
+            Air-taxi corridors on real buildings in Astana, NYC &amp; Tokyo, routed against the rules
+            their regulators actually publish — as a feed, as a map layer, and as a legal document.
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             {CHIPS.map((m) => (

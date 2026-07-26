@@ -237,6 +237,11 @@ checkoutRouter.post("/session", async (req, res) => {
         });
         return res.json({
           url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId, ...paid.truth,
+          // Плательщик через PayBox платит В ТЕНГЕ — сумма в долларах ему ни о
+          // чём не говорит. Отдаём то, что реально уйдёт на счёт, в валюте
+          // списания: остальные поля truth остаются в USD как общая база.
+          chargedKzt: Math.round(kztCents) / 100,
+          chargeCurrency: "KZT",
         });
       } catch (e) {
         capture(e);

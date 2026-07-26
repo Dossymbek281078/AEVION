@@ -370,6 +370,19 @@ describe("веер в валютах — KZT это единственный ж�
     expect(annual.fan.applied).toBeCloseTo(addonTotal * FAN_RING_BASE[1], 1);
   });
 
+  it("сумма в тенге, которую увидит плательщик PayBox, считается от СКИДОЧНОЙ цены", () => {
+    // routes/checkout.ts конвертирует в тыйыны уже применённую сумму
+    // (charge(...).cents), а не прайс. Тест держит саму арифметику: если
+    // конвертировать до скидки, плательщик увидит на 3948 тг больше.
+    const q = buildQuoteWithFan({ ...args, currency: "USD" });
+    const kztCents = Math.round(Math.round(q.total * 100) * CURRENCY_RATES.KZT.rate);
+    const kztQuote = buildQuoteWithFan({ ...args, currency: "KZT" });
+    expect(kztCents / 100).toBeCloseTo(kztQuote.total, 0);
+    // И это меньше, чем без веера.
+    const noFan = buildQuoteWithFan({ ...args, ownedModules: [], currency: "KZT" });
+    expect(kztQuote.total).toBeLessThan(noFan.total);
+  });
+
   it("в EUR и RUB та же пропорция — валюта не создаёт скидку и не съедает её", () => {
     const usd = buildQuoteWithFan({ ...args, currency: "USD" });
     for (const cur of ["EUR", "RUB"] as const) {

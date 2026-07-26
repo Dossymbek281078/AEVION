@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { eventsStoreStatus } from "./routes/events";
 dotenv.config();
 
 import express from "express";
@@ -190,7 +191,22 @@ function healthPayload() {
     commit: BUILD_COMMIT,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
+    // Аналитика пишется в файл. Если её самое старое событие всегда моложе
+    // bootedAt выше — значит хранилище не переживает перезапуск, и метки
+    // utm из рассылки теряются на каждом деплое. Раньше это было видно
+    // только из переменных окружения; теперь видно отсюда. Счётчики и одна
+    // метка времени, без единого поля самих событий.
+    eventsStore: safeEventsStoreStatus(),
   };
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEventsStoreStatus() {
+  try {
+    return eventsStoreStatus();
+  } catch {
+    return { persistedByEnv: null, exists: null, count: null, oldest: null };
+  }
 }
 app.get("/health", (_req, res) => res.json(healthPayload()));
 app.get("/api/health", (_req, res) => res.json(healthPayload()));

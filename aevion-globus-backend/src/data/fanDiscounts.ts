@@ -56,6 +56,7 @@ import {
   type TierId,
 } from "./pricing";
 import { projects } from "./projects";
+import { normalizeTier } from "../lib/planGate";
 
 /* ───── Параметры веера (единственное место, где их можно менять) ───── */
 
@@ -421,6 +422,23 @@ export function computeFan(input: FanInput = {}): FanState {
   const currency: CurrencyCode = normalizeCurrency(input.currency);
   const rate = CURRENCY_RATES[currency].rate;
   const tier = input.tierId ? getTier(input.tierId) : null;
+  /**
+   * Тариф для вопроса «а это у него уже есть?» — через ту же нормализацию,
+   * что и пейвол (`planGate.normalizeTier`), а не по сырому `tier.id`.
+   *
+   * 🔴 Найдено прогоном 2026-07-26: `includedIn` НИ У ОДНОГО модуля не содержит
+   * `"pro"` — флагман Universe ($249.99) там просто не упомянут, он всеобъемлющий
+   * по `limits.modules: null`. Из-за сырого сравнения веер предлагал подписчику
+   * Universe **31 модуль к докупке** — ровно столько же, сколько бесплатному, —
+   * притом что доступ к ним у него уже есть. Самому дорогому покупателю
+   * продавали то, за что он уже заплатил.
+   *
+   * `normalizeTier` мапит `pro`/`business` → `full`, а `full`/`enterprise` —
+   * всеобъемлющие (см. `isModuleEntitled`). Берём готовое правило, а не пишем
+   * второе: два независимых представления о том, «что входит в тариф»,
+   * разъедутся при первой же правке прайса.
+   */
+  const coveredTier = tier ? normalizeTier(tier.id) : null;
   const notes: string[] = [];
 
   // Вход считаем ВРАЖДЕБНЫМ: сюда приходит тело HTTP-запроса, а эта функция
@@ -487,7 +505,7 @@ export function computeFan(input: FanInput = {}): FanState {
     const list = m.addonMonthly;
     if (typeof list !== "number" || list <= 0) continue; // бесплатные и on_request
     if (ownedKnown.includes(m.id)) continue; // уже куплен
-    if (tier && m.includedIn.includes(tier.id)) {
+    if (coveredTier && (coveredTier === "full" || coveredTier === "enterprise" || m.includedIn.includes(coveredTier))) {
       coveredByTier.push(m.id);
       continue;
     }

@@ -88,3 +88,35 @@ describe("движок веера не доверяет вызывающему",
     }
   });
 });
+
+/**
+ * 🔴 Всеобъемлющие тарифы не получают предложений «докупи».
+ *
+ * Найдено прогоном 2026-07-26: `includedIn` НИ У ОДНОГО модуля не содержит
+ * `"pro"` — Universe ($249.99) там просто не упомянут, он всеобъемлющий через
+ * `limits.modules: null`. Из-за сравнения по сырому `tier.id` веер предлагал
+ * подписчику Universe **31 модуль к докупке — ровно столько же, сколько
+ * бесплатному**. Самому дорогому покупателю продавали то, за что он заплатил.
+ *
+ * Правило берём готовое — `planGate.normalizeTier` (`pro`→`full`, а
+ * `full`/`enterprise` всеобъемлющи, см. `isModuleEntitled`), чтобы не завести
+ * второе представление о «что входит в тариф».
+ */
+describe("веер и всеобъемлющие тарифы", () => {
+  test("Universe/full/enterprise: докупать нечего", () => {
+    for (const tierId of ["pro", "full", "enterprise"] as const) {
+      const fan = computeFan({ tierId, owned: ["qsign"] });
+      expect(fan.offers.length, `${tierId}: предложено ${fan.offers.length} модулей к докупке`).toBe(0);
+      expect(fan.coveredByTier.length, `${tierId}: пустой coveredByTier`).toBeGreaterThan(20);
+    }
+  });
+
+  test("тарифы НИЖЕ всеобъемлющих предложения по-прежнему получают", () => {
+    // Без этой половины проверка выше проходила бы и при «веер выключен всем».
+    const medium = computeFan({ tierId: "medium", owned: ["qsign"] });
+    expect(medium.offers.length).toBeGreaterThan(5);
+    expect(medium.coveredByTier.length).toBeGreaterThan(5);
+    const free = computeFan({ tierId: "free", owned: ["qsign"] });
+    expect(free.offers.length).toBeGreaterThan(medium.offers.length);
+  });
+});

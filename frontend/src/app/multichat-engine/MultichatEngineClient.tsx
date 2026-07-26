@@ -405,12 +405,12 @@ const ROLES: Role[] = [
 ];
 
 const ROLE_COLORS: Record<Role, { bg: string; border: string; fg: string }> = {
-  General:    { bg: "rgba(94,234,212,0.18)",  border: "rgba(94,234,212,0.45)",  fg: T.accent },
-  Code:       { bg: "rgba(125,211,252,0.18)", border: "rgba(125,211,252,0.45)", fg: T.skyLight },
-  Finance:    { bg: "rgba(250,204,21,0.18)",  border: "rgba(250,204,21,0.45)",  fg: T.warnBright },
-  "IP/Legal": { bg: "rgba(196,181,253,0.18)", border: "rgba(196,181,253,0.45)", fg: T.brand },
-  Compliance: { bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.45)", fg: T.bad },
-  Translator: { bg: "rgba(134,239,172,0.18)", border: "rgba(134,239,172,0.45)", fg: T.good },
+  General:    { bg: T.tealFill18b,  border: T.tealEdge45b,  fg: T.accent },
+  Code:       { bg: T.violetFill18, border: T.violetEdge45, fg: T.skyLight },
+  Finance:    { bg: T.amberFill18,  border: T.amberEdge45,  fg: T.warnBright },
+  "IP/Legal": { bg: T.violetFill18b, border: T.violetEdge45b, fg: T.brand },
+  Compliance: { bg: T.redFill18b, border: T.redEdge45, fg: T.bad },
+  Translator: { bg: T.tealFill18, border: T.tealEdge45, fg: T.good },
 };
 
 const ROLE_SYSTEM_PROMPT: Record<Role, string> = {
@@ -821,8 +821,8 @@ function ProviderHealthStrip() {
         marginTop: 16,
         marginBottom: 16,
         borderRadius: 14,
-        border: "1px solid rgba(148,163,184,0.25)",
-        background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+        border: `1px solid ${T.violetEdge25}`,
+        background: `linear-gradient(180deg, ${T.indigoVeil96}, ${T.inkVeil96})`,
         padding: "14px 16px",
         color: T.text,
       }}
@@ -853,8 +853,8 @@ function ProviderHealthStrip() {
           style={{
             padding: "3px 9px",
             borderRadius: 7,
-            border: "1px solid rgba(94,234,212,0.4)",
-            background: "rgba(13,148,136,0.18)",
+            border: `1px solid ${T.tealEdge40}`,
+            background: T.greenFill18,
             color: T.accent,
             cursor: "pointer",
             fontSize: 10,
@@ -912,8 +912,8 @@ function ProviderHealthStrip() {
                   gap: 4,
                   padding: "9px 11px",
                   borderRadius: 10,
-                  border: `1px solid ${p.configured ? (p.reachable ? "rgba(34,197,94,0.35)" : "rgba(248,113,113,0.35)") : "rgba(100,116,139,0.35)"}`,
-                  background: "rgba(2,6,23,0.6)",
+                  border: `1px solid ${p.configured ? (p.reachable ? T.greenEdge35 : T.redEdge35) : T.indigoEdge35}`,
+                  background: T.inkVeil60,
                 }}
                 title={
                   p.configured
@@ -1054,8 +1054,8 @@ function MissionPresetGrid() {
           marginBottom: 16,
           padding: "12px 14px",
           borderRadius: 14,
-          border: "1px solid rgba(248,113,113,0.35)",
-          background: "rgba(127,29,29,0.18)",
+          border: `1px solid ${T.redEdge35}`,
+          background: T.redFill18,
           color: T.bad,
           fontSize: 12,
         }}
@@ -1073,8 +1073,8 @@ function MissionPresetGrid() {
           marginBottom: 16,
           padding: "12px 14px",
           borderRadius: 14,
-          border: "1px solid rgba(148,163,184,0.25)",
-          background: "rgba(15,23,42,0.7)",
+          border: `1px solid ${T.violetEdge25}`,
+          background: T.indigoVeil70,
           color: T.textMute,
           fontSize: 12,
         }}
@@ -1090,9 +1090,9 @@ function MissionPresetGrid() {
         marginTop: 16,
         marginBottom: 16,
         borderRadius: 14,
-        border: "1px solid rgba(124,58,237,0.35)",
+        border: `1px solid ${T.violetEdge35}`,
         background:
-          "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(45,29,84,0.45))",
+          `linear-gradient(180deg, ${T.indigoVeil96}, ${T.indigoEdge45})`,
         padding: "16px 18px",
         color: T.text,
       }}
@@ -1139,8 +1139,8 @@ function MissionPresetGrid() {
                 gap: 8,
                 padding: 12,
                 borderRadius: 12,
-                border: "1px solid rgba(124,58,237,0.3)",
-                background: "rgba(2,6,23,0.65)",
+                border: `1px solid ${T.violetEdge30}`,
+                background: T.inkVeil65,
               }}
             >
               <div
@@ -1172,8 +1172,8 @@ function MissionPresetGrid() {
                     margin: 0,
                     padding: "8px 10px",
                     borderRadius: 8,
-                    border: "1px solid rgba(94,234,212,0.25)",
-                    background: "rgba(15,23,42,0.85)",
+                    border: `1px solid ${T.tealEdge25}`,
+                    background: T.indigoVeil85,
                     color: T.textDim,
                     fontSize: 11,
                     lineHeight: 1.45,
@@ -1200,7 +1200,7 @@ function MissionPresetGrid() {
                     border: "none",
                     background:
                       launching === preset.id
-                        ? "rgba(124,58,237,0.4)"
+                        ? T.violetEdge40
                         : `linear-gradient(135deg, ${T.brandDeep}, ${T.indigo})`,
                     color: T.onAccent,
                     cursor: launching !== null ? "wait" : "pointer",
@@ -1220,8 +1220,8 @@ function MissionPresetGrid() {
                   style={{
                     padding: "7px 10px",
                     borderRadius: 8,
-                    border: "1px solid rgba(148,163,184,0.25)",
-                    background: "rgba(15,23,42,0.6)",
+                    border: `1px solid ${T.violetEdge25}`,
+                    background: T.indigoVeil60,
                     color: T.textMute,
                     cursor: "pointer",
                     fontWeight: 700,
@@ -1269,7 +1269,7 @@ export default function MultichatEnginePage() {
           <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
             AEVION Multichat Engine
           </h1>
-          <p style={{ margin: "8px 0 0", color: "rgba(226,232,240,0.82)", fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: "8px 0 0", color: T.neutralVeil82, fontSize: 14, lineHeight: 1.55 }}>
             One backend, five LLM providers, two modes. Pick a single-model chat for quick answers,
             or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.
           </p>
@@ -1291,14 +1291,14 @@ export default function MultichatEnginePage() {
             style={{
               textDecoration: "none",
               color: "inherit",
-              border: "1px solid rgba(15,23,42,0.12)",
+              border: `1px solid ${T.indigoFill12}`,
               borderRadius: 14,
               padding: 20,
               background: T.cardLight,
               display: "flex",
               flexDirection: "column",
               gap: 10,
-              boxShadow: "0 1px 4px rgba(15,23,42,0.04)",
+              boxShadow: `0 1px 4px ${T.indigoFill04}`,
               transition: "transform 0.12s",
             }}
           >
@@ -1340,14 +1340,14 @@ export default function MultichatEnginePage() {
             style={{
               textDecoration: "none",
               color: "inherit",
-              border: "1px solid rgba(124,58,237,0.35)",
+              border: `1px solid ${T.violetEdge35}`,
               borderRadius: 14,
               padding: 20,
-              background: `linear-gradient(180deg, ${T.onAccent} 0%, rgba(124,58,237,0.04) 100%)`,
+              background: `linear-gradient(180deg, ${T.onAccent} 0%, ${T.violetFill04} 100%)`,
               display: "flex",
               flexDirection: "column",
               gap: 10,
-              boxShadow: "0 1px 4px rgba(124,58,237,0.08)",
+              boxShadow: `0 1px 4px ${T.violetFill08}`,
               position: "relative",
             }}
           >
@@ -1362,9 +1362,9 @@ export default function MultichatEnginePage() {
                 textTransform: "uppercase",
                 padding: "3px 8px",
                 borderRadius: 999,
-                background: "rgba(124,58,237,0.12)",
+                background: T.violetFill12,
                 color: T.brandDeeper,
-                border: "1px solid rgba(124,58,237,0.3)",
+                border: `1px solid ${T.violetEdge30}`,
               }}
             >
               New
@@ -1454,7 +1454,7 @@ export default function MultichatEnginePage() {
               href={href}
               style={{
                 border: `1px solid ${T.brandGlow}`,
-                background: "rgba(124,58,237,0.06)",
+                background: T.violetFill06,
                 borderRadius: 8,
                 padding: "6px 10px",
                 textDecoration: "none",
@@ -1570,7 +1570,7 @@ function AgentPanel(props: {
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     const prev = target.style.boxShadow;
-    target.style.boxShadow = `0 0 0 3px ${T.warn}, 0 8px 32px rgba(251,191,36,0.35)`;
+    target.style.boxShadow = `0 0 0 3px ${T.warn}, 0 8px 32px ${T.amberEdge35}`;
     setTimeout(() => {
       target.style.boxShadow = prev;
     }, 1200);
@@ -1620,7 +1620,7 @@ function AgentPanel(props: {
         flexDirection: "column",
         borderRadius: 16,
         border: `1px solid ${colors.border}`,
-        background: "rgba(15,23,42,0.85)",
+        background: T.indigoVeil85,
         minHeight: 480,
         overflow: "hidden",
         transition: "box-shadow 220ms ease-out",
@@ -1633,8 +1633,8 @@ function AgentPanel(props: {
           display: "flex",
           alignItems: "center",
           gap: 10,
-          borderBottom: "1px solid rgba(51,65,85,0.5)",
-          background: "rgba(2,6,23,0.4)",
+          borderBottom: `1px solid ${T.indigoEdge50}`,
+          background: T.inkEdge40,
         }}
       >
         <select
@@ -1693,8 +1693,8 @@ function AgentPanel(props: {
                   style={{
                     padding: "2px 6px",
                     borderRadius: 6,
-                    border: "1px solid rgba(148,163,184,0.25)",
-                    background: "rgba(15,23,42,0.6)",
+                    border: `1px solid ${T.violetEdge25}`,
+                    background: T.indigoVeil60,
                     color: T.textDim,
                     fontSize: 10,
                     fontWeight: 700,
@@ -1720,8 +1720,8 @@ function AgentPanel(props: {
                     style={{
                       padding: "2px 6px",
                       borderRadius: 6,
-                      border: "1px solid rgba(148,163,184,0.25)",
-                      background: "rgba(15,23,42,0.6)",
+                      border: `1px solid ${T.violetEdge25}`,
+                      background: T.indigoVeil60,
                       color: T.textDim,
                       fontSize: 10,
                       fontWeight: 700,
@@ -1752,8 +1752,8 @@ function AgentPanel(props: {
             width: 28,
             height: 28,
             borderRadius: 8,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(15,23,42,0.6)",
+            border: `1px solid ${T.violetEdge25}`,
+            background: T.indigoVeil60,
             color: T.textMute,
             cursor: "pointer",
             fontWeight: 800,
@@ -1772,8 +1772,8 @@ function AgentPanel(props: {
           gap: 6,
           alignItems: "center",
           padding: "6px 10px",
-          borderBottom: "1px solid rgba(51,65,85,0.4)",
-          background: "rgba(2,6,23,0.45)",
+          borderBottom: `1px solid ${T.indigoEdge40}`,
+          background: T.inkEdge45,
           fontSize: 11,
         }}
       >
@@ -1784,10 +1784,10 @@ function AgentPanel(props: {
           style={{
             padding: "3px 8px",
             borderRadius: 6,
-            border: `1px solid ${agent.customSystemPrompt?.trim() ? "rgba(251,191,36,0.5)" : "rgba(148,163,184,0.25)"}`,
+            border: `1px solid ${agent.customSystemPrompt?.trim() ? T.amberEdge50 : T.violetEdge25}`,
             background: agent.customSystemPrompt?.trim()
-              ? "rgba(251,191,36,0.12)"
-              : "rgba(15,23,42,0.55)",
+              ? T.amberFill12
+              : T.indigoVeil55,
             color: agent.customSystemPrompt?.trim() ? T.warn : T.textMute,
             cursor: "pointer",
             fontWeight: 700,
@@ -1804,8 +1804,8 @@ function AgentPanel(props: {
           style={{
             padding: "3px 8px",
             borderRadius: 6,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(15,23,42,0.55)",
+            border: `1px solid ${T.violetEdge25}`,
+            background: T.indigoVeil55,
             color: agent.messages.length === 0 ? T.line : T.textDim,
             cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
             fontWeight: 700,
@@ -1821,8 +1821,8 @@ function AgentPanel(props: {
           style={{
             padding: "3px 8px",
             borderRadius: 6,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(15,23,42,0.55)",
+            border: `1px solid ${T.violetEdge25}`,
+            background: T.indigoVeil55,
             color: agent.messages.length === 0 ? T.line : T.textDim,
             cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
             fontWeight: 700,
@@ -1839,8 +1839,8 @@ function AgentPanel(props: {
             style={{
               padding: "3px 8px",
               borderRadius: 6,
-              border: "1px solid rgba(196,181,253,0.45)",
-              background: "rgba(196,181,253,0.12)",
+              border: `1px solid ${T.violetEdge45b}`,
+              background: T.violetFill12b,
               color: T.brand,
               cursor: "pointer",
               fontWeight: 700,
@@ -1858,8 +1858,8 @@ function AgentPanel(props: {
             style={{
               padding: "3px 8px",
               borderRadius: 6,
-              border: "1px solid rgba(94,234,212,0.45)",
-              background: "rgba(13,148,136,0.18)",
+              border: `1px solid ${T.tealEdge45b}`,
+              background: T.greenFill18,
               color: agent.busy ? T.line : T.accent,
               cursor: agent.busy ? "not-allowed" : "pointer",
               fontWeight: 700,
@@ -1893,8 +1893,8 @@ function AgentPanel(props: {
         <div
           style={{
             padding: 10,
-            borderBottom: "1px solid rgba(51,65,85,0.4)",
-            background: "rgba(2,6,23,0.55)",
+            borderBottom: `1px solid ${T.indigoEdge40}`,
+            background: T.inkVeil55,
           }}
         >
           <div style={{ fontSize: 10, color: T.textMute, marginBottom: 6, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
@@ -1910,8 +1910,8 @@ function AgentPanel(props: {
               boxSizing: "border-box",
               padding: 8,
               borderRadius: 8,
-              border: "1px solid rgba(148,163,184,0.25)",
-              background: "rgba(15,23,42,0.7)",
+              border: `1px solid ${T.violetEdge25}`,
+              background: T.indigoVeil70,
               color: T.textBright,
               fontSize: 12,
               lineHeight: 1.4,
@@ -1930,8 +1930,8 @@ function AgentPanel(props: {
               style={{
                 padding: "5px 12px",
                 borderRadius: 8,
-                border: "1px solid rgba(94,234,212,0.45)",
-                background: "linear-gradient(135deg, rgba(13,148,136,0.5), rgba(14,165,233,0.45))",
+                border: `1px solid ${T.tealEdge45b}`,
+                background: `linear-gradient(135deg, ${T.greenEdge50}, ${T.skyEdge45})`,
                 color: T.onAccent,
                 cursor: "pointer",
                 fontWeight: 800,
@@ -1951,8 +1951,8 @@ function AgentPanel(props: {
               style={{
                 padding: "5px 12px",
                 borderRadius: 8,
-                border: "1px solid rgba(148,163,184,0.25)",
-                background: "rgba(15,23,42,0.55)",
+                border: `1px solid ${T.violetEdge25}`,
+                background: T.indigoVeil55,
                 color: T.textMute,
                 cursor: "pointer",
                 fontWeight: 700,
@@ -1970,7 +1970,7 @@ function AgentPanel(props: {
               style={{
                 padding: "5px 12px",
                 borderRadius: 8,
-                border: "1px solid rgba(148,163,184,0.25)",
+                border: `1px solid ${T.violetEdge25}`,
                 background: "transparent",
                 color: T.textMute,
                 cursor: "pointer",
@@ -1996,7 +1996,7 @@ function AgentPanel(props: {
           gap: 10,
           minHeight: 280,
           maxHeight: 460,
-          background: "rgba(2,6,23,0.55)",
+          background: T.inkVeil55,
         }}
       >
         {visibleMessages.length === 0 ? (
@@ -2021,8 +2021,8 @@ function AgentPanel(props: {
                 marginTop: 14,
                 padding: "8px 10px",
                 borderRadius: 8,
-                border: "1px solid rgba(94,234,212,0.25)",
-                background: "rgba(13,148,136,0.08)",
+                border: `1px solid ${T.tealEdge25}`,
+                background: T.greenFill08,
                 fontSize: 11,
                 color: T.textMute,
                 lineHeight: 1.6,
@@ -2087,8 +2087,8 @@ function AgentPanel(props: {
                       order: 2,
                       padding: "3px 8px",
                       borderRadius: 8,
-                      border: "1px solid rgba(94,234,212,0.4)",
-                      background: "rgba(15,23,42,0.85)",
+                      border: `1px solid ${T.tealEdge40}`,
+                      background: T.indigoVeil85,
                       color: T.accent,
                       cursor: "pointer",
                       fontSize: 10,
@@ -2109,8 +2109,8 @@ function AgentPanel(props: {
                     style={{
                       padding: "3px 8px",
                       borderRadius: 8,
-                      border: "1px solid rgba(94,234,212,0.4)",
-                      background: "rgba(15,23,42,0.85)",
+                      border: `1px solid ${T.tealEdge40}`,
+                      background: T.indigoVeil85,
                       color: T.accent,
                       cursor: "pointer",
                       fontSize: 10,
@@ -2132,13 +2132,13 @@ function AgentPanel(props: {
                     background:
                       mm.role === "user"
                         ? `linear-gradient(135deg, ${T.accentDeep}, ${T.sky})`
-                        : "rgba(30,41,59,0.85)",
+                        : T.indigoVeil85b,
                     color: T.textBright,
                     border: accent
                       ? `1px solid ${accent}`
                       : mm.role === "user"
                       ? "none"
-                      : "1px solid rgba(71,85,105,0.5)",
+                      : `1px solid ${T.indigoEdge50b}`,
                     fontSize: 13,
                     lineHeight: 1.55,
                     whiteSpace: "pre-wrap",
@@ -2164,7 +2164,7 @@ function AgentPanel(props: {
                         cursor: "pointer",
                         textDecoration: "underline",
                         textUnderlineOffset: 3,
-                        textDecorationColor: "rgba(251,191,36,0.35)",
+                        textDecorationColor: T.amberEdge35,
                         fontFamily: "inherit",
                       }}
                     >
@@ -2188,8 +2188,8 @@ function AgentPanel(props: {
               style={{
                 padding: "9px 12px",
                 borderRadius: "12px 12px 12px 4px",
-                background: "rgba(30,41,59,0.85)",
-                border: "1px solid rgba(71,85,105,0.5)",
+                background: T.indigoVeil85b,
+                border: `1px solid ${T.indigoEdge50b}`,
                 display: "inline-flex",
                 gap: 4,
                 alignItems: "center",
@@ -2222,8 +2222,8 @@ function AgentPanel(props: {
           display: "flex",
           gap: 8,
           alignItems: "flex-end",
-          borderTop: "1px solid rgba(51,65,85,0.5)",
-          background: "rgba(2,6,23,0.55)",
+          borderTop: `1px solid ${T.indigoEdge50}`,
+          background: T.inkVeil55,
         }}
       >
         {(() => {
@@ -2246,10 +2246,10 @@ function AgentPanel(props: {
                 minWidth: 180,
                 padding: 4,
                 borderRadius: 10,
-                border: "1px solid rgba(94,234,212,0.45)",
-                background: "rgba(2,6,23,0.95)",
+                border: `1px solid ${T.tealEdge45b}`,
+                background: T.inkVeil95,
                 backdropFilter: "blur(8px)",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                boxShadow: `0 8px 24px ${T.inkEdge50}`,
               }}
             >
               <div
@@ -2281,7 +2281,7 @@ function AgentPanel(props: {
                     borderRadius: 6,
                     border: "1px solid transparent",
                     background:
-                      i === safeIdx ? "rgba(94,234,212,0.15)" : "transparent",
+                      i === safeIdx ? T.tealFill15 : "transparent",
                     color: i === safeIdx ? T.accent : T.textDim,
                     cursor: "pointer",
                     fontSize: 12,
@@ -2352,8 +2352,8 @@ function AgentPanel(props: {
             resize: "none",
             padding: "8px 10px",
             borderRadius: 10,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(15,23,42,0.7)",
+            border: `1px solid ${T.violetEdge25}`,
+            background: T.indigoVeil70,
             color: T.textBright,
             fontSize: 13,
             lineHeight: 1.4,
@@ -2371,7 +2371,7 @@ function AgentPanel(props: {
             border: "none",
             background:
               agent.busy || !input.trim()
-                ? "rgba(94,234,212,0.18)"
+                ? T.tealFill18b
                 : `linear-gradient(135deg, ${T.accentDeep}, ${T.sky})`,
             color: agent.busy || !input.trim() ? T.line : T.onAccent,
             fontWeight: 800,
@@ -2391,7 +2391,7 @@ function AgentPanel(props: {
           fontSize: 10,
           color: T.textFaded,
           letterSpacing: "0.02em",
-          background: "rgba(2,6,23,0.55)",
+          background: T.inkVeil55,
           display: "flex",
           flexWrap: "wrap",
           gap: 6,
@@ -2405,7 +2405,7 @@ function AgentPanel(props: {
             style={{
               padding: "1px 6px",
               borderRadius: 6,
-              background: "rgba(71,85,105,0.35)",
+              background: T.indigoEdge35b,
               color: T.textDim,
               fontFamily: "ui-monospace, SFMono-Regular, monospace",
             }}

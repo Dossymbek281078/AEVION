@@ -328,7 +328,7 @@ export default function DevHubPage() {
                 Studio Pro — unlock the full IDE
               </p>
               <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "4px 0 0" }}>
-                50 AI videos · 200 images · unlimited deploys · your own *.aevion.build subdomain · team collaborators
+                50 AI videos · 200 images · unlimited deploys · public *.pages.dev URL · team collaborators
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -383,7 +383,7 @@ export default function DevHubPage() {
         }}>
           <div style={{ maxWidth: 640 }}>
             <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
-              🌐 Deploy → your own <span style={{ fontFamily: "monospace" }}>&lt;project&gt;.aevion.build</span>
+              🌐 Deploy → живой публичный адрес за один клик
             </p>
             <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
               One click deploys a Static project to Cloudflare's edge and provisions a real subdomain.

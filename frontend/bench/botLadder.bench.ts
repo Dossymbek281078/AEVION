@@ -63,7 +63,9 @@ const ADJUDICATE_CP = 300;
 
 async function match(a: number, b: number, games: number) {
   let pts = 0, mates = 0, adjudicated = 0;
+  const results: number[] = []; // per-game score for `a`, needed for the error bar
   for (let n = 0; n < games; n++) {
+    const before = pts;
     const g = new Chess();
     const aIsWhite = n % 2 === 0; // alternate colours so neither side keeps the first move
     while (!g.isGameOver() && g.history().length < MAX_PLY) {
@@ -80,12 +82,33 @@ async function match(a: number, b: number, games: number) {
       else if (cp <= -ADJUDICATE_CP) { adjudicated++; }
       else pts += 0.5;
     }
+    results.push(pts - before);
   }
-  return { pts, mates, adjudicated };
+  return { pts, mates, adjudicated, results };
 }
 
 /** Elo difference a score rate implies. */
 const impliedElo = (s: number) => (s <= 0 ? -Infinity : s >= 1 ? Infinity : -400 * Math.log10(1 / s - 1));
+
+/* Standard error of the mean score over the individual game results. A match
+   this short is mostly noise, and a bare point estimate invites reading far
+   more into it than it can carry — so every implied-Elo figure is reported
+   with the range its own sample supports. */
+function stdErr(results: number[]): number {
+  const n = results.length;
+  if (n < 2) return Infinity;
+  const mean = results.reduce((a, b) => a + b, 0) / n;
+  const variance = results.reduce((a, x) => a + (x - mean) ** 2, 0) / (n - 1);
+  return Math.sqrt(variance / n);
+}
+
+const clamp = (x: number) => Math.min(0.999, Math.max(0.001, x));
+const eloRange = (score: number, se: number): string => {
+  if (!isFinite(se)) return "too few games to bound";
+  const lo = impliedElo(clamp(score - 1.96 * se));
+  const hi = impliedElo(clamp(score + 1.96 * se));
+  return `${lo.toFixed(0)}..${hi.toFixed(0)} Elo (95%)`;
+};
 
 describe("bot ladder", () => {
   it("does the advertised Elo gap show up in actual play?", async () => {
@@ -103,8 +126,15 @@ describe("bot ladder", () => {
       const expected = 1 / (1 + Math.pow(10, -gap / 400));
       say(`${NAMES[a]} vs ${NAMES[b]}`);
       say(`  score ${r.pts}/${GAMES} = ${(score * 100).toFixed(0)}%  (mates ${r.mates}, adjudicated ${r.adjudicated})`);
+      const se = stdErr(r.results);
+      const consistent = Math.abs(score - expected) <= 1.96 * se;
       say(`  advertised gap ${gap} Elo -> expected ${(expected * 100).toFixed(0)}%`);
-      say(`  gap implied by play: ${impliedElo(score).toFixed(0)} Elo\n`);
+      say(`  gap implied by play: ${impliedElo(score).toFixed(0)} Elo, range ${eloRange(score, se)}`);
+      say(`  verdict: ${consistent
+        ? "consistent with the advertised gap — this sample cannot tell them apart"
+        : "DIFFERS from the advertised gap beyond this sample's noise"}\n`);
     }
+    say(`A ${GAMES}-game match is mostly noise: at a 85% score the 95% range spans`);
+    say(`roughly 100..1200 Elo. Treat a run as a smoke test, not as a rating.`);
   }, 3_000_000);
 });

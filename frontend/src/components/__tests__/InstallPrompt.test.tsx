@@ -42,6 +42,25 @@ describe("InstallPrompt", () => {
     expect(region.style.right).toBe("");
   });
 
+  // Any fixed banner covers a strip of the page while it is up. Moving it only
+  // changes which content it sits on, so it retires itself instead.
+  it("retires itself so it does not sit over page content indefinitely", () => {
+    vi.useFakeTimers();
+    try {
+      render(<InstallPrompt />);
+      const event: Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome: "accepted" | "dismissed" }> } =
+        new Event("beforeinstallprompt", { cancelable: true });
+      event.prompt = async () => {};
+      event.userChoice = Promise.resolve({ outcome: "accepted" as const });
+      act(() => { window.dispatchEvent(event); });
+      expect(screen.queryByRole("region", { name: "PWA install prompt" })).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(12_000); });
+      expect(screen.queryByRole("region", { name: "PWA install prompt" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hides itself when localStorage flag is set", () => {
     localStorage.setItem("aevion_install_dismissed_v1", "1");
     const { container } = render(<InstallPrompt />);

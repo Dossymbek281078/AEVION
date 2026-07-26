@@ -40,6 +40,17 @@ export function InstallPrompt() {
     };
   }, []);
 
+  // A fixed banner covers a strip of the page for as long as it is on screen —
+  // moving it left only changed which column it sat on. It is a nudge, not a
+  // permanent control, so it retires itself: the user gets one clear offer and
+  // the page is theirs again. Dismissal is not persisted here (that is what the
+  // × does) so a later visit can still offer install once.
+  useEffect(() => {
+    if (!deferred || hidden) return;
+    const t = setTimeout(() => setHidden(true), 12_000);
+    return () => clearTimeout(t);
+  }, [deferred, hidden]);
+
   if (!deferred || hidden) return null;
 
   const install = async () => {

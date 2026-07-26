@@ -42,7 +42,25 @@ function readCatalog() {
   const links = {};
   const lre = /id:\s*"([^"]+)",[\s\S]*?href:\s*(GUM|LS)\("([^"]+)"\)/g;
   while ((m = lre.exec(src))) links[m[1]] = { processor: m[2] === "GUM" ? "gumroad" : "lemonsqueezy", ref: m[3] };
-  return items.map((i) => ({ ...i, ...(links[i.id] || { processor: "unknown", ref: null }) }));
+  // Есть ли у позиции предупреждение (Product.notice) — нужно, чтобы поймать модуль,
+  // который на своей странице объявил себя демонстрацией, а на витрине об этом молчит.
+  //
+  // Режем исходник ПО ГРАНИЦАМ позиций, а не ищем notice регуляркой от id: жадный
+  // поиск съедал куски файла и пропускал позиции, из-за чего первая версия выдала два
+  // ложных FAIL ровно на тех модулях, где предупреждение как раз стоит. `id: "` —
+  // первое поле каждого объекта, поэтому split по нему даёт ровно один блок на товар
+  // (в интерфейсе `id: string;` кавычки нет, туда не попадём).
+  const noticeIds = new Set();
+  for (const segment of src.split(/id:\s*"/).slice(1)) {
+    const id = segment.slice(0, segment.indexOf('"'));
+    if (id && /\bnotice:/.test(segment)) noticeIds.add(id);
+  }
+
+  return items.map((i) => ({
+    ...i,
+    ...(links[i.id] || { processor: "unknown", ref: null }),
+    hasNotice: noticeIds.has(i.id),
+  }));
 }
 
 async function checkGumroad(item) {
@@ -113,6 +131,37 @@ async function checkLemonSqueezy(item) {
   return problems.length ? { status: "FAIL", why: problems.join("; ") } : { status: "OK", why: "" };
 }
 
+/**
+ * Страницы модулей. Демо-баннер живёт НЕ на чекауте, а на самой странице продукта,
+ * поэтому сверять надо её. 26.07.2026 /qpaynet и /qcontract объявляли «Demonstration
+ * only», продаваясь помесячно как рабочие, — цена и периодичность у них при этом
+ * сходились идеально, то есть проверкой чекаута такое не ловится в принципе.
+ */
+const MODULE_PAGES = {
+  devhub: "/devhub",
+  smeta: "/smeta-trainer",
+  qventure: "/qventure",
+  bureau: "/bureau",
+  qpaynet: "/qpaynet",
+  cyberchess: "/cyberchess",
+  qcontract: "/qcontract",
+};
+
+const DEMO_MARKERS = /demonstration only|not a licensed|not legal advice|educational use/i;
+
+/** null — претензий нет; строка — что именно не сходится. */
+async function checkDemoDisclosure(item) {
+  const page = MODULE_PAGES[item.id];
+  if (!page) return null;
+  const r = await fetch(`https://aevion.vercel.app${page}`, { headers: { Accept: "text/html" } });
+  if (!r.ok) return `страница модуля ${page} отдала HTTP ${r.status}`;
+  const text = (await r.text()).replace(/<[^>]+>/g, " ");
+  if (DEMO_MARKERS.test(text) && !item.hasNotice) {
+    return `страница ${page} объявляет демо-режим, а на витрине предупреждения нет`;
+  }
+  return null;
+}
+
 (async () => {
   const catalog = readCatalog();
   if (!catalog.length) {
@@ -139,6 +188,17 @@ async function checkLemonSqueezy(item) {
     } catch (e) {
       res = { status: "FAIL", why: `запрос не прошёл: ${e.message}` };
     }
+    // Цена сошлась — но модуль всё ещё может втихую продаваться как рабочий,
+    // объявляя себя демонстрацией на собственной странице.
+    if (res.status === "OK") {
+      try {
+        const demo = await checkDemoDisclosure(item);
+        if (demo) res = { status: "FAIL", why: demo };
+      } catch (e) {
+        res = { status: "FAIL", why: `страницу модуля проверить не удалось: ${e.message}` };
+      }
+    }
+
     if (res.status === "OK") {
       ok++;
       console.log(`OK    ${item.id.padEnd(10)} $${item.priceUsd}${item.billing === "monthly" ? "/мес" : ""}  (${item.processor})`);

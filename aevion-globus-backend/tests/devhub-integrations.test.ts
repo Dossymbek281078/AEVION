@@ -3849,3 +3849,32 @@ describe("provider realities: retired TTS model, empty video balance", () => {
     delete process.env.REPLICATE_API_TOKEN;
   });
 });
+
+describe("realism pass shared with QReal", () => {
+  test("video prompts carry QReal's realism directives by default", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p1", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a barista pours milk" });
+    expect(r.status).toBe(200);
+    expect(r.body.realism).toBe(true);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    // Same text QReal renders with — imported, not duplicated.
+    const { REALISM_DIRECTIVES } = await import("../src/services/qreal/directives");
+    expect(sent.input.prompt).toContain("a barista pours milk");
+    expect(sent.input.prompt).toContain(REALISM_DIRECTIVES);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("realism:false leaves a stylised prompt untouched", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p2", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "flat 2d cartoon fox", realism: false });
+    expect(r.body.realism).toBe(false);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(sent.input.prompt).toBe("flat 2d cartoon fox");
+    expect(sent.input.prompt).not.toMatch(/ARRI Alexa/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});

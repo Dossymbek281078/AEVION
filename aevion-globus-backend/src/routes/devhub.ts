@@ -5723,7 +5723,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 devhubRouter.post("/media/video", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt } = req.body || {};
+  const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt, realism } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
   }
@@ -5757,11 +5757,22 @@ devhubRouter.post("/media/video", async (req, res) => {
   }
   const resolvedModel = chosen.id;
 
+  // The realism pass QReal built (services/qreal/directives.ts) is the whole
+  // difference between "looks generated" and "looks filmed": camera body and
+  // shutter, skin subsurface scattering, irregular blinks, handheld
+  // micro-jitter, real room acoustics. Imported, never copied — a second copy
+  // would drift and QReal's benchmark would stop measuring what production
+  // actually sends. Opt out with realism:false for stylised or animated shots,
+  // where describing a physical camera fights the prompt.
+  const { REALISM_DIRECTIVES } = await import("../services/qreal/directives");
+  const wantsRealism = realism !== false;
+  const finalPrompt = wantsRealism ? `${prompt.trim()} ${REALISM_DIRECTIVES}` : prompt.trim();
+
   try {
     // Each model has its own input schema — the previous code sent num_frames
     // and width/height to models that accept neither, so they were dropped.
     const input: Record<string, any> = chosen.toInput({
-      prompt: prompt.trim(),
+      prompt: finalPrompt,
       imageUrl,
       duration,
       aspectRatio,
@@ -5810,6 +5821,7 @@ devhubRouter.post("/media/video", async (req, res) => {
       model: chosen.id,
       modelLabel: chosen.label,
       audio: chosen.audio,
+      realism: wantsRealism,
       creditsUsed: 1,
       creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1,
     });

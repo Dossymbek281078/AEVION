@@ -66,7 +66,11 @@ async function run() {
     const body = r.body || {};
     const arr = body.items ?? body.runs ?? body.claims ?? body.assessments
               ?? body.prompts ?? body.personas ?? body.posts ?? body.ideas
-              ?? body.tracks ?? body.capsules ?? body.projects;
+              ?? body.tracks ?? body.capsules ?? body.projects
+              // StartupX wraps its collection as {success, data:{listings}} — without
+              // this it silently fell through to the "object shape" branch and the
+              // list assertion never actually looked at a list.
+              ?? body.data?.listings;
     if (r.status === 200) {
       if (Array.isArray(arr)) {
         ok(`${m.name} list`, `${m.list} items=${arr.length}`);

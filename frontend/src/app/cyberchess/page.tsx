@@ -4598,8 +4598,20 @@ export default function CyberChessPage(){
             // The await let the board move on — re-check before committing.
             if(cancelled||game.fen()!==fenAtTrigger){done();return}
             if(uci&&uci.length>=4){
-              exec(uci.slice(0,2) as Square,uci.slice(2,4) as Square,(uci.length>4?uci[4]:undefined) as any,false);
-              done();return;
+              const bFrom=uci.slice(0,2) as Square,bTo=uci.slice(2,4) as Square;
+              const bPr=(uci.length>4?uci[4]:undefined) as "q"|"r"|"b"|"n"|undefined;
+              // The book is keyed on placement+turn+castling and ignores the
+              // en-passant square, so a transposed position can match an entry
+              // whose continuation is an en-passant capture that is not legal
+              // here. exec() drops an illegal move silently, and this effect
+              // only re-runs when the board changes — so playing one would
+              // leave the bot simply never moving. Verify, else play it out.
+              let bookLegal=false;
+              try{bookLegal=!!new Chess(fenAtTrigger).move({from:bFrom,to:bTo,promotion:bPr||"q"})}catch{bookLegal=false}
+              if(bookLegal){
+                exec(bFrom,bTo,bPr,false);
+                done();return;
+              }
             }
           }catch{/* book unavailable → play it out */}
           if(cancelled||game.fen()!==fenAtTrigger){done();return}

@@ -196,7 +196,10 @@ async function main() {
   assert(asN.minCeilingM === 0 && asN.maxCeilingM > 0, "[nyc] ceilings span from no-auto-authorization to a real limit", `${asN?.minCeilingM}–${asN?.maxCeilingM}m`);
   // Cities without an open regulator feed must say so rather than inventing one.
   const cityAst = await jget("/api/qskyway/city?city=astana");
-  assert(cityAst.json?.airspace?.available === false, "[astana] no regulator feed is reported honestly, not faked");
+  assert(cityAst.json?.airspace?.available === false, "[astana] absence of a CEILING grid is reported honestly, not faked");
+  // The note must say which thing is missing. Claiming "no regulator source"
+  // for a city that sits inside a published prohibited zone was false.
+  assert(!/не найдено/.test(cityAst.json?.airspace?.note ?? "") && /permission/.test(cityAst.json?.airspace?.note ?? ""), "[astana] the note names the missing ceiling, not a missing regulator", (cityAst.json?.airspace?.note ?? "").slice(0, 60));
 
   // Advisory (default) mode must not have changed routability — the verdict is
   // added information, not a new restriction.

@@ -205,7 +205,11 @@ export function airspaceSummary(cityId: string, city: CityData) {
   if (!src) {
     return {
       available: false as const,
-      note: "Открытого фида регулятора для этого города не найдено — регуляторный потолок не наложен (запретные зоны остаются иллюстративными).",
+      // Says what is missing (a CEILING grid), not "no regulator" — both cities
+      // that hit this branch are in fact governed, just by a different kind of
+      // rule, and the caller sees it in the sibling `permission` block. The old
+      // wording claimed no source was found and was false for both.
+      note: "Сетку потолков высоты регулятор этого города не публикует, поэтому высотного ограничения здесь нет. Это НЕ значит, что города нет правил — см. блок permission рядом.",
     };
   }
   const field = ceilingField(cityId, city);

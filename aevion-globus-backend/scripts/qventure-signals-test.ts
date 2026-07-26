@@ -256,6 +256,24 @@ const tamReversed = parsePlanSignals("€2B to €4B TAM in the EU.");
 ok("'€2B to €4B TAM' takes the floor, not the ceiling",
   tamReversed.bottomUpTamUsd !== null && tamReversed.bottomUpTamUsd < 3e9, String(tamReversed.bottomUpTamUsd));
 ok("a plain TAM is untouched", parsePlanSignals("TAM of $12B addressable market.").bottomUpTamUsd === 12e9);
+// The conservative end is not always the low one: a longer payback and a higher
+// churn are the worse readings, so a band on those takes its high end.
+const ratioBand = parsePlanSignals("LTV/CAC of 3-5x across cohorts.");
+ok("an LTV/CAC band takes the low end", ratioBand.ltvCacRatio === 3, String(ratioBand.ltvCacRatio));
+const pbBand = parsePlanSignals("Payback of 9-12 months.");
+ok("a payback band takes the LONGER end", pbBand.paybackMonths === 12, String(pbBand.paybackMonths));
+ok("the payback band says which end it used", pbBand.parseNotes.some((n) => /longer, conservative/.test(n)));
+const churnBand = parsePlanSignals("Churn of 2-3% monthly.");
+ok("a churn band takes the HIGHER end", churnBand.churnPct === 3, String(churnBand.churnPct));
+ok("a churn band keeps its period", churnBand.churnPeriod === "monthly", String(churnBand.churnPeriod));
+const annualChurnBand = parsePlanSignals("annual churn between 15 and 20%");
+ok("an annual churn band normalizes from the high end",
+  annualChurnBand.churnPct === 20 && annualChurnBand.churnMonthlyPct !== null && annualChurnBand.churnMonthlyPct < 2.5,
+  `${annualChurnBand.churnPct}/${annualChurnBand.churnMonthlyPct}`);
+ok("plain ratio, payback and churn are untouched",
+  parsePlanSignals("LTV:CAC of 4:1.").ltvCacRatio === 4
+  && parsePlanSignals("8 month payback.").paybackMonths === 8
+  && parsePlanSignals("3% monthly churn.").churnPct === 3);
 ok("the range assumption reaches the report",
   analyze({ ...base, description: "SaaS with ARR between $2M and $4M depending on renewals, 500 customers." })
     .assumptions.some((a) => /low end/.test(a)));

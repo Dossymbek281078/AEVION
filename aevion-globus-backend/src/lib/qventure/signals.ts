@@ -308,8 +308,26 @@ export function parsePlanSignals(text: string): PlanSignals {
     if (isFinite(m) && m > 0 && m <= 100) s.grossMarginPct = m;
   }
 
-  // ── LTV:CAC ratio stated directly: "LTV:CAC of 4:1" / "LTV/CAC 3.5" ──
-  const ratio = firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?::\s*1)?`, "i"));
+  // ── LTV:CAC ratio stated directly: "LTV:CAC of 4:1" / "LTV/CAC 3.5" / "3-5x" ──
+  // A band is read at the end that does NOT flatter the plan. For a ratio that
+  // is the low end; for payback and churn below it is the HIGH end, because a
+  // longer payback and a higher churn are the worse readings. "Low end" is not
+  // the rule — "the conservative end" is.
+  // "and" only counts after an explicit "between": without that guard,
+  // "LTV:CAC of 8:1 and 6 month payback" parsed as the range 8–6 and scored the
+  // deal on a ratio of 6 that belonged to the payback clause.
+  const ratioRange = firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?:x|:\s*1)?\s*(?:-|–|—|to)\s*${NUM}\s*(?:x|:\s*1)?`, "i"))
+    || firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*between\s*${NUM}\s*(?:x|:\s*1)?\s*and\s*${NUM}\s*(?:x|:\s*1)?`, "i"));
+  if (ratioRange) {
+    const a = parseLocaleNumber(ratioRange[1]);
+    const b = parseLocaleNumber(ratioRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) < 100) {
+      s.ltvCacRatio = Math.min(a, b);
+      s.parseNotes.push(`LTV/CAC was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}); the score uses the conservative end.`);
+    }
+  }
+  const ratio = s.ltvCacRatio !== null ? null
+    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?::\s*1)?`, "i"));
   if (ratio) {
     const r = parseLocaleNumber(ratio[1]);
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
@@ -327,14 +345,49 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
 
   // ── Payback: "payback of 8 months" / "8-month payback" ──
-  const pb = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*[- ]?months?`, "i"))
+  // A payback band takes the LONGER end — the conservative reading of a range is
+  // the one that is worse for the plan, and "9-12 months" promises 12.
+  const pbRange = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?\s*payback`, "i"));
+  if (pbRange) {
+    const a = parseLocaleNumber(pbRange[1]);
+    const b = parseLocaleNumber(pbRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) < 240) {
+      s.paybackMonths = Math.max(a, b);
+      s.parseNotes.push(`Payback was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)} months); the score uses the longer, conservative end.`);
+    }
+  }
+  const pb = s.paybackMonths !== null ? null
+    : firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*[- ]?months?`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"));
   if (pb) { const v = parseLocaleNumber(pb[1]); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
 
   // ── Churn / retention / NRR ──
   // The period matters as much as the number: "4% annual churn" is excellent,
   // "4% churn" read as monthly is ~39%/yr. Capture whichever side states it.
-  const churn = firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
+  // A churn band takes the HIGHER end for the same reason payback takes the
+  // longer one: "2-3% monthly churn" promises 3%, and reading 2% would score a
+  // company on the best month it ever had.
+  const churnRange = firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  if (churnRange) {
+    const groups = churnRange.slice(1).filter((g): g is string => typeof g === "string");
+    const nums = groups.filter((g) => /^\d/.test(g)).map(parseLocaleNumber);
+    const words = groups.filter((g) => !/^\d/.test(g)).join(" ");
+    if (nums.length >= 2 && nums.every((n) => isFinite(n)) && Math.max(...nums) <= 100) {
+      s.churnPct = Math.max(...nums);
+      // "Churn of 2-3% monthly" puts the period after the phrase, so also read
+      // the words just past the match before falling back to "unspecified".
+      const at = (churnRange.index ?? 0) + churnRange[0].length;
+      s.churnPeriod = ratePeriodFromWords(words) !== "unspecified"
+        ? ratePeriodFromWords(words)
+        : ratePeriodFromWords(t.slice(at, at + 18));
+      s.churnMonthlyPct = monthlyChurnFrom(s.churnPct, s.churnPeriod);
+      s.parseNotes.push(`Churn was disclosed as a range (${Math.min(...nums)}–${Math.max(...nums)}%); the score uses the higher, conservative end.`);
+    }
+  }
+  const churn = s.churnPct !== null ? null
+    : firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
     || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
   if (churn) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");

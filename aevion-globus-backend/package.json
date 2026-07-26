@@ -56,7 +56,8 @@
     "coord:update": "node scripts/coord-update.js",
     "coord:update-commit": "node scripts/coord-update.js --commit",
     "wait-for-deploy": "node scripts/wait-for-deploy.js",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:qreal-suite",
+    "test:qreal-suite": "node ../scripts/qreal-judge.test.mjs && node ../scripts/qreal-characters.test.mjs && node ../scripts/qreal-continuity.test.mjs && node ../scripts/qreal-sync-rubric.mjs --check",
     "test:watch": "vitest"
   },
   "keywords": [],

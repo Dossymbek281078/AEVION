@@ -99,6 +99,45 @@ async function run() {
     fail("demo shot for /qc contract", "нет кадров в демо");
   }
 
+  // 8e-8g. Реестр персонажей (2026-07-26). Каст — то, что держит лицо героя
+  // одинаковым между кадрами; если эндпоинт отвалится, дрейф вернётся тихо,
+  // и заметит его только зритель готового ролика.
+  const cast = await req("GET", "/api/qreal/projects/demo-steppe-morning/characters");
+  if (cast.status === 404 || !cast.body?.characters) {
+    pend("cast derived for demo");
+    pend("every character has a canonical description");
+    pend("props are not treated as characters");
+  } else {
+    const chars = cast.body.characters;
+    chars.length >= 3
+      ? ok("cast derived for demo", `${chars.length}: ${chars.map((c) => c.kind).join(",")}`)
+      : fail("cast derived for demo", `ожидал >=3, получил ${chars.length}`);
+    chars.every((c) => typeof c.canonical === "string" && c.canonical.length > 5)
+      ? ok("every character has a canonical description")
+      : fail("every character has a canonical description");
+    // Трава и чайник в демо есть; персонажами они быть не должны — иначе
+    // директива непрерывности начнёт «фиксировать личность» у реквизита.
+    chars.every((c) => ["human", "child", "animal", "bird"].includes(c.kind))
+      ? ok("props are not treated as characters")
+      : fail("props are not treated as characters", chars.map((c) => c.kind).join(","));
+  }
+
+  // 8h. Судья непрерывности обязан отказываться судить сцену без повторов
+  // героя. Если он начнёт выдавать «непрерывно» там, где сравнивать нечего,
+  // мы получим зелёный отчёт, подтверждающий непроверенное заявление —
+  // хуже, чем отсутствие проверки. Демо как раз такая сцена.
+  const cont = await fetch(`${BASE}/api/qreal/projects/demo-steppe-morning/continuity`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    signal: AbortSignal.timeout(15000),
+  }).then((r) => r.json().then((b) => ({ status: r.status, body: b }))).catch(() => null);
+  if (!cont || cont.status === 404) {
+    pend("continuity refuses unmeasurable scenes");
+  } else {
+    cont.status === 409 && cont.body?.error === "not_measurable"
+      ? ok("continuity refuses unmeasurable scenes")
+      : fail("continuity refuses unmeasurable scenes", `${cont.status} ${JSON.stringify(cont.body).slice(0, 120)}`);
+  }
+
   // 9-11. Демо целиком (persistence/пересеивание)
   const d = await req("GET", "/api/qreal/demo");
   d.status === 200 ? ok("GET /demo → 200") : fail("GET /demo → 200", String(d.status));

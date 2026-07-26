@@ -34,6 +34,9 @@ export default function QRealClient() {
   const [project, setProject] = useState<Project | null>(null);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [criteria, setCriteria] = useState<QcCriterion[]>([]);
+  // Якоря 1/3/5 и порог приёмки — из того же ответа, что и критерии.
+  const [anchors, setAnchors] = useState<Record<string, { "1": string; "3": string; "5": string }>>({});
+  const [threshold, setThreshold] = useState<number | null>(null);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [filmUrl, setFilmUrl] = useState<string | null>(null);
@@ -61,7 +64,11 @@ export default function QRealClient() {
   useEffect(() => {
     loadDemo();
     fetch(apiUrl("/api/qreal/engines")).then((r) => r.json()).then((d) => setEngines(d?.engines || [])).catch(() => {});
-    fetch(apiUrl("/api/qreal/realism-criteria")).then((r) => r.json()).then((d) => setCriteria(d?.criteria || [])).catch(() => {});
+    fetch(apiUrl("/api/qreal/realism-criteria")).then((r) => r.json()).then((d) => {
+      setCriteria(d?.criteria || []);
+      setAnchors(d?.anchors || {});
+      setThreshold(typeof d?.threshold === "number" ? d.threshold : null);
+    }).catch(() => {});
   }, [loadDemo]);
 
   // Смета проекта (пересчитывается при каждой смене раскадровки/статусов).
@@ -376,13 +383,39 @@ export default function QRealClient() {
           <h2 className="font-serif text-2xl">{t("qreal.qc.h")}</h2>
           <p className="mt-1 max-w-3xl text-sm text-neutral-600">{t("qreal.qc.sub")}</p>
           <ol className="mt-4 grid gap-x-8 gap-y-1 text-sm leading-relaxed md:grid-cols-2">
-            {criteria.map((c, i) => (
-              <li key={c.id} className="flex gap-2 border-b border-dotted border-neutral-300 py-1">
-                <span className="font-serif text-neutral-400">{String(i + 1).padStart(2, "0")}</span>
-                <span>{c.label}</span>
-              </li>
-            ))}
+            {criteria.map((c, i) => {
+              const a = anchors[c.id];
+              return (
+                <li key={c.id} className="border-b border-dotted border-neutral-300 py-1">
+                  <details className="group">
+                    {/* Якоря приходят с бэкенда вместе с критериями — тот же текст,
+                        по которому судит VLM. Держать их только в API значит
+                        оставить человека без линейки, по которой судит машина. */}
+                    <summary className={`flex cursor-pointer gap-2 ${a ? "" : "list-none"}`}>
+                      <span className="font-serif text-neutral-400">{String(i + 1).padStart(2, "0")}</span>
+                      <span>{c.label}</span>
+                      <span className="ml-auto shrink-0 font-serif text-xs text-neutral-400">×{c.weight}</span>
+                    </summary>
+                    {a && (
+                      <dl className="mt-1 space-y-1 pl-7 text-xs text-neutral-600">
+                        {(["1", "3", "5"] as const).map((lvl) => (
+                          <div key={lvl} className="flex gap-2">
+                            <dt className="shrink-0 font-serif text-neutral-400">{lvl}</dt>
+                            <dd>{a[lvl]}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </details>
+                </li>
+              );
+            })}
           </ol>
+          {threshold != null && (
+            <p className="mt-3 text-xs text-neutral-500">
+              {t("qreal.qc.threshold", { v: threshold.toFixed(2) })}
+            </p>
+          )}
         </section>
 
         {/* Движки */}

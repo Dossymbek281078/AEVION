@@ -701,7 +701,8 @@ export const translations = {
 
     "qreal.film.download": "Download film",
     "qreal.qc.h": "3 · Realism QC loop",
-    "qreal.qc.sub": "Every render passes a judge across 14 weighted realism criteria. A shot that fails the threshold is regenerated automatically — that is the gap between QReal and reroll-culture generators.",
+    "qreal.qc.threshold": "Acceptance threshold: {v} on a 0-1 scale (about \"4 out of 5\"). Below it the judge returns a regeneration verdict — it does not spend on a retry by itself.",
+    "qreal.qc.sub": "Every render is scored by a judge across 14 weighted realism criteria, each with anchored 1-5 levels. A shot below the threshold comes back with a verdict and its weakest criteria named. Regeneration is opt-in and capped — every retry costs real money. That scoring loop is the gap between QReal and reroll-culture generators.",
     "qreal.engines.h": "4 · Render engines",
     "qreal.engines.on": "connected",
     "qreal.engines.off": "not connected",
@@ -4619,7 +4620,8 @@ export const translations = {
 
     "qreal.film.download": "Скачать фильм",
     "qreal.qc.h": "3 · QC-петля реализма",
-    "qreal.qc.sub": "Каждый рендер проходит судью по 14 взвешенным критериям реализма. Кадр, заваливший порог, перегенерируется автоматически — это и есть разрыв между QReal и «реролл»-генераторами.",
+    "qreal.qc.threshold": "Порог приёмки: {v} по шкале 0-1 (примерно «4 из 5»). Ниже порога судья возвращает вердикт на перегенерацию — но сам на повтор не тратит.",
+    "qreal.qc.sub": "Каждый рендер судится по 14 взвешенным критериям реализма, у каждого — якоря уровней 1-5. Кадр ниже порога возвращается с вердиктом и названными слабыми местами. Перегенерация включается явно и ограничена по попыткам — каждый повтор стоит денег. Этот скоринг и есть разрыв между QReal и «реролл»-генераторами.",
     "qreal.engines.h": "4 · Движки рендера",
     "qreal.engines.on": "подключён",
     "qreal.engines.off": "не подключён",
@@ -8583,7 +8585,8 @@ export const translations = {
 
     "qreal.film.download": "Фильмді жүктеу",
     "qreal.qc.h": "3 · Реализмнің QC-циклі",
-    "qreal.qc.sub": "Әр рендер 14 салмақталған реализм критерийі бойынша төрешіден өтеді. Шектен өтпеген кадр автоматты түрде қайта генерацияланады — QReal мен «реролл»-генераторлардың айырмасы осы.",
+    "qreal.qc.threshold": "Қабылдау шегі: 0-1 шкаласы бойынша {v} (шамамен «5-тен 4»). Одан төмен болса, төреші қайта генерация вердиктін қайтарады — бірақ қайталауға өзі ақша жұмсамайды.",
+    "qreal.qc.sub": "Әр рендер 14 салмақталған реализм критерийі бойынша бағаланады, әрқайсысында 1-5 деңгей тіректері бар. Шектен төмен кадр вердиктпен және аталған әлсіз тұстарымен қайтады. Қайта генерация нақты қосылады және әрекет саны шектеулі — әр қайталау ақшаға түседі. Осы бағалау циклі QReal мен «реролл»-генераторлардың айырмасы.",
     "qreal.engines.h": "4 · Рендер қозғалтқыштары",
     "qreal.engines.on": "қосылған",
     "qreal.engines.off": "қосылмаған",

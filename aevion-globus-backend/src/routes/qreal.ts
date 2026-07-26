@@ -30,6 +30,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { callProvider, pickConfiguredProvider, getProviders } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
+import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -753,7 +754,7 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-status failed" }); }
 });
 
-qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
+qrealRouter.post("/projects/:id/shots/:sid/qc", async (req, res) => {
   try {
     const p = memProjects.get(req.params.id);
     const s = p?.shots.find((x) => x.id === req.params.sid);
@@ -761,7 +762,20 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
 
     // Оценки приходят снаружи: от VLM-судьи или от человека по тем же якорям.
     // Шкала 1..5, null = критерий неприменим к этому кадру.
-    const raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+    let raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+    let judgeNote: string | null = null;
+
+    // Позвать VLM-судью можно только явно: вызов платный, и неявный запуск
+    // из «просто открыл вкладку QC» жёг бы деньги на каждом рендере.
+    if (!raw && req.body?.judge === true) {
+      if (!s.resultUrl) return res.status(409).json({ error: "no_render", message: "Судить нечего: у кадра нет рендера." });
+      if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан — VLM-судья недоступен." });
+      const verdictRaw = await judgeRender(s.resultUrl, REALISM_CRITERIA, s);
+      if (!verdictRaw.ok) return res.status(502).json({ error: "vlm_judge_failed", message: verdictRaw.error });
+      raw = verdictRaw.scores;
+      judgeNote = verdictRaw.dropped.length ? `Судья вернул неизвестные критерии и они отброшены: ${verdictRaw.dropped.join(", ")}.` : null;
+    }
+
     if (!raw) {
       // Судить нечем — отдаём якорный чеклист, а не пустой «vlm-judge»,
       // который раньше выглядел как проведённая проверка.
@@ -774,6 +788,7 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
         anchors: REALISM_ANCHORS,
         threshold: acceptThreshold(),
         judgePrompt: s.resultUrl ? buildJudgePrompt(REALISM_CRITERIA, s) : null,
+        vlm: { configured: vlmJudgeConfigured(), model: vlmJudgeModel(), note: "Платный вызов. Запуск: POST {\"judge\":true}" },
         note: s.resultUrl
           ? "Рендер есть. Пришли оценки в POST {scores:[{id,score:1-5|null,note}]} — от VLM по judgePrompt или от человека по якорям."
           : "Рендера ещё нет: чеклист с якорями для ручной проверки.",
@@ -798,6 +813,7 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
       qc: s.qc,
       threshold: acceptThreshold(),
       autoRegen: policy,
+      judgeNote,
       note:
         verdict.verdict === "pass"
           ? `Кадр принят: ${(verdict.totalScore as number).toFixed(2)} ≥ ${acceptThreshold()}.`

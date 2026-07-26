@@ -1183,6 +1183,10 @@ qcoreaiRouter.get("/quota-policy", (_req, res) => {
     freeQuotaEnforced: process.env.QCOREAI_FREE_QUOTA === "1",
     tierQuotaEnforced: process.env.QCOREAI_TIER_QUOTA === "1",
     premiumQuotaEnforced: process.env.QCOREAI_PREMIUM_QUOTA === "1",
+    // Which dispatch surfaces the premium gate covers in THIS build — lets the
+    // flip-readiness smoke assert the deployed binary carries the orchestrator
+    // wire-in (2026-07-26), not just that the env flag is set.
+    premiumQuotaScope: ["chat", "chat-stream", "orchestrator"],
     freeTokenLimit: freeTokenLimit(),
     tiers: TIERS.map((t) => ({
       tier: t.id,

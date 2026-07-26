@@ -3703,3 +3703,47 @@ describe("deleting a project drops its database", () => {
     delete process.env.DEVHUB_DB_ADMIN_URL;
   }, 20_000);
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 28. Video model catalogue (Veo 3 / Seedance / Kling instead of 2024 models)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("video models", () => {
+  test("catalogue exposes the current generation and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/video/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toContain("google/veo-3-fast");
+    expect(ids).toContain("bytedance/seedance-1-pro");
+    expect(ids).toContain("kwaivgi/kling-v2.1");
+    const def = r.body.models.filter((m: { default: boolean }) => m.default);
+    expect(def).toHaveLength(1);
+    expect(def[0].audio).toBe(true); // the default is the one that ships sound
+  });
+
+  test("maps our request onto each model's real input schema", async () => {
+    const { findVideoModel } = await import("../src/lib/devhubVideoModels");
+    const veo = findVideoModel("google/veo-3-fast")!.toInput({ prompt: "a cat", aspectRatio: "9:16", resolution: "720p" });
+    expect(veo).toMatchObject({ prompt: "a cat", aspect_ratio: "9:16", resolution: "720p", generate_audio: true });
+    expect(veo).not.toHaveProperty("num_frames"); // the old code sent this; Veo ignores it
+
+    const seed = findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "a car", duration: 10, imageUrl: "https://x/y.png" });
+    expect(seed).toMatchObject({ duration: 10, image: "https://x/y.png", fps: 24 });
+
+    const kling = findVideoModel("kwaivgi/kling-v2.1")!.toInput({ prompt: "a city", imageUrl: "https://x/y.png", resolution: "1080p" });
+    expect(kling).toMatchObject({ start_image: "https://x/y.png", mode: "pro" }); // not "image"
+    // Durations outside a model's list fall back rather than erroring at the provider.
+    expect(findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "x", duration: 7 })).toMatchObject({ duration: 5 });
+  });
+
+  test("unknown model id is refused with the list instead of a provider error", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "x", model: "made/up" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/unknown video model/);
+    expect(r.body.models).toContain("google/veo-3-fast");
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});

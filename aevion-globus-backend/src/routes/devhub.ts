@@ -5662,7 +5662,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 devhubRouter.post("/media/video", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  const { prompt, model = "minimax/video-01", width = 1280, height = 720, duration = 5, imageUrl } = req.body || {};
+  const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
   }
@@ -5684,20 +5684,29 @@ devhubRouter.post("/media/video", async (req, res) => {
     });
   }
 
-  const MODEL_VERSIONS: Record<string, string> = {
-    "minimax/video-01": "minimax/video-01",
-    "stability-ai/stable-video-diffusion": "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3aa966e1e89b5c27be9702aff8",
-    "lucataco/animate-diff-v2": "lucataco/animate-diff-v2:47b39c5b24fab06e5ec0a3aa5e63daf17e92ab3f8edc27f7da7fa9f0be28cad5",
-    "tencent/hunyuan-video": "tencent/hunyuan-video:847dfa8b01e739d5c05b04cc4c64a2a9ef56fba41783ba11c0e24ce1a36cbf30",
-  };
-  const resolvedModel = MODEL_VERSIONS[model] || model;
+  const { findVideoModel, videoModelCatalogue } = await import("../lib/devhubVideoModels");
+  const chosen = findVideoModel(model);
+  if (!chosen) {
+    // An unknown id used to be forwarded to Replicate as-is, which failed with
+    // a provider error the user could not act on.
+    return res.status(400).json({
+      error: `unknown video model "${model}"`,
+      models: videoModelCatalogue().map((m) => m.id),
+    });
+  }
+  const resolvedModel = chosen.id;
 
   try {
-    const input: Record<string, any> = { prompt: prompt.trim() };
-    if (imageUrl) input.image = imageUrl;
-    if (width) input.width = width;
-    if (height) input.height = height;
-    if (duration) input.num_frames = Math.round(duration * 24);
+    // Each model has its own input schema — the previous code sent num_frames
+    // and width/height to models that accept neither, so they were dropped.
+    const input: Record<string, any> = chosen.toInput({
+      prompt: prompt.trim(),
+      imageUrl,
+      duration,
+      aspectRatio,
+      resolution,
+      negativePrompt,
+    });
 
     const resp = await fetch(`https://api.replicate.com/v1/models/${resolvedModel}/predictions`, {
       method: "POST",
@@ -5724,10 +5733,26 @@ devhubRouter.post("/media/video", async (req, res) => {
 
     const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
     await debitCredit(userId, "video").catch(() => {});
-    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status, creditsUsed: 1, creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1 });
+    return res.json({
+      ok: true,
+      predictionId: prediction.id,
+      status: prediction.status,
+      model: chosen.id,
+      modelLabel: chosen.label,
+      audio: chosen.audio,
+      creditsUsed: 1,
+      creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1,
+    });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Video generation failed" });
   }
+});
+
+// GET /api/devhub/media/video/models — what the video button can actually run.
+// Exposed so the IDE and the agent pick from real ids instead of guessing.
+devhubRouter.get("/media/video/models", async (_req, res) => {
+  const { videoModelCatalogue } = await import("../lib/devhubVideoModels");
+  res.json({ models: videoModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
 });
 
 devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {

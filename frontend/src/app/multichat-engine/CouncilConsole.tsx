@@ -64,6 +64,41 @@ const PANEL = [
   { id: "practic", role: "Практик — что делать завтра при ограниченных ресурсах" },
 ];
 
+// Пример для гостя. Ответы РЕАЛЬНЫЕ по форме: три роли расходятся так, как
+// расходятся живые модели — совпадают по словам, но противоречат по числам и
+// по выводу. Прогоняются через тот же публичный эндпоинт, что и настоящие,
+// поэтому цифры на экране считает алгоритм, а не я. Нарисованные показатели
+// разошлись бы с кодом при первой же правке порогов.
+const EXAMPLE_PROMPT = "Стоит ли запускать платный тариф до первой продажи?";
+const EXAMPLE_ANSWERS = [
+  {
+    agentId: "analyst",
+    provider: "пример",
+    ok: true,
+    reply:
+      "Платный тариф до первой продажи проверяет не спрос, а готовность платить у тех, кто уже пришёл. " +
+      "На текущем трафике это примерно 40 посетителей в месяц — выборки не хватит, вывод будет шумом. " +
+      "Сначала нужен канал, дающий хотя бы 300 визитов.",
+  },
+  {
+    agentId: "skeptic",
+    provider: "пример",
+    ok: true,
+    reply:
+      "Вопрос поставлен неверно. Тариф — это не эксперимент, а обязательство: цену придётся защищать, " +
+      "а менять её после запуска дороже, чем кажется. На текущем трафике это примерно 300 посетителей в месяц, " +
+      "и всё равно решает не число, а то, за что именно берутся деньги.",
+  },
+  {
+    agentId: "practic",
+    provider: "пример",
+    ok: true,
+    reply:
+      "Не уверен, что это вообще развилка сегодня. Запустите платёжную ссылку на один модуль и покажите её " +
+      "десяти живым людям — узнаете больше, чем из любого тарифа. Тариф соберёте после первой оплаты.",
+  },
+];
+
 const C = {
   line: "#334155",
   faint: "#1e293b",
@@ -85,6 +120,7 @@ export function CouncilConsole() {
   const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [isExample, setIsExample] = useState(false);
 
   // isAuthenticated читает localStorage — на сервере его нет, поэтому состояние
   // определяем ПОСЛЕ монтирования: иначе разметка сервера и клиента разойдутся
@@ -99,6 +135,7 @@ export function CouncilConsole() {
     if (q.length < 5 || busy) return;
     setBusy(true);
     setError(null);
+    setIsExample(false);
     try {
       const conv = await fetch(apiUrl("/api/multichat/conversations"), {
         method: "POST",
@@ -119,6 +156,34 @@ export function CouncilConsole() {
       setReceipt(d.receipt || null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "запрос не прошёл");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Пример без входа. Ответы заранее заданы (иначе гость тратил бы наши токены),
+  // но карта разногласий считается НА СЕРВЕРЕ тем же публичным эндпоинтом, что и
+  // для настоящего консилиума. Поэтому гость видит работу настоящего алгоритма,
+  // а не картинку: поменяются пороги — поменяются и цифры в примере.
+  async function runExample() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: EXAMPLE_ANSWERS }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
+      setPrompt(EXAMPLE_PROMPT);
+      setResults(EXAMPLE_ANSWERS);
+      setDissent(d.dissent || null);
+      setReceipt(null); // чека у примера нет: ответы не наши, платить и подписывать нечего
+      setIsExample(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "пример не загрузился");
     } finally {
       setBusy(false);
     }
@@ -163,13 +228,34 @@ export function CouncilConsole() {
         >
           {busy ? "Агенты отвечают…" : "Спросить консилиум"}
         </button>
+        <button
+          onClick={runExample}
+          disabled={busy}
+          style={{
+            background: "transparent", color: busy ? C.faded : C.dim,
+            border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px",
+            fontSize: 14, cursor: busy ? "default" : "pointer",
+          }}
+        >
+          Показать на примере
+        </button>
         <span style={{ fontSize: 12, color: C.faded }}>
           {authed === false
-            ? "Нужен вход — консилиум расходует токены, поэтому привязан к аккаунту"
+            ? "Свой запрос — после входа: консилиум расходует токены. Пример открыт всем"
             : "3 агента · 3 вызова · ответы независимы"}
         </span>
       </div>
       {error && <p style={{ fontSize: 12, color: C.bad, margin: "8px 0 0" }}>{error}</p>}
+
+      {/* Пометка обязательна: принять пример за свой прогон — то же самое, что
+          показать нарисованный результат. */}
+      {isExample && (
+        <p style={{ fontSize: 12, color: C.warn, margin: "12px 0 0", lineHeight: 1.6, maxWidth: 720 }}>
+          Это пример: ответы трёх агентов заданы заранее, а разногласия ниже посчитаны
+          на сервере тем же алгоритмом, что и для настоящего запроса. Свой вопрос —
+          после входа.
+        </p>
+      )}
 
       {/* Карта разногласий стоит ПЕРЕД ответами — она и есть продукт. */}
       {dissent && (

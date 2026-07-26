@@ -26,6 +26,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { buildDissentMap } from "../services/multichat/dissent";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
@@ -448,12 +449,19 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   });
 
   const results = await Promise.all(calls);
+
+  // Карта разногласий считается ЗДЕСЬ же, из уже полученных ответов: ни одного
+  // дополнительного вызова модели, поэтому она бесплатна и воспроизводима.
+  // Разногласие — то, что все остальные продукты выбрасывают при синтезе, а оно
+  // и есть указание, где смотреть человеку.
+  const dissent = buildDissentMap(results as never);
   await touchConv(conversationId);
 
   res.json({
     conversationId,
     prompt,
     results,
+    dissent,
     completedAt: new Date().toISOString(),
   });
 });

@@ -36,6 +36,16 @@ const contMap = new Map<string, Map<string, BookMove>>();
 const nameMap = new Map<string, { eco: string; name: string }>();
 let loadPromise: Promise<void> | null = null;
 
+/* Placement + side to move + castling. The en-passant and clock fields are
+   dropped on purpose so transpositions collapse onto one entry.
+
+   ⚠️ Callers must validate before playing. Because the key ignores the
+   en-passant square, a position can match an entry whose continuation is an
+   en-passant capture that is NOT legal in the position on the board. Both
+   consumers hit this: the bot would have stalled the game outright (its move
+   effect only re-runs when the board changes, and exec() drops an illegal move
+   silently), and the explorer produced a dead click. Resolve any continuation
+   against the real FEN with chess.js before handing it on. */
 function keyOf(fen: string): string {
   const p = fen.split(" ");
   return `${p[0]} ${p[1]} ${p[2]}`;

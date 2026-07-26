@@ -2450,8 +2450,22 @@ export default function CyberChessPage(){
   // full post-game overlay (accuracy/blunder-map/AI review, further down)
   // is gated on `!on` — so timeout losses/wins silently never got the rich
   // report, only the bare "Time out" card.
-  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");sOn(false);snd("x")});
-  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");sOn(false);snd("x")});
+  // Рейтинг и счёт W/L по итогу партии против AI. Формулы те же, что стояли в
+  // ветке мата и в кнопке «Сдаться», — здесь они в одном месте, потому что
+  // ФЛАГ их вообще не применял: партия по времени завершалась, но ни рейтинг,
+  // ни счётчик не менялись. В блице 5+0 (умолчание) это самый частый исход.
+  const applyResult=useCallback((win:boolean)=>{
+    const nr=win
+      ? Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)))
+      : Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));
+    sRat(nr);svR(nr);
+    const ns=win?{...sts,w:sts.w+1}:{...sts,l:sts.l+1};
+    sSts(ns);svS(ns);
+    showToast(win?`+${nr-rat} rating`:`${nr-rat} rating`,win?"success":"info");
+  },[rat,sts,lv.elo,showToast]);
+
+  const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");sOn(false);snd("x");if(!p2pMode&&!hotseat)applyResult(false)});
+  const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");sOn(false);snd("x");if(!p2pMode&&!hotseat)applyResult(true)});
 
   // Shop v2: consume time_boost on game start — applies +Ns to user's clock
   // once per purchase. Triggered at game start when ach.time_boost > 0.
@@ -3322,8 +3336,7 @@ export default function CyberChessPage(){
         }else{
           const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
           if(w){
-            const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
-            const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
+            applyResult(true);
             // Chessy reward: scale by AI difficulty × time category × shop bonus
             const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
             const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
@@ -3345,7 +3358,7 @@ export default function CyberChessPage(){
               if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
             },900);
           }
-          else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+          else{applyResult(false)}
         }
       }
       else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";
@@ -7960,7 +7973,7 @@ export default function CyberChessPage(){
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Сдаться?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Сдаться</Btn>
+            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Сдаться?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{applyResult(false);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Сдаться</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Предложить ничью?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>½ Ничья</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}

@@ -27,6 +27,7 @@ import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { buildDissentMap } from "../services/multichat/dissent";
+import { buildReceipt, signReceipt } from "../services/multichat/receipt";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
@@ -455,6 +456,20 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   // Разногласие — то, что все остальные продукты выбрасывают при синтезе, а оно
   // и есть указание, где смотреть человеку.
   const dissent = buildDissentMap(results as never);
+
+  // Чек: канонический артефакт с составом панели, хешами ответов, картой
+  // разногласий и стоимостью. Ответ без происхождения — это мнение; ответ с
+  // чеком можно предъявить. Подпись берётся из реестра QSign v2, а если ключей
+  // нет — чек честно уходит неподписанным, но с проверяемым хешем.
+  const signedReceipt = await signReceipt(
+    buildReceipt({
+      conversationId,
+      prompt,
+      answers: results as never,
+      dissent,
+      askedAt: new Date().toISOString(),
+    })
+  );
   await touchConv(conversationId);
 
   res.json({
@@ -462,6 +477,7 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     prompt,
     results,
     dissent,
+    receipt: signedReceipt,
     completedAt: new Date().toISOString(),
   });
 });

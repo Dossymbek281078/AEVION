@@ -3121,7 +3121,7 @@ export default function CyberChessPage(){
                 if(firstTime)addChessy(reward,"пазл решён");
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;if(firstTime){addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}else showToast("↻ Повтор — награда уже получена","info");}
-                bumpDaily("puzzle");
+                if(firstTime)bumpDaily("puzzle"); // цель «реши 3 задачи» — про три РАЗНЫЕ задачи
                 if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
@@ -3161,7 +3161,7 @@ export default function CyberChessPage(){
           if(firstTime)addChessy(reward,"пазл решён");
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
           {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;if(firstTime){addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}else showToast("↻ Повтор — награда уже получена","info");}
-          bumpDaily("puzzle");
+          if(firstTime)bumpDaily("puzzle"); // цель «реши 3 задачи» — про три РАЗНЫЕ задачи
           if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){

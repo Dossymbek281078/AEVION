@@ -211,6 +211,23 @@ pricingRouter.get("/bundles", (_req, res) => {
  */
 const QUOTABLE_TIERS = ["free", "lite", "medium", "full", "pro", "enterprise"];
 
+/**
+ * Разбор валюты из тела/запроса.
+ *
+ * Раньше стояла проверка `body.currency in CURRENCY_RATES`, а оператор `in`
+ * находит и УНАСЛЕДОВАННЫЕ свойства: `"constructor"`, `"toString"`,
+ * `"__proto__"`, `"valueOf"` проходили её. Дальше `CURRENCY_RATES["constructor"]`
+ * — это функция, у неё нет `.rate`, и смета возвращалась с
+ * `total: null, subtotal: null` при HTTP 200. Не падение — просто пустые цифры
+ * там, где человек смотрит цену. Найдено прогоном прототипных ключей 2026-07-26.
+ */
+const CURRENCY_CODES = Object.keys(CURRENCY_RATES) as CurrencyCode[];
+function parseCurrency(raw: unknown): CurrencyCode {
+  return typeof raw === "string" && (CURRENCY_CODES as string[]).includes(raw)
+    ? (raw as CurrencyCode)
+    : "USD";
+}
+
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
@@ -219,10 +236,7 @@ pricingRouter.post("/quote", (req, res) => {
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
   const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
-  const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
-      ? (body.currency as CurrencyCode)
-      : "USD";
+  const currency: CurrencyCode = parseCurrency(body.currency);
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];
   const promoCode = typeof body.promoCode === "string" ? body.promoCode.trim().slice(0, 40) : undefined;
 
@@ -252,10 +266,7 @@ pricingRouter.post("/fan", (req, res) => {
   const tierId = typeof body.tierId === "string" && QUOTABLE_TIERS.includes(body.tierId)
     ? (body.tierId as TierId)
     : undefined;
-  const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
-      ? (body.currency as CurrencyCode)
-      : "USD";
+  const currency: CurrencyCode = parseCurrency(body.currency);
   const lastPurchaseAt = typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined;
 
   res.json({
@@ -277,10 +288,7 @@ pricingRouter.post("/fan", (req, res) => {
  * ring-1 список и суммарная экономия. Публично, без auth — это маркетинг.
  */
 pricingRouter.get("/fan/preview", (req, res) => {
-  const currency: CurrencyCode =
-    typeof req.query.currency === "string" && req.query.currency in CURRENCY_RATES
-      ? (req.query.currency as CurrencyCode)
-      : "USD";
+  const currency: CurrencyCode = parseCurrency(req.query.currency);
   const rows = fanPreview(currency);
   res.json({
     items: rows,

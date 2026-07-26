@@ -195,6 +195,27 @@ describe("денежные пути переживают враждебный в
     expect(ok.body).toHaveProperty("offers");
   }, IMPORT_TIMEOUT_MS);
 
+  test("🔴 прототипные ключи в currency не дают смету с null-числами", async () => {
+    // Проверка была `body.currency in CURRENCY_RATES`, а `in` находит и
+    // УНАСЛЕДОВАННЫЕ свойства: "constructor", "toString", "__proto__",
+    // "valueOf" её проходили. Дальше CURRENCY_RATES["constructor"] — функция,
+    // у неё нет .rate, и смета возвращалась с total: null, subtotal: null при
+    // HTTP 200. Не падение — просто пустые цифры там, где человек смотрит цену.
+    const app = await getApp();
+    for (const cur of ["constructor", "toString", "__proto__", "valueOf", "hasOwnProperty"]) {
+      const r = await request(app).post("/api/pricing/quote").send({ tierId: "medium", currency: cur });
+      expect(r.status).toBe(200);
+      expect(typeof r.body.total, `currency=${cur} дал total=${r.body.total}`).toBe("number");
+      expect(typeof r.body.subtotal).toBe("number");
+      expect(r.body.currency, `currency=${cur} не откатился на USD`).toBe("USD");
+    }
+    // И то же на веерной ручке + витрине.
+    const fan = await request(app).post("/api/pricing/fan").send({ owned: ["qsign"], currency: "__proto__" });
+    expect(fan.body.currency).toBe("USD");
+    const prev = await request(app).get("/api/pricing/fan/preview?currency=constructor");
+    expect(prev.body.currency).toBe("USD");
+  }, IMPORT_TIMEOUT_MS);
+
   test("пустое и не-объектное тело не роняют ручки", async () => {
     const app = await getApp();
     for (const path of ["/api/pricing/checkout/session", "/api/pricing/quote", "/api/pricing/fan"]) {

@@ -1042,11 +1042,32 @@ qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
  * existing object instead of minting a duplicate — including after a restart,
  * a redeploy, or a call from a second instance.
  */
-qskywayRouter.post("/airspace/register", async (req: Request, res: Response) => {
+// Unauthenticated and it writes, so the same two questions as the anchor: what
+// can a stranger make us do repeatedly, and what work is avoidable. The row is
+// idempotent on content hash, so at most one exists per edition — but every call
+// still reached the database. Once this process has seen the edition registered,
+// answer from memory and touch nothing.
+const registerLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-airspace-register",
+  message: "Слишком много обращений к реестру — попробуйте через минуту.",
+});
+const registeredCache = new Map<string, { qrightObjectId: string; contentHash: string }>();
+
+qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
   const src = AIRSPACE[resolved.id];
   if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", city: resolved.id });
+  const known = registeredCache.get(resolved.id);
+  if (known && known.contentHash === airspaceContentHash(src)) {
+    return res.json({
+      ok: true, alreadyRegistered: true, qrightObjectId: known.qrightObjectId,
+      contentHash: known.contentHash, link: "/qright",
+      note: "Эта редакция уже зарегистрирована — ответ из памяти процесса, база не запрашивалась.",
+    });
+  }
 
   const contentHash = airspaceContentHash(src);
   const title = `${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
@@ -1069,6 +1090,7 @@ qskywayRouter.post("/airspace/register", async (req: Request, res: Response) => 
     );
     if (existing.rows.length) {
       const row = existing.rows[0] as { id: string; createdAt: string };
+      registeredCache.set(resolved.id, { qrightObjectId: row.id, contentHash });
       return res.json({
         ok: true, alreadyRegistered: true, qrightObjectId: row.id, contentHash,
         registeredAt: row.createdAt, link: "/qright",
@@ -1081,6 +1103,7 @@ qskywayRouter.post("/airspace/register", async (req: Request, res: Response) => 
        VALUES ($1,$2,$3,'airspace-edition',$4,$5,$6)`,
       [objectId, title.slice(0, 200), description, contentHash, src.authority === "FAA" ? "US" : null, resolved.city.city.slice(0, 120)],
     );
+    registeredCache.set(resolved.id, { qrightObjectId: objectId, contentHash });
     res.status(201).json({
       ok: true, alreadyRegistered: false, qrightObjectId: objectId, contentHash,
       authority: src.authority, effective: src.effective, link: "/qright",

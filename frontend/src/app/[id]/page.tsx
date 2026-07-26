@@ -45,9 +45,13 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // Promise only. The defensive union that used to be here (`Promise<T> | T`)
+  // stopped satisfying Next's PageProps constraint in 16.2.11 and failed the
+  // build outright — params has been a Promise since the App Router change,
+  // so the non-Promise arm was never reachable anyway.
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
   try {
     const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {

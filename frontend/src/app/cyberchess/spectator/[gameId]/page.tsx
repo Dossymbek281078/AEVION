@@ -133,17 +133,14 @@ function evalWhiteRatio(cp?: number | null, mate?: number | null): number {
 }
 
 interface Props {
-  params: { gameId: string } | Promise<{ gameId: string }>;
+  // Promise only. The Next 14 sync form used to be accepted here as a union,
+  // but as of 16.2.11 that union no longer satisfies PageProps and fails the
+  // build. params has been a Promise since the App Router change.
+  params: Promise<{ gameId: string }>;
 }
 
 export default function SpectatorViewerPage(props: Props) {
-  // Support both Next 14 sync and Next 15 Promise params
-  const rawParams = props.params as any;
-  const params =
-    rawParams && typeof rawParams.then === "function"
-      ? reactUse(rawParams as Promise<{ gameId: string }>)
-      : (rawParams as { gameId: string });
-
+  const params = reactUse(props.params);
   const gameId = params?.gameId ?? "";
 
   const [state, setState] = useState<SpectatorState>({});

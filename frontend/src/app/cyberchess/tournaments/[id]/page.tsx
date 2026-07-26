@@ -133,12 +133,10 @@ function getDisplayName(): string {
 export default function TournamentDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+    use(params);
 
   const tournamentId = resolved.id;
   const router = useRouter();

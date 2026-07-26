@@ -16,12 +16,10 @@ import { findLesson, markLessonVisited } from "../../../lib/examLessons";
 export default function ExamLessonPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+    use(params);
   const taskId = resolved.id;
   const task = findExamTask(taskId);
   const lesson = findLesson(taskId);

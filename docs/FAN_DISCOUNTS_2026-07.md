@@ -373,10 +373,38 @@ qventure, qpaynet, qcontract, constitution, ip_bureau, qrenew, smeta) и пиш�
 То есть последняя строка — не гипотеза из чтения кода, а воспроизведённое на
 проде поведение. После мержа смоук обязан дать 21/21; это и есть приёмка.
 
+## 7ж. Пути к базе проверены на ЖИВОМ Postgres, а не только в фолбэке
+
+Первые прогоны шли без базы, то есть проверяли деградацию, а не работу. Прогнано
+на локальном Postgres 18 в **отдельной** базе `aevion_fan_test` (прод не
+трогался; база после проверки удалена):
+
+| Что проверялось | Результат |
+|---|---|
+| `/fan/me` видит поштучные покупки | `appsSource: "db"`, уровень 2, модули `cyberchess` + `aevion-ip-bureau` |
+| маппинг слага | `ip_bureau` → `aevion-ip-bureau` сработал на живой строке |
+| отменённая подписка не считается | `qventure` со `status: cancelled` в веер не попал (уровень 2, не 3) |
+| кластер `play` работает | CyberChess открыл `qlearn` −30% и `qevents` −35% — до этой ветки веер у флагмана был пуст |
+| потолок COGS в живом пути | `qlearn` (COGS-модуль) −30% против `qcontract` −35% на том же уровне |
+| `discount_integrity_log` пишется | `source: "db"`, 4 строки: `gumroad / medium / 21.80 / 45.20` |
+| каскад чекаута не сломан переделкой арифметики | `checkout-rails-prod-smoke` **17/17** против локального бэкенда |
+| pricing-смоук с живой базой | **21/21** |
+
+Как повторить (три команды, база изолированная):
+
+```
+psql -U postgres -c "CREATE DATABASE aevion_fan_test"
+psql -U postgres -d aevion_fan_test -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto'
+PORT=4192 DATABASE_URL='postgresql://postgres:<пароль>@localhost:5432/aevion_fan_test' npm run dev
+```
+
+Таблицы `AppSubscription` и `discount_integrity_log` модули создают сами при
+первом обращении.
+
 ## 8. Что НЕ вышло проверить и почему
 
 - **Панель веера, веерная строка на витринах, светлый paywall — не проверены
-  глазами.** Next/Turbopack отказывается работать с junction на `node_modules`
+  глазами** (бэкенд-пути проверены полностью, см. §7ж).** Next/Turbopack отказывается работать с junction на `node_modules`
   («Symlink points out of the filesystem root»), а реального `npm install` в
   этом worktree нет. Есть только: `tsc` 0 ошибок и посчитанные вручную
   контрасты (см. ниже). Первый, кто сделает install или откроет ветку в

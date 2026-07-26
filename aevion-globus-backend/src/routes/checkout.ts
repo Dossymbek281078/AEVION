@@ -11,9 +11,80 @@ import {
 import { buildQuoteWithFan } from "../data/fanDiscounts";
 import { recordCheckoutSession, integritySummary } from "../lib/discountIntegrityLog";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
+import { readOwnedModules } from "../lib/ownedModules";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import jwt from "jsonwebtoken";
 
 const capture = makeServiceCapture("checkout");
+
+/**
+ * Одно правило проверки email на весь файл. Раньше это же выражение стояло
+ * инлайном при провижининге; вторая копия при первой правке разошлась бы с
+ * первой — а от неё зависит и то, кому выпишут подписку, и то, чьё владение
+ * подтянут для веера.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Чьё владение считать при расчёте ВЕЕРНОЙ скидки на списание.
+ *
+ * 🔴 Найдено вычиткой дифа 2026-07-26 и подтверждено прогоном: до этой функции
+ * чекаут брал `ownedModules` и `lastPurchaseAt` прямо из тела запроса и
+ * передавал в `buildQuoteWithFan`, а тот уменьшал `quote.total` — то есть
+ * РЕАЛЬНОЕ списание. Заявив владение пятью соседями по кластеру, любой
+ * анонимный клиент получал Medium+3 модуля за **$59.35 вместо $76** (−$16.65,
+ * −22%). Ни авторизации, ни сверки со стором на этом пути не было.
+ *
+ * Правило: скидку даёт СЕРВЕР по своим данным, клиент про владение только
+ * спрашивает. Личность берём из JWT, если он есть; иначе — из email, на
+ * который и будет выписана подписка (подставить чужой можно, но тогда и
+ * подписка уедет ему, а не атакующему — самоограничивающийся случай).
+ * Не удалось установить личность → веера нет, платится прайс.
+ *
+ * `/api/pricing/quote` остаётся превью «сколько бы я заплатил» и по-прежнему
+ * принимает заявленное владение — там ничего не списывается.
+ */
+async function resolveVerifiedOwnership(
+  authHeader: string | undefined,
+  bodyEmail: unknown,
+): Promise<{ modules: string[]; anchorAt: string | undefined; source: "token" | "email" | "none" }> {
+  let email: string | null = null;
+
+  const raw = typeof authHeader === "string" ? authHeader.trim() : "";
+  if (raw.toLowerCase().startsWith("bearer ")) {
+    const token = raw.slice(7).trim();
+    const secret = process.env.AUTH_JWT_SECRET;
+    if (token && secret) {
+      try {
+        // Алгоритм пиннуем: без этого часть версий jsonwebtoken принимает
+        // alg:"none" (см. tests/sharedSecretsHardening.test.ts).
+        const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as { email?: string };
+        email = payload.email?.trim().toLowerCase() || null;
+      } catch {
+        email = null; // битый токен — не ошибка чекаута, просто нет веера
+      }
+    }
+  }
+  const viaToken = !!email;
+  if (!email && typeof bodyEmail === "string" && EMAIL_RE.test(bodyEmail.trim())) {
+    email = bodyEmail.trim().toLowerCase();
+  }
+  if (!email) return { modules: [], anchorAt: undefined, source: "none" };
+
+  try {
+    const owned = await readOwnedModules(email);
+    return {
+      modules: owned.modules,
+      anchorAt: owned.fanAnchorAt ?? undefined,
+      source: viaToken ? "token" : "email",
+    };
+  } catch (e) {
+    // Стор недоступен — платится прайс. Молча дать скидку «на всякий случай»
+    // здесь нельзя: это деньги.
+    capture(e, { where: "resolveVerifiedOwnership" });
+    return { modules: [], anchorAt: undefined, source: "none" };
+  }
+}
 
 export const checkoutRouter = Router();
 
@@ -145,9 +216,13 @@ checkoutRouter.post("/session", async (req, res) => {
       ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
       : [];
     const promoCode = typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined;
-    const ownedModules = Array.isArray(body.ownedModules)
-      ? body.ownedModules.slice(0, 60).filter((x: unknown) => typeof x === "string")
-      : [];
+
+    // 🔴 Владение для веера берём У СЕБЯ, а не из тела запроса. Тело здесь
+    // управляет РЕАЛЬНЫМ списанием: прогон 2026-07-26 показал Medium+3 модуля
+    // за $59.35 вместо $76 по одному лишь заявлению «я владею вот этими пятью».
+    // body.ownedModules/body.lastPurchaseAt на этом пути больше не читаются —
+    // они остались только у /api/pricing/quote, где ничего не списывается.
+    const verified = await resolveVerifiedOwnership(req.headers.authorization, body.email);
 
     const quote = buildQuoteWithFan({
       tierId: tier.id,
@@ -156,8 +231,8 @@ checkoutRouter.post("/session", async (req, res) => {
       period,
       currency: "USD",
       promoCode,
-      ownedModules,
-      lastPurchaseAt: typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined,
+      ownedModules: verified.modules,
+      lastPurchaseAt: verified.anchorAt,
     });
 
     /** Скидки-стимулы (промо + веер). Годовая скидка сюда НЕ входит — это цена периода. */
@@ -183,7 +258,7 @@ checkoutRouter.post("/session", async (req, res) => {
      * выручке. Проверка та же, что в /api/pricing/lead.
      */
     const email =
-      typeof body.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())
+      typeof body.email === "string" && EMAIL_RE.test(body.email.trim())
         ? body.email.trim().toLowerCase().slice(0, 200)
         : undefined;
 
@@ -223,7 +298,15 @@ checkoutRouter.post("/session", async (req, res) => {
         quotedUsd: quote.total,
         incentiveDiscountUsd: incentiveUsd,
         discountHonoured: incentiveUsd > 0 ? honoured : true,
-        fan: { status: quote.fan.status, level: quote.fan.level, appliedUsd: quote.fan.applied },
+        fan: {
+          status: quote.fan.status,
+          level: quote.fan.level,
+          appliedUsd: quote.fan.applied,
+          // Откуда сервер узнал о владении: "token" | "email" | "none".
+          // Видно в логе расхождений — если скидка когда-нибудь применится при
+          // source:"none", это баг, а не покупатель.
+          ownershipSource: verified.source,
+        },
       };
       if (honoured) {
         truth.chargedUsd = Math.round(cents) / 100;

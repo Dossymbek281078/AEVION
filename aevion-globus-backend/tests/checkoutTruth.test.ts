@@ -1,6 +1,9 @@
-import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Контракт правдивости ответа чекаута.
@@ -20,15 +23,39 @@ import request from "supertest";
  */
 
 const OLD_ENV = { ...process.env };
+/**
+ * Стор подписок — в temp. Чекаут со stub-провайдером ПРОВИЖИНИТ подписку на
+ * каждый вызов; без этого тест насыпал бы записи в рабочую копию репозитория
+ * (так уже случалось — 6 мусорных подписок в data/subscriptions.jsonl).
+ */
+const TMP = mkdtempSync(join(tmpdir(), "aevion-checkout-truth-"));
 
 beforeAll(() => {
   process.env.FRONTEND_URL = "http://localhost:3000";
+  process.env.SUBSCRIPTIONS_FILE = join(TMP, "subscriptions.jsonl");
   delete process.env.LEMON_SQUEEZY_API_KEY;
   delete process.env.LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE;
 });
 
+/**
+ * Владельца восстанавливаем ПЕРЕД КАЖДЫМ тестом: сам чекаут провижинит подписку
+ * на купленные модули, то есть после первого же запроса владелец «уже владеет»
+ * тем, что покупает, и веер честно гаснет. Без этого второй тест в файле падал
+ * бы из-за первого, а выглядело бы как дефект веера.
+ */
+beforeEach(async () => {
+  const { provisionSubscription } = await import("../src/routes/provisioning");
+  await (provisionSubscription as never as (a: Record<string, unknown>) => Promise<unknown>)({
+    email: FAN_OWNER_EMAIL,
+    tierId: "medium",
+    modules: ["qsign"],
+    source: "test",
+  });
+});
+
 afterAll(() => {
   process.env = { ...OLD_ENV };
+  rmSync(TMP, { recursive: true, force: true });
 });
 
 /**
@@ -67,10 +94,19 @@ async function post(body: unknown, env: Record<string, string | undefined> = {})
 /** Запас на первый импорт под нагрузкой — см. комментарий у getApp(). */
 const IMPORT_TIMEOUT_MS = 30_000;
 
+/**
+ * Веер здесь должен быть АКТИВЕН — иначе тест «скидка учтена» проверяет только
+ * промо. Раньше для этого хватало `ownedModules: ["qsign"]` в теле, но чекаут
+ * больше не верит телу о владении (см. tests/fanOwnershipVerification): скидку
+ * на списание даёт сервер по своему стору. Поэтому владельца заводим по-настоящему,
+ * тем же провижинингом, что и живая покупка, и присылаем его адрес.
+ */
+const FAN_OWNER_EMAIL = "checkout-truth-owner@test.dev";
+
 const ORDER = {
   tierId: "medium",
   modules: ["qright", "qcontract"],
-  ownedModules: ["qsign"],
+  email: FAN_OWNER_EMAIL,
   promoCode: "AEVION20",
 };
 

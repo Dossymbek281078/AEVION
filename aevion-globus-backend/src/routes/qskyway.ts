@@ -784,9 +784,15 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     // The scope limit travels WITH the document. A justification that gets
     // forwarded without it is exactly how "routed against FAA data" turns into
     // "FAA approved".
+    // Must cover all three cases. A city can have a permission regime without a
+    // ceiling grid, and saying "no regulatory verdict" while the document itself
+    // carries the regime would make the signed artifact contradict its own
+    // disclaimer — in the one document meant to be handed to a regulator.
     scope: src
       ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
-      : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
+      : PERMISSION[resolved.id]
+        ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
+        : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
   });
 });

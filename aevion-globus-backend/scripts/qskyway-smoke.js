@@ -257,6 +257,8 @@ async function main() {
   assert(Array.isArray(cov?.missing) && cov.missing.length === 1 && cov.missing[0] === "astana", "only the city with nothing published is listed as missing", (cov?.missing ?? []).join(","));
   const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
   assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");
+  // The disclaimer must not contradict the document it is attached to.
+  assert(/режим разрешений/.test(justTk.json?.scope ?? "") && !/фида регулятора нет/.test(justTk.json?.scope ?? ""), "[tokyo] scope text matches what the document actually contains");
 
   // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
   // both outcomes are legitimate — what must never happen is a success response

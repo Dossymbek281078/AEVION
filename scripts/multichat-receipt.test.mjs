@@ -31,7 +31,11 @@ put(`services/multichat/_dissent-${pid}.mts`, readFileSync(path.join(BE, "servic
 // keyRegistry тянет БД; для чистых функций чека он не нужен — подменяем
 // заглушкой, которая ведёт себя как «ключей нет». Именно этот путь и надо
 // проверить: чек обязан честно отдаваться неподписанным.
-put(`lib/qsignV2/_keys-${pid}.mts`, "export async function getActiveEd25519() { return null; }\n");
+put(
+  `lib/qsignV2/_keys-${pid}.mts`,
+  "export async function getActiveEd25519() { return null; }\n" +
+    "export async function resolveEd25519(kid) { throw new Error('unknown kid ' + kid); }\n"
+);
 
 const receiptFile = put(
   `services/multichat/_receipt-${pid}.mts`,
@@ -125,6 +129,35 @@ ok("verifyReceiptHash ловит подмену", m.verifyReceiptHash(tamperedPr
 ok("без ключей подписи нет", s1.signature === null);
 ok("причина названа прямо", typeof s1.signatureNote === "string" && s1.signatureNote.length > 10, String(s1.signatureNote));
 ok("но хеш есть всегда", !!s1.hash, "без подписи чек всё равно проверяем пересчётом");
+
+/* ── 5. Проверка чека ───────────────────────────────────────────────────── */
+
+const v = await m.verifyReceipt({ receipt: r, hash: s1.hash, signature: null });
+ok("целый чек проходит проверку", v.hashMatches === true);
+ok("подпись честно помечена отсутствующей", v.signature === "absent", v.signature);
+ok("спецификация отдаётся наружу", v.spec.canonicalization === "RFC8785" && v.spec.digest === "sha256",
+  JSON.stringify(v.spec));
+
+const vBad = await m.verifyReceipt({ receipt: tamperedPrompt, hash: s1.hash, signature: null });
+ok("подменённый чек проверку НЕ проходит", vBad.hashMatches === false);
+ok("но пересчитанный хеш всё равно отдаётся", /^[0-9a-f]{64}$/.test(vBad.computedHash));
+
+// Без переданного хеша сравнивать не с чем — выдать «сходится» было бы ложным
+// подтверждением, ровно тем, от чего чек и защищает.
+const vNoHash = await m.verifyReceipt({ receipt: r, signature: null });
+ok("без переданного хеша совпадения нет", vNoHash.hashMatches === false);
+
+const vAlgo = await m.verifyReceipt({ receipt: r, hash: s1.hash, signature: { algo: "rsa", kid: "k1", value: "00" } });
+ok("неизвестный алгоритм → unverifiable, а не valid", vAlgo.signature === "unverifiable", vAlgo.signature);
+ok("хеш проверяется даже при непроверяемой подписи", vAlgo.hashMatches === true);
+
+// Ключ не разрешается — подпись непроверяема, но подмену содержимого это
+// скрыть не должно.
+const vNoKey = await m.verifyReceipt({ receipt: tamperedPrompt, hash: s1.hash, signature: { algo: "ed25519", kid: "missing", value: "00" } });
+ok("недоступный ключ не маскирует подмену", vNoKey.hashMatches === false && vNoKey.signature === "unverifiable",
+  `${vNoKey.hashMatches} / ${vNoKey.signature}`);
+ok("детали реестра наружу не утекают",
+  !/SASL|SCRAM|password|postgres|unknown kid/i.test(String(vNoKey.signatureNote)), String(vNoKey.signatureNote));
 
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

@@ -19,7 +19,7 @@
 import { mentionsUnnegated } from "../textNegation";
 import {
   monthlyRateFrom, ratePeriodFromWords, growthPeriodFromWords, parseMoney,
-  NUMBER_PATTERN, MONEY_UNIT_PATTERN, parseLocaleNumber, type RatePeriod,
+  NUMBER_PATTERN, MONEY_UNIT_PATTERN, parseLocaleNumber, MONEY_MULTIPLIER, type RatePeriod,
 } from "../metrics/periods";
 import {
   CURRENCY_PREFIX_PATTERN, detectCurrency, detectCurrencyFirst, toUsd, type MoneyCurrency,
@@ -89,6 +89,8 @@ export interface PlanSignals {
   technicalProof: string[];
   /** Internal contradictions in the plan's own figures — surfaced to the reader, not scored. */
   conflicts: string[];
+  /** How the parser resolved an ambiguity, so the reader sees the choice and not only its result. */
+  parseNotes: string[];
 
   /** Count of concrete quantitative fields parsed (drives signal coverage). */
   fieldsFound: number;
@@ -180,7 +182,7 @@ export function emptySignals(): PlanSignals {
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
-    pilots: null, regulatoryMilestones: [], technicalProof: [], conflicts: [],
+    pilots: null, regulatoryMilestones: [], technicalProof: [], conflicts: [], parseNotes: [],
     fieldsFound: 0,
   };
 }
@@ -236,6 +238,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   const planCurrency = detectCurrencyFirst(t);
   s.currency = planCurrency;
 
+  detectRevenueRange(t, s, planCurrency);
+
   // ── Revenue: "$2M ARR" / "$500k MRR" / "$1.2m in revenue" / "arr of $3m" ──
   const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "i"))
     || firstMatch(t, new RegExp(String.raw`(arr|mrr|revenue)\s*(?:of|=|:|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
@@ -246,7 +250,9 @@ export function parsePlanSignals(text: string): PlanSignals {
     const unitStr = hasLeadingNum ? arr[2] : arr[3];
     const kindStr = (hasLeadingNum ? arr[3] : arr[1]) || "";
     const val = moneyUsd(t, arr, numStr, unitStr, planCurrency);
-    if (val && val > 0) {
+    // A range already resolved this (at its low end) — the single-figure pattern
+    // would otherwise overwrite it with whichever end of the range it matched.
+    if (val && val > 0 && s.revenueUsd === null) {
       const isMrr = /mrr/i.test(kindStr);
       s.revenueUsd = isMrr ? val * 12 : val;
       s.revenueBasis = isMrr ? "MRR" : /arr/i.test(kindStr) ? "ARR" : "revenue";
@@ -375,6 +381,38 @@ export function parsePlanSignals(text: string): PlanSignals {
  *
  * Forward-looking figures are not contradictions: "$2M today, targeting $5M by
  * year end" is a plan, so a figure introduced by a projection word is skipped.
+ */
+function detectRevenueRange(t: string, s: PlanSignals, planCurrency: MoneyCurrency | null): void {
+  if (s.revenueUsd !== null) return;
+  const KIND = String.raw`(arr|mrr|recurring revenue|in revenue|revenue)`;
+  const SPAN = String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`;
+  const m = firstMatch(t, new RegExp(String.raw`${KIND}\s*(?:of|is|at|:|between)?\s*${SPAN}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(?:between\s*)?${SPAN}\s*(?:in\s*)?${KIND}`, "i"));
+  if (!m) return;
+  const groups = m.slice(1).filter((g): g is string => typeof g === "string");
+  const nums = groups.filter((g) => /^\d/.test(g));
+  if (nums.length < 2) return;
+  const units = groups.filter((g) => /^[a-zа-я]{1,8}$/i.test(g) && g.toLowerCase() in MONEY_MULTIPLIER);
+  const a = parseMoney(nums[0], units[0]);
+  const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
+  if (!a || !b) return;
+  const low = toUsd(Math.min(a, b), planCurrency);
+  const high = toUsd(Math.max(a, b), planCurrency);
+  const isMrr = /mrr/i.test(m[0]);
+  s.revenueUsd = isMrr ? low * 12 : low;
+  s.revenueBasis = isMrr ? "MRR" : /arr/i.test(m[0]) ? "ARR" : "revenue";
+  s.mentionsRevenueNoNumber = false;
+  const fmt = (n: number) => (n >= 1e6 ? `$${Math.round((n / 1e6) * 10) / 10}M` : `$${Math.round(n / 1e3)}k`);
+  s.parseNotes.push(`Revenue was disclosed as a range (${fmt(low)}–${fmt(high)}); the score uses the low end.`);
+}
+
+/**
+ * Two different revenue figures stated as present fact — see below. This one
+ * handles the honest cousin of that problem: a plan that gives a range rather
+ * than a point. It used to be dropped in silence, because the revenue pattern
+ * wants one figure, so a founder who was open about uncertainty scored as if
+ * nothing had been disclosed at all. Read at the low end (the diligence
+ * convention) with the choice stated in the assumptions.
  */
 function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCurrency | null): void {
   if (s.revenueUsd === null) return;

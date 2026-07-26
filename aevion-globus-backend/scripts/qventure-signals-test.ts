@@ -235,6 +235,19 @@ ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPc
 ok("unspecified-period churn is disclosed in assumptions",
   analyze({ ...base, description: "SaaS with $2M ARR, 1,000 customers and churn of 3%." }).assumptions.some((a) => /read as monthly/.test(a)));
 
+console.log("\n15. A range is a disclosure, not a blank");
+const rangeArr = parsePlanSignals("SaaS with ARR between $2M and $4M depending on renewals.");
+ok("a range is read at its low end", rangeArr.revenueUsd === 2_000_000, String(rangeArr.revenueUsd));
+ok("the choice is stated, not silent", rangeArr.parseNotes.some((n) => /low end/.test(n)), rangeArr.parseNotes.join("|"));
+ok("'$2-4M' is $2M, not $2", parsePlanSignals("Revenue of $2-4M this year.").revenueUsd === 2_000_000, String(parsePlanSignals("Revenue of $2-4M this year.").revenueUsd));
+const eurRange = parsePlanSignals("€1,5M to €3M ARR in Europe.");
+ok("a currency range converts at the low end", eurRange.revenueUsd !== null && eurRange.revenueUsd > 1_600_000 && eurRange.revenueUsd < 1_800_000, String(eurRange.revenueUsd));
+ok("a single figure is untouched by the range path", parsePlanSignals("$3M ARR flat.").revenueUsd === 3_000_000);
+ok("a single figure carries no range note", parsePlanSignals("$3M ARR flat.").parseNotes.length === 0);
+ok("the range assumption reaches the report",
+  analyze({ ...base, description: "SaaS with ARR between $2M and $4M depending on renewals, 500 customers." })
+    .assumptions.some((a) => /low end/.test(a)));
+
 console.log("\n14. A plan that contradicts itself says so");
 const conflict = analyze({ ...base, description: "SaaS platform. We have $2M ARR today. Elsewhere in the deck: the company reached $5M ARR last quarter." });
 ok("two present-tense revenue figures are surfaced", conflict.redFlags.some((f) => /more than one current revenue figure/.test(f)), conflict.redFlags.join("|"));

@@ -639,6 +639,8 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       : []),
     // A converted figure must never be presented as if it were native.
     ...(signals.currency && signals.currency !== "USD" ? [conversionNote(signals.currency)] : []),
+    // Every ambiguity the parser resolved on the reader's behalf, stated.
+    ...(signals.parseNotes ?? []),
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 

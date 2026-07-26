@@ -13,6 +13,7 @@ import { PERMISSION, permissionSummary } from "../src/routes/qskyway.permission"
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY as CITY_ASTANA } from "../src/routes/qskyway.city";
 import { NOFLY } from "../src/routes/qskyway.zones";
+import { AIRSPACE_PROOFS } from "../src/routes/qskyway.airspace.proof";
 
 /**
  * QSkyway had 112 smoke assertions and ZERO tests in the CI job: the smoke needs
@@ -167,5 +168,31 @@ describe("qskyway — illustrative zones must not pass for published ones", () =
     const gov = (NOFLY.astana ?? []).find((z) => z.id === "nfz-gov")!;
     expect(gov.radiusM).toBeLessThan(1000);
     expect(PERMISSION.astana.regime).toMatch(/UAP28/);
+  });
+});
+
+describe("qskyway — the shipped Bitcoin proof must match the edition we serve", () => {
+  test("the proof's hash is the hash of the current NYC airspace snapshot", () => {
+    // The failure this exists for: someone regenerates qskyway.airspace.nyc.ts
+    // from a newer FAA edition and does not re-anchor. Nothing breaks, nothing
+    // throws — the page just starts serving a proof that silently covers a
+    // different edition than the one routing obeys. CI should notice, not a user.
+    const proof = AIRSPACE_PROOFS.nyc;
+    expect(proof).toBeDefined();
+    expect(proof.contentHash).toBe(airspaceContentHash(AIRSPACE.nyc));
+  });
+
+  test("the proof names the same edition as the data and carries a Bitcoin block", () => {
+    const proof = AIRSPACE_PROOFS.nyc;
+    expect(proof.effective).toBe(AIRSPACE.nyc.effective);
+    expect(proof.bitcoinBlockHeight).toBeGreaterThan(0);
+    expect(proof.otsProofB64.length).toBeGreaterThan(100);
+  });
+
+  test("every shipped proof belongs to a city that actually has a snapshot", () => {
+    for (const [city, proof] of Object.entries(AIRSPACE_PROOFS)) {
+      expect(AIRSPACE[city], `${city} has a snapshot`).toBeDefined();
+      expect(proof.city).toBe(city);
+    }
   });
 });

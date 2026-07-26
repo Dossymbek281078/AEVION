@@ -184,6 +184,28 @@ describe("окно веера vs продление подписки", () => {
     expect(fanAnchorOf(renewal.subscription)).toBe(anchor);
   });
 
+  test("дубль вебхука после рестарта безвреден: без письма и без сдвига окна", async () => {
+    // Дедуп в lemonSqueezyWebhook.ts — Set в памяти процесса, и в комментарии там
+    // компромисс принят осознанно: «jsonl append-only, дубль терпим». После
+    // fanAnchorAt + isRenewalOf это стало правдой ещё и для веера с письмом —
+    // тест закрепляет ровно это, чтобы «терпим» не превратилось обратно в
+    // «шлём письмо и открываем окно заново» при следующей правке.
+    const email = "dup@test.aevion.dev";
+    const first = await provisionSubscription({
+      email, tierId: "medium", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+    // Рестарт процесса → SEEN пуст → LS доставляет то же событие повторно.
+    const dup = await provisionSubscription({
+      email, tierId: "medium", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+
+    expect(dup.emailSkipped).toBe("renewal");        // покупателя не беспокоим
+    expect(dup.emailSent).toBe(false);
+    expect(fanAnchorOf(dup.subscription)).toBe(fanAnchorOf(first.subscription)); // окно на месте
+    // Единственное последствие — лишняя строка в сторе, и latest-wins её терпит.
+    expect(readLatestSubscription(email)!.tierId).toBe("medium");
+  });
+
   test("запись без fanAnchorAt (до 2026-07-26) читается по ts — старые данные не ломаются", () => {
     const legacy = {
       id: "sub_legacy", ts: "2026-07-01T00:00:00.000Z", email: "legacy@test.dev",

@@ -4577,10 +4577,15 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>{void(async()=>{
       try{
         if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
-        const profile=HUMAN_PROFILES[aiI]??HUMAN_PROFILES[2];
+        // A Stockfish level reaches this branch only when the engine is not
+        // ready yet (still loading, or WASM blocked). Someone who picked Master
+        // or Stockfish must not get a bot that hangs pieces on purpose while it
+        // waits — fall back to the strongest bundled move instead, which is
+        // what the old noise model did here.
+        const profile=HUMAN_PROFILES[aiI]??null;
         // Opening book only in standard chess — a variant shares the start
         // position but not the rules, so theory there would be nonsense.
-        if(variant==="standard"&&hist.length<profile.bookPlies){
+        if(profile&&variant==="standard"&&hist.length<profile.bookPlies){
           try{
             const book=await getBookContinuations(fenAtTrigger);
             const uci=pickBookMove(book.moves.map(m=>({uci:m.uci,freq:m.freq})),hist.length,profile);
@@ -4603,7 +4608,9 @@ export default function CyberChessPage(){
         // comes from the profile, not from a search too blind to grade a move.
         const d=Math.max(1,Math.min(lv.depth,4)-1);
         const scored=scoreMoves(c,pos=>mm(pos,d,-Infinity,Infinity,pos.turn()==="w"));
-        const b=pickHumanMove(scored,profile);
+        const b=profile
+          ?pickHumanMove(scored,profile)
+          :scored.reduce((best,s)=>s.score>best.score?s:best,scored[0])?.move??null;
         if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}
       sThink(false);

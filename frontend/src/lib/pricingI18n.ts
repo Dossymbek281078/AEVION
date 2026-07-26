@@ -1009,8 +1009,13 @@ export function usePricingT() {
   return (key: string, vars?: Record<string, string | number>): string => {
     const raw = (dict[lang] ?? dict.en ?? {})[key] ?? dict.en?.[key] ?? key;
     if (!vars) return raw;
+    // split/join, а НЕ replace: String.replace со строковым шаблоном меняет
+    // только ПЕРВОЕ вхождение. Найдено 2026-07-26 на живой странице: ключ
+    // `fan.paywall.offer` содержит {cur} дважды, и в стене 402 отрисовалось
+    // «$12.35/мес вместо {cur}19» — плейсхолдер уехал в интерфейс к покупателю.
+    // Ничего не упало, никто бы не заметил без взгляда на текст.
     return Object.keys(vars).reduce(
-      (acc, k) => acc.replace(`{${k}}`, String(vars[k])),
+      (acc, k) => acc.split(`{${k}}`).join(String(vars[k])),
       raw,
     );
   };

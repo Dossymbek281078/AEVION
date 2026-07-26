@@ -97,14 +97,42 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
     const token = getAuthToken();
     if (!token) return;
     let alive = true;
-    fetch(apiUrl("/api/pricing/fan/me"), { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
+
+    /**
+     * Своя покупка — данные, за которые стоит попробовать дважды.
+     *
+     * Замерено в живом прогоне 2026-07-26: первый запрос после старта бэкенда
+     * может вернуть `appsSource: "unavailable"` (холодный пул Postgres). Раньше
+     * панель на этом залипала НАВСЕГДА: веер пустой, а ручной выбор скрыт,
+     * потому что `mine` уже не null — покупатель оставался в тупике без
+     * единого способа увидеть скидку. Теперь: одна повторная попытка, а если и
+     * она без данных — `mine` НЕ выставляется, и человек видит обычную витрину
+     * с ручным выбором. Тупика быть не должно ни при какой ошибке.
+     */
+    const load = async (attempt: number): Promise<void> => {
+      try {
+        const r = await fetch(apiUrl("/api/pricing/fan/me"), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) return;
+        const j = await r.json();
         if (!alive || !j) return;
-        if (j.appsSource === "unavailable") setAppsUnavailable(true);
-        if (Array.isArray(j.offers)) setMine(j as FanState);
-      })
-      .catch(() => {});
+        const incomplete = j.appsSource === "unavailable";
+        if (incomplete && attempt === 1) {
+          await new Promise((res) => setTimeout(res, 600));
+          return load(2);
+        }
+        if (incomplete) setAppsUnavailable(true);
+        // Пустой веер при неполных данных не выдаём за факт: пусть человек
+        // подберёт вручную, чем смотрит на «скидок нет» из-за нашей ошибки.
+        const hasSomething = Array.isArray(j.offers) && (j.ownedPaid?.length ?? 0) > 0;
+        if (hasSomething) setMine(j as FanState);
+      } catch {
+        /* сеть — тихо, витрина с ручным выбором остаётся доступной */
+      }
+    };
+    void load(1);
+
     return () => {
       alive = false;
     };

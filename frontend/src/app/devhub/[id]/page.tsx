@@ -1769,6 +1769,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
+    if (isCapabilityBlocked(caps, "image")) {
+      setImgError(capabilityHint(caps, "image", "Image generation"));
+      return;
+    }
     setImgLoading(true);
     setImgError(null);
     setImgResult(null);
@@ -1826,6 +1830,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
+    if (isCapabilityBlocked(caps, "audio_music")) {
+      setMusicError(capabilityHint(caps, "audio_music", "Music generation"));
+      return;
+    }
     setMusicLoading(true);
     setMusicError(null);
     setMusicUrl(null);
@@ -2596,6 +2604,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
+    if (isCapabilityBlocked(caps, "audio_tts")) {
+      setMediaTtsError(capabilityHint(caps, "audio_tts", "Voice (TTS)"));
+      return;
+    }
     setMediaTtsLoading(true);
     setMediaTtsError(null);
     setMediaTtsUrl(null);
@@ -3814,6 +3826,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <button
                           onClick={async () => {
                             if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            if (isCapabilityBlocked(caps, "video")) {
+                              setVideoError(capabilityHint(caps, "video", "Video generation"));
+                              return;
+                            }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
                             try {
                               const r = await fetch(apiUrl("/api/devhub/media/video"), {
@@ -3843,7 +3859,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap" }}
+                          title={capabilityHint(caps, "video", "Generate video")}
+                          style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
                         </button>

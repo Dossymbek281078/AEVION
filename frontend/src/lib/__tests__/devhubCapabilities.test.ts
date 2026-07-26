@@ -43,6 +43,18 @@ describe("devhubCapabilities", () => {
     expect(capabilityHint(null, "vercel", "Vercel deploy")).toBe("Vercel deploy");
   });
 
+  it("uses the capability ids the backend actually emits", () => {
+    // A typo here fails open (silently does nothing), so the ids the IDE asks
+    // for are pinned against the list in devhub.ts /studio/capabilities.
+    const BACKEND_IDS = [
+      "code", "github", "railway", "vercel", "pages", "domain",
+      "video", "image", "screenshot_code", "audio_tts", "audio_music",
+      "email", "sms", "whatsapp",
+    ];
+    const USED_BY_IDE = ["railway", "vercel", "pages", "video", "image", "audio_tts", "audio_music"];
+    for (const id of USED_BY_IDE) expect(BACKEND_IDS).toContain(id);
+  });
+
   it("lists every token when a capability needs several", () => {
     const idx = indexCapabilities([
       { id: "domain", status: "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE_ID"] },

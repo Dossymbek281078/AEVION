@@ -9,8 +9,26 @@
 
    Каноном взята та классификация, что уже стояла в расчёте серий: она верна для
    всех строк, которые ставит sOver(...). */
+/* Список строк ниже — полный набор того, что реально передаётся в sOver(...):
+   "Checkmate! You win! 🏆", "Checkmate — AI wins", "Stalemate",
+   "Threefold repetition", "Insufficient material", "50-move draw",
+   "AI timed out — you win!", "Draw agreed", "Time out", "You resigned",
+   "Ничья (договорились)", "<соперник> сдался — Вы победили!".
+
+   Первая версия этой функции знала не все: тройное повторение, недостаток
+   материала и русская «Ничья (договорились)» уходили в поражения, а победа в
+   партии с живым соперником («сдался — Вы победили!») — тоже в поражения.
+   Здесь считается рейтинг и серии, поэтому промах стоит игроку рейтинга. */
 export function gameResultOf(result: string): "W" | "L" | "D" {
-  if (result.includes("You win") || result.includes("win!")) return "W";
-  if (result.includes("Draw") || result.includes("draw") || result.includes("Stalemate")) return "D";
+  const r = result.toLowerCase();
+  if (r.includes("you win") || r.includes("win!") || r.includes("вы победили")) return "W";
+  if (
+    r.includes("draw") ||
+    r.includes("stalemate") ||
+    r.includes("repetition") ||
+    r.includes("insufficient") ||
+    r.includes("ничья") ||
+    r.includes("пат")
+  ) return "D";
   return "L";
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -136,7 +137,7 @@ const _RSS = `${getApiBase()}/api/modules/changelog.rss`;
 export const metadata: Metadata = {
   title: "AEVION ecosystem modules",
   description:
-    "37 nodes of the AEVION ecosystem with live tier and status. Filter by tier, status, kind, or search by name.",
+    `${MODULE_NODES} nodes of the AEVION ecosystem with live tier and status. Filter by tier, status, kind, or search by name.`,
   alternates: {
     types: {
       "application/rss+xml": _RSS,
@@ -145,13 +146,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "article",
     title: "AEVION ecosystem modules",
-    description: "37 nodes with live tier and status — filter, search, export CSV.",
+    description: `${MODULE_NODES} nodes with live tier and status — filter, search, export CSV.`,
     images: [{ url: _OG, width: 1200, height: 630, alt: "AEVION ecosystem modules" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION ecosystem modules",
-    description: "37 nodes with live tier and status — filter, search, export CSV.",
+    description: `${MODULE_NODES} nodes with live tier and status — filter, search, export CSV.`,
     images: [_OG],
   },
 };
@@ -188,7 +189,7 @@ const COPY = {
   en: {
     title: "AEVION ecosystem modules",
     subtitle:
-      "All 37 nodes with live tier and status. Use filters to drill down or download the full CSV.",
+      `All ${MODULE_NODES} nodes with live tier and status. Use filters to drill down or download the full CSV.`,
     headTotal: "Total modules",
     headLive: "MVP live",
     headApi: "Platform API",

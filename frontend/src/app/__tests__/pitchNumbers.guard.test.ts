@@ -55,9 +55,29 @@ const RETIRED: Array<{ pattern: RegExp; reason: string }> = [
   },
   {
     pattern: /\b29\b[^\n]{0,20}(product nodes|modules? live|nodes)/i,
-    reason: '"29 … nodes" — stale module count (canonical public count is 37 nodes; import MODULE_NODES from pitchFacts)',
+    reason: '"29 … nodes" — stale module count (never hardcode it; import MODULE_NODES from pitchFacts)',
   },
 ];
+
+/**
+ * AutoTranslate matches dictionary keys by EXACT full string. So the moment the
+ * module count changes, the phrase "<N> product nodes" stops matching and the
+ * Russian rendering silently falls back to English — no error, no test failure,
+ * just an untranslated line nobody notices. This locks the two together.
+ */
+describe("AutoTranslate — the module-count phrase stays translatable", () => {
+  it(`carries a dictionary entry for the current count`, async () => {
+    const { MODULE_NODES } = await import("@/data/pitchFacts");
+    const dict = readFileSync(path.join(FRONTEND_ROOT, "src/components/AutoTranslate.tsx"), "utf8");
+    const phrase = `"${MODULE_NODES} product nodes"`;
+    expect(
+      dict.includes(phrase),
+      `AutoTranslate.tsx has no entry for ${phrase}. The dictionary matches whole ` +
+        `strings exactly, so without it the phrase renders untranslated in RU. ` +
+        `Add the pair next to the existing "product nodes" entries.`,
+    ).toBe(true);
+  });
+});
 
 describe("pitch numbers — retired figures must not resurface", () => {
   for (const rel of SURFACES) {

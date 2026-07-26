@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { LIVE_MODULES } from "@/data/pitchFacts";
 
 export const metadata: Metadata = {
-  title: "Explore the AEVION planet — 25+ tools you own",
+  title: `Explore the AEVION planet — ${LIVE_MODULES} tools you own`,
   description:
     "AEVION is a working planet of AI, ownership and money on a single trust core. Register what you create, prove it cryptographically, get paid, and run business, health and life from one place. Start with QVenture.",
   openGraph: {

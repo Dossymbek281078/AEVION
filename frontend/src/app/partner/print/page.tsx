@@ -1,3 +1,5 @@
+import { MODULE_NODES } from "@/data/pitchFacts";
+
 const css = `
   @page { size: A4; margin: 16mm 14mm; }
   html, body { background: #fff !important; color: #111 !important; font-family: Inter, Helvetica, Arial, sans-serif; }
@@ -196,7 +198,7 @@ export default function PartnerPrintPage() {
           <li><strong>aevion.app/transparency</strong> — live health-board, daily smoke 24/24</li>
           <li><strong>aevion.app/constitution</strong> — Constitution v1, QSign-attested, 3 languages</li>
           <li><strong>aevion.app/partner</strong> — full visual brief</li>
-          <li><strong>/api/aevion/registry</strong> — JSON registry of all 30+ modules</li>
+          <li><strong>/api/aevion/registry</strong> — JSON registry of all {MODULE_NODES} modules</li>
         </ul>
 
         <div className="footer">

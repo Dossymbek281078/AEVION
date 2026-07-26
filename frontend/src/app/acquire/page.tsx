@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -588,7 +589,7 @@ export default function AcquirePage() {
                 Полный пакет промо одним архивом
               </h3>
               <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, marginBottom: 18 }}>
-                PROMPT (мета-промт) · MASTER PITCH (60s / 3m / 12m) · MODULES (по всем 30+) ·
+                PROMPT (мета-промт) · MASTER PITCH (60s / 3m / 12m) · MODULES (по всем {MODULE_NODES}) ·
                 DEAL TERMS · VIDEO STORYBOARD · DEMO FLOW · FINANCIAL APPENDIX · FAQ.
                 Один zip, ~42KB, читается в Cursor/Obsidian/Notepad.
               </p>

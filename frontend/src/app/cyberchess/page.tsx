@@ -11388,13 +11388,16 @@ ${question.trim()}`;
 
     {/* Chessy Shop */}
     {showShop&&(()=>{
-      type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean};
+      type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean;/** Объявлен, но ещё не работает — показываем «Скоро» и не продаём. */soon?:boolean};
       const items:ShopItem[]=[
         {id:"master_ai",name:"Master AI (2400 ELO)",desc:"Разблокирует самого сильного соперника",cost:30,kind:"unlock"},
         {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
-        {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
+        // soon:true — покупка записывала владение, но ЧИТАТЬ его было некому: ни одной
+        // ссылки на owned.ai_rival во всём модуле. Игрок платил 100 Chessy (самый
+        // дорогой товар) и не получал ничего. Продаём, когда режим появится.
+        {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой",cost:100,kind:"unlock",soon:true},
         {id:"hint_ghost",
           name:(()=>{
             const left=(chessy.ach as Record<string,number>).hints_left||0;
@@ -11640,9 +11643,9 @@ ${question.trim()}`;
                 variant={dis?"secondary":"primary"}
                 size="sm"
                 full
-                onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}}
+                onClick={()=>{if(it.soon){showToast("Скоро — этот режим ещё готовится","info");return}if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}}
               >
-                {it.disabled?"Нужна сыгранная партия":!afford?`Нужно +${it.cost-chessy.balance}`:it.kind==="action"?"Использовать":"Купить"}
+                {it.soon?"Скоро":it.disabled?"Нужна сыгранная партия":!afford?`Нужно +${it.cost-chessy.balance}`:it.kind==="action"?"Использовать":"Купить"}
               </Btn>}
             </div>;
           })}

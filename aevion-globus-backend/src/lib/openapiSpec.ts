@@ -596,6 +596,7 @@ export const openapiSpec = {
     "/api/qskyway/verify": { get: { summary: "Verify Ed25519 over the city twin AND the airspace layer (?city=)", security: [] } },
     "/api/qskyway/airspace/anchor": { post: { summary: "Submit the airspace layer's content hash to OpenTimestamps (Bitcoin) — trustless proof of when the edition was in use", security: [] } },
     "/api/qskyway/airspace/anchor/verify": { post: { summary: "Verify an OTS proof {city, contentHash, otsProofB64}; reports Bitcoin anchoring and current-snapshot match separately", security: [] } },
+    "/api/qskyway/airspace/proof": { get: { summary: "The shipped Bitcoin (OpenTimestamps) proof for the airspace edition in use, verified on the fly; says separately whether it still covers the current edition", security: [] } },
     "/api/qskyway/airspace/register": { post: { summary: "Register the signed airspace edition in the QRight registry (idempotent on content hash)", security: [] } },
     "/api/qskyway/slots": { get: { summary: "4D slot market (QRight receipts); POST books {routeId,t0,t1,holder}, 409 over capacity", security: [] } },
     "/api/qtrade/cap-status": { get: { summary: "Daily-cap headroom for caller (used / cap / remainingSec)" } },

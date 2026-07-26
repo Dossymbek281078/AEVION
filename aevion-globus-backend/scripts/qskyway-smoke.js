@@ -260,6 +260,16 @@ async function main() {
   // The disclaimer must not contradict the document it is attached to.
   assert(/режим разрешений/.test(justTk.json?.scope ?? "") && !/фида регулятора нет/.test(justTk.json?.scope ?? ""), "[tokyo] scope text matches what the document actually contains");
 
+  // The shipped Bitcoin proof: a proof nobody keeps is a proof that does not
+  // exist, so the one for the edition in use must verify with no arguments.
+  const pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  assert(pf.status === 200 && pf.json?.contentHash === asN._signature.contentHash, "[nyc] shipped proof is for the edition actually served", `${pf.status}`);
+  assert(pf.json?.coversCurrentEdition === true, "[nyc] shipped proof still covers the current edition");
+  assert(pf.json?.verification?.ots?.verified === true && pf.json?.verification?.ots?.status === "bitcoin-confirmed", "[nyc] shipped proof verifies against Bitcoin", `block=${pf.json?.verification?.ots?.bitcoinBlockHeight}`);
+  assert(pf.json?.verification?.fullyProven === true && pf.json?.bitcoinBlockHeight > 0, "[nyc] edition is trustlessly timestamped", `block=${pf.json?.bitcoinBlockHeight}`);
+  const pfAst = await jget("/api/qskyway/airspace/proof?city=astana");
+  assert(pfAst.status === 404, "[astana] no shipped proof where there is no edition to anchor", `status=${pfAst.status}`);
+
   // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
   // both outcomes are legitimate — what must never happen is a success response
   // when nothing was written.

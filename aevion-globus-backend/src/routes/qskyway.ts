@@ -8,6 +8,7 @@ import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
 import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
+import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
 
@@ -54,6 +55,7 @@ import { getPool } from "../lib/dbPool";
  *   POST /route/justification — один подписанный документ «почему рейс обоснован»
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
+ *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
  */
 
@@ -853,6 +855,28 @@ qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
 
 qskywayRouter.post("/airspace/anchor/verify", async (req: Request, res: Response) => {
   res.json(await verifyAnchoredAirspace(req.body));
+});
+
+// The proof we ship for the edition actually in use, checkable by anyone with
+// no arguments and no re-anchoring. A stateless anchor is right for a caller
+// timestamping their own data, but the edition THIS service routes against
+// needs a proof that outlives the request that created it.
+qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const proof = AIRSPACE_PROOFS[resolved.id];
+  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", city: resolved.id });
+  const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
+  const verdict = await verifyAnchoredAirspace({ city: resolved.id, contentHash: proof.contentHash, otsProofB64: proof.otsProofB64 });
+  res.json({
+    ...proof,
+    currentContentHash: current,
+    // Reported separately, because after a reissue the proof stays valid for the
+    // edition it covers while no longer describing what we serve — a historical
+    // record, not a broken proof.
+    coversCurrentEdition: current === proof.contentHash,
+    verification: verdict,
+  });
 });
 
 /**

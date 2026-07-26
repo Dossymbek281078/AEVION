@@ -494,11 +494,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"video" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
+  const [mediaTab, setMediaTab] = useState<"video" | "3d" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
 
   // Video generation state (Replicate)
   const [videoPrompt, setVideoPrompt] = useState("");
-  const [videoModel, setVideoModel] = useState("minimax/video-01");
+  const [videoModel, setVideoModel] = useState("google/veo-3-fast");
+  // Catalogue comes from the server so the picker cannot drift from what the
+  // backend can actually run — the hard-coded list had gone two model
+  // generations stale.
+  const [videoModels, setVideoModels] = useState<Array<{ id: string; label: string; provider: string; audio: boolean; note: string; default?: boolean }>>([]);
+  const [threeDModels, setThreeDModels] = useState<Array<{ id: string; label: string; provider: string; note: string; default?: boolean }>>([]);
+  const [threeDModel, setThreeDModel] = useState("firtoz/trellis");
+  const [threeDImageUrl, setThreeDImageUrl] = useState("");
+  const [threeDLoading, setThreeDLoading] = useState(false);
+  const [threeDStatus, setThreeDStatus] = useState<string | null>(null);
+  const [threeDUrl, setThreeDUrl] = useState<string | null>(null);
+  const [threeDError, setThreeDError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState("5");
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
@@ -718,6 +729,27 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       .then((d) => setTemplates(d.templates || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "media") return;
+    if (videoModels.length === 0) {
+      fetch(apiUrl("/api/devhub/media/video/models"), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          setVideoModels(d.models || []);
+          const def = (d.models || []).find((m: { default?: boolean }) => m.default);
+          if (def) setVideoModel(def.id);
+        })
+        .catch(() => {});
+    }
+    if (threeDModels.length === 0) {
+      fetch(apiUrl("/api/devhub/media/3d/models"), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setThreeDModels(d.models || []))
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     // Failure stays silent on purpose: caps === null means "fail open", the
@@ -3837,7 +3869,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["video", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -3880,11 +3912,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           onChange={(e) => setVideoModel(e.target.value)}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                         >
-                          <option value="minimax/video-01">MiniMax Video-01 (text-to-video)</option>
-                          <option value="tencent/hunyuan-video">Tencent HunyuanVideo (high quality)</option>
-                          <option value="lucataco/animate-diff-v2">AnimateDiff v2 (fast)</option>
-                          <option value="stability-ai/stable-video-diffusion">Stable Video Diffusion</option>
+                          {(videoModels.length ? videoModels : [{ id: videoModel, label: videoModel, provider: "", audio: false, note: "" }]).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}{m.audio ? " · со звуком" : ""}
+                            </option>
+                          ))}
                         </select>
+                        {videoModels.find((m) => m.id === videoModel)?.note && (
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                            {videoModels.find((m) => m.id === videoModel)!.note}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
@@ -3965,6 +4003,100 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   )}
 
                   {/* TTS */}
+                  {/* 3D assets — image → textured GLB */}
+                  {mediaTab === "3d" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+                        Готовая 3D-модель в формате GLB — открывается в three.js, Unity и Blender.
+                        Нужна картинка предмета: сгенерируйте её во вкладке Image и вставьте ссылку сюда.
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Модель</label>
+                        <select
+                          value={threeDModel}
+                          onChange={(e) => setThreeDModel(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                        >
+                          {(threeDModels.length ? threeDModels : [{ id: threeDModel, label: threeDModel, provider: "", note: "" }]).map((m) => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                        {threeDModels.find((m) => m.id === threeDModel)?.note && (
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                            {threeDModels.find((m) => m.id === threeDModel)!.note}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Ссылка на картинку</label>
+                        <input
+                          value={threeDImageUrl}
+                          onChange={(e) => setThreeDImageUrl(e.target.value)}
+                          placeholder="https://... (png или jpg с одним предметом)"
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
+                          if (isCapabilityBlocked(caps, "video")) { setThreeDError(capabilityHint(caps, "video", "3D-генерация")); return; }
+                          setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
+                          try {
+                            const r = await fetch(apiUrl("/api/devhub/media/3d"), {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ imageUrl: threeDImageUrl.trim(), model: threeDModel }),
+                            });
+                            const d = await r.json();
+                            if (!r.ok || !d.ok) {
+                              // 402 means the provider has no balance — say that, not "failed".
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (d.error || "3D generation failed"));
+                              setThreeDLoading(false);
+                              return;
+                            }
+                            setThreeDStatus("generating…");
+                            const poll = async (id: string, attempts = 0) => {
+                              if (attempts > 100) { setThreeDError("Таймаут — попробуйте ещё раз"); setThreeDLoading(false); return; }
+                              const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
+                              const sd = await sr.json();
+                              setThreeDStatus(sd.status);
+                              if (sd.status === "succeeded") {
+                                const url = sd.videoUrl || sd.output?.model_file || (Array.isArray(sd.output) ? sd.output[0] : sd.output);
+                                if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
+                                setThreeDLoading(false);
+                              } else if (sd.status === "failed") {
+                                setThreeDError(sd.error || "Генерация не удалась"); setThreeDLoading(false);
+                              } else {
+                                setTimeout(() => poll(id, attempts + 1), 3000);
+                              }
+                            };
+                            setTimeout(() => poll(d.predictionId), 4000);
+                          } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
+                        }}
+                        disabled={threeDLoading || !threeDImageUrl.trim()}
+                        title={capabilityHint(caps, "video", "Сгенерировать 3D")}
+                        style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
+                      >
+                        {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}
+                      </button>
+                      {threeDError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13, wordBreak: "break-word" }}>{threeDError}</div>}
+                      {threeDUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>
+                            GLB готов — скачайте или сохраните ссылку в файл проекта.
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <a href={threeDUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", borderRadius: 7, fontWeight: 700, fontSize: 13, textAlign: "center", textDecoration: "none" }}>Скачать GLB</a>
+                            <button
+                              onClick={() => { setEditorContent(threeDUrl); if (selectedFile) saveCurrentFile(selectedFile.path, threeDUrl, selectedFile.language); showToast("Ссылка на модель сохранена в файл", "success"); }}
+                              style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                            >Сохранить ссылку в файл</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {mediaTab === "tts" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>

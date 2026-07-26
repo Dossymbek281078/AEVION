@@ -458,6 +458,45 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 3) Stub — ни один процессинг не настроен для этого tier:period.
     const paidStub = charge("stub");
+
+    /**
+     * 🔴 В ПРОДЕ stub НЕ выписывает подписку.
+     *
+     * Найдено 2026-07-26 сквозной проверкой денежного пути и подтверждено
+     * прогоном: при незаданных процессингах эта ветка провижинила НАСТОЯЩУЮ
+     * подписку без единой оплаты — включая Universe, и записывала
+     * `amountUsd: 249.99`, как будто деньги пришли. Локально это ровно то, что
+     * нужно (разработка без ключей), в проде — бесплатный доступ по запросу и
+     * ложные $249.99 в отчёте о выручке.
+     *
+     * Ветка достижима на проде не гипотетически: у тарифа Universe (`pro`) нет
+     * LS-варианта вовсе (см. комментарий в data/lemonSqueezyVariants.ts), то
+     * есть его чекаут проваливается мимо LS по построению.
+     *
+     * Поведение в проде: честный отказ и ссылка на связь. Молча отдать доступ
+     * или молча отдать ссылку «оплачено» — обе ветки хуже отказа.
+     */
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        `[checkout] НЕТ ПРОЦЕССИНГА для ${tier.id}:${period} — подписка НЕ выписана. ` +
+          `Настрой LS-вариант/Gumroad-permalink для этого тарифа.`,
+      );
+      capture(new Error(`no_payment_provider_configured:${tier.id}:${period}`), {
+        where: "checkout/stub",
+      });
+      paidStub.record();
+      return res.status(503).json({
+        error: "no_payment_provider",
+        message:
+          "Оплата этого тарифа сейчас недоступна — ни один процессинг для него не настроен. " +
+          "Мы не выписываем подписку без оплаты; напишите нам, и мы оформим вручную.",
+        url: `${FRONTEND_URL}/pricing/contact?tier=${tier.id}&reason=no_provider`,
+        tierId: tier.id,
+        period,
+        quotedUsd: quote.total,
+      });
+    }
+
     if (email) {
       provisionSubscription({
         email,

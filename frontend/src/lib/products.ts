@@ -60,7 +60,10 @@ export const SUBSCRIPTIONS: Product[] = [
     id: "xpxzam",
     title: "AEVION All-Access",
     format: "подписка · $59 / мес",
-    desc: "Доступ ко всей экосистеме AEVION одной подпиской — вместо покупки модулей поштучно.",
+    // Формулировка сверена с текстом самого продавца на Gumroad, а не сочинена из тарифов.
+    desc:
+      "Полный доступ к платформе — 15+ модулей: QRight, QSign, QCoreAI, QFusionAI, QPayNet, " +
+      "QTradeOffline, Constitution и другие. Одна подписка, без лимитов.",
     priceUsd: 59,
     billing: "monthly",
     kind: "subscription",
@@ -80,27 +83,34 @@ export const SUBSCRIPTIONS: Product[] = [
     id: "wjvquw",
     title: "Constitution Team",
     format: "подписка · $49 / мес",
-    desc: "Constitution Design Lab для команды: совместная работа над IP-конституцией, общие объекты и подписи.",
+    desc:
+      "Симулятор мироустройства: восемь параметров, четыре опоры, живой прогон в исторические режимы. " +
+      "Безлимит сохранений, ИИ-советник, чистый PDF, виджет для встраивания.",
     priceUsd: 49,
     billing: "monthly",
     kind: "subscription",
     processor: "gumroad",
     href: GUM("wjvquw"),
     appId: "constitution",
-    includes: ["Всё из Constitution Pro", "Командные места", "Общая база объектов и подписей"],
+    // ⚠️ На Gumroad у Pro ($9) и Team ($49) СОВПАДАЮЩЕЕ описание — покупателю не видно,
+    // за что доплата впятеро. Состав придумывать нельзя; до решения основателя честно
+    // говорим то, что известно.
+    includes: ["Состав пакета не описан продавцом — уточняется"],
   },
   {
     id: "pyiaz",
     title: "Constitution Pro",
     format: "подписка · $9 / мес",
-    desc: "Конструктор IP-конституции на 12 страниц, 27+ эндпоинтов подачи, криптографическое подтверждение через QSign.",
+    desc:
+      "Симулятор мироустройства: восемь параметров, четыре опоры, живой прогон в исторические режимы. " +
+      "Безлимит сохранений, ИИ-советник, чистый PDF, виджет для встраивания.",
     priceUsd: 9,
     billing: "monthly",
     kind: "subscription",
     processor: "gumroad",
     href: GUM("pyiaz"),
     appId: "constitution",
-    includes: ["Конструктор конституции", "Подача документов", "QSign-подпись"],
+    includes: ["Безлимит сохранений", "ИИ-советник", "Чистый PDF", "Виджет для встраивания"],
   },
 ];
 

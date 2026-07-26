@@ -102,16 +102,19 @@ const APP_DEFS: AppDef[] = [
     id: "constitution",
     productId: "pyiaz",
     icon: "📜",
-    name: "Constitution Design Lab",
-    tagline: "AI-powered IP registration",
+    name: "Constitution — World-System Design Lab",
+    tagline: "Political economy simulator",
     href: "/constitution",
     cat: "Business",
+    // Описание выправлено 26.07.2026 по живому модулю /constitution и карточке Gumroad:
+    // здесь значилось «AI-powered IP registration / 12-page IP constitution builder /
+    // 27+ filing endpoints / QSign proof» — это другой продукт. /constitution на самом
+    // деле «World-System Design Lab»: восемь параметров, ползунки, исторические режимы.
     highlights: [
-      "12-page IP constitution builder",
-      "27+ filing endpoints",
-      "QSign cryptographic proof",
+      "Eight parameters across four pillars",
+      "Historical regime simulation",
+      "AI advisor · clean PDF · embed widget",
     ],
-    // Единая цена везде: Gumroad Constitution Pro $9 (та же ссылка, что на /constitution).
   },
   {
     id: "bureau",

@@ -1,0 +1,263 @@
+/**
+ * StartupX — shared types and API access for the exchange UI.
+ *
+ * The shapes here mirror aevion-globus-backend/src/lib/startupx/*. They are
+ * intentionally not re-derived: the backend is the source of truth for tier
+ * rules, market sources and the disclaimer, and the UI reads them from
+ * /api/startupx/tiers rather than keeping a second copy that can drift.
+ */
+
+import { apiUrl } from "@/lib/apiBase";
+
+export type Tier = "idea" | "mvp" | "product";
+export type DealIntent = "raise" | "sell_stake" | "sell_full";
+export type BuildBy = "founder" | "investor" | "shared";
+
+export interface TierSpec {
+  id: Tier;
+  label: string;
+  offer: string;
+  intents: DealIntent[];
+  ticketUsd: { low: number; high: number };
+  minDescription: number;
+  requiresDemoUrl: boolean;
+}
+
+export interface DealTerms {
+  intent: DealIntent;
+  askUsd?: number;
+  equityOfferedPct?: number;
+  buildBy?: BuildBy;
+  askingPriceUsd?: number;
+  stakeForSalePct?: number;
+  stakePriceUsd?: number;
+  notes?: string;
+}
+
+export interface ListingMetrics {
+  mrrUsd?: number;
+  arrUsd?: number;
+  users?: number;
+  payingCustomers?: number;
+  growthMomPct?: number;
+  churnMonthlyPct?: number;
+  grossMarginPct?: number;
+  teamSize?: number;
+  monthsInDevelopment?: number;
+}
+
+export interface AssessmentFactor {
+  key: string;
+  label: string;
+  weight: number;
+  score: number;
+  rationale: string;
+  basis: "company-evidence" | "sector-prior" | "text-only";
+}
+
+export interface RedFlag {
+  severity: "high" | "medium" | "info";
+  message: string;
+}
+
+export interface ValuationBand {
+  low: number;
+  base: number;
+  high: number;
+  basis: string;
+  method: "revenue-multiple" | "stage-band";
+}
+
+export interface Assessment {
+  version: number;
+  tier: Tier;
+  score: number;
+  band: "strong" | "mixed" | "weak";
+  headline: string;
+  factors: AssessmentFactor[];
+  redFlags: RedFlag[];
+  blindSpots: string[];
+  deal: {
+    band: ValuationBand;
+    implied: { postMoneyUsd: number | null; ratioToBandHigh: number | null; formula: string | null };
+    ticket: { low: number; high: number; note: string };
+  };
+  sector: { id: string; label: string; tamUsdBn: number; cagr: number };
+  sources: Array<{ publisher: string; year: number; claim: string; url: string }>;
+  evidenceCoverage: number;
+  disclaimer: string;
+  generatedAt: string;
+}
+
+export interface Listing {
+  id: number;
+  title: string;
+  description: string;
+  tier: Tier;
+  tierLabel: string;
+  stage: string;
+  sector: string | null;
+  geography: string | null;
+  demo_url: string | null;
+  repo_url: string | null;
+  deal: DealTerms | null;
+  metrics: ListingMetrics | null;
+  assessment: Assessment | null;
+  assessment_score: number | null;
+  contact_method: string | null;
+  content_hash: string | null;
+  qright_protected: boolean;
+  created_at: string;
+  interest_count?: number;
+}
+
+export interface ListingDraft {
+  title: string;
+  description: string;
+  tier: Tier;
+  sector?: string;
+  geography?: string;
+  demoUrl?: string;
+  repoUrl?: string;
+  deal: DealTerms;
+  metrics?: ListingMetrics;
+  founderEmail?: string;
+  contactMethod?: string;
+}
+
+export interface ValidationIssue {
+  field: string;
+  message: string;
+}
+
+export class ApiError extends Error {
+  issues: ValidationIssue[];
+  constructor(message: string, issues: ValidationIssue[] = []) {
+    super(message);
+    this.issues = issues;
+  }
+}
+
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(apiUrl(`/api/startupx${path}`), {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  let payload: unknown = null;
+  try {
+    payload = await resp.json();
+  } catch {
+    throw new ApiError(`Сервер ответил ${resp.status} без данных`);
+  }
+  const body = payload as { success?: boolean; data?: T; error?: string; issues?: ValidationIssue[] };
+  if (!resp.ok || body?.success === false) {
+    throw new ApiError(body?.error ?? `Ошибка ${resp.status}`, body?.issues ?? []);
+  }
+  return body.data as T;
+}
+
+export const startupxApi = {
+  tiers: () =>
+    call<{
+      tiers: TierSpec[];
+      intents: DealIntent[];
+      /** Sector list the assessment scores against — the form offers only these. */
+      sectors: Array<{ id: string; label: string }>;
+      sources: Assessment["sources"];
+      assessmentVersion: number;
+      disclaimer: string;
+    }>("/tiers"),
+
+  stats: () =>
+    call<{
+      total: number;
+      byTier: Record<string, number>;
+      recentCount: number;
+      assessed: number;
+      avgScore: number;
+    }>("/stats"),
+
+  list: (params: { tier?: Tier | ""; limit: number; offset: number; sort?: "recent" | "score" }) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(params.limit));
+    q.set("offset", String(params.offset));
+    if (params.tier) q.set("tier", params.tier);
+    if (params.sort) q.set("sort", params.sort);
+    return call<{ listings: Listing[]; total: number }>(`/ideas?${q.toString()}`);
+  },
+
+  get: (id: number) => call<Listing>(`/ideas/${id}`),
+
+  /** Free analysis of a draft — nothing is stored. */
+  assess: (draft: ListingDraft) =>
+    call<{ assessment: Assessment; stored: boolean }>("/assess", {
+      method: "POST",
+      body: JSON.stringify(draft),
+    }),
+
+  publish: (draft: ListingDraft) =>
+    call<{ id: number; contentHash: string; listing: Listing; assessment: Assessment }>("/ideas", {
+      method: "POST",
+      body: JSON.stringify(draft),
+    }),
+
+  interest: (
+    id: number,
+    payload: { investorEmail: string; message?: string; intent?: DealIntent; ticketUsd?: number; equityPct?: number },
+  ) =>
+    call<{ id: number; ideaId: number }>(`/ideas/${id}/interest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+
+export function usd(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
+  return `$${Math.round(n)}`;
+}
+
+export const TIER_ACCENT: Record<Tier, string> = {
+  idea: "#7c3aed",
+  mvp: "#0d9488",
+  product: "#b45309",
+};
+
+export const BAND_STYLE: Record<Assessment["band"], { label: string; color: string; bg: string }> = {
+  strong: { label: "Сильная заявка", color: "#166534", bg: "#dcfce7" },
+  mixed: { label: "Есть пробелы", color: "#92400e", bg: "#fef3c7" },
+  weak: { label: "Не готова", color: "#991b1b", bg: "#fee2e2" },
+};
+
+export const INTENT_LABEL: Record<DealIntent, string> = {
+  raise: "Привлекает инвестиции за долю",
+  sell_stake: "Продаёт долю",
+  sell_full: "Продаёт проект целиком",
+};
+
+export const BUILD_BY_LABEL: Record<BuildBy, string> = {
+  founder: "дорабатывает основатель",
+  investor: "разработку берёт инвестор",
+  shared: "делают вместе",
+};
+
+/** One line describing what the founder is asking for, from the deal terms. */
+export function dealHeadline(deal: DealTerms | null): string {
+  if (!deal) return "Условия сделки не указаны";
+  if (deal.intent === "raise") {
+    if (deal.askUsd && deal.equityOfferedPct) {
+      return `${usd(deal.askUsd)} за ${deal.equityOfferedPct}%`;
+    }
+    return "Привлекает инвестиции";
+  }
+  if (deal.intent === "sell_stake") {
+    if (deal.stakePriceUsd && deal.stakeForSalePct) {
+      return `${deal.stakeForSalePct}% за ${usd(deal.stakePriceUsd)}`;
+    }
+    return "Продаёт долю";
+  }
+  return deal.askingPriceUsd ? `Продажа целиком — ${usd(deal.askingPriceUsd)}` : "Продажа целиком";
+}

@@ -3,6 +3,11 @@
  * Startup Exchange smoke test.
  * Usage: BASE=http://localhost:4001 node scripts/startupx-smoke.js
  *        BASE=https://aevion-production-a70c.up.railway.app node scripts/startupx-smoke.js
+ *
+ * Covers the capability the exchange sells, not just the fact that routes
+ * answer: a tier, terms an investor can read, and a free assessment that
+ * compares those terms to the market — plus the two refusals that keep the
+ * feed honest (no deal terms → no listing; no demo link → no product listing).
  */
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/$/, "");
 let passed = 0, failed = 0;
@@ -21,61 +26,120 @@ async function req(method, path, body) {
   catch { return { status: r.status, body: text }; }
 }
 
+const DESCRIPTION =
+  "Проблема: мелкие перевозчики ищут обратный груз вручную в чатах и теряют треть рейсов на пустом " +
+  "пробеге. Для кого: перевозчики с парком 1–5 машин. Мы делаем платформу, которая автоматически " +
+  "подбирает груз по маршруту освободившейся машины. Зарабатываем на комиссии 5% с рейса. " +
+  "В отличие от досок объявлений, подбор идёт по факту освободившейся машины.";
+
 async function run() {
   console.log(`\nStartup Exchange smoke → ${BASE}\n`);
 
-  console.log("1. Health");
+  console.log("1. Health + tier contract");
   const h = await req("GET", "/api/startupx/health");
   assert("GET /health → 200", h.status === 200, String(h.status));
   assert("ok === true", h.body?.ok === true);
 
-  console.log("\n2. Submit idea");
+  const tiers = await req("GET", "/api/startupx/tiers");
+  assert("GET /tiers → 200", tiers.status === 200, String(tiers.status));
+  const tierIds = (tiers.body?.data?.tiers ?? []).map((t) => t.id);
+  assert("three tiers exposed", JSON.stringify(tierIds) === JSON.stringify(["idea", "mvp", "product"]), JSON.stringify(tierIds));
+  assert("disclaimer served with the contract", /не гарантирует/.test(tiers.body?.data?.disclaimer ?? ""));
+  assert("sector list served", Array.isArray(tiers.body?.data?.sectors) && tiers.body.data.sectors.length > 0);
+
+  console.log("\n2. Free assessment of a draft (no deal terms, nothing stored)");
+  const draft = await req("POST", "/api/startupx/assess", {
+    title: "Draft check",
+    description: DESCRIPTION,
+    tier: "idea",
+    sector: "marketplace",
+  });
+  assert("POST /assess → 200", draft.status === 200, String(draft.status));
+  const draftA = draft.body?.data?.assessment;
+  assert("score is a number 0–100", typeof draftA?.score === "number" && draftA.score >= 0 && draftA.score <= 100, String(draftA?.score));
+  assert("nothing stored", draft.body?.data?.stored === false);
+  assert("blind spots always present", Array.isArray(draftA?.blindSpots) && draftA.blindSpots.length >= 4);
+  assert("disclaimer travels inside the payload", /не гарантирует/.test(draftA?.disclaimer ?? ""));
+  // A Russian description must actually score: `\b` never matches before a
+  // Cyrillic letter, and a regex written that way silently scored every
+  // Russian listing as though it said nothing.
+  const clarity = (draftA?.factors ?? []).find((f) => f.key === "clarity");
+  assert("Russian text is read, not silently ignored", (clarity?.score ?? 0) > 60, `clarity=${clarity?.score}`);
+
+  console.log("\n3. Refusals that keep the feed honest");
+  const noTerms = await req("POST", "/api/startupx/ideas", {
+    title: "No terms", description: DESCRIPTION, tier: "idea",
+  });
+  assert("publishing without deal terms → 400", noTerms.status === 400, String(noTerms.status));
+  assert("the missing field is named", (noTerms.body?.issues ?? []).some((i) => i.field === "deal.intent"));
+
+  const noDemo = await req("POST", "/api/startupx/ideas", {
+    title: "No demo", description: DESCRIPTION, tier: "product",
+    deal: { intent: "sell_full", askingPriceUsd: 150000 },
+  });
+  assert("a working product without a link → 400", noDemo.status === 400, String(noDemo.status));
+  assert("demoUrl is the named field", (noDemo.body?.issues ?? []).some((i) => i.field === "demoUrl"));
+
+  console.log("\n4. Publish a listing with terms");
   const tag = `smoke-${Date.now()}`;
   const sub = await req("POST", "/api/startupx/ideas", {
-    title: `Smoke Idea ${tag}`,
-    description: "Automated smoke test idea — ignore",
-    stage: "mvp",
+    title: `Smoke listing ${tag}`,
+    description: DESCRIPTION,
+    tier: "idea",
+    sector: "marketplace",
+    geography: "KZ",
+    deal: { intent: "raise", askUsd: 30000, equityOfferedPct: 15, buildBy: "founder" },
     founderEmail: "smoke@test.local",
     contactMethod: "@smoke_bot",
   });
-  assert("POST /ideas → 200 or 201", [200, 201].includes(sub.status), String(sub.status));
-  const idea = sub.body?.data;
-  assert("response has idea.id", !!idea?.id, JSON.stringify(sub.body).slice(0, 200));
-  assert("contentHash present", typeof idea?.contentHash === "string" && idea.contentHash.length > 0);
-  assert("qrightProtected present", typeof idea?.qrightProtected === "boolean");
+  assert("POST /ideas → 201", sub.status === 201, String(sub.status));
+  const created = sub.body?.data;
+  assert("listing id returned", !!created?.id, JSON.stringify(sub.body).slice(0, 200));
+  assert("content hash stamped", typeof created?.contentHash === "string" && created.contentHash.length === 64);
+  assert("tier persisted", created?.listing?.tier === "idea", String(created?.listing?.tier));
+  // $30k for 15% is a $200k post-money — the number an investor reads first.
+  assert("implied post-money computed", created?.assessment?.deal?.implied?.postMoneyUsd === 200000,
+    String(created?.assessment?.deal?.implied?.postMoneyUsd));
+  assert("market band attached", (created?.assessment?.deal?.band?.high ?? 0) > 0);
 
-  const ideaId = idea?.id;
+  const listingId = created?.id;
 
-  console.log("\n3. List ideas");
-  const list = await req("GET", "/api/startupx/ideas?limit=5");
+  console.log("\n5. Feed reads back the tier and the score");
+  const list = await req("GET", "/api/startupx/ideas?limit=5&tier=idea&sort=score");
   assert("GET /ideas → 200", list.status === 200, String(list.status));
-  assert("response has data array", Array.isArray(list.body?.data?.ideas));
+  assert("listings array present", Array.isArray(list.body?.data?.listings));
+  assert("tier filter honoured", (list.body?.data?.listings ?? []).every((l) => l.tier === "idea"));
 
-  console.log("\n4. Single idea");
-  if (ideaId) {
-    const single = await req("GET", `/api/startupx/ideas/${ideaId}`);
+  console.log("\n6. Single listing");
+  if (listingId) {
+    const single = await req("GET", `/api/startupx/ideas/${listingId}`);
     assert("GET /ideas/:id → 200", single.status === 200, String(single.status));
-    assert("idea.id matches", single.body?.data?.id === ideaId);
+    assert("id matches", single.body?.data?.id === listingId);
     assert("interest_count present", typeof single.body?.data?.interest_count === "number");
+    assert("assessment stored with the row", typeof single.body?.data?.assessment?.score === "number");
   } else {
-    console.log("  (skipped — no ideaId)");
+    console.log("  (skipped — no listing id)");
   }
 
-  console.log("\n5. Express interest");
-  if (ideaId) {
-    const interest = await req("POST", `/api/startupx/ideas/${ideaId}/interest`, {
+  console.log("\n7. Investor offer carries terms, not just an email");
+  if (listingId) {
+    const interest = await req("POST", `/api/startupx/ideas/${listingId}/interest`, {
       investorEmail: "investor@smoke.local",
       message: "Smoke test interest",
+      intent: "raise",
+      ticketUsd: 10000,
+      equityPct: 5,
     });
-    assert("POST /ideas/:id/interest → 200 or 201", [200, 201].includes(interest.status), String(interest.status));
-    assert("interest recorded", interest.body?.success === true);
+    assert("POST /interest → 201", interest.status === 201, String(interest.status));
+    assert("intent recorded", interest.body?.data?.intent === "raise", JSON.stringify(interest.body?.data));
   }
 
-  console.log("\n6. Stats");
+  console.log("\n8. Stats");
   const stats = await req("GET", "/api/startupx/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
-  assert("stats.total >= 0", typeof stats.body?.data?.total === "number");
-  assert("stats.byStage present", typeof stats.body?.data?.byStage === "object");
+  assert("stats.total is a number", typeof stats.body?.data?.total === "number");
+  assert("byTier present", typeof stats.body?.data?.byTier === "object");
+  assert("byStage kept for older consumers", typeof stats.body?.data?.byStage === "object");
 
   console.log(`\nStartup Exchange: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

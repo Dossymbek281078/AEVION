@@ -1,40 +1,337 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
-import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
-import { SubmitIdeaForm } from "./components/SubmitIdeaForm";
-import { IdeaCard, type Idea } from "./components/IdeaCard";
+import { ListingWizard } from "./components/ListingWizard";
+import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type StageFilter = "" | "idea" | "prototype" | "mvp" | "scaling";
-
-interface Stats {
-  total: number;
-  byStage: Record<string, number>;
-  recentCount: number;
-}
-
-const STAGE_TABS: Array<{ id: StageFilter; label: string }> = [
-  { id: "",          label: "Все" },
-  { id: "idea",      label: "Idea" },
-  { id: "prototype", label: "Prototype" },
-  { id: "mvp",       label: "MVP" },
-  { id: "scaling",   label: "Scaling" },
-];
+import { TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
 const PAGE_SIZE = 10;
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+type TierFilter = "" | Tier;
+
+interface Stats {
+  total: number;
+  byTier: Record<string, number>;
+  recentCount: number;
+  assessed: number;
+  avgScore: number;
+}
+
+export default function StartupExchangePage() {
+  const [tiers, setTiers] = useState<TierSpec[]>([]);
+  const [sectors, setSectors] = useState<Array<{ id: string; label: string }>>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tierFilter, setTierFilter] = useState<TierFilter>("");
+  const [sort, setSort] = useState<"recent" | "score">("recent");
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [interestFor, setInterestFor] = useState<Listing | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+
+  const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score") => {
+    setLoading(true);
+    try {
+      const data = await startupxApi.list({ tier, limit: PAGE_SIZE, offset: off, sort: s });
+      setListings(data.listings ?? []);
+      setTotal(data.total ?? 0);
+    } catch {
+      setListings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setStats(await startupxApi.stats());
+    } catch {
+      /* the feed still works without the counters */
+    }
+  }, []);
+
+  useEffect(() => {
+    startupxApi
+      .tiers()
+      .then((r) => {
+        setTiers(r.tiers);
+        setSectors(r.sectors ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchListings(tierFilter, offset, sort);
+  }, [tierFilter, offset, sort, fetchListings]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  function handlePublished(listing: Listing) {
+    setToast(`Опубликовано: «${listing.title}» — заявка №${listing.id}`);
+    setShowWizard(false);
+    setOffset(0);
+    setTierFilter("");
+    fetchListings("", 0, sort);
+    fetchStats();
+  }
+
+  const tabs: Array<{ id: TierFilter; label: string; count?: number }> = [
+    { id: "", label: "Все", count: stats?.total },
+    ...tiers.map((t) => ({ id: t.id as TierFilter, label: t.label, count: stats?.byTier?.[t.id] })),
+  ];
+
+  return (
+    <>
+      <Wave1Nav />
+      <ProductPageShell>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="startup-exchange" theme="light" />
+        </div>
+
+        {/* ── Hero ─────────────────────────────────────────────────────────── */}
+        <header style={{ marginBottom: 22 }}>
+          <div
+            style={{
+              display: "inline-block",
+              padding: "3px 12px",
+              borderRadius: 20,
+              background: "#f5f3ff",
+              color: "#7c3aed",
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 12,
+            }}
+          >
+            Биржа стартапов
+          </div>
+          <h1 style={{ margin: "0 0 10px", fontSize: 32, fontWeight: 800, color: "#0f172a", lineHeight: 1.2, maxWidth: 760 }}>
+            Идея, MVP или готовый продукт — с ценой, долей и бесплатным разбором
+          </h1>
+          <p style={{ margin: "0 0 16px", fontSize: 14.5, color: "#475569", lineHeight: 1.65, maxWidth: 720 }}>
+            Хорошие идеи гибнут не потому, что они плохие, а потому, что их не с чем сравнить: инвестор
+            видит текст без условий и не понимает, о чём разговор. Здесь у каждой заявки есть уровень,
+            названные условия сделки и бесплатный разбор, который сравнивает эти условия с рынком.
+          </p>
+
+          {!showWizard && (
+            <button
+              type="button"
+              onClick={() => setShowWizard(true)}
+              style={{
+                padding: "13px 24px",
+                borderRadius: 11,
+                border: "none",
+                background: "#0f172a",
+                color: "#fff",
+                fontSize: 14.5,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Опишите проект — покажу бесплатный разбор
+            </button>
+          )}
+        </header>
+
+        {/* ── Tier explainer ───────────────────────────────────────────────── */}
+        {tiers.length > 0 && !showWizard && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12, marginBottom: 24 }}>
+            {tiers.map((t) => (
+              <div key={t.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16, borderTop: `3px solid ${TIER_ACCENT[t.id]}` }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 5 }}>{t.label}</div>
+                <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>{t.offer}</p>
+                <div style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                  Вход инвестора: {usd(t.ticketUsd.low)} – {usd(t.ticketUsd.high)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Wizard ───────────────────────────────────────────────────────── */}
+        {showWizard && (
+          <section style={{ marginBottom: 28 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#0f172a" }}>Подать заявку</h2>
+              <button
+                type="button"
+                onClick={() => setShowWizard(false)}
+                style={{ background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+              >
+                Свернуть
+              </button>
+            </div>
+            <ListingWizard tiers={tiers} sectors={sectors} onPublished={handlePublished} />
+          </section>
+        )}
+
+        {/* ── Stats ────────────────────────────────────────────────────────── */}
+        {stats && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
+            <StatTile label="Заявок" value={String(stats.total)} accent="#0f172a" />
+            <StatTile label="За 7 дней" value={String(stats.recentCount)} accent="#0d9488" />
+            <StatTile label="С разбором" value={String(stats.assessed)} accent="#7c3aed" />
+            <StatTile label="Средний балл" value={stats.assessed > 0 ? String(stats.avgScore) : "—"} accent="#b45309" />
+          </div>
+        )}
+
+        {/* ── Feed ─────────────────────────────────────────────────────────── */}
+        <section>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+            {tabs.map((tab) => {
+              const active = tierFilter === tab.id;
+              return (
+                <button
+                  key={tab.id || "all"}
+                  type="button"
+                  onClick={() => {
+                    setTierFilter(tab.id);
+                    setOffset(0);
+                  }}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    background: active ? "#0f172a" : "#f1f5f9",
+                    color: active ? "#fff" : "#475569",
+                  }}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && <span style={{ opacity: 0.65, marginLeft: 6 }}>{tab.count}</span>}
+                </button>
+              );
+            })}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>Сортировка:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSort(sort === "recent" ? "score" : "recent");
+                  setOffset(0);
+                }}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12.5, fontWeight: 600, color: "#334155", cursor: "pointer" }}
+              >
+                {sort === "recent" ? "сначала новые" : "по баллу разбора"}
+              </button>
+            </div>
+          </div>
+
+          {loading && <p style={{ color: "#94a3b8", textAlign: "center", padding: 36 }}>Загружаю заявки…</p>}
+
+          {!loading && listings.length === 0 && (
+            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 36, textAlign: "center", color: "#94a3b8" }}>
+              <div style={{ fontSize: 26, marginBottom: 8 }}>○</div>
+              <div>В этой категории пока пусто.</div>
+              <button
+                type="button"
+                onClick={() => setShowWizard(true)}
+                style={{ marginTop: 12, padding: "9px 18px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Стать первым
+              </button>
+            </div>
+          )}
+
+          {listings.map((l) => (
+            <ListingCard key={l.id} listing={l} onInterest={setInterestFor} />
+          ))}
+
+          {total > PAGE_SIZE && (
+            <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 16 }}>
+              <PageBtn disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>← Назад</PageBtn>
+              <span style={{ alignSelf: "center", fontSize: 12, color: "#64748b" }}>
+                {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} из {total}
+              </span>
+              <PageBtn disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>Вперёд →</PageBtn>
+            </div>
+          )}
+        </section>
+
+        <div style={{ marginTop: 32 }}>
+          <MvpConceptBoard
+            moduleId="startupx"
+            noun="concept/messages"
+            accent="amber"
+            sectionTitle="Что ещё должно быть на бирже"
+            sectionHint="Каких данных не хватает инвестору? Что мешает основателю подать заявку?"
+            titleField="idea"
+            summaryField="rationale"
+            fields={[
+              { key: "idea", label: "Идея / фича", placeholder: "напр.: эскроу для сделок по выкупу", required: true },
+              { key: "rationale", label: "Какую дыру это закрывает", type: "textarea", placeholder: "Что не дают существующие площадки" },
+              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            ]}
+          />
+        </div>
+      </ProductPageShell>
+
+      {interestFor && (
+        <InterestModal
+          listing={interestFor}
+          onClose={() => setInterestFor(null)}
+          onSubmitted={(id) => {
+            setInterestFor(null);
+            setToast(`Предложение отправлено основателю заявки №${id}`);
+            fetchListings(tierFilter, offset, sort);
+          }}
+        />
+      )}
+
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+    </>
+  );
+}
+
+function StatTile({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: accent }}>{value}</div>
+    </div>
+  );
+}
+
+function PageBtn({ disabled, onClick, children }: { disabled: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        padding: "8px 16px",
+        borderRadius: 8,
+        border: "1px solid #e2e8f0",
+        background: "#fff",
+        fontWeight: 600,
+        fontSize: 13,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onDone, 4000);
+    const t = setTimeout(onDone, 4500);
     return () => clearTimeout(t);
   }, [onDone]);
   return (
@@ -55,326 +352,6 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
       }}
     >
       {message}
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function StartupExchangePage() {
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [stageFilter, setStageFilter] = useState<StageFilter>("");
-  const [offset, setOffset] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [interestFor, setInterestFor] = useState<Idea | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const fetchIdeas = useCallback(
-    async (filter: StageFilter, off: number) => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        params.set("limit", String(PAGE_SIZE));
-        params.set("offset", String(off));
-        if (filter) params.set("stage", filter);
-        const resp = await fetch(apiUrl(`/api/startupx/ideas?${params.toString()}`));
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data?.success) {
-            setIdeas(data.data.ideas ?? []);
-            setTotal(Number(data.data.total) || 0);
-          }
-        }
-      } catch {
-        /* swallow */
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const resp = await fetch(apiUrl("/api/startupx/stats"));
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.success) setStats(data.data);
-      }
-    } catch {
-      /* swallow */
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchIdeas(stageFilter, offset);
-  }, [stageFilter, offset, fetchIdeas]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
-
-  function handleSubmitted(result: { id: number; qrightProtected: boolean; contentHash: string }) {
-    setToast(
-      result.qrightProtected
-        ? `Идея #${result.id} защищена · sha256:${result.contentHash.slice(0, 12)}…`
-        : `Идея #${result.id} опубликована`,
-    );
-    setOffset(0);
-    fetchIdeas(stageFilter, 0);
-    fetchStats();
-  }
-
-  function handleInterested(ideaId: number) {
-    setToast(`Заявка отправлена основателю идеи #${ideaId}`);
-    fetchIdeas(stageFilter, offset);
-  }
-
-  const tabBtn = (active: boolean): React.CSSProperties => ({
-    padding: "7px 14px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 13,
-    background: active ? "#7c3aed" : "#f1f5f9",
-    color: active ? "#fff" : "#475569",
-    transition: "background 0.15s",
-  });
-
-  return (
-    <>
-      <Wave1Nav />
-      <ProductPageShell>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-          <ModulePricingChip moduleId="startup-exchange" theme="light" />
-        </div>
-        {/* Hero */}
-        <div style={{ marginBottom: 24 }}>
-          <div
-            style={{
-              display: "inline-block",
-              padding: "3px 12px",
-              borderRadius: 20,
-              background: "#f5f3ff",
-              color: "#7c3aed",
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              marginBottom: 12,
-            }}
-          >
-            Биржа стартапов · IP-protected
-          </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 30, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
-            От идеи → IP-метка → инвестор
-          </h1>
-          <p style={{ margin: 0, fontSize: 14, color: "#475569", lineHeight: 1.6, maxWidth: 720 }}>
-            Подайте идею — она автоматически получает SHA-256 контент-хеш (QRight-совместимая
-            метка), публикуется в публичной ленте и становится видимой для инвесторов. Инвесторы
-            оставляют заявки на интерес и получают ваш контакт.
-          </p>
-        </div>
-
-        {/* Stats strip */}
-        {stats && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              gap: 12,
-              marginBottom: 24,
-            }}
-          >
-            <StatTile label="Всего идей" value={stats.total} accent="#7c3aed" />
-            <StatTile label="За 7 дней" value={stats.recentCount} accent="#0d9488" />
-            <StatTile label="Idea" value={stats.byStage.idea ?? 0} accent="#a78bfa" />
-            <StatTile label="Prototype" value={stats.byStage.prototype ?? 0} accent="#60a5fa" />
-            <StatTile label="MVP" value={stats.byStage.mvp ?? 0} accent="#10b981" />
-            <StatTile label="Scaling" value={stats.byStage.scaling ?? 0} accent="#f97316" />
-          </div>
-        )}
-
-        {/* Layout */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 360px",
-            gap: 24,
-            alignItems: "flex-start",
-          }}
-        >
-          {/* Main column — feed */}
-          <div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-              {STAGE_TABS.map((tab) => (
-                <button
-                  key={tab.id || "all"}
-                  type="button"
-                  onClick={() => {
-                    setStageFilter(tab.id);
-                    setOffset(0);
-                  }}
-                  style={tabBtn(stageFilter === tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {loading && (
-              <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>
-                Загружаю идеи…
-              </p>
-            )}
-
-            {!loading && ideas.length === 0 && (
-              <div
-                style={{
-                  background: "#fff",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 14,
-                  padding: 40,
-                  textAlign: "center",
-                  color: "#94a3b8",
-                }}
-              >
-                <div style={{ fontSize: 28, marginBottom: 8 }}>○</div>
-                <div>Пока нет идей в этой категории.</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Будьте первыми — заполните форму справа.</div>
-              </div>
-            )}
-
-            {ideas.map((idea) => (
-              <IdeaCard
-                key={idea.id}
-                idea={idea}
-                onInterest={(i) => setInterestFor(i)}
-              />
-            ))}
-
-            {/* Pagination */}
-            {total > PAGE_SIZE && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 16 }}>
-                <button
-                  type="button"
-                  disabled={offset === 0}
-                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    background: "#fff",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: offset === 0 ? "not-allowed" : "pointer",
-                    opacity: offset === 0 ? 0.5 : 1,
-                  }}
-                >
-                  ← Назад
-                </button>
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#64748b" }}>
-                  {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} из {total}
-                </span>
-                <button
-                  type="button"
-                  disabled={offset + PAGE_SIZE >= total}
-                  onClick={() => setOffset(offset + PAGE_SIZE)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    background: "#fff",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: offset + PAGE_SIZE >= total ? "not-allowed" : "pointer",
-                    opacity: offset + PAGE_SIZE >= total ? 0.5 : 1,
-                  }}
-                >
-                  Вперёд →
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Right column — submit form */}
-          <div style={{ position: "sticky", top: 24 }}>
-            <SubmitIdeaForm onSubmitted={handleSubmitted} />
-
-            <div
-              style={{
-                marginTop: 16,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: 12,
-                padding: 16,
-                fontSize: 12,
-                color: "#64748b",
-                lineHeight: 1.6,
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6, fontSize: 13 }}>
-                Как работает защита
-              </div>
-              При публикации backend считает SHA-256 от <code style={{ background: "#fff", padding: "1px 4px", borderRadius: 4 }}>(title, description, stage)</code>{" "}
-              и сохраняет его как content-hash. Это та же схема, что использует QRight, — позже идею можно перенести в QRight-реестр без переподписи.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 32 }}>
-          <MvpConceptBoard
-            moduleId="startupx"
-            noun="concept/messages"
-            accent="amber"
-            sectionTitle="Founder ↔ investor concept board"
-            sectionHint="Что должно быть в стартап-маркетплейсе? Какие сигналы важны инвесторам?"
-            titleField="idea"
-            summaryField="rationale"
-            fields={[
-              { key: "idea", label: "Идея / фича", placeholder: "напр.: AI-скоринг team-fit к нише", required: true },
-              { key: "rationale", label: "Почему это закроет gap", type: "textarea", placeholder: "Что не дают существующие платформы" },
-              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
-            ]}
-          />
-        </div>
-      </ProductPageShell>
-
-      {interestFor && (
-        <InterestModal
-          idea={interestFor}
-          onClose={() => setInterestFor(null)}
-          onSubmitted={(id) => {
-            setInterestFor(null);
-            handleInterested(id);
-          }}
-        />
-      )}
-
-      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
-    </>
-  );
-}
-
-// ─── StatTile ─────────────────────────────────────────────────────────────────
-
-function StatTile({ label, value, accent }: { label: string; value: number; accent: string }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 12,
-        padding: "12px 14px",
-      }}
-    >
-      <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: accent }}>{value}</div>
     </div>
   );
 }

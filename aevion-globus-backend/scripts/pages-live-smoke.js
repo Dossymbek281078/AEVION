@@ -38,6 +38,7 @@ const PAGES = [
   "/revenue",
   "/pitch",
   "/acquire",
+  "/startup-exchange",
 ];
 
 let pass = 0;

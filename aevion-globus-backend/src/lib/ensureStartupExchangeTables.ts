@@ -51,6 +51,39 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_ideas_stage ON startup_ideas(stage);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_ideas_created ON startup_ideas(created_at DESC);`);
 
+    // ── Listing tiers (2026-07) ──────────────────────────────────────────────
+    // The exchange used to have one kind of row for everything from a one-line
+    // idea to a revenue-earning product, with no deal terms at all. `tier` is
+    // now the primary axis and carries its own terms; the original `stage`
+    // column stays (it has a CHECK constraint and old rows depend on it) and is
+    // written from the tier so the two can never drift apart.
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS tier TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS sector TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS geography TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS demo_url TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS repo_url TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS deal JSONB;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS metrics JSONB;`);
+    // Assessment snapshot: stored so the feed can sort and filter by score
+    // without recomputing, and so a score can be traced to the rules that made
+    // it (assessment_version) instead of being silently re-graded by new rules.
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment JSONB;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment_score INTEGER;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment_version INTEGER;`);
+
+    // Backfill: every pre-tier row gets the tier its legacy stage implies.
+    // Runs once — after this, `tier IS NULL` matches nothing.
+    await pool.query(`
+      UPDATE startup_ideas SET tier = CASE
+        WHEN stage = 'idea' THEN 'idea'
+        WHEN stage IN ('prototype','mvp') THEN 'mvp'
+        WHEN stage = 'scaling' THEN 'product'
+        ELSE 'idea' END
+      WHERE tier IS NULL;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_ideas_tier ON startup_ideas(tier);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_ideas_score ON startup_ideas(assessment_score DESC NULLS LAST);`);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS startup_interests (
         id SERIAL PRIMARY KEY,
@@ -61,6 +94,11 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
       );
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_interests_idea ON startup_interests(idea_id);`);
+    // An "interest" with no terms is a comment. These three columns make it an
+    // offer the founder can answer yes or no to.
+    await pool.query(`ALTER TABLE startup_interests ADD COLUMN IF NOT EXISTS intent TEXT;`);
+    await pool.query(`ALTER TABLE startup_interests ADD COLUMN IF NOT EXISTS ticket_usd BIGINT;`);
+    await pool.query(`ALTER TABLE startup_interests ADD COLUMN IF NOT EXISTS equity_pct NUMERIC;`);
 
     dbReady = true;
     console.log("[StartupX] Tables ready");

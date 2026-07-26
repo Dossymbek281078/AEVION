@@ -39,6 +39,19 @@ describe("app-slug → модуль прайса", () => {
     expect(moduleForAppSlug("нет-такого")).toBeNull();
   });
 
+  test("🔴 прототипные ключи не превращаются в «модуль»", () => {
+    // Прямой доступ MAP[slug] возвращает УНАСЛЕДОВАННЫЕ свойства:
+    // "constructor" давал функцию, "__proto__" — объект, и оба уходили дальше
+    // как модуль. Слаги приходят из БД, а не от клиента, но полагаться на это
+    // в словарном доступе не стоит.
+    for (const key of ["constructor", "toString", "__proto__", "valueOf", "hasOwnProperty"]) {
+      const got = moduleForAppSlug(key);
+      expect(got, `moduleForAppSlug("${key}") вернул ${typeof got}`).toBeNull();
+    }
+    // Настоящий слаг по-прежнему работает — иначе проверка выше ничего не значит.
+    expect(moduleForAppSlug("qpaynet")).toBe("qpaynet-embedded");
+  });
+
   test("три слага действительно НЕ равны id модуля — маппинг не декоративный", () => {
     // Если однажды слаги переименуют в id, этот тест напомнит, что маппинг можно
     // выбросить, а не тащить вечно.

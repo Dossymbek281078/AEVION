@@ -79,7 +79,9 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
-  return s in TIER_VARIANT_ENV;
+  // hasOwnProperty, а не `in`: `in` пропускает "constructor"/"__proto__" и
+  // прочие свойства прототипа (см. moduleForAppSlug выше).
+  return typeof s === "string" && Object.prototype.hasOwnProperty.call(TIER_VARIANT_ENV, s);
 }
 
 /**
@@ -162,7 +164,20 @@ export const APP_SLUG_TO_MODULE: Record<string, string> = {
   cyberchess: "cyberchess",
 };
 
-/** Слаг приложения → id модуля прайса (или null, если слаг неизвестен). */
+/**
+ * Слаг приложения → id модуля прайса (или null, если слаг неизвестен).
+ *
+ * Индексация объекта проверяется через `hasOwnProperty`, а не напрямую: прямой
+ * доступ `MAP[slug]` возвращает УНАСЛЕДОВАННЫЕ свойства — `"constructor"` давал
+ * функцию, `"__proto__"` — объект, и оба уходили дальше как «модуль». Найдено
+ * прогоном прототипных ключей 2026-07-26 (тот же класс, что с валютой в
+ * routes/pricing.ts). Слаги приходят из БД, а не напрямую от клиента, но
+ * полагаться на это в словарном доступе не стоит.
+ */
 export function moduleForAppSlug(slug: string): string | null {
-  return APP_SLUG_TO_MODULE[slug.trim().toLowerCase()] ?? null;
+  if (typeof slug !== "string") return null;
+  const key = slug.trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(APP_SLUG_TO_MODULE, key)
+    ? APP_SLUG_TO_MODULE[key]
+    : null;
 }

@@ -306,6 +306,10 @@ async function cmdSheet(argv) {
   if (!judge || judge.startsWith("--")) throw new Error("Укажи судью: --judge <имя>");
   const { briefs, rubric } = loadLocal();
   const criteria = await loadCriteria(rubric);
+  const mp = path.join(OUT, "manifest.json");
+  // Внятный отказ вместо сырого ENOENT: по документу легко запустить
+  // фазу не в том порядке.
+  if (!existsSync(mp)) throw new Error("Нет manifest.json — сначала prepare (и render/poll, если нужны клипы).");
   const manifest = readJson(path.join(OUT, "manifest.json"));
   const rendered = manifest.items.filter((i) => i.status === "rendered");
   if (!rendered.length) throw new Error("Нечего судить: нет отрендеренных клипов.");

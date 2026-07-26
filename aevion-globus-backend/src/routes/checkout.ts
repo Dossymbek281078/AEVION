@@ -5,9 +5,10 @@ import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/paybox
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
-  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO,
+  TIERS, getTier, CURRENCY_RATES,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
+import { buildQuoteWithFan } from "../data/fanDiscounts";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
@@ -55,6 +56,46 @@ interface CheckoutBody {
   currency?: CurrencyCode;
   /** Способ оплаты. "paypal" → канал PayPal (если настроен), иначе дефолтный каскад. */
   method?: "card" | "paypal";
+  /** Уже купленные модули — источник веерной скидки (data/fanDiscounts.ts). */
+  ownedModules?: string[];
+  /** ISO-дата последней покупки: от неё считается окно веера. */
+  lastPurchaseAt?: string;
+}
+
+/**
+ * Умеет ли канал списать ПРОИЗВОЛЬНУЮ сумму (т.е. может ли скидка стать
+ * реальной), или он спишет фиксированную цену продукта на своей стороне.
+ *
+ * Проверено по коду провайдеров 2026-07-26:
+ *   - paybox  — `pg_amount` = наша сумма → да.
+ *   - paypal  — Orders v2 `amount.value` = наша сумма → да.
+ *   - lemonsqueezy — createIntent НЕ передаёт ни `custom_price`, ни
+ *     `discount_code`: LS спишет цену варианта. `amountCents` в LS-провайдере
+ *     только возвращается назад в ответе, на счёт не влияет.
+ *   - gumroad — checkoutUrl = `app.gumroad.com/l/<permalink>` (+ email):
+ *     цена продукта, скидку выразить нечем (нужен offer-code в URL).
+ *
+ * Из этого следует то, что до сих пор было незаметно: на LS и Gumroad
+ * промокод/веер НЕ доходят до счёта. Раньше чекаут молча отдавал ссылку на
+ * полную цену, показав пользователю скидку в смете. Теперь либо скидка
+ * реальна, либо ответ прямо говорит `discountHonoured: false` и сумму, которую
+ * действительно спишут; провижининг тоже пишет реальную сумму.
+ *
+ * `LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1` включает передачу custom_price в LS —
+ * тогда скидка на LS становится настоящей (цена фиксируется на весь срок
+ * подписки, это осознанная семантика «зафиксируй цену, пока веер открыт»).
+ */
+function channelHonoursAmount(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub"): boolean {
+  switch (provider) {
+    case "paybox":
+    case "paypal":
+    case "stub":
+      return true;
+    case "lemonsqueezy":
+      return process.env.LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE === "1";
+    case "gumroad":
+      return false;
+  }
 }
 
 // ── POST /session ─────────────────────────────────────────────────────────────
@@ -83,56 +124,79 @@ checkoutRouter.post("/session", async (req, res) => {
       });
     }
 
-    const tierUsd = period === "annual" ? (tier.priceAnnualTotal ?? 0) : (tier.priceMonthly ?? 0);
+    // Смета — ОДНА реализация и для показа, и для списания. До 2026-07-26 здесь
+    // лежала вторая копия той же арифметики, и она уже разошлась с
+    // /api/pricing/quote: процентное промо там округлялось до доллара, здесь до
+    // цента (Full+AEVION20 — смета обещала итог $71, чекаут выставлял $71.20).
+    // Правило: любой новый потребитель сметы зовёт buildQuoteWithFan, а не
+    // считает сам. Веерные скидки (data/fanDiscounts.ts) приходят тем же путём.
+    const quote = buildQuoteWithFan({
+      tierId: tier.id,
+      modules: body.modules ?? [],
+      seats,
+      period,
+      currency: "USD",
+      promoCode: body.promoCode,
+      ownedModules: body.ownedModules ?? [],
+      lastPurchaseAt: body.lastPurchaseAt,
+    });
 
-    let totalUsd = tierUsd;
+    /** Скидки-стимулы (промо + веер). Годовая скидка сюда НЕ входит — это цена периода. */
+    const incentiveUsd = Math.round(((quote.promo?.applied ?? 0) + quote.fan.applied) * 100) / 100;
+    /** Что списали бы без стимулов — по этой цене сверстаны LS-варианты и Gumroad-продукты. */
+    const listUsd = Math.round((quote.total + incentiveUsd) * 100) / 100;
 
-    // Extra seats
-    const baseSeats = tier.limits.seats ?? 1;
-    const extraSeats = Math.max(0, seats - baseSeats);
-    if (extraSeats > 0) {
-      totalUsd += 5 * extraSeats * (period === "annual" ? 12 : 1);
-    }
-
-    // Add-on modules.
-    //
-    // Lite grants "1 product of your choice" with full access to it (see its
-    // tagline/features in data/pricing.ts). The chosen module covered by Lite's
-    // module allowance must NOT also be billed its à-la-carte add-on — that
-    // would double-charge the very thing Lite buys (e.g. Lite + qsign would
-    // wrongly come to $19 + $9 = $28 instead of $19). Modules beyond the
-    // allowance, or on tiers without a free-choice slot, still incur the add-on.
-    const freeChoiceSlots = tier.id === "lite" ? (tier.limits.modules ?? 0) : 0;
-    let usedChoiceSlots = 0;
-    for (const mid of body.modules ?? []) {
-      const m = getModulePrice(mid);
-      if (!m || m.includedIn.includes(tier.id)) continue;
-      if (usedChoiceSlots < freeChoiceSlots) { usedChoiceSlots++; continue; }
-      if (!m.addonMonthly) continue;
-      totalUsd += m.addonMonthly * (period === "annual" ? 12 : 1);
-    }
-
-    // Promo code discount
-    let discountUsd = 0;
-    if (body.promoCode) {
-      const { promo } = resolvePromoCode(body.promoCode, tier.id, period);
-      if (promo) {
-        const subtotal = totalUsd;
-        const rawDiscount = promo.kind === "percent"
-          ? Math.round(subtotal * promo.amount) / 100
-          : Math.min(subtotal, promo.amount * (period === "annual" ? 12 : 1));
-        discountUsd = Math.min(rawDiscount, subtotal * MAX_PROMO_DISCOUNT_RATIO);
-        totalUsd = Math.max(0, totalUsd - discountUsd);
-      }
-    }
+    const discountedCents = Math.round(quote.total * 100);
+    const listCents = Math.round(listUsd * 100);
 
     const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
-    const totalCents = Math.round(totalUsd * 100);
 
     const reference = `tier_${tier.id}_${period}`;
 
+    /**
+     * Что реально спишет канал + правда об этом в ответе. Ни одна ветка
+     * каскада не имеет права отдать ссылку на полную цену, показав скидку в
+     * смете: либо скидка доходит до счёта, либо ответ это признаёт.
+     */
+    function charge(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub") {
+      const honoured = channelHonoursAmount(provider);
+      const cents = honoured ? discountedCents : listCents;
+      const truth: Record<string, unknown> = {
+        quotedUsd: quote.total,
+        incentiveDiscountUsd: incentiveUsd,
+        discountHonoured: incentiveUsd > 0 ? honoured : true,
+        fan: { status: quote.fan.status, level: quote.fan.level, appliedUsd: quote.fan.applied },
+      };
+      if (honoured) {
+        truth.chargedUsd = Math.round(cents) / 100;
+      } else {
+        // Канал спишет цену СВОЕГО продукта (LS-вариант / Gumroad-permalink),
+        // а она сверстана только под tier:period — add-on модули и доп. seats
+        // в ней не выражаются вовсе. Значит точную сумму мы отсюда не знаем и
+        // называть её числом нельзя: назвали бы — получили бы вторую ложь
+        // вместо первой. Отдаём то, что знаем: цену тарифа по конвенции из
+        // шапки файла + прямое указание, что остальное каналом не берётся.
+        truth.chargedUsd = null;
+        truth.tierListUsd = period === "annual" ? (tier.priceAnnualTotal ?? 0) : (tier.priceMonthly ?? 0);
+        truth.chargedNote =
+          "Канал списывает фиксированную цену своего продукта (вариант tier:period). Add-on модули и доп. пользователи в этой цене не учтены.";
+        console.warn(
+          `[checkout/session] канал ${provider} не принимает нашу сумму: смета $${quote.total}` +
+            (incentiveUsd > 0 ? `, скидка $${incentiveUsd} НЕ применена` : "") +
+            `, спишется цена варианта ${reference}`,
+        );
+      }
+      if (incentiveUsd > 0 && !honoured) {
+        truth.discountNotHonouredReason =
+          provider === "lemonsqueezy"
+            ? "LemonSqueezy списывает цену варианта; включите LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1, чтобы скидка стала реальной"
+            : "Gumroad списывает цену продукта по permalink; скидку нечем выразить (нужен offer-code)";
+      }
+      return { cents, honoured, truth };
+    }
+
     // Free / fully discounted — no checkout needed, provision directly
-    if (totalCents <= 0) {
+    if (discountedCents <= 0) {
       if (body.email) {
         provisionSubscription({
           email: body.email, tierId: tier.id, period, seats,
@@ -156,13 +220,17 @@ checkoutRouter.post("/session", async (req, res) => {
     //    тыйынах (тенге*100), а провайдер делит на 100.
     if (body.currency === "KZT" && isPayboxConfigured()) {
       try {
-        const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
+        const paid = charge("paybox");
+        const kztCents = Math.round(paid.cents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          chargeExactAmount: true,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
+        return res.json({
+          url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId, ...paid.truth,
+        });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -173,12 +241,16 @@ checkoutRouter.post("/session", async (req, res) => {
     //     плательщик явно выбрал method="paypal" и провайдер настроен.
     if (body.method === "paypal" && isPaypalConfigured()) {
       try {
+        const paid = charge("paypal");
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
-          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          chargeExactAmount: true,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
+        return res.json({
+          url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId, ...paid.truth,
+        });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -195,12 +267,16 @@ checkoutRouter.post("/session", async (req, res) => {
       try {
         // Lite = 1 продукт на выбор: пробрасываем выбранный модуль в custom_data,
         // чтобы вебхук провижинил подписку именно на него.
+        const paid = charge("lemonsqueezy");
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await lemonSqueezyPaymentProvider.createIntent({
-          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          chargeExactAmount: paid.honoured,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
+        return res.json({
+          url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId, ...paid.truth,
+        });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
@@ -209,13 +285,17 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 2) Gumroad — fallback (one-time продукты / пока LS не настроен).
     if (gumroadPermalinkConfigured(reference)) {
+      const paid = charge("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({
-        reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+        reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
       });
-      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId });
+      return res.json({
+        url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId, ...paid.truth,
+      });
     }
 
     // 3) Stub — ни один процессинг не настроен для этого tier:period.
+    const paidStub = charge("stub");
     if (body.email) {
       provisionSubscription({
         email: body.email,
@@ -224,15 +304,19 @@ checkoutRouter.post("/session", async (req, res) => {
         seats,
         modules: body.modules ?? [],
         trialDays,
-        amountUsd: totalUsd,
+        // Реально списанная сумма, а не «обещанная». На каналах, которые скидку
+        // не применяют, эти числа расходятся — в подписке должно лежать то, что
+        // ушло со счёта, иначе вся выручка в отчётах поедет.
+        amountUsd: Math.round(paidStub.cents) / 100,
         promoCode: body.promoCode,
         source: "stub_checkout",
       }).catch((e) => console.error("[stub_provisioning] failed", e));
     }
     return res.json({
-      url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
+      url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${paidStub.cents}`,
       mode: "stub",
       provider: "none",
+      ...paidStub.truth,
     });
   } catch (e: unknown) {
     capture(e);

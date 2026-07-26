@@ -32,6 +32,20 @@ export interface PaymentIntentInput {
    *  module for a Lite subscription). Provider-specific: LemonSqueezy forwards
    *  it on subscription events. */
   customData?: Record<string, string>;
+  /**
+   * Просить провайдера списать именно `amountCents`, а не фиксированную цену
+   * своего продукта. Нужно там, где сумма получается со скидкой (промокод,
+   * веерная скидка): LemonSqueezy и Gumroad по умолчанию берут цену
+   * варианта/продукта и наши скидки игнорируют.
+   *
+   * Поддержка — на стороне провайдера: LS умеет через `custom_price`
+   * (включается `LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1`), Gumroad — не умеет
+   * (нужен offer-code в URL, отдельная задача). Провайдер, который не умеет,
+   * этот флаг игнорирует; вызывающая сторона обязана сама сказать
+   * пользователю правду о реальной сумме — см.
+   * routes/checkout.ts#channelHonoursAmount.
+   */
+  chargeExactAmount?: boolean;
 }
 
 export interface PaymentIntent {

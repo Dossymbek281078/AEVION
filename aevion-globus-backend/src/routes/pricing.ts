@@ -18,6 +18,17 @@ import {
   type BillingPeriod,
   type TierId,
 } from "../data/pricing";
+import {
+  buildQuoteWithFan,
+  computeFan,
+  fanPreview,
+  FAN_EXTRA_CLUSTERS,
+  FAN_LEVEL_STEP,
+  FAN_MAX_DISCOUNT_RATIO,
+  FAN_MAX_LEVEL,
+  FAN_RING_BASE,
+  FAN_WINDOW_DAYS,
+} from "../data/fanDiscounts";
 import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
@@ -179,8 +190,9 @@ pricingRouter.get("/bundles", (_req, res) => {
 
 /**
  * POST /api/pricing/quote
- * Body: { tierId, modules?, seats?, period?, currency? }
- * Возвращает смету: lines, subtotal, discount, total.
+ * Body: { tierId, modules?, seats?, period?, currency?, promoCode?,
+ *         ownedModules?, lastPurchaseAt? }
+ * Возвращает смету: lines, subtotal, discount, total, fan.
  *
  * Validation:
  *   - tierId обязателен и должен быть из known set
@@ -188,11 +200,20 @@ pricingRouter.get("/bundles", (_req, res) => {
  *   - modules: массив строк <= 30
  *   - period: 'monthly' | 'annual'
  *   - currency: 'USD' | 'EUR' | 'KZT' | 'RUB'
+ *
+ * `pro` (Universe, $249.99 — флагман) в этом списке ОТСУТСТВОВАЛ до
+ * 2026-07-26: калькулятор цен не мог посчитать самый дорогой тариф, отдавал
+ * 400 invalid_tier, хотя routes/checkout.ts его принимает и продаёт. Добавлен.
+ *
+ * ownedModules/lastPurchaseAt — веерная скидка (data/fanDiscounts.ts). Смета
+ * идёт через buildQuoteWithFan, чтобы совпадать с чекаутом строка в строку.
  */
+const QUOTABLE_TIERS = ["free", "lite", "medium", "full", "pro", "enterprise"];
+
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
-  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
+  if (!tierId || !QUOTABLE_TIERS.includes(tierId)) {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
@@ -204,8 +225,106 @@ pricingRouter.post("/quote", (req, res) => {
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];
   const promoCode = typeof body.promoCode === "string" ? body.promoCode.trim().slice(0, 40) : undefined;
 
-  const quote = buildQuote({ tierId, modules, seats, period, currency, promoCode });
+  const ownedModules = Array.isArray(body.ownedModules)
+    ? body.ownedModules.slice(0, 60).filter((x: unknown) => typeof x === "string")
+    : [];
+  const lastPurchaseAt = typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined;
+
+  const quote = buildQuoteWithFan({
+    tierId, modules, seats, period, currency, promoCode, ownedModules, lastPurchaseAt,
+  });
   res.json(quote);
+});
+
+/**
+ * POST /api/pricing/fan
+ * Body: { owned: string[], tierId?, lastPurchaseAt?, currency? }
+ *
+ * Веерная скидка: что и на сколько дешевеет владельцу набора `owned`.
+ * Детерминировано от входа — можно кэшировать. Ничего не списывает.
+ */
+pricingRouter.post("/fan", (req, res) => {
+  const body = req.body ?? {};
+  const owned = Array.isArray(body.owned)
+    ? body.owned.slice(0, 60).filter((x: unknown) => typeof x === "string")
+    : [];
+  const tierId = typeof body.tierId === "string" && QUOTABLE_TIERS.includes(body.tierId)
+    ? (body.tierId as TierId)
+    : undefined;
+  const currency: CurrencyCode =
+    typeof body.currency === "string" && body.currency in CURRENCY_RATES
+      ? (body.currency as CurrencyCode)
+      : "USD";
+  const lastPurchaseAt = typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined;
+
+  res.json({
+    ...computeFan({ owned, tierId, lastPurchaseAt, currency }),
+    params: {
+      ringBase: FAN_RING_BASE,
+      levelStep: FAN_LEVEL_STEP,
+      maxLevel: FAN_MAX_LEVEL,
+      maxDiscountRatio: FAN_MAX_DISCOUNT_RATIO,
+      windowDays: FAN_WINDOW_DAYS,
+    },
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+/**
+ * GET /api/pricing/fan/preview?currency=USD
+ * Витрина «купи один — вот что подешевеет»: для каждого платного модуля его
+ * ring-1 список и суммарная экономия. Публично, без auth — это маркетинг.
+ */
+pricingRouter.get("/fan/preview", (req, res) => {
+  const currency: CurrencyCode =
+    typeof req.query.currency === "string" && req.query.currency in CURRENCY_RATES
+      ? (req.query.currency as CurrencyCode)
+      : "USD";
+  const rows = fanPreview(currency);
+  res.json({
+    items: rows,
+    total: rows.length,
+    currency,
+    clusters: FAN_EXTRA_CLUSTERS,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+/**
+ * GET /api/pricing/fan/me
+ * Веер для текущего покупателя: owned берётся из его подписки
+ * (provisioning.readLatestSubscription), окно — от даты подписки.
+ * Требует Bearer-токен; без него 401 (а не «пустой веер» — молчаливая пустота
+ * читалась бы как «скидок нет», что неправда).
+ */
+pricingRouter.get("/fan/me", (req, res) => {
+  const auth = req.headers.authorization ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) return res.status(401).json({ error: "auth_required" });
+  let email: string | null = null;
+  try {
+    // algorithms обязательно пиннуем: без него часть версий jsonwebtoken
+    // принимает alg:"none" (см. tests/sharedSecretsHardening.test.ts).
+    const payload = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as { email?: string };
+    email = payload.email?.toLowerCase() ?? null;
+  } catch {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+  if (!email) return res.status(401).json({ error: "no_email_in_token" });
+
+  const sub = readLatestSubscription(email);
+  if (!sub) {
+    return res.json({
+      ...computeFan({ owned: [] }),
+      subscription: null,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+  res.json({
+    ...computeFan({ owned: sub.modules ?? [], tierId: sub.tierId, lastPurchaseAt: sub.ts }),
+    subscription: { tierId: sub.tierId, period: sub.period, modules: sub.modules, since: sub.ts },
+    generatedAt: new Date().toISOString(),
+  });
 });
 
 /**

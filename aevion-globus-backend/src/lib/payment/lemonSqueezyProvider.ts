@@ -122,6 +122,11 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
           checkout_data: {
             email: input.email ?? undefined,
             custom: { bureauIntentId: intentId, reference: input.reference, ...(input.customData ?? {}) },
+            // Без custom_price LS спишет цену варианта и любую нашу скидку
+            // (промокод, веерная скидка) молча проигнорирует. Передаём сумму
+            // только когда вызывающая сторона это явно запросила — цена тогда
+            // фиксируется на весь срок подписки, а не на первый период.
+            ...(input.chargeExactAmount ? { custom_price: Math.max(0, Math.round(input.amountCents)) } : {}),
           },
           checkout_options: {
             embed: false,

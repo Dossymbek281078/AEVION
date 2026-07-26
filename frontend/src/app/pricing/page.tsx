@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
+import { FanDiscountPanel } from "@/components/FanDiscountPanel";
 import { apiUrl } from "@/lib/apiBase";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
@@ -1152,6 +1153,11 @@ export default function PricingPage() {
           ))}
         </div>
       </section>
+
+      {/* Веерная скидка — механика «купил один → подешевели соседние».
+          Числа берутся из /api/pricing/fan, того же движка, что применяет
+          скидку в смете и чекауте, чтобы фронт не мог обещать своё. */}
+      <FanDiscountPanel currency={currency} />
 
       {/* Customer logos row */}
       <CustomerLogosRow label={tp("logos.label")} />

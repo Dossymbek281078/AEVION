@@ -786,6 +786,33 @@ export function resolvePromoCode(
 }
 
 /**
+ * Скидка по промокоду в USD — ОДНА реализация для сметы и для чекаута.
+ *
+ * Найдено 2026-07-26: buildQuote считал процент как `Math.round(base*amount/100)`
+ * (округление до доллара), а routes/checkout.ts — как `Math.round(base*amount)/100`
+ * (до цента). На Full+AEVION20 смета показывала скидку $18 (итог $71), а списывал
+ * чекаут $17.80 (итог $71.20) — расхождение на 20 центов при том, что в коде
+ * прямо заявлен инвариант «quote == итоговый charge». Правильная гранулярность —
+ * центы (в них выставляется счёт), поэтому обе стороны теперь зовут эту функцию.
+ *
+ * `period` нужен из-за fixed-скидок: они домножаются на 12 при годовой оплате
+ * (историческое поведение чекаута, см. комментарий у PROMO_CODES).
+ * Потолок MAX_PROMO_DISCOUNT_RATIO применяется здесь же — он не опция.
+ */
+export function computePromoDiscountUsd(
+  baseUsd: number,
+  promo: Pick<PromoCode, "kind" | "amount">,
+  period: BillingPeriod,
+): number {
+  const base = Math.max(0, baseUsd);
+  const raw =
+    promo.kind === "percent"
+      ? Math.round(base * promo.amount) / 100
+      : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
+  return Math.min(raw, base * MAX_PROMO_DISCOUNT_RATIO);
+}
+
+/**
  * Расчёт сметы: тариф + список модулей + период + кол-во seats.
  * Возвращает { subtotal, discount, total, lines }.
  *
@@ -794,6 +821,12 @@ export function resolvePromoCode(
  *   2. Дополнительные seats × 5 USD (свыше базовых лимитов тарифа, кроме enterprise).
  *   3. Add-on модули, если не входят в includedIn тарифа.
  *   4. Скидка 16% накатывается только на тариф (не на per-seat / add-on).
+ *
+ * ВЕЕРНЫЕ СКИДКИ здесь НЕ применяются: их движок (data/fanDiscounts.ts)
+ * импортирует этот файл, поэтому обратный импорт создал бы цикл. Единственная
+ * точка, где веер попадает в деньги, — `buildQuoteWithFan()` там же; и
+ * routes/pricing.ts, и routes/checkout.ts зовут именно её. Если добавляешь
+ * третьего потребителя смет — зови buildQuoteWithFan, а не buildQuote.
  */
 export interface QuoteLine {
   kind: "tier" | "addon" | "seat" | "bundle";
@@ -801,6 +834,14 @@ export interface QuoteLine {
   unitPrice: number;
   qty: number;
   total: number;
+  /**
+   * Для kind="addon" — id модуля из MODULES_PRICING. Нужен потребителям,
+   * которые накатывают скидку на конкретный модуль (веерные скидки, см.
+   * data/fanDiscounts.ts): без него им пришлось бы либо парсить label, либо
+   * повторять здешние правила пропуска (lite-слоты, includedIn, on_request) —
+   * а дубль этих правил и есть классический источник «смета ≠ списание».
+   */
+  moduleId?: string;
 }
 
 export interface AppliedPromo {
@@ -909,6 +950,7 @@ export function buildQuote(input: {
     lines.push({
       kind: "addon",
       label: `Модуль ${m.id}`,
+      moduleId: m.id,
       unitPrice: m.addonMonthly,
       qty: period === "annual" ? 12 : 1,
       total: m.addonMonthly * (period === "annual" ? 12 : 1),
@@ -933,11 +975,7 @@ export function buildQuote(input: {
     const { promo, reason } = resolvePromoCode(input.promoCode, tier.id, period);
     if (promo) {
       const base = Math.max(0, subtotal - discount);
-      const rawPromoUsd =
-        promo.kind === "percent"
-          ? Math.round((base * promo.amount) / 100)
-          : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
-      promoUsd = Math.min(rawPromoUsd, base * MAX_PROMO_DISCOUNT_RATIO);
+      promoUsd = computePromoDiscountUsd(base, promo, period);
       const rate = CURRENCY_RATES[currency].rate;
       promoApplied = {
         code: promo.code,

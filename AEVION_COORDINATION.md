@@ -435,6 +435,7 @@ C) [третий вариант]
 | `aevion-backend-modules` | `feat/platform-tier2-rest` | `modules.ts`, `awards.ts`, `planetCompliance.ts`, `auth.ts`, `frontend/src/app/admin/**` |
 | `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/devhub/**` — **CyberChess отозван в aevion-core/main 2026-05-12** (не трогать `cyberchess.ts` / `frontend/src/app/cyberchess/**` до новой реасайн-инструкции) |
 | `frontend-payments` (under aevion-core) | `payments-rail` | `qpaynet.ts`, `qcontract.ts`, `frontend/src/app/qpaynet/**`, `frontend/src/app/qcontract/**` |
+| `aevion-fan-pricing` | `feat/fan-discounts` | **Веерные скидки + параметры монетизации:** `aevion-globus-backend/src/data/{fanDiscounts,pricing}.ts`, `src/routes/{pricing,checkout}.ts`, `src/lib/payment/{provider,lemonSqueezyProvider}.ts`, `frontend/src/components/FanDiscountPanel.tsx`, `docs/FAN_DISCOUNTS_2026-07.md` (открыто 2026-07-26; Monetization-окно 3 стоит DONE с 2026-06-10, heartbeat протух) |
 | `aevion-core` (main) **sprint 2** | `main` | **QJobs** (`qjobs.ts`, `lib/ensureQJobsTables.ts`, `frontend/src/app/qjobs/**`, `scripts/qjobs-smoke.js`), **QNews** (`qnews.ts`, `frontend/src/app/qnews/**`), **QSocial** (`qsocial.ts`, `frontend/src/app/qsocial/**`) — prod-ready: rate limits + smoke + search + Postgres indexes |
 
 **Shared/no-owner zones** (договариваемся отдельно перед изменением):
@@ -616,6 +617,7 @@ C) [третий вариант]
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
+| `data/{fanDiscounts,pricing}.ts` + `routes/{pricing,checkout}.ts` + `lib/payment/**` + `FanDiscountPanel.tsx` | ☑ ЗАНЯТО | `aevion-fan-pricing` (`feat/fan-discounts`) | Веерные скидки (ring1/2/3, лестница уровней, потолки: кольцо + общий 50% + COGS 30%) + 3 эндпоинта + панель на `/pricing`. По пути починено: промо-скидка считалась двумя разными способами (смета $71 vs списание $71.20), `/quote` не принимал тариф `pro`, чекаут перестал молча отдавать полную цену со скидкой в смете (`discountHonoured`). 🔴 Найдено: на LS/Gumroad скидки НЕ доходили до счёта — см. `docs/FAN_DISCOUNTS_2026-07.md` §3. Красный тест `paywallProvisionFlow` — ПРЕД-СУЩЕСТВУЮЩИЙ (падает и на чистом origin/main), не трогал: зона paywall | 2026-07-26 13:35 UTC |
 | `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()`. ✅ 14/26 закоммичено (вкл. `/merchant` `/widget`, 3fcb7c5e). ⚠️ `/admin/**` (9 стр.) — правки откатились параллельной сессией дважды на диске; зона КОНТЕСТЕД, не беру повторно без согласования. SSR `r/[token]/layout`+`opengraph-image` — в RU (tServer/OG отдельно). commit `--only` | 2026-06-01 |
 | `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | Бэклог 2026-06-01 (100vh / move-dots+hover / плавность / 1-й ход / 60 звуков / музыка) по коду УЖЕ закрыт — фаза верификации билда + точечный полиш реальных пробелов | 2026-06-02 |
 | `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |

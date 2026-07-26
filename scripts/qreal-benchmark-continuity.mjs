@@ -321,19 +321,35 @@ async function cmdScore() {
 
   const sheets = readdirSync(OUT).filter((f) => /^scoresheet-.+\.csv$/.test(f));
   if (!sheets.length) throw new Error("Нет заполненных scoresheet-*.csv");
+  const knownGroups = new Set(manifest.items.map((i) => i.sceneClipId));
+  const stale = [];
+  const usedSheets = [];
   const scores = {};
   for (const f of sheets) {
     const rows = parseCsv(readFileSync(path.join(OUT, f), "utf8"));
     const head = rows[0].map((h) => h.trim());
     const ix = (n) => head.indexOf(n);
-    for (const r of rows.slice(1)) {
+    const body = rows.slice(1);
+    // Лист прошлого прогона: его id принадлежат другому манифесту. В тотал он
+    // не попадёт, но судья заполнял ДРУГОЙ набор сцен — молча считать такую
+    // панель полной нельзя. Сцен всего три, цена ошибки высока.
+    const unknown = body.filter((r) => !knownGroups.has(r[ix("group_id")])).length;
+    if (body.length && unknown > body.length / 2) {
+      stale.push({ file: f, unknown, total: body.length });
+      console.error(`! ${f}: ${unknown} из ${body.length} строк не из этого прогона — лист пропущен целиком.`);
+      continue;
+    }
+    usedSheets.push(f);
+    for (const r of body) {
       const g = r[ix("group_id")], cid = r[ix("criterion_id")], raw = (r[ix("score_1_5")] || "").trim();
       if (!raw) continue;
+      if (!knownGroups.has(g)) continue; // одиночная строка из старого прогона
       const v = Number(raw);
       if (!Number.isFinite(v) || v < 1 || v > 5) { console.error(`! ${f}: ${g}/${cid} — «${raw}» вне 1-5`); continue; }
       ((scores[g] ||= {})[cid] ||= []).push(v);
     }
   }
+  if (!usedSheets.length) throw new Error("Все найденные листы — от другого прогона. Убери их из каталога и пересобери sheet.");
 
   const groupScore = (g) => {
     const per = scores[g] || {};
@@ -370,7 +386,12 @@ async function cmdScore() {
 
   const L = [];
   L.push("# Бенчмарк консистентности QReal\n");
-  L.push(`Судейских листов: ${sheets.length}. Порог приёмки кадра-сцены: ${threshold}.`);
+  L.push(`Судейских листов учтено: ${usedSheets.length}. Порог приёмки кадра-сцены: ${threshold}.`);
+  if (stale.length) {
+    L.push(`
+> ⚠️ **Пропущено листов от другого прогона: ${stale.length}.** ` +
+      stale.map((x) => `${x.file} (${x.unknown} из ${x.total} строк с чужими id)`).join("; ") + `.`);
+  }
   L.push(`Плечи: naive (короткое упоминание героя) vs qreal (канон реестра + директива continuity). Кадры одинаковые.\n`);
   L.push("## Вердикт\n");
   L.push(proven

@@ -260,6 +260,17 @@ async function main() {
   // The disclaimer must not contradict the document it is attached to.
   assert(/режим разрешений/.test(justTk.json?.scope ?? "") && !/фида регулятора нет/.test(justTk.json?.scope ?? ""), "[tokyo] scope text matches what the document actually contains");
 
+  // What the ceiling costs across the whole network — the figure the page shows
+  // and the pitch quotes, so it must come from the engine, not from a slide.
+  const imp = await jget("/api/qskyway/airspace/impact?city=nyc");
+  assert(imp.status === 200 && imp.json?.available === true, "[nyc] regulatory impact is measured", `status=${imp.status}`);
+  assert(imp.json?.pairs === imp.json?.routable, "[nyc] impact measures every pair, all still routable in advisory mode", `${imp.json?.routable}/${imp.json?.pairs}`);
+  assert(imp.json.compliant > 0 && imp.json.compliant < imp.json.pairs, "[nyc] the published ceiling genuinely bites — some pairs comply, some do not", `${imp.json?.compliant}/${imp.json?.pairs}`);
+  assert(imp.json.strictRoutable <= imp.json.pairs && imp.json.strictRoutable >= imp.json.compliant, "[nyc] strict-routable sits between compliant and total", `strict=${imp.json?.strictRoutable}`);
+  assert(imp.json.padsNeedingAtc >= 1 && !/\d+ площадок стоят/.test(imp.json.note ?? ""), "[nyc] impact note counts pads with correct Russian agreement", imp.json?.note?.slice(-60));
+  const impTk = await jget("/api/qskyway/airspace/impact?city=tokyo");
+  assert(impTk.json?.available === false, "[tokyo] no ceiling grid means nothing to measure, said plainly");
+
   // The shipped Bitcoin proof: a proof nobody keeps is a proof that does not
   // exist, so the one for the edition in use must verify with no arguments.
   const pf = await jget("/api/qskyway/airspace/proof?city=nyc");

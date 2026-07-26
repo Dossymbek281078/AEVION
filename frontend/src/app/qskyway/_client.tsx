@@ -149,6 +149,7 @@ export default function QSkywayClient() {
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [coverage, setCoverage] = useState<{ withFeed: number; total: number; missing: string[] } | null>(null);
+  const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
   const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
@@ -316,7 +317,13 @@ export default function QSkywayClient() {
   const loadCity = useCallback(async (id: string) => {
     cityIdRef.current = id;
     setLoaded(false); setErr(null); setVerify("idle");
-    setAirspaceRoute(null); setCeilingBlocked(null);
+    setAirspaceRoute(null); setCeilingBlocked(null); setImpact(null);
+    // Measured server-side across every pair, never typed in by hand: the whole
+    // point of this figure is that it comes from the same engine the routes do.
+    fetch(apiUrl(`/api/qskyway/airspace/impact?city=${encodeURIComponent(id)}`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setImpact(j?.available ? j : null))
+      .catch(() => setImpact(null));
     try {
       const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
       if (!res.ok) throw new Error("city " + res.status);
@@ -624,7 +631,8 @@ export default function QSkywayClient() {
         <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>AEVION · планета городского неба</div>
         <h1 style={{ fontFamily: "monospace", fontSize: 24, margin: "2px 0 4px" }}><span style={{ color: "#fbbf24" }}>Q</span>Skyway</h1>
         <p style={{ color: "#9fb0c4", fontSize: 14, margin: "0 0 4px", maxWidth: 720 }}>
-          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города. Данные зданий — OpenStreetMap.
+          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города.
+          Здания — OpenStreetMap, ограничения — из публикаций самих регуляторов там, где они существуют.
         </p>
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
           Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC). Данные зданий — OpenStreetMap (открытые, ODbL).
@@ -656,6 +664,23 @@ export default function QSkywayClient() {
                 .map((id) => cities.find((c) => c.id === id)?.name.split(" — ")[0] ?? id)
                 .join(", "),
             })}
+          </div>
+        )}
+
+        {/* The strongest thing this module can say about a city, and it was
+            computed nowhere until now: how much of the network the published
+            ceiling actually rules out. */}
+        {impact && (
+          <div style={{ margin: "0 0 16px", padding: "12px 14px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836" }}>
+            <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e8eef7" }}>
+              <span style={{ color: impact.compliantPct >= 50 ? "#fbbf24" : "#fb7185", fontSize: 17, fontWeight: 700 }}>
+                {impact.compliant} / {impact.pairs}
+              </span>{" "}
+              {t("qskyway.impact.head", { authority: impact.authority })}
+            </div>
+            <div style={{ fontSize: 12, color: "#9fb0c4", marginTop: 5, lineHeight: 1.5 }}>
+              {t("qskyway.impact.body", { strict: impact.strictRoutable, pairs: impact.pairs, pads: impact.padsNeedingAtc })}
+            </div>
           </div>
         )}
 

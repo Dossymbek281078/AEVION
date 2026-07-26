@@ -54,6 +54,7 @@ import { getPool } from "../lib/dbPool";
  *                           (обход зон + ветер в ETA + регуляторный потолок)
  *   POST /route/justification — один подписанный документ «почему рейс обоснован»
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
+ *   GET  /airspace/impact — сколько пар площадок реально укладывается в потолок
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
@@ -99,6 +100,15 @@ interface ZoneXY extends NoFlyZone { x: number; y: number; }
 function zonesMeters(cityId: string, city: CityData): ZoneXY[] {
   const proj = projector(city);
   return (NOFLY[cityId] ?? []).map((z) => { const [x, y] = proj(z.center[0], z.center[1]); return { ...z, x, y }; });
+}
+
+// Russian pluralisation for the served strings. A figure this module computes
+// and then renders as "1 площадок" undermines the care taken to compute it.
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ${few}`;
+  return `${n} ${many}`;
 }
 
 const obstOf = (g: CityData["grid"]) => (c: number, r: number): number =>
@@ -662,6 +672,66 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
     airspace: airspaceBlock(id, city),
     vertiportScores: suitability(id, city),
     _signature: signCity(id, city),
+  });
+});
+
+/**
+ * What the published ceiling actually costs, across every pair of pads.
+ *
+ * The single most useful thing this module can say about a city is not that it
+ * ingested a feed — it is how much of the network the feed rules out. That
+ * number has been sitting one loop away from the data since the ceilings
+ * landed, computed nowhere and therefore quotable nowhere; a figure typed into
+ * a slide by hand is exactly what this platform is not supposed to do.
+ *
+ * Deterministic and cheap (n² routes over a cached grid), so it is computed on
+ * request rather than stored — nothing to go stale, and the page can show a
+ * live figure instead of a hardcoded one.
+ */
+qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const { id, city } = resolved;
+  const field = ceilingField(id, city);
+  if (!field) {
+    return res.json({
+      city: id, available: false,
+      note: "Сетки потолков для этого города регулятор не публикует — измерять нечего.",
+    });
+  }
+  const n = city.vertiports.length;
+  let pairs = 0, routable = 0, compliant = 0, strictRoutable = 0;
+  let worstExceedanceM = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j) continue;
+    pairs++;
+    const r = buildRoute(id, city, i, j, false);
+    if (!r) continue;
+    routable++;
+    if (r.airspace.compliant) compliant++;
+    worstExceedanceM = Math.max(worstExceedanceM, r.airspace.maxExceedanceM);
+    if (buildRoute(id, city, i, j, true)) strictRoutable++;
+  }
+  // Pads the regulator authorizes nothing over: they cannot launch at all, which
+  // is a different and harsher fact than a corridor merely flying too high.
+  const padsNeedingAtc = suitability(id, city).filter((v) => v.needsAtcCoordination).length;
+  res.json({
+    city: id,
+    available: true,
+    authority: AIRSPACE[id].authority,
+    effective: AIRSPACE[id].effective,
+    pairs,
+    routable,
+    /** pairs whose corridor stays within the published ceiling end to end */
+    compliant,
+    compliantPct: Math.round((100 * compliant) / Math.max(1, pairs)),
+    /** pairs still flyable when the ceiling is enforced as a hard constraint */
+    strictRoutable,
+    worstExceedanceM,
+    padsNeedingAtc,
+    zeroCeilingCells: field.zeroCeilingCells,
+    gridCells: field.cols * field.rows,
+    note: `${compliant} из ${pairs} пар площадок укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
   });
 });
 

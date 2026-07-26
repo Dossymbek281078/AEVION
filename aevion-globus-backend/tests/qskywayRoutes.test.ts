@@ -148,6 +148,35 @@ describe("GET /cities and /verify — coverage and attestation", () => {
   });
 });
 
+describe("POST /airspace/anchor/verify — the one input-driven outbound call", () => {
+  test("an oversized proof is refused before anything reaches the network", async () => {
+    // Parsing a caller-supplied blob and then calling third-party calendars with
+    // it is work an attacker gets to choose the size of. Refused on shape, not
+    // after the round trip — and with a limit, not a silent truncation.
+    const r = await request(app)
+      .post("/api/qskyway/airspace/anchor/verify")
+      .send({ city: "nyc", contentHash: "a".repeat(64), otsProofB64: "A".repeat(70_000) });
+    expect(r.status).toBe(413);
+    expect(r.body.maxBytesB64).toBeGreaterThan(0);
+  });
+
+  test("a request missing its proof is answered locally, not by asking a calendar", async () => {
+    const r = await request(app)
+      .post("/api/qskyway/airspace/anchor/verify")
+      .send({ city: "nyc", contentHash: "a".repeat(64) });
+    expect(r.status).toBe(200);
+    expect(r.body.fullyProven).toBe(false);
+    expect(r.body.ots.error).toMatch(/otsProofB64/);
+  });
+
+  test("a request missing its hash is refused before the proof is even looked at", async () => {
+    const r = await request(app).post("/api/qskyway/airspace/anchor/verify").send({ city: "nyc" });
+    expect(r.status).toBe(200);
+    expect(r.body.fullyProven).toBe(false);
+    expect(r.body.ots.error).toMatch(/contentHash/);
+  });
+});
+
 describe("GET /airspace/impact — what the ceiling costs", () => {
   test("measures every pair and finds the ceiling genuinely binding", async () => {
     const r = await request(app).get("/api/qskyway/airspace/impact?city=nyc");

@@ -11,6 +11,7 @@ import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.ancho
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
+import { rateLimit } from "../lib/rateLimit";
 
 /**
  * AEVION QSkyway — навигационный слой городского неба для аэротакси.
@@ -964,7 +965,33 @@ qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
   res.json(anchor);
 });
 
-qskywayRouter.post("/airspace/anchor/verify", async (req: Request, res: Response) => {
+// The one endpoint whose outbound traffic is driven by user input: it verifies a
+// proof the caller supplies, which means calling the OpenTimestamps calendars
+// with a payload we did not choose. Everything else added today could be made
+// self-sufficient by caching; this one legitimately needs the network, so it
+// gets a limit instead. Reuses the repo's own limiter rather than inventing a
+// second one.
+const anchorVerifyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-anchor-verify",
+  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту.",
+});
+
+// A serialized .ots proof for one hash is well under a kilobyte (ours is 3.7 KB
+// with the Bitcoin attestation). Anything far larger is not a proof we could
+// verify, and parsing it before finding that out is work an attacker chooses.
+const MAX_OTS_PROOF_B64 = 64 * 1024;
+
+qskywayRouter.post("/airspace/anchor/verify", anchorVerifyLimiter, async (req: Request, res: Response) => {
+  const proofB64 = req.body?.otsProofB64;
+  if (typeof proofB64 === "string" && proofB64.length > MAX_OTS_PROOF_B64) {
+    return res.status(413).json({
+      error: "пруф слишком большой",
+      maxBytesB64: MAX_OTS_PROOF_B64,
+      note: "Сериализованный .ots-пруф на один хэш — единицы килобайт; всё, что заметно больше, проверить всё равно не удастся.",
+    });
+  }
   res.json(await verifyAnchoredAirspace(req.body));
 });
 

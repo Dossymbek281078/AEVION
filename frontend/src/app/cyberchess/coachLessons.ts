@@ -185,7 +185,7 @@ export const LESSONS: Lesson[] = [
         kind: "exercise",
         title: "Возьми оппозицию",
         body: "Белые ходят. Цель — провести пешку. Как взять оппозицию?",
-        fen: "8/8/4k3/8/4P3/4K3/8/8 w - - 0 1",
+        fen: "8/8/4k3/8/8/4K3/4P3/8 w - - 0 1",
         bestMove: "Ke4",
       },
       {

@@ -287,10 +287,23 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
 
-  // ── Gross margin: "80% gross margin" / "gross margin of 72%" ──
+  // ── Gross margin: "80% gross margin" / "gross margin of 72%" / "70-80%" ──
+  // A stated band is read at its low end, like a revenue range: the plan
+  // disclosed a floor, and scoring the ceiling would credit a number it never
+  // committed to. The choice is stated in the assumptions, not assumed.
+  const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*gross\s*margin`, "i"));
+  if (gmRange) {
+    const a = parseLocaleNumber(gmRange[1]);
+    const b = parseLocaleNumber(gmRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 100) {
+      s.grossMarginPct = Math.min(a, b);
+      s.parseNotes.push(`Gross margin was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
+    }
+  }
   const gm = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*gross\s*margin`, "i"))
     || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*\(?\s*${NUM}\s*%`, "i"));
-  if (gm) {
+  if (gm && s.grossMarginPct === null) {
     const m = parseLocaleNumber(gm[1]);
     if (isFinite(m) && m > 0 && m <= 100) s.grossMarginPct = m;
   }
@@ -346,7 +359,32 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
 
   // ── Bottom-up TAM: "TAM of $12B" / "$500M TAM" / "addressable market of $8B" ──
-  const tam = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+  // A TAM band ("$5-10B") reads at the low end too. Here it matters more than
+  // elsewhere: the market factor is log-scaled and an inflated TAM is one of the
+  // engine's red flags, so quietly taking the ceiling would flatter the plan on
+  // the one number founders are most tempted to stretch.
+  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    // Numbers first, keyword after ("€2B to €4B TAM") — without this the
+    // single-figure pattern matched the SECOND figure and took the ceiling.
+    || firstMatch(t, new RegExp(String.raw`(?:between\s*)?${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
+  if (tamRange) {
+    const groups = tamRange.slice(1).filter((g): g is string => typeof g === "string");
+    const nums = groups.filter((g) => /^\d/.test(g));
+    const units = groups.filter((g) => /^[a-zа-я]{1,8}$/i.test(g) && g.toLowerCase() in MONEY_MULTIPLIER);
+    if (nums.length >= 2) {
+      const a = parseMoney(nums[0], units[0]);
+      const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
+      if (a && b) {
+        const low = toUsd(Math.min(a, b), planCurrency);
+        const high = toUsd(Math.max(a, b), planCurrency);
+        s.bottomUpTamUsd = low;
+        const fmt = (n: number) => (n >= 1e9 ? `$${Math.round((n / 1e9) * 10) / 10}B` : `$${Math.round(n / 1e6)}M`);
+        s.parseNotes.push(`Bottom-up TAM was disclosed as a range (${fmt(low)}–${fmt(high)}); the score uses the low end.`);
+      }
+    }
+  }
+  const tam = s.bottomUpTamUsd !== null ? null
+    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
   if (tam) {
     // detect group layout

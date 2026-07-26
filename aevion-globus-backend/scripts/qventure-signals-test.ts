@@ -244,6 +244,18 @@ const eurRange = parsePlanSignals("€1,5M to €3M ARR in Europe.");
 ok("a currency range converts at the low end", eurRange.revenueUsd !== null && eurRange.revenueUsd > 1_600_000 && eurRange.revenueUsd < 1_800_000, String(eurRange.revenueUsd));
 ok("a single figure is untouched by the range path", parsePlanSignals("$3M ARR flat.").revenueUsd === 3_000_000);
 ok("a single figure carries no range note", parsePlanSignals("$3M ARR flat.").parseNotes.length === 0);
+const gmRange = parsePlanSignals("SaaS with gross margin of 70-80% at scale.");
+ok("a margin band is read at its low end", gmRange.grossMarginPct === 70, String(gmRange.grossMarginPct));
+ok("the margin band is disclosed", gmRange.parseNotes.some((n) => /Gross margin.*low end/.test(n)), gmRange.parseNotes.join("|"));
+ok("a plain margin is untouched", parsePlanSignals("DTC with 60% gross margin.").grossMarginPct === 60);
+const tamRangeLow = parsePlanSignals("TAM of $5-10B in logistics.");
+ok("a TAM band is read at its low end", tamRangeLow.bottomUpTamUsd === 5e9, String(tamRangeLow.bottomUpTamUsd));
+// Numbers-first phrasing used to fall through to the single-figure pattern,
+// which matched the SECOND figure — i.e. it silently took the ceiling.
+const tamReversed = parsePlanSignals("€2B to €4B TAM in the EU.");
+ok("'€2B to €4B TAM' takes the floor, not the ceiling",
+  tamReversed.bottomUpTamUsd !== null && tamReversed.bottomUpTamUsd < 3e9, String(tamReversed.bottomUpTamUsd));
+ok("a plain TAM is untouched", parsePlanSignals("TAM of $12B addressable market.").bottomUpTamUsd === 12e9);
 ok("the range assumption reaches the report",
   analyze({ ...base, description: "SaaS with ARR between $2M and $4M depending on renewals, 500 customers." })
     .assumptions.some((a) => /low end/.test(a)));

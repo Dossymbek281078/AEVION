@@ -8,7 +8,7 @@ import { apiUrl, fetchWithRedeployRetry } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
-import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
+import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -1139,7 +1139,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Client-side live preview for React SPA projects — transform in the parent,
   // module graph via import map, no deploy needed (see lib/reactPreview.ts).
   useEffect(() => {
-    if (activeTab !== "visual" || !project || project.stack !== "react") return;
+    if (activeTab !== "visual" || !project || !isClientPreviewStack(project.stack)) return;
     let cancelled = false;
     setReactPreviewError(null);
     buildReactPreviewSrcdoc(
@@ -2914,7 +2914,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
             {activeTab === "visual" ? (
               project?.stack !== "static" ? (
-                project?.stack === "react" && reactPreviewSrcdoc ? (
+                isClientPreviewStack(project?.stack) && reactPreviewSrcdoc ? (
                   <iframe
                     ref={visualEditIframeRef}
                     srcDoc={reactPreviewSrcdoc}
@@ -2922,7 +2922,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
                     title="Visual Edit preview"
                   />
-                ) : project?.stack === "react" ? (
+                ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                     <div style={{ maxWidth: 460 }}>
                       <div style={{ fontSize: 32, marginBottom: 12 }}>⚛️</div>

@@ -20,12 +20,30 @@ export type PreviewFile = { path: string; content: string };
 // therefore ranked, not required: .jsx/.tsx first, .js/.ts right behind.
 const ENTRY_BASENAMES = ["src/main", "main", "src/index", "index", "src/App", "App"];
 const ENTRY_EXTS = [".jsx", ".tsx", ".js", ".ts"];
-const ENTRY_CANDIDATES = ENTRY_BASENAMES.flatMap((b) => ENTRY_EXTS.map((e) => b + e));
+// Next.js route entries come first: a Next project also has src/… files, but
+// its page component is what the user expects to see rendered.
+const NEXT_ENTRY_BASENAMES = ["app/page", "src/app/page", "pages/index", "src/pages/index"];
+const ENTRY_CANDIDATES = [...NEXT_ENTRY_BASENAMES, ...ENTRY_BASENAMES].flatMap((b) =>
+  ENTRY_EXTS.map((e) => b + e)
+);
+
+/** A Server Component cannot run in the browser: it awaits data server-side
+ * before returning JSX. Detected so the preview says so instead of dying in
+ * an unhandled rejection. */
+const ASYNC_DEFAULT_RE = /export\s+default\s+async\s+function/;
 
 const CODE_RE = /\.(jsx|tsx|js|ts|mjs)$/i;
 /** An entry that mounts itself (CRA/Vite index) rather than exporting a component. */
 const SELF_MOUNT_RE = /createRoot\s*\(|ReactDOM\.render\s*\(/;
 const REACT_VERSION = "18.3.1";
+
+/** Stacks whose sources can be rendered in the browser with no deploy.
+ * "next" is included for client pages: a Server Component is caught later
+ * and reported honestly rather than guessed at. */
+export function isClientPreviewStack(stack: string | null | undefined): boolean {
+  const s = (stack || "").toLowerCase();
+  return s === "react" || s === "next" || s === "nextjs";
+}
 
 export function findReactEntry(files: PreviewFile[]): string | null {
   for (const c of ENTRY_CANDIDATES) {
@@ -77,8 +95,65 @@ export function rewriteLocalImports(code: string, importerPath: string, files: P
     (whole, lead: string, quote: string, spec: string) => {
       const resolved = resolveLocalImport(importerPath, spec, files);
       if (!resolved) return whole; // unknown import — leave it; the iframe error surfaces it honestly
-      if (resolved.endsWith(".css")) return `${lead}${quote}data:text/javascript,${quote}`; // no-op module
+      // CSS Modules keep a value (s.title must be a string); plain CSS is
+      // injected as <style> and its import becomes a no-op module.
+      if (/\.module\.css$/i.test(resolved)) return `${lead}${quote}${CSS_MODULE_SPECIFIER}${quote}`;
+      if (resolved.endsWith(".css")) return `${lead}${quote}data:text/javascript,${quote}`;
       return `${lead}${quote}local/${resolved}${quote}`;
+    }
+  );
+}
+
+/**
+ * Browser stand-ins for the Next.js runtime imports a generated page uses.
+ * They are not Next.js — they render the DOM element the real component would
+ * produce, so a page can be *seen* without a build. Navigation is inert: this
+ * is a preview of one route, not a running router.
+ */
+const NEXT_SHIMS: Record<string, string> = {
+  "next/link": `import React from "react";
+export default function Link({ href, children, ...rest }) {
+  return React.createElement("a", { href: typeof href === "string" ? href : "#", ...rest }, children);
+}`,
+  "next/image": `import React from "react";
+export default function Image({ src, alt, fill, priority, quality, loader, placeholder, blurDataURL, unoptimized, ...rest }) {
+  const resolved = src && typeof src === "object" ? (src.src || "") : src;
+  const style = fill ? { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", ...(rest.style || {}) } : rest.style;
+  return React.createElement("img", { ...rest, style, src: resolved, alt: alt || "" });
+}`,
+  "next/navigation": `const noop = () => {};
+export function useRouter() { return { push: noop, replace: noop, back: noop, forward: noop, refresh: noop, prefetch: noop }; }
+export function usePathname() { return "/"; }
+export function useSearchParams() { return new URLSearchParams(); }
+export function useParams() { return {}; }
+export function redirect() {}
+export function notFound() {}`,
+  "next/head": `export default function Head() { return null; }`,
+  "next/script": `export default function Script() { return null; }`,
+};
+
+/** CSS Modules: `import s from "./x.module.css"` must yield something whose
+ * every property is a string, or the first `s.title` throws. The real class
+ * names are already in the injected <style>, so echoing the key is enough. */
+const CSS_MODULE_SHIM =
+  `const handler = { get: (_t, k) => (typeof k === "string" ? k : undefined) };\n` +
+  `export default new Proxy({}, handler);`;
+
+const CSS_MODULE_SPECIFIER = "devhub/css-module";
+
+/** `next/font` exports arbitrary named loaders (Inter, Roboto, …) which no
+ * fixed shim module can satisfy, so the import is rewritten into a local
+ * stub instead of resolved. */
+export function stubNextFontImports(code: string): string {
+  return code.replace(
+    /import\s*\{([^}]*)\}\s*from\s*["']next\/font\/[a-z]+["']\s*;?/g,
+    (_whole, names: string) => {
+      const decls = names
+        .split(",")
+        .map((n) => n.split(/\s+as\s+/).pop()!.trim())
+        .filter(Boolean)
+        .map((n) => `const ${n} = () => ({ className: "", style: {}, variable: "" });`);
+      return decls.join(" ");
     }
   );
 }
@@ -91,18 +166,34 @@ export async function buildReactPreviewSrcdoc(files: PreviewFile[], overlayScrip
 
   const babel = (await import("@babel/standalone")) as unknown as Babel;
 
+  const entryFile = files.find((f) => f.path === entry);
+  if (entryFile && ASYNC_DEFAULT_RE.test(entryFile.content)) {
+    return {
+      error:
+        `${entry} is an async Server Component — it fetches on the server before rendering, ` +
+        `so the browser preview cannot run it. Deploy the project to see this page.`,
+    };
+  }
+
   const moduleMap: Record<string, string> = {
     react: `https://esm.sh/react@${REACT_VERSION}`,
     "react-dom": `https://esm.sh/react-dom@${REACT_VERSION}`,
     "react-dom/client": `https://esm.sh/react-dom@${REACT_VERSION}/client`,
     "react/jsx-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-runtime`,
+    [CSS_MODULE_SPECIFIER]: `data:text/javascript;base64,${toBase64(CSS_MODULE_SHIM)}`,
   };
+  // Next runtime stand-ins are always mapped: harmless entries for a plain
+  // React project, and the difference between a rendered page and a module
+  // resolution error for a Next one.
+  for (const [spec, src] of Object.entries(NEXT_SHIMS)) {
+    moduleMap[spec] = `data:text/javascript;base64,${toBase64(src)}`;
+  }
 
   const codeFiles = files.filter((f) => CODE_RE.test(f.path));
   for (const f of codeFiles) {
     let transformed: string;
     try {
-      const out = babel.transform(f.content, {
+      const out = babel.transform(stubNextFontImports(f.content), {
         filename: f.path,
         // Babel 8 removed preset-typescript's isTSX/allExtensions options —
         // the filename alone now decides TS/TSX handling (bug found live:

@@ -38,6 +38,9 @@
 | `POST` | `/api/startupx/ideas/:id/interest` | все | отклик инвестора с условиями (чек, доля, тип сделки) |
 | `GET` | `/api/startupx/ideas/:id/offers?token=` | основатель | входящие предложения |
 | `POST` | `/api/startupx/ideas/:id/reassess` | все | пересчёт по текущим правилам (когда двигается `ASSESSMENT_VERSION`) |
+| `GET` | `/api/startupx/stats` | все | счётчики ленты + `assessmentVersion` и `staleAssessments` |
+| `GET` | `/api/startupx/health` | все | `dbReady` — используется ли Postgres или включился in-memory фолбэк |
+| `GET` | `/api/startupx/status` | все | карточка модуля для витрины MVP |
 
 ### Токен основателя
 

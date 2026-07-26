@@ -57,7 +57,7 @@ export function InterestModal({
       if (e.shiftKey && (active === first || !dialogRef.current.contains(active))) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && active === last) {
+      } else if (!e.shiftKey && (active === last || !dialogRef.current.contains(active))) {
         e.preventDefault();
         first.focus();
       }

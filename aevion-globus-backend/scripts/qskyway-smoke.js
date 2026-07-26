@@ -16,7 +16,11 @@ const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
 // run can cover the whole read surface without leaving smoke rows behind.
 const READ_ONLY = process.env.READ_ONLY === "1";
 let step = 0, failed = 0;
-const skip = (n, why) => console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`);
+let skipped = 0;
+const skip = (n, why) => { skipped++; console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`); };
+// A skipped write leg did not pass — folding it into the pass count would make
+// a prod run look like it verified more than it actually did.
+const summary = () => `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step - skipped}/${step} checks${skipped ? `, ${skipped} skipped` : ""})`;
 const ok = (n, x) => console.log(`  ${String(++step).padStart(2, "0")}  PASS  ${n}${x ? "  " + x : ""}`);
 const fail = (n, r) => { step++; failed++; console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${n}${r ? "  — " + r : ""}`); };
 const assert = (c, n, r) => (c ? ok(n) : fail(n, r));
@@ -287,7 +291,7 @@ async function main() {
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
   if (READ_ONLY) {
     skip("slot market capacity gate", "READ_ONLY — booking writes skipped");
-    console.log(`\n${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step} checks)`);
+    console.log(`\n${summary()}`);
     process.exit(failed === 0 ? 0 : 1);
   }
   let okCount = 0, conflict = false;
@@ -304,7 +308,7 @@ async function main() {
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");
 
-  console.log(`\n${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step} checks)`);
+  console.log(`\n${summary()}`);
   process.exit(failed === 0 ? 0 : 1);
 }
 main().catch((e) => { console.error("smoke crashed:", e); process.exit(1); });

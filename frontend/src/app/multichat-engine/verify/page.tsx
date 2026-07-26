@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { T } from "../theme";
 
 type VerifyResult = {
   hashMatches: boolean;
@@ -23,11 +24,6 @@ type VerifyResult = {
   spec: { canonicalization: string; digest: string; signature: string };
 };
 
-const C = {
-  bg: "#0b1220", panel: "#0f172a", line: "#334155", faint: "#1e293b",
-  text: "#e2e8f0", dim: "#cbd5e1", mute: "#94a3b8", faded: "#64748b",
-  ok: "#5eead4", warn: "#fbbf24", bad: "#fca5a5",
-};
 
 export default function VerifyReceiptPage() {
   const [raw, setRaw] = useState("");
@@ -68,18 +64,18 @@ export default function VerifyReceiptPage() {
     void check(text);
   }
 
-  const verdictColor = !res ? C.mute : res.hashMatches ? C.ok : C.bad;
+  const verdictColor = !res ? T.textMute : res.hashMatches ? T.accent : T.bad;
 
   return (
-    <main style={{ background: C.bg, minHeight: "100vh", padding: "48px 20px", color: C.text }}>
+    <main style={{ background: T.canvas, minHeight: "100vh", padding: "48px 20px", color: T.text }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <h1 style={{ fontSize: 30, margin: "0 0 8px", fontWeight: 600 }}>Проверка чека</h1>
-        <p style={{ fontSize: 15, color: C.mute, lineHeight: 1.65, margin: "0 0 6px" }}>
+        <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.65, margin: "0 0 6px" }}>
           Каждый ответ консилиума AEVION сопровождается чеком: состав панели, хеши ответов,
           карта разногласий и стоимость. Уроните сюда скачанный файл — и увидите, соответствует
           ли содержимое своему хешу.
         </p>
-        <p style={{ fontSize: 13, color: C.faded, lineHeight: 1.6, margin: "0 0 22px" }}>
+        <p style={{ fontSize: 13, color: T.textFaded, lineHeight: 1.6, margin: "0 0 22px" }}>
           Наш ответ «сходится» — это удобство, а не доказательство. Доказательство в том, что
           спецификация открыта: канонизация RFC8785, дайджест sha256, подпись ed25519. Пересчитайте
           хеш любой сторонней реализацией и не доверяйте этой кнопке.
@@ -91,7 +87,7 @@ export default function VerifyReceiptPage() {
             e.preventDefault();
             void onFile(e.dataTransfer.files?.[0]);
           }}
-          style={{ border: `1px dashed ${C.line}`, borderRadius: 12, padding: 14, background: C.panel }}
+          style={{ border: `1px dashed ${T.lineSoft}`, borderRadius: 12, padding: 14, background: T.surface }}
         >
           <textarea
             value={raw}
@@ -100,7 +96,7 @@ export default function VerifyReceiptPage() {
             placeholder="Перетащите файл чека сюда или вставьте его содержимое"
             style={{
               width: "100%", background: "transparent", border: "none", outline: "none",
-              color: C.dim, fontSize: 13, fontFamily: "ui-monospace, monospace", lineHeight: 1.5, resize: "vertical",
+              color: T.textDim, fontSize: 13, fontFamily: "ui-monospace, monospace", lineHeight: 1.5, resize: "vertical",
             }}
           />
         </div>
@@ -110,50 +106,50 @@ export default function VerifyReceiptPage() {
             onClick={() => void check(raw)}
             disabled={busy || raw.trim().length < 10}
             style={{
-              background: busy || raw.trim().length < 10 ? C.line : C.ok,
-              color: busy || raw.trim().length < 10 ? C.mute : "#042f2e",
+              background: busy || raw.trim().length < 10 ? T.btnDisabledBg : T.btnAccentBg,
+              color: busy || raw.trim().length < 10 ? T.textMute : T.onAccentDeep,
               border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: 600,
               cursor: busy || raw.trim().length < 10 ? "default" : "pointer",
             }}
           >
             {busy ? "Считаю…" : "Проверить"}
           </button>
-          <label style={{ fontSize: 13, color: C.faded, cursor: "pointer" }}>
+          <label style={{ fontSize: 13, color: T.textFaded, cursor: "pointer" }}>
             <input type="file" accept="application/json,.json" style={{ display: "none" }}
               onChange={(e) => void onFile(e.target.files?.[0] || undefined)} />
             …или выберите файл
           </label>
         </div>
 
-        {error && <p style={{ color: C.bad, fontSize: 14, marginTop: 14 }}>{error}</p>}
+        {error && <p style={{ color: T.bad, fontSize: 14, marginTop: 14 }}>{error}</p>}
 
         {res && (
-          <div style={{ marginTop: 22, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18 }}>
+          <div style={{ marginTop: 22, background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontSize: 20, margin: 0, color: verdictColor }}>
               {res.hashMatches ? "Хеш сходится — содержимое не изменено" : "Хеш НЕ сходится — содержимое изменено"}
             </h2>
-            <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: C.faded, margin: "10px 0 0", wordBreak: "break-all" }}>
+            <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded, margin: "10px 0 0", wordBreak: "break-all" }}>
               пересчитано: {res.computedHash}
             </p>
 
-            <p style={{ fontSize: 14, color: C.dim, margin: "14px 0 0" }}>
-              <span style={{ color: C.faded }}>Подпись: </span>
-              <span style={{ color: res.signature === "valid" ? C.ok : res.signature === "invalid" ? C.bad : C.warn }}>
+            <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
+              <span style={{ color: T.textFaded }}>Подпись: </span>
+              <span style={{ color: res.signature === "valid" ? T.accent : res.signature === "invalid" ? T.bad : T.warn }}>
                 {res.signature === "valid" ? "действительна"
                   : res.signature === "invalid" ? "НЕ действительна"
                     : res.signature === "absent" ? "отсутствует"
                       : "не проверена"}
               </span>
-              {res.signatureNote && <span style={{ color: C.faded, fontSize: 13 }}> — {res.signatureNote}</span>}
+              {res.signatureNote && <span style={{ color: T.textFaded, fontSize: 13 }}> — {res.signatureNote}</span>}
             </p>
 
-            <p style={{ fontSize: 12, color: C.faded, margin: "14px 0 0" }}>
+            <p style={{ fontSize: 12, color: T.textFaded, margin: "14px 0 0" }}>
               Спецификация: канонизация {res.spec.canonicalization}, дайджест {res.spec.digest},
               подпись {res.spec.signature}.
             </p>
 
             {!res.hashMatches && (
-              <p style={{ fontSize: 13, color: C.warn, margin: "12px 0 0", lineHeight: 1.6 }}>
+              <p style={{ fontSize: 13, color: T.warn, margin: "12px 0 0", lineHeight: 1.6 }}>
                 Расхождение означает одно из двух: файл отредактировали после выдачи, либо это чек
                 другого ответа. Сравните поле <code>hash</code> в файле с пересчитанным выше.
               </p>

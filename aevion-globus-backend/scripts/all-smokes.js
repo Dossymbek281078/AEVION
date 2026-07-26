@@ -64,6 +64,15 @@ const SMOKES = [
   { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true, offline: true },
   // Offline: exercises the QCoreAI "auto" router (classify → council vs single) via the stub.
   { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true, offline: true },
+  // Offline: проверяет, что health честно сообщает состояние хранилища событий
+  // (см. issue #960 — аналитика на файловой системе контейнера стирается
+  // каждым деплоем, и снаружи это неотличимо от «событий ещё не было»).
+  // Работает против dist/, а не против BASE, поэтому offline.
+  { name: "events-store", script: "events-store-status-smoke.js", readOnly: true, offline: true },
+  // Offline: health обязан честно называть режим подписи. Письма партнёрам
+  // утверждают ML-DSA-65/FIPS 204, а это включается ключом — и самый коварный
+  // случай, когда ключ задан, но битый, снаружи неотличим от рабочего.
+  { name: "qsign-mode", script: "qsign-mode-smoke.js", readOnly: true, offline: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.

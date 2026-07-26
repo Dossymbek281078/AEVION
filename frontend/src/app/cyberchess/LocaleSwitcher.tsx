@@ -80,7 +80,14 @@ export default function LocaleSwitcher({ surface1, surface2, border, text, textD
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
               >
                 <span style={{ fontSize: 16 }}>{l.flag}</span>
-                <span style={{ flex: 1 }}>{l.label}</span>
+                <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span>{l.label}</span>
+                  {l.note && (
+                    <span style={{ fontSize: 10, fontWeight: 500, color: textDim, lineHeight: 1.25 }}>
+                      {l.note}
+                    </span>
+                  )}
+                </span>
                 {active && <span style={{ color: brand, fontSize: 11 }}>✓</span>}
               </button>
             );

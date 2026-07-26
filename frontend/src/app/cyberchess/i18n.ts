@@ -22,10 +22,15 @@ export type CcLocale = "ru" | "en" | "kk";
 export const DEFAULT_LOCALE: CcLocale = "ru";
 const LOCALE_KEY = "aevion_locale";
 
-export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[] = [
+/* `note` warns that the locale is not complete. The dictionary covers the side
+   panels; the main board page is written in Russian directly, so picking English
+   today still leaves most of the screen in Russian. Saying so in the menu costs
+   one line and stops the switch from promising more than it delivers. Drop the
+   note from a locale once its screens are actually translated. */
+export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string; note?: string }[] = [
   { code: "ru", label: "Русский", flag: "🇷🇺" },
-  { code: "en", label: "English", flag: "🇺🇸" },
-  { code: "kk", label: "Қазақша", flag: "🇰🇿" },
+  { code: "en", label: "English", flag: "🇺🇸", note: "partial — main board is in Russian" },
+  { code: "kk", label: "Қазақша", flag: "🇰🇿", note: "ішінара — басты тақта орысша" },
 ];
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
@@ -569,11 +574,17 @@ export function loadLocale(): CcLocale {
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
   } catch {}
-  // Auto-detect by browser navigator.language prefix
+  /* Auto-detect by browser language, but only into a language we have finished. An
+     English-locale browser is common among Russian speakers here, and sending them to
+     a locale that translates the panels and not the board would greet them with a
+     mixed screen they never asked for. Choosing it from the menu still works — that is
+     a deliberate act, and the menu says what is missing. Once a locale loses its `note`
+     it becomes an auto-detect target on its own. */
   try {
     const nav = navigator.language?.slice(0, 2).toLowerCase();
-    if (nav === "ru" || nav === "en" || nav === "kk") return nav as CcLocale;
-    if (nav === "kz") return "kk";
+    const code = nav === "kz" ? "kk" : nav;
+    const match = SUPPORTED_LOCALES.find((l) => l.code === code && !l.note);
+    if (match) return match.code;
   } catch {}
   return DEFAULT_LOCALE;
 }

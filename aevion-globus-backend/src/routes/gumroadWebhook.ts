@@ -23,7 +23,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { gumroadPaymentProvider, verifyGumroadSale } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
@@ -239,6 +239,32 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "external") {
     console.log(`[gumroad/webhook] external product ${productId} — skipping`);
     return res.json({ ok: true, ignored: "external_product" });
+  }
+
+  // Подтверждение продажи, когда пинг не подписан.
+  //
+  // parseWebhook проверяет HMAC только при заданном GUMROAD_WEBHOOK_SECRET. На
+  // проде 26.07.2026 секрет не задан, а Ping-адрес публично известен — то есть
+  // любой POST с чужим email выдавал бы платный тариф без единого платежа.
+  // Здесь мы спрашиваем у самого Gumroad, существует ли такая продажа.
+  //
+  // Отклоняем ТОЛЬКО при определённом «нет такой продажи». Если подтвердить не
+  // удалось (нет токена, сеть, 5xx) — ведём себя как раньше и провижиним:
+  // реальный покупатель не должен терять доступ из-за сбоя стороннего API.
+  // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
+  const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
+  if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
+    const verdict = await verifyGumroadSale(saleId);
+    if (verdict === "not_found") {
+      console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
+      SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом
+      return res.status(401).json({ ok: false, error: "sale_not_found" });
+    }
+    if (verdict === "unverifiable") {
+      console.warn(
+        `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
+      );
+    }
   }
 
   // DevHub Studio Pro — upgrades DevHubTier, not the main subscription tier.

@@ -33,7 +33,7 @@
 | `GET` | `/api/startupx/ideas` | все | лента; фильтры `tier`, `sector`, `minScore`, сортировка `recent`/`score` |
 | `GET` | `/api/startupx/ideas/:id` | все | одна заявка (только `visibility='public'`) |
 | `POST` | `/api/startupx/ideas` | все | публикация; в ответе **один раз** отдаётся `manageToken` |
-| `PATCH` | `/api/startupx/ideas/:id?token=` | основатель | правка условий, цифр и ссылок; разбор пересчитывается |
+| `PATCH` | `/api/startupx/ideas/:id?token=` | основатель | правка условий, цифр и ссылок; разбор пересчитывается. `restore: true` возвращает снятую заявку в ленту |
 | `DELETE` | `/api/startupx/ideas/:id?token=` | основатель | снятие с публикации (`visibility='withdrawn'`, строка сохраняется) |
 | `POST` | `/api/startupx/ideas/:id/interest` | все | отклик инвестора с условиями (чек, доля, тип сделки) |
 | `GET` | `/api/startupx/ideas/:id/offers?token=` | основатель | входящие предложения |
@@ -87,6 +87,10 @@
   следующий за правками, не стоит ничего.
 - **Цифры не проверяются.** Везде написано «со слов основателя». Верификация выручки через
   Stripe (как у TrustMRR) — следующий шаг, и до него нельзя говорить «проверено».
+- **Отрасль резолвится только через `safeResolveSector`.** Общий справочник индексируется
+  строкой, а любой объект отвечает на `constructor`, `toString`, `valueOf`, `__proto__` —
+  замерено: заявка с `sector=constructor` давала label `undefined`, TAM `undefined` и балл
+  рынка 0 при полностью «успешном» ответе.
 - **`ASSESSMENT_VERSION` двигается при любом изменении правил.** Балл принадлежит правилам,
   которые его сделали; иначе лента сравнивает несравнимое.
 - **Миграция только добавляет колонки** (`ADD COLUMN IF NOT EXISTS`) и разово проставляет
@@ -95,10 +99,14 @@
 ## 5. Проверки
 
 ```
-npx vitest run tests/startupxListings.test.ts     # 30 тестов
-BASE=http://127.0.0.1:4001 node scripts/startupx-smoke.js   # 49 проверок
+npx vitest run tests/startupxListings.test.ts     # 32 теста
+BASE=http://127.0.0.1:4001 node scripts/startupx-smoke.js   # 51 проверка
 node scripts/startupx-seed.js                     # сухой прогон первых заявок
 ```
+
+Смоук падает, если `DATABASE_URL` задан, а `dbReady` вернулся `false`: молчаливый откат на
+in-memory store удобен для превью-деплоев, но в среде с базой он означает сломанную миграцию
+и данные, которые исчезнут при рестарте.
 
 Смоук входит в `all-smokes` и гоняется в daily-smoke против эфемерного Postgres. Он проверяет
 способность, а не коды ответов: отказ публиковать без условий, отказ принять «готовый продукт»

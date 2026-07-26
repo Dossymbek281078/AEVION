@@ -141,31 +141,52 @@ export const VARIANTS: Variant[] = [
 // - 2 bishops on opposite-colored squares
 // - king between 2 rooks
 // Returns 8-char string of piece symbols.
+/* Детерминированный источник случайности для функций, принимающих `seed`.
+
+   Сигнатуры обещали «Deterministic if seed given», но тело работало на
+   Math.random() — seed принимался и молча игнорировался. Сейчас на это никто не
+   опирается (единственный вызов идёт без seed), но обещание в сигнатуре — ловушка:
+   первый же, кто захочет ОДНУ 960-позицию для обоих игроков онлайн-матча, получил
+   бы разные доски у двух клиентов, и по коду это выглядело бы невозможным.
+
+   mulberry32 — короткий, быстрый, с достаточным качеством для раздачи позиций. */
+function rngFrom(seed?: number): () => number {
+  if (seed === undefined) return Math.random;
+  let a = (seed >>> 0) || 1;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function generate960Backrank(seed?: number): string {
-  // Deterministic if seed given (1..960)
-  // For UX, just random.
+  const rnd = rngFrom(seed);
+  // С seed — воспроизводимо (одна и та же расстановка у всех, кто передал тот же
+  // seed); без него — случайно на каждый вызов.
   const tries = 100;
   for (let t = 0; t < tries; t++) {
     const slots: (string | null)[] = [null, null, null, null, null, null, null, null];
     // Place light-square bishop (file 1,3,5,7)
     const lightSlots = [1, 3, 5, 7];
-    const bL = lightSlots[Math.floor(Math.random() * 4)];
+    const bL = lightSlots[Math.floor(rnd() * 4)];
     slots[bL] = "B";
     const darkSlots = [0, 2, 4, 6];
-    const bD = darkSlots[Math.floor(Math.random() * 4)];
+    const bD = darkSlots[Math.floor(rnd() * 4)];
     slots[bD] = "B";
     // Place queen on any free
     const free1 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
-    const q = free1[Math.floor(Math.random() * free1.length)];
+    const q = free1[Math.floor(rnd() * free1.length)];
     slots[q] = "Q";
     // Place 2 knights on any 2 free
     const free2 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
     if (free2.length < 5) continue;
-    const idx1 = Math.floor(Math.random() * free2.length);
+    const idx1 = Math.floor(rnd() * free2.length);
     const n1 = free2[idx1];
     slots[n1] = "N";
     const free3 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
-    const n2 = free3[Math.floor(Math.random() * free3.length)];
+    const n2 = free3[Math.floor(rnd() * free3.length)];
     slots[n2] = "N";
     // Remaining 3 free slots → R K R (king MUST be between rooks)
     const free4 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0).sort((a, b) => a - b);
@@ -198,6 +219,7 @@ const PIECE_VAL: Record<string, number> = { Q: 9, R: 5, B: 3, N: 3 };
 
 // Random army with piece variety constraints to keep things playable.
 export function randomArmy(seed?: number): { piecesByFile: string[]; pieces: ArmySlot[] } {
+  const rnd = rngFrom(seed);
   // 7 non-king back-rank slots, target sum = 30 (39 - 9 for the queen-equivalent; but standard is 30 actually: 5+5+3+3+3+3+9=31... let's pick 30)
   // Actually standard back rank value WITHOUT the king = 8R+8R+3B+3B+3N+3N+9Q = 39. So 7 slots = 39 points.
   const tries = 200;
@@ -228,7 +250,7 @@ export function randomArmy(seed?: number): { piecesByFile: string[]; pieces: Arm
       if (filtered.length === 0) {
         slots.length = 0; remaining = 39; openSlots = 7; continue;
       }
-      const pick = filtered[Math.floor(Math.random() * filtered.length)];
+      const pick = filtered[Math.floor(rnd() * filtered.length)];
       slots.push(pick);
       remaining -= PIECE_VAL[pick];
       openSlots--;

@@ -68,7 +68,12 @@ export function InstallPrompt() {
       style={{
         position: "fixed" as const,
         bottom: 16,
-        right: 16,
+        // Bottom-LEFT, not right: the AI Agent launcher already lives bottom-right
+        // on every page, so the two stacked there and the pair covered the right
+        // edge of page content — on /qventure/batch that is the ranking table's
+        // Stress column and its per-deal "Report →" links, i.e. the one control
+        // a reader wants after a batch finishes. Nothing else is anchored left.
+        left: 16,
         zIndex: 9999,
         padding: "10px 14px",
         borderRadius: 10,

@@ -25,6 +25,23 @@ describe("InstallPrompt", () => {
     expect(screen.getByRole("button", { name: "Install" })).toBeInTheDocument();
   });
 
+  // The AI Agent launcher is anchored bottom-right on every page. When this
+  // prompt sat there too, the pair covered the right edge of page content —
+  // on /qventure/batch that was the ranking table's per-deal "Report →" links.
+  it("anchors bottom-left, clear of the bottom-right agent launcher", () => {
+    render(<InstallPrompt />);
+    const event: Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome: "accepted" | "dismissed" }> } =
+      new Event("beforeinstallprompt", { cancelable: true });
+    event.prompt = async () => {};
+    event.userChoice = Promise.resolve({ outcome: "accepted" as const });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    const region = screen.getByRole("region", { name: "PWA install prompt" });
+    expect(region.style.left).toBe("16px");
+    expect(region.style.right).toBe("");
+  });
+
   it("hides itself when localStorage flag is set", () => {
     localStorage.setItem("aevion_install_dismissed_v1", "1");
     const { container } = render(<InstallPrompt />);

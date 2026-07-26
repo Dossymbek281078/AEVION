@@ -86,6 +86,11 @@ frontend/src/app/cyberchess/
 ├── gameDna.ts                  # Visual game pattern analysis
 ├── coordTrainer.ts             # Board coordinate trainer
 ├── openingExplorer.ts          # Lichess opening DB integration
+├── localOpeningBook.ts         # Bundled CC0 book, offline fallback. NOTE: keys ignore
+│                               # en passant — go through resolveBookMove() before playing
+├── humanBot.ts                 # Human-like move choice for the sub-1200 levels:
+│                               # book → best → softmax, plus a real blunder branch
+├── minimax.ts                  # The bundled eval + alpha-beta the weak levels search with
 ├── tablebase.ts                # 7-piece endgame tablebase queries
 ├── boardEditor.ts              # FEN editor
 ├── coachLessons.ts             # Structured lesson plans
@@ -191,6 +196,9 @@ See [`CYBERCHESS_ROADMAP.md`](../../../../../CYBERCHESS_ROADMAP.md) for the full
 | ---------- | --------------- |
 | `cpi.ts` | `computeGameCPI`, `applyGameToCPI`, `ldCPIState`, `svCPIState`, types: `GameMetrics`, `CPIBreakdown`, `CPIState`, `CPIWeights`, `DEFAULT_WEIGHTS` |
 | `stockfishMetrics.ts` | `MetricsCollector`, `computeCPL`, `parseMultiPVLine`, types: `MoveMetric`, `PVLine` |
+| `humanBot.ts` | `HUMAN_PROFILES` (tuned by measurement, see `bench/botLadder.bench.ts`), `pickHumanMove`, `pickBookMove`, `scoreMoves`, `temptation`, types: `HumanProfile`, `ScoredMove` |
+| `minimax.ts` | `ev`, `mm`, `PV`, `PST` — pure, so the weak-bot path is playable outside React |
+| `localOpeningBook.ts` | `getBookContinuations`, `resolveBookMove` — always resolve a continuation through the latter; the position key ignores en passant, so an entry can offer a move that is illegal on the actual board |
 | `variants.ts` | `VARIANTS`, FEN helpers per variant, `twinKingsLossSideByCaptures`, `kothWinner`, `applyExplosion`, `filterMovesByDice`, `pickReinforcement`, ... |
 | `tournament.ts` | `createTournament`, `applyPlayerResult`, `advanceBracket`, `finalPlace`, `placeReward`, `buildBracket`, `bracketAscii`, `awardBadges`, `computeTournamentLeaderboard` |
 | `coachKnowledge.ts` | 93 entries, `findEntryById`, `entriesByDifficulty`, `ldReminderState`, `markFirstStudy`, `dismissReminder`, `getDueReminders` |

@@ -27,12 +27,12 @@ export type BrilliancyHunt = {
 export const BRILLIANCIES: BrilliancyHunt[] = [
   {
     id: "imm-game-anderssen",
-    title: "Бессмертная партия — Андерссен жертвует ферзя",
-    fen: "r1bk3r/p2pBpNp/n4n2/1p1NP2P/6P1/3P4/P1P1K3/q5b1 w - - 1 23",
+    title: "Бессмертная партия — мат без ферзя и ладей",
+    fen: "r1bk3r/p2p1pNp/n2B1n2/1p1NP2P/6P1/3P4/P1P1K3/q5b1 w - - 0 23",
     side: "w",
     solutionSan: "Be7#",
     altSans: ["Be7"],
-    story: "Андерссен — Кизерицкий, 1851. После двух жертв ферзя следует короткий мат слоном.",
+    story: "Андерссен — Кизерицкий, Лондон 1851. Белые отдали обе ладьи и ферзя. Осталось три лёгких фигуры — и этого хватит.",
     year: 1851,
     white: "Adolf Anderssen",
     black: "Lionel Kieseritzky",
@@ -40,120 +40,120 @@ export const BRILLIANCIES: BrilliancyHunt[] = [
   },
   {
     id: "evergreen-anderssen",
-    title: "Вечнозелёная партия — финальная связка",
-    fen: "1r3kr1/pbpBBp1p/1b3P2/8/8/2P2q2/P4PPP/3R2K1 w - - 1 21",
+    title: "Вечнозелёная партия — вызов королю",
+    fen: "1r2k1r1/pbppnp1p/1b3P2/8/Q7/B1PB1q2/P4PPP/3R2K1 w - - 0 21",
     side: "w",
-    solutionSan: "Bd7+",
-    altSans: ["Bd7"],
-    story: "Андерссен — Дюфрен, 1852. Двойной шах с тихим следующим ходом — мат через ход.",
+    solutionSan: "Qxd7+",
+    altSans: ["Qxd7"],
+    story: "Андерссен — Дюфрен, Берлин 1852. Чёрные грозят матом на g2. Белые начинают с того, что отдают ферзя.",
     year: 1852,
     white: "Adolf Anderssen",
     black: "Jean Dufresne",
-    difficulty: 3,
+    difficulty: 4,
   },
   {
     id: "morphy-opera",
-    title: "Опера в Париже — Морфи поднимает занавес",
-    fen: "4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - - 0 17",
+    title: "Опера в Париже — Морфи опускает занавес",
+    fen: "4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 0 16",
     side: "w",
     solutionSan: "Qb8+",
     altSans: ["Qb8"],
-    story: "Морфи — герцог Брауншвейгский, 1858. Ферзь жертвуется, чтобы освободить вертикаль для ладьи.",
+    story: "Морфи — герцог Брауншвейгский и граф Изуар, Париж 1858. Партия игралась в ложе во время «Севильского цирюльника».",
     year: 1858,
     white: "Paul Morphy",
-    black: "Duke of Brunswick",
+    black: "Duke of Brunswick & Count Isouard",
     difficulty: 2,
   },
   {
-    id: "fischer-byrne-13",
-    title: "Игра века — 13-летний Фишер ставит ловушку",
-    fen: "r3r1k1/pp3pbp/1qp3p1/2B5/2BP2b1/Q1n2N2/P4PPP/3R1K1R b - - 0 17",
+    id: "byrne-fischer-56",
+    title: "Партия века — 13-летний Фишер",
+    fen: "r3r1k1/pp3pbp/1qp3p1/2B5/2BP2b1/Q1n2N2/P4PPP/3R1K1R b - - 3 17",
     side: "b",
     solutionSan: "Be6",
-    altSans: ["Be6"],
-    story: "Бирн — Фишер, 1956. Тихий ход слоном — но ферзь белых уже не имеет защиты от вилки.",
+    altSans: [],
+    story: "Бирн — Фишер, Нью-Йорк 1956. Ферзь под боем, но тихий ход слоном сильнее любого шаха.",
     year: 1956,
     white: "Donald Byrne",
+    black: "Bobby Fischer",
+    difficulty: 5,
+  },
+  {
+    id: "byrne-fischer-63",
+    title: "Фишер взрывает рокировку",
+    fen: "r2qr1k1/p4pbp/bp3np1/3p4/8/BPNnP1P1/P1Q1NPBP/R2R2K1 b - - 3 15",
+    side: "b",
+    solutionSan: "Nxf2",
+    altSans: [],
+    story: "Бирн — Фишер, чемпионат США 1963. Комментаторы в соседнем зале решили, что чёрные просто зевнули фигуру.",
+    year: 1963,
+    white: "Robert Byrne",
     black: "Bobby Fischer",
     difficulty: 4,
   },
   {
-    id: "kasparov-topalov-99",
-    title: "Кoнь Каспарова — Wijk aan Zee 1999",
-    fen: "r3r1k1/p4ppp/2pq4/B1p1p3/4P3/N7/PP3PPP/R2QK2R w KQ - 0 16",
-    side: "w",
-    solutionSan: "Nb5",
-    altSans: ["Nb5"],
-    story: "Каспаров — Топалов, 1999. Конь жертвуется на пустое поле для атаки на короля.",
-    year: 1999,
-    white: "Garry Kasparov",
-    black: "Veselin Topalov",
-    difficulty: 5,
-  },
-  {
-    id: "tal-hecht-62",
-    title: "Таль жертвует ладью",
-    fen: "r1b1k2r/pp1n1ppp/2pq1n2/4p3/3PP3/2P1BN2/PP1QBPPP/R3K2R w KQkq - 0 9",
-    side: "w",
-    solutionSan: "d5",
-    altSans: ["d5"],
-    story: "Таль — Хехт, 1962. Подрыв в центре — открывает диагонали для слонов.",
-    year: 1962,
-    white: "Mikhail Tal",
-    black: "Hans-Joachim Hecht",
-    difficulty: 3,
-  },
-  {
-    id: "carlsen-anand-13",
-    title: "Магнус ставит мат в эндшпиле",
-    fen: "8/3R4/2P3kp/6p1/4r3/8/5BPP/6K1 w - - 0 41",
-    side: "w",
-    solutionSan: "Rd6+",
-    altSans: ["Rd6"],
-    story: "Карлсен — Ананд, 2013. Шах ладьёй вынуждает короля идти под пешку.",
-    year: 2013,
-    white: "Magnus Carlsen",
-    black: "Viswanathan Anand",
-    difficulty: 4,
-  },
-  {
     id: "rotlevi-rubinstein",
-    title: "Бессмертная Рубинштейна — двойная жертва ладей",
-    fen: "r3qr1k/1b1nb1pp/p3p3/1ppQ1p2/3p1B2/P2B1P2/1PP3PP/R3R1K1 b - - 1 22",
+    title: "Бессмертная Рубинштейна",
+    fen: "2rr2k1/1b3ppp/pb2p3/1p2P3/1P2BPnq/P1N3P1/1B2Q2P/R4R1K b - - 0 22",
     side: "b",
     solutionSan: "Rxc3",
-    altSans: ["Rxc3"],
-    story: "Ротлеви — Рубинштейн, 1907. Жертва ладьи — начало комбинации с матом через 4 хода.",
+    altSans: [],
+    story: "Ротлеви — Рубинштейн, Лодзь 1907. Ферзь на h4 под боем — и чёрные бьют совсем другую фигуру.",
     year: 1907,
     white: "Georg Rotlewi",
     black: "Akiba Rubinstein",
     difficulty: 5,
   },
   {
-    id: "polgar-mate",
-    title: "Полгар — комбинация в дебюте",
-    fen: "r2qkb1r/pp2nppp/3p4/2pNN1B1/2BnP3/3P4/PPP2PPP/R2bK2R w KQkq - 1 10",
+    id: "lasker-bauer-89",
+    title: "Двойная жертва слонов — первый слон",
+    fen: "r4rk1/1b2bppp/ppq1p3/2ppB2n/5P2/1P1BP3/P1PPQ1PP/R4RK1 w - - 0 15",
     side: "w",
-    solutionSan: "Nf6+",
-    altSans: ["Nf6"],
-    story: "Полгар — Хансен, 1990. Шах конём с двумя угрозами одновременно.",
-    year: 1990,
-    white: "Judit Polgar",
-    black: "Lars Bo Hansen",
+    solutionSan: "Bxh7+",
+    altSans: ["Bxh7"],
+    story: "Ласкер — Бауэр, Амстердам 1889. Шаблон, который с тех пор носит имя автора: сначала один слон, затем второй.",
+    year: 1889,
+    white: "Emanuel Lasker",
+    black: "Johann Bauer",
     difficulty: 3,
   },
   {
-    id: "spassky-fischer-72",
-    title: "Спасский — Фишер, матч века",
-    fen: "rn1q1rk1/pb1p1ppp/1p2pn2/8/2PP4/P1Q1PN2/1B3PPP/R3KB1R b KQ - 0 10",
-    side: "b",
-    solutionSan: "Nxc3",
-    altSans: ["Nxc3"],
-    story: "Спасский — Фишер, Рейкьявик 1972. Жертва коня для разрушения пешечной структуры.",
-    year: 1972,
-    white: "Boris Spassky",
-    black: "Bobby Fischer",
+    id: "lasker-thomas-12",
+    title: "Король идёт через всю доску",
+    fen: "rn3rk1/pbppq1pp/1p2pb2/4N2Q/3PN3/3B4/PPP2PPP/R3K2R w KQ - 6 11",
+    side: "w",
+    solutionSan: "Qxh7+",
+    altSans: ["Qxh7"],
+    story: "Эдвард Ласкер — Томас, Лондон 1912. Жертва ферзя, после которой чёрного короля гонят с h8 до g1.",
+    year: 1912,
+    white: "Edward Lasker",
+    black: "George Thomas",
+    difficulty: 3,
+  },
+  {
+    id: "steinitz-bardeleben-95",
+    title: "Стейниц — соперник ушёл из зала",
+    fen: "r1r1k3/pp1qn2p/5pp1/3p2N1/6Q1/8/PP3PPP/2R1R1K1 w - - 2 22",
+    side: "w",
+    solutionSan: "Rxe7+",
+    altSans: ["Rxe7"],
+    story: "Стейниц — фон Барделебен, Гастингс 1895. Ладья под четырьмя боями и ни одного взятия нет.",
+    year: 1895,
+    white: "Wilhelm Steinitz",
+    black: "Curt von Bardeleben",
     difficulty: 4,
+  },
+  {
+    id: "kasparov-topalov-99",
+    title: "Жемчужина Вейк-ан-Зее",
+    fen: "b2r3r/k4p1p/p2q1np1/NppP4/3p1Q2/P4PPB/1PP4P/1K1RR3 w - - 1 24",
+    side: "w",
+    solutionSan: "Rxd4",
+    altSans: [],
+    story: "Каспаров — Топалов, 1999. Короля чёрных погонят с a7 до a4 — начало здесь.",
+    year: 1999,
+    white: "Garry Kasparov",
+    black: "Veselin Topalov",
+    difficulty: 5,
   },
 ];
 
@@ -276,14 +276,32 @@ export function hintFor(hunt: BrilliancyHunt): string {
   return `Ход ${map[piece] || piece}. ${san.includes("x") ? "Со взятием!" : "Тихий ход."}`;
 }
 
-// Simulated leaderboard for today's hunt — deterministic stats per day.
-export function simulatedLeaderboard(idx: number): { players: number; solved: number; avgAttempts: number; topPercent: number } {
-  // Deterministic but varied per day
-  const seed = idx * 31337 + Math.floor(Date.now() / 86400000);
-  const rng = (n: number) => Math.abs((seed * 9301 + n * 49297) % 233280) / 233280;
-  const players = 2000 + Math.floor(rng(1) * 5000);
-  const solved = Math.floor(players * (0.18 + rng(2) * 0.45));
-  const avgAttempts = +(2.1 + rng(3) * 1.8).toFixed(1);
-  const topPercent = +((solved / players) * 100).toFixed(1);
-  return { players, solved, avgAttempts, topPercent };
+/* This used to be `simulatedLeaderboard` — invented player counts and solve rates,
+   seeded by the date, shown on screen beside the player's real streak with nothing to
+   say they were made up. There is no server collecting hunt results, so there is no
+   community number to show. What the player's own history does support is counted
+   here instead: how many hunts they solved, and how many tries it took.
+
+   `avgAttempts` counts only solved hunts — attempts on a hunt that was given up say
+   how soon the player quit, not how hard the puzzle was. It is null until there is
+   something to average. */
+export function personalStats(state: BrilliancyState): {
+  played: number;
+  solved: number;
+  solveRate: number | null;
+  avgAttempts: number | null;
+} {
+  /* applyGuess and giveUp both push today's result into history the moment the hunt
+     ends, so history is the whole record — appending today again would count it twice.
+     It holds the last 30 hunts. */
+  const rows = state.history;
+  const played = rows.length;
+  const won = rows.filter((r) => r.solved);
+  const tries = won.reduce((a, r) => a + r.attempts, 0);
+  return {
+    played,
+    solved: won.length,
+    solveRate: played ? +((won.length / played) * 100).toFixed(0) : null,
+    avgAttempts: won.length ? +(tries / won.length).toFixed(1) : null,
+  };
 }

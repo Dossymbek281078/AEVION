@@ -72,15 +72,46 @@ describe("selectMoveByPersonality", () => {
     expect(seen.size).toBeGreaterThan(1);
   });
 
-  it("still prefers its best move most of the time", () => {
-    const argmax = selectMoveByPersonality(persona, candidates)!;
-    let hits = 0;
-    const N = 1000;
-    for (let i = 0; i < N; i++) {
-      if (selectMoveByPersonality(persona, candidates, {}, Math.random)?.uci === argmax.uci) hits++;
+  /* Seeded, so the assertion is on the sampler and not on the luck of a particular run.
+     An earlier version drew from Math.random over 1000 tries and asserted a rate barely
+     below the true one — it failed roughly one run in four, which is a broken test rather
+     than a broken sampler. */
+  const seeded = (seed: number) => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  const share = (moves: typeof candidates, seed = 12345, n = 20000) => {
+    const rnd = seeded(seed);
+    const count: Record<string, number> = {};
+    for (let i = 0; i < n; i++) {
+      const m = selectMoveByPersonality(persona, moves, {}, rnd);
+      if (m) count[m.uci] = (count[m.uci] ?? 0) + 1;
     }
-    // Sampling, not chaos: the top pick must still dominate.
-    expect(hits / N).toBeGreaterThan(0.34);
+    return Object.fromEntries(Object.entries(count).map(([k, v]) => [k, v / n]));
+  };
+
+  it("picks the stronger move more often than the weaker one", () => {
+    const s = share(candidates);
+    expect(s["e2e4"]).toBeGreaterThan(s["d2d4"]);
+    expect(s["d2d4"]).toBeGreaterThan(s["g1f3"]);
+  });
+
+  /* Moves five centipawns apart are near enough to equal that the split stays close —
+     that is the point of the temperature. A move three pawns worse is a different
+     matter and has to be rare, or the personality is just noise. */
+  it("nearly never plays a move that is much worse", () => {
+    const s = share([
+      { uci: "e2e4", signals: { cp: 30, mate: 0 } },
+      { uci: "b1a3", signals: { cp: -300, mate: 0 } },
+    ]);
+    expect(s["e2e4"]).toBeGreaterThan(0.9);
+    expect(s["b1a3"] ?? 0).toBeLessThan(0.1);
   });
 
   it("only ever returns a move it was given", () => {

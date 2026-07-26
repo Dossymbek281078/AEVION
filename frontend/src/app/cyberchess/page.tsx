@@ -69,7 +69,7 @@ import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, r
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
-import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
+import { todayHunt, applyGuess, showHint, giveUp, hintFor, personalStats, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import { createTierPaymentRequest, pollPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
@@ -12958,7 +12958,7 @@ ${question.trim()}`;
     <Modal open={showBrilliancy} onClose={()=>sShowBrilliancy(false)} size="lg"
       title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>💎 Daily Brilliancy Hunt <Badge tone="gold" size="sm">{new Date().toLocaleDateString("ru-RU")}</Badge></span>}>
       {brilliancyHunt&&brilliancyState&&(()=>{
-        const lb=simulatedLeaderboard(brilliancyState.idx);
+        const lb=personalStats(brilliancyState);
         const renderMiniBoard=()=>{
           try{
             const ch=new Chess(brilliancyHunt.fen);
@@ -13042,13 +13042,14 @@ ${question.trim()}`;
               <div style={{fontSize:18,fontWeight:900,color:CC.gold}}>{brilliancyState.bestStreak}</div>
             </div>
             <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
-              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Решили</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Решено</div>
               <div style={{fontSize:18,fontWeight:900,color:CC.brand}}>{lb.solved}</div>
-              <div style={{fontSize:9,color:CC.textDim}}>из {lb.players}</div>
+              <div style={{fontSize:9,color:CC.textDim}}>{lb.played?`из ${lb.played} за 30 дней`:"первый ход за тобой"}</div>
             </div>
             <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
-              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Avg попыт.</div>
-              <div style={{fontSize:18,fontWeight:900,color:CC.text}}>{lb.avgAttempts}</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Попыток</div>
+              <div style={{fontSize:18,fontWeight:900,color:CC.text}}>{lb.avgAttempts??"—"}</div>
+              <div style={{fontSize:9,color:CC.textDim}}>в среднем на решённый</div>
             </div>
           </div>
           {brilliancyState.history.length>0&&<div style={{marginTop:SPACE[3]}}>

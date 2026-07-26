@@ -3373,17 +3373,31 @@ export default function CyberChessPage(){
       }
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
-      const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
-      // Include per-move cp-loss analysis for richer FIDE calibration.
-      // cpLoss is now computed correctly inside classifyMove (prevFromMover -
-      // currFromMover with proper side-to-move flip) and stored directly on
-      // the analysis state entries, so we just read it here.
-      const analysisEntries = analysis.length > 0
-        ? analysis.map(a => ({ply: a.move, quality: a.quality, cpLoss: a.cpLoss}))
-        : undefined;
-      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
-      saveGame(sg);sSavedGames(loadGames())}
+      // Сохранение в историю переехало в эффект на `over` (см. ниже): здесь оно
+      // срабатывало только когда партию заканчивал ХОД, поэтому сдача и флаг в
+      // «Историю» не попадали вообще.
+      }
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
+
+  /* ── Сохранение партии в историю на ЛЮБОМ завершении ──
+     Раньше saveGame стоял внутри обработчика хода и использовал [...hist,mv.san],
+     то есть срабатывал, только если партию заканчивал ход. Сдача и флаг ходом не
+     являются — такие партии в «Историю» не попадали вообще. Тот же приём, что у
+     CPI-эффекта ниже: следим за `over`, дедуп по отпечатку. `hist` к этому
+     моменту уже содержит последний ход (sHist вызывается раньше sOver). */
+  const savedGameRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over||hist.length===0)return;
+    const fingerprint=`${gameStartTimeRef.current}|${over}`;
+    if(savedGameRef.current===fingerprint)return;
+    savedGameRef.current=fingerprint;
+    try{
+      const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
+      const analysisEntries=analysis.length>0?analysis.map(a=>({ply:a.move,quality:a.quality,cpLoss:a.cpLoss})):undefined;
+      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist],result:over,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
+      saveGame(sg);sSavedGames(loadGames());
+    }catch{}
+  },[over]);// eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── F2-phase: centralized CPI update on every game-end ──
      Watches `over` going from null → string. Fires applyGameToCPI exactly once

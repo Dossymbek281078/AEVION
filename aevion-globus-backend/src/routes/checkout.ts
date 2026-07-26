@@ -165,6 +165,21 @@ checkoutRouter.post("/session", async (req, res) => {
     const reference = `tier_${tier.id}_${period}`;
 
     /**
+     * Email из тела запроса — только если он похож на email.
+     *
+     * Прогон враждебных входов 2026-07-26 показал, что чекаут провижинил
+     * подписку на ЛЮБУЮ строку: в сторе оказались записи с email вида
+     * `'; drop table users; --`, нулевыми байтами и строкой в 5000 символов.
+     * Инъекции тут нет (стор — JSONL, не SQL), но провижининг на мусорный
+     * адрес — это подписка, о которой владелец адреса не узнает, и мусор в
+     * выручке. Проверка та же, что в /api/pricing/lead.
+     */
+    const email =
+      typeof body.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())
+        ? body.email.trim().toLowerCase().slice(0, 200)
+        : undefined;
+
+    /**
      * Что реально спишет канал + правда об этом в ответе. Ни одна ветка
      * каскада не имеет права отдать ссылку на полную цену, показав скидку в
      * смете: либо скидка доходит до счёта, либо ответ это признаёт.
@@ -219,9 +234,9 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // Free / fully discounted — no checkout needed, provision directly
     if (discountedCents <= 0) {
-      if (body.email) {
+      if (email) {
         provisionSubscription({
-          email: body.email, tierId: tier.id, period, seats,
+          email, tierId: tier.id, period, seats,
           // `modules` приходит из тела так же, как ownedModules. Проверено
       // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
       // поведение было и ДО веерных скидок, просто никто не слал мусор.
@@ -251,7 +266,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const kztCents = Math.round(paid.cents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
-          reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
+          reference, amountCents: kztCents, currency: "KZT", description, email: email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: true,
         });
@@ -276,7 +291,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const paid = charge("paypal");
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
-          reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
+          reference, amountCents: paid.cents, currency: "USD", description, email: email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: true,
         });
@@ -302,7 +317,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const paid = charge("lemonsqueezy");
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await lemonSqueezyPaymentProvider.createIntent({
-          reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
+          reference, amountCents: paid.cents, currency: "USD", description, email: email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: paid.honoured,
         });
@@ -319,7 +334,7 @@ checkoutRouter.post("/session", async (req, res) => {
     if (gumroadPermalinkConfigured(reference)) {
       const paid = charge("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({
-        reference, amountCents: paid.cents, currency: "USD", description, email: body.email ?? null,
+        reference, amountCents: paid.cents, currency: "USD", description, email: email ?? null,
       });
       return res.json({
         url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId, ...paid.truth,
@@ -328,9 +343,9 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 3) Stub — ни один процессинг не настроен для этого tier:period.
     const paidStub = charge("stub");
-    if (body.email) {
+    if (email) {
       provisionSubscription({
-        email: body.email,
+        email,
         tierId: tier.id,
         period,
         seats,

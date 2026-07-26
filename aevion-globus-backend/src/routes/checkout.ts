@@ -187,12 +187,24 @@ checkoutRouter.post("/session", async (req, res) => {
     function charge(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub") {
       const honoured = channelHonoursAmount(provider);
       const cents = honoured ? discountedCents : listCents;
-      // Учёт расхождения «обещали / списали» — в lib/discountIntegrityLog.ts
-      // (Postgres, при недоступной базе — счётчики в памяти). Fire-and-forget:
-      // упасть на учёте нельзя, это путь к оплате.
-      recordCheckoutSession({
-        provider, tier: tier.id, incentiveUsd, quotedUsd: quote.total, honoured,
-      });
+      /**
+       * Учёт расхождения «обещали / списали» пишется НЕ здесь, а в момент
+       * ответа — через `paid.record()`.
+       *
+       * Почему: каскад пробует провайдеров по очереди, и `charge()` вызывается
+       * ДО `createIntent()`, который может бросить и увести на следующего.
+       * Пока запись шла отсюда, один запрос пользователя попадал в метрику
+       * 2-4 раза — за каналы, которые ничего не отдали, — и «сколько скидок мы
+       * потеряли» превращалось в вымысел. Найдено вычиткой дифа 2026-07-26.
+       */
+      let recorded = false;
+      const record = () => {
+        if (recorded) return;
+        recorded = true;
+        recordCheckoutSession({
+          provider, tier: tier.id, incentiveUsd, quotedUsd: quote.total, honoured,
+        });
+      };
       const truth: Record<string, unknown> = {
         // Валюта списания есть в КАЖДОМ ответе, а не только там, где она не USD:
         // клиент не должен догадываться о ней по наличию/отсутствию поля.
@@ -229,7 +241,7 @@ checkoutRouter.post("/session", async (req, res) => {
             ? "LemonSqueezy списывает цену варианта; включите LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1, чтобы скидка стала реальной"
             : "Gumroad списывает цену продукта по permalink; скидку нечем выразить (нужен offer-code)";
       }
-      return { cents, honoured, truth };
+      return { cents, honoured, truth, record };
     }
 
     // Free / fully discounted — no checkout needed, provision directly
@@ -270,6 +282,7 @@ checkoutRouter.post("/session", async (req, res) => {
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: true,
         });
+        paid.record();
         return res.json({
           url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId, ...paid.truth,
           // Плательщик через PayBox платит В ТЕНГЕ — сумма в долларах ему ни о
@@ -295,6 +308,7 @@ checkoutRouter.post("/session", async (req, res) => {
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: true,
         });
+        paid.record();
         return res.json({
           url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId, ...paid.truth,
         });
@@ -321,6 +335,7 @@ checkoutRouter.post("/session", async (req, res) => {
           customData: liteModule ? { module: liteModule } : undefined,
           chargeExactAmount: paid.honoured,
         });
+        paid.record();
         return res.json({
           url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId, ...paid.truth,
         });
@@ -336,6 +351,7 @@ checkoutRouter.post("/session", async (req, res) => {
       const intent = await gumroadPaymentProvider.createIntent({
         reference, amountCents: paid.cents, currency: "USD", description, email: email ?? null,
       });
+      paid.record();
       return res.json({
         url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId, ...paid.truth,
       });
@@ -364,6 +380,7 @@ checkoutRouter.post("/session", async (req, res) => {
         source: "stub_checkout",
       }).catch((e) => console.error("[stub_provisioning] failed", e));
     }
+    paidStub.record();
     return res.json({
       url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${paidStub.cents}`,
       mode: "stub",

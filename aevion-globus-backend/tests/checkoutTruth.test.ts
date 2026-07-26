@@ -123,6 +123,19 @@ describe("ответ чекаута говорит правду о списан�
     }
   }, IMPORT_TIMEOUT_MS);
 
+  test("🔴 один запрос = одна запись в метрике, даже если каскад пробовал несколько каналов", async () => {
+    // Каскад пробует провайдеров по очереди, а charge() вызывается ДО
+    // createIntent(), который может бросить. Пока запись шла из charge(), один
+    // запрос попадал в метрику несколько раз — за каналы, которые ничего не
+    // отдали, — и «сколько скидок мы потеряли» превращалось в вымысел.
+    const { integritySummary } = await import("../src/lib/discountIntegrityLog");
+    const before = await integritySummary(30);
+    await post(ORDER, { GUMROAD_DEFAULT_PERMALINK: "aevion-test" });
+    const after = await integritySummary(30);
+    expect(after.sessions - before.sessions).toBe(1);
+    expect(after.notHonoured - before.notHonoured).toBe(1);
+  }, IMPORT_TIMEOUT_MS);
+
   test("без скидок discountHonoured остаётся true (нечего не применять)", async () => {
     const r = await post(
       { tierId: "medium" },

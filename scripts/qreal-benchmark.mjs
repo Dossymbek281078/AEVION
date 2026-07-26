@@ -59,9 +59,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
 const writeJson = (p, v) => writeFileSync(p, JSON.stringify(v, null, 2) + "\n", "utf8");
 
-function loadLocal() {
+/** --limit N: пилот на первых N брифах. Решение «платить $36 за полный прогон»
+ *  не должно быть «всё или ничего» — сначала дешёвый прогон на 3 брифах
+ *  показывает, сходятся ли судьи по шкале, и только потом полная выборка.
+ *  Порог вердикта требует ≥8 брифов, поэтому пилот честно печатает
+ *  «НЕ ПОДТВЕРЖДЕНО» — он для калибровки, а не для заявлений. */
+function limitFrom(argv) {
+  const i = argv.indexOf("--limit");
+  const n = i >= 0 ? Number(argv[i + 1]) : Number(process.env.QREAL_BENCH_LIMIT) || 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function loadLocal(limit = 0) {
   const briefs = readJson(path.join(HERE, "qreal-benchmark.briefs.json"));
   const rubric = readJson(path.join(HERE, "qreal-benchmark.rubric.json"));
+  if (limit) briefs.briefs = briefs.briefs.slice(0, limit);
   return { briefs, rubric };
 }
 
@@ -111,14 +123,15 @@ async function loadEngine() {
 
 /* ── plan ─────────────────────────────────────────────────────────────── */
 
-async function cmdPlan() {
-  const { briefs, rubric } = loadLocal();
+async function cmdPlan(argv) {
+  const limit = limitFrom(argv);
+  const { briefs, rubric } = loadLocal(limit);
   const criteria = await loadCriteria(rubric);
   const engine = await loadEngine();
   const clips = briefs.briefs.length * ARMS.length;
   const usd = clips * DURATION_SEC * engine.usdPerSecond;
 
-  console.log(`План бенчмарка реализма QReal`);
+  console.log(`План бенчмарка реализма QReal${limit ? ` — ПИЛОТ на ${limit} брифах (вердикт требует ≥8, пилот его не даёт)` : ""}`);
   console.log(`  движок:      ${engine.label} (${engine.falModelId})`);
   console.log(`  брифов:      ${briefs.briefs.length}`);
   console.log(`  плечи:       ${ARMS.join(" vs ")} (одинаковый движок, разный промт)`);
@@ -139,8 +152,8 @@ async function cmdPlan() {
 
 /* ── prepare: собрать промты обоих плеч ───────────────────────────────── */
 
-async function cmdPrepare() {
-  const { briefs, rubric } = loadLocal();
+async function cmdPrepare(argv) {
+  const { briefs, rubric } = loadLocal(limitFrom(argv));
   await loadCriteria(rubric);
   mkdirSync(OUT, { recursive: true });
   const items = [];

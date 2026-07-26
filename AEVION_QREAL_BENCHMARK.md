@@ -96,6 +96,11 @@
 | Seedance 2.0 | **$36.41** | дефолт QReal, выиграл A/B по режиссуре 2026-07-21 |
 | Kling v3 std | **$15.12** | бюджетный прогон, `QREAL_BENCH_ENGINE=kling` |
 
+Пилот `--limit 3` — 6 клипов, **$10.92** (Seedance) / **$4.54** (Kling). Нужен,
+чтобы решение о полном прогоне не было «всё или ничего»: сначала дёшево
+проверяем, сходятся ли судьи по шкале. Вердикт пилот не даёт — порог требует
+≥8 брифов, и отчёт честно напишет «НЕ ПОДТВЕРЖДЕНО».
+
 Фазы `plan`, `prepare`, `sheet`, `score` не тратят ничего. Тратит только
 `render`, и только с явным `--confirm-spend`.
 
@@ -103,6 +108,7 @@
 
 ```bash
 node scripts/qreal-benchmark.mjs plan                    # смета + проверка шкалы, $0
+node scripts/qreal-benchmark.mjs plan --limit 3          # пилотная смета, $10.92
 node scripts/qreal-benchmark.mjs prepare                 # промты обоих плеч, ~$0
 node scripts/qreal-benchmark.mjs render --confirm-spend  # ТРАТИТ $36.41
 node scripts/qreal-benchmark.mjs poll                    # дождаться ссылок

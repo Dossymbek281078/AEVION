@@ -3530,3 +3530,49 @@ describe("import zip: file name encoding", () => {
     expect(r.body.imported.map((x: { path: string }) => x.path)).toContain("src/App.jsx");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 26. Export → Import round trip (both sides were fixed separately: #923/#924)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("zip round trip: export → import", () => {
+  test("a project survives a full export/import cycle, Cyrillic paths included", async () => {
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RtSrc", stack: "react" })).body.project.id;
+
+    const files = [
+      { path: "src/компоненты/Таймер.jsx", content: "export default function Таймер(){ return null; }" },
+      { path: "src/App.jsx", content: "import T from './компоненты/Таймер';\nexport default T;" },
+      { path: "README.md", content: "# проект\nописание" },
+    ];
+    for (const f of files) {
+      const put = await request(app)
+        .put(`/api/devhub/projects/${src}/file?path=${encodeURIComponent(f.path)}`)
+        .send({ content: f.content, language: "javascript" });
+      expect(put.status).toBe(200);
+    }
+
+    const exported = await request(app)
+      .get(`/api/devhub/projects/${src}/export`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(exported.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RtDst", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exported.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    // Paths AND contents must match — a mangled name would still "import".
+    const listed = await request(app).get(`/api/devhub/projects/${dst}/files`);
+    const got: Record<string, string> = {};
+    for (const f of listed.body.files) got[f.path] = f.content;
+    for (const f of files) expect(got[f.path]).toBe(f.content);
+    expect(Object.keys(got).sort()).toEqual(files.map((f) => f.path).sort());
+  });
+});

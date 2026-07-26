@@ -2284,8 +2284,11 @@ export default function CyberChessPage(){
 
   const achContext=useMemo(()=>({
     totalGames, totalWins: sts.w,
-    pzSolvedCount, pzBestStreak: 0,
-    rushBestScore: 0,
+    // Раньше тут стояли нули. Достижения на эти метрики сейчас выдаются напрямую
+    // (rush_10/rush_25 при новом рекорде), поэтому нули ничего не ломали — но
+    // любое НОВОЕ достижение на серию или рекорд Rush молча не выдалось бы.
+    pzSolvedCount, pzBestStreak: pzStreak.best,
+    rushBestScore: rushBest,
     rating: rat,
     variantsTried: Object.keys(variantStats||{}).filter(v=>v!=="standard").length,
     coachUsed: coachUsedCount,
@@ -2296,7 +2299,7 @@ export default function CyberChessPage(){
     matchmakingWins, spectatorStreams, replayViews,
     personalitiesTried, personalityWins, fideOpened,
     acCleanGames, obsStreamed,
-  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime, matchmakingWins, spectatorStreams, replayViews, personalitiesTried, personalityWins, fideOpened, acCleanGames, obsStreamed]);
+  }),[totalGames, sts.w, pzSolvedCount, pzStreak.best, rushBest, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime, matchmakingWins, spectatorStreams, replayViews, personalitiesTried, personalityWins, fideOpened, acCleanGames, obsStreamed]);
   useEffect(()=>{
     const newly=findNewlyUnlocked(chessy.ach,achContext);
     for(const a of newly){

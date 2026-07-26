@@ -168,8 +168,16 @@ async function warmFromDb(): Promise<void> {
 
 qrealRouter.use((_req, _res, next) => { warmFromDb().finally(() => next()); });
 
-function renderCacheKey(engineId: string, prompt: string, durationSec: number): string {
-  return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}`).digest("hex");
+/** Ключ кэша рендеров.
+ *
+ *  Референс-картинки ОБЯЗАНЫ входить в ключ. В промте от них остаётся только
+ *  маркер «@Image1» — при смене ссылки на другое лицо текст промта не меняется,
+ *  и без URL в ключе повторный рендер вернул бы СТАРОЕ видео из кэша. Режиссёр
+ *  поменял бы референс, увидел прежний ролик и решил, что референсы не
+ *  работают. (Найдено вычиткой собственного дифа 2026-07-26.) */
+function renderCacheKey(engineId: string, prompt: string, durationSec: number, imageUrls: string[] = []): string {
+  const refs = imageUrls.length ? `|refs:${imageUrls.join(",")}` : "";
+  return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}${refs}`).digest("hex");
 }
 
 // Append-only журнал рендеров на диске: {submitted|completed}-строки.
@@ -638,7 +646,8 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
 function isCachedShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): boolean {
   if (!engine) return false;
   const prompt = s.prompt || buildRenderPrompt(p, s);
-  return memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec));
+  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+  return memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec, imageUrls));
 }
 
 /** Один кадр: кэш → мгновенно; иначе submit в движок с одним ретраем. */
@@ -653,7 +662,14 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
     s.status = "prompt_ready"; // честно: промт собран, FAL_KEY не задан
     return "Render-промт готов. Прямой видеодвижок не сконфигурирован (env FAL_KEY) — задайте ключ fal.ai, и рендер пойдёт без посредников.";
   }
-  const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
+  // Есть ли у персонажей кадра опорные картинки — тогда уходим в
+  // reference-вариант модели и ссылаемся на них прямо в промте (@Image1).
+  // Считаем ДО кэша: ссылки входят в ключ, иначе смена референса вернула бы
+  // старое видео.
+  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+  s.usedReference = imageUrls.length > 0;
+
+  const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec, imageUrls);
   const cached = memRenderCache.get(cacheKey);
   if (cached) {
     s.engine = engine.id;
@@ -662,10 +678,6 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
     s.status = "rendered";
     return "Кадр взят из кэша рендеров — $0.";
   }
-  // Есть ли у персонажей кадра опорные картинки — тогда уходим в
-  // reference-вариант модели и ссылаемся на них прямо в промте (@Image1).
-  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
-  s.usedReference = imageUrls.length > 0;
 
   let sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls);
   if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls); // один ретрай (fal бывает 5xx)
@@ -781,7 +793,8 @@ qrealRouter.get("/projects/:id/estimate", (req, res) => {
   const cachedSec = p.shots.reduce((a, s) => {
     const engine = pickVideoEngine() || renderEngines().find((e) => e.modality.includes("video"))!;
     const prompt = s.prompt || buildRenderPrompt(p, s);
-    return a + (memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec)) ? s.durationSec : 0);
+    const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+    return a + (memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec, imageUrls)) ? s.durationSec : 0);
   }, 0);
   const engines = renderEngines()
     .filter((e) => e.modality.includes("video") && e.usdPerSecond != null)
@@ -850,7 +863,10 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
       s.resultUrl = poll.videoUrl;
       s.status = poll.videoUrl ? "rendered" : "failed";
       if (poll.videoUrl && s.prompt) {
-        const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
+        // Ключ записи обязан совпадать с ключом чтения, иначе кэш не попадёт
+        // никогда и каждый повтор будет платным.
+        const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+        const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec, imageUrls);
         memRenderCache.set(cacheKey, poll.videoUrl);
         saveCacheEntry(cacheKey, poll.videoUrl);
         journalAppend({ type: "completed", projectId: p.id, shotId: s.id, requestId: s.engineRequestId, cacheKey, url: poll.videoUrl });

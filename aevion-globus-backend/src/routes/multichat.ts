@@ -26,6 +26,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
@@ -519,9 +520,12 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
     const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    // Выгружается content — текст сообщений, который пишет пользователь. Гашение
+    // формул берём из общего lib/csv: значение с ведущим = + - @ Excel исполняет
+    // при открытии файла.
     const esc = (v: unknown): string => {
       if (v == null) return "";
-      const s = String(v);
+      const s = csvNeutralizeFormula(String(v));
       if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
         return `"${s.replace(/"/g, '""')}"`;
       }

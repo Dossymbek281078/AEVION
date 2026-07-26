@@ -76,6 +76,31 @@ describe("welcome-письмо", () => {
     expect(html).not.toContain("ВЕЕРНАЯ СКИДКА");
   });
 
+  test("веер письма учитывает поштучные покупки (не только подписку)", () => {
+    // Покупки одиночных приложений живут в таблице AppSubscription, а не в
+    // subscription.modules. Пока welcomeHtml читал только подписку, купивший
+    // CyberChess отдельно получал письмо БЕЗ веера, хотя веер у него открыт —
+    // та же слепота, что была у /fan/me.
+    const s = sub({ tierId: "lite", modules: [] });
+    const withoutApps = welcomeHtml(s);
+    const withApps = welcomeHtml(s, ["cyberchess", "aevion-ip-bureau"]);
+
+    // Без поштучных покупок предлагать нечего (Lite без выбранного модуля).
+    expect(withoutApps).not.toContain("ВЕЕРНАЯ СКИДКА");
+    // С ними веер появляется, и в нём соседи по контурам обоих модулей.
+    expect(withApps).toContain("ВЕЕРНАЯ СКИДКА");
+    const fan = computeFan({
+      tierId: s.tierId,
+      owned: ["cyberchess", "aevion-ip-bureau"],
+      lastPurchaseAt: s.ts,
+    });
+    const top = fan.offers.filter((o) => o.discountPercent > 0).slice(0, 4);
+    expect(top.length).toBeGreaterThan(0);
+    for (const o of top) expect(withApps).toContain(o.module);
+    // Сам купленный модуль себе же не предлагается.
+    expect(withApps).not.toContain(">cyberchess<");
+  });
+
   test("в письме нет модуля, который покупатель уже купил", () => {
     const s = sub({ modules: ["qsign", "qright"] });
     const html = welcomeHtml(s);

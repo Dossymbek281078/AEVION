@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, ren
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { computeFan } from "../data/fanDiscounts";
+import { activeAppModules } from "../lib/appSubscriptions";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
 
@@ -322,10 +323,18 @@ export function fanAnchorOf(sub: Subscription): string {
  * Цифры считает тот же движок, что применяет скидку в чекауте, — здесь ничего
  * не пересчитывается локально, иначе письмо начнёт обещать своё.
  */
-function fanBlock(sub: Subscription): { html: string; text: string } {
+function fanBlock(sub: Subscription, ownedModules?: string[]): { html: string; text: string } {
   let fan;
   try {
-    fan = computeFan({ tierId: sub.tierId, owned: sub.modules ?? [], lastPurchaseAt: fanAnchorOf(sub) });
+    // ownedModules приходит из provisionSubscription и включает покупки
+    // одиночных приложений (таблица AppSubscription). Без него письмо было слепо
+    // к поштучным покупкам так же, как был слеп /fan/me: купивший CyberChess
+    // отдельно получал письмо БЕЗ веера, хотя веер у него открыт.
+    fan = computeFan({
+      tierId: sub.tierId,
+      owned: ownedModules ?? sub.modules ?? [],
+      lastPurchaseAt: fanAnchorOf(sub),
+    });
   } catch (e) {
     // Письмо о состоявшейся оплате важнее веера: если расчёт упал, отправляем
     // письмо без блока, а не роняем всё письмо.
@@ -370,7 +379,7 @@ function fanBlock(sub: Subscription): { html: string; text: string } {
 
 /** Экспортировано для тестов (tests/welcomeEmail.test.ts): письмо собирается
  *  строковой конкатенацией, и без прогона его вёрстку никто не увидит. */
-export function welcomeHtml(sub: Subscription): string {
+export function welcomeHtml(sub: Subscription, ownedModules?: string[]): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
@@ -394,7 +403,7 @@ export function welcomeHtml(sub: Subscription): string {
             Ваша подписка активна. Можете сразу зарегистрировать первую идею в QRight, подписать документ через QSign или открыть аналитику в Globus.
           </p>
           ${trialBlock}
-          ${fanBlock(sub).html}
+          ${fanBlock(sub, ownedModules).html}
           <p style="font-size:13px;color:#64748b;line-height:1.5;margin:16px 0">
             <strong>Что входит:</strong><br/>
             ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
@@ -417,14 +426,14 @@ export function welcomeHtml(sub: Subscription): string {
 </html>`;
 }
 
-export function welcomeText(sub: Subscription): string {
+export function welcomeText(sub: Subscription, ownedModules?: string[]): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trial = sub.trialDays > 0
     ? `\nТриал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
     : "";
   return `Добро пожаловать в AEVION ${tierName}!
 
-Ваша подписка активна.${trial}${fanBlock(sub).text}
+Ваша подписка активна.${trial}${fanBlock(sub, ownedModules).text}
 Что входит:
 ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
 
@@ -498,12 +507,18 @@ export async function provisionSubscription(input: {
     return { subscription, emailSent: false, emailMode: "stub", emailSkipped: "renewal" };
   }
 
+  // Полный набор модулей для веера в письме: подписка + поштучные покупки.
+  // activeAppModules никогда не бросает: нет базы → пустой список, письмо
+  // уходит с веером по одной подписке, а не падает целиком.
+  const apps = await activeAppModules(subscription.email);
+  const ownedForFan = [...new Set([...modules, ...apps.modules])];
+
   const subjPrefix = trialDays > 0 ? "Триал активен" : "Подписка активна";
   const result = await sendEmail({
     to: subscription.email,
     subject: `[AEVION] ${subjPrefix} · ${TIER_DISPLAY[subscription.tierId]}`,
-    html: welcomeHtml(subscription),
-    text: welcomeText(subscription),
+    html: welcomeHtml(subscription, ownedForFan),
+    text: welcomeText(subscription, ownedForFan),
   });
 
   return {

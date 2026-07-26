@@ -19,8 +19,7 @@
  * `appsSource: "unavailable"`, чтобы вызывающий не принял неполный список за
  * полный.
  */
-import { getPool } from "./dbPool";
-import { moduleForAppSlug } from "../data/lemonSqueezyVariants";
+import { activeAppModules } from "./appSubscriptions";
 import { readLatestSubscription, fanAnchorOf } from "../routes/provisioning";
 import type { TierId } from "../data/pricing";
 
@@ -34,28 +33,6 @@ export interface OwnedState {
   fanAnchorAt: string | null;
   subscriptionSince: string | null;
   appsSource: "db" | "unavailable";
-}
-
-async function activeAppModules(email: string): Promise<{ modules: string[]; source: "db" | "unavailable" }> {
-  try {
-    const pool = getPool();
-    const result = await pool.query(
-      `SELECT "appSlug" FROM "AppSubscription" WHERE "email"=$1 AND "status"='active'`,
-      [email],
-    );
-    const rows = result.rows as Array<{ appSlug: string }>;
-    const modules: string[] = [];
-    for (const r of rows) {
-      const id = moduleForAppSlug(r.appSlug);
-      if (id) modules.push(id);
-      else console.warn(`[ownedModules] неизвестный appSlug "${r.appSlug}" — нет в APP_SLUG_TO_MODULE`);
-    }
-    return { modules, source: "db" };
-  } catch (e: any) {
-    // База недоступна — не выдаём неполный список за полный.
-    console.warn(`[ownedModules] AppSubscription недоступна: ${e?.message || e}`);
-    return { modules: [], source: "unavailable" };
-  }
 }
 
 export async function readOwnedModules(email: string): Promise<OwnedState> {

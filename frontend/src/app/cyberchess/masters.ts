@@ -333,8 +333,22 @@ export type GuessResult = {
   guess: string;
   reward: number;
 };
+/* Нормализация перед сравнением. Догадка вводится ТЕКСТОМ, а сравнение было
+   посимвольным — игрок, назвавший верный ход `Nf3`, получал «неверно», если в
+   партии он записан `Nf3+`. В данных 49 ходов с `+` и 5 с `#`: шах и мат — это
+   пометка к ходу, а не сам ход. Плюс рокировка нулями `0-0` вместо букв `O-O`.
+
+   Регистр НЕ трогаем намеренно: `bxc4` (пешка) и `Bxc4` (слон) — разные ходы,
+   и приведение к одному регистру засчитало бы неверный ответ. */
+function normalizeSan(san: string): string {
+  return san
+    .trim()
+    .replace(/[+#!?]+$/, "")   // шах, мат, оценочные знаки
+    .replace(/0/g, "O");        // 0-0 / 0-0-0 → O-O / O-O-O
+}
+
 export function scoreGuess(actualSan: string, guessSan: string | null): GuessResult {
-  const correct = !!guessSan && guessSan === actualSan;
+  const correct = !!guessSan && normalizeSan(guessSan) === normalizeSan(actualSan);
   return {
     correct,
     actual: actualSan,

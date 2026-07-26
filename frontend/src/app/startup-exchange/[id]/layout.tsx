@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { apiUrl } from "@/lib/apiBase";
+// Один форматтер денег на модуль: локальная копия здесь разошлась с карточкой
+// ("$30.0K" против "$30K") ровно в тот момент, когда формат поменяли в одном месте.
+import { usd } from "../lib";
 
 /**
  * Link preview for a single listing.
@@ -21,13 +24,6 @@ const TIER_LABEL: Record<string, string> = {
   mvp: "Идея + MVP",
   product: "Готовый продукт",
 };
-
-function usd(n: number | null | undefined): string | null {
-  if (typeof n !== "number" || !Number.isFinite(n)) return null;
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
-  return `$${Math.round(n)}`;
-}
 
 interface DealTerms {
   intent?: string;

@@ -145,6 +145,12 @@ async function run() {
       equityPct: 5,
     });
     assert("POST /interest → 201", interest.status === 201, String(interest.status));
+
+    // Отклик без рабочего адреса — тупик: условия видны, ответить некуда.
+    const noReply = await req("POST", `/api/startupx/ideas/${listingId}/interest`, {
+      investorEmail: "напишите мне в телеграм", intent: "raise", ticketUsd: 5000,
+    });
+    assert("отклик с нерабочим адресом → 400", noReply.status === 400, String(noReply.status));
     assert("intent recorded", interest.body?.data?.intent === "raise", JSON.stringify(interest.body?.data));
   }
 

@@ -30,6 +30,7 @@ import {
   DEAL_INTENTS,
   isTier,
   legacyStageForTier,
+  looksLikeEmail,
   normalizeListing,
   tierFromLegacyStage,
   type DealIntent,
@@ -599,6 +600,14 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
   const investorEmail = clampStr(req.body?.investorEmail, MAX_EMAIL);
   const message = clampStr(req.body?.message, MAX_MESSAGE);
   if (!investorEmail) return fail(res, "investorEmail_required");
+  // Отклик без рабочего адреса — тупик: основатель видит условия и не может
+  // ответить. Проверка нарочно нестрогая, её задача — отсечь «напишите мне»
+  // в поле почты, а не спорить с RFC.
+  if (!looksLikeEmail(investorEmail)) {
+    return fail(res, "investorEmail_invalid", 400, {
+      issues: [{ field: "investorEmail", message: "Похоже, это не email — основатель не сможет ответить" }],
+    });
+  }
 
   const rawIntent = req.body?.intent;
   const intent: DealIntent | null =

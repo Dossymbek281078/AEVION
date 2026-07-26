@@ -93,6 +93,18 @@ describe("listing validation", () => {
     expect(normalizeListing(body).issues.map((i) => i.field)).toContain("demoUrl");
   });
 
+  test("адрес, по которому нельзя ответить, не проходит", () => {
+    // Биржа обещает основателю, что инвестор до него дойдёт, а инвестору — что
+    // основатель ответит. Поле почты, в котором лежит «напишите мне», ломает
+    // обе стороны обещания молча.
+    const bad = normalizeListing(ideaBody({ founderEmail: "напишите мне в телеграм" }));
+    expect(bad.listing).toBeNull();
+    expect(bad.issues.map((i) => i.field)).toContain("founderEmail");
+
+    const good = normalizeListing(ideaBody({ founderEmail: "founder@example.com" }));
+    expect(good.issues).toEqual([]);
+  });
+
   test("legacy rows map onto tiers both ways without drifting", () => {
     expect(tierFromLegacyStage("idea")).toBe("idea");
     expect(tierFromLegacyStage("prototype")).toBe("mvp");

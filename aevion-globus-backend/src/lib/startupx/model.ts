@@ -185,6 +185,17 @@ function str(v: unknown, max: number): string | undefined {
   return t ? t.slice(0, max) : undefined;
 }
 
+/**
+ * A deliberately loose email check: one @, something on each side, a dot in the
+ * domain, no spaces. Not RFC-complete — the point is not to validate addresses
+ * but to keep the exchange's promise. An investor's reply address is the only
+ * way the founder can answer; "хочу обсудить" in that field looks like an offer
+ * and is a dead end.
+ */
+export function looksLikeEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+}
+
 function isHttpUrl(v: string): boolean {
   try {
     const u = new URL(v);
@@ -304,6 +315,11 @@ export function normalizeListing(
     });
   }
 
+  const founderEmail = str(b.founderEmail, MAX.email);
+  if (founderEmail && !looksLikeEmail(founderEmail)) {
+    issues.push({ field: "founderEmail", message: "Похоже, это не email — по нему вам не смогут ответить" });
+  }
+
   const rawMetrics = (b.metrics ?? {}) as Record<string, unknown>;
   const metrics: ListingMetrics = {
     mrrUsd: num(rawMetrics.mrrUsd, { min: 0, max: 1_000_000_000 }),
@@ -332,7 +348,7 @@ export function normalizeListing(
       repoUrl,
       deal,
       metrics,
-      founderEmail: str(b.founderEmail, MAX.email),
+      founderEmail,
       contactMethod: str(b.contactMethod, MAX.contact),
     },
     issues,

@@ -20,6 +20,7 @@ import { refererHost } from "../lib/qrightHelpers";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 const capturePlanetError = makeServiceCapture("planet");
 
 const PLANET_WEBHOOK_DELIVERY_CFG = {
@@ -2844,7 +2845,7 @@ planetComplianceRouter.get("/admin/certificates.csv", async (req, res) => {
 
     function csvCell(v: unknown): string {
       if (v === null || v === undefined) return "";
-      const s = v instanceof Date ? v.toISOString() : String(v);
+      const s = csvNeutralizeFormula(v instanceof Date ? v.toISOString() : String(v));
       return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     }
     const header = [

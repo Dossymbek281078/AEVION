@@ -1294,7 +1294,7 @@ export default function MultichatEnginePage() {
               border: "1px solid rgba(15,23,42,0.12)",
               borderRadius: 14,
               padding: 20,
-              background: T.onAccent,
+              background: T.cardLight,
               display: "flex",
               flexDirection: "column",
               gap: 10,
@@ -1321,11 +1321,11 @@ export default function MultichatEnginePage() {
                 S
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: T.surface }}>Single chat</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Single chat</div>
                 <div style={{ fontSize: 11, color: T.textFaded }}>One provider · one model · fastest path</div>
               </div>
             </div>
-            <p style={{ margin: 0, fontSize: 13, color: T.line, lineHeight: 1.55 }}>
+            <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
               Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer.
               Best for quick lookups and informal conversation.
             </p>
@@ -1388,11 +1388,11 @@ export default function MultichatEnginePage() {
                 MA
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: T.surface }}>Multi-agent</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Multi-agent</div>
                 <div style={{ fontSize: 11, color: T.textFaded }}>Analyst → Writer → Critic · inspectable</div>
               </div>
             </div>
-            <p style={{ margin: 0, fontSize: 13, color: T.line, lineHeight: 1.55 }}>
+            <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
               Three specialized agents coordinate on every answer. Pick <b>Sequential</b> for a classic reflection loop,
               <b> Parallel</b> for two writers on different models merged by a Judge, or <b>Debate</b> where a Pro and a Con
               advocate argue and a Moderator synthesizes a balanced recommendation.
@@ -1465,7 +1465,7 @@ export default function MultichatEnginePage() {
               {label}
             </Link>
           ))}
-          <div style={{ width: 1, background: T.text, margin: "0 2px" }} />
+          <div style={{ width: 1, background: T.divider, margin: "0 2px" }} />
           <a
             href={`${origin}/api/qcoreai/health`}
             target="_blank"
@@ -1475,7 +1475,7 @@ export default function MultichatEnginePage() {
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: T.lineSoft,
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1490,7 +1490,7 @@ export default function MultichatEnginePage() {
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: T.lineSoft,
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1505,7 +1505,7 @@ export default function MultichatEnginePage() {
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: T.lineSoft,
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1880,10 +1880,10 @@ function AgentPanel(props: {
         >
           {tokenLabel}
         </span>
-        <span style={{ color: T.line, fontSize: 10 }}>
+        <span style={{ color: T.inkOnCardMute, fontSize: 10 }}>
           ·
         </span>
-        <span style={{ color: T.line, fontSize: 10 }}>
+        <span style={{ color: T.inkOnCardMute, fontSize: 10 }}>
           {t(agent.messages.length === 1 ? "mc.panel.msg.one" : "mc.panel.msg.many", { n: agent.messages.length })}
         </span>
       </div>

@@ -48,4 +48,11 @@ export const T = {
   surfaceSoft: "#1e293b",
   canvas: "#0b1220",
   onAccentDeep: "#042f2e",
+  cardLight: "#fff",
+  inkOnCard: "#0f172a",
+  inkOnCardSoft: "#334155",
+  inkOnCardMute: "#475569",
+  divider: "#e2e8f0",
+  btnAccentBg: "#5eead4",
+  btnDisabledBg: "#334155",
 } as const;

@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+// Тест реестра персонажей QReal.
+//   node scripts/qreal-characters.test.mjs
+//
+// Проверяет то, ради чего реестр существует: один и тот же персонаж из разных
+// кадров должен слиться в ОДНУ запись с одним описанием, а разные персонажи —
+// не слипнуться. Ошибка в любую сторону хуже, чем отсутствие фичи: слипание
+// подменит одного героя другим, разделение вернёт дрейф.
+
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const ROOT = path.join(HERE, "..");
+
+// .mts-копия: бэкенд — CommonJS-пакет, .ts в нём грузится как CJS.
+const tmp = path.join(tmpdir(), `qreal-characters-${process.pid}.mts`);
+writeFileSync(tmp, readFileSync(path.join(ROOT, "aevion-globus-backend/src/services/qreal/characters.ts"), "utf8"), "utf8");
+const m = await import("file:///" + tmp.replace(/\\/g, "/"));
+process.on("exit", () => { try { unlinkSync(tmp); } catch { /* уже убран */ } });
+
+let failed = 0;
+const ok = (name, cond, extra = "") => {
+  console.log(`${cond ? "  ok  " : "  FAIL"} ${name}${cond || !extra ? "" : ` — ${extra}`}`);
+  if (!cond) failed++;
+};
+
+/* ── 1. Слияние одного героя из разных кадров ───────────────────────────── */
+
+// Реальный дрейф из демо «Утро в степи»: мальчик описан по-разному в двух кадрах.
+const drifting = [
+  { id: "s1", subjects: [
+    { kind: "child", description: "7yo boy, tousled hair, oversized sweater, childlike gait" },
+    { kind: "animal", description: "Central Asian shepherd dog, tail wagging, ears reacting to voice" },
+  ]},
+  { id: "s2", subjects: [
+    { kind: "child", description: "little boy running, tousled hair" },
+    { kind: "nature", description: "steppe, feather grass, dawn light" },
+  ]},
+  { id: "s3", subjects: [
+    { kind: "animal", description: "shepherd dog Alabai, tail wagging" },
+  ]},
+];
+const chars = m.deriveCharacters(drifting);
+ok("два персонажа, а не четыре", chars.length === 2, `получил ${chars.length}: ${chars.map((c) => c.name).join(" | ")}`);
+
+const boy = chars.find((c) => c.kind === "child");
+const dog = chars.find((c) => c.kind === "animal");
+ok("мальчик найден", !!boy);
+ok("собака найдена", !!dog);
+ok("мальчик занят в двух кадрах", boy?.shotIds.join(",") === "s1,s2", boy?.shotIds.join(","));
+ok("собака занята в двух кадрах", dog?.shotIds.join(",") === "s1,s3", dog?.shotIds.join(","));
+
+// Каноническим должно стать САМОЕ ПОДРОБНОЕ описание — короткое из него выводимо,
+// наоборот нет.
+ok("каноническое описание — подробное", boy?.canonical.includes("oversized sweater"), boy?.canonical);
+
+/* ── 2. Разные персонажи НЕ слипаются ───────────────────────────────────── */
+
+const twoPeople = [
+  { id: "s1", subjects: [
+    { kind: "human", description: "grandmother ~70, weathered hands, warm squint, headscarf" },
+    { kind: "child", description: "7yo boy, tousled hair, oversized sweater" },
+  ]},
+];
+const pair = m.deriveCharacters(twoPeople);
+ok("бабушка и мальчик — разные персонажи", pair.length === 2, `получил ${pair.length}`);
+
+// Два животных разных видов не должны слиться только потому, что оба «животные».
+const twoAnimals = m.deriveCharacters([
+  { id: "s1", subjects: [
+    { kind: "animal", description: "Central Asian shepherd dog, tail wagging" },
+    { kind: "animal", description: "grey cat, twitching ear, sitting on windowsill" },
+  ]},
+]);
+ok("собака и кот не слиплись", twoAnimals.length === 2, `получил ${twoAnimals.length}`);
+
+/* ── 3. Пейзаж и реквизит персонажами не становятся ─────────────────────── */
+
+const propsOnly = m.deriveCharacters([
+  { id: "s1", subjects: [
+    { kind: "nature", description: "steppe, feather grass, dawn light, wind" },
+    { kind: "object", description: "copper kettle, piala bowls, steam in light shaft" },
+  ]},
+]);
+ok("трава и чайник не персонажи", propsOnly.length === 0, `получил ${propsOnly.length}`);
+
+/* ── 4. human/child путаница LLM не плодит дубли ────────────────────────── */
+
+const mixedKind = m.deriveCharacters([
+  { id: "s1", subjects: [{ kind: "human", description: "7yo boy, tousled hair, oversized sweater" }] },
+  { id: "s2", subjects: [{ kind: "child", description: "boy with tousled hair, oversized sweater" }] },
+]);
+ok("один мальчик, хотя kind разный", mixedKind.length === 1, `получил ${mixedKind.length}`);
+ok("итоговый kind уточнён до child", mixedKind[0]?.kind === "child", mixedKind[0]?.kind);
+
+/* ── 5. Подстановка в кадр ──────────────────────────────────────────────── */
+
+const lines = m.subjectLines(drifting[1].subjects, chars);
+ok("в кадре 2 подставлено каноническое описание", lines.some((l) => l.includes("oversized sweater")), lines.join(" | "));
+ok("разовый субъект остался как был", lines.some((l) => l.includes("feather grass")), lines.join(" | "));
+
+const inShot = m.charactersInShot(drifting[0].subjects, chars);
+ok("в кадре 1 занято два персонажа", inShot.length === 2, String(inShot.length));
+
+/* ── 6. Директива консистентности ───────────────────────────────────────── */
+
+const dir = m.consistencyDirective(inShot);
+ok("директива называет обоих персонажей", dir.includes("oversized sweater") && dir.includes("shepherd dog"));
+ok("директива запрещает переосмысление", /do not reinterpret/i.test(dir));
+ok("без персонажей директива пуста", m.consistencyDirective([]) === "");
+
+/* ── 7. Детерминированность ─────────────────────────────────────────────── */
+
+const again = m.deriveCharacters(drifting);
+ok("повторный вызов даёт те же id и описания",
+  JSON.stringify(again) === JSON.stringify(chars),
+  "реестр обязан быть стабильным, иначе он прыгает при каждой пересборке");
+
+/* ── 8. Мусор на входе не роняет ────────────────────────────────────────── */
+
+ok("пустой список кадров", m.deriveCharacters([]).length === 0);
+ok("кадр без субъектов", m.deriveCharacters([{ id: "s1", subjects: [] }]).length === 0);
+ok("пустое описание игнорируется", m.deriveCharacters([{ id: "s1", subjects: [{ kind: "child", description: "  " }] }]).length === 0);
+
+console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
+process.exitCode = failed ? 1 : 0;

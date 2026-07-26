@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Chess, type Square } from "chess.js";
+import { bumpDaily } from "./DailyMission";
 
 /* ══════════════════════════════════════════════════════════════════════
    AEVION CyberChess — AI Coach v35
@@ -439,6 +440,10 @@ export default function AiCoach({
         newMsgs.push({ role: "user", content: userMsg });
         sMsgs(newMsgs);
         sInput("");
+        // Дневная цель «Спроси Coach» показывалась игроку, но отметить её было
+        // нечем: bumpDaily("coach") не вызывался ни из одного места в проекте,
+        // так что цель висела 0/1 навсегда. Отмечаем по факту заданного вопроса.
+        bumpDaily("coach");
       }
 
       sLoading(true);

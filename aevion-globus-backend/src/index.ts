@@ -636,6 +636,12 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       // Multichat — multi-agent chat (fully Bearer-gated on prod)
       "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },
+      "/api/multichat/conversations/{id}/dispatch": {
+        post: { summary: "Fan out one prompt to N agents; returns replies, dissent map and a signed receipt" },
+      },
+      "/api/multichat/receipt/verify": {
+        post: { summary: "PUBLIC — recompute a receipt's RFC8785/sha256 hash and check its ed25519 signature", security: [] },
+      },
       "/api/multichat/rooms": {
         get: { summary: "List user chat rooms (Bearer required)" },
         post: { summary: "Create new room (Bearer required)" },

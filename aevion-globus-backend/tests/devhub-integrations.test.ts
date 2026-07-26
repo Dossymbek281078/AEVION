@@ -950,6 +950,9 @@ describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
     process.env.RAILWAY_API_TOKEN = "tok";
     process.env.RAILWAY_PROJECT_ID = "proj";
     process.env.RAILWAY_SERVICE_ID = "svc";
+    // The plain path now refuses (it used to redeploy AEVION's own service);
+    // this flag opts into the per-project path these assertions describe.
+    process.env.DEVHUB_RAILWAY_PER_PROJECT = "1";
     const app = makeApp();
     const projectId = await createProject(app);
 
@@ -974,6 +977,9 @@ describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
     process.env.RAILWAY_API_TOKEN = "tok";
     process.env.RAILWAY_PROJECT_ID = "proj";
     process.env.RAILWAY_SERVICE_ID = "svc";
+    // The plain path now refuses (it used to redeploy AEVION's own service);
+    // this flag opts into the per-project path these assertions describe.
+    process.env.DEVHUB_RAILWAY_PER_PROJECT = "1";
     const app = makeApp();
     const projectId = await createProject(app);
 
@@ -990,6 +996,9 @@ describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
     process.env.RAILWAY_API_TOKEN = "tok";
     process.env.RAILWAY_PROJECT_ID = "proj";
     process.env.RAILWAY_SERVICE_ID = "svc";
+    // The plain path now refuses (it used to redeploy AEVION's own service);
+    // this flag opts into the per-project path these assertions describe.
+    process.env.DEVHUB_RAILWAY_PER_PROJECT = "1";
     const app = makeApp();
     const projectId = await createProject(app);
 
@@ -3702,4 +3711,39 @@ describe("deleting a project drops its database", () => {
     expect(still.status).toBe(200);
     delete process.env.DEVHUB_DB_ADMIN_URL;
   }, 20_000);
+});
+
+
+describe("Railway deploy no longer restarts our own backend", () => {
+  test("refuses with 501 by default and says what does work", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.RAILWAY_PROJECT_ID = "proj";
+    process.env.RAILWAY_SERVICE_ID = "svc";
+    delete process.env.DEVHUB_RAILWAY_PER_PROJECT;
+
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DeployMe", stack: "next" });
+    const id = cr.body.project.id;
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/deploy`).send({});
+    expect(r.status).toBe(501);
+    expect(r.body.error).toMatch(/not available yet/i);
+    expect(r.body.alternative).toMatch(/Cloudflare Pages/);
+    // Nothing was sent to Railway at all — that is the whole point.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // And the attempt is recorded as failed rather than left "pending".
+    const list = await request(app).get(`/api/devhub/projects/${id}/deployments`);
+    expect(list.body.deployments[0].status).toBe("failed");
+    expect(list.body.deployments[0].buildLog).toMatch(/AEVION platform service/);
+  });
+
+  test("capability reports railway as not_available instead of live", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    delete process.env.DEVHUB_RAILWAY_PER_PROJECT;
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/studio/capabilities");
+    const railway = r.body.capabilities.find((c: { id: string }) => c.id === "railway");
+    expect(railway.status).toBe("not_available");
+  });
 });

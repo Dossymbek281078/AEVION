@@ -228,6 +228,11 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
                 key={t.id}
                 type="button"
                 onClick={() => setTier(t.id)}
+                // Кнопка целиком состоит из вложенных блоков, поэтому в дереве
+                // доступности она читалась без имени: три безымянные кнопки
+                // подряд. Имя и состояние — явно.
+                aria-label={`Уровень: ${t.label}. ${t.offer}`}
+                aria-pressed={active}
                 style={{
                   textAlign: "left",
                   padding: "12px 14px",

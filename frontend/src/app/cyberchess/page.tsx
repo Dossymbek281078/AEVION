@@ -4602,7 +4602,12 @@ export default function CyberChessPage(){
                 };
               }).filter(c=>typeof c.uci==="string"&&c.uci.length>=4);
               if(!candidates.length){sThink(false);return}
-              const picked=selectMoveByPersonality(personality,candidates,{ply:hist.length});
+              // Math.random обязателен: без него selectMoveByPersonality уходит в
+              // детерминированный argmax, и вся температурная логика (быстрая
+              // интуитивная личность играет разнообразнее вдумчивой) не работает —
+              // каждая личность отвечала одним и тем же ходом на одну позицию,
+              // а реванш повторял ту же партию.
+              const picked=selectMoveByPersonality(personality,candidates,{ply:hist.length},Math.random);
               const u=picked?.uci||"";
               if(u.length>=4){
                 const from=u.slice(0,2) as Square;

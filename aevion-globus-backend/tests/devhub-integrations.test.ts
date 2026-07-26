@@ -4112,6 +4112,7 @@ describe("per-project Railway deploys", () => {
           expect(v.input.source.repo).toBe("acme/widget");
           return { serviceCreate: { id: "svc-1" } };
         }
+        if (q.includes("repoTriggers")) return { service: { repoTriggers: { edges: [{ node: { repository: "acme/widget" } }] } } };
         if (q.includes("variableUpsert")) { vars[v.input.name] = v.input.value; return { variableUpsert: true }; }
         if (q.includes("serviceDomainCreate")) return { serviceDomainCreate: { domain: "widget-production.up.railway.app" } };
         return { serviceInstanceRedeploy: true };
@@ -4153,5 +4154,29 @@ describe("per-project Railway deploys", () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/Not Authorized/);
+  });
+});
+
+
+describe("Railway repo attachment is verified, not assumed", () => {
+  test("a service created without the repo actually attached is a failure", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    // Reproduces what the live API did on 2026-07-26: serviceCreate returned an
+    // id, and repoTriggers came back empty — the service would have built
+    // nothing while the deploy reported success.
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async (q) => {
+        if (q.includes("serviceCreate")) return { serviceCreate: { id: "svc-1" } };
+        if (q.includes("repoTriggers")) return { service: { repoTriggers: { edges: [] } } };
+        return {};
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/did not attach/);
+      expect(r.error).toMatch(/GitHub App/);
+    }
   });
 });

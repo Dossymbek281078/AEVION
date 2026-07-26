@@ -103,6 +103,24 @@ export async function deployProjectToRailway(args: {
       serviceId = data?.serviceCreate?.id;
       created = true;
       if (!serviceId) return { ok: false, error: "Railway did not return a service id" };
+
+      // Verified against the real API before enabling any of this: Railway
+      // ACCEPTS source.repo and returns a service id even when it cannot
+      // actually attach the repository — the service then exists and builds
+      // nothing. Check the trigger rather than trusting the mutation, or we
+      // ship another "the API said yes" deploy that never runs.
+      const check = await gql(
+        `query S($id: String!) { service(id: $id) { repoTriggers { edges { node { repository } } } } }`,
+        { id: serviceId }
+      ).catch(() => null);
+      const attached = check?.service?.repoTriggers?.edges?.length > 0;
+      if (!attached) {
+        return {
+          ok: false,
+          error:
+            `Railway created the service but did not attach ${slug} — install the Railway GitHub App on that repository (railway.com/account/integrations), then deploy again. Without the link the service would build nothing.`,
+        };
+      }
     }
 
     // The project's own env vars — this is what carries DATABASE_URL into the

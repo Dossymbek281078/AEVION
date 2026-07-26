@@ -126,7 +126,7 @@ export function EditTermsForm({
             padding: "9px 18px",
             borderRadius: 9,
             border: "none",
-            background: busy ? "#94a3b8" : "#0f172a",
+            background: busy ? "#64748b" : "#0f172a",
             color: "#fff",
             fontWeight: 700,
             fontSize: 13,

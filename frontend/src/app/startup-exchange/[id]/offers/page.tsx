@@ -73,7 +73,7 @@ export default function OffersPage() {
       <>
         <Wave1Nav />
         <ProductPageShell>
-          <p style={{ color: "#94a3b8", padding: 40, textAlign: "center" }}>Открываю предложения…</p>
+          <p style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Открываю предложения…</p>
         </ProductPageShell>
       </>
     );
@@ -147,7 +147,7 @@ export default function OffersPage() {
                         {implied !== null && ` · это оценка ${usd(implied)}`}
                       </div>
                     </div>
-                    <div style={{ fontSize: 11.5, color: "#94a3b8", textAlign: "right" }}>
+                    <div style={{ fontSize: 11.5, color: "#64748b", textAlign: "right" }}>
                       {new Date(o.createdAt).toLocaleString("ru-RU")}
                     </div>
                   </div>
@@ -215,7 +215,7 @@ export default function OffersPage() {
           )}
         </div>
 
-        <p style={{ margin: "22px 0 0", fontSize: 11.5, color: "#94a3b8", lineHeight: 1.6, maxWidth: 640 }}>
+        <p style={{ margin: "22px 0 0", fontSize: 11.5, color: "#64748b", lineHeight: 1.6, maxWidth: 640 }}>
           Отклик — заявка на разговор с названными условиями, а не оферта и не обязательство ни для
           одной из сторон. Проверять инвестора, обсуждать цену и оформлять сделку вы будете сами;
           биржа в этом не участвует и денег не держит.

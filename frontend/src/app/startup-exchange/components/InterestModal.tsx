@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, INTENT_LABEL, dealHeadline, startupxApi, usd, type DealIntent, type Listing } from "../lib";
 
 /**
@@ -30,6 +30,18 @@ export function InterestModal({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  // Диалог, который нельзя закрыть с клавиатуры, — ловушка: мышь есть не у
+  // всех, а фокус после открытия оставался на кнопке под затемнением.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    emailRef.current?.focus();
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function submit() {
     if (!email.trim()) {
@@ -130,7 +142,7 @@ export function InterestModal({
         </div>
 
         <SmallLabel>Ваш email</SmallLabel>
-        <input aria-label="Ваш email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
+        <input ref={emailRef} aria-label="Ваш email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
 
         <SmallLabel>Сообщение (необязательно)</SmallLabel>
         <textarea
@@ -144,7 +156,7 @@ export function InterestModal({
 
         {error && <p style={{ color: "#dc2626", fontSize: 12.5, margin: "0 0 10px" }}>{error}</p>}
 
-        <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "#94a3b8", lineHeight: 1.5 }}>
+        <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>
           Отклик — не оферта и не обязательство. Это заявка на разговор с названными условиями, чтобы
           основатель понимал, о чём речь, до первого письма. {INTENT_LABEL[intent]}.
         </p>
@@ -161,7 +173,7 @@ export function InterestModal({
             type="button"
             onClick={submit}
             disabled={busy}
-            style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: busy ? "#94a3b8" : "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: busy ? "wait" : "pointer" }}
+            style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: busy ? "#64748b" : "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: busy ? "wait" : "pointer" }}
           >
             {busy ? "Отправляю…" : "Отправить основателю"}
           </button>

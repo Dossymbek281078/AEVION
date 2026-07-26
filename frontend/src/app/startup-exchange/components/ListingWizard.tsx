@@ -245,7 +245,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
               >
                 <div style={{ fontSize: 14, fontWeight: 800, color: active ? TIER_ACCENT[t.id] : "#0f172a" }}>{t.label}</div>
                 <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.45, marginTop: 4 }}>{t.offer}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
                   Типичный чек: {usd(t.ticketUsd.low)} – {usd(t.ticketUsd.high)}
                 </div>
               </button>
@@ -277,7 +277,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           rows={7}
           style={{ ...input, resize: "vertical", lineHeight: 1.55, minHeight: 150 }}
         />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginTop: -4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b", marginTop: -4 }}>
           <span>{issueFor("description") ? <span style={{ color: "#dc2626" }}>{issueFor("description")}</span> : "Чем конкретнее, тем выше балл за ясность"}</span>
           <span>{description.length} / {spec?.minDescription ?? 120} мин.</span>
         </div>
@@ -427,7 +427,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           {tier !== "idea" && (
             <>
               <Label>Цифры проекта</Label>
-              <p style={{ margin: "4px 0 10px", fontSize: 12, color: "#94a3b8" }}>
+              <p style={{ margin: "4px 0 10px", fontSize: 12, color: "#64748b" }}>
                 Необязательно, но именно они переводят балл с «по отрасли» на «по данным заявки».
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
@@ -471,7 +471,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
               {busy ? "Публикую…" : "Опубликовать на бирже"}
             </button>
           </div>
-          <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#94a3b8", lineHeight: 1.5 }}>
+          <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>
             При публикации заявка получает SHA-256 отпечаток текста — фиксирует авторство на дату подачи.
             Email виден только вам, инвесторы пишут через форму отклика.
           </p>
@@ -514,7 +514,7 @@ function primaryBtn(busy: boolean): React.CSSProperties {
     padding: "11px 20px",
     borderRadius: 10,
     border: "none",
-    background: busy ? "#94a3b8" : "#0f172a",
+    background: busy ? "#64748b" : "#0f172a",
     color: "#fff",
     fontWeight: 700,
     fontSize: 13.5,

@@ -36,14 +36,14 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
       <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ minWidth: 92 }}>
           <div style={{ fontSize: 40, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{a.score}</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: "0.04em" }}>ИЗ 100</div>
+          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>ИЗ 100</div>
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
           <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, background: band.bg, color: band.color, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
             {band.label}
           </span>
           <p style={{ margin: 0, fontSize: 14, color: "#334155", lineHeight: 1.55 }}>{a.headline}</p>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: a.sector.origin === "fallback" ? "#b45309" : "#94a3b8" }}>
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: a.sector.origin === "fallback" ? "#b45309" : "#64748b" }}>
             {a.sector.label}
             {a.sector.origin === "detected" && " (определена по описанию)"}
             {a.sector.origin === "fallback" && " — отрасль не распознана, цифры рынка общие"}
@@ -93,7 +93,7 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
                   {f.label}
-                  <span style={{ fontWeight: 500, color: "#94a3b8", fontSize: 11, marginLeft: 6 }}>
+                  <span style={{ fontWeight: 500, color: "#64748b", fontSize: 11, marginLeft: 6 }}>
                     вес {Math.round(f.weight * 100)}% · {BASIS_LABEL[f.basis] ?? f.basis}
                   </span>
                 </span>
@@ -177,7 +177,7 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+    <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.07em", textTransform: "uppercase" }}>
       {children}
     </div>
   );
@@ -186,9 +186,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function Cell({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: "#0f172a", margin: "2px 0 3px" }}>{value}</div>
-      {hint && <div style={{ fontSize: 11.5, color: "#94a3b8", lineHeight: 1.45 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 11.5, color: "#64748b", lineHeight: 1.45 }}>{hint}</div>}
     </div>
   );
 }

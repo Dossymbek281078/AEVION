@@ -156,7 +156,7 @@ export default function StartupExchangePage() {
               <div key={t.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16, borderTop: `3px solid ${TIER_ACCENT[t.id]}` }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 5 }}>{t.label}</div>
                 <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>{t.offer}</p>
-                <div style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                <div style={{ fontSize: 11.5, color: "#64748b" }}>
                   Вход инвестора: {usd(t.ticketUsd.low)} – {usd(t.ticketUsd.high)}
                 </div>
               </div>
@@ -235,7 +235,7 @@ export default function StartupExchangePage() {
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
-              <span style={{ fontSize: 12, color: "#94a3b8" }}>Сортировка:</span>
+              <span style={{ fontSize: 12, color: "#64748b" }}>Сортировка:</span>
               <button
                 type="button"
                 onClick={() => {
@@ -249,10 +249,10 @@ export default function StartupExchangePage() {
             </div>
           </div>
 
-          {loading && <p style={{ color: "#94a3b8", textAlign: "center", padding: 36 }}>Загружаю заявки…</p>}
+          {loading && <p style={{ color: "#64748b", textAlign: "center", padding: 36 }}>Загружаю заявки…</p>}
 
           {!loading && listings.length === 0 && (
-            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 36, textAlign: "center", color: "#94a3b8" }}>
+            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 36, textAlign: "center", color: "#64748b" }}>
               <div style={{ fontSize: 26, marginBottom: 8 }}>○</div>
               <div>В этой категории пока пусто.</div>
               <button

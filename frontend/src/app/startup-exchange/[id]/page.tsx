@@ -52,7 +52,7 @@ export default function ListingDetailPage() {
       <>
         <Wave1Nav />
         <ProductPageShell>
-          <p style={{ color: "#94a3b8", padding: 40, textAlign: "center" }}>Загружаю заявку…</p>
+          <p style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Загружаю заявку…</p>
         </ProductPageShell>
       </>
     );
@@ -105,7 +105,7 @@ export default function ListingDetailPage() {
             {listing.title}
           </h1>
           <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{dealHeadline(deal)}</div>
-          <div style={{ fontSize: 12.5, color: "#94a3b8", marginTop: 6 }}>
+          <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 6 }}>
             Опубликовано {new Date(listing.created_at).toLocaleDateString("ru-RU")}
             {listing.geography && ` · ${listing.geography}`}
             {listing.interest_count !== undefined && ` · откликов: ${listing.interest_count}`}
@@ -165,7 +165,7 @@ export default function ListingDetailPage() {
                   )}
                 </dl>
               ) : (
-                <p style={{ margin: 0, fontSize: 12.5, color: "#94a3b8" }}>Основатель не указал условия.</p>
+                <p style={{ margin: 0, fontSize: 12.5, color: "#64748b" }}>Основатель не указал условия.</p>
               )}
               <button
                 type="button"
@@ -175,7 +175,7 @@ export default function ListingDetailPage() {
                 Предложить сделку
               </button>
               {listing.contact_method && (
-                <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#94a3b8" }}>
+                <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#64748b" }}>
                   Публичный контакт: {listing.contact_method}
                 </p>
               )}
@@ -189,7 +189,7 @@ export default function ListingDetailPage() {
                     <Row key={k} k={k} v={v} />
                   ))}
                 </dl>
-                <p style={{ margin: "10px 0 0", fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                <p style={{ margin: "10px 0 0", fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
                   Указаны основателем. Биржа их не проверяла.
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function ListingDetailPage() {
                 <code style={{ fontSize: 10.5, color: "#475569", wordBreak: "break-all", lineHeight: 1.5, display: "block" }}>
                   sha256:{listing.content_hash}
                 </code>
-                <p style={{ margin: "8px 0 0", fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                <p style={{ margin: "8px 0 0", fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
                   SHA-256 от текста заявки на дату подачи — та же схема, что в QRight.
                 </p>
               </div>
@@ -248,7 +248,7 @@ export default function ListingDetailPage() {
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5 }}>
-      <dt style={{ color: "#94a3b8" }}>{k}</dt>
+      <dt style={{ color: "#64748b" }}>{k}</dt>
       <dd style={{ margin: 0, color: "#0f172a", fontWeight: 700, textAlign: "right" }}>{v}</dd>
     </div>
   );

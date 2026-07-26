@@ -89,7 +89,7 @@ export function ExampleListing() {
         <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 8 }}>
           {dealHeadline(EXAMPLE.deal)}
           {assessment?.deal.implied.postMoneyUsd && (
-            <span style={{ fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>
+            <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }}>
               {" "}· оценка {usd(assessment.deal.implied.postMoneyUsd)}
             </span>
           )}
@@ -100,7 +100,7 @@ export function ExampleListing() {
       {assessment ? (
         <AssessmentPanel a={assessment} />
       ) : (
-        <p style={{ color: "#94a3b8", fontSize: 13 }}>Считаю разбор примера…</p>
+        <p style={{ color: "#64748b", fontSize: 13 }}>Считаю разбор примера…</p>
       )}
     </section>
   );

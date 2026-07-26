@@ -32,11 +32,11 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
               {listing.tierLabel}
             </span>
             {listing.qright_protected && (
-              <span style={{ fontSize: 10.5, color: "#94a3b8", fontFamily: "monospace" }} title="SHA-256 отпечаток текста заявки">
+              <span style={{ fontSize: 10.5, color: "#64748b", fontFamily: "monospace" }} title="SHA-256 отпечаток текста заявки">
                 sha256:{listing.content_hash?.slice(0, 10)}
               </span>
             )}
-            {listing.geography && <span style={{ fontSize: 11, color: "#94a3b8" }}>· {listing.geography}</span>}
+            {listing.geography && <span style={{ fontSize: 11, color: "#64748b" }}>· {listing.geography}</span>}
           </div>
 
           <h3 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "#0f172a", lineHeight: 1.3 }}>
@@ -48,7 +48,7 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
           <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 6 }}>
             {dealHeadline(listing.deal)}
             {listing.deal?.intent === "raise" && a?.deal.implied.postMoneyUsd && (
-              <span style={{ fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>
+              <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }}>
                 {" "}· оценка {usd(a.deal.implied.postMoneyUsd)}
               </span>
             )}
@@ -89,7 +89,7 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
               )}
             </div>
           ) : (
-            <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>Анализ не проводился</div>
+            <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>Анализ не проводился</div>
           )}
 
           <button

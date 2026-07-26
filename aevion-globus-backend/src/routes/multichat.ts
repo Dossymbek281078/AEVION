@@ -27,7 +27,7 @@ import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { buildDissentMap } from "../services/multichat/dissent";
-import { buildReceipt, signReceipt } from "../services/multichat/receipt";
+import { buildReceipt, signReceipt, verifyReceipt } from "../services/multichat/receipt";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
@@ -880,6 +880,41 @@ multichatRouter.post("/presets/:id/launch", async (req, res) => {
 // to keep cost data private). Mounted as a separate sub-route to bypass the
 // router-wide requireAuth.
 export const multichatPublicRouter = Router();
+// POST /api/multichat/receipt/verify — ПУБЛИЧНАЯ проверка чека.
+//
+// Живёт именно здесь, а не в основном роутере: тот монтируется через
+// requireModule("multichat-engine"), то есть за платной стеной. Проверка чека
+// за стеной бессмысленна — предъявляют его тому, у кого нет ни аккаунта, ни
+// подписки. (Первая версия по ошибке стояла в приватном роутере и на проде
+// упёрлась бы в 402.)
+//
+// Состояние не меняется, работы ровно на канонизацию и хеш.
+const receiptVerifyLimiter = rateLimit({
+  capacity: 60,
+  refillPerSec: 1,
+  keyFn: (req) => `mc-verify:${req.ip || "anon"}`,
+});
+
+multichatPublicRouter.post("/receipt/verify", receiptVerifyLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    // Принимаем и целиком скачанный файл {receipt, hash, signature}, и голый чек.
+    const receipt = body.receipt ?? body;
+    if (!receipt || typeof receipt !== "object" || !("panel" in receipt)) {
+      return res.status(400).json({ error: "not_a_receipt", message: "Ожидается чек мультичата (JSON со списком panel)." });
+    }
+    const out = await verifyReceipt({
+      receipt: receipt as never,
+      hash: typeof body.hash === "string" ? body.hash : undefined,
+      signature: body.signature ?? null,
+    });
+    res.json(out);
+  } catch (err) {
+    captureMultichatError(err, { route: "receipt-verify" });
+    res.status(500).json({ error: "verify failed" });
+  }
+});
+
 multichatPublicRouter.get("/shared/:token", async (req, res) => {
   const token = String(req.params.token).trim();
   if (!token) return res.status(400).json({ error: "token_required" });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { track } from "@/lib/track";
 import { apiUrl } from "@/lib/apiBase";
+import { LIVE_MODULES } from "@/data/pitchFacts";
 
 type Status = "live" | "new" | "soon";
 type Item = { name: string; slug: string; desc: string; status: Status };
@@ -24,6 +25,7 @@ const REGIONS: Region[] = [
     name: "Artificial Intelligence",
     code: "AI",
     items: [
+      { name: "Multichat Engine", slug: "multichat-engine", desc: "Консилиум ИИ: агенты отвечают независимо, карта разногласий показывает, где им нельзя верить, и каждый ответ идёт с проверяемым чеком.", status: "live" },
       { name: "QReal Studio", slug: "qreal", desc: "Fully-alive AI video from a text brief — no actor, one face across every shot, scored realism QC, built-in provenance.", status: "live" },
       { name: "QVenture", slug: "qventure", desc: "AI investment analyst: quant score, four-role council, entry strategy.", status: "live" },
       { name: "QCoreAI", slug: "qcoreai", desc: "Multi-agent pipeline — Analyst → Writer → Critic, eval harness, batch runs.", status: "live" },
@@ -186,7 +188,11 @@ export default function ExplorePlanet() {
             <a className="aevx-btn aevx-btn-ghost" href="/pricing">Start free</a>
           </div>
           <div className="aevx-stats">
-            <div className="aevx-stat"><b>{liveModules ? `${liveModules}` : "25+"}</b><span>Live modules</span></div>
+            {/* Fallback is the build-time count, not a frozen string: if the
+                stats call fails the visitor still sees a number that was true
+                when the page shipped, instead of a "25+" that stopped being
+                true four months ago. */}
+            <div className="aevx-stat"><b>{liveModules ? `${liveModules}` : `${LIVE_MODULES}`}</b><span>Live modules</span></div>
             <div className="aevx-stat"><b>1</b><span>Trust core (IP · signing)</span></div>
             <div className="aevx-stat"><b>0→100</b><span>QVenture quant score</span></div>
             <div className="aevx-stat"><b>Ed25519</b><span>Signed authorship</span></div>

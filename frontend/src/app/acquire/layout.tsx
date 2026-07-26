@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LIVE_MODULES } from "@/data/pitchFacts";
 
 export const metadata: Metadata = {
   title: "AEVION — Partnership Brief · planet on Claude",
@@ -7,7 +8,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Planet AEVION — Partnership Brief",
     description:
-      "30+ modules in production. AEV in circulation. Constitution v1 attested. One offer: a $10M repayable advance + a 51/49 revenue partnership.",
+      `${LIVE_MODULES} modules in production. AEV in circulation. Constitution v1 attested. One offer: a $10M repayable advance + a 51/49 revenue partnership.`,
     type: "website",
   },
   robots: { index: false, follow: false },

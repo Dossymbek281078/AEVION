@@ -16,7 +16,7 @@
 
 import crypto from "node:crypto";
 import { canonicalHash, CANONICALIZATION_SPEC } from "../../lib/qsignV2/canonicalize";
-import { getActiveEd25519 } from "../../lib/qsignV2/keyRegistry";
+import { getActiveEd25519, resolveEd25519 } from "../../lib/qsignV2/keyRegistry";
 import type { DissentMap } from "./dissent";
 
 export type ReceiptAgent = {
@@ -144,4 +144,49 @@ export async function signReceipt(receipt: Receipt): Promise<SignedReceipt> {
  *  клиента, и из теста. */
 export function verifyReceiptHash(receipt: Receipt, expectedHash: string): boolean {
   return canonicalHash(receipt).hash === expectedHash;
+}
+
+export type VerifyResult = {
+  hashMatches: boolean;
+  computedHash: string;
+  signature: "valid" | "invalid" | "absent" | "unverifiable";
+  signatureNote: string | null;
+  /** Спецификация, по которой любой может пересчитать хеш БЕЗ нас. Это важнее
+   *  самой ручки проверки: доверять нашему «сходится» — не то же самое, что
+   *  проверить самому. */
+  spec: { canonicalization: string; digest: "sha256"; signature: "ed25519" };
+};
+
+/** Проверка чека: пересчёт хеша тем же кодом, что его считал, плюс проверка
+ *  подписи, если она есть и ключ разрешается. Хеш проверяется ВСЕГДА — даже
+ *  когда реестр ключей недоступен, подмена содержимого будет видна. */
+export async function verifyReceipt(input: {
+  receipt: Receipt;
+  hash?: string;
+  signature?: { algo: string; kid: string; value: string } | null;
+}): Promise<VerifyResult> {
+  const { hash: computedHash, canonical } = canonicalHash(input.receipt);
+  const hashMatches = typeof input.hash === "string" && input.hash === computedHash;
+  const spec = { canonicalization: CANONICALIZATION_SPEC, digest: "sha256" as const, signature: "ed25519" as const };
+
+  if (!input.signature) {
+    return { hashMatches, computedHash, signature: "absent", signatureNote: "чек не подписан — проверен только хеш", spec };
+  }
+  if (input.signature.algo !== "ed25519") {
+    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: `неизвестный алгоритм подписи: ${String(input.signature.algo).slice(0, 32)}`, spec };
+  }
+  try {
+    const key = await resolveEd25519(input.signature.kid);
+    const pub = crypto.createPublicKey({
+      key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from(key.publicKeyHex, "hex")]),
+      format: "der",
+      type: "spki",
+    });
+    const valid = crypto.verify(null, Buffer.from(canonical, "utf8"), pub, Buffer.from(input.signature.value, "hex"));
+    return { hashMatches, computedHash, signature: valid ? "valid" : "invalid", signatureNote: null, spec };
+  } catch (e) {
+    // Наружу — без деталей реестра/БД, как и при подписи.
+    console.error("[multichat/receipt] проверка подписи не выполнена:", e instanceof Error ? e.message : e);
+    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: "ключ подписи не разрешается — хеш проверен, подпись нет", spec };
+  }
 }

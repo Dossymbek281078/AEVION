@@ -43,7 +43,14 @@ function isPaywallPayload(x: unknown): x is PaywallPayload {
     o.error === "upgrade_required" &&
     typeof o.module === "string" &&
     typeof o.plan === "string" &&
+    // Содержимое, а не только форма: `requiredTiers` идёт в `TIER_ACCENT[t]`
+    // и в `TIER_LABELS[t]`, а голый доступ по ключу возвращает и УНАСЛЕДОВАННЫЕ
+    // свойства — `["constructor"]` дало бы функцию вместо цвета CSS и слово
+    // «constructor» вместо названия тарифа. Payload приходит от нашего же
+    // бэкенда, поэтому это не дыра, а страховка от собственной опечатки:
+    // проверять форму и не проверять значения — половина проверки.
     Array.isArray(o.requiredTiers) &&
+    o.requiredTiers.every((t: unknown) => typeof t === "string" && CANONICAL_TIERS.has(t)) &&
     typeof o.upgradeUrl === "string" &&
     typeof o.message === "string"
   );
@@ -101,6 +108,9 @@ export async function apiFetchOrPaywall<T>(
   }
   return (await res.json()) as T;
 }
+
+/** Разрешённые канонические тарифы — один источник для гарда и подписей. */
+const CANONICAL_TIERS = new Set<string>(["free", "lite", "medium", "full", "enterprise"]);
 
 const TIER_LABELS: Record<CanonicalTier, string> = {
   free: "Free",

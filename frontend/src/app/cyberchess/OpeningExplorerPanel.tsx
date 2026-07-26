@@ -18,9 +18,8 @@
 
 "use client";
 import { useEffect, useState } from "react";
-import { Chess, type Square } from "chess.js";
 import { fetchOpening, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
-import { getBookContinuations, type BookResult } from "./localOpeningBook";
+import { getBookContinuations, resolveBookMove, type BookResult } from "./localOpeningBook";
 
 export default function OpeningExplorerPanel({
   fen,
@@ -47,19 +46,8 @@ export default function OpeningExplorerPanel({
   // drops an illegal move without a word.
   const play = (uci: string, san: string) => {
     if (!onPlayMove) return;
-    try {
-      const g = new Chess(fen);
-      const mv = uci
-        ? g.move({
-            from: uci.slice(0, 2) as Square,
-            to: uci.slice(2, 4) as Square,
-            promotion: (uci.length > 4 ? uci[4] : "q") as "q" | "r" | "b" | "n",
-          })
-        : g.move(san);
-      if (mv) onPlayMove(mv.from + mv.to + (mv.promotion || ""));
-    } catch {
-      /* illegal in this position — ignore */
-    }
+    const mv = resolveBookMove(fen, uci, san);
+    if (mv) onPlayMove(mv.from + mv.to + (mv.promotion || ""));
   };
 
   const pathKey = sanPath ? sanPath.join(" ") : "";

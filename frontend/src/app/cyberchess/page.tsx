@@ -110,7 +110,7 @@ import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFe
 import { computeInsights, type Insights } from "./insights";
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
-import { getBookContinuations } from "./localOpeningBook";
+import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
 import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
 import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
@@ -4597,21 +4597,15 @@ export default function CyberChessPage(){
             const uci=pickBookMove(book.moves.map(m=>({uci:m.uci,freq:m.freq})),hist.length,profile);
             // The await let the board move on — re-check before committing.
             if(cancelled||game.fen()!==fenAtTrigger){done();return}
-            if(uci&&uci.length>=4){
-              const bFrom=uci.slice(0,2) as Square,bTo=uci.slice(2,4) as Square;
-              const bPr=(uci.length>4?uci[4]:undefined) as "q"|"r"|"b"|"n"|undefined;
-              // The book is keyed on placement+turn+castling and ignores the
-              // en-passant square, so a transposed position can match an entry
-              // whose continuation is an en-passant capture that is not legal
-              // here. exec() drops an illegal move silently, and this effect
-              // only re-runs when the board changes — so playing one would
-              // leave the bot simply never moving. Verify, else play it out.
-              let bookLegal=false;
-              try{bookLegal=!!new Chess(fenAtTrigger).move({from:bFrom,to:bTo,promotion:bPr||"q"})}catch{bookLegal=false}
-              if(bookLegal){
-                exec(bFrom,bTo,bPr,false);
-                done();return;
-              }
+            // resolveBookMove, not the raw uci: the book's key ignores the
+            // en-passant square, so a transposition can hand back a move that
+            // is illegal here. exec() drops an illegal move silently and this
+            // effect only re-runs when the board changes, so playing one would
+            // leave the bot never moving at all. Null → play the position out.
+            const bookMv=uci?resolveBookMove(fenAtTrigger,uci):null;
+            if(bookMv){
+              exec(bookMv.from as Square,bookMv.to as Square,bookMv.promotion as any,false);
+              done();return;
             }
           }catch{/* book unavailable → play it out */}
           if(cancelled||game.fen()!==fenAtTrigger){done();return}

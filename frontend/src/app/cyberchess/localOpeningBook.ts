@@ -13,7 +13,7 @@
    Position key matches page.tsx: "<placement> <turn> <castling>" (ignores the
    en-passant / halfmove / fullmove fields so transpositions collapse). */
 
-import { Chess, type Square } from "chess.js";
+import { Chess, type Square, type Move } from "chess.js";
 
 export type BookMove = {
   uci: string;
@@ -101,6 +101,32 @@ function ensureLoaded(): Promise<void> {
     }
   })();
   return loadPromise;
+}
+
+/**
+ * Resolve a book continuation against the position actually on the board.
+ * Returns null when it does not apply here — see keyOf(): the key ignores the
+ * en-passant square, so a transposition can surface a continuation that is
+ * illegal on this board. Every caller must go through this before playing a
+ * book move; both of them shipped the bug once already.
+ *
+ * Prefers `uci` (what this book carries) and falls back to `san` (what the
+ * deep tree carries, which has no UCI).
+ */
+export function resolveBookMove(fen: string, uci?: string, san?: string): Move | null {
+  try {
+    const g = new Chess(fen);
+    if (uci && uci.length >= 4) {
+      return g.move({
+        from: uci.slice(0, 2) as Square,
+        to: uci.slice(2, 4) as Square,
+        promotion: (uci.length > 4 ? uci[4] : "q") as "q" | "r" | "b" | "n",
+      });
+    }
+    return san ? g.move(san) : null;
+  } catch {
+    return null; // illegal in this position
+  }
 }
 
 // Book continuations from `fen`, most-popular first. Empty moves[] = out of book.

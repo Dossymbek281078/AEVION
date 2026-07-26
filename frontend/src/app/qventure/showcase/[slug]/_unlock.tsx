@@ -43,8 +43,15 @@ export function UnlockPanel({ slug, locked }: { slug: string; locked: string[] }
     }
   }, [slug]);
 
-  // A signed-in reader should not have to click a gate that does not apply.
-  useEffect(() => { if (getAuthToken()) void unlock(); }, [unlock]);
+  // A signed-in reader should not have to click a gate that does not apply —
+  // on arrival, and again when the tab regains focus, because signing in happens
+  // in another tab often enough that "reload the page yourself" is a bad answer.
+  useEffect(() => {
+    const check = () => { if (getAuthToken()) void unlock(); };
+    check();
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [unlock]);
 
   if (full) {
     return (
@@ -72,7 +79,10 @@ export function UnlockPanel({ slug, locked }: { slug: string; locked: string[] }
         </div>
       )}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <Link href="/auth" style={{ padding: "11px 18px", borderRadius: 8, background: "var(--teal, #0a7d72)", color: "#fff", fontWeight: 700, textDecoration: "none" }}>
+        <Link
+          href={`/auth?next=${encodeURIComponent(`/qventure/showcase/${slug}`)}`}
+          style={{ padding: "11px 18px", borderRadius: 8, background: "var(--teal, #0a7d72)", color: "#fff", fontWeight: 700, textDecoration: "none" }}
+        >
           {state === "loading" ? "Opening…" : "Sign in to see the full analysis"}
         </Link>
         <Link href="/qventure" style={{ padding: "11px 18px", borderRadius: 8, border: "1px solid var(--rule-mid, #b9b8b0)", fontWeight: 700, textDecoration: "none", color: "inherit" }}>

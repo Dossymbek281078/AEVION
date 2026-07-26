@@ -33,6 +33,7 @@ const PAGES = [
   "/cyberchess",
   "/qventure",
   "/qventure/gallery",
+  "/qventure/showcase",
   "/qventure/batch",
   "/build",
   "/qtrade",

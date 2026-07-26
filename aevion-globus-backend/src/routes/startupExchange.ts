@@ -40,6 +40,7 @@ import {
 } from "../lib/startupx/model";
 import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
 import { MARKET_SOURCES } from "../lib/startupx/valuation";
+import { timingSafeHexEq } from "../lib/qrightHelpers";
 import { listSectors } from "../lib/qventure/sectors";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -55,6 +56,9 @@ const postLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "startupx:p
 // The preview assessment is free and costs no LLM call, but it is still CPU on
 // an unauthenticated path.
 const assessLimiter = rateLimit({ windowMs: 60_000, max: 12, keyPrefix: "startupx:assess", message: "rate_limited" });
+// Reading offers takes a 256-bit token, so guessing is hopeless — but a tight
+// limit keeps a guesser from turning the endpoint into a load generator.
+const offersLimiter = rateLimit({ windowMs: 60_000, max: 20, keyPrefix: "startupx:offers", message: "rate_limited" });
 
 export const startupExchangeRouter = Router();
 startupExchangeRouter.use(generalLimiter);
@@ -85,6 +89,7 @@ interface ListingRow {
   contact_method: string | null;
   qright_object_id: string | null;
   content_hash: string | null;
+  manage_token_hash: string | null;
   visibility: string;
   created_at: string;
 }
@@ -148,6 +153,22 @@ function computeContentHash(input: { title: string; description: string; tier: T
     .createHash("sha256")
     .update(JSON.stringify({ title: input.title, description: input.description, stage: input.tier }))
     .digest("hex");
+}
+
+/**
+ * The founder's key to their own listing. Returned once, on publish, and never
+ * again: only its SHA-256 lives in the database, so a dump of the table does
+ * not hand anyone the offers a founder received.
+ */
+function mintManageToken(): { token: string; hash: string } {
+  const token = crypto.randomBytes(32).toString("hex");
+  return { token, hash: crypto.createHash("sha256").update(token).digest("hex") };
+}
+
+function manageTokenMatches(token: unknown, hash: string | null): boolean {
+  if (typeof token !== "string" || !hash) return false;
+  const candidate = crypto.createHash("sha256").update(token).digest("hex");
+  return timingSafeHexEq(candidate, hash);
 }
 
 /** Public projection: founder_email never leaves the server. */
@@ -403,6 +424,7 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
   // qright_object_id is reserved for a direct QRight registry link; the hash is
   // produced here and is what makes `qright_protected` true.
   const qrightObjectId: string | null = null;
+  const manage = mintManageToken();
 
   try {
     if (isStartupExchangeDbReady()) {
@@ -410,8 +432,8 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
         `INSERT INTO startup_ideas
          (title, description, stage, tier, sector, geography, demo_url, repo_url,
           deal, metrics, assessment, assessment_score, assessment_version,
-          founder_email, contact_method, qright_object_id, content_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          founder_email, contact_method, qright_object_id, content_hash, manage_token_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         [
           listing.title, listing.description, stage, listing.tier,
@@ -420,7 +442,7 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
           JSON.stringify(listing.deal), JSON.stringify(listing.metrics ?? {}),
           JSON.stringify(assessment), assessment.score, assessment.version,
           listing.founderEmail ?? null, listing.contactMethod ?? null,
-          qrightObjectId, contentHash,
+          qrightObjectId, contentHash, manage.hash,
         ],
       );
       const row = (rows as ListingRow[])[0];
@@ -428,6 +450,10 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
         id: row.id,
         qrightProtected: true,
         contentHash: row.content_hash,
+        // Shown to the founder once. Losing it means losing access to the
+        // offers on this listing — the UI has to say so at the moment it is
+        // handed over, not in a help page.
+        manageToken: manage.token,
         listing: publicView(row),
         assessment,
       }, 201);
@@ -455,12 +481,14 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     contact_method: listing.contactMethod ?? null,
     qright_object_id: qrightObjectId,
     content_hash: contentHash,
+    manage_token_hash: manage.hash,
     visibility: "public",
   });
   return ok(res, {
     id: row.id,
     qrightProtected: true,
     contentHash: row.content_hash,
+    manageToken: manage.token,
     listing: publicView(row),
     assessment,
   }, 201);
@@ -583,6 +611,67 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
     equity_pct: equityPct,
   });
   return ok(res, { id: row.id, ideaId: row.idea_id, intent: row.intent, createdAt: row.created_at }, 201);
+});
+
+// ─── GET /api/startupx/ideas/:id/offers?token= ───────────────────────────────
+// The founder's side of the exchange. Investors send terms; without this the
+// rows sat in a table nobody could read and the whole flow dead-ended at
+// "заявка отправлена".
+startupExchangeRouter.get("/ideas/:id/offers", offersLimiter, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+
+  let row: ListingRow | undefined;
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM startup_ideas WHERE id=$1`, [id]);
+      row = (rows as ListingRow[])[0];
+    } catch (e) {
+      console.error("[StartupX] offers fetch error", e);
+      return fail(res, "offers_unavailable", 500);
+    }
+  } else {
+    row = memListings.get(id);
+  }
+  if (!row) return fail(res, "not_found", 404);
+
+  if (!manageTokenMatches(req.query.token, row.manage_token_hash)) {
+    // Deliberately the same answer for a wrong token and for a listing published
+    // before manage tokens existed: neither can be opened, and saying which is
+    // which only helps someone guessing.
+    return fail(res, "invalid_token", 401);
+  }
+
+  let offers: InterestRow[] = [];
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM startup_interests WHERE idea_id=$1 ORDER BY created_at DESC LIMIT 200`,
+        [id],
+      );
+      offers = rows as InterestRow[];
+    } catch (e) {
+      console.error("[StartupX] offers list error", e);
+      return fail(res, "offers_unavailable", 500);
+    }
+  } else {
+    offers = Array.from(memInterests.values())
+      .filter((i) => i.idea_id === id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  return ok(res, {
+    listing: publicView(row, offers.length),
+    offers: offers.map((o) => ({
+      id: o.id,
+      investorEmail: o.investor_email,
+      message: o.message,
+      intent: o.intent,
+      ticketUsd: o.ticket_usd === null ? null : Number(o.ticket_usd),
+      equityPct: o.equity_pct === null ? null : Number(o.equity_pct),
+      createdAt: o.created_at,
+    })),
+  });
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────

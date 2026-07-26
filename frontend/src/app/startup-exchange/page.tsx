@@ -77,7 +77,9 @@ export default function StartupExchangePage() {
 
   function handlePublished(listing: Listing) {
     setToast(`Опубликовано: «${listing.title}» — заявка №${listing.id}`);
-    setShowWizard(false);
+    // The wizard stays mounted on purpose. It has just been handed the founder's
+    // one-time link to their offers, and collapsing the form here would take that
+    // link off the screen before it could be copied.
     setOffset(0);
     setTierFilter("");
     fetchListings("", 0, sort);

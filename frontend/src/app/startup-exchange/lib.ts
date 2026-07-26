@@ -125,6 +125,16 @@ export interface ListingDraft {
   contactMethod?: string;
 }
 
+export interface Offer {
+  id: number;
+  investorEmail: string;
+  message: string | null;
+  intent: DealIntent | null;
+  ticketUsd: number | null;
+  equityPct: number | null;
+  createdAt: string;
+}
+
 export interface ValidationIssue {
   field: string;
   message: string;
@@ -196,10 +206,21 @@ export const startupxApi = {
     }),
 
   publish: (draft: ListingDraft) =>
-    call<{ id: number; contentHash: string; listing: Listing; assessment: Assessment }>("/ideas", {
+    call<{
+      id: number;
+      contentHash: string;
+      /** Shown to the founder exactly once — the only key to their offers. */
+      manageToken: string;
+      listing: Listing;
+      assessment: Assessment;
+    }>("/ideas", {
       method: "POST",
       body: JSON.stringify(draft),
     }),
+
+  /** The founder's inbox for one listing. Requires the token issued on publish. */
+  offers: (id: number, token: string) =>
+    call<{ listing: Listing; offers: Offer[] }>(`/ideas/${id}/offers?token=${encodeURIComponent(token)}`),
 
   interest: (
     id: number,

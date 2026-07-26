@@ -27,7 +27,13 @@ import { AssessmentPanel } from "./AssessmentPanel";
  * come second, when they can already see what an investor will see.
  */
 
-type Phase = "draft" | "terms";
+type Phase = "draft" | "terms" | "published";
+
+interface Published {
+  id: number;
+  manageToken: string;
+  title: string;
+}
 
 interface Props {
   tiers: TierSpec[];
@@ -68,6 +74,8 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
   const [contact, setContact] = useState("");
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [published, setPublished] = useState<Published | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -132,8 +140,12 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
     setError(null);
     try {
       const r = await startupxApi.publish(buildDraft());
-      onPublished(r.listing);
       setAssessment(r.assessment);
+      // The token is returned exactly once. Show it before anything else can
+      // navigate away — losing it means losing access to the offers.
+      setPublished({ id: r.id, manageToken: r.manageToken, title: r.listing.title });
+      setPhase("published");
+      onPublished(r.listing);
     } catch (e) {
       if (e instanceof ApiError) {
         setIssues(e.issues);
@@ -147,6 +159,61 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
   }
 
   const issueFor = (field: string) => issues.find((i) => i.field === field)?.message;
+
+  const manageUrl =
+    published && typeof window !== "undefined"
+      ? `${window.location.origin}/startup-exchange/${published.id}/offers?token=${published.manageToken}`
+      : "";
+
+  if (phase === "published" && published) {
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ ...card, borderColor: "#bbf7d0", background: "#f0fdf4" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#166534", marginBottom: 6 }}>
+            Заявка №{published.id} опубликована
+          </div>
+          <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#334155", lineHeight: 1.6 }}>
+            Сохраните ссылку ниже — по ней вы будете читать предложения инвесторов. Она выдаётся
+            один раз: у нас в базе лежит только её отпечаток, поэтому восстановить ссылку нельзя
+            даже нам.
+          </p>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 12,
+              fontFamily: "monospace",
+              wordBreak: "break-all",
+              color: "#0f172a",
+              marginBottom: 10,
+            }}
+          >
+            {manageUrl}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(manageUrl).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                );
+              }}
+              style={primaryBtn(false)}
+            >
+              {copied ? "Скопировано" : "Скопировать ссылку"}
+            </button>
+            <a href={manageUrl} style={{ ...secondaryBtn(false), textDecoration: "none", display: "inline-block" }}>
+              Открыть мои предложения
+            </a>
+          </div>
+        </div>
+        {assessment && <AssessmentPanel a={assessment} />}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>

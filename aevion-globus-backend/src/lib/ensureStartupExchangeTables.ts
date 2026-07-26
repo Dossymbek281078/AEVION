@@ -70,6 +70,12 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment JSONB;`);
     await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment_score INTEGER;`);
     await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS assessment_version INTEGER;`);
+    // Founder's key to their own listing. Only the SHA-256 of the token is
+    // stored — a leaked database row must not hand over the offers. The plain
+    // token is shown to the founder exactly once, right after publishing.
+    // Without this the offers investors send simply accumulate in a table
+    // nobody can read, which is what the first version did.
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS manage_token_hash TEXT;`);
 
     // Backfill: every pre-tier row gets the tier its legacy stage implies.
     // Runs once — after this, `tier IS NULL` matches nothing.

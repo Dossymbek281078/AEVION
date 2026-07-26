@@ -96,6 +96,7 @@ async function run() {
   const created = sub.body?.data;
   assert("listing id returned", !!created?.id, JSON.stringify(sub.body).slice(0, 200));
   assert("content hash stamped", typeof created?.contentHash === "string" && created.contentHash.length === 64);
+  assert("manage token issued once", typeof created?.manageToken === "string" && /^[0-9a-f]{64}$/.test(created.manageToken));
   assert("tier persisted", created?.listing?.tier === "idea", String(created?.listing?.tier));
   // $30k for 15% is a $200k post-money — the number an investor reads first.
   assert("implied post-money computed", created?.assessment?.deal?.implied?.postMoneyUsd === 200000,
@@ -134,7 +135,23 @@ async function run() {
     assert("intent recorded", interest.body?.data?.intent === "raise", JSON.stringify(interest.body?.data));
   }
 
-  console.log("\n8. Stats");
+  console.log("\n8. The founder can actually read the offers");
+  if (listingId && created?.manageToken) {
+    const mine = await req("GET", `/api/startupx/ideas/${listingId}/offers?token=${created.manageToken}`);
+    assert("GET /offers with the founder's token → 200", mine.status === 200, String(mine.status));
+    const offers = mine.body?.data?.offers ?? [];
+    assert("the offer sent in step 7 is there", offers.length >= 1, `count=${offers.length}`);
+    assert("terms came through, not just an email",
+      offers[0]?.ticketUsd === 10000 && offers[0]?.equityPct === 5 && offers[0]?.intent === "raise",
+      JSON.stringify(offers[0]));
+
+    const stranger = await req("GET", `/api/startupx/ideas/${listingId}/offers?token=${"0".repeat(64)}`);
+    assert("a wrong token → 401", stranger.status === 401, String(stranger.status));
+    const bare = await req("GET", `/api/startupx/ideas/${listingId}/offers`);
+    assert("no token → 401", bare.status === 401, String(bare.status));
+  }
+
+  console.log("\n9. Stats");
   const stats = await req("GET", "/api/startupx/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
   assert("stats.total is a number", typeof stats.body?.data?.total === "number");

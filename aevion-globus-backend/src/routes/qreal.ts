@@ -32,6 +32,7 @@ import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
 import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, referenceCast, type Character } from "../services/qreal/characters";
+import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildContinuityPrompt, scoreContinuity, isMeasurable } from "../services/qreal/continuity";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -721,6 +722,63 @@ qrealRouter.patch("/projects/:id/characters/:cid", (req, res) => {
     saveProject(p);
     res.json({ character: c, characters: p.characters, note: "Промты кадров пересобраны под новое описание." });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "character update failed" }); }
+});
+
+/** Непрерывность персонажа между кадрами — то, что реестр персонажей чинит,
+ *  а покадровый QC измерить не может в принципе: на одиночном клипе не видно,
+ *  что во втором и четвёртом кадре разные мальчики. Судим собранный фильм. */
+qrealRouter.post("/projects/:id/continuity", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    if (!p.characters?.length) p.characters = deriveCharacters(p.shots);
+
+    // Ни один герой не появляется дважды — сравнивать нечего. Отдать здесь
+    // бодрое «непрерывно» значило бы подтвердить непроверенное заявление.
+    if (!isMeasurable(p.characters)) {
+      return res.status(409).json({
+        error: "not_measurable",
+        message: "Ни один персонаж не появляется в двух кадрах — непрерывность измерять не на чем.",
+        characters: p.characters,
+      });
+    }
+
+    const shots = p.shots.map((s) => ({ order: s.order, title: s.title }));
+    const prompt = buildContinuityPrompt(p.characters, shots);
+    let raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+
+    if (!raw && req.body?.judge === true) {
+      if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан." });
+      // Судья смотрит фильм по публичному URL — тот же, что отдаёт витрина.
+      const base = (process.env.PUBLIC_BASE_URL || "https://aevion.vercel.app/api-backend").replace(/\/+$/, "");
+      const filmUrl = `${base}/api/qreal/projects/${p.id}/film`;
+      const out = await judgeRender(filmUrl, CONTINUITY_CRITERIA, { description: p.brief }, { prompt });
+      if (!out.ok) return res.status(502).json({ error: "vlm_judge_failed", message: out.error, filmUrl });
+      raw = out.scores;
+    }
+
+    if (!raw) {
+      return res.json({
+        criteria: CONTINUITY_CRITERIA,
+        anchors: CONTINUITY_ANCHORS,
+        threshold: continuityThreshold(),
+        characters: p.characters,
+        judgePrompt: prompt,
+        note: "Пришли оценки в {scores:[{id,score:1-5|null}]} — от человека по якорям или от VLM через {\"judge\":true} (платно, по собранному фильму).",
+      });
+    }
+
+    const result = scoreContinuity(raw);
+    res.json({
+      continuity: result,
+      note:
+        result.verdict === "consistent"
+          ? `Персонаж держится: ${(result.totalScore as number).toFixed(2)} ≥ ${result.threshold}.`
+          : result.verdict === "drifting"
+            ? `Дрейф: ${(result.totalScore as number).toFixed(2)} < ${result.threshold}. Разошлось: ${result.weakest.map((w) => w.id).join(", ")}. Уточни канон персонажа или добавь референс-кадр.`
+            : `Оценено ${result.judgedCriteria} из ${CONTINUITY_CRITERIA.length} — мало для вердикта.`,
+    });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "continuity failed" }); }
 });
 
 qrealRouter.get("/projects/:id/estimate", (req, res) => {

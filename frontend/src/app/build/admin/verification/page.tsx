@@ -51,7 +51,7 @@ function Body() {
   useEffect(() => { load(); }, [token]);
 
   async function approve(userId: string) {
-    await fetch(`/api/build/verification/admin/${userId}/approve`, {
+    await fetch(apiUrl(`/api/build/verification/admin/${userId}/approve`), {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
     });
     load();
@@ -59,7 +59,7 @@ function Body() {
 
   async function reject(userId: string) {
     const reason = prompt("Reason for rejection (optional):");
-    await fetch(`/api/build/verification/admin/${userId}/reject`, {
+    await fetch(apiUrl(`/api/build/verification/admin/${userId}/reject`), {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ reason }),

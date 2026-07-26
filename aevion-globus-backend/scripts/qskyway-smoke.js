@@ -261,6 +261,10 @@ async function main() {
   assert(pa.kind === "prohibition", "[astana] a prohibition is not rendered as a permission", `kind=${pa?.kind}`);
   assert(pa.basis === "ingested" && /UAP28/.test(pa.regime ?? ""), "[astana] zone identifier and provenance are stated", `${pa?.regime?.slice(0, 40)}`);
   assert(pa.coveragePct === 100 && /ЗАПРЕТНОЙ/.test(pa.note ?? ""), "[astana] full coverage is stated as prohibition, not as 'needs permission'");
+  // A demo circle named after a real restriction must say it is a demo circle.
+  const gov = (permAst.json?.nofly ?? []).find((z) => z.id === "nfz-gov");
+  assert(gov && /демо/i.test(gov.name ?? ""), "[astana] the placeholder zone is named as a placeholder", gov?.name);
+  assert(gov && /UAP28/.test(gov.realityNote ?? "") && /4\.5/.test(gov.realityNote ?? ""), "[astana] the placeholder points at the real published zone it stands in for");
   const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
   assert(cov?.withFeed === 3 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city now has a published rule of some kind", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
   assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));

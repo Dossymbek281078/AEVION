@@ -647,7 +647,7 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       withPermissionRegime: Object.keys(CITIES).filter((id) => PERMISSION[id]).length,
       total: Object.keys(CITIES).length,
       missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id] && !PERMISSION[id]),
-      note: "Регуляторный слой есть там, где регулятор публикует ограничения машиночитаемо — потолками высоты или режимом разрешений. Отсутствие фида — свойство юрисдикции, а не пробел реализации.",
+      note: "Регуляторный слой есть там, где регулятор вообще публикует ограничения — сеткой потолков, режимом разрешений или запретной зоной в AIP. Форма публикации разная: фид, растровый слой, нормативный документ. «Нет API» не равно «нет правила» — правило читается из того, в чём оно опубликовано.",
     },
   });
 });
@@ -659,7 +659,7 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
   const zones = zonesMeters(id, city);
   res.json({
     ...city,
-    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null })),
+    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
     wind: {
       fromDeg: windAt(id, FLOOR).fromDeg,
       groundMs: windAt(id, FLOOR).speedMs,

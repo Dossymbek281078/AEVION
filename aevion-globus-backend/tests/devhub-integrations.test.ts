@@ -410,7 +410,11 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
       .send({ prompt: "a cat" });
 
     expect(r.status).toBe(502);
-    expect(r.body.error).toMatch(/All image providers failed/);
+    // The message now names the fix instead of restating the failure: this
+    // mock is a billing rejection, so it must read as a blocked provider
+    // rather than a bad prompt.
+    expect(r.body.providersBlocked).toBe(true);
+    expect(r.body.error).toMatch(/not your prompt/);
     expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
   });
 });

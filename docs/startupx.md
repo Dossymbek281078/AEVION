@@ -92,15 +92,17 @@
   замерено: заявка с `sector=constructor` давала label `undefined`, TAM `undefined` и балл
   рынка 0 при полностью «успешном» ответе.
 - **`ASSESSMENT_VERSION` двигается при любом изменении правил.** Балл принадлежит правилам,
-  которые его сделали; иначе лента сравнивает несравнимое.
+  которые его сделали; иначе лента сравнивает несравнимое. Это стережёт тест с отпечатком
+  правил (проверено: сдвиг веса на 0.04 красит его), а `/stats` показывает `assessmentVersion`
+  и `staleAssessments` — сколько строк ждут `/reassess`.
 - **Миграция только добавляет колонки** (`ADD COLUMN IF NOT EXISTS`) и разово проставляет
   `tier` по старому `stage`. Тест сверяет SQL-бэкфилл с TS-маппингом, чтобы они не разошлись.
 
 ## 5. Проверки
 
 ```
-npx vitest run tests/startupxListings.test.ts     # 32 теста
-BASE=http://127.0.0.1:4001 node scripts/startupx-smoke.js   # 51 проверка
+npx vitest run tests/startupxListings.test.ts     # 34 теста
+BASE=http://127.0.0.1:4001 node scripts/startupx-smoke.js   # 53 проверки
 node scripts/startupx-seed.js                     # сухой прогон первых заявок
 ```
 

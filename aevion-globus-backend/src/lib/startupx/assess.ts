@@ -199,8 +199,39 @@ const BUZZWORDS = new RegExp(
  */
 const CLARITY_CEILING = 88;
 
+/**
+ * The part of a description that actually explains something.
+ *
+ * Measured on real listings against a deliberately stuffed one: an honest pitch
+ * runs 9–12 words per sentence, while "Подписка, комиссия, тариф, цена." is a
+ * keyword list wearing a full stop. Before this, stuffing every cue word into
+ * one comma-separated line scored 88/100 on clarity and 71 overall — the
+ * exchange would have ranked spam above a real pitch, and a founder would have
+ * found that out before we did.
+ *
+ * A sentence is dropped when it is too short to say anything, or when it is
+ * mostly commas — one word per comma is a list, not a sentence.
+ */
+function explanatorySentences(text: string): string {
+  return text
+    .split(/[.!?\n]+/)
+    .map((raw) => raw.trim())
+    .filter((sentence) => {
+      const words = sentence.split(/[\s,;:()—–-]+/).filter(Boolean);
+      if (words.length < 4) return false;
+      const commas = (sentence.match(/,/g) ?? []).length;
+      if (commas >= 3 && words.length / commas <= 2) return false;
+      return true;
+    })
+    .join(". ");
+}
+
 function scoreClarity(listing: ListingInput, signals: PlanSignals): AssessmentFactor {
-  const text = listing.description;
+  const full = listing.description;
+  // Cues are looked for only where an explanation could live; the buzzword
+  // penalty still reads the whole text, because loud words count wherever
+  // they are.
+  const text = explanatorySentences(full);
   const hits: string[] = [];
   const misses: string[] = [];
   let s = 12; // a readable paragraph that says nothing still beats an empty one
@@ -218,12 +249,14 @@ function scoreClarity(listing: ListingInput, signals: PlanSignals): AssessmentFa
   if (signals.fieldsFound >= 3) s += 8;
   else if (signals.fieldsFound >= 1) s += 4;
 
-  const buzz = (text.match(BUZZWORDS) ?? []).length;
+  const buzz = (full.match(BUZZWORDS) ?? []).length;
   const unbackedBuzz = signals.fieldsFound === 0 ? buzz : Math.max(0, buzz - signals.fieldsFound);
   const penalty = Math.min(18, unbackedBuzz * 6);
   s -= penalty;
 
   // Very short descriptions cannot carry five ideas, however many cues match.
+  // Measured on the explanatory part, so padding with keyword lists does not
+  // buy length either.
   const spec = TIER_SPECS[listing.tier];
   if (text.length < spec.minDescription * 1.5) s = Math.min(s, 64);
   s = Math.min(s, CLARITY_CEILING);

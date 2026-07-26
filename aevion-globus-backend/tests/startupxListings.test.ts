@@ -193,6 +193,28 @@ describe("assessment honesty", () => {
     expect(asProduct.redFlags.some((f) => /выручка не раскрыта/i.test(f.message))).toBe(true);
   });
 
+  test("stuffing the cue words into a list does not buy a clarity score", () => {
+    // Every cue the rubric looks for, packed into comma-separated fragments.
+    // Before the fix this scored 88/100 on clarity and 71 overall — above a real
+    // pitch — so the feed would have ranked spam first, and a founder would have
+    // discovered that before we did.
+    const stuffed = assessBody(
+      ideaBody({
+        title: "Проект",
+        description:
+          "Проблема. Для кого: клиенты - все. Мы делаем платформу. Подписка, комиссия, тариф, цена. " +
+          "В отличие от конкурентов, аналогов нет. Проблема, вручную, теряют, платформа, алгоритм, " +
+          "интеграция, монетизация, конкурент, альтернатива, подписка.",
+      }),
+    );
+    const real = assessBody(ideaBody());
+    const clarityOf = (a: typeof stuffed) => a.factors.find((f) => f.key === "clarity")!.score;
+
+    expect(clarityOf(stuffed)).toBeLessThan(50);
+    expect(clarityOf(stuffed)).toBeLessThan(clarityOf(real) - 30);
+    expect(stuffed.score).toBeLessThan(real.score);
+  });
+
   test("clarity rewards a specific pitch and penalises adjectives with no numbers", () => {
     const specific = assessBody(ideaBody()).factors.find((f) => f.key === "clarity")!;
     const vague = assessBody(

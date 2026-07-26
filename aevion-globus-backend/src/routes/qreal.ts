@@ -31,7 +31,7 @@ import { callProvider, pickConfiguredProvider, getProviders } from "../services/
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
-import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, type Character } from "../services/qreal/characters";
+import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, referenceCast, type Character } from "../services/qreal/characters";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -81,6 +81,9 @@ type Shot = {
   /** Сколько раз кадр уже перегенерировали по вердикту судьи — ограничитель
    *  для авто-режима, чтобы петля «не нравится → рендерь ещё» не жгла бюджет. */
   qcAttempts?: number;
+  /** Ушёл ли кадр в reference-вариант модели. Нужно при опросе: у него свой
+   *  requests-путь, и опрос по text-to-video отдаст 404 на живую задачу. */
+  usedReference?: boolean;
 };
 
 type ProjectFormat = "short" | "scene" | "film" | "music-video";
@@ -297,7 +300,12 @@ function buildRenderPrompt(p: Project, s: Shot): string {
   // раскадровку покадрово и переописывает того же героя каждый раз — отсюда
   // разные лица между кадрами. Реестр подставляет ОДИН канонический текст.
   const cast = p.characters || [];
-  const subj = subjectLines(s.subjects, cast).join("; ");
+  // Если у персонажей есть опорные картинки, строки несут маркеры @Image1/@Image2 —
+  // Seedance адресует image_urls именно из текста промта, без ссылки они не
+  // применяются. Без картинок referenceCast возвращает те же строки, что и
+  // subjectLines, поэтому ветвление не нужно.
+  const { imageUrls, lines } = referenceCast(s.subjects, cast);
+  const subj = (imageUrls.length ? lines : subjectLines(s.subjects, cast)).join("; ");
   const dial = s.dialogue ? ` Dialogue (${p.language}): "${s.dialogue}".` : "";
   const continuity = consistencyDirective(charactersInShot(s.subjects, cast));
   return (
@@ -660,8 +668,13 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
     s.status = "rendered";
     return "Кадр взят из кэша рендеров — $0.";
   }
-  let sub = await falSubmit(engine, s.prompt, s.durationSec);
-  if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec); // один ретрай (fal бывает 5xx)
+  // Есть ли у персонажей кадра опорные картинки — тогда уходим в
+  // reference-вариант модели и ссылаемся на них прямо в промте (@Image1).
+  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+  s.usedReference = imageUrls.length > 0;
+
+  let sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls);
+  if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls); // один ретрай (fal бывает 5xx)
   if (!sub.ok) {
     s.engine = engine.id;
     s.status = "failed";
@@ -781,7 +794,7 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
     if (s.status === "rendered" || !s.engineRequestId) return res.json({ shot: s });
     const engine = renderEngines().find((e) => e.id === s.engine);
     if (!engine) return res.json({ shot: s });
-    const poll = await falPoll(engine, s.engineRequestId);
+    const poll = await falPoll(engine, s.engineRequestId, s.usedReference === true);
     if (poll.state === "completed") {
       s.resultUrl = poll.videoUrl;
       s.status = poll.videoUrl ? "rendered" : "failed";

@@ -124,5 +124,34 @@ ok("пустой список кадров", m.deriveCharacters([]).length === 0
 ok("кадр без субъектов", m.deriveCharacters([{ id: "s1", subjects: [] }]).length === 0);
 ok("пустое описание игнорируется", m.deriveCharacters([{ id: "s1", subjects: [{ kind: "child", description: "  " }] }]).length === 0);
 
+/* ── 9. Референс-каст для reference-to-video ────────────────────────────── */
+
+// Без референсов — обычные строки, image_urls пуст: вызывающий останется на
+// text-to-video, а не заплатит за reference-модель впустую.
+const noRefs = m.referenceCast(drifting[0].subjects, chars);
+ok("без референсов image_urls пуст", noRefs.imageUrls.length === 0);
+ok("без референсов в промте нет @Image", !noRefs.lines.join(" ").includes("@Image"));
+
+// С референсами: номер в промте обязан совпадать с позицией в массиве —
+// разъедутся, и модель приклеит лицо мальчика собаке.
+const withRefs = JSON.parse(JSON.stringify(chars));
+withRefs.find((c) => c.kind === "child").refImages = ["https://cdn/boy.png"];
+withRefs.find((c) => c.kind === "animal").refImages = ["https://cdn/dog.png"];
+const rc = m.referenceCast(drifting[0].subjects, withRefs);
+ok("оба референса собраны", rc.imageUrls.length === 2, rc.imageUrls.join(","));
+const boyLine = rc.lines.find((l) => l.includes("oversized sweater"));
+const boyIdx = rc.imageUrls.indexOf("https://cdn/boy.png") + 1;
+ok("мальчик ссылается на СВОЮ картинку", boyLine?.includes(`@Image${boyIdx}`), `${boyLine} | idx ${boyIdx}`);
+const dogLine = rc.lines.find((l) => l.includes("shepherd dog"));
+const dogIdx = rc.imageUrls.indexOf("https://cdn/dog.png") + 1;
+ok("собака ссылается на свою", dogLine?.includes(`@Image${dogIdx}`), `${dogLine} | idx ${dogIdx}`);
+
+// Персонаж без референса не должен «съесть» чужой номер.
+const partial = JSON.parse(JSON.stringify(chars));
+partial.find((c) => c.kind === "animal").refImages = ["https://cdn/dog.png"];
+const rp = m.referenceCast(drifting[0].subjects, partial);
+ok("персонаж без референса номера не получает", rp.imageUrls.length === 1, String(rp.imageUrls.length));
+ok("единственный референс — @Image1", rp.lines.some((l) => l.includes("@Image1") && l.includes("shepherd dog")), rp.lines.join(" | "));
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

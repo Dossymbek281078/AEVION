@@ -263,6 +263,10 @@ function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
   };
   const period = r.growthPeriod;
   if (period === "MoM" || period === "YoY" || period === "WoW" || period === "unspecified") f.growthPeriod = period;
+  const churnPeriod = r.churnPeriod;
+  if (churnPeriod === "monthly" || churnPeriod === "quarterly" || churnPeriod === "annual" || churnPeriod === "weekly" || churnPeriod === "unspecified") {
+    f.churnPeriod = churnPeriod;
+  }
   const hasAny = Object.values(f).some((v) => v !== undefined);
   return hasAny ? f : undefined;
 }

@@ -95,7 +95,11 @@ export interface AnalysisResult {
       multiple: number;
       impliedCagrPct: number | null;
       sectorCagrPct: number;
-      verdict: "grounded" | "aggressive" | "hockey-stick" | "pre-revenue";
+      /** Venture bar for the stage; absent on reports scored before it existed. */
+      stageBarCagrPct?: number;
+      ratioToBar?: number | null;
+      // "grounded" is the pre-2026-07 label, kept so old shared reports still render.
+      verdict: "below-market" | "conservative" | "venture-grade" | "grounded" | "aggressive" | "hockey-stick" | "pre-revenue";
       note: string;
     } | null;
   };
@@ -581,23 +585,30 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 // ─── Full result body (shared by both pages) ──────────────────────────────────
 
 /** Bottom-up TAM triangulation — claimed TAM vs derived ACV / implied accounts / SOM. */
-/** Revenue projection vs sector CAGR — the hockey-stick check. */
+/** Revenue projection vs the venture bar for the stage — the plan-quality check. */
 function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["result"]["projections"]>> }) {
   const V: Record<string, { c: string; bg: string; label: string }> = {
+    "below-market": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "BELOW MARKET" },
+    conservative: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "CONSERVATIVE" },
+    "venture-grade": { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "VENTURE-GRADE" },
     grounded: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "GROUNDED" },
     aggressive: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "AGGRESSIVE" },
     "hockey-stick": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "HOCKEY STICK" },
     "pre-revenue": { c: "var(--ink-faint, #74767c)", bg: "var(--paper-2, #efeee8)", label: "PRE-REVENUE" },
   };
   const fmt = (n: number) => (n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
-  const v = V[p.verdict];
+  // An unknown verdict (a report from a newer engine) still renders, neutrally.
+  const v = V[p.verdict] ?? { c: "var(--ink-faint, #74767c)", bg: "var(--paper-2, #efeee8)", label: String(p.verdict).toUpperCase() };
   return (
     <div style={{ ...SECTION, background: v.bg, borderColor: `${v.c}44` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
         <h2 style={{ ...H2, margin: 0 }}>Revenue projection</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: v.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{v.label}</span>
         <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>
-          {fmt(p.startRevenueUsd)} → {fmt(p.endRevenueUsd)} ({p.multiple}× / {p.years}yr){p.impliedCagrPct !== null ? ` · ${p.impliedCagrPct}% CAGR vs ${p.sectorCagrPct}% sector` : ""}
+          {fmt(p.startRevenueUsd)} → {fmt(p.endRevenueUsd)} ({p.multiple}× / {p.years}yr)
+          {p.impliedCagrPct !== null
+            ? ` · ${p.impliedCagrPct}% CAGR vs ${p.stageBarCagrPct ? `${p.stageBarCagrPct}% stage bar · ` : ""}${p.sectorCagrPct}% market`
+            : ""}
         </span>
       </div>
       <p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55 }}>{p.note}</p>

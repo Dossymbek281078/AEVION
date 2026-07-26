@@ -198,6 +198,41 @@ async function run() {
   assert("different traction is NOT deduped", differing.body?.data?.id && differing.body.data.id !== first.body?.data?.id,
     `${differing.body?.data?.id}`);
 
+  // A churn figure means nothing without its period, and a plan growing at the
+  // market's own rate is not "credible" for a venture deal. Both were scored the
+  // wrong way round until rubric v4.
+  console.log("\n14. Periods and benchmarks are read, not assumed");
+  const annual = await req("POST", "/api/qventure/analyze", {
+    name: "Churn Period Annual", sector: "saas", stage: "seed",
+    description: "Enterprise SaaS for finance teams. $3M ARR, 2,000 customers, 20% annual churn, 82% gross margin.",
+  });
+  const monthly = await req("POST", "/api/qventure/analyze", {
+    name: "Churn Period Monthly", sector: "saas", stage: "seed",
+    description: "Enterprise SaaS for finance teams. $3M ARR, 2,000 customers, 20% monthly churn, 82% gross margin.",
+  });
+  const aRes = annual.body?.data?.result, mRes = monthly.body?.data?.result;
+  assert("annual churn is normalized to a monthly rate",
+    aRes?.signals?.churnPeriod === "annual" && aRes?.signals?.churnMonthlyPct < 2,
+    `${aRes?.signals?.churnPeriod}/${aRes?.signals?.churnMonthlyPct}`);
+  assert("20% annual churn raises no high-churn flag",
+    Array.isArray(aRes?.redFlags) && !aRes.redFlags.some((f) => /churn/i.test(f)), JSON.stringify(aRes?.redFlags));
+  assert("20% monthly churn does raise it",
+    Array.isArray(mRes?.redFlags) && mRes.redFlags.some((f) => /churn/i.test(f)), JSON.stringify(mRes?.redFlags));
+  assert("the annual-churn deal outscores the monthly-churn one",
+    aRes?.composite > mRes?.composite, `${aRes?.composite} vs ${mRes?.composite}`);
+  assert("'20% monthly churn' is not counted as 20% MoM growth",
+    mRes?.signals?.growthPct === null, String(mRes?.signals?.growthPct));
+
+  const proj = await req("POST", "/api/qventure/analyze", {
+    name: "Projection Bar Co", sector: "saas", stage: "seed",
+    description: "Vertical SaaS with a normal venture plan: triple then double revenue over two years.",
+    projections: [{ year: 2026, revenueUsd: 2400000 }, { year: 2027, revenueUsd: 6000000 }, { year: 2028, revenueUsd: 14000000 }],
+  });
+  const pr = proj.body?.data?.result?.projections;
+  assert("projection is judged against the stage bar", pr?.stageBarCagrPct === 180, String(pr?.stageBarCagrPct));
+  assert("an ordinary venture plan is venture-grade, not a hockey stick",
+    pr?.verdict === "venture-grade", `${pr?.verdict} (${pr?.impliedCagrPct}% CAGR)`);
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

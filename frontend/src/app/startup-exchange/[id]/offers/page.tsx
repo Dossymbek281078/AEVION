@@ -7,7 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { EditTermsForm } from "../../components/EditTermsForm";
 import { AssessmentPanel } from "../../components/AssessmentPanel";
-import { INTENT_LABEL, dealHeadline, startupxApi, usd, type Listing, type Offer } from "../../lib";
+import { INTENT_LABEL, dealHeadline, labelOf, startupxApi, usd, type Listing, type Offer } from "../../lib";
 
 /**
  * The founder's inbox for one listing.
@@ -143,7 +143,7 @@ export default function OffersPage() {
                         {o.equityPct ? <span style={{ color: "#475569", fontWeight: 700 }}> за {o.equityPct}%</span> : null}
                       </div>
                       <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>
-                        {o.intent ? INTENT_LABEL[o.intent] : "Тип сделки не указан"}
+                        {labelOf(INTENT_LABEL, o.intent, "Тип сделки не указан")}
                         {implied !== null && ` · это оценка ${usd(implied)}`}
                       </div>
                     </div>

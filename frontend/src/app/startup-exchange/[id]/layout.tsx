@@ -77,7 +77,10 @@ export async function generateMetadata({
     const l = body?.data;
     if (!body?.success || !l || typeof l.title !== "string") return fallback;
 
-    const tier = TIER_LABEL[String(l.tier)] ?? "Заявка";
+    // hasOwnProperty, not `?? `: TIER_LABEL["constructor"] is a function, and a
+    // function interpolated into a <title> renders as its source code.
+    const tierKey = String(l.tier);
+    const tier = Object.prototype.hasOwnProperty.call(TIER_LABEL, tierKey) ? TIER_LABEL[tierKey] : "Заявка";
     const deal = dealLine(l.deal as DealTerms | null);
     const score = typeof l.assessment_score === "number" ? `${l.assessment_score}/100` : null;
     const summary = typeof l.description === "string" ? l.description.replace(/\s+/g, " ").slice(0, 180) : "";

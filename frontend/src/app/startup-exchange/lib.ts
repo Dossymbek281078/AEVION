@@ -276,6 +276,19 @@ export const BAND_STYLE: Record<Assessment["band"], { label: string; color: stri
   weak: { label: "Не готова", color: "#991b1b", bg: "#fee2e2" },
 };
 
+/**
+ * Reading a label out of a lookup table by a key that came from the server.
+ *
+ * `MAP[key]` answers for `constructor`, `toString`, `valueOf` and `__proto__`
+ * on every JavaScript object, so a stray value would render a function into the
+ * page instead of a word. Values are validated on write, so this is defence in
+ * depth — the kind that costs one line.
+ */
+export function labelOf<T extends string>(map: Record<T, string>, key: string | null | undefined, fallback: string): string {
+  if (!key || !Object.prototype.hasOwnProperty.call(map, key)) return fallback;
+  return map[key as T];
+}
+
 export const INTENT_LABEL: Record<DealIntent, string> = {
   raise: "Привлекает инвестиции за долю",
   sell_stake: "Продаёт долю",

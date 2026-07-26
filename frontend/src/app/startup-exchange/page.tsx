@@ -192,7 +192,16 @@ export default function StartupExchangePage() {
         )}
 
         {/* ── Feed ─────────────────────────────────────────────────────────── */}
-        <section>
+        <section aria-labelledby="startupx-feed-heading">
+          {/* Карточки заявок — h3, а ближайший заголовок выше был h1 страницы:
+              для скринридера это пропуск уровня, а лента — главный список на
+              странице. Заголовок нужен и глазу: он отделяет витрину от подачи. */}
+          <h2
+            id="startupx-feed-heading"
+            style={{ margin: "0 0 12px", fontSize: 19, fontWeight: 800, color: "#0f172a" }}
+          >
+            Заявки на бирже
+          </h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
             {tabs.map((tab) => {
               const active = tierFilter === tab.id;

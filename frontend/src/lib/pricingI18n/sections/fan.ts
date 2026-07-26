@@ -39,6 +39,7 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.module.tooltip": "Покупка {module} включает веер: {list} со скидкой до −45%",
     "fan.quote.cta": "цена по запросу →",
     "fan.quote.tooltip": "{module} пока не продаётся поштучно — оставьте заявку, ответим с ценой и условиями",
+    "fan.appsUnavailable": "Часть покупок сейчас проверить не удалось — веер может быть неполным. Обновите страницу через минуту.",
     "fan.termsLink": "Условия веера →",
     "fan.terms.title": "Веерная скидка",
     "fan.terms.body":
@@ -78,6 +79,7 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.module.tooltip": "Buying {module} opens the fan: {list} at up to −45%",
     "fan.quote.cta": "price on request →",
     "fan.quote.tooltip": "{module} isn't sold à-la-carte yet — request a quote and we'll reply with pricing and terms",
+    "fan.appsUnavailable": "Some of your purchases could not be checked right now — the fan may be incomplete. Refresh in a minute.",
     "fan.termsLink": "Fan terms →",
     "fan.terms.title": "Fan discount",
     "fan.terms.body":

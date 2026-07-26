@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { track } from "@/lib/track";
+import { getAuthToken } from "@/lib/aevionCatalog";
 
 /**
  * Веерная скидка — панель для /pricing.
@@ -73,6 +74,10 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
   const [error, setError] = useState<string | null>(null);
   /** Ключ последнего отправленного fan_view — защита от дублей на ререндерах. */
   const viewedRef = useRef<string | null>(null);
+  /** Веер авторизованного покупателя: пришёл с сервера, ручной выбор не нужен. */
+  const [mine, setMine] = useState<FanState | null>(null);
+  /** true — база покупок приложений недоступна, список модулей может быть неполным. */
+  const [appsUnavailable, setAppsUnavailable] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -84,6 +89,26 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
       alive = false;
     };
   }, [currency]);
+
+  // Авторизованный покупатель не должен вручную отмечать то, что мы про него
+  // знаем: /fan/me читает и подписки, и поштучные покупки (lib/ownedModules.ts).
+  // Ручной выбор остаётся для гостя — это витрина «что будет, если купить».
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+    let alive = true;
+    fetch(apiUrl("/api/pricing/fan/me"), { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive || !j) return;
+        if (j.appsSource === "unavailable") setAppsUnavailable(true);
+        if (Array.isArray(j.offers)) setMine(j as FanState);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (owned.length === 0) {
@@ -124,9 +149,11 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
     };
   }, [owned, currency]);
 
+  /** Свой веер приоритетнее ручного подбора: это факт, а не гипотеза. */
+  const shown = mine ?? fan;
   const sym = SYMBOL[currency];
   const starters = useMemo(() => (preview ?? []).slice(0, 6), [preview]);
-  const discounted = useMemo(() => (fan?.offers ?? []).filter((o) => o.discountPercent > 0), [fan]);
+  const discounted = useMemo(() => (shown?.offers ?? []).filter((o) => o.discountPercent > 0), [shown]);
 
   function toggle(id: string) {
     setOwned((prev) => {
@@ -154,7 +181,7 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
         {tp("fan.title")}
       </h2>
       <p style={{ margin: 0, fontSize: 14, color: "#475569", maxWidth: 720 }}>
-        {tp("fan.subtitle", { days: fan?.windowDays ?? 14 })}
+        {tp("fan.subtitle", { days: shown?.windowDays ?? 14 })}
       </p>
 
       {error && (
@@ -165,7 +192,9 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
 
       {/* Витрина до покупки */}
       {!preview && !error && <div style={{ marginTop: 20, color: "#64748b", fontSize: 14 }}>{tp("fan.loading")}</div>}
-      {preview && (
+      {/* Ручной подбор — только для гостя. Своему покупателю мы не задаём
+          вопросов, ответ на которые уже есть на сервере. */}
+      {preview && !mine && (
         <>
           <h3 style={{ margin: "24px 0 8px", fontSize: 13, fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.03em" }}>
             {tp("fan.pick")}
@@ -202,14 +231,25 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
       )}
 
       {/* Результат веера */}
-      {fan && (
+      {shown && (
         <div style={{ marginTop: 24 }}>
+          {appsUnavailable && (
+            <div
+              style={{
+                marginBottom: 12, padding: "8px 12px", borderRadius: 8,
+                background: "#fef3c7", border: "1px solid #f59e0b",
+                fontSize: 12.5, color: "#78350f",
+              }}
+            >
+              {tp("fan.appsUnavailable")}
+            </div>
+          )}
           <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>
-            {tp("fan.level", { n: fan.level })} · {tp("fan.discountedCount", { n: fan.summary.discounted })} ·{" "}
-            {tp("fan.maxSaving", { cur: sym, sum: fan.summary.maxSavingMonthly })}
-            {fan.validUntil && (
+            {tp("fan.level", { n: shown.level })} · {tp("fan.discountedCount", { n: shown.summary.discounted })} ·{" "}
+            {tp("fan.maxSaving", { cur: sym, sum: shown.summary.maxSavingMonthly })}
+            {shown.validUntil && (
               <span style={{ fontWeight: 500, color: "#64748b" }}>
-                {" "}· {tp("fan.openUntil", { date: new Date(fan.validUntil).toLocaleDateString(locale) })}
+                {" "}· {tp("fan.openUntil", { date: new Date(shown.validUntil).toLocaleDateString(locale) })}
               </span>
             )}
           </div>

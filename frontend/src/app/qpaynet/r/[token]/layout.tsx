@@ -25,8 +25,9 @@ function fmt(n: number) {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
-  const meta = await loadRequest(params.token);
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const meta = await loadRequest(token);
   if (!meta?.amount) {
     return {
       title: "Запрос на оплату · QPayNet · AEVION",

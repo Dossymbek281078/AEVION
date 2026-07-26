@@ -4776,6 +4776,12 @@ function crc32(buf: Buffer): number {
 /** ZIP general purpose bit 11 — "the file name is encoded in UTF-8". */
 const UTF8_NAME_FLAG = 0x0800;
 
+/** True when the bytes really are UTF-8 — a lossy decode would introduce
+ * U+FFFD, so a round-trip that changes the bytes proves they were not. */
+function isValidUtf8(buf: Buffer): boolean {
+  return Buffer.compare(Buffer.from(buf.toString("utf8"), "utf8"), buf) === 0;
+}
+
 export function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
@@ -5419,7 +5425,23 @@ function parseZipStored(buf: Buffer): Array<{ path: string; content: Buffer }> |
     const localOffset = buf.readUInt32LE(p + 42);
     if (method !== 0) return { error: `unsupported compression method ${method} (only stored=0)` };
     if (compSize !== uncompSize) return { error: "stored entry size mismatch" };
-    const name = buf.slice(p + 46, p + 46 + nameLen).toString("utf8");
+    const flags = buf.readUInt16LE(p + 8);
+    const nameBytes = buf.slice(p + 46, p + 46 + nameLen);
+    // Mirror of the export bug (#923), read side: without bit 11 the name is
+    // NOT UTF-8 by spec. Decoding it as UTF-8 anyway yields U+FFFD in paths —
+    // files land under names that no import in the code will ever resolve.
+    // We do not guess the real code page (the spec says CP437, Russian
+    // Windows tools actually write CP866, and picking wrong is silently
+    // wrong): non-ASCII bytes with no UTF-8 flag are refused with a fix.
+    if (!(flags & UTF8_NAME_FLAG) && !isValidUtf8(nameBytes) ) {
+      return {
+        error:
+          "ZIP file names are not UTF-8 and the archive does not say which encoding they use " +
+          "(general purpose bit 11 unset). Re-create the archive with UTF-8 names — " +
+          "otherwise the imported paths would not match the imports inside the code.",
+      };
+    }
+    const name = nameBytes.toString("utf8");
     p += 46 + nameLen + extraLen + commentLen;
 
     // Local header at localOffset

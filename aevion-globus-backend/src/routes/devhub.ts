@@ -3428,9 +3428,35 @@ devhubRouter.post("/media/music", async (req, res) => {
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
+  const replicateToken = process.env.REPLICATE_API_TOKEN;
+
+  // Music had exactly one provider and no fallback: an ElevenLabs timeout
+  // (repeatedly seen on prod) meant no music at all. MusicGen runs on the
+  // Replicate token already configured.
+  const musicGenFallback = async (reason: string) => {
+    if (!replicateToken) return null;
+    const secs = Number.isFinite(Number(musicLengthMs)) ? Math.round(Number(musicLengthMs) / 1000) : 8;
+    const rr = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${replicateToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+      body: JSON.stringify({
+        version: "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb",
+        input: { prompt: prompt.trim(), duration: Math.min(Math.max(secs || 8, 3), 30), model_version: "stereo-melody-large", output_format: "mp3" },
+      }),
+    });
+    if (!rr.ok) return null;
+    const pred = await rr.json() as { id: string; status: string };
+    await debitCredit(musicUserId, "music").catch(() => {});
+    // Async unlike the ElevenLabs path — say so instead of handing back a
+    // body the caller cannot play.
+    return { ok: true, provider: "replicate/musicgen", async: true, predictionId: pred.id, status: pred.status, fallbackFrom: reason };
+  };
+
   if (!apiKey) {
+    const fb = await musicGenFallback("ELEVENLABS_API_KEY not set");
+    if (fb) return res.json(fb);
     return res.status(503).json({
-      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      error: "Music not configured — set ELEVENLABS_API_KEY or REPLICATE_API_TOKEN",
       setupUrl: "https://elevenlabs.io/api",
     });
   }
@@ -3449,6 +3475,8 @@ devhubRouter.post("/media/music", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      const fb = await musicGenFallback(`ElevenLabs ${r.status}`);
+      if (fb) return res.json(fb);
       return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
@@ -3458,6 +3486,8 @@ devhubRouter.post("/media/music", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
+    const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
+    if (fb) return res.json(fb);
     res.status(500).json({ error: e?.message || "Music compose failed" });
   }
 });
@@ -5746,6 +5776,61 @@ devhubRouter.post("/media/video", async (req, res) => {
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Video generation failed" });
   }
+});
+
+// POST /api/devhub/media/3d — image → textured GLB mesh. A media type the
+// platform did not have: it could make pictures, speech, music and video, but
+// nothing a game engine or a three.js scene could load.
+devhubRouter.post("/media/3d", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { imageUrl, model, textureSize, removeBackground } = req.body || {};
+  if (!imageUrl || typeof imageUrl !== "string" || !/^https?:/.test(imageUrl)) {
+    return res.status(400).json({ error: "imageUrl (http/https) is required - generate or upload an image first" });
+  }
+
+  const credit = await checkCredit(userId, "video");
+  if (!credit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generation limit reached",
+      tier: credit.tier, used: credit.used, limit: credit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) {
+    return res.status(503).json({ error: "3D generation not configured - set REPLICATE_API_TOKEN", envVar: "REPLICATE_API_TOKEN" });
+  }
+
+  const { find3dModel, threeDModelCatalogue } = await import("../lib/devhub3dModels");
+  const chosen = find3dModel(model);
+  if (!chosen) {
+    return res.status(400).json({ error: `unknown 3D model "${model}"`, models: threeDModelCatalogue().map((m) => m.id) });
+  }
+
+  try {
+    const r = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+      body: JSON.stringify({ version: chosen.version, input: chosen.toInput({ imageUrl, textureSize, removeBackground }) }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      return res.status(r.status).json({ error: `Replicate error: ${t.slice(0, 300)}` });
+    }
+    const prediction = await r.json() as { id: string; status: string };
+    await debitCredit(userId, "video").catch(() => {});
+    res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "3D generation failed" });
+  }
+});
+
+// GET /api/devhub/media/3d/models - catalogue, same contract as video.
+devhubRouter.get("/media/3d/models", async (_req, res) => {
+  const { threeDModelCatalogue } = await import("../lib/devhub3dModels");
+  res.json({ models: threeDModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
 });
 
 // GET /api/devhub/media/video/models — what the video button can actually run.

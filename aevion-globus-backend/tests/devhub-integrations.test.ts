@@ -3747,3 +3747,59 @@ describe("video models", () => {
     delete process.env.REPLICATE_API_TOKEN;
   });
 });
+
+describe("3D assets and music fallback", () => {
+  test("3D catalogue lists both meshers and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/3d/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toEqual(expect.arrayContaining(["firtoz/trellis", "tencent/hunyuan3d-2"]));
+    expect(r.body.models.filter((m: { default: boolean }) => m.default)).toHaveLength(1);
+  });
+
+  test("3D refuses a non-URL image with an actionable message", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/3d").send({ imageUrl: "not-a-url" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/imageUrl/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("3D maps inputs onto each mesher's real schema", async () => {
+    const { find3dModel } = await import("../src/lib/devhub3dModels");
+    const trellis = find3dModel("firtoz/trellis")!.toInput({ imageUrl: "https://x/y.png" });
+    expect(trellis).toMatchObject({ images: ["https://x/y.png"], generate_model: true, generate_color: true });
+    const hunyuan = find3dModel("tencent/hunyuan3d-2")!.toInput({ imageUrl: "https://x/y.png", removeBackground: false });
+    expect(hunyuan).toMatchObject({ image: "https://x/y.png", remove_background: false });
+  });
+
+  test("music falls back to MusicGen when ElevenLabs is not configured", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "pred-music-1", status: "starting" }),
+    } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat", musicLengthMs: 12000 });
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toBe("replicate/musicgen");
+    expect(r.body.async).toBe(true);
+    expect(r.body.predictionId).toBe("pred-music-1");
+    expect(r.body.fallbackFrom).toMatch(/ELEVENLABS_API_KEY/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("without either provider music says which env vars would fix it", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/ELEVENLABS_API_KEY or REPLICATE_API_TOKEN/);
+  });
+});

@@ -6,6 +6,8 @@
 
 import { Chess } from "chess.js";
 
+import { gameResultOf } from "./gameResult";
+
 export type SavedGame = {
   id: string;
   date: string;
@@ -21,17 +23,13 @@ export type SavedGame = {
 
 export type Outcome = "win" | "loss" | "draw";
 
+/* Исход берётся из общей функции, а не разбирается здесь второй раз. Свой разбор
+   стоял тут с собственным набором подстрок и расходился с ней на русских окончаниях:
+   «Ничья (договорились)» шла в поражения, победа над живым соперником — тоже. Строка
+   одна и та же, значит и классификация должна быть одна. */
 function outcomeOf(g: SavedGame): Outcome {
-  const r = (g.result || "").toLowerCase();
-  if (r.includes("won") || r.includes("checkmate") && r.includes("you")) {
-    // legacy formats
-  }
-  // Standardized markers from page.tsx:
-  //   "Checkmate — You win!", "Checkmate — AI wins!", "Draw …", "Resigned …", "Time out", etc.
-  if (r.includes("you win") || r.includes("ai timed out") || r.includes("ai resigned")) return "win";
-  if (r.includes("ai wins") || r.includes("you resigned") || r.includes("time out")) return "loss";
-  if (r.includes("draw") || r.includes("stalemate") || r.includes("repetition") || r.includes("50-move") || r.includes("insufficient")) return "draw";
-  return "loss"; // unknown → treat as loss (conservative)
+  const r = gameResultOf(g.result || "");
+  return r === "W" ? "win" : r === "D" ? "draw" : "loss";
 }
 
 export type WinrateBreakdown = {

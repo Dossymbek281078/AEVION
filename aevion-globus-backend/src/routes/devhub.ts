@@ -5452,6 +5452,15 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       }
     }, 4000);
 
+    // The CNAME is created, but a record in a zone nobody delegated resolves
+    // nowhere: aevion.build is still `pending` at Cloudflare, so every
+    // *.aevion.build address handed out so far — including ones from July —
+    // fails DNS. pagesUrl is the address that actually answers, so that is
+    // what we call live; the custom domain is reported separately with its
+    // real state instead of being presented as the primary URL.
+    // Second arg is the delay between attempts — 1ms keeps this a fast probe
+    // rather than the 25s wait the deploy path uses.
+    const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
     return res.json({
       ok: true,
       provider: "cloudflare-pages",
@@ -5459,9 +5468,12 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       pagesUrl,
       domain: customDomain,
       domainUrl,
-      liveUrl: domainUrl ?? pagesUrl,
+      domainReady,
+      liveUrl: domainReady ? domainUrl : pagesUrl,
       message: customDomain
-        ? `Deployed to ${domainUrl} (and ${pagesUrl}) — verifying it serves before marking live`
+        ? domainReady
+          ? `Deployed to ${domainUrl} (and ${pagesUrl})`
+          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the aevion.build zone is not delegated to Cloudflare (point the registrar's nameservers at it).`
         : `Deployed to ${pagesUrl} — verifying it serves before marking live (add CLOUDFLARE_ZONE_ID to enable aevion.build domain)`,
     });
   } catch (e: any) {

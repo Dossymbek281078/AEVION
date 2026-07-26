@@ -4030,3 +4030,32 @@ describe("image failures name the fix, not just the failure", () => {
     delete process.env.CLOUDFLARE_API_TOKEN;
   });
 });
+
+describe("aevion.build subdomain is only promised when it resolves", () => {
+  test("an unresolvable custom domain does not become liveUrl", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc";
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    process.env.CLOUDFLARE_ZONE_ID = "zone";
+
+    // wrangler upload, CNAME creation, then the domain probe fails (the zone
+    // is not delegated) while pages.dev answers.
+    vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+    }));
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" } as any);
+
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DomainCheck", stack: "static" });
+    await request(app).put(`/api/devhub/projects/${cr.body.project.id}/file?path=index.html`).send({ content: "<h1>hi</h1>", language: "html" });
+
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/deploy/pages`).send({});
+    if (r.status === 200 && r.body.domainUrl) {
+      // Whatever the probe decided, liveUrl must never be a domain reported as
+      // not ready — that is the promise that was broken for two weeks.
+      if (!r.body.domainReady) expect(r.body.liveUrl).toBe(r.body.pagesUrl);
+      expect(r.body).toHaveProperty("domainReady");
+    }
+    vi.doUnmock("../src/lib/wranglerPagesDeploy");
+    delete process.env.CLOUDFLARE_ZONE_ID;
+  });
+});

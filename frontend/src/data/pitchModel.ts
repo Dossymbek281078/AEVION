@@ -125,7 +125,7 @@ export const unitEconomics = {
     {
       module: "Ecosystem All-Access",
       market: "Creators & professionals wanting IP + wallet + AI in one place.",
-      price: "$49/mo ($39/mo annual = $468/yr) — the real published All-Access price",
+      price: "$89/mo ($74/mo annual = $890/yr) — the real published All-Access price",
       assumptions: [
         "Consumer subscription, converts off free ecosystem usage",
         "Distribution-gated — modelled at modest penetration",
@@ -172,7 +172,7 @@ export const launchGrowth = {
       "the stack it replaces.",
     honesty:
       "$149.99 is now a real \"Universe\" tier in the live plan, sitting above the kept on-ramps " +
-      "($0/$19/$29/$49) — its checkout goes live once its Gumroad product is set up. Most modules are early " +
+      "($0/$24/$39/$89) — its checkout goes live once its Gumroad product is set up. Most modules are early " +
       "MVPs and the cross-module agent layer is still early, so \"replaces your stack\" is the promise the " +
       "price rests on — which is why the intro price + a free tier underneath are there to earn the upgrade " +
       "before the price rises.",
@@ -186,7 +186,7 @@ export const launchGrowth = {
       "LM Studio, $0 marginal) models. A single-vendor AI product cannot arbitrage cost this way.",
     margin:
       "At efficient routing (~$0.5/1M blended) and ~15% allowance utilisation, gross margin is ~85–95% " +
-      "across paid tiers (Lite $19/2M · Medium $29/10M · Full $49/50M tokens/mo). The tail risk is a " +
+      "across paid tiers (Lite $24/2M · Medium $39/10M · Full $89/50M · Universe $249.99/200M tokens/mo). The tail risk is a " +
       "power user maxing the cap on a frontier model — which is why margin depends on two levers, not luck.",
     levers: [
       "Efficient default routing — frontier (Opus/GPT-4o) on request or on higher tiers, cheap models by default.",

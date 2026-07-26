@@ -46,6 +46,11 @@ const RETIRED = [
 /** Только витрины прайса — иначе поймаем цены чужих продуктов ($19 за сертификат). */
 const SURFACES = [
   "app/pricing",
+  // Питч — тоже витрина, только для инвестора. `pitchModel.economics.margin`
+  // рендерится на /pitch (page.tsx:982) и до 2026-07-27 называл цены
+  // 19/29/49, снятые ещё 22.07.
+  "data/pitchModel.ts",
+  "data/pitchFacts.ts",
   "components/PaywallModal.tsx",
   "components/PaywallScreen.tsx",
   "components/ModulePricingChip.tsx",
@@ -68,17 +73,30 @@ function walk(dir, acc = []) {
   return acc;
 }
 
+/**
+ * Исключения — только с ПРИЧИНОЙ и только там, где число проверено.
+ * Разобрано 2026-07-27 прогоном `getModulePrice`.
+ */
+const ALLOW = [
+  { needle: "Paid add-on $29/mo over known unit economics", why: "цена модуля qreal ($29), не тариф Medium" },
+  { needle: "$49/mo Pro (~$470/yr annual) — undercuts HH", why: "бизнес-утверждение о плане QBuild; в реестре модуль стоит $19 — расхождение вынесено основателю, не правится кодом" },
+];
+
 const problems = [];
 
 for (const surface of SURFACES) {
   for (const file of walk(join(FRONTEND, surface))) {
     const text = readFileSync(file, "utf8");
     text.split(/\r?\n/).forEach((line, i) => {
-      if (/^\s*(\/\/|\*|\/\*)/.test(line)) return; // комментарии — это история, не витрина
+      // Комментарии обычно история, а не витрина — но в pitch*.ts именно в них
+      // записан «текущий прайс», и он там уже разъезжался. Их проверяем.
+      const isPitch = /pitch(Model|Facts)\.ts$/.test(file);
+      if (!isPitch && /^\s*(\/\/|\*|\/\*)/.test(line)) return;
       for (const r of RETIRED) {
         // Именно "$19", а не "$190" и не "119": цена — целиком.
         const re = new RegExp(`\\$${r.was}(?![0-9])`);
         if (re.test(line)) {
+          if (ALLOW.some((a) => line.includes(a.needle))) continue;
           problems.push(
             `${relative(REPO, file)}:${i + 1} — $${r.was} (цена ${r.tier} до ${r.since}, сейчас $${r.now})\n      ${line.trim().slice(0, 120)}`,
           );

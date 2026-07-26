@@ -3703,3 +3703,29 @@ describe("deleting a project drops its database", () => {
     delete process.env.DEVHUB_DB_ADMIN_URL;
   }, 20_000);
 });
+
+describe("translation failures are legible", () => {
+  test("DeepL 456 reads as an account quota problem, not a generic error", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 456, text: async () => '{"message":"Quota exceeded"}' } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/translate").send({ text: "Привет", targetLang: "EN" });
+    expect(r.status).toBe(456);
+    expect(r.body.provider).toBe("deepl");
+    expect(r.body.error).toMatch(/out of quota/i);
+    // The detail that cost an hour to find: their usage endpoint lies.
+    expect(r.body.error).toMatch(/can still show 0 used/);
+    delete process.env.DEEPL_API_KEY;
+  });
+
+  test("translation is listed as a capability so its state is visible at all", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/studio/capabilities");
+    const t = r.body.capabilities.find((c: { id: string }) => c.id === "translate");
+    expect(t).toBeTruthy();
+    expect(t.status).toBe("live");
+    delete process.env.DEEPL_API_KEY;
+  });
+});

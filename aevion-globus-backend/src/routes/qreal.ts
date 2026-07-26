@@ -32,6 +32,7 @@ import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
 import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, referenceCast, type Character } from "../services/qreal/characters";
+import { REALISM_DIRECTIVES } from "../services/qreal/directives";
 import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildContinuityPrompt, scoreContinuity, isMeasurable } from "../services/qreal/continuity";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
@@ -287,14 +288,6 @@ function emptyQcReport(): QcReport {
 
 /* ── Директивы реализма, вшиваемые в каждый render-промт ── */
 
-const REALISM_DIRECTIVES =
-  "Shot on ARRI Alexa 35, 24fps, 180-degree shutter, natural motion blur. " +
-  "Skin with subsurface scattering, visible pores, slight asymmetry. Involuntary " +
-  "micro-expressions; irregular blinking every 3-6s including partial blinks. " +
-  "Hands anatomically correct. Handheld micro-jitter (sub-pixel), camera has body weight. " +
-  "Species-accurate animal behavior. Natural ambient sound bed (room tone), " +
-  "material-true foley, dialogue with real room acoustics. No slow-motion look, " +
-  "no beauty filter, no digital sharpness.";
 
 function buildRenderPrompt(p: Project, s: Shot): string {
   // Описания субъектов берём из реестра персонажей, а не из кадра: LLM пишет

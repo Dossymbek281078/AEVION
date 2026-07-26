@@ -22,6 +22,11 @@ export default function OffersPage() {
 
   const [data, setData] = useState<{ listing: Listing; offers: Offer[] } | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "denied">("loading");
+  // Withdrawal is irreversible from the founder's side of the screen, so it
+  // takes two deliberate clicks rather than a modal nobody reads.
+  const [confirming, setConfirming] = useState(false);
+  const [withdrawn, setWithdrawn] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!Number.isInteger(id) || id <= 0 || !token) {
@@ -39,6 +44,23 @@ export default function OffersPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function withdraw() {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await startupxApi.withdraw(id, token);
+      setWithdrawn(true);
+    } catch {
+      // The listing stays as it was; the founder can try again.
+      setConfirming(false);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (state === "loading") {
     return (
@@ -141,6 +163,38 @@ export default function OffersPage() {
             })}
           </div>
         )}
+
+        <div style={{ marginTop: 26, paddingTop: 18, borderTop: "1px solid #e2e8f0" }}>
+          {listing.qright_protected && (
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+              Нашли инвестора или передумали? Снимите заявку — она исчезнет из ленты, но запись и
+              полученные предложения останутся у вас, вместе с отпечатком авторства на дату подачи.
+            </p>
+          )}
+          {withdrawn ? (
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
+              Заявка снята с публикации. Эта страница по-прежнему открывается по вашей ссылке.
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={withdraw}
+              disabled={busy}
+              style={{
+                padding: "9px 16px",
+                borderRadius: 9,
+                border: "1px solid #fecaca",
+                background: "#fff",
+                color: "#991b1b",
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: busy ? "wait" : "pointer",
+              }}
+            >
+              {confirming ? "Точно снять? Нажмите ещё раз" : "Снять заявку с публикации"}
+            </button>
+          )}
+        </div>
 
         <p style={{ margin: "22px 0 0", fontSize: 11.5, color: "#94a3b8", lineHeight: 1.6, maxWidth: 640 }}>
           Отклик — заявка на разговор с названными условиями, а не оферта и не обязательство ни для

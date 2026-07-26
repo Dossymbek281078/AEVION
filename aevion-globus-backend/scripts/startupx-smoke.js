@@ -151,7 +151,21 @@ async function run() {
     assert("no token → 401", bare.status === 401, String(bare.status));
   }
 
-  console.log("\n9. Stats");
+  console.log("\n9. The run cleans up after itself");
+  // Prod once held 19 listings, all of them "Smoke Idea …", because every night
+  // this script published one more and nothing ever took it down. A withdrawal
+  // is a real founder action, so the smoke exercises the feature AND stops
+  // filling the public feed with test data.
+  if (listingId && created?.manageToken) {
+    const gone = await req("DELETE", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`);
+    assert("DELETE with the founder's token → 200", gone.status === 200, String(gone.status));
+    const after = await req("GET", `/api/startupx/ideas/${listingId}`);
+    assert("withdrawn listing disappears from the public surface", after.status === 404, String(after.status));
+    const stillMine = await req("GET", `/api/startupx/ideas/${listingId}/offers?token=${created.manageToken}`);
+    assert("but the founder still sees the offers already received", stillMine.status === 200, String(stillMine.status));
+  }
+
+  console.log("\n10. Stats");
   const stats = await req("GET", "/api/startupx/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
   assert("stats.total is a number", typeof stats.body?.data?.total === "number");

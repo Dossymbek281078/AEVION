@@ -222,6 +222,12 @@ export const startupxApi = {
   offers: (id: number, token: string) =>
     call<{ listing: Listing; offers: Offer[] }>(`/ideas/${id}/offers?token=${encodeURIComponent(token)}`),
 
+  /** Take the listing off the public feed. The row and its offers are kept. */
+  withdraw: (id: number, token: string) =>
+    call<{ id: number; visibility: string }>(`/ideas/${id}?token=${encodeURIComponent(token)}`, {
+      method: "DELETE",
+    }),
+
   interest: (
     id: number,
     payload: { investorEmail: string; message?: string; intent?: DealIntent; ticketUsd?: number; equityPct?: number },

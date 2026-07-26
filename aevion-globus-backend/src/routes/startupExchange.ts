@@ -674,6 +674,49 @@ startupExchangeRouter.get("/ideas/:id/offers", offersLimiter, async (req: Reques
   });
 });
 
+// ─── DELETE /api/startupx/ideas/:id?token= ───────────────────────────────────
+// Withdrawing a listing. A founder who found their investor — or thought better
+// of publishing — must be able to take the listing down without writing to
+// anyone, and the daily smoke uses the same door to clean up after itself
+// instead of leaving another row in the public feed every night.
+//
+// The row is kept and marked withdrawn rather than deleted: the offers already
+// received belong to the founder, and the SHA-256 authorship stamp is worth
+// nothing if the record behind it can vanish.
+startupExchangeRouter.delete("/ideas/:id", offersLimiter, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const token = req.query.token ?? (req.body as Record<string, unknown> | undefined)?.token;
+
+  let row: ListingRow | undefined;
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM startup_ideas WHERE id=$1`, [id]);
+      row = (rows as ListingRow[])[0];
+    } catch (e) {
+      console.error("[StartupX] withdraw fetch error", e);
+      return fail(res, "withdraw_failed", 500);
+    }
+  } else {
+    row = memListings.get(id);
+  }
+  if (!row) return fail(res, "not_found", 404);
+  if (!manageTokenMatches(token, row.manage_token_hash)) return fail(res, "invalid_token", 401);
+
+  if (isStartupExchangeDbReady()) {
+    try {
+      await pool.query(`UPDATE startup_ideas SET visibility='withdrawn' WHERE id=$1`, [id]);
+    } catch (e) {
+      console.error("[StartupX] withdraw save error", e);
+      return fail(res, "withdraw_failed", 500);
+    }
+  } else {
+    const existing = memListings.get(id);
+    if (existing) existing.visibility = "withdrawn";
+  }
+  return ok(res, { id, visibility: "withdrawn" });
+});
+
 // ── MVP concept board surface ───────────────────────────────────────────────
 
 startupExchangeRouter.get("/status", (_req: Request, res: Response) => {

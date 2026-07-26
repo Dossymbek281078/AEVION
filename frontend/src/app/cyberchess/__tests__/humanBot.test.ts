@@ -155,6 +155,28 @@ describe("pickHumanMove", () => {
     expect(top / n).toBeGreaterThan(0.6);
   });
 
+  it("picks the tempting blunder over the equally-bad quiet one", () => {
+    // The whole reason blunders are weighted rather than uniform: a weak player
+    // drops a piece grabbing something far more often than by playing a quiet
+    // move. Both losers below cost exactly the same, so only temptation can
+    // separate them. (Measured over a real walk, this shifts the share of
+    // played blunders that are captures/checks/promotions/queen moves from the
+    // 32% simply available in the position to 43% actually played.)
+    const pair: ScoredMove[] = [
+      { move: mv({ san: "Nf3" }), score: 0 },
+      { move: mv({ san: "h3" }), score: -400 },
+      { move: mv({ san: "Rxb7", piece: "r", captured: "r", from: "b1", to: "b7" }), score: -400 },
+    ];
+    const rng = lcg(1234);
+    let grab = 0, quiet = 0;
+    for (let i = 0; i < 8000; i++) {
+      const san = pickHumanMove(pair, HUMAN_PROFILES[0], rng)!.san;
+      if (san === "Rxb7") grab++;
+      else if (san === "h3") quiet++;
+    }
+    expect(grab).toBeGreaterThan(quiet * 2);
+  });
+
   it("only ever returns a move from the supplied list", () => {
     const rng = lcg(97);
     const sans = scored.map((s) => s.move.san);

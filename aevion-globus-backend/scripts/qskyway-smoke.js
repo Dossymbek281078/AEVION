@@ -27,9 +27,39 @@ const assert = (c, n, r) => (c ? ok(n) : fail(n, r));
 async function jget(p) { const r = await fetch(`${BASE}${p}`); return { status: r.status, json: await r.json().catch(() => null) }; }
 async function jpost(p, b) { const r = await fetch(`${BASE}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }); return { status: r.status, json: await r.json().catch(() => null) }; }
 
+/**
+ * Confirm we are talking to a QSkyway-capable backend before asserting anything.
+ *
+ * BASE defaults to port 4001, which on this machine is contested by 18+ AEVION
+ * worktrees. Point this at another session's server and you get a cascade of
+ * confusing failures that look like regressions in your own branch — an hour
+ * went to exactly that on 2026-07-27. A liveness check is not enough: something
+ * answers, it is just the wrong something.
+ */
+async function assertRightBackend() {
+  let h;
+  try {
+    h = await jget("/api/qskyway/health");
+  } catch (e) {
+    console.error(`\nCannot reach ${BASE} — is the backend running?  (${e instanceof Error ? e.message : e})`);
+    process.exit(1);
+  }
+  if (h.status !== 200 || h.json?.module !== "qskyway") {
+    console.error(`\n${BASE} answered ${h.status}, but this is not a QSkyway backend.`);
+    console.error("Another worktree is probably on this port. Check:  netstat -ano | grep LISTENING | grep ':<port> '");
+    process.exit(1);
+  }
+  if (!(h.json.features ?? []).includes("regulatory-airspace-ceilings")) {
+    console.error(`\n${BASE} is a QSkyway backend, but an OLDER build — no regulatory-airspace-ceilings feature.`);
+    console.error("Restart it from this worktree, or point BASE at the right port.");
+    process.exit(1);
+  }
+}
+
 async function main() {
   console.log(`QSkyway smoke → ${BASE}\n`);
 
+  await assertRightBackend();
   const h = await jget("/api/qskyway/health");
   assert(h.status === 200 && h.json?.status === "ok", "/health ok", `status=${h.status}`);
   assert((h.json?.buildings ?? 0) >= 300, "digital twin has buildings", `n=${h.json?.buildings}`);

@@ -24,7 +24,7 @@
 import { analyze, type AnalysisInput } from "../src/lib/qventure/engine";
 import { parsePlanSignals } from "../src/lib/qventure/signals";
 
-interface Pair {
+export interface Pair {
   model: string;
   /** What evidence the engine must pick up for this model to be scored at all. */
   mustParse: (s: ReturnType<typeof parsePlanSignals>) => boolean;
@@ -37,7 +37,7 @@ const base = (over: Partial<AnalysisInput>): AnalysisInput => ({
   name: "case", description: "", sector: "other", stage: "series-a", geography: "US", ...over,
 });
 
-const PAIRS: Pair[] = [
+export const PAIRS: Pair[] = [
   {
     model: "Defence hardware programme",
     mustParseLabel: "contracted backlog or defence contracting status",
@@ -130,34 +130,44 @@ const PAIRS: Pair[] = [
   },
 ];
 
-let pass = 0, fail = 0;
-const ok = (label: string, cond: boolean, info = "") => {
-  if (cond) { console.log(`    ✓ ${label}`); pass++; }
-  else { console.error(`    ✗ ${label}${info ? " — " + info : ""}`); fail++; }
-};
+/**
+ * Report the pairs to a human. CI asserts the same invariants as a vitest suite
+ * (tests/qventureHardCases.test.ts) — this stays the readable version, and it
+ * only runs when the file is executed directly, never on import.
+ */
+export function runHardCases(): number {
+  let pass = 0, fail = 0;
+  const ok = (label: string, cond: boolean, info = "") => {
+    if (cond) { console.log(`    ✓ ${label}`); pass++; }
+    else { console.error(`    ✗ ${label}${info ? " — " + info : ""}`); fail++; }
+  };
 
-console.log("\nQVenture — complex business models");
-console.log("Matched strong/weak pairs in one sector: any gap comes from disclosure, not priors.\n");
+  console.log("\nQVenture — complex business models");
+  console.log("Matched strong/weak pairs in one sector: any gap comes from disclosure, not priors.\n");
 
-const gaps: number[] = [];
-for (const p of PAIRS) {
-  const s = analyze(p.strong), w = analyze(p.weak);
-  const sig = parsePlanSignals(`${p.strong.description} ${p.strong.tractionNotes ?? ""}`);
-  const gap = Math.round((s.composite - w.composite) * 10) / 10;
-  gaps.push(gap);
-  console.log(`── ${p.model} ──`);
-  console.log(`    strong ${s.composite} ${s.verdict.padEnd(6)} coverage ${Math.round(s.signalCoverage * 100)}%   |   weak ${w.composite} ${w.verdict.padEnd(6)} coverage ${Math.round(w.signalCoverage * 100)}%   |   gap ${gap}`);
-  ok(`reads ${p.mustParseLabel}`, p.mustParse(sig),
-    JSON.stringify({ contracted: sig.contractedRevenueUsd, gmv: sig.gmvUsd, take: sig.takeRatePct, pilots: sig.pilots, nonDilutive: sig.nonDilutiveUsd, reg: sig.regulatoryMilestones, proof: sig.technicalProof }));
-  ok("strong scores above weak", s.composite > w.composite, `${s.composite} vs ${w.composite}`);
-  ok("gap is decision-relevant (>= 6 points)", gap >= 6, `gap ${gap}`);
-  ok("strong is scored on company evidence (coverage >= 40%)", s.signalCoverage >= 0.4, `${Math.round(s.signalCoverage * 100)}%`);
-  ok("weak does not read as strong (verdict not invest)", w.verdict !== "invest", w.verdict);
-  console.log("");
+  const gaps: number[] = [];
+  for (const p of PAIRS) {
+    const s = analyze(p.strong), w = analyze(p.weak);
+    const sig = parsePlanSignals(`${p.strong.description} ${p.strong.tractionNotes ?? ""}`);
+    const gap = Math.round((s.composite - w.composite) * 10) / 10;
+    gaps.push(gap);
+    console.log(`── ${p.model} ──`);
+    console.log(`    strong ${s.composite} ${s.verdict.padEnd(6)} coverage ${Math.round(s.signalCoverage * 100)}%   |   weak ${w.composite} ${w.verdict.padEnd(6)} coverage ${Math.round(w.signalCoverage * 100)}%   |   gap ${gap}`);
+    ok(`reads ${p.mustParseLabel}`, p.mustParse(sig),
+      JSON.stringify({ contracted: sig.contractedRevenueUsd, gmv: sig.gmvUsd, take: sig.takeRatePct, pilots: sig.pilots, nonDilutive: sig.nonDilutiveUsd, reg: sig.regulatoryMilestones, proof: sig.technicalProof }));
+    ok("strong scores above weak", s.composite > w.composite, `${s.composite} vs ${w.composite}`);
+    ok("gap is decision-relevant (>= 6 points)", gap >= 6, `gap ${gap}`);
+    ok("strong is scored on company evidence (coverage >= 40%)", s.signalCoverage >= 0.4, `${Math.round(s.signalCoverage * 100)}%`);
+    ok("weak does not read as strong (verdict not invest)", w.verdict !== "invest", w.verdict);
+    console.log("");
+  }
+
+  const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  console.log("── Summary ──");
+  console.log(`  mean strong/weak gap: ${mean(gaps).toFixed(1)} points (min ${Math.min(...gaps)}, max ${Math.max(...gaps)})`);
+  console.log(`\n${fail === 0 ? "✅" : "❌"} hard cases: ${pass} passed, ${fail} failed\n`);
+  return fail;
+
 }
 
-const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
-console.log("── Summary ──");
-console.log(`  mean strong/weak gap: ${mean(gaps).toFixed(1)} points (min ${Math.min(...gaps)}, max ${Math.max(...gaps)})`);
-console.log(`\n${fail === 0 ? "✅" : "❌"} hard cases: ${pass} passed, ${fail} failed\n`);
-process.exit(fail === 0 ? 0 : 1);
+if (require.main === module) process.exit(runHardCases() === 0 ? 0 : 1);

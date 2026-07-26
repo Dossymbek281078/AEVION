@@ -32,7 +32,7 @@
 import { analyze, type AnalysisInput } from "../src/lib/qventure/engine";
 
 /** outcome: "failed" = wound down / fire-sale / fraud finding. "succeeded" = durable large outcome. */
-const CASES: Array<AnalysisInput & { outcome: "failed" | "succeeded" }> = [
+export const CASES: Array<AnalysisInput & { outcome: "failed" | "succeeded" }> = [
   // ── Outcome: failed ───────────────────────────────────────────────────────
   { name: "Quibi", sector: "consumer", stage: "series-a", geography: "US", askUsd: 750_000_000, outcome: "failed",
     description: "Short-form premium video for mobile: professionally produced shows in under-10-minute chapters, built for commuting and queueing. Founded by a studio chairman and a former tech CEO, with major studio content commitments and a subscription model.",
@@ -215,4 +215,4 @@ function run() {
   console.log(`\n── Range used ──\n  ${Math.min(...all)}–${Math.max(...all)} of a nominal 0–100 scale (${(Math.max(...all) - Math.min(...all)).toFixed(1)} points of ${100} used)\n`);
 }
 
-run();
+if (require.main === module) run();

@@ -2029,35 +2029,43 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     const id = await createProject(app);
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Record when each upstream call starts and ends. Overlapping intervals
+    // prove concurrency directly; wall-clock does not, because under a loaded
+    // parallel test run the overhead alone can exceed any fixed ceiling (this
+    // assertion used to be `elapsed < 150ms` and measured 154 in full runs).
+    const spans: Array<{ who: string; start: number; end: number }> = [];
+    const track = async (who: string, ms: number, make: () => any) => {
+      const start = Date.now();
+      await delay(ms);
+      const out = make();
+      spans.push({ who, start, end: Date.now() });
+      return out;
+    };
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes("openai.com")) {
-        await delay(80); // slow — would finish LAST if this and tts ran sequentially
-        return jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] });
+        return track("image", 80, () => jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] }));
       }
       if (String(url).includes("elevenlabs.io")) {
-        await delay(5); // fast — finishes first if truly concurrent
-        return audioResp(200, 512);
+        return track("tts", 5, () => audioResp(200, 512));
       }
       throw new Error(`unexpected url ${url}`);
     });
 
-    const startedAt = Date.now();
     const r = await request(app)
       .post(`/api/devhub/projects/${id}/agent/workflow`)
       .send({ steps: [{ type: "image", prompt: "hero" }, { type: "tts", text: "hi" }] });
-    const elapsedMs = Date.now() - startedAt;
-
     expect(r.status).toBe(200);
     expect(r.body.successCount).toBe(2);
     // Order in the response matches step order, even though the tts (fast)
     // call resolves before the image (slow) one internally.
     expect(r.body.results[0].type).toBe("image");
     expect(r.body.results[1].type).toBe("tts");
-    // Concurrent → total time tracks the SLOWER step (~80ms), not the sum
-    // (~85ms) plus per-request overhead. Generous ceiling to avoid CI flake
-    // while still failing hard if this regresses to sequential (which would
-    // add another 80ms+ of pure serial wait on top).
-    expect(elapsedMs).toBeLessThan(150);
+    // Sequential execution cannot overlap: the second call would start only
+    // after the first ended. Any overlap at all proves they ran together, and
+    // this holds no matter how slow the machine is.
+    expect(spans).toHaveLength(2);
+    const [a, b] = [...spans].sort((x, y) => x.start - y.start);
+    expect(b.start).toBeLessThan(a.end);
   });
 });
 

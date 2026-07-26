@@ -8,6 +8,7 @@ import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
 import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
+import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -28,9 +29,13 @@ import { getPool } from "../lib/dbPool";
  * METAR ближайшего аэропорта (aviationweather.gov, без ключа, см.
  * qskyway.metar.ts), не иллюстрация; graceful fallback на демо-модель при
  * недоступности фида. Фаза 7 (уже реализована): регуляторные потолки высоты из
- * официального фида — FAA UAS Facility Map для NYC (qskyway.airspace.ts). Города
- * без открытого фида регулятора (Астана/KZ CAA, Токио/JCAB) честно отдают
- * `airspace.available:false`, а не выдуманные данные.
+ * официального фида — FAA UAS Facility Map для NYC (qskyway.airspace.ts).
+ * Фаза 8 (уже реализована): режимы разрешений регулятора (qskyway.permission.ts)
+ * — второй вид опубликованного правила. Токио: MLIT/JCAB, полёт над плотно
+ * населённым районом (DID) требует разрешения министра; 100% твина под режимом.
+ * Потолки и режимы НЕ смешиваются: первое ограничивает геометрию маршрута,
+ * второе — саму операцию. Астана: не найдено ни того, ни другого — честно
+ * `available:false`, а не выдуманные данные.
  *
  * Честно: движок/PoC, не сертифицированное авиационное ПО. Данные зданий —
  * OpenStreetMap (ODbL, открытые). Точечные запретные зоны (qskyway.zones.ts)
@@ -462,8 +467,12 @@ function verifyAirspace(cityId: string, sig: Signature): boolean {
  *  still matches the regulator, and its attestation. */
 function airspaceBlock(cityId: string, city: CityData) {
   const summary = airspaceSummary(cityId, city);
-  if (!summary.available) return summary;
-  return { ...summary, freshness: airspaceFreshness(cityId), _signature: signAirspace(cityId) };
+  // A city can have no ceiling grid and still be under a published permission
+  // regime (Tokyo). Reporting only ceilings would call that city "no source"
+  // when a regulator does in fact govern every flight over it.
+  const permission = permissionSummary(cityId);
+  if (!summary.available) return { ...summary, permission };
+  return { ...summary, permission, freshness: airspaceFreshness(cityId), _signature: signAirspace(cityId) };
 }
 
 function verifyCity(city: CityData, sig: Signature): boolean {
@@ -616,13 +625,17 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       signature: { alg: "Ed25519", contentHash: signCity(id, c).contentHash },
     })),
     // Not a shortfall to apologise for — a map of where low-altitude airspace is
-    // machine-readable at all. The US publishes an open ceiling grid; Kazakhstan
-    // and Japan publish nothing equivalent, so no provider can obey it there yet.
+    // machine-readable at all, counting ANY published rule: a ceiling grid (US)
+    // or a permission regime (Japan). Counting only ceilings would misdescribe
+    // Tokyo, where a regulator governs every flight but publishes no altitudes.
+    // Kazakhstan publishes neither, so no provider can obey anything there yet.
     airspaceCoverage: {
-      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
+      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id] || PERMISSION[id]).length,
+      withCeilings: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
+      withPermissionRegime: Object.keys(CITIES).filter((id) => PERMISSION[id]).length,
       total: Object.keys(CITIES).length,
-      missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id]),
-      note: "Регуляторный слой есть там, где регулятор публикует ограничения машиночитаемо. Отсутствие фида — свойство юрисдикции, а не пробел реализации.",
+      missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id] && !PERMISSION[id]),
+      note: "Регуляторный слой есть там, где регулятор публикует ограничения машиночитаемо — потолками высоты или режимом разрешений. Отсутствие фида — свойство юрисдикции, а не пробел реализации.",
     },
   });
 });
@@ -748,6 +761,17 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
       : null,
     windSource: windSourceOf(resolved.id),
     heightConfidencePct: route.heightConfidencePct,
+    // A permission regime belongs on the paperwork even though it never touched
+    // the routing — "this corridor is legal geometry" and "this flight may take
+    // place at all" are both things the filing has to answer.
+    permission: PERMISSION[resolved.id]
+      ? {
+          authority: PERMISSION[resolved.id].authority,
+          regime: PERMISSION[resolved.id].regime,
+          basis: PERMISSION[resolved.id].basis,
+          coveragePct: PERMISSION[resolved.id].coveragePct,
+        }
+      : null,
     issuedAt: new Date().toISOString(),
   };
   const canonical = JSON.stringify(document);

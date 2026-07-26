@@ -29,6 +29,8 @@ interface AirspaceSummary {
   zeroCeilingCells?: number;
   note?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
+  /** a regulator gate on the operation, published separately from any ceiling */
+  permission?: { available: boolean; authority?: string; regime?: string; basis?: string; effective?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
   _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
@@ -81,6 +83,23 @@ const VP_CLASS_COLOR: Record<string, string> = {
 /** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
 function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
   if (!a?.available) {
+    // No ceiling grid does not mean no regulator. Tokyo publishes no altitudes
+    // but governs every flight over the twin, and calling that "no source"
+    // would understate the regulator, not just our coverage.
+    const perm = a?.permission;
+    if (perm?.available) {
+      return {
+        tier: "official",
+        authority: perm.authority,
+        // The statute text is long; it belongs in the tooltip, not wrapping
+        // across the toolbar. The chip line answers "whose rule", the hover
+        // answers "which rule".
+        effective: perm.effective,
+        scopeNote: [perm.regime, perm.note, perm.provenanceNote].filter(Boolean).join(" "),
+        upToDate: null,
+        attested: false,
+      };
+    }
     return { tier: "none", scopeNote: a?.note };
   }
   const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
@@ -684,7 +703,11 @@ export default function QSkywayClient() {
                       regulator publication, the point zones are still ours. Showing
                       them under one badge would launder the second into the first. */}
                   <RegulatorySourceChip
-                    subject={t("qskyway.reg.subject.ceilings")}
+                    subject={meta.airspace?.available
+                      ? t("qskyway.reg.subject.ceilings")
+                      : meta.airspace?.permission?.available
+                        ? t("qskyway.reg.subject.permission")
+                        : t("qskyway.reg.subject.ceilings")}
                     source={airspaceRegSource(meta.airspace)}
                     labels={{ none: t("qskyway.reg.nofeed") }}
                   />

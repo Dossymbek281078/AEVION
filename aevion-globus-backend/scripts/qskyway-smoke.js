@@ -238,6 +238,22 @@ async function main() {
   assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits a regulatory verdict it cannot make");
   assert(justAst.json?.scope?.includes("нет"), "[astana] scope says the regulatory part is absent");
 
+  // Phase 8: a permission regime is a published rule too — a city with no
+  // ceiling grid must not be reported as having no regulator.
+  const cityTk = await jget("/api/qskyway/city?city=tokyo");
+  const perm = cityTk.json?.airspace?.permission;
+  assert(cityTk.json?.airspace?.available === false, "[tokyo] no ceiling grid is published — still reported honestly");
+  assert(perm?.available === true && /MLIT/.test(perm.authority ?? ""), "[tokyo] permission regime from the real authority is reported", `${perm?.authority}`);
+  assert(perm.basis === "raster-sampled", "[tokyo] permission provenance says it was sampled, not ingested", `basis=${perm?.basis}`);
+  assert(perm.coveragePct === 100 && perm.uniform === true, "[tokyo] uniform coverage is stated as uniform, not drawn as a map", `${perm?.coveragePct}%`);
+  const permAst = await jget("/api/qskyway/city?city=astana");
+  assert(permAst.json?.airspace?.permission?.available === false, "[astana] no permission regime found is reported as absent");
+  const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
+  assert(cov?.withFeed === 2 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 1, "coverage counts any published rule, not only ceilings", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
+  assert(Array.isArray(cov?.missing) && cov.missing.length === 1 && cov.missing[0] === "astana", "only the city with nothing published is listed as missing", (cov?.missing ?? []).join(","));
+  const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
+  assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");
+
   // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
   // both outcomes are legitimate — what must never happen is a success response
   // when nothing was written.

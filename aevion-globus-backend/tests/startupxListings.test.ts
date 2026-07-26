@@ -1,4 +1,5 @@
 import { describe, test, expect } from "vitest";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -8,7 +9,7 @@ import {
   TIER_SPECS,
   type ListingInput,
 } from "../src/lib/startupx/model";
-import { assessListing, DISCLAIMER } from "../src/lib/startupx/assess";
+import { assessListing, ASSESSMENT_VERSION, DISCLAIMER } from "../src/lib/startupx/assess";
 import { valuationBand, impliedTerms } from "../src/lib/startupx/valuation";
 
 // The exchange's whole promise is that an investor can read a number and a set
@@ -136,6 +137,52 @@ describe("the backfill and the code agree on what a legacy row is", () => {
     const addColumns = sql.match(/ADD COLUMN[^;]*/gi) ?? [];
     expect(addColumns.length).toBeGreaterThan(5);
     for (const stmt of addColumns) expect(stmt).toMatch(/IF NOT EXISTS/i);
+  });
+});
+
+describe("правила и их версия двигаются вместе", () => {
+  // Балл принадлежит правилам, которые его сделали: лента сортирует заявки по
+  // баллу, а страница показывает его рядом с чужими. Поменять веса или пороги,
+  // не подняв ASSESSMENT_VERSION, — значит начать сравнивать несравнимое, и
+  // ничего при этом не упадёт. Тот же приём уже стоит в QVenture и там сработал.
+  //
+  // Если этот тест покраснел: поднимите ASSESSMENT_VERSION, впишите новый
+  // отпечаток сюда — одним коммитом с изменением правил.
+  const EXPECTED_VERSION = 1;
+  const EXPECTED_FINGERPRINT = "50aa89b012e21c4a";
+
+  /** Отпечаток берётся с того, что реально влияет на балл, на всех трёх уровнях. */
+  function rulesFingerprint(): string {
+    const parts: string[] = [];
+    for (const tier of ["idea", "mvp", "product"] as const) {
+      const body =
+        tier === "idea"
+          ? ideaBody()
+          : ideaBody({
+              tier,
+              demoUrl: "https://example.com",
+              deal:
+                tier === "mvp"
+                  ? { intent: "raise", askUsd: 80_000, equityOfferedPct: 12 }
+                  : { intent: "sell_full", askingPriceUsd: 150_000 },
+              metrics: tier === "product" ? { arrUsd: 90_000 } : undefined,
+            });
+      const a = assessBody(body);
+      parts.push(
+        `${tier}:${a.score}:${a.band}:` +
+          a.factors.map((f) => `${f.key}=${f.weight}/${f.score}`).sort().join(","),
+      );
+    }
+    return crypto.createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
+  }
+
+  test("веса и пороги не изменились без подъёма версии", () => {
+    expect(rulesFingerprint()).toBe(EXPECTED_FINGERPRINT);
+    expect(ASSESSMENT_VERSION).toBe(EXPECTED_VERSION);
+  });
+
+  test("каждый разбор несёт текущую версию правил", () => {
+    expect(assessBody(ideaBody()).version).toBe(ASSESSMENT_VERSION);
   });
 });
 

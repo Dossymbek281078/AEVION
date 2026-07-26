@@ -235,5 +235,16 @@ ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPc
 ok("unspecified-period churn is disclosed in assumptions",
   analyze({ ...base, description: "SaaS with $2M ARR, 1,000 customers and churn of 3%." }).assumptions.some((a) => /read as monthly/.test(a)));
 
+console.log("\n14. A plan that contradicts itself says so");
+const conflict = analyze({ ...base, description: "SaaS platform. We have $2M ARR today. Elsewhere in the deck: the company reached $5M ARR last quarter." });
+ok("two present-tense revenue figures are surfaced", conflict.redFlags.some((f) => /more than one current revenue figure/.test(f)), conflict.redFlags.join("|"));
+ok("the contradiction does not silently move the score",
+  conflict.composite === analyze({ ...base, description: "SaaS platform. We have $2M ARR today." }).composite,
+  String(conflict.composite));
+const forwardLooking = analyze({ ...base, description: "SaaS platform with $2M ARR today, targeting $5M ARR by year end." });
+ok("a forward-looking figure is a plan, not a contradiction", !forwardLooking.redFlags.some((f) => /more than one current revenue/.test(f)), forwardLooking.redFlags.join("|"));
+const rounded = analyze({ ...base, description: "SaaS with $2M ARR. Precisely, $2.0M ARR as of last month." });
+ok("the same figure written twice is not a contradiction", !rounded.redFlags.some((f) => /more than one current revenue/.test(f)));
+
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

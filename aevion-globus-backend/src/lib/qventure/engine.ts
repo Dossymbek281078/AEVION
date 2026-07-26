@@ -590,6 +590,10 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
     textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
   }
+  // Contradictions in the plan's own numbers: shown, never silently scored.
+  // Which figure is right is the reader's call, not the engine's.
+  textOnlyFlags.push(...(signals.conflicts ?? []));
+
   const churnMonthlyPct = signals.churnMonthlyPct ?? signals.churnPct;
   if (churnMonthlyPct !== null && churnMonthlyPct > 8) {
     const asStated = signals.churnPeriod && signals.churnPeriod !== "monthly" && signals.churnPeriod !== "unspecified"

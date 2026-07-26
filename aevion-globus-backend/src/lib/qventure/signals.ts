@@ -87,6 +87,8 @@ export interface PlanSignals {
   regulatoryMilestones: string[];
   /** Technical validation the plan claims: peer review, trial phase, benchmark, working plant. */
   technicalProof: string[];
+  /** Internal contradictions in the plan's own figures — surfaced to the reader, not scored. */
+  conflicts: string[];
 
   /** Count of concrete quantitative fields parsed (drives signal coverage). */
   fieldsFound: number;
@@ -178,7 +180,7 @@ export function emptySignals(): PlanSignals {
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
-    pilots: null, regulatoryMilestones: [], technicalProof: [],
+    pilots: null, regulatoryMilestones: [], technicalProof: [], conflicts: [],
     fieldsFound: 0,
   };
 }
@@ -255,6 +257,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (s.revenueUsd === null && mentionsUnnegated(t, /\b(revenue|paying customers|arr|mrr|monetiz)\b/i)) {
     s.mentionsRevenueNoNumber = true;
   }
+
+  detectRevenueConflict(t, s, planCurrency);
 
   // ── Growth: "growing 20% MoM" / "30% month-over-month growth" / "up 15% MoM" ──
   // A bare "<n>% monthly" is NOT growth: "20% monthly churn" used to be read as
@@ -357,6 +361,44 @@ export function parsePlanSignals(text: string): PlanSignals {
   s.fieldsFound = countFields(s);
 
   return s;
+}
+
+/**
+ * Two different revenue figures stated as present fact.
+ *
+ * The parser takes the first match, so a deck claiming "$2M ARR" on one page and
+ * "$5M ARR" on another was scored on $2M with nothing said about the other
+ * number. Which figure is right is not the tool's call — that the plan
+ * contradicts itself is a diligence finding on its own, and it is surfaced as
+ * text rather than scored, because the honest response is "reconcile these",
+ * not a silent deduction.
+ *
+ * Forward-looking figures are not contradictions: "$2M today, targeting $5M by
+ * year end" is a plan, so a figure introduced by a projection word is skipped.
+ */
+function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCurrency | null): void {
+  if (s.revenueUsd === null) return;
+  const FORWARD = /\b(target|targeting|goal|expect\w*|forecast\w*|project\w*|plan(?:ned|ning)?|plans? to|plan for|will|plan of|by (?:year[- ]end|the end of|20\d\d)|next year|plan year|run[- ]rate exit|ambition)\b/;
+  const re = new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "gi");
+  const seen = new Set<number>();
+  const stated: number[] = [];
+  for (const m of t.matchAll(re)) {
+    const at = m.index ?? 0;
+    if (FORWARD.test(t.slice(Math.max(0, at - 60), at))) continue;
+    const val = moneyUsd(t, m as RegExpMatchArray, m[1], m[2], planCurrency);
+    if (!val || val <= 0) continue;
+    const annual = /mrr/i.test(m[3] || "") ? val * 12 : val;
+    const key = Math.round(annual);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    stated.push(annual);
+  }
+  if (stated.length < 2) return;
+  const lo = Math.min(...stated), hi = Math.max(...stated);
+  // Rounding of the same figure ("$2M" and "$2.0M") is not a contradiction.
+  if (hi / lo < 1.2) return;
+  const fmt = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${Math.round(n / 1e3)}k`);
+  s.conflicts.push(`Plan states more than one current revenue figure (${stated.slice(0, 3).map(fmt).join(" and ")}) — scored on ${fmt(s.revenueUsd)}; reconcile before relying on either.`);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Chess, type Move } from "chess.js";
+import { mm } from "../minimax";
 import {
   HUMAN_PROFILES,
   pickBookMove,
@@ -162,6 +163,49 @@ describe("pickHumanMove", () => {
         expect(sans).toContain(pickHumanMove(scored, HUMAN_PROFILES[level], rng)!.san);
       }
     }
+  });
+});
+
+/* The synthetic lists above hand pickHumanMove ready-made 400-900cp gaps, so
+   they pass no matter how the caller scores moves. These play a real position
+   through the real search — the case that caught the scoring depth being too
+   shallow for the blunder branch to have anything to fire on. */
+describe("blunder branch on a real position", () => {
+  // Italian-ish opening, both sides developed, several losing moves available.
+  const FEN = "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 5";
+  const searchAt = (d: number) => (p: Chess) => mm(p, d, -Infinity, Infinity, p.turn() === "w");
+
+  it("a 0-ply score cannot grade a blunder — the model needs at least 1", () => {
+    const g = new Chess(FEN);
+    const gaps = (d: number) => {
+      const sc = scoreMoves(g, searchAt(d));
+      const best = Math.max(...sc.map((s) => s.score));
+      return sc.filter((s) => best - s.score >= 200).length;
+    };
+    // Static eval sees no reply, so a hanging piece looks as good as a sound
+    // move. This is why the caller floors the search depth at 1.
+    expect(gaps(0)).toBe(0);
+    expect(gaps(1)).toBeGreaterThan(0);
+  });
+
+  it("Beginner really hangs material, Club mostly does not", () => {
+    const g = new Chess(FEN);
+    const scored = scoreMoves(g, searchAt(1));
+    const best = Math.max(...scored.map((s) => s.score));
+    const rate = (level: number) => {
+      const rng = lcg(13 + level);
+      let bad = 0;
+      const n = 4000;
+      for (let i = 0; i < n; i++) {
+        const picked = pickHumanMove(scored, HUMAN_PROFILES[level], rng)!;
+        if (best - scored.find((s) => s.move.san === picked.san)!.score >= 200) bad++;
+      }
+      return bad / n;
+    };
+    const beginner = rate(0);
+    const club = rate(2);
+    expect(beginner).toBeGreaterThan(0.1);
+    expect(club).toBeLessThan(beginner / 2);
   });
 });
 

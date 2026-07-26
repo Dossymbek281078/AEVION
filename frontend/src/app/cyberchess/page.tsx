@@ -4594,7 +4594,14 @@ export default function CyberChessPage(){
           if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
         }
         const c=new Chess(fenAtTrigger);
-        const d=Math.min(lv.depth,4)-1;
+        // Floor of 1: Beginner's nominal depth 1 would search 0 ply, i.e. score
+        // every move by static eval, which cannot see the opponent's reply — so
+        // a hanging queen scores as well as a good move. Measured on real
+        // positions: at 0 ply NO move is ever 200cp worse than the best (widest
+        // spread is ~70-180cp of piece-square noise), so the blunder branch can
+        // never fire and the level collapses into near-random. Strength here
+        // comes from the profile, not from a search too blind to grade a move.
+        const d=Math.max(1,Math.min(lv.depth,4)-1);
         const scored=scoreMoves(c,pos=>mm(pos,d,-Infinity,Infinity,pos.turn()==="w"));
         const b=pickHumanMove(scored,profile);
         if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);

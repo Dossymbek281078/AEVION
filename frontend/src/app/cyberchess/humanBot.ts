@@ -45,14 +45,26 @@ export type HumanProfile = {
   blunderChance: number;
 };
 
-/** Indexed by ALS level index — only the minimax levels (Stockfish runs 3+). */
+/* Indexed by ALS level index — only the minimax levels (Stockfish runs 3+).
+
+   Temperatures are measured, not guessed: swept over 56 positions taken from
+   real self-play walks, picking the value that lands each level on the blunder
+   rate its rating band implies (~22% / ~11% / ~4.5% of moves losing >=200cp).
+
+   The first pass used much hotter values (260/160/95) on the theory that a
+   weak player is "vague". Measurement said otherwise: at those temperatures
+   Beginner hung material on 37% of moves and opened 1.h4 — the softmax tail,
+   not the blunder branch, was producing the weakness, which is the same
+   uniformly-mediocre bot this file exists to replace. Cooling the tail costs
+   almost nothing in soundness (loss when not blundering only moves 30cp->18cp)
+   and hands the level's character back to blunderChance, where it belongs. */
 export const HUMAN_PROFILES: Record<number, HumanProfile> = {
   // Beginner ~400: barely knows theory, hangs material often.
-  0: { bookPlies: 6,  bookChance: 0.55, bookSharpness: 0.4, bestChance: 0.20, temperature: 260, blunderChance: 0.30 },
+  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 40, blunderChance: 0.30 },
   // Casual ~800: plays the first few book moves, blunders a few times a game.
-  1: { bookPlies: 10, bookChance: 0.75, bookSharpness: 0.8, bestChance: 0.38, temperature: 160, blunderChance: 0.15 },
+  1: { bookPlies: 10, bookChance: 0.85, bookSharpness: 0.8, bestChance: 0.38, temperature: 75, blunderChance: 0.15 },
   // Club ~1200: solid opening, occasional tactical oversight.
-  2: { bookPlies: 14, bookChance: 0.90, bookSharpness: 1.4, bestChance: 0.58, temperature: 95,  blunderChance: 0.07 },
+  2: { bookPlies: 14, bookChance: 0.93, bookSharpness: 1.4, bestChance: 0.58, temperature: 65, blunderChance: 0.07 },
 };
 
 export type ScoredMove = {

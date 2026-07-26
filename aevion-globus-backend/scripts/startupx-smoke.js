@@ -203,6 +203,19 @@ async function run() {
     assert("withdrawn listing disappears from the public surface", after.status === 404, String(after.status));
     const stillMine = await req("GET", `/api/startupx/ideas/${listingId}/offers?token=${created.manageToken}`);
     assert("but the founder still sees the offers already received", stillMine.status === 200, String(stillMine.status));
+
+    // Withdrawal must not be a one-way door: taking a listing down by mistake
+    // should not cost the id, the authorship stamp and every offer on it.
+    const restored = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`, {
+      restore: true,
+      deal: { intent: "raise", askUsd: 20000, equityOfferedPct: 20, buildBy: "founder" },
+    });
+    assert("a withdrawn listing can be restored", restored.status === 200, String(restored.status));
+    const back = await req("GET", `/api/startupx/ideas/${listingId}`);
+    assert("and is public again", back.status === 200, String(back.status));
+
+    // Put it back down so the run still leaves the feed as it found it.
+    await req("DELETE", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`);
   }
 
   console.log("\n11. Stats");

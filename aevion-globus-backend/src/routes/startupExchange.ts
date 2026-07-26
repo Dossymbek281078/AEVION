@@ -751,12 +751,19 @@ startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, re
     return fail(res, "assessment_failed", 500);
   }
 
+  // Withdrawal was one-way: a founder who took the listing down by mistake had
+  // to publish a new one, with a new id, a new stamp and none of the offers.
+  // Nothing about that had to be irreversible.
+  const restore = body.restore === true;
+  const nextVisibility = restore ? "public" : row.visibility;
+
   if (isStartupExchangeDbReady()) {
     try {
       const { rows } = await pool.query(
         `UPDATE startup_ideas
             SET deal=$1, metrics=$2, geography=$3, demo_url=$4, repo_url=$5,
-                contact_method=$6, assessment=$7, assessment_score=$8, assessment_version=$9
+                contact_method=$6, assessment=$7, assessment_score=$8, assessment_version=$9,
+                visibility=$11
           WHERE id=$10
       RETURNING *`,
         [
@@ -764,7 +771,7 @@ startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, re
           listing.geography ?? null, listing.demoUrl ?? null, listing.repoUrl ?? null,
           listing.contactMethod ?? null,
           JSON.stringify(assessment), assessment.score, assessment.version,
-          id,
+          id, nextVisibility,
         ],
       );
       const updated = (rows as ListingRow[])[0];
@@ -787,6 +794,7 @@ startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, re
   existing.assessment = assessment;
   existing.assessment_score = assessment.score;
   existing.assessment_version = assessment.version;
+  existing.visibility = nextVisibility;
   return ok(res, { listing: publicView(existing), assessment });
 });
 

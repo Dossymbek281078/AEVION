@@ -108,7 +108,7 @@ import { startSession as coordStart, registerHit as coordHit, isExpired as coord
 import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as ldQuizResult, saveResult as svQuizResult, type QuizResult, type PlayerStyle } from "./personality";
 import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
 import { computeInsights, type Insights } from "./insights";
-import { themeLabel } from "./puzzleThemes";
+import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
@@ -3123,7 +3123,7 @@ export default function CyberChessPage(){
                   showToast(`✓ +${bonus}с`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else{
-                  showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                  showToast(`✓ Решено! ${puzzleTitle(pzCurrent)}`,"success");
                 }
                 // Платим за позицию только в первый раз: без этого один лёгкий
                 // пазл фармится бесконечно, а Chessy открывают реальные вещи
@@ -3166,7 +3166,7 @@ export default function CyberChessPage(){
             showToast(`✓ +${bonus}с`,"success");
             // Auto-advance handled by the single pzAttempt==="correct" effect
           }else{
-            showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+            showToast(`✓ Решено! ${puzzleTitle(pzCurrent)}`,"success");
           }
           const firstTime=claimReward(pzSolvedRef.current,pzCurrent.fen);
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
@@ -4923,7 +4923,7 @@ export default function CyberChessPage(){
     else if(pzMode==="custom")startClock(pzCustomSec);
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
-    showToast(`${pz.name} · ${themeLabel(pz.theme)} · ${pz.r}`,"info");
+    showToast(`${puzzleTitle(pz)} · ${pz.r}`,"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -9686,14 +9686,14 @@ export default function CyberChessPage(){
               <div style={{padding:"14px 16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pzCurrent.name}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{puzzleTitle(pzCurrent)}</div>
                     <div style={{fontSize:18,fontWeight:900,color:T.text,lineHeight:1.2}}>
                       {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
                     <span style={{display:"inline-flex",flexDirection:"column",alignItems:"center",gap:1,padding:"4px 12px",borderRadius:7,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>
-                      <span style={{fontSize:9,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,opacity:0.85}}>{pzCurrent.r<800?"Лёгкая":pzCurrent.r<1400?"Средняя":pzCurrent.r<2000?"Сложная":"Эксперт"}</span>
+                      <span style={{fontSize:9,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,opacity:0.85}}>{difficultyLabel(pzCurrent.r)}</span>
                       <span style={{fontSize:15,fontWeight:900,lineHeight:1}}>★ {pzCurrent.r}</span>
                     </span>
                     {pzTimeLeft>0&&<span ref={pzTimeLeftBadgeRef as any} style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
@@ -10201,7 +10201,7 @@ export default function CyberChessPage(){
                 <button onClick={()=>{
                   if(!pzCurrent){showToast("Нет активного пазла","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Пазл · ${pzCurrent.name}`,"success");
+                  showToast(`Пазл · ${puzzleTitle(pzCurrent)}`,"success");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🧩 Текущий пазл</button>
 
                 {/* Random puzzle */}
@@ -10209,7 +10209,7 @@ export default function CyberChessPage(){
                   if(PUZZLES.length===0){showToast("Пазлы не загружены","error");return}
                   const pz=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`🎲 Случайный пазл · ${pz.r} · ${pz.name}`,"info");
+                  showToast(`🎲 Случайный пазл · ${pz.r} · ${puzzleTitle(pz)}`,"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🎲 Random пазл</button>
 
                 {/* Daily puzzle */}
@@ -10877,7 +10877,7 @@ ${question.trim()}`;
                     {modeBtn("🧩","Из пазлов","активный пазл",()=>{
                       if(!pzCurrent){showToast("Сначала выбери пазл во вкладке Puzzles","info");sTab("puzzles");return}
                       const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
-                      showToast(`Пазл: ${pzCurrent.name}`,"success");
+                      showToast(`Пазл: ${puzzleTitle(pzCurrent)}`,"success");
                     })}
                     {modeBtn("📜",savedGames.length>0?`Библиотека · ${savedGames.length}`:"Библиотека","твои партии",()=>{
                       if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
@@ -10923,7 +10923,7 @@ ${question.trim()}`;
                 <button onClick={()=>{
                   if(!pzCurrent){showToast("Нет активного пазла","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Из пазла · ${pzCurrent.name}`,"success");
+                  showToast(`Из пазла · ${puzzleTitle(pzCurrent)}`,"success");
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
 
                 <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>

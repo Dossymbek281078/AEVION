@@ -73,3 +73,30 @@ export function themeLabel(theme: string | undefined | null): string {
 
 /** Exported for tests — how many ids the map covers. */
 export const THEME_RU_KEYS = Object.keys(THEME_RU);
+
+/* Сложность по рейтингу. Полосы взяты из бейджа сложности в page.tsx — это уже
+   был источник правды в UI, и второй набор границ тут только разошёлся бы с ним. */
+export function difficultyLabel(rating: number): string {
+  if (rating < 800) return "Лёгкая";
+  if (rating < 1400) return "Средняя";
+  if (rating < 2000) return "Сложная";
+  return "Эксперт";
+}
+
+/**
+ * Читаемое имя пазла.
+ *
+ * Почти половина корпуса (5 000 из 10 818) приходит из набора Lichess, где поле
+ * `name` — это идентификатор задачи вида `L001om`. Игрок видел его буквально:
+ * «✓ Решено! L001om». Остальные записи уже названы по-человечески, в формате
+ * «Вилка · Средняя», — здесь тот же формат достраивается из темы и рейтинга,
+ * так что сгенерированные имена неотличимы от готовых.
+ */
+export function puzzleTitle(p: { name?: string; theme?: string; r?: number }): string {
+  const name = p.name ?? "";
+  // Идентификатор Lichess: только латиница и цифры, 4–8 символов, без пробелов.
+  const isRawId = /^[A-Za-z0-9]{4,8}$/.test(name);
+  if (name && !isRawId) return name;
+  const theme = themeLabel(p.theme) || "Тактика";
+  return `${theme} · ${difficultyLabel(p.r ?? 800)}`;
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { themeLabel, THEME_RU_KEYS } from "../puzzleThemes";
+import { themeLabel, THEME_RU_KEYS, puzzleTitle, difficultyLabel } from "../puzzleThemes";
 
 describe("themeLabel", () => {
   it("translates the raw Lichess ids that used to leak into the UI", () => {
@@ -55,3 +55,37 @@ describe("themeLabel", () => {
     expect(untranslated).toEqual([]);
   });
 });
+
+describe("puzzleTitle", () => {
+  it("keeps a human name as-is", () => {
+    expect(puzzleTitle({ name: "Вилка · Средняя", theme: "Вилка", r: 900 })).toBe("Вилка · Средняя");
+  });
+
+  it("replaces a raw Lichess id with theme and difficulty", () => {
+    expect(puzzleTitle({ name: "L001om", theme: "Вилка", r: 900 })).toBe("Вилка · Средняя");
+    expect(puzzleTitle({ name: "L002HE", theme: "kingsideAttack", r: 1500 }))
+      .toBe("Атака на королевском фланге · Сложная");
+  });
+
+  it("falls back to a generic label when the theme is missing too", () => {
+    expect(puzzleTitle({ name: "L001om", r: 500 })).toBe("Тактика · Лёгкая");
+  });
+
+  it("uses the same difficulty bands as the badge in the UI", () => {
+    expect(difficultyLabel(799)).toBe("Лёгкая");
+    expect(difficultyLabel(800)).toBe("Средняя");
+    expect(difficultyLabel(1399)).toBe("Средняя");
+    expect(difficultyLabel(1400)).toBe("Сложная");
+    expect(difficultyLabel(1999)).toBe("Сложная");
+    expect(difficultyLabel(2000)).toBe("Эксперт");
+  });
+
+  /* Almost half the shipped corpus carried a raw id as its name — the player was
+     told "✓ Решено! L001om". Nothing should reach them like that. */
+  it("leaves no raw id reaching the player across the whole corpus", () => {
+    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{ name?: string; theme?: string; r?: number }>;
+    const leaks = puzzles.filter((p) => /^[A-Za-z0-9]{4,8}$/.test(puzzleTitle(p)));
+    expect(leaks).toEqual([]);
+  });
+});
+

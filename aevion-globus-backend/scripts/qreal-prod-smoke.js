@@ -11,9 +11,13 @@
  *  - /film отдаёт Range 206 (само-восстанавливающаяся сборка)
  */
 const BASE = (process.env.BASE || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, pending = 0;
 function ok(l, i = "") { passed++; console.log(`  ✓ ${l}${i ? "  " + i : ""}`); }
 function fail(l, i = "") { failed++; console.error(`  ✗ ${l}${i ? "  " + i : ""}`); }
+// Фича есть в ветке, но ещё не на проде. Красить смок в красный за это нечестно
+// (мержа не было), зелёным считать — тоже (проверка не проходила). Отдельный
+// счётчик: видно в выводе, но exit-код не ломает.
+function pend(l, i = "") { pending++; console.log(`  ~ ${l} — ждёт деплоя${i ? "  " + i : ""}`); }
 async function req(method, path, extraHeaders = {}, timeoutMs = 15000) {
   const r = await fetch(`${BASE}${path}`, { method, headers: extraHeaders, signal: AbortSignal.timeout(timeoutMs) });
   const text = await r.text();
@@ -49,6 +53,52 @@ async function run() {
     ? ok("14 realism criteria")
     : fail("14 realism criteria", String((c.body?.criteria || []).length));
 
+  // 8a-8d. Контракт судьи (2026-07-26). Якоря отдаются вместе с критериями —
+  // на них завязан и слепой бенчмарк, и VLM-судья. Если прод перестанет их
+  // отдавать, обе линейки молча разъедутся, поэтому это ассерт, а не «мелочь».
+  const anchors = c.body?.anchors;
+  const critIds = (c.body?.criteria || []).map((x) => x.id);
+  if (!anchors) {
+    // Поле отсутствует целиком => на проде сборка старше фичи.
+    pend("anchors for every criterion");
+    pend("each anchor has levels 1/3/5");
+    pend("acceptance threshold exposed");
+  } else {
+    critIds.length && critIds.every((id) => anchors[id])
+      ? ok("anchors for every criterion")
+      : fail("anchors for every criterion", `нет якорей: ${critIds.filter((id) => !anchors[id]).join(",") || "—"}`);
+    critIds.every((id) => ["1", "3", "5"].every((lvl) => typeof anchors[id]?.[lvl] === "string" && anchors[id][lvl].length > 10))
+      ? ok("each anchor has levels 1/3/5")
+      : fail("each anchor has levels 1/3/5");
+    typeof c.body?.threshold === "number" && c.body.threshold > 0 && c.body.threshold < 1
+      ? ok("acceptance threshold exposed", String(c.body.threshold))
+      : fail("acceptance threshold exposed", String(c.body?.threshold));
+  }
+
+  // Судейство платное. Смок обязан убедиться, что БЕЗ явного judge:true
+  // ни один вызов /qc не уходит в модель — иначе прод-смок сам жёг бы деньги.
+  const demoForQc = await req("GET", "/api/qreal/demo");
+  const qcShot = (demoForQc.body?.project?.shots || [])[0];
+  if (qcShot) {
+    const qc = await fetch(`${BASE}/api/qreal/projects/${demoForQc.body.project.id}/shots/${qcShot.id}/qc`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      signal: AbortSignal.timeout(15000),
+    }).then((r) => r.json()).catch(() => null);
+    if (!qc?.vlm) {
+      pend("POST /qc without judge:true stays manual (no paid call)");
+      pend("vlm judge status reported honestly");
+    } else {
+      qc?.qc?.method === "manual" && qc?.anchors
+        ? ok("POST /qc without judge:true stays manual (no paid call)")
+        : fail("POST /qc without judge:true stays manual", JSON.stringify(qc).slice(0, 140));
+      typeof qc.vlm.configured === "boolean" && qc.vlm.model
+        ? ok("vlm judge status reported honestly", `${qc.vlm.model}:${qc.vlm.configured}`)
+        : fail("vlm judge status reported", JSON.stringify(qc.vlm).slice(0, 120));
+    }
+  } else {
+    fail("demo shot for /qc contract", "нет кадров в демо");
+  }
+
   // 9-11. Демо целиком (persistence/пересеивание)
   const d = await req("GET", "/api/qreal/demo");
   d.status === 200 ? ok("GET /demo → 200") : fail("GET /demo → 200", String(d.status));
@@ -73,7 +123,7 @@ async function run() {
     ? ok("GET /film (Range) sane", String(f.status))
     : fail("GET /film (Range) sane", String(f.status));
 
-  console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
+  console.log(`\n${passed + failed + pending} assertions — ${passed} PASS  ${failed} FAIL  ${pending} PENDING-DEPLOY\n`);
   process.exit(failed > 0 ? 1 : 0);
 }
 

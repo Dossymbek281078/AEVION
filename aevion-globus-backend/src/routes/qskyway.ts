@@ -937,6 +937,28 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
 qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  // A public POST that submits to the OpenTimestamps calendars is an open tap
+  // into someone else's infrastructure: spam it and we flood them. It is also
+  // pointless work — a second timestamp over an identical hash proves nothing
+  // the first one did not. When this edition already ships a confirmed proof,
+  // hand that one back instead of stamping again.
+  const shipped = AIRSPACE_PROOFS[resolved.id];
+  const src = AIRSPACE[resolved.id];
+  if (shipped && src && shipped.contentHash === airspaceContentHash(src)) {
+    return res.json({
+      status: "bitcoin-confirmed",
+      city: resolved.id,
+      authority: src.authority,
+      effective: src.effective,
+      contentHash: shipped.contentHash,
+      otsProofB64: shipped.otsProofB64,
+      bitcoinBlockHeight: shipped.bitcoinBlockHeight,
+      calendars: [],
+      error: null,
+      reused: true,
+      note: "Эта редакция уже привязана и подтверждена Bitcoin — возвращён существующий пруф, повторный штамп не создавался: над тем же хэшем он не доказал бы ничего нового.",
+    });
+  }
   const anchor = await anchorAirspace(resolved.id);
   if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", city: resolved.id });
   res.json(anchor);

@@ -306,6 +306,12 @@ async function main() {
   // same answer, not a trimmed one.
   const pf2 = await jget("/api/qskyway/airspace/proof?city=nyc");
   assert(JSON.stringify(pf2.json) === JSON.stringify(pf.json), "[nyc] repeat proof request returns an identical verdict (served from cache)");
+  // Anchoring an edition that is already anchored must not stamp again: a public
+  // POST into someone else's calendars is an open tap, and a second timestamp
+  // over the same hash proves nothing the first one did not.
+  const reAnchor = await jpost("/api/qskyway/airspace/anchor", { city: "nyc" });
+  assert(reAnchor.status === 200 && reAnchor.json?.reused === true, "[nyc] re-anchoring an already-anchored edition reuses the shipped proof", `reused=${reAnchor.json?.reused}`);
+  assert(reAnchor.json?.contentHash === asN._signature.contentHash && (reAnchor.json?.calendars ?? []).length === 0, "[nyc] the reused answer is the same proof and hit no calendars");
   const pfAst = await jget("/api/qskyway/airspace/proof?city=astana");
   assert(pfAst.status === 404, "[astana] no shipped proof where there is no edition to anchor", `status=${pfAst.status}`);
 

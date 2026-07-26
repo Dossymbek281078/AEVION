@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { findReactEntry, resolveLocalImport, rewriteLocalImports, buildReactPreviewSrcdoc } from "../reactPreview";
+import {
+  findReactEntry,
+  resolveLocalImport,
+  rewriteLocalImports,
+  buildReactPreviewSrcdoc,
+  stubNextFontImports,
+} from "../reactPreview";
 
 const f = (path: string, content = "") => ({ path, content });
 
@@ -98,4 +104,87 @@ describe("reactPreview — srcdoc build (real babel transform)", () => {
     const r = await buildReactPreviewSrcdoc([f("App.jsx", "export default function ( { return <h1>; }")], "");
     expect("error" in r && r.error).toMatch(/Babel could not transform App.jsx/);
   }, 30_000);
+});
+
+describe("reactPreview — Next.js projects (previously previewable only after a deploy)", () => {
+  const f = (path: string, content = "") => ({ path, content });
+
+  it("prefers the route entry over src/ files", () => {
+    expect(findReactEntry([f("src/App.jsx"), f("app/page.tsx")])).toBe("app/page.tsx");
+    expect(findReactEntry([f("src/app/page.jsx"), f("src/lib/util.ts")])).toBe("src/app/page.jsx");
+    expect(findReactEntry([f("pages/index.tsx")])).toBe("pages/index.tsx");
+  });
+
+  it("renders a client page that imports next/link and next/image", async () => {
+    const files = [
+      f(
+        "app/page.tsx",
+        `"use client";
+import Link from "next/link";
+import Image from "next/image";
+export default function Home() {
+  return <main><Image src="/logo.png" alt="logo" width={40} height={40} /><Link href="/about">About</Link></main>;
+}`
+      ),
+    ];
+    const r = await buildReactPreviewSrcdoc(files, "");
+    if ("error" in r) throw new Error(r.error);
+    // The shims are mapped, so nothing tries to resolve the real next package.
+    expect(r.srcdoc).toContain('"next/link":"data:text/javascript;base64,');
+    expect(r.srcdoc).toContain('"next/image":"data:text/javascript;base64,');
+    expect(r.srcdoc).toContain('"local/app/page.tsx":"data:text/javascript;base64,');
+    expect(r.srcdoc).toContain("createRoot(document.getElementById(\"root\"))");
+  }, 30_000);
+
+  it("says so plainly when the page is an async Server Component", async () => {
+    const files = [
+      f("app/page.tsx", "export default async function Home() { const d = await fetch('/api'); return <p>{d}</p>; }"),
+    ];
+    const r = await buildReactPreviewSrcdoc(files, "");
+    expect("error" in r && r.error).toMatch(/async Server Component/);
+    expect("error" in r && r.error).toMatch(/Deploy the project/);
+  }, 30_000);
+
+  it("gives CSS Modules a value so styles.title does not throw", async () => {
+    const files = [
+      f("app/page.jsx", 'import s from "./page.module.css";\nexport default function P(){ return <h1 className={s.title}>x</h1>; }'),
+      f("app/page.module.css", ".title { color: rebeccapurple; }"),
+    ];
+    const r = await buildReactPreviewSrcdoc(files, "");
+    if ("error" in r) throw new Error(r.error);
+    expect(r.srcdoc).toContain('"devhub/css-module":"data:text/javascript;base64,');
+    expect(r.srcdoc).toContain("rebeccapurple"); // still injected as a real <style>
+  }, 30_000);
+
+  it("rewrites a CSS Module import to the shim, plain CSS to a no-op", () => {
+    const files = [f("app/page.jsx"), f("app/page.module.css"), f("app/global.css")];
+    const out = rewriteLocalImports(
+      'import s from "./page.module.css";\nimport "./global.css";',
+      "app/page.jsx",
+      files
+    );
+    expect(out).toContain('from "devhub/css-module"');
+    expect(out).toContain('import "data:text/javascript,"');
+  });
+
+  it("stubs next/font imports, which no fixed shim module could satisfy", () => {
+    const out = stubNextFontImports(
+      'import { Inter, Roboto_Mono as Mono } from "next/font/google";\nconst x = Inter();'
+    );
+    expect(out).toContain("const Inter = () => ({ className:");
+    expect(out).toContain("const Mono = () =>");
+    expect(out).not.toContain("next/font");
+  });
+});
+
+describe("isClientPreviewStack", () => {
+  it("covers the stacks whose sources can render without a deploy", async () => {
+    const { isClientPreviewStack } = await import("../reactPreview");
+    expect(isClientPreviewStack("react")).toBe(true);
+    expect(isClientPreviewStack("next")).toBe(true); // the backend's default stack
+    expect(isClientPreviewStack("Nextjs")).toBe(true);
+    expect(isClientPreviewStack("express")).toBe(false);
+    expect(isClientPreviewStack("static")).toBe(false); // has its own srcdoc path
+    expect(isClientPreviewStack(undefined)).toBe(false);
+  });
 });

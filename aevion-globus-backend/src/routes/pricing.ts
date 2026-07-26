@@ -34,7 +34,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
+import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, fanAnchorOf, type Subscription } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -321,8 +321,13 @@ pricingRouter.get("/fan/me", (req, res) => {
     });
   }
   res.json({
-    ...computeFan({ owned: sub.modules ?? [], tierId: sub.tierId, lastPurchaseAt: sub.ts }),
-    subscription: { tierId: sub.tierId, period: sub.period, modules: sub.modules, since: sub.ts },
+    // Окно веера — от fanAnchorOf(), а НЕ от sub.ts: продление подписки пишет
+    // новую запись, но окно открывать заново не должно (см. resolveFanAnchor).
+    ...computeFan({ owned: sub.modules ?? [], tierId: sub.tierId, lastPurchaseAt: fanAnchorOf(sub) }),
+    subscription: {
+      tierId: sub.tierId, period: sub.period, modules: sub.modules,
+      since: sub.ts, fanAnchorAt: fanAnchorOf(sub),
+    },
     generatedAt: new Date().toISOString(),
   });
 });

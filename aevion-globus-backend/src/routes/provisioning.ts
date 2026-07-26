@@ -18,9 +18,24 @@ import { degraded } from "../lib/degradedResponse";
 
 const capture = makeServiceCapture("provisioning");
 
-const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
-  ? process.env.SUBSCRIPTIONS_FILE
-  : join(process.cwd(), "data", "subscriptions.jsonl");
+/**
+ * Путь к стору подписок читается ЛЕНИВО, при каждом обращении.
+ *
+ * Раньше это была module-scope константа, и `process.env.SUBSCRIPTIONS_FILE`
+ * из тестов не действовал: в ESM `import` поднимается выше присваиваний, то есть
+ * модуль успевал забиндить путь ДО того, как тест выставлял env. Последствие
+ * было не «тест чуть неточен», а два реальных эффекта:
+ *   1) tests/paywallProvisionFlow.test.ts писал подписки в РЕАЛЬНЫЙ
+ *      data/subscriptions.jsonl репозитория и краснел на втором же прогоне
+ *      («after provisioning a paid tier, the SAME user passes the gate» —
+ *      пользователь оказывался уже provisioned с прошлого раза);
+ *   2) прогон тестов копил мусорные подписки в рабочей копии — на 2026-07-26
+ *      там лежало 101 запись от тестовых адресов.
+ * Найдено 2026-07-26 при написании tests/fanWindowRenewal.test.ts.
+ */
+function subsFile(): string {
+  return process.env.SUBSCRIPTIONS_FILE || join(process.cwd(), "data", "subscriptions.jsonl");
+}
 
 const RESEND_KEY = process.env.RESEND_API_KEY?.trim();
 const FROM_EMAIL = process.env.FROM_EMAIL?.trim() || "AEVION <hello@aevion.io>";
@@ -41,17 +56,23 @@ export interface Subscription {
   promoCode?: string;
   stripeSessionId?: string;
   source?: string;
+  /**
+   * Дата, от которой считается окно веерной скидки. НЕ равна `ts`: продление
+   * подписки пишет новую запись, но окно веера продлевать не должно — см.
+   * resolveFanAnchor() ниже. Отсутствует у записей до 2026-07-26.
+   */
+  fanAnchorAt?: string;
 }
 
 function ensureDir() {
-  const dir = dirname(SUBS_FILE);
+  const dir = dirname(subsFile());
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
 export function writeSubscription(sub: Subscription): void {
   try {
     ensureDir();
-    appendFileSync(SUBS_FILE, JSON.stringify(sub) + "\n", "utf8");
+    appendFileSync(subsFile(), JSON.stringify(sub) + "\n", "utf8");
   } catch (e) {
     capture(e);
     console.error("[provisioning] writeSubscription failed", e);
@@ -70,8 +91,8 @@ export function writeSubscription(sub: Subscription): void {
 export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
   const target = email.trim().toLowerCase();
   if (!target) return { removed: 0, remaining: 0 };
-  if (!existsSync(SUBS_FILE)) return { removed: 0, remaining: 0 };
-  const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+  if (!existsSync(subsFile())) return { removed: 0, remaining: 0 };
+  const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
   const kept: string[] = [];
   let removed = 0;
   for (const line of lines) {
@@ -87,18 +108,18 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
     }
     kept.push(line);
   }
-  const tmp = SUBS_FILE + ".tmp";
+  const tmp = subsFile() + ".tmp";
   const out = kept.length === 0 ? "" : kept.join("\n") + "\n";
   ensureDir();
   writeFileSync(tmp, out, "utf8");
-  renameSync(tmp, SUBS_FILE);
+  renameSync(tmp, subsFile());
   return { removed, remaining: kept.length };
 }
 
 export function countSubscriptions(): number {
   try {
-    if (!existsSync(SUBS_FILE)) return 0;
-    const content = readFileSync(SUBS_FILE, "utf8");
+    if (!existsSync(subsFile())) return 0;
+    const content = readFileSync(subsFile(), "utf8");
     return content.split("\n").filter((l) => l.trim().length > 0).length;
   } catch {
     return 0;
@@ -115,8 +136,8 @@ export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
   try {
-    if (!existsSync(SUBS_FILE)) return null;
-    const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+    if (!existsSync(subsFile())) return null;
+    const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
     let latest: Subscription | null = null;
     for (const line of lines) {
       try {
@@ -219,6 +240,40 @@ const TIER_DISPLAY: Record<TierId, string> = {
 };
 
 /**
+ * Якорь окна веера: от какой даты считать 14 дней.
+ *
+ * 🔴 Почему это отдельное поле, а не `sub.ts`. Стор подписок append-only, а
+ * `ACTIVATE_EVENTS` в routes/lemonSqueezyWebhook.ts включает
+ * `subscription_updated`, и dedup-ключ там намеренно содержит `renews_at`
+ * («a genuine later state change (new renews_at) still provisions»). То есть
+ * КАЖДОЕ ежемесячное продление пишет новую запись со свежим `ts`. Если окно
+ * веера считать от `ts`, оно открывается заново каждый месяц — дефицит
+ * времени, на котором держится вся механика (docs/FAN_DISCOUNTS_2026-07.md §2),
+ * исчезает, и активный подписчик получает −30% навсегда. Найдено 2026-07-26
+ * чтением вебхука, до первой продажи.
+ *
+ * Правило: якорь сдвигается только на РЕАЛЬНОЙ покупке — сменился тариф или
+ * в наборе появился новый модуль. Продление с тем же тарифом и тем же набором
+ * наследует прежний якорь, поэтому окно закрывается ровно один раз.
+ *
+ * Записи до 2026-07-26 поля не имеют — для них читатели берут `ts` (см.
+ * fanAnchorOf()); это то же поведение, что было, никого не ломает.
+ */
+function resolveFanAnchor(email: string, tierId: TierId, modules: string[], now: string): string {
+  const prev = readLatestSubscription(email);
+  if (!prev) return now;
+  const gainedModule = modules.some((m) => !(prev.modules ?? []).includes(m));
+  const tierChanged = prev.tierId !== tierId;
+  if (gainedModule || tierChanged) return now;
+  return prev.fanAnchorAt ?? prev.ts;
+}
+
+/** Дата, от которой считается окно веера. Старые записи — по `ts`. */
+export function fanAnchorOf(sub: Subscription): string {
+  return sub.fanAnchorAt ?? sub.ts;
+}
+
+/**
  * Веерный блок в welcome-письме.
  *
  * Окно веера — 14 дней от покупки (data/fanDiscounts.ts), но до сих пор оно
@@ -235,7 +290,7 @@ const TIER_DISPLAY: Record<TierId, string> = {
 function fanBlock(sub: Subscription): { html: string; text: string } {
   let fan;
   try {
-    fan = computeFan({ tierId: sub.tierId, owned: sub.modules ?? [], lastPurchaseAt: sub.ts });
+    fan = computeFan({ tierId: sub.tierId, owned: sub.modules ?? [], lastPurchaseAt: fanAnchorOf(sub) });
   } catch (e) {
     // Письмо о состоявшейся оплате важнее веера: если расчёт упал, отправляем
     // письмо без блока, а не роняем всё письмо.
@@ -278,7 +333,9 @@ function fanBlock(sub: Subscription): { html: string; text: string } {
   return { html, text };
 }
 
-function welcomeHtml(sub: Subscription): string {
+/** Экспортировано для тестов (tests/welcomeEmail.test.ts): письмо собирается
+ *  строковой конкатенацией, и без прогона его вёрстку никто не увидит. */
+export function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
@@ -325,7 +382,7 @@ function welcomeHtml(sub: Subscription): string {
 </html>`;
 }
 
-function welcomeText(sub: Subscription): string {
+export function welcomeText(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trial = sub.trialDays > 0
     ? `\nТриал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
@@ -363,21 +420,24 @@ export async function provisionSubscription(input: {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
   const validityDays = trialDays > 0 ? trialDays : period === "annual" ? 365 : 30;
+  const now = new Date().toISOString();
+  const modules = input.modules ?? [];
 
   const subscription: Subscription = {
     id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    ts: new Date().toISOString(),
+    ts: now,
     email: input.email.toLowerCase(),
     tierId: input.tierId,
     period,
     seats: input.seats ?? 1,
-    modules: input.modules ?? [],
+    modules,
     trialDays,
     validUntil: new Date(Date.now() + validityDays * 86400000).toISOString(),
     amountUsd: input.amountUsd,
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
     source: input.source,
+    fanAnchorAt: resolveFanAnchor(input.email, input.tierId, modules, now),
   };
 
   writeSubscription(subscription);

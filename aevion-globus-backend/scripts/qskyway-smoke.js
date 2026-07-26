@@ -257,6 +257,10 @@ async function main() {
   assert(perm.coveragePct === 100 && perm.uniform === true, "[tokyo] uniform coverage is stated as uniform, not drawn as a map", `${perm?.coveragePct}%`);
   // Astana: the eAIP publishes a prohibited area that covers the whole twin.
   // Reporting it as "no source" was the module's own worst inaccuracy.
+  // The disclaimer is read by every API consumer; it must not still be claiming
+  // Astana has no source after the source was found.
+  const disc = h.json?.disclaimer ?? "";
+  assert(/UAP28/.test(disc) && !/Астана — открытого фида регулятора не найдено/.test(disc), "disclaimer names Astana's real zone rather than claiming none exists", disc.slice(-90));
   const permAst = await jget("/api/qskyway/city?city=astana");
   const pa = permAst.json?.airspace?.permission;
   assert(pa?.available === true && /AIP KZ/.test(pa.authority ?? ""), "[astana] published prohibited area is reported", `${pa?.authority}`);

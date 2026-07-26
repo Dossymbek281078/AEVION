@@ -371,6 +371,16 @@ describe("deal terms vs the market", () => {
     expect(a.redFlags.some((f) => f.severity === "high" && /× годовой выручки/.test(f.message))).toBe(true);
   });
 
+  test("revenue claimed at the idea tier is called out as a contradiction", () => {
+    // "Ничего не построено" and a revenue figure cannot both be true. Usually
+    // it is the wrong tier — and the idea rubric barely weighs evidence, so the
+    // founder's real numbers would quietly count for almost nothing.
+    const a = assessBody(ideaBody({ metrics: { mrrUsd: 4_000 } }));
+    const flag = a.redFlags.find((f) => /Уровень «только идея», но заявлена выручка/.test(f.message));
+    expect(flag?.severity).toBe("medium");
+    expect(flag?.message).toMatch(/выберите «идея \+ MVP» или «готовый продукт»/);
+  });
+
   test("a price far below the claimed revenue is questioned, not treated as a bargain", () => {
     // Nobody sells a working product for less than half a year of its own
     // revenue unless something is wrong with one of the two numbers. Saying

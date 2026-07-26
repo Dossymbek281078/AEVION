@@ -1,6 +1,6 @@
 # QReal: слепой бенчмарк реализма + рабочая QC-петля
 
-Ветка: `feat/qreal-realism-benchmark-clean` → `main`. 13 коммитов.
+Ветка: `feat/qreal-realism-benchmark-clean` → `main`. 15 коммитов.
 
 > ⚠️ Мержить именно эту ветку. Первая версия (`feat/qreal-realism-benchmark`)
 > была по ошибке ответвлена от `feat/pitch-counts-meta` и тащила чужой

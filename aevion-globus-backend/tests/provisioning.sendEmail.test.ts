@@ -11,6 +11,13 @@
  */
 import { describe, test, expect, afterEach, vi } from "vitest";
 
+/**
+ * Запас на первый `await import()` роутера: он тянет половину графа модулей и на
+ * загруженной машине один выбирает дефолтные 5 с vitest — файл падал именно так
+ * (см. docs/FAN_DISCOUNTS_2026-07.md §7ц). Логика тестов при этом не меняется.
+ */
+const IMPORT_TIMEOUT_MS = 30_000;
+
 describe("provisioning.sendEmail — degraded convention", () => {
   const originalFetch = globalThis.fetch;
 
@@ -18,7 +25,7 @@ describe("provisioning.sendEmail — degraded convention", () => {
     globalThis.fetch = originalFetch;
     delete process.env.RESEND_API_KEY;
     vi.resetModules();
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("stub mode (no RESEND_API_KEY) returns ok without hitting the network", async () => {
     delete process.env.RESEND_API_KEY;
@@ -27,7 +34,7 @@ describe("provisioning.sendEmail — degraded convention", () => {
     const r = await sendEmail({ to: "x@y.com", subject: "hi", html: "<p>hi</p>", text: "hi" });
     expect(r.ok).toBe(true);
     expect(r.mode).toBe("stub");
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("real mode with a message id → ok, not degraded", async () => {
     process.env.RESEND_API_KEY = "test-key";
@@ -38,7 +45,7 @@ describe("provisioning.sendEmail — degraded convention", () => {
     expect(r.ok).toBe(true);
     expect(r.id).toBe("email_123");
     expect(r.degraded).toBeUndefined();
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("2xx with no message id → ok:true, degraded:true — not a silent success", async () => {
     process.env.RESEND_API_KEY = "test-key";
@@ -50,7 +57,7 @@ describe("provisioning.sendEmail — degraded convention", () => {
     expect(r.degraded).toBe(true);
     expect(r.degradedReason).toMatch(/message id/);
     expect(r.id).toBeUndefined();
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("HTTP error → ok:false, not degraded", async () => {
     process.env.RESEND_API_KEY = "test-key";
@@ -61,5 +68,5 @@ describe("provisioning.sendEmail — degraded convention", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBe("invalid from address");
     expect(r.degraded).toBeUndefined();
-  });
+  }, IMPORT_TIMEOUT_MS);
 });

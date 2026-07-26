@@ -233,6 +233,44 @@ async function run() {
   assert("an ordinary venture plan is venture-grade, not a hockey stick",
     pr?.verdict === "venture-grade", `${pr?.verdict} (${pr?.impliedCagrPct}% CAGR)`);
 
+  // Rubric v5: a business model without SaaS metrics still has evidence, money
+  // carries a currency, and a plan that contradicts itself should say so. These
+  // run against the live deployment so a merge is verified, not assumed.
+  console.log("\n15. Non-SaaS evidence, currency and self-contradiction");
+  const defence = await req("POST", "/api/qventure/analyze", {
+    name: "Smoke Defence Systems", sector: "space", stage: "series-a", geography: "US",
+    description: "Autonomous perimeter surveillance towers sold to border agencies. ITAR registered, field-tested and in operational use at eleven sites.",
+    tractionNotes: "Backlog of $62M across signed contracts. 11 deployments live. $8M non-dilutive from an OTA award.",
+  });
+  const ds = defence.body?.data?.result?.signals;
+  assert("contracted backlog is parsed", ds?.contractedRevenueUsd === 62_000_000, String(ds?.contractedRevenueUsd));
+  assert("non-dilutive award is parsed", ds?.nonDilutiveUsd === 8_000_000, String(ds?.nonDilutiveUsd));
+  assert("deployments count as pilots / design wins", ds?.pilots === 11, String(ds?.pilots));
+  assert("a defence contracting milestone is recognised",
+    Array.isArray(ds?.regulatoryMilestones) && ds.regulatoryMilestones.length > 0, JSON.stringify(ds?.regulatoryMilestones));
+  assert("evidence with no ARR still lifts coverage above zero",
+    defence.body?.data?.result?.signalCoverage > 0, String(defence.body?.data?.result?.signalCoverage));
+
+  const euro = await req("POST", "/api/qventure/analyze", {
+    name: "Smoke Euro Ledger", sector: "fintech", stage: "seed", geography: "EU",
+    description: "Treasury automation for European mid-market finance teams, reconciling multi-bank cash positions across the eurozone with EUR 3,000,000 ARR and 240 customers.",
+  });
+  const es = euro.body?.data?.result?.signals;
+  assert("a EUR figure is converted, not read as dollars",
+    es?.currency === "EUR" && es?.revenueUsd > 3_300_000 && es?.revenueUsd < 3_600_000,
+    `${es?.currency}/${es?.revenueUsd}`);
+  assert("the conversion is disclosed in the assumptions",
+    (euro.body?.data?.result?.assumptions || []).some((a) => /converted to USD/i.test(a)),
+    JSON.stringify(euro.body?.data?.result?.assumptions || []).slice(0, 160));
+
+  const contradictory = await req("POST", "/api/qventure/analyze", {
+    name: "Smoke Two Numbers", sector: "saas", stage: "seed",
+    description: "Collaboration platform. We have $2M ARR today. Elsewhere in this plan: the company reached $5M ARR last quarter.",
+  });
+  assert("two present-tense revenue figures raise a flag",
+    (contradictory.body?.data?.result?.redFlags || []).some((f) => /more than one current revenue figure/.test(f)),
+    JSON.stringify(contradictory.body?.data?.result?.redFlags || []));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

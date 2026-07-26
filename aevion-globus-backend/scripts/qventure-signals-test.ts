@@ -245,6 +245,12 @@ const forwardLooking = analyze({ ...base, description: "SaaS platform with $2M A
 ok("a forward-looking figure is a plan, not a contradiction", !forwardLooking.redFlags.some((f) => /more than one current revenue/.test(f)), forwardLooking.redFlags.join("|"));
 const rounded = analyze({ ...base, description: "SaaS with $2M ARR. Precisely, $2.0M ARR as of last month." });
 ok("the same figure written twice is not a contradiction", !rounded.redFlags.some((f) => /more than one current revenue/.test(f)));
+// The smoke run caught this: the bare noun "plan" used to count as forward
+// intent, so "elsewhere in this plan: $5M ARR" silenced a real contradiction.
+const nounPlan = analyze({ ...base, description: "Collaboration platform. We have $2M ARR today. Elsewhere in this plan: the company reached $5M ARR last quarter." });
+ok("the noun 'plan' does not silence a contradiction", nounPlan.redFlags.some((f) => /more than one current revenue figure/.test(f)), nounPlan.redFlags.join("|"));
+const intentPlan = analyze({ ...base, description: "SaaS with $2M ARR today; the company plans to reach $5M ARR next year." });
+ok("'plans to reach' is still read as forward intent", !intentPlan.redFlags.some((f) => /more than one current revenue/.test(f)), intentPlan.redFlags.join("|"));
 
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

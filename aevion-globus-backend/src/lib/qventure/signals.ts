@@ -378,7 +378,10 @@ export function parsePlanSignals(text: string): PlanSignals {
  */
 function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCurrency | null): void {
   if (s.revenueUsd === null) return;
-  const FORWARD = /\b(target|targeting|goal|expect\w*|forecast\w*|project\w*|plan(?:ned|ning)?|plans? to|plan for|will|plan of|by (?:year[- ]end|the end of|20\d\d)|next year|plan year|run[- ]rate exit|ambition)\b/;
+  // Forward INTENT, not the noun. "in this plan:" must not silence the check —
+  // the smoke run caught exactly that: a bare "plan" swallowed a real
+  // contradiction because the sentence happened to use the word.
+  const FORWARD = /\b(target|targets|targeting|goal|expects?|expected|expecting|forecasts?|forecasting|projected|projection|projections|planned|planning|plans to|plan to|aims? to|intends? to|will (?:reach|hit|grow|be)|by (?:year[- ]end|the end of|20\d\d)|next year|run[- ]rate exit|ambition)\b/;
   const re = new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "gi");
   const seen = new Set<number>();
   const stated: number[] = [];

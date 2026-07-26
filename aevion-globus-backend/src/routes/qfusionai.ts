@@ -384,7 +384,9 @@ qfusionaiRouter.get("/stats", async (_req, res) => {
 /** GET /fusions — list recent fusion runs (Postgres + in-memory fallback) */
 qfusionaiRouter.get("/fusions", async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
-  const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+  // Upper bound so a malicious client can't send offset=1e18 and trigger a
+  // Postgres seq scan on OFFSET (which reads-and-discards every row up to N).
+  const offset = Math.min(Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0), 10_000);
 
   // Try Postgres first
   try {
@@ -462,15 +464,32 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
     return res.status(503).json({ error: "provider-not-found", provider: providerId });
   }
 
+  // Cap model to 100 chars — user-supplied string is sent to provider APIs and
+  // stored in the runs table; unbounded input inflates DB rows and provider
+  // error logs and can silently break lookups that expect canonical model ids.
   const model =
     typeof body.model === "string" && body.model.trim()
-      ? body.model.trim()
+      ? body.model.trim().slice(0, 100)
       : providerMeta.defaultModel;
 
-  const temperature = typeof body.temperature === "number" ? body.temperature : 0.7;
+  // Temperature is passed verbatim to provider SDKs — most reject values outside
+  // [0, 2], but NaN/Infinity slip past the `typeof number` gate and either crash
+  // the request or, worse, get sent as `null`/garbage and burn a provider call.
+  const rawTemp = typeof body.temperature === "number" ? body.temperature : 0.7;
+  if (!Number.isFinite(rawTemp) || rawTemp < 0 || rawTemp > 2) {
+    return res.status(400).json({ error: "invalid_temperature", hint: "must be finite number in [0, 2]" });
+  }
+  const temperature = rawTemp;
+
   // Cap context to 8k chars — user-supplied text folded into system prompt.
   // Without a cap, an attacker could inflate tokens to burn the router budget.
   const context = typeof body.context === "string" ? body.context.trim().slice(0, 8000) : null;
+
+  // sanitizeMessages caps per-message content at 32k but does NOT cap array
+  // length — reject upfront so we never allocate/iterate a huge messages array.
+  if (Array.isArray(body.messages) && body.messages.length > 50) {
+    return res.status(400).json({ error: "too_many_messages", hint: "max 50 messages per request" });
+  }
 
   const messages: ChatMessage[] =
     sanitizeMessages(body.messages) ?? [

@@ -146,7 +146,16 @@ qchaingovRouter.post("/proposals", writeLimit, async (req, res) => {
     if (!Array.isArray(options) || options.length < 2 || options.length > 10) {
       return res.status(400).json({ error: "options must be array 2..10" });
     }
-    const cleanOptions = options.map(o => String(o).slice(0, 80).trim()).filter(Boolean);
+    // Reject options that would be silently truncated — a proposal author sees
+    // "yes-with-conditions-A-until-2028…" in their form but voters see the
+    // sliced version, and vote.choice validation later would silently fail.
+    for (const o of options) {
+      const s = typeof o === "string" ? o : String(o);
+      if (s.length > 80) {
+        return res.status(400).json({ error: "option_too_long", hint: "each option ≤ 80 chars" });
+      }
+    }
+    const cleanOptions = options.map(o => String(o).trim()).filter(Boolean);
     if (cleanOptions.length !== options.length) {
       return res.status(400).json({ error: "options must be non-empty strings" });
     }
@@ -265,12 +274,23 @@ qchaingovRouter.post("/proposals/:id/votes", voteLimit, async (req, res) => {
     if (!allowedOptions.includes(choice)) {
       return res.status(400).json({ error: "invalid_choice", allowed: allowedOptions });
     }
+    // Reject over-long rationale explicitly — silently truncating loses the
+    // voter's actual reasoning (this text is quoted back to them in the UI and
+    // aggregated by downstream summarization).
+    let rationaleClean: string | null = null;
+    if (rationale != null) {
+      const s = typeof rationale === "string" ? rationale : String(rationale);
+      if (s.length > 1000) {
+        return res.status(400).json({ error: "rationale_too_long", hint: "≤ 1000 chars" });
+      }
+      rationaleClean = s.length ? s : null;
+    }
     const voteId = crypto.randomUUID();
     try {
       await pool.query(
         `INSERT INTO "QChainGovVote" ("id","proposalId","voterUserId","choice","weight","rationale")
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [voteId, id, auth.sub, choice, w, rationale ? String(rationale).slice(0, 1000) : null],
+        [voteId, id, auth.sub, choice, w, rationaleClean],
       );
     } catch (e: unknown) {
       const err = e as { code?: string };

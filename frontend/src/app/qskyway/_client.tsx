@@ -54,6 +54,14 @@ interface CityData {
   dataQuality?: DataQuality;
   _signature?: { alg: string; contentHash: string };
 }
+/** The filing document /route/justification returns, signed as one unit. */
+interface JustDoc {
+  kind: string; city: string; from: number; to: number; respectCeiling: boolean;
+  distanceKm: number; cruiseAltM: number; etaMinWind: number;
+  twinContentHash: string; windSource: string; heightConfidencePct: number; issuedAt: string;
+  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
+}
+interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
 interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean; }
@@ -131,6 +139,9 @@ export default function QSkywayClient() {
   const strictRef = useRef(false);
   const [airspaceRoute, setAirspaceRoute] = useState<AirspaceCompliance | null>(null);
   const [ceilingBlocked, setCeilingBlocked] = useState<string | null>(null);
+  const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
+  const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
+  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
@@ -253,6 +264,9 @@ export default function QSkywayClient() {
           setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${j.note ?? "нет коридора в пределах опубликованного потолка"}`);
           setAirspaceRoute(j.airspaceIfUnrestricted ?? null);
           heroRef.current = null;
+          setHeroPair(null);
+          setJustification(null);
+          setJustState("idle");
           // There is no flight — leaving the previous route's telemetry on screen
           // next to a "refused" banner would read as if those numbers described it.
           setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null }));
@@ -263,6 +277,11 @@ export default function QSkywayClient() {
       const r = await res.json();
       setCeilingBlocked(null);
       setAirspaceRoute(r.airspace ?? null);
+      setHeroPair({ from, to });
+      // A justification describes one specific flight. Carrying the previous
+      // one over to a new route would attach a signed document to the wrong trip.
+      setJustification(null);
+      setJustState("idle");
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
       setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null }));
     } catch {
@@ -529,6 +548,51 @@ export default function QSkywayClient() {
     } catch (e) { setBooking("ошибка сети: " + String(e)); }
   }, [cityId, fetchSlots]);
 
+  // ── filing document ────────────────────────────────────────────────────────
+  const requestJustification = useCallback(async () => {
+    if (!heroPair) return;
+    setJustState("busy");
+    try {
+      const res = await fetch(apiUrl("/api/qskyway/route/justification"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...heroPair, city: cityIdRef.current, respectCeiling: strictRef.current }),
+      });
+      if (!res.ok) throw new Error("justification " + res.status);
+      const j = await res.json();
+      setJustification({ doc: j.document, attestation: j.attestation, scope: j.scope });
+      setJustState("idle");
+    } catch { setJustState("idle"); setJustification(null); }
+  }, [heroPair]);
+
+  // Verification runs against the backend, not in the browser: a document that
+  // only ever checks itself locally proves nothing to the person receiving it.
+  const verifyJustification = useCallback(async () => {
+    if (!justification) return;
+    setJustState("busy");
+    try {
+      const res = await fetch(apiUrl("/api/qskyway/route/justification/verify"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document: justification.doc, attestation: justification.attestation }),
+      });
+      const j = await res.json();
+      setJustState(j?.valid === true ? "verified" : "invalid");
+    } catch { setJustState("invalid"); }
+  }, [justification]);
+
+  const downloadJustification = useCallback(() => {
+    if (!justification) return;
+    const payload = JSON.stringify(
+      { document: justification.doc, attestation: justification.attestation, scope: justification.scope },
+      null, 2,
+    );
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qskyway-justification-${justification.doc.city}-${justification.doc.from}-${justification.doc.to}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [justification]);
+
   const wrap: React.CSSProperties = { maxWidth: 1180, margin: "0 auto", padding: "24px 18px 48px", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", color: "#e8eef7" };
   const card: React.CSSProperties = { background: "#0e141f", border: "1px solid #1e2836", borderRadius: 12, overflow: "hidden" };
   const cardH: React.CSSProperties = { padding: "10px 14px", borderBottom: "1px solid #1e2836", background: "#131b28", fontFamily: "monospace", fontSize: 11.5, letterSpacing: 1.5, textTransform: "uppercase", color: "#9fb0c4" };
@@ -696,6 +760,43 @@ export default function QSkywayClient() {
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
+
+                  {/* The filing document. Until now it existed only as an endpoint,
+                      which is the same as not existing for the person who has to
+                      justify a flight. */}
+                  <div style={{ marginTop: 12, borderTop: "1px solid #1e2836", paddingTop: 12 }}>
+                    {!justification ? (
+                      <button style={btn} onClick={requestJustification} disabled={!heroPair || justState === "busy"}>
+                        {justState === "busy" ? "…" : t("qskyway.just.build")}
+                      </button>
+                    ) : (
+                      <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
+                        <div style={{ color: "#2dd4bf" }}>
+                          📄 {t("qskyway.just.ready")} · H-{justification.doc.from + 1} → H-{justification.doc.to + 1}
+                        </div>
+                        <div style={{ color: "#5f7086", marginTop: 3, wordBreak: "break-all" }}>
+                          sha256 {justification.attestation.contentHash.slice(0, 24)}…
+                        </div>
+                        {justification.doc.airspace && (
+                          <div style={{ marginTop: 3, color: justification.doc.airspace.compliant ? "#2dd4bf" : "#fbbf24" }}>
+                            {justification.doc.airspace.authority} · {justification.doc.airspace.effective} ·{" "}
+                            {justification.doc.airspace.compliant ? t("qskyway.just.within") : t("qskyway.just.above")}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          <button style={btn} onClick={downloadJustification}>{t("qskyway.just.download")}</button>
+                          <button style={btn} onClick={verifyJustification} disabled={justState === "busy"}>
+                            {justState === "verified" ? "✓ " + t("qskyway.just.verified")
+                              : justState === "invalid" ? "✗ " + t("qskyway.just.invalid")
+                              : t("qskyway.just.verify")}
+                          </button>
+                        </div>
+                        <div style={{ marginTop: 8, color: "#5f7086", fontSize: 10.5, whiteSpace: "normal", lineHeight: 1.45 }}>
+                          {justification.scope}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 

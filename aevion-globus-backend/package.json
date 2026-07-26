@@ -22,6 +22,7 @@
     "smoke:qbuild-prod": "node scripts/qbuild-prod-smoke.js",
     "audit:projects-pricing": "node scripts/projects-pricing-audit.js",
     "audit:paywall-coverage": "node scripts/paywall-coverage-audit.js",
+    "money:health": "node scripts/money-health.js",
     "smoke:paywall-policy": "node scripts/paywall-policy-smoke.js",
     "paywall:flip": "node scripts/paywall-flip-helper.js",
     "seo:gsc-verify": "node scripts/gsc-pre-submit-verify.js",

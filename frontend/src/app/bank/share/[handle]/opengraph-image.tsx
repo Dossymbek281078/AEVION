@@ -45,21 +45,23 @@ function initialsOf(s: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function ShareProfileOg({
+export default async function ShareProfileOg({
   params,
   searchParams,
 }: {
-  params: { handle: string };
-  searchParams?: { name?: string; score?: string; tier?: string; bio?: string };
+  params: Promise<{ handle: string }>;
+  searchParams?: Promise<{ name?: string; score?: string; tier?: string; bio?: string }>;
 }) {
-  const handle = (params.handle ?? "anon").slice(0, 24);
-  const name = (searchParams?.name ?? "").slice(0, 36) || handle;
-  const score = parseFloat(searchParams?.score ?? "");
+  const p = await params;
+  const sp = await searchParams;
+  const handle = (p.handle ?? "anon").slice(0, 24);
+  const name = (sp?.name ?? "").slice(0, 36) || handle;
+  const score = parseFloat(sp?.score ?? "");
   const scoreShown = Number.isFinite(score) ? Math.round(Math.max(0, Math.min(1, score)) * 100) : null;
-  const tier = (searchParams?.tier ?? "").toLowerCase();
+  const tier = (sp?.tier ?? "").toLowerCase();
   const tierColor = TIER_COLOR[tier] ?? "#cbd5e1";
   const tierLabel = TIER_LABEL[tier] ?? "AEVION member";
-  const bio = (searchParams?.bio ?? "").slice(0, 160);
+  const bio = (sp?.bio ?? "").slice(0, 160);
 
   const avatarBg = gradientFor(name);
   const initials = initialsOf(name);

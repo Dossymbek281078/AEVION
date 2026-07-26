@@ -5,15 +5,17 @@ export const alt = "You're invited to AEVION";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function ReferralOg({
+export default async function ReferralOg({
   params,
   searchParams,
 }: {
-  params: { code: string };
-  searchParams?: { from?: string; tier?: string };
+  params: Promise<{ code: string }>;
+  searchParams?: Promise<{ from?: string; tier?: string }>;
 }) {
-  const code = (params.code ?? "").slice(0, 16).toUpperCase();
-  const from = (searchParams?.from ?? "").slice(0, 24);
+  const p = await params;
+  const sp = await searchParams;
+  const code = (p.code ?? "").slice(0, 16).toUpperCase();
+  const from = (sp?.from ?? "").slice(0, 24);
 
   return new ImageResponse(
     (

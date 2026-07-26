@@ -30,8 +30,9 @@ function fmt(n: number) {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-export default async function PayRequestOg({ params }: { params: { token: string } }) {
-  const meta = await loadRequest(params.token);
+export default async function PayRequestOg({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const meta = await loadRequest(token);
   const amount = meta?.amount;
   const description = meta?.description?.slice(0, 80) ?? "Запрос на оплату через QPayNet";
   const status = meta?.status ?? "pending";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, use } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -173,8 +173,8 @@ function DeploymentRow({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function DevHubDeployPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function DevHubDeployPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);

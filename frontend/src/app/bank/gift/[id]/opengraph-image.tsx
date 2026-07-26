@@ -53,13 +53,14 @@ function tryDecode(p: string | undefined): DecodedGift | null {
   }
 }
 
-export default function GiftOgImage({
+export default async function GiftOgImage({
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { p?: string };
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ p?: string }>;
 }) {
-  const decoded = tryDecode(searchParams?.p);
+  const sp = await searchParams;
+  const decoded = tryDecode(sp?.p);
   const themeId = decoded?.themeId && decoded.themeId in THEME_GRADIENT ? decoded.themeId : "general";
   const gradient = THEME_GRADIENT[themeId];
   const icon = THEME_ICON[themeId];

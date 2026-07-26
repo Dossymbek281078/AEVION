@@ -232,6 +232,13 @@ export const startupxApi = {
   offers: (id: number, token: string) =>
     call<{ listing: Listing; offers: Offer[] }>(`/ideas/${id}/offers?token=${encodeURIComponent(token)}`),
 
+  /** Correct the terms of a published listing. Text and tier are frozen. */
+  updateTerms: (id: number, token: string, patch: { deal: DealTerms; metrics?: ListingMetrics; demoUrl?: string; repoUrl?: string }) =>
+    call<{ listing: Listing; assessment: Assessment }>(`/ideas/${id}?token=${encodeURIComponent(token)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
   /** Take the listing off the public feed. The row and its offers are kept. */
   withdraw: (id: number, token: string) =>
     call<{ id: number; visibility: string }>(`/ideas/${id}?token=${encodeURIComponent(token)}`, {

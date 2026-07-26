@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { EditTermsForm } from "../../components/EditTermsForm";
+import { AssessmentPanel } from "../../components/AssessmentPanel";
 import { INTENT_LABEL, dealHeadline, startupxApi, usd, type Listing, type Offer } from "../../lib";
 
 /**
@@ -165,6 +167,19 @@ export default function OffersPage() {
                 </article>
               );
             })}
+          </div>
+        )}
+
+        {!withdrawn && (
+          <div style={{ marginTop: 26, display: "grid", gap: 14 }}>
+            <EditTermsForm
+              listing={listing}
+              token={token}
+              onSaved={(updated, assessment) =>
+                setData((prev) => (prev ? { ...prev, listing: { ...updated, assessment } } : prev))
+              }
+            />
+            {listing.assessment && <AssessmentPanel a={listing.assessment} compact />}
           </div>
         )}
 

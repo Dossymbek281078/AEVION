@@ -271,6 +271,32 @@ async function run() {
     (contradictory.body?.data?.result?.redFlags || []).some((f) => /more than one current revenue figure/.test(f)),
     JSON.stringify(contradictory.body?.data?.result?.redFlags || []));
 
+
+  // The showcase is the public face of the engine: conclusions for everyone,
+  // reasoning behind a token. A payload that merely goes unrendered is still
+  // published, so the split is asserted on the wire.
+  console.log("\n16. Showcase — conclusions public, reasoning gated");
+  const showcaseList = await req("GET", "/api/qventure/showcase");
+  const showcaseRows = showcaseList.body?.data || [];
+  assert("showcase lists the curated set", Array.isArray(showcaseRows) && showcaseRows.length >= 10, String(showcaseRows.length));
+  assert("it spans all three difficulty bands",
+    ["simple", "medium", "complex"].every((c) => showcaseRows.some((r) => r.complexity === c)),
+    JSON.stringify([...new Set(showcaseRows.map((r) => r.complexity))]));
+  assert("every row carries a public verdict and score",
+    showcaseRows.every((r) => typeof r.composite === "number" && ["invest", "watch", "pass"].includes(r.verdict)));
+  const showcaseOne = await req("GET", `/api/qventure/showcase/${showcaseRows[0]?.slug}`);
+  assert("a signed-out reader gets the teaser", showcaseOne.body?.unlocked === false, String(showcaseOne.body?.unlocked));
+  const teaser = JSON.stringify(showcaseOne.body?.data ?? {});
+  assert("the teaser carries no factor reasoning", !teaser.includes('"factors"'));
+  assert("the teaser carries no council memo", !teaser.includes('"council"') && !teaser.includes('"memo"'));
+  assert("the teaser carries no entry strategy", !teaser.includes('"strategy"') && !teaser.includes("ticketUsd"));
+  assert("the teaser carries no diligence panels",
+    !teaser.includes('"stress"') && !teaser.includes('"tam"') && !teaser.includes('"signals"'));
+  assert("the teaser names what is behind the gate",
+    Array.isArray(showcaseOne.body?.data?.locked) && showcaseOne.body.data.locked.length >= 4, String(showcaseOne.body?.data?.locked?.length));
+  const unknownSlug = await req("GET", "/api/qventure/showcase/no-such-company");
+  assert("an unknown slug is 404, not a leak", unknownSlug.status === 404, String(unknownSlug.status));
+
   console.log(`\n${failed === 0 ? "✅" : "❌"} QVenture smoke: ${passed} passed, ${failed} failed\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

@@ -29,7 +29,7 @@ import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 import { fetchComparables } from "../lib/qventure/comparables";
 import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
-import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX } from "../lib/qventure/examples";
+import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX, type ExampleSeed } from "../lib/qventure/examples";
 import { verifyBearerOptional } from "../lib/authJwt";
 
 const captureQVentureError = makeServiceCapture("qventure");
@@ -363,6 +363,84 @@ qventureRouter.get("/examples", async (_req: Request, res: Response) => {
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "examples_failed" });
+  }
+});
+
+/**
+ * Public showcase: conclusions for everyone, reasoning behind a sign-in.
+ *
+ * A visitor should be able to see the tool decide on an easy plan AND on one
+ * where the evidence is contracts, clearances or offtake — that difference is
+ * the product. What they should not get for free is the work: the factor
+ * reasoning, the four-role council, the entry strategy and the diligence panels.
+ *
+ * The split is enforced here rather than in the UI, because a public payload
+ * that merely goes unrendered is still published.
+ */
+function showcasePublicView(r: StoredAnalysis, seed: ExampleSeed | undefined) {
+  const result = r.result;
+  const flags = Array.isArray(result?.redFlags) ? result.redFlags.length : 0;
+  return {
+    id: r.id,
+    slug: seed?.slug ?? r.id.replace(EXAMPLE_ID_PREFIX, ""),
+    name: r.name,
+    sector: result?.sector?.label ?? r.sector,
+    stage: r.stage,
+    geography: r.geography,
+    complexity: seed?.complexity ?? "medium",
+    whyThisOne: seed?.whyThisOne ?? "",
+    // The conclusions themselves — the verdict, how much of it rests on the
+    // company's own disclosure, and how many things the engine took issue with.
+    composite: r.composite,
+    verdict: r.verdict,
+    signalCoveragePct: typeof result?.signalCoverage === "number" ? Math.round(result.signalCoverage * 100) : null,
+    redFlagCount: flags,
+    rubricVersion: result?.rubricVersion ?? null,
+    /** What a signed-in reader gets, named so the gate is honest about itself. */
+    locked: [
+      "Score breakdown across all eight factors, each with its reasoning and whether the number came from this company or its sector",
+      "The four-role council memo (scientist, data analyst, economist, lawyer)",
+      "Entry strategy: ticket, ownership, valuation band, tranches, risk-adjusted return",
+      "Evidence read from the plan, red-flag text, financial stress test, TAM triangulation, revenue-plan check",
+      "PDF export of the full memo",
+    ],
+  };
+}
+
+// GET /showcase — the curated set as public conclusions, grouped client-side.
+qventureRouter.get("/showcase", async (_req: Request, res: Response) => {
+  try {
+    const rows = await listExamples();
+    const bySlug = new Map(EXAMPLE_SEEDS.map((s) => [`${EXAMPLE_ID_PREFIX}${s.slug}`, s]));
+    const data = rows
+      .map((r) => showcasePublicView(r, bySlug.get(r.id)))
+      .sort((a, b) => b.composite - a.composite);
+    res.json({ ok: true, data, count: data.length });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "showcase_failed" });
+  }
+});
+
+// GET /showcase/:slug — conclusions publicly; the full analysis with a Bearer token.
+qventureRouter.get("/showcase/:slug", async (req: Request, res: Response) => {
+  try {
+    const slug = String(req.params.slug || "").replace(/[^a-z0-9-]/gi, "").slice(0, 60);
+    const seed = EXAMPLE_SEEDS.find((s) => s.slug === slug);
+    const record = await getById(`${EXAMPLE_ID_PREFIX}${slug}`);
+    if (!record) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const auth = verifyBearerOptional(req);
+    if (auth) {
+      return res.json({
+        ok: true, unlocked: true,
+        data: { ...redactInput(record), showcase: showcasePublicView(record, seed) },
+      });
+    }
+    res.json({ ok: true, unlocked: false, data: showcasePublicView(record, seed) });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "showcase_failed" });
   }
 });
 

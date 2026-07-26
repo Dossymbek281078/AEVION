@@ -88,9 +88,11 @@ async function getJson(url, init) {
  *  якорями. Разъехались — падаем: судить половину критериев без якорей нельзя. */
 async function loadCriteria(rubric) {
   let criteria = null;
+  let apiAnchors = null;
   try {
     const d = await getJson(`${API}/api/qreal/realism-criteria`);
     criteria = d.criteria;
+    apiAnchors = d.anchors || null;
   } catch (e) {
     console.error(`! Не дотянулся до ${API}/api/qreal/realism-criteria: ${e.message}`);
     throw new Error("Шкалу нельзя брать по памяти. Подними backend или задай QREAL_API.");
@@ -104,6 +106,25 @@ async function loadCriteria(rubric) {
       `Шкала разъехалась с якорями.\n  нет якорей для: ${missing.join(", ") || "—"}\n  якоря-сироты: ${extra.join(", ") || "—"}\n` +
         `Почини scripts/qreal-benchmark.rubric.json под REALISM_CRITERIA и повтори.`
     );
+  }
+
+  // Якоря — продуктовый IP, они живут в services/qreal/judge.ts и отдаются
+  // вместе с критериями. Локальный rubric.json остаётся читаемой копией для
+  // судьи-человека, но расходиться с продуктом ему нельзя: иначе VLM-судья и
+  // люди мерят разными линейками, и сравнивать их скоры бессмысленно.
+  if (apiAnchors) {
+    const drift = apiIds.filter((id) => {
+      const a = apiAnchors[id], b = rubric.anchors[id];
+      return !a || !b || ["1", "3", "5"].some((lvl) => (a[lvl] || "").trim() !== (b[lvl] || "").trim());
+    });
+    if (drift.length) {
+      throw new Error(
+        `Якоря бенчмарка разошлись с продуктовыми по: ${drift.join(", ")}.\n` +
+          `Источник правды — REALISM_ANCHORS в services/qreal/judge.ts. Синхронизируй rubric.json и повтори.`
+      );
+    }
+  } else {
+    console.error(`! Прод ещё не отдаёт anchors (старая версия backend) — сверяю только состав критериев, тексты якорей не проверены.`);
   }
   return criteria;
 }

@@ -3703,3 +3703,88 @@ describe("deleting a project drops its database", () => {
     delete process.env.DEVHUB_DB_ADMIN_URL;
   }, 20_000);
 });
+
+describe("per-project Railway deploys", () => {
+  test("refuses to deploy user services into the platform's own Railway project", async () => {
+    const { isSafeDeployTarget } = await import("../src/lib/devhubRailwayDeploy");
+    expect(isSafeDeployTarget("proj-users", "proj-platform")).toBe(true);
+    expect(isSafeDeployTarget("proj-platform", "proj-platform")).toBe(false); // next to our API and databases
+    expect(isSafeDeployTarget(undefined, "proj-platform")).toBe(false);
+  });
+
+  test("reads owner/repo out of every URL form we store", async () => {
+    const { repoSlugFromUrl } = await import("../src/lib/devhubRailwayDeploy");
+    expect(repoSlugFromUrl("https://github.com/acme/widget")).toBe("acme/widget");
+    expect(repoSlugFromUrl("https://github.com/acme/widget.git")).toBe("acme/widget");
+    expect(repoSlugFromUrl("git@github.com:acme/widget.git")).toBe("acme/widget");
+    expect(repoSlugFromUrl(null)).toBeNull();
+  });
+
+  test("without a repo it says so instead of creating an empty service", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: null, envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async () => { throw new Error("must not be called"); },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/GitHub repo/);
+  });
+
+  test("creates the service, pushes the project's env vars, returns a domain", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const calls: string[] = [];
+    const vars: Record<string, string> = {};
+    const r = await deployProjectToRailway({
+      projectId: "aaaaaaaa-bbbb", repoUrl: "https://github.com/acme/widget",
+      envVars: { DATABASE_URL: "postgres://u:p@h/db", NODE_ENV: "production" },
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async (q, v: any) => {
+        calls.push(q.split("(")[0].trim());
+        if (q.includes("serviceCreate")) {
+          expect(v.input.source.repo).toBe("acme/widget");
+          return { serviceCreate: { id: "svc-1" } };
+        }
+        if (q.includes("variableUpsert")) { vars[v.input.name] = v.input.value; return { variableUpsert: true }; }
+        if (q.includes("serviceDomainCreate")) return { serviceDomainCreate: { domain: "widget-production.up.railway.app" } };
+        return { serviceInstanceRedeploy: true };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.domain).toBe("widget-production.up.railway.app");
+    expect(r.created).toBe(true);
+    // The whole point of the rewrite: the app gets its own database URL.
+    expect(vars.DATABASE_URL).toBe("postgres://u:p@h/db");
+    expect(vars.NODE_ENV).toBe("production");
+  });
+
+  test("a redeploy reuses the service instead of billing a new container", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    let createdCalled = false;
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      existingServiceId: "svc-existing",
+      gql: async (q) => {
+        if (q.includes("serviceCreate")) { createdCalled = true; return { serviceCreate: { id: "svc-new" } }; }
+        if (q.includes("serviceDomainCreate")) return { serviceDomainCreate: { domain: "d.up.railway.app" } };
+        return { serviceInstanceRedeploy: true };
+      },
+    });
+    expect(createdCalled).toBe(false);
+    expect(r.ok && r.serviceId).toBe("svc-existing");
+    expect(r.ok && r.created).toBe(false);
+  });
+
+  test("a GraphQL 200-with-errors body is a failure, not a success", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async () => { throw new Error("Not Authorized"); },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/Not Authorized/);
+  });
+});

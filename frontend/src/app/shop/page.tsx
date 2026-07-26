@@ -45,6 +45,10 @@ function Card({ p }: { p: Product }) {
       <h3 style={styles.cardTitle}>{p.title}</h3>
       <p style={styles.cardDesc}>{p.desc}</p>
 
+      {/* Предупреждение показывается ДО кнопки и не прячется под спойлер:
+          модуль, объявляющий себя демонстрацией, не должен продаваться молча. */}
+      {p.notice ? <p style={styles.notice}>{p.notice}</p> : null}
+
       {p.includes?.length ? (
         <ul style={styles.includes}>
           {p.includes.map((line) => (
@@ -193,6 +197,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardDesc: { color: MUTED, fontSize: 13.5, lineHeight: 1.6, marginTop: 8 },
   spacer: { flex: 1, minHeight: 8 },
+  notice: {
+    fontSize: 12.5,
+    lineHeight: 1.5,
+    color: "#7a4a12",
+    background: "#fbf3e4",
+    border: "1px solid #e8d5ae",
+    borderRadius: 3,
+    padding: "10px 12px",
+    margin: "12px 0 0",
+  },
   includes: {
     listStyle: "none",
     padding: "12px 0 0",

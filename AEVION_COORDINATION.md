@@ -849,3 +849,34 @@ const end = range[2] ? Math.min(parseInt(range[2], 10), stat.size - 1) : stat.si
 **Починка везде одна:** проверить `Number.isFinite` до зажима, а не после.
 Готовый образец — `parseLimit()` в `routes/pricing.ts` (с тестом на обе
 половины: мусор даёт фолбэк И реальные значения проходят).
+
+### Нестабильность сюиты: devhub-integrations и qtradeInternalCredit (2026-07-27)
+
+Замерено за пять полных прогонов `npm run test:stable` из worktree
+`aevion-fan-pricing` (ветка `feat/fan-discounts` эти зоны не трогает).
+
+**`tests/devhub-integrations.test.ts`** — падает нестабильно и **каждый раз
+другим тестом**:
+
+| прогон | красных | какие |
+|---|---|---|
+| 1 | 0 | — |
+| 2 | 1 | `tts step: R2 env missing` |
+| 3 | 3 | `merge sha`, `tts R2 set`, `SSE music` |
+| 4 | 1 | `opens a PR on a new branch` |
+| 5 | 2 | `opens a PR on a new branch`, `email-template-send (Brevo)` |
+
+В изоляции — стабильно **191 PASS**. В паре с посторонним файлом — 194 PASS.
+Характер падений один: мок ожидается вызванным 1 раз, вызывается 2. Похоже на
+async-хвост, из-за которого мок доживает до следующего файла под параллельной
+нагрузкой (`--maxWorkers=2`).
+
+**`tests/qtradeInternalCredit.test.ts`** — в общей сюите падает
+`auto-provisions a fresh account and credits it`, в изоляции **5 PASS**.
+
+Что это значит для проверяющего: если в CI красный из этих двух файлов —
+сверьте имя теста. Если оно меняется от прогона к прогону, это не регрессия
+конкретного PR.
+
+Диагноза причины у меня нет — зоны чужие, воспроизведения в изоляции добиться
+не удалось. Передаю замер, а не догадку.

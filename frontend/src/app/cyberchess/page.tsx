@@ -985,6 +985,18 @@ export default function CyberChessPage(){
   const[hoverStripMove,sHoverStripMove]=useState<{from:string;to:string}|null>(null);
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
+  // Цель «сыграй партию» отмечалась ТОЛЬКО в ветке мата, поэтому сдача, ничья и
+  // флаг её не засчитывали — а именно так заканчивается большинство партий с
+  // ботом. Каждый путь завершения зовёт sOver(...), так что отмечаем здесь, в
+  // одном месте: латать каждый исход по отдельности — как раз тот способ, каким
+  // этот баг и появился. Ref-гард, чтобы одна партия не считалась дважды.
+  const gameCountedRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over){gameCountedRef.current=null;return}
+    if(gameCountedRef.current===over)return;
+    gameCountedRef.current=over;
+    bumpDaily("game");
+  },[over]);
   const[showGameOver,sShowGameOver]=useState(false);
   const[aiReview,sAiReview]=useState<{text:string;loading:boolean}>({text:"",loading:false});
   const[hist,sHist]=useState<string[]>([]);
@@ -3306,7 +3318,7 @@ export default function CyberChessPage(){
           // Local 2-player: no rating change, small shared Chessy for playing a full game
           const winner=game.turn()==="w"?"Чёрные":"Белые";
           r=`Checkmate — ${winner} победили`;
-          setTimeout(()=>{addChessy(3,"партия сыграна");bumpDaily("game")},400);
+          setTimeout(()=>{addChessy(3,"партия сыграна")},400);
         }else{
           const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
           if(w){
@@ -3322,7 +3334,7 @@ export default function CyberChessPage(){
             if(doubleActive){
               sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
             }
-            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
+            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`)},400);
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{

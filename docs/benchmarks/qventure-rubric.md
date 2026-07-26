@@ -22,11 +22,11 @@ That is a statement about *reading disclosure*, not about predicting outcomes.
 
 ## The claim we are **not** willing to make
 
-QVenture does not predict success. The calibration corpus separates known
-failures from known successes by **7.0 points of mean composite**, and **6 of 12
-failures still score at or above the weakest success**. Those descriptions were
-reconstructed by an author who knew the outcome, so even that 7.0 is generous to
-the rubric, not conservative.
+QVenture does not predict success. The calibration corpus (32 companies)
+separates known failures from known successes by **6.7 points of mean
+composite**, and **8 of 15 failures still score at or above the weakest
+success**. Those descriptions were reconstructed by an author who knew the
+outcome, so even that 6.7 is generous to the rubric, not conservative.
 
 ## Known limits, stated plainly
 
@@ -37,12 +37,19 @@ the rubric, not conservative.
 2. **`invest` is unreachable without disclosure.** No calibration case reaches
    it. With disclosed metrics it is reachable (marketplace strong case, 72.6),
    so the band is live, not decorative.
-3. **Capital-intensive discrimination is unmeasured.** The calibration corpus
-   has one capital-intensive success (Anduril, 52.1 → `pass`). Its description
-   discloses no contract awards; the hard-cases defence pair shows that when
-   that evidence *is* disclosed the same shape of company scores 62.3 vs 46.1.
-   More known-outcome capital-intensive companies are needed before claiming
-   anything here.
+3. **Capital-intensive discrimination is now measured, and it is ordinary.**
+   The arm was extended to 8 failures and 6 successes (SpaceX, Moderna, First
+   Solar, Enphase, Illumina; Northvolt, Solyndra, Nikola) and separates by
+   **6.6 points** — marginally better than the software-like arm's 5.7, and on
+   the same order. Worth stating plainly: that is *discrimination*, not skill.
+
+   Northvolt is the case to look at. It held the largest contracted backlog in
+   the corpus ($55B of offtake) and failed. Under v5 it scored **60.5**, above
+   the mean success — the engine credited the order book and ignored the two
+   negatives the same disclosure stated: yields below plan, and a capital
+   requirement an order of magnitude past the round. Both are now charged, and
+   it scores **55.7** with two flags. A screening tool that reads only the good
+   half of a disclosure is worse than no tool.
 4. **v5 changed nothing on the calibration corpus** — identical to the decimal.
    That is the expected result (the fixtures state no figures), and it is worth
    keeping visible: a rubric change that cannot be seen on your existing corpus

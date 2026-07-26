@@ -409,6 +409,19 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
       add("execution", 12, "Plan states no working hardware exists yet — at this stage the build risk is still ahead of the company, not behind it.");
     }
   }
+  // ── Ramp and financing risk on capital-heavy plans. ──────────────────────
+  // A large order book is demand, not delivery. Northvolt held one of the
+  // biggest contracted backlogs in its industry and still failed, and its own
+  // disclosure said why: yields below plan, and a capital requirement an order
+  // of magnitude past the round. Crediting the backlog while ignoring both
+  // stated negatives is how a screening tool talks itself into a hard deal.
+  if (/\b(yields?|output|production|deliveries|ramp|milestones?)\b[^.]{0,40}\b(below plan|behind (?:plan|schedule)|missed|short of)\b|\bbehind schedule\b|\bcost overruns?\b/.test(t)) {
+    add("execution", 12, "Plan discloses production or schedule shortfall against its own plan — the ramp is already slipping before this capital is deployed.");
+  }
+  if (/\bcapital (?:requirement|requirements|need|needs)\b[^.]{0,60}\b(billions|tens of billions)\b|\b(?:requires|needs)\b[^.]{0,40}\b(?:billions|tens of billions)\b[^.]{0,40}\bbefore\b/.test(t)) {
+    add("economics", 10, "Plan discloses a capital requirement far beyond this round before the asset produces at scale — financing and dilution risk sit ahead of any return.");
+  }
+
   // Signed demand is how contract-shaped businesses show traction; its explicit
   // absence is as informative as an empty revenue line in a subscription model.
   if ((stage === "series-a" || stage === "growth")

@@ -8,24 +8,28 @@
   "historical": {
     "recordedAt": "2026-07-26",
     "recordedBy": "human-reviewed run, rubric v5",
+    "revisions": [
+      "2026-07-26 (first): 24 cases, capital-intensive arm had n=1 success — that split was not a measurement and was labelled as such.",
+      "2026-07-26 (this): corpus extended to 32 with 8 capital-intensive cases (SpaceX, Moderna, First Solar, Enphase, Illumina succeeded; Northvolt, Solyndra, Nikola failed), and the engine learned two adverse disclosures those cases surfaced — production/schedule shortfall and a capital requirement far beyond the round."
+    ],
     "calibration": {
       "rubricVersion": 5,
-      "n": 24,
+      "n": 32,
       "note": "Reconstructed descriptions of companies with public outcomes, written with hindsight. Measures DISCRIMINATION and RANGE only — never predictive accuracy.",
       "failedMean": 53.8,
-      "succeededMean": 60.8,
-      "separationPoints": 7.0,
-      "overlapFailedAboveWeakestSuccess": 6,
-      "rangeUsed": [49.6, 66.3],
+      "succeededMean": 60.5,
+      "separationPoints": 6.7,
+      "overlapFailedAboveWeakestSuccess": 8,
+      "rangeUsed": [49.6, 68.0],
       "verdictDistribution": {
-        "failed": { "invest": 0, "watch": 4, "pass": 8 },
-        "succeeded": { "invest": 0, "watch": 11, "pass": 1 }
+        "failed": { "invest": 0, "watch": 6, "pass": 9 },
+        "succeeded": { "invest": 0, "watch": 16, "pass": 1 }
       },
       "byBusinessType": {
-        "capitalIntensive": { "separationPoints": 1.2, "nFailed": 5, "nSucceeded": 1 },
+        "capitalIntensive": { "separationPoints": 6.6, "nFailed": 8, "nSucceeded": 6 },
         "softwareLike": { "separationPoints": 5.7, "nFailed": 7, "nSucceeded": 11 }
       },
-      "caveat": "These fixtures state almost no figures, so rubric v5's non-SaaS evidence layer never fires on them: the v4 and v5 numbers are identical to the decimal. This harness cannot measure the capability added in v5 — that is what the hard-cases harness is for. The capital-intensive arm has n=1 on the success side and is not a measurement."
+      "caveat": "Fixtures state few figures, so rubric v5's non-SaaS evidence layer fires on only part of this corpus — the hard-cases harness is what measures that capability. Northvolt is the instructive case: the largest contracted backlog in the corpus, and it failed. It scored 60.5 (above the mean success) until the engine also read the two negatives its own disclosure stated; it now scores 55.7 with two flags."
     },
     "hardCases": {
       "rubricVersion": 5,
@@ -46,9 +50,9 @@
       ]
     },
     "openIssues": [
-      "On plans that disclose no figures at all, the composite still compresses into roughly 49-66 of a nominal 0-100 scale. That is defensible (no evidence, no movement) but the scale as presented overstates its own resolution.",
+      "On plans that disclose no figures at all, the composite still compresses into roughly 50-68 of a nominal 0-100 scale. That is defensible (no evidence, no movement) but the scale as presented overstates its own resolution.",
       "No case in the calibration corpus reaches 'invest'. On disclosure-rich input the hard-cases harness does reach it (marketplace strong, 72.6), so the band is reachable — but not on evidence-free descriptions.",
-      "Capital-intensive discrimination in the calibration corpus is 1.2 points, on n=1 success. Needs more known-outcome capital-intensive companies before any claim is made about it."
+      "8 of 15 known failures still score at or above the weakest known success. This corpus cannot support any claim about predicting outcomes, only about spreading disclosed evidence apart."
     ]
   },
   "latest": null

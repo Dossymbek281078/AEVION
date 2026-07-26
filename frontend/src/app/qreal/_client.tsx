@@ -32,6 +32,11 @@ type Estimate = {
 };
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
 type Character = { id: string; kind: string; name: string; canonical: string; refImages: string[]; shotIds: string[] };
+type Continuity = {
+  verdict: "consistent" | "drifting" | "insufficient";
+  totalScore: number | null; threshold: number;
+  weakest: Array<{ id: string; label: string; score: number }>;
+};
 
 export default function QRealClient() {
   const { t } = useI18n();
@@ -54,6 +59,7 @@ export default function QRealClient() {
   const [cast, setCast] = useState<Character[]>([]);
   const [castDraft, setCastDraft] = useState<Record<string, string>>({});
   const [refDraft, setRefDraft] = useState<Record<string, string>>({});
+  const [continuity, setContinuity] = useState<Continuity | null>(null);
   const [openQc, setOpenQc] = useState<string | null>(null);
   const [qcScores, setQcScores] = useState<Record<string, string>>({});
 
@@ -118,6 +124,24 @@ export default function QRealClient() {
       const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
       const pd = await pr.json();
       if (pd?.project) setProject(pd.project);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
+  // Ручная оценка непрерывности: судим по собранной сцене своими глазами.
+  // VLM-вариант ({judge:true}) платный, поэтому из UI его не дёргаем — цена
+  // вызова у fal не опубликована, и жать её кнопкой вслепую нельзя.
+  async function checkContinuity() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/continuity`), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const d = await r.json();
+      if (d?.note) setNote(d.note);
+      if (d?.message) setNote(d.message);
+      setContinuity(d?.continuity || null);
     } catch { setNote(t("qreal.note.backend.down")); }
     finally { setBusy(false); }
   }
@@ -539,6 +563,39 @@ export default function QRealClient() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Непрерывность измерима только там, где герой появляется дважды.
+                Показываем это состояние честно, а не прячем кнопку: «нечего
+                сравнивать» — тоже результат, и он объясняет, почему сцена не
+                демонстрирует консистентность. */}
+            <div className="mt-4 border-t border-neutral-200 pt-3 text-sm">
+              {cast.some((c) => c.shotIds.length >= 2) ? (
+                <>
+                  <button
+                    onClick={checkContinuity}
+                    disabled={busy}
+                    className="border border-neutral-900 bg-neutral-900 px-4 py-1.5 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
+                  >
+                    {t("qreal.cast.continuity.check")}
+                  </button>
+                  {continuity && (
+                    <p className="mt-2 text-xs">
+                      <span className={continuity.verdict === "consistent" ? "text-teal-800" : "text-red-700"}>
+                        {t(`qreal.cast.continuity.${continuity.verdict}`)}
+                      </span>
+                      {continuity.totalScore != null && (
+                        <span className="font-mono"> · {continuity.totalScore.toFixed(2)} / {continuity.threshold}</span>
+                      )}
+                      {continuity.weakest.length > 0 && (
+                        <span className="text-neutral-500"> · {continuity.weakest.map((w) => w.id).join(", ")}</span>
+                      )}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-neutral-500">{t("qreal.cast.continuity.na")}</p>
+              )}
             </div>
           </section>
         )}

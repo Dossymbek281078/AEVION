@@ -153,5 +153,22 @@ const rp = m.referenceCast(drifting[0].subjects, partial);
 ok("персонаж без референса номера не получает", rp.imageUrls.length === 1, String(rp.imageUrls.length));
 ok("единственный референс — @Image1", rp.lines.some((l) => l.includes("@Image1") && l.includes("shepherd dog")), rp.lines.join(" | "));
 
+/* ── 10. Метка персонажа ────────────────────────────────────────────────── */
+
+// Наивное «первые два слова» давало «central asian» — метку без предмета.
+// Предмет стоит в конце первой фразы, уточнения идут после запятой.
+const names = [
+  ["Central Asian shepherd dog, tail wagging, ears reacting to voice", "shepherd dog"],
+  ["7yo boy, tousled hair, oversized sweater, childlike gait", "7yo boy"],
+  ["golden eagle, accurate wing mechanics, feather detail", "golden eagle"],
+  ["grandmother ~70, weathered hands, warm squint, headscarf", "grandmother"],
+  ["grey cat, twitching ear, sitting on windowsill", "grey cat"],
+];
+for (const [input, expected] of names) {
+  const got = m.deriveName(input);
+  ok(`метка «${expected}»`, got === expected, `получил «${got}»`);
+}
+ok("пустое описание не роняет", m.deriveName("") === "персонаж");
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

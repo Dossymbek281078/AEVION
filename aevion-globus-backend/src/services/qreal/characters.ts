@@ -73,10 +73,18 @@ function pickCanonical(descriptions: string[]): string {
   return descriptions.reduce((best, d) => (tokens(d).length > tokens(best).length ? d : best), descriptions[0]);
 }
 
-/** Метка для UI: первые два значимых слова канонического описания. */
-function deriveName(canonical: string): string {
-  const t = tokens(canonical).slice(0, 2);
-  return t.length ? t.join(" ") : "персонаж";
+/** Метка для UI.
+ *
+ *  Наивное «первые два слова» даёт мусор: «Central Asian shepherd dog» →
+ *  «central asian», где вообще нет предмета. В описаниях предмет стоит в
+ *  КОНЦЕ первой фразы («Central Asian shepherd dog», «7yo boy», «golden
+ *  eagle»), а уточнения идут после запятой. Поэтому берём хвост первого
+ *  сегмента: «shepherd dog», «7yo boy», «golden eagle». */
+export function deriveName(canonical: string): string {
+  const head = String(canonical || "").split(/[,;(]/)[0];
+  const t = tokens(head);
+  if (!t.length) return "персонаж";
+  return t.slice(-2).join(" ");
 }
 
 /** Субъекты всех кадров → персонажи. Детерминированно: одинаковый вход даёт

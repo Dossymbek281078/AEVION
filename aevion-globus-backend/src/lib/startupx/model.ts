@@ -376,7 +376,11 @@ export function listingSignals(listing: ListingInput): PlanSignals {
  * determine something — see sectorDetect.ts for why that is not a given.
  */
 export function listingSectorDetection(listing: ListingInput): SectorDetection {
-  return detectSector(listing.sector, listing.description);
+  // The title carries as much signal as a paragraph of the description — "AI-помощник
+  // для юристов" says more about the market than three sentences about workflow — so
+  // detection reads both.
+  return detectSector(listing.sector, `${listing.title}
+${listing.description}`);
 }
 
 export function listingSector(listing: ListingInput): SectorProfile {

@@ -54,7 +54,8 @@ const SECTOR_CUES: Record<string, RegExp> = {
     "inference", "vector (?:db|database)", "model training", "fine-?tun", "llm ops", "mlops", "gpu cluster",
   ),
   ai_app: cues(
-    "ии-?ассистент", "ai-?ассистент", "нейросет[ьи] для", "генери(?:рует|руем) текст", "чат-?бот",
+    "ии-?ассистент", "ai-?ассистент", "ии-?помощник", "ai-?помощник", "нейросет", "нейронн(?:ая|ой) сет",
+    "генери(?:рует|руем) текст", "чат-?бот",
     "распознаван", "ai (?:assistant|copilot|agent)", "gpt", "chatbot", "generative",
   ),
   cybersecurity: cues(

@@ -215,7 +215,9 @@ describe("the sector the market factor is scored against", () => {
   // market numbers documented as not being about their market.
 
   test("a Russian description is classified, not dumped into the fallback", () => {
-    const a = assessBody({ ...ideaBody(), sector: undefined });
+    // Title deliberately neutral: the classification must come from the body,
+    // not from a giveaway word in the headline.
+    const a = assessBody({ ...ideaBody(), title: "Проект без названия отрасли", sector: undefined });
     expect(a.sector.origin).toBe("detected");
     expect(a.sector.id).toBe("logistics");
     expect(a.factors.find((f) => f.key === "market")!.rationale).toMatch(/Отрасль определена по описанию/);
@@ -238,6 +240,10 @@ describe("the sector the market factor is scored against", () => {
     const a = assessBody(
       ideaBody({
         sector: undefined,
+        // The title is read too — a listing called "Логистика для перевозчиков"
+        // is about logistics whatever the body says — so a genuinely
+        // uninformative case has to be uninformative in both fields.
+        title: "Хороший продукт",
         description:
           "Мы строим очень хороший продукт для людей. Он будет удобным и понятным, им будут " +
           "пользоваться каждый день, и мы будем постоянно его улучшать вместе с сообществом.",

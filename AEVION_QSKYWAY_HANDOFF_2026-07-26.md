@@ -148,3 +148,34 @@ mid-run it leaves `.next/lock` and every later build fails with "Another next
 build process is already running" — wait for the live pid, or remove `.next`
 entirely; do not blind-delete the lock while a build still holds it. Run long
 builds with `run_in_background`.
+
+## Pre-merge checks (run 26.07, end of session)
+
+Done so the merge decision rests on facts rather than hope:
+
+- **Mount risk: none.** The diff touches zero mount points — `index.ts` and
+  `moduleManifest.ts` are untouched, and qskyway already mounts via the
+  append-only `EXTRA_MOUNTS` list in `moduleManifest.ts`. The squash-merge
+  mount-drop that bit this repo five times cannot apply here.
+- **No conflicts with main.** `main` moved 15 commits since the branch point and
+  three shared files were edited in parallel (`i18n-data.ts` ×2,
+  `all-smokes.js` ×1, `package.json` ×3). A dry-run merge auto-merged all three
+  cleanly, with zero conflicted paths.
+- **The merged result is sound, not just textually mergeable.** On the merged
+  tree: i18n parity (en/ru/kk) ✅ and backend `tsc` ✅. Frontend typecheck on the
+  *merged* tree was NOT run — the attempt picked up the wrong `tsc` binary and
+  the trial merge had already been aborted. On the branch itself frontend `tsc`
+  and a full `next build` are both green.
+
+### After merging, verification is one command
+
+```
+READ_ONLY=1 BASE=https://api.aevion.app node scripts/qskyway-smoke.js
+```
+
+`READ_ONLY=1` skips the two write legs (slot booking, QRight registry) so a prod
+run leaves nothing behind; everything else — ceilings, permission regime,
+freshness, both signatures, the shipped Bitcoin proof, the justification
+document — is read-only and gets checked. Expect the freshness verdict to read
+`checked:false` for the first minute after a deploy: the timer restarts on every
+boot, and this backend redeploys often.

@@ -9,9 +9,20 @@ const file = path.join(dir, "events.jsonl");
 process.env.EVENTS_FILE = file;
 
 const mod = require(path.join(__dirname, "..", "dist", "routes", "events.js"));
-const status = mod.eventsStoreStatus;
-if (typeof status !== "function") {
+const reset = mod.__resetEventsStoreStatusCache;
+// Статус кэшируется на 30с, чтобы health не читал растущий файл на каждый
+// вызов. В тесте состояние меняется мгновенно, поэтому кэш сбрасываем перед
+// каждой проверкой — иначе тест мерил бы кэш, а не файл.
+const status = () => {
+  if (typeof reset === "function") reset();
+  return mod.eventsStoreStatus();
+};
+if (typeof mod.eventsStoreStatus !== "function") {
   console.log("ПРОВАЛ: eventsStoreStatus не экспортируется");
+  process.exit(1);
+}
+if (typeof reset !== "function") {
+  console.log("ПРОВАЛ: __resetEventsStoreStatusCache не экспортируется — тест мерил бы кэш");
   process.exit(1);
 }
 
@@ -60,6 +71,23 @@ const after = status().persistedByEnv;
 const stable = after === true;
 if (!stable) ok = false;
 console.log(`${stable ? "OK  " : "FAIL"} флаг не меняется после загрузки: ${after} (ожидалось true)`);
+
+// 5. Кэш действительно кэширует. Без него health читал бы растущий
+// append-only файл на каждый опрос Railway — и через сутки начал бы тормозить.
+// Проверяем без reset: меняем файл и убеждаемся, что значение НЕ изменилось.
+process.env.EVENTS_FILE = file;
+reset();
+const before = mod.eventsStoreStatus().count;
+fs.appendFileSync(file, JSON.stringify({ ts: "2026-07-27T00:00:00.000Z", type: "x" }) + "\n", "utf8");
+const cached = mod.eventsStoreStatus().count;
+const cacheWorks = cached === before;
+if (!cacheWorks) ok = false;
+console.log(`${cacheWorks ? "OK  " : "FAIL"} кэш держит значение: было ${before}, после дописи ${cached} (ожидалось ${before})`);
+reset();
+const fresh = mod.eventsStoreStatus().count;
+const refreshes = fresh === before + 1;
+if (!refreshes) ok = false;
+console.log(`${refreshes ? "OK  " : "FAIL"} после сброса перечитывает: ${fresh} (ожидалось ${before + 1})`);
 
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(ok ? "\nВСЁ СХОДИТСЯ" : "\nЕСТЬ РАСХОЖДЕНИЯ");

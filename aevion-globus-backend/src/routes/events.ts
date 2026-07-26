@@ -43,13 +43,38 @@ function ensureDir() {
  * bootedAt из того же ответа, данные не переживают перезапуск, и это видно
  * с первого взгляда вместо того, чтобы лезть в переменные окружения.
  */
-export function eventsStoreStatus() {
+type EventsStoreStatus = {
+  persistedByEnv: boolean;
+  exists: boolean;
+  count: number;
+  oldest: string | null;
+};
+
+// Файл событий append-only и не ротируется, а health опрашивают постоянно —
+// Railway своей проверкой, CI в цикле, любой аптайм-монитор. Читать весь файл
+// на каждый вызов означает, что через сутки работы health начнёт тянуть
+// мегабайты, замедлится и Railway сочтёт сервис больным. Кэшируем: цифры в
+// диагностике не обязаны быть посекундными.
+const STORE_STATUS_TTL_MS = 30_000;
+let storeStatusCache: { at: number; value: EventsStoreStatus } | null = null;
+
+export function eventsStoreStatus(): EventsStoreStatus {
+  const now = Date.now();
+  if (storeStatusCache && now - storeStatusCache.at < STORE_STATUS_TTL_MS) {
+    return storeStatusCache.value;
+  }
+  const value = readEventsStoreStatus();
+  storeStatusCache = { at: now, value };
+  return value;
+}
+
+function readEventsStoreStatus(): EventsStoreStatus {
   // Путь наружу не отдаём — он раскрывает раскладку файловой системы сервера.
   // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
   // метки самого старого события.
   const persistedByEnv = EVENTS_FILE_FROM_ENV;
   if (!existsSync(EVENTS_FILE)) {
-    return { persistedByEnv, exists: false, count: 0, oldest: null as string | null };
+    return { persistedByEnv, exists: false, count: 0, oldest: null };
   }
   try {
     const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
@@ -65,9 +90,15 @@ export function eventsStoreStatus() {
     return { persistedByEnv, exists: true, count: lines.length, oldest };
   } catch (e) {
     captureEventsError(e, { route: "events/storeStatus" });
-    return { persistedByEnv, exists: true, count: -1, oldest: null as string | null };
+    return { persistedByEnv, exists: true, count: -1, oldest: null };
   }
 }
+
+/** Для тестов: сбросить кэш, чтобы следующий вызов прочитал файл заново. */
+export function __resetEventsStoreStatusCache() {
+  storeStatusCache = null;
+}
+
 
 
 interface AnalyticsEvent {

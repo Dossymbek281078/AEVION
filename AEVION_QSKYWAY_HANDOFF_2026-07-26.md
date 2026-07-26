@@ -1,0 +1,150 @@
+# QSkyway — Session Handoff (2026-07-26)
+
+> Supersedes `AEVION_QSKYWAY_HANDOFF_2026-07-22.md` for everything after 22.07.
+> That file's "What's next" section is now DONE — read this one first.
+>
+> Worktree: `C:\Users\user\aevion-qskyway`. Root `CLAUDE.md` and `HANDOFF.md` in
+> this worktree are stale/shared with other modules (smeta-trainer / CyberChess)
+> — ignore them.
+
+## Headline
+
+The last big illustrative piece is gone. Airspace restrictions used to be
+invented point+radius circles; two of the three cities are now governed by data
+their actual regulator publishes, and the third says so honestly instead of
+faking it.
+
+| City | Regulator layer | Kind |
+|---|---|---|
+| NYC | **FAA UAS Facility Map** — 9 published cells, 99% twin coverage, ceilings 0–122 m, edition 7/9/2026 | ceiling grid (ingested, vector) |
+| Tokyo | **MLIT / JCAB** — Densely Inhabited District, 100% of the twin | permission regime (raster-sampled) |
+| Astana | none found | — |
+
+**The number worth quoting:** in real FAA-published airspace, only **21 of 42**
+Midtown vertiport pairs fly a corridor that stays within the published ceiling,
+28% of grid cells sit under a 0 ft ceiling (no automatic authorization at all),
+and pad vp0 is inside one — so strict mode refuses all 12 of its pairs. This is
+measured from the regulator's own feed, not modelled.
+
+## Open PRs (NOT merged — merging to main is the founder's call)
+
+| PR | Contents | CI |
+|---|---|---|
+| **#930** | FAA ceilings: ingest, advisory verdict + strict routing mode, pad ceilings | **fully green** (Backend, Frontend, Payments Rail) |
+| **#934** | everything after: freshness, attestation, OTS anchor, justification document, QRight bridge, RegulatorySourceChip, permission regimes, smoke/OpenAPI/i18n | see the CI trap below |
+
+**⚠️ CI trap — read before trusting #934's badges.** `ci.yml` only triggers on
+PRs targeting `main`/`master`/`develop`. #934's base is #930's branch, so
+**Backend and Frontend checks never ran on it** — only Vercel's, which are easy
+to mistake for a passing CI. They start automatically once #930 merges and
+GitHub retargets #934. Until then, run the CI steps by hand (all green as of
+26.07): `npm run audit:projects-pricing`, backend `npm run build`, backend
+`npm test` (1232 pass), **`node scripts/i18n-kk-extract.mjs` from the repo root**
+(en/ru/kk parity — catches an EN key added without ru/kk siblings), frontend
+`npm run build`. Memory: `feedback_stacked_pr_no_ci`.
+
+## What exists now
+
+**Ceilings (`qskyway.airspace.ts`)** — FAA UASFM ingested verbatim, regenerable
+via `node scripts/fetch-faa-airspace.mjs nyc`. Advisory by default: routing is
+unchanged and every route carries a verdict (exceeding segments, max exceedance,
+lowest ceiling). Strict on request: `POST /route {respectCeiling:true}` makes it
+a hard A* edge constraint and refuses with `reason:"airspace-ceiling"` plus what
+an unrestricted flight would have needed.
+
+**Freshness (`qskyway.airspace.freshness.ts`)** — the backend replays the
+identical bbox query every 12h and reports whether the committed snapshot still
+matches. Drift is **reported, never auto-applied** (auto-adopting would break
+the attestation and skip human review of a rule change). Unchecked reports
+`null`, never "fresh". The comparator is a pure exported function so the drift
+branches are testable: `npm run smoke:airspace-freshness` (12/12).
+
+**Attestation** — Ed25519 over the ceiling layer as well as the city twin;
+`GET /verify` returns both. Signed payload is ASCII-only (ceilings, geometry,
+edition — no localized prose), per the transport bug in #712.
+
+**Bitcoin anchor** — `POST /airspace/anchor` submits the layer's contentHash to
+OpenTimestamps (reuses `src/lib/opentimestamps/anchor.ts` from #699). Verify
+reports two things *separately on purpose*: the proof anchors the hash, and that
+hash still matches what we serve. They come apart legitimately after a reissue —
+an old proof stays valid for its edition, which is a correct historical record.
+
+**Permission regimes (`qskyway.permission.ts`)** — the second kind of published
+rule, deliberately NOT merged into ceilings: a ceiling constrains route geometry
+and belongs in the router, a permission regime constrains the operation and
+belongs on the paperwork. `basis` records `ingested` vs `raster-sampled`, because
+"the authority published a vector" and "we sampled the authority's map image"
+are different strengths of claim. Regenerable: `node scripts/sample-did-permission.mjs tokyo`.
+
+**Flight justification** — `POST /route/justification` returns ONE Ed25519-signed
+document (twin hash + airspace hash + edition + ceiling verdict + permission
+regime + wind source) for attaching to a filing, plus a verify endpoint that
+reports content-tamper and signature failure separately. Reachable from the page,
+not only the API. Signed as a whole, not part by part: it is the *combination*
+being attested.
+
+**QRight bridge** — `POST /airspace/register` puts the signed edition in the
+platform registry, idempotent on content hash. DB unreachable → 503 with the
+reason, never a success response for a write that did not happen.
+
+**RegulatorySourceChip (platform)** — second trust axis beside
+DataProvenanceChip: not "how was this NUMBER obtained" but "whose RULE is this"
+(`official / illustrative / none`). A source claiming `official` without naming
+an authority renders as illustrative; an official source always carries its scope
+limit one hover away. /qskyway is the reference: ceilings green as FAA, point
+zones amber as ours, side by side. **Adoption in Smeta / QContract / Constitution
+is the obvious follow-up** — do it on a branch from main after the stack merges,
+or the build fails Module-not-found.
+
+## Verified (26.07)
+
+- `npm run smoke:qskyway` — **90/90** (was 44 on 22.07); **76/76** under
+  `READ_ONLY=1`, where the two write legs self-skip. QSkyway is now in
+  `smoke:all`, so the daily cron covers it.
+- `/qskyway` added to `scripts/pages-live-smoke.js` — it had 90 API assertions
+  and zero daily checks that the page opens.
+- QSkyway documented in `/api/openapi.json` — it was absent entirely.
+- Live click-tested: strict mode, refusal banner, justification build + verify
+  (`✓ signature valid`), coverage banner, both chips, language switch to English.
+
+## Not done / blocked
+
+- **Success path of the QRight registry write** — Postgres listens on 5432 but
+  the credential is commented out in `.env`; passwords are not guessed. The
+  failure path is covered. Needs a working `DATABASE_URL` or prod.
+- **Bitcoin confirmation of the anchor** — still `pending`; OTS takes 1–6h. The
+  chain is proven up to that point (3 calendars accepted, 912-byte proof,
+  `matchesCurrentSnapshot:true`).
+- **Prod verification of everything above** — waits on the merge.
+
+## Researched and closed (do not redo)
+
+Japan: MLIT publishes no data downloads; `kokuarea` (airport airspace) 404s on
+every documented GSI tile path and is absent from the official catalogue, so it
+is an app-internal overlay; DIPS 2.0 is an application portal with no export.
+`did2020` IS live and usable — that is what the permission layer uses.
+Kazakhstan: nothing open found at all. Details with URLs are in the header
+comment of `qskyway.airspace.ts`.
+
+## Still illustrative (be honest about it)
+
+The point no-fly zones in `qskyway.zones.ts` are ours, not a regulator's. The
+chip says so. Wind aloft is still an extrapolation — only the ground reading is
+real METAR.
+
+## Known platform bug, still open
+
+The translate-on-rerender concatenation bug from the 22.07 handoff is unfixed
+(old + new text glued together in non-Russian locales after a client-side
+re-render). It is why the trust-critical strings on this page were moved to i18n
+keys rather than left to the runtime translator. Memory:
+`bug_translation_concat_on_rerender.md`.
+
+## Environment note
+
+Frontend `next build` can take 40+ minutes when several worktrees build at once
+(7 parallel `next build` processes observed on 26.07). If a build is killed
+mid-run it leaves `.next/lock` and every later build fails with "Another next
+build process is already running" — wait for the live pid, or remove `.next`
+entirely; do not blind-delete the lock while a build still holds it. Run long
+builds with `run_in_background`.

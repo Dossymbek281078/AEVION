@@ -33,6 +33,13 @@ measured from the regulator's own feed, not modelled.
 | **#930** | FAA ceilings: ingest, advisory verdict + strict routing mode, pad ceilings | **fully green** (Backend, Frontend, Payments Rail) |
 | **#934** | everything after: freshness, attestation, OTS anchor, justification document, QRight bridge, RegulatorySourceChip, permission regimes, smoke/OpenAPI/i18n | see the CI trap below |
 
+**Full local CI-equivalent on the final state (26.07):** pricing audit ✅, backend
+build ✅, **frontend build ✅ (exit 0)**, i18n parity en/ru/kk ✅, smoke 112/112 ✅,
+new vitest files 37/37 ✅. `npm test` as a whole exits 1, but only on
+`devhub-integrations` and `paywallProvisionFlow` — neither touched by this
+branch, both failing on *different* tests run to run (order/state dependence,
+see memory `reference_paywall_test_state_leak`). Both pass when run alone.
+
 **⚠️ CI trap — read before trusting #934's badges.** `ci.yml` only triggers on
 PRs targeting `main`/`master`/`develop`. #934's base is #930's branch, so
 **Backend and Frontend checks never ran on it** — only Vercel's, which are easy
@@ -98,10 +105,26 @@ or the build fails Module-not-found.
 
 ## Verified (26.07)
 
-- `npm run smoke:qskyway` — **96/96** (was 44 on 22.07); under `READ_ONLY=1` the
-  two write legs self-skip and the summary says so explicitly (`82/84 checks,
-  2 skipped`) rather than counting skips as passes. QSkyway is now in
-  `smoke:all`, so the daily cron covers it.
+- `npm run smoke:qskyway` — **112/112** (was 44 on 22.07); under `READ_ONLY=1` the
+  two write legs self-skip and the summary says so explicitly rather than
+  counting skips as passes. QSkyway is now in `smoke:all`, so the daily cron
+  covers it.
+- **37 tests that actually run in CI**, where the module had none. The smoke
+  needs a live server, so the Backend check covered nothing here: a regression
+  in the ceiling rasterizer, in the signed bytes, or in the
+  prohibition/permission distinction would have shipped green.
+  `tests/qskywayAirspace.test.ts` (22) covers the pure layer against the REAL
+  committed data — rasterization, out-of-grid cells reporting "no constraint"
+  rather than a zero ceiling, ASCII/order-independent hashing, drift detection
+  including "a reissue is not drift", and that the shipped Bitcoin proof still
+  matches the edition served. `tests/qskywayRoutes.test.ts` (15) mounts the real
+  router with supertest — advisory vs strict, the 0 ft refusal with its reason,
+  justification round-trip and tamper attribution, and the filing never telling a
+  regulator a banned flight merely needs permission. Slot market and OTS anchor
+  are left to the smoke on purpose: they need a database and the network.
+  Every group was mutation-checked — disabling the strict gate, desyncing the
+  proof, relabelling the prohibition and injecting prose into the signed payload
+  each fail the expected tests.
 - `/qskyway` added to `scripts/pages-live-smoke.js` — it had 96 API assertions
   and zero daily checks that the page opens.
 - QSkyway documented in `/api/openapi.json` — it was absent entirely.

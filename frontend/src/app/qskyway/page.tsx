@@ -7,8 +7,9 @@ const TITLE = "QSkyway — navigation layer for the urban sky";
 const DESCRIPTION =
   "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
   + "Astana, NYC & Tokyo. Routed against what the regulators actually publish: FAA airspace "
-  + "ceilings over Manhattan, Japan's MLIT permission regime over Tokyo — and an honest \"no "
-  + "source\" where none exists. Live METAR wind, height-data provenance, an airspace-slot "
+  + "ceilings over Manhattan, Japan's MLIT permission regime over Tokyo, and Kazakhstan's "
+  + "published prohibited area UAP28 covering all of the Astana twin. Live METAR wind, "
+  + "height-data provenance, an airspace-slot "
   + "rights market, and every flight exportable as a signed justification document.";
 
 export const metadata: Metadata = {

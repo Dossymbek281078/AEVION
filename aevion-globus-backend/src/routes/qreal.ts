@@ -29,6 +29,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { callProvider, pickConfiguredProvider, getProviders } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
+import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -53,6 +54,9 @@ type QcReport = {
   method: "vlm-judge" | "manual" | "pending";
   criteria: QcCriterion[];
   checkedAt: string;
+  /** Итог судьи: принять кадр, перегенерировать или «нечем судить».
+   *  Появляется после реального скоринга; у пустого чеклиста его нет. */
+  verdict?: JudgeVerdict;
 };
 
 type ShotStatus = "draft" | "prompt_ready" | "queued" | "rendered" | "failed";
@@ -72,6 +76,9 @@ type Shot = {
   status: ShotStatus;
   resultUrl: string | null;
   qc: QcReport | null;
+  /** Сколько раз кадр уже перегенерировали по вердикту судьи — ограничитель
+   *  для авто-режима, чтобы петля «не нравится → рендерь ещё» не жгла бюджет. */
+  qcAttempts?: number;
 };
 
 type ProjectFormat = "short" | "scene" | "film" | "music-video";
@@ -539,7 +546,9 @@ qrealRouter.get("/engines", (_req, res) => {
 });
 
 qrealRouter.get("/realism-criteria", (_req, res) => {
-  res.json({ criteria: REALISM_CRITERIA });
+  // Якоря 1/3/5 отдаются вместе с критериями: продуктовый судья, слепой
+  // бенчмарк и фронт обязаны мерить одной линейкой, а не тремя копиями шкалы.
+  res.json({ criteria: REALISM_CRITERIA, anchors: REALISM_ANCHORS, scale: "1..5 по якорям; наружу score = (оценка-1)/4", threshold: acceptThreshold() });
 });
 
 qrealRouter.get("/demo", (_req, res) => {
@@ -745,13 +754,53 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
     const p = memProjects.get(req.params.id);
     const s = p?.shots.find((x) => x.id === req.params.sid);
     if (!p || !s) return res.status(404).json({ error: "not found" });
-    // MVP: без прикреплённого рендера отчёт остаётся pending/manual —
-    // VLM-judge подключается вместе с движком (кадры → судья → скор).
-    s.qc = emptyQcReport();
-    s.qc.method = s.resultUrl ? "vlm-judge" : "manual";
+
+    // Оценки приходят снаружи: от VLM-судьи или от человека по тем же якорям.
+    // Шкала 1..5, null = критерий неприменим к этому кадру.
+    const raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+    if (!raw) {
+      // Судить нечем — отдаём якорный чеклист, а не пустой «vlm-judge»,
+      // который раньше выглядел как проведённая проверка.
+      s.qc = emptyQcReport();
+      s.qc.method = "manual";
+      p.updatedAt = nowIso();
+      saveProject(p);
+      return res.json({
+        qc: s.qc,
+        anchors: REALISM_ANCHORS,
+        threshold: acceptThreshold(),
+        judgePrompt: s.resultUrl ? buildJudgePrompt(REALISM_CRITERIA, s) : null,
+        note: s.resultUrl
+          ? "Рендер есть. Пришли оценки в POST {scores:[{id,score:1-5|null,note}]} — от VLM по judgePrompt или от человека по якорям."
+          : "Рендера ещё нет: чеклист с якорями для ручной проверки.",
+      });
+    }
+
+    const { criteria, verdict } = scoreCriteria(REALISM_CRITERIA, raw);
+    s.qc = {
+      totalScore: verdict.totalScore,
+      method: req.body?.method === "manual" ? "manual" : "vlm-judge",
+      criteria,
+      checkedAt: nowIso(),
+      verdict,
+    };
     p.updatedAt = nowIso();
     saveProject(p);
-    res.json({ qc: s.qc, note: s.resultUrl ? "Рендер найден — очередь VLM-судьи." : "Рендера ещё нет: чеклист для ручной проверки." });
+
+    // Перегенерация — это деньги. По умолчанию отдаём рекомендацию, а не жжём
+    // бюджет молча; авто-режим включается явно и ограничен по попыткам.
+    const policy = verdict.verdict === "regenerate" ? autoRegenPolicy(s.qcAttempts || 0) : null;
+    res.json({
+      qc: s.qc,
+      threshold: acceptThreshold(),
+      autoRegen: policy,
+      note:
+        verdict.verdict === "pass"
+          ? `Кадр принят: ${(verdict.totalScore as number).toFixed(2)} ≥ ${acceptThreshold()}.`
+          : verdict.verdict === "regenerate"
+            ? `Ниже порога (${(verdict.totalScore as number).toFixed(2)} < ${acceptThreshold()}). Слабее всего: ${verdict.weakest.map((w) => w.id).join(", ")}. ${policy?.reason ?? ""}`
+            : `Оценено ${verdict.judgedCriteria} из ${REALISM_CRITERIA.length} критериев — этого мало для вердикта.`,
+    });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "qc failed" }); }
 });
 

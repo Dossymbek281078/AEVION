@@ -1727,8 +1727,13 @@ export function markFirstStudy(entryId: string): ReminderState {
 export function dismissReminder(entryId: string, milestone: 1 | 3 | 7): ReminderState {
   const cur = ldReminderState();
   if (!cur.entries[entryId]) return cur;
-  if (!cur.entries[entryId].dismissed.includes(milestone)) {
-    cur.entries[entryId].dismissed.push(milestone);
+  // Гасим и все МЛАДШИЕ вехи: если человек отложил семидневное повторение,
+  // однодневное и трёхдневное для той же карточки давно потеряли смысл и иначе
+  // всплыли бы снова следующим заходом.
+  for (const ms of [1, 3, 7] as const) {
+    if (ms <= milestone && !cur.entries[entryId].dismissed.includes(ms)) {
+      cur.entries[entryId].dismissed.push(ms);
+    }
   }
   svReminderState(cur);
   return cur;
@@ -1745,10 +1750,15 @@ export function getDueReminders(): Array<{ entryId: string; milestone: 1 | 3 | 7
   for (const [entryId, info] of Object.entries(cur.entries)) {
     const ageMs = now - new Date(info.firstStudyAt).getTime();
     const days = ageMs / 86400000;
+    // Одна карточка — одна запись: САМАЯ СТАРШАЯ наступившая веха. Раньше
+    // возвращались все подошедшие сразу, и карточка недельной давности считалась
+    // трижды — баннер обещает «N тем для повторения», то есть завышал счёт втрое.
+    let best: 1 | 3 | 7 | null = null;
     for (const ms of [1, 3, 7] as const) {
-      if (days >= ms && !info.dismissed.includes(ms)) {
-        out.push({ entryId, milestone: ms, daysSinceStudy: Math.floor(days) });
-      }
+      if (days >= ms && !info.dismissed.includes(ms)) best = ms;
+    }
+    if (best !== null) {
+      out.push({ entryId, milestone: best, daysSinceStudy: Math.floor(days) });
     }
   }
   return out;

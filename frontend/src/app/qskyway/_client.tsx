@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
+import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
 import type { DataQuality } from "@/lib/dataQuality";
+import type { RegulatorySource } from "@/lib/regulatorySource";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -25,6 +27,8 @@ interface AirspaceSummary {
   maxCeilingM?: number | null;
   zeroCeilingCells?: number;
   note?: string;
+  freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
+  _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
 interface AirspaceCompliance {
@@ -64,6 +68,23 @@ const VP_CLASS_COLOR: Record<string, string> = {
   "needs-infrastructure": "#fbbf24",
   unsuitable: "#fb7185",
 };
+
+/** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
+function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
+  if (!a?.available) {
+    return { tier: "none", scopeNote: a?.note ?? "Открытого фида регулятора для этого города не найдено." };
+  }
+  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
+  return {
+    tier: "official",
+    authority: a.authority,
+    title: (a.source ?? "") + range,
+    effective: a.effective,
+    scopeNote: a.regime ? `${a.regime} — не сертификация аэротакси` : undefined,
+    upToDate: a.freshness?.checked ? a.freshness.upToDate : null,
+    attested: Boolean(a._signature),
+  };
+}
 
 const FLOOR = 50, CLEAR = 15, BAND = 25, ALT_MIN = 50;
 // Phase 5: extra safety clearance by height-data confidence (measured/derived/guessed).
@@ -571,19 +592,22 @@ export default function QSkywayClient() {
                       · {meta.windSource === "metar" ? "METAR" : "демо"}
                     </span>
                   </span>
-                  <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
-                  {meta.airspace?.available ? (
-                    <span
-                      style={{ color: "#2dd4bf" }}
-                      title={`${meta.airspace.source} · ${meta.airspace.regime} · действует с ${meta.airspace.effective} · покрытие твина ${meta.airspace.coveragePct}% · ${meta.airspace.cells} ячеек фида. ${meta.airspace.note ?? ""}`}
-                    >
-                      🛂 потолок {meta.airspace.authority}: {meta.airspace.minCeilingM}–{meta.airspace.maxCeilingM} м · реальный фид
-                    </span>
-                  ) : (
-                    <span style={{ color: "#5f7086" }} title={meta.airspace?.note ?? "Открытого фида регулятора для этого города нет."}>
-                      🛂 потолок регулятора: фида нет
-                    </span>
-                  )}
+                  {/* Two chips, deliberately side by side: the ceiling layer is a real
+                      regulator publication, the point zones are still ours. Showing
+                      them under one badge would launder the second into the first. */}
+                  <RegulatorySourceChip
+                    subject="потолки"
+                    source={airspaceRegSource(meta.airspace)}
+                    labels={{ none: "фида нет" }}
+                  />
+                  <RegulatorySourceChip
+                    subject={`зоны (${meta.nofly})`}
+                    source={{
+                      tier: "illustrative",
+                      scopeNote: "Точечные запретные зоны заданы нами для демонстрации обхода; официальные NOTAM/U-space фиды сюда ещё не подключены.",
+                    }}
+                    labels={{ illustrative: "иллюстративно" }}
+                  />
                   <span
                     onClick={verify === "checking" ? undefined : verifySignature}
                     title="Проверить подпись двойника на бэкенде (GET /verify)"

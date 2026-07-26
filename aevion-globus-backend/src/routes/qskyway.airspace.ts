@@ -15,6 +15,7 @@
 // It is the real published altitude constraint over the twin — that is exactly
 // the claim, and no more.
 
+import crypto from "crypto";
 import { AIRSPACE_NYC } from "./qskyway.airspace.nyc";
 import type { CityData } from "./qskyway.city";
 
@@ -42,6 +43,8 @@ export interface CityAirspace {
   regime: string;
   effective: string;
   fetched: string;
+  /** the envelope this snapshot was queried with — replayed by the freshness check */
+  bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number };
   cells: AirspaceCell[];
 }
 
@@ -132,6 +135,33 @@ export function ceilingAt(field: CeilingField | null, c: number, r: number): num
   if (!field) return NO_CEILING;
   if (c < 0 || r < 0 || c >= field.cols || r >= field.rows) return NO_CEILING;
   return field.ceilings[r * field.cols + c];
+}
+
+/**
+ * Canonical, ASCII-only payload of what routing actually obeys.
+ *
+ * Signed rather than the whole record: the constraint is the cell geometry and
+ * its ceiling, not the prose around it. Keeping localized free text out of the
+ * signed bytes is the lesson from the Trust Score transport bug (PR #712) —
+ * escaped non-ASCII JSON survived a proxy differently than raw UTF-8 and broke
+ * verification for anyone whose HTTP client escapes by default.
+ */
+export function signablePayload(src: CityAirspace): string {
+  const cells = [...src.cells]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((c) => [c.id, c.minLon, c.maxLon, c.minLat, c.maxLat, c.ceilingFt, c.airspaceClass ?? "", c.airportIcao ?? "", c.laanc ? 1 : 0]);
+  return JSON.stringify({
+    authority: src.authority,
+    source: src.source,
+    regime: src.regime,
+    effective: src.effective,
+    bbox: [src.bbox.minLon, src.bbox.minLat, src.bbox.maxLon, src.bbox.maxLat],
+    cells,
+  });
+}
+
+export function airspaceContentHash(src: CityAirspace): string {
+  return crypto.createHash("sha256").update(signablePayload(src)).digest("hex");
 }
 
 /** Public summary for API responses — the provenance, not the raster. */

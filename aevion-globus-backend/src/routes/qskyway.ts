@@ -5,7 +5,8 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
-import { AIRSPACE, CeilingField, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
+import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
+import { airspaceFreshness } from "./qskyway.airspace.freshness";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -44,7 +45,7 @@ import { getPool } from "../lib/dbPool";
  *   GET  /vertiports?city=id — площадки со скорингом пригодности
  *   POST /route           — {from,to,city?,respectCeiling?} → 4D-маршрут
  *                           (обход зон + ветер в ETA + регуляторный потолок)
- *   GET  /verify?city=id  — проверка подписи Ed25519 двойника
+ *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
  */
 
@@ -418,6 +419,50 @@ function signCity(cityId: string, city: CityData): Signature {
   sigCache.set(cityId, sig);
   return sig;
 }
+/**
+ * Attest the ceiling layer too, not just the twin.
+ *
+ * A route is only as trustworthy as the two things it obeys: the city geometry
+ * (already signed) and the published airspace constraint (until now unsigned).
+ * With both attested under the same key, "this corridor was computed against FAA
+ * edition 7/9/2026 over this exact cell set" is checkable by a third party
+ * rather than a claim on a slide.
+ */
+const airspaceSigCache = new Map<string, Signature>();
+function signAirspace(cityId: string): Signature | null {
+  const src = AIRSPACE[cityId];
+  if (!src) return null;
+  const cached = airspaceSigCache.get(cityId);
+  if (cached) return cached;
+  const contentHash = airspaceContentHash(src);
+  const sig: Signature = {
+    alg: "Ed25519",
+    contentHash,
+    signature: crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64"),
+    publicKey: SIGN_PK_B64,
+    note: SIGN_EPHEMERAL
+      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Подпись покрывает ячейки и потолки, не пояснительный текст."
+      : "Аттестация опубликованного слоя ограничений (QSign). Подпись покрывает ячейки, потолки, класс пространства и дату публикации — не пояснительный текст.",
+  };
+  airspaceSigCache.set(cityId, sig);
+  return sig;
+}
+function verifyAirspace(cityId: string, sig: Signature): boolean {
+  const src = AIRSPACE[cityId];
+  if (!src) return false;
+  if (airspaceContentHash(src) !== sig.contentHash) return false;
+  try { return crypto.verify(null, Buffer.from(sig.contentHash, "hex"), SIGN_PK, Buffer.from(sig.signature, "base64")); }
+  catch { return false; }
+}
+
+/** Everything a caller needs to trust the ceiling layer: what it is, whether it
+ *  still matches the regulator, and its attestation. */
+function airspaceBlock(cityId: string, city: CityData) {
+  const summary = airspaceSummary(cityId, city);
+  if (!summary.available) return summary;
+  return { ...summary, freshness: airspaceFreshness(cityId), _signature: signAirspace(cityId) };
+}
+
 function verifyCity(city: CityData, sig: Signature): boolean {
   const hash = crypto.createHash("sha256").update(JSON.stringify(city)).digest("hex");
   if (hash !== sig.contentHash) return false;
@@ -548,7 +593,7 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
     features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings"],
-    airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceSummary(id, CITIES[id])])),
+    airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     wind: metarStatus(),
@@ -586,7 +631,7 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
         : "иллюстративная послойная модель (METAR временно недоступен)",
     },
-    airspace: airspaceSummary(id, city),
+    airspace: airspaceBlock(id, city),
     vertiportScores: suitability(id, city),
     _signature: signCity(id, city),
   });
@@ -635,7 +680,21 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
   const sig = signCity(resolved.id, resolved.city);
-  res.json({ city: resolved.id, valid: verifyCity(resolved.city, sig), alg: "Ed25519", contentHash: sig.contentHash, publicKey: sig.publicKey });
+  const twinValid = verifyCity(resolved.city, sig);
+  const asSig = signAirspace(resolved.id);
+  const airspace = asSig
+    ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
+    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего." };
+  res.json({
+    city: resolved.id,
+    // `valid` stays the twin verdict so existing callers (the UI badge) don't shift meaning.
+    valid: twinValid,
+    alg: "Ed25519",
+    contentHash: sig.contentHash,
+    publicKey: sig.publicKey,
+    twin: { valid: twinValid, contentHash: sig.contentHash },
+    airspace,
+  });
 });
 
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {

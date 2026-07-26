@@ -1,11 +1,15 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "QSkyway — navigation layer for the urban sky (3D air corridors for air taxis)";
+export const alt = "QSkyway — navigation layer for the urban sky: 3D air taxi corridors routed against real FAA airspace ceilings and live METAR wind";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const CHIPS = ["3D corridors", "4D routing", "no-fly zones", "layered wind", "height confidence", "QRight slots", "Ed25519-signed"];
+// The card is the first thing anyone following the shared link sees, so it
+// advertises what is REAL rather than what is merely built: the two chips that
+// name an outside authority (FAA, METAR) carry the weight, and the illustrative
+// no-fly zones deliberately no longer appear here as if they were on par.
+const CHIPS = ["FAA airspace ceilings", "live METAR wind", "4D routing", "3D corridors", "height provenance", "QRight slots", "Ed25519-signed"];
 
 export default function QSkywayOg() {
   return new ImageResponse(
@@ -44,8 +48,8 @@ export default function QSkywayOg() {
             <span style={{ color: "#22d3ee" }}>for the urban sky</span>
           </div>
           <div style={{ fontSize: 26, color: "#c3d0e2", maxWidth: 1000, lineHeight: 1.4, display: "flex" }}>
-            3D air corridors + rules for air taxis — live on real buildings in Astana, NYC &amp; Tokyo.
-            &ldquo;Google Maps + traffic rules for the sky.&rdquo;
+            3D air corridors for air taxis on real buildings in Astana, NYC &amp; Tokyo — routed against
+            the FAA&rsquo;s published airspace ceilings and live METAR wind, not illustrations.
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             {CHIPS.map((m) => (

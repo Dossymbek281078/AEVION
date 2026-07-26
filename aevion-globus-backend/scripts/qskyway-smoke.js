@@ -188,6 +188,25 @@ async function main() {
   const strictAst = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "astana", respectCeiling: true });
   assert(strictAst.status === 200, "[astana] strict flag cannot block a city that has no published ceiling", `status=${strictAst.status}`);
 
+  // The snapshot is frozen data about a rule that changes — the service must be
+  // able to say whether it is still current, and must not guess when unchecked.
+  const fr = asN.freshness;
+  assert(fr && typeof fr.checked === "boolean" && "upToDate" in fr, "[nyc] airspace layer reports a freshness verdict");
+  assert(fr.snapshotEffective === asN.effective, "[nyc] freshness verdict names the edition actually routed against", `${fr?.snapshotEffective}`);
+  assert(fr.checked === false ? fr.upToDate === null : typeof fr.upToDate === "boolean", "[nyc] unchecked freshness is null, never a silent 'fresh'", `checked=${fr?.checked} upToDate=${fr?.upToDate}`);
+
+  // The ceiling layer is attested too, not just the city twin — otherwise "we
+  // routed against FAA edition X" is an unverifiable claim.
+  assert(asN._signature?.alg === "Ed25519" && /^[0-9a-f]{64}$/.test(asN._signature?.contentHash ?? ""), "[nyc] airspace layer carries an Ed25519 attestation");
+  const sigVer = await jget("/api/qskyway/verify?city=nyc");
+  assert(sigVer.status === 200 && sigVer.json?.twin?.valid === true, "[nyc] twin signature verifies", `status=${sigVer.status}`);
+  assert(sigVer.json?.airspace?.attested === true && sigVer.json.airspace.valid === true, "[nyc] airspace signature verifies");
+  assert(sigVer.json.airspace.contentHash === asN._signature.contentHash, "[nyc] /verify and /city attest the same airspace content");
+  assert(sigVer.json.airspace.effective === asN.effective, "[nyc] attestation is bound to the published edition", `${sigVer.json?.airspace?.effective}`);
+  const verAst = await jget("/api/qskyway/verify?city=astana");
+  assert(verAst.json?.airspace?.attested === false && verAst.json.airspace.valid === null, "[astana] nothing to attest is reported as such, not as invalid");
+  assert(verAst.json?.valid === true, "[astana] twin verdict is unaffected by the absent airspace layer");
+
   // Pads inherit the same published ceiling as the grid they stand on.
   const padCeil = (cityNyc.json?.vertiportScores ?? []).filter((v) => typeof v.ceilingM === "number");
   assert(padCeil.length === nycVp, "[nyc] every pad reports its published ceiling", `${padCeil.length}/${nycVp}`);

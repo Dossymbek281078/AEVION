@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 dotenv.config();
 
@@ -197,7 +198,21 @@ function healthPayload() {
     // только из переменных окружения; теперь видно отсюда. Счётчики и одна
     // метка времени, без единого поля самих событий.
     eventsStore: safeEventsStoreStatus(),
+    // Какой режим подписи реально активен. Письма партнёрам утверждают
+    // «post-quantum signatures (ML-DSA-65, FIPS 204)», а это включается ключом:
+    // без него прод отдаёт SHA-512, который наше же описание API называет
+    // «NOT a cryptographic signature». Теперь проверяется одним запросом.
+    qsign: safeDilithiumStatus(),
   };
+}
+
+/** health не должен падать из-за диагностики. */
+function safeDilithiumStatus() {
+  try {
+    return dilithiumStatus();
+  } catch {
+    return { mode: null, reason: null };
+  }
 }
 
 /** health не должен падать из-за диагностики. */

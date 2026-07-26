@@ -284,12 +284,30 @@ export default function StartupExchangePage() {
           )}
         </section>
 
-        <div style={{ marginTop: 32 }}>
+        {/* Доска идей платформы рисуется в тёмной палитре и на светлой странице
+            выглядела оторванным куском чужого интерфейса. Общий компонент трогать
+            нельзя — им пользуются полтора десятка модулей, — поэтому она подана
+            как сознательный тёмный блок со своим заголовком. */}
+        <div
+          style={{
+            marginTop: 36,
+            background: "#0f172a",
+            borderRadius: 18,
+            padding: "22px 6px 6px",
+          }}
+        >
+          <div style={{ padding: "0 18px 4px" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>Что достроить на бирже</div>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, maxWidth: 620 }}>
+              Это не заявка и не отклик — сюда пишут, чего не хватает самой площадке. Читаем и
+              достраиваем.
+            </p>
+          </div>
           <MvpConceptBoard
             moduleId="startupx"
             noun="concept/messages"
             accent="amber"
-            sectionTitle="Что ещё должно быть на бирже"
+            sectionTitle="Предложения по площадке"
             sectionHint="Каких данных не хватает инвестору? Что мешает основателю подать заявку?"
             titleField="idea"
             summaryField="rationale"

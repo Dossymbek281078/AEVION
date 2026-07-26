@@ -451,7 +451,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
-    | { role: "hint"; kind: "design_db" | "deploy"; description: string; at: string };
+    | { role: "hint"; kind: "design_db" | "deploy" | "manifest"; description: string; at: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
   const aiImageInputRef = useRef<HTMLInputElement | null>(null);

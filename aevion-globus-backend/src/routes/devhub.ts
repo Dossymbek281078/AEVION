@@ -6128,6 +6128,74 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 // GET /api/devhub/studio/capabilities
 // ═════════════════════════════════════════════════════════════════════════════
 
+// GET /api/devhub/providers/health — are the KEYS still valid?
+//
+// Distinct from /studio/capabilities (is a key present?) and from an actual
+// generation (is there money?). The middle question turned out to matter: a
+// Brevo key that answers fine from production is rejected from a laptop by
+// its IP allowlist, and ElevenLabs kept accepting our key while refusing the
+// model we sent. Only free, side-effect-free endpoints are used — nothing
+// here sends a message, spends credit, or creates anything.
+devhubRouter.get("/providers/health", async (_req, res) => {
+  const probe = async (name: string, run: () => Promise<{ ok: boolean; detail: string }>) => {
+    try {
+      const r = await run();
+      return { name, ...r };
+    } catch (e: any) {
+      return { name, ok: false, detail: (e?.message || "request failed").slice(0, 120) };
+    }
+  };
+
+  const checks = await Promise.all([
+    probe("brevo", async () => {
+      if (!process.env.BREVO_API_KEY) return { ok: false, detail: "BREVO_API_KEY not set" };
+      const r = await fetch("https://api.brevo.com/v3/account", {
+        headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("replicate", async () => {
+      if (!process.env.REPLICATE_API_TOKEN) return { ok: false, detail: "REPLICATE_API_TOKEN not set" };
+      const r = await fetch("https://api.replicate.com/v1/account", {
+        headers: { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` },
+      });
+      // Valid key only. Credit is invisible here — an empty balance still
+      // answers 200, which is exactly how "video: live" stayed wrong.
+      return { ok: r.ok, detail: r.ok ? "key valid (balance not visible here)" : `HTTP ${r.status}` };
+    }),
+    probe("cloudflare", async () => {
+      if (!process.env.CLOUDFLARE_API_TOKEN) return { ok: false, detail: "CLOUDFLARE_API_TOKEN not set" };
+      const r = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", {
+        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("cloudflare_zone", async () => {
+      if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
+        return { ok: false, detail: "CLOUDFLARE_ZONE_ID not set" };
+      }
+      const r = await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`, {
+        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+      });
+      const b = await r.json().catch(() => ({} as any));
+      const status = b?.result?.status;
+      // "pending" means the registrar never pointed at Cloudflare, so every
+      // *.aevion.build address we hand out fails DNS.
+      return { ok: status === "active", detail: `zone status: ${status ?? "unknown"}` };
+    }),
+    probe("openai", async () => {
+      if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
+      const r = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      });
+      return { ok: r.ok, detail: r.ok ? "key valid (billing not visible here)" : `HTTP ${r.status}` };
+    }),
+  ]);
+
+  const failing = checks.filter((c) => !c.ok);
+  res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
+});
+
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },

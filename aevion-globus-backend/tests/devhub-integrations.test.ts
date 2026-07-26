@@ -4085,3 +4085,44 @@ describe("translation failures are legible", () => {
     delete process.env.DEEPL_API_KEY;
   });
 });
+
+describe("provider key health", () => {
+  test("reports a pending Cloudflare zone as unhealthy — the aevion.build failure", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    process.env.CLOUDFLARE_ZONE_ID = "zone";
+    delete process.env.BREVO_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    delete process.env.OPENAI_API_KEY;
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("tokens/verify")) return { ok: true, status: 200, json: async () => ({ success: true }) } as any;
+      if (String(url).includes("/zones/")) return { ok: true, status: 200, json: async () => ({ result: { status: "pending" } }) } as any;
+      return { ok: false, status: 500, json: async () => ({}) } as any;
+    });
+
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/providers/health");
+    expect(r.status).toBe(200);
+    const zone = r.body.checks.find((c: { name: string }) => c.name === "cloudflare_zone");
+    expect(zone.ok).toBe(false);
+    expect(zone.detail).toMatch(/pending/);
+    expect(r.body.failing).toContain("cloudflare_zone");
+    // A token that is present but the zone undelegated: the token check passes.
+    expect(r.body.checks.find((c: { name: string }) => c.name === "cloudflare").ok).toBe(true);
+
+    delete process.env.CLOUDFLARE_ZONE_ID;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  test("a valid key is not mistaken for a funded account", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep";
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "acme" }) } as any);
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/providers/health");
+    const rep = r.body.checks.find((c: { name: string }) => c.name === "replicate");
+    expect(rep.ok).toBe(true);
+    // Says so out loud: this is exactly how "video: live" stayed wrong.
+    expect(rep.detail).toMatch(/balance not visible/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});

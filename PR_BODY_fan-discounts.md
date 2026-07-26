@@ -1,6 +1,6 @@
 # AEVION Fan — веерные скидки + девятнадцать живых дефектов на пути к деньгам
 
-Ветка `feat/fan-discounts` → `main` · **66 коммитов** · backend tsc 0, frontend tsc 0 · backend `npm run test:stable` **1354 PASS / 0 FAIL**, frontend **484 PASS** · `next build` зелёный (738 страниц, пересобран после всех правок) · pricing-смоук **21/21**, checkout-rails **17/17**, канарейки **2 PASS** · мутационный аудит **17 мутаций, 15 пойманы, 2 нейтральны и разобраны**.
+Ветка `feat/fan-discounts` → `main` · **66 коммитов** · backend tsc 0, frontend tsc 0 · backend `npm run test:stable` **1354 PASS / 0 FAIL**, frontend **487 PASS** · `next build` зелёный (738 страниц, пересобран после всех правок) · pricing-смоук **21/21**, checkout-rails **17/17**, канарейки **2 PASS** · мутационный аудит **17 мутаций, 15 пойманы, 2 нейтральны и разобраны**.
 
 **Про плавающий красный в чужой зоне — он не от этой ветки.**
 Часть прогонов даёт

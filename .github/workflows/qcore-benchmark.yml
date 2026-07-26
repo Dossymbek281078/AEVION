@@ -26,10 +26,38 @@ permissions:
   pull-requests: write
 
 jobs:
+  # The `secrets` context is not available in a job-level `if:`. Writing
+  # `if: ${{ secrets.ANTHROPIC_API_KEY != '' }}` there is an invalid expression,
+  # so GitHub rejected the whole workflow file and produced a failed run on
+  # EVERY push to every branch — a permanent red X that never ran a single step.
+  # The guard meant to make this job a safe no-op was itself the breakage.
+  #
+  # `needs` IS available in a job-level `if:`, so the check moves into a tiny
+  # gate job that reads the secret through env (where it is allowed) and
+  # publishes a plain boolean output.
+  gate:
+    name: Check whether the API keys are provisioned
+    runs-on: ubuntu-latest
+    outputs:
+      has_key: ${{ steps.check.outputs.has_key }}
+    steps:
+      - id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY is present — benchmark will run."
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY not set — skipping the benchmark (no LLM spend)."
+          fi
+
   benchmark:
     name: Run qcore-eval.js + open a PR with fresh numbers
     runs-on: ubuntu-latest
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    needs: gate
+    if: needs.gate.outputs.has_key == 'true'
     defaults:
       run:
         working-directory: aevion-globus-backend

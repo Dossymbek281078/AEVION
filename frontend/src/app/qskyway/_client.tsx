@@ -30,7 +30,7 @@ interface AirspaceSummary {
   note?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
   /** a regulator gate on the operation, published separately from any ceiling */
-  permission?: { available: boolean; authority?: string; regime?: string; basis?: string; effective?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
+  permission?: { available: boolean; authority?: string; regime?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
   _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
@@ -733,10 +733,16 @@ export default function QSkywayClient() {
                       regulator publication, the point zones are still ours. Showing
                       them under one badge would launder the second into the first. */}
                   <RegulatorySourceChip
+                    // A prohibition labelled "permission regime" would read as
+                    // "you may fly if you ask" where the rule is "you may not
+                    // fly" — the one distinction the data layer keeps separate,
+                    // so the label must keep it too.
                     subject={meta.airspace?.available
                       ? t("qskyway.reg.subject.ceilings")
                       : meta.airspace?.permission?.available
-                        ? t("qskyway.reg.subject.permission")
+                        ? t(meta.airspace.permission.kind === "prohibition"
+                            ? "qskyway.reg.subject.prohibition"
+                            : "qskyway.reg.subject.permission")
                         : t("qskyway.reg.subject.ceilings")}
                     source={airspaceRegSource(meta.airspace)}
                     labels={{ none: t("qskyway.reg.nofeed") }}

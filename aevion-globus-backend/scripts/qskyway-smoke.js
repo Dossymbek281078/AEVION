@@ -259,6 +259,10 @@ async function main() {
   const pa = permAst.json?.airspace?.permission;
   assert(pa?.available === true && /AIP KZ/.test(pa.authority ?? ""), "[astana] published prohibited area is reported", `${pa?.authority}`);
   assert(pa.kind === "prohibition", "[astana] a prohibition is not rendered as a permission", `kind=${pa?.kind}`);
+  // The UI picks its label off this field, so its absence would silently relabel
+  // a ban as "needs permission" — the exact collapse the type exists to prevent.
+  const pt = (await jget("/api/qskyway/city?city=tokyo")).json?.airspace?.permission;
+  assert(pt?.kind === "permission", "[tokyo] permission regime keeps its own kind", `kind=${pt?.kind}`);
   assert(pa.basis === "ingested" && /UAP28/.test(pa.regime ?? ""), "[astana] zone identifier and provenance are stated", `${pa?.regime?.slice(0, 40)}`);
   assert(pa.coveragePct === 100 && /ЗАПРЕТНОЙ/.test(pa.note ?? ""), "[astana] full coverage is stated as prohibition, not as 'needs permission'");
   // A demo circle named after a real restriction must say it is a demo circle.

@@ -76,6 +76,25 @@ export default function PricingRefundPolicyPage() {
       ],
     },
     {
+      // Условия веерной скидки. Мы продаём скидку с дедлайном («открыт до
+      // <дата>»), и без описанных условий это обещание без основания: спор с
+      // платящим клиентом мы на этом проиграем. Числа здесь — те же, что в
+      // aevion-globus-backend/src/data/fanDiscounts.ts; меняешь константы —
+      // правь и эти строки (docs/FAN_DISCOUNTS_2026-07.md §2).
+      id: "fan",
+      icon: "🌀",
+      color: "#0f766e",
+      title: tp("fan.terms.title"),
+      body: tp("fan.terms.body"),
+      bullets: [
+        tp("fan.terms.b1"),
+        tp("fan.terms.b2"),
+        tp("fan.terms.b3"),
+        tp("fan.terms.b4"),
+        tp("fan.terms.b5"),
+      ],
+    },
+    {
       id: "data",
       icon: "💾",
       color: "#be185d",

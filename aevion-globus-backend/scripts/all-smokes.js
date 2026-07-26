@@ -166,6 +166,16 @@ const SMOKES = [
   { name: "qzone-prod", script: "qzone-prod-smoke.js", readOnly: true },
   // Pricing PROD — 15 checks: FAQ, social-proof, provisioning, category filter.
   { name: "pricing-prod", script: "pricing-prod-smoke.js", readOnly: true },
+  // Оферта веерной скидки == константы движка. Локальная проверка файлов, без
+  // сети и базы: /pricing/refund-policy#fan обещает конкретные проценты и срок,
+  // и если поменять константу в data/fanDiscounts.ts не тронув текст, сайт
+  // начнёт обещать то, чего код не делает. Спор с платящим клиентом дороже
+  // любого рефакторинга.
+  { name: "fan-terms", script: "fan-terms-consistency.js", readOnly: true },
+  // Цена LS-варианта == цена в data/pricing.ts. Без LEMON_SQUEEZY_API_KEY
+  // скрипт печатает SKIP и выходит с 0 — то есть в наборе он безвреден, а на
+  // Railway с ключом ловит дрейф «код обещает одно, LS списывает другое».
+  { name: "ls-price-drift", script: "ls-variant-price-drift.js", readOnly: true },
   // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
   // Closes the prod-surface gap for modules without their own *-prod-smoke.
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },

@@ -243,7 +243,10 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
           </div>
 
           <p style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            {tp("fan.footnote")}
+            {tp("fan.footnote")}{" "}
+            <a href="/pricing/refund-policy#fan" style={{ color: "#0f766e", fontWeight: 700 }}>
+              {tp("fan.termsLink")}
+            </a>
           </p>
         </div>
       )}

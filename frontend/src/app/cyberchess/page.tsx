@@ -5134,7 +5134,10 @@ export default function CyberChessPage(){
       // DOM paint via paintPzTimeLeft, no re-render.
       if(rem<=0){
         sPzTimeLeft(0);
-        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();}
+        // addThemeResult здесь же, что и в ветке «неверный ход»: без него провал
+        // ПО ВРЕМЕНИ не попадал в статистику тем, а она питает подбор слабых мест —
+        // игрок, стабильно не успевающий на связках, так и не узнал бы про связки.
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();if(pzCurrent?.theme)addThemeResult(pzCurrent.theme,false);}
       }
     };
     tick();

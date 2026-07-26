@@ -131,24 +131,32 @@ checkoutRouter.post("/session", async (req, res) => {
     // цента (Full+AEVION20 — смета обещала итог $71, чекаут выставлял $71.20).
     // Правило: любой новый потребитель сметы зовёт buildQuoteWithFan, а не
     // считает сам. Веерные скидки (data/fanDiscounts.ts) приходят тем же путём.
+    /**
+     * Валидированные поля тела — ОДИН раз на весь обработчик.
+     *
+     * Тело приходит от клиента, а движок сметы и веера стоит на пути к оплате:
+     * прогон враждебных входов 2026-07-26 показал, что `modules: 42` и
+     * `promoCode: 42` роняли чекаут в 500 (поведение было и до веерных скидок).
+     * Вторая линия обороны есть в самих `buildQuote`/`computeFan`, но чекаут не
+     * должен на неё полагаться. Проверка объявлена здесь, до первого
+     * использования: три копии одного правила разошлись бы при первой правке.
+     */
+    const requestedModules = Array.isArray(body.modules)
+      ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
+      : [];
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined;
+    const ownedModules = Array.isArray(body.ownedModules)
+      ? body.ownedModules.slice(0, 60).filter((x: unknown) => typeof x === "string")
+      : [];
+
     const quote = buildQuoteWithFan({
       tierId: tier.id,
-      // `modules` приходит из тела так же, как ownedModules. Проверено
-      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
-      // поведение было и ДО веерных скидок, просто никто не слал мусор.
-      modules: Array.isArray(body.modules)
-        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
-        : [],
+      modules: requestedModules,
       seats,
       period,
       currency: "USD",
-      promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined,
-      // Валидируем так же, как POST /api/pricing/quote: тело приходит от
-      // клиента, а движок веера стоит на пути к оплате. Вторая линия обороны —
-      // в самом computeFan(), но чекаут не должен на неё полагаться.
-      ownedModules: Array.isArray(body.ownedModules)
-        ? body.ownedModules.slice(0, 60).filter((x: unknown) => typeof x === "string")
-        : [],
+      promoCode,
+      ownedModules,
       lastPurchaseAt: typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined,
     });
 
@@ -178,6 +186,7 @@ checkoutRouter.post("/session", async (req, res) => {
       typeof body.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())
         ? body.email.trim().toLowerCase().slice(0, 200)
         : undefined;
+
 
     /**
      * Что реально спишет канал + правда об этом в ответе. Ни одна ветка
@@ -246,16 +255,23 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // Free / fully discounted — no checkout needed, provision directly
     if (discountedCents <= 0) {
+      // Заказ на ноль — это сессия, где скидка применена ПОЛНОСТЬЮ. Без этой
+      // записи самые крупные скидки были невидимы в метрике: ветка отвечает до
+      // каскада, а `charge()` здесь не вызывается вовсе.
+      recordCheckoutSession({
+        provider: "stub", tier: tier.id, incentiveUsd, quotedUsd: quote.total, honoured: true,
+      });
       if (email) {
         provisionSubscription({
-          email, tierId: tier.id, period, seats,
-          // `modules` приходит из тела так же, как ownedModules. Проверено
-      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
-      // поведение было и ДО веерных скидок, просто никто не слал мусор.
-      modules: Array.isArray(body.modules)
-        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
-        : [], trialDays, amountUsd: 0,
-          promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined, source: "gumroad_zero",
+          email,
+          tierId: tier.id,
+          period,
+          seats,
+          modules: requestedModules,
+          trialDays,
+          amountUsd: 0,
+          promoCode,
+          source: "gumroad_zero",
         }).catch((e) => console.error("[provisioning] zero-price failed", e));
       }
       return res.json({
@@ -365,18 +381,13 @@ checkoutRouter.post("/session", async (req, res) => {
         tierId: tier.id,
         period,
         seats,
-        // `modules` приходит из тела так же, как ownedModules. Проверено
-      // прогоном враждебных входов: `modules: 42` роняло чекаут в 500 — это
-      // поведение было и ДО веерных скидок, просто никто не слал мусор.
-      modules: Array.isArray(body.modules)
-        ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string")
-        : [],
+        modules: requestedModules,
         trialDays,
         // Реально списанная сумма, а не «обещанная». На каналах, которые скидку
         // не применяют, эти числа расходятся — в подписке должно лежать то, что
         // ушло со счёта, иначе вся выручка в отчётах поедет.
         amountUsd: Math.round(paidStub.cents) / 100,
-        promoCode: typeof body.promoCode === "string" ? body.promoCode.slice(0, 40) : undefined,
+        promoCode,
         source: "stub_checkout",
       }).catch((e) => console.error("[stub_provisioning] failed", e));
     }

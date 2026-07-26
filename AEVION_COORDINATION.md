@@ -880,3 +880,57 @@ async-хвост, из-за которого мок доживает до сле
 
 Диагноза причины у меня нет — зоны чужие, воспроизведения в изоляции добиться
 не удалось. Передаю замер, а не догадку.
+
+### 🔴 Системная защёлка: 21 модуль навсегда падает в in-memory от ОДНОГО холодного запроса (2026-07-27)
+
+Найдено прогрепом после того, как тот же класс дефекта чинился в
+`lib/discountIntegrityLog` и `lib/appSubscriptions`. Зоны чужие — не правил.
+
+**Что не так.** Во всех `src/lib/ensure*Tables.ts` (и в `conceptBoardStore`,
+`ecosystemStore`, `chatHistory`, `ecosystemEvents`) один и тот же шаблон:
+
+```ts
+let ensured = false;
+export async function ensureXTables(pool) {
+  if (ensured) return;
+  try { await pool.query("SELECT 1"); }
+  catch (e) {
+    dbReady = false;
+    ensured = true;            // ← защёлка ВНУТРИ catch
+    console.warn("[X] Database unavailable — falling back to in-memory store");
+    return;
+  }
+  ...
+}
+```
+
+`ensured = true` ставится **в обработчике ошибки**. То есть после ОДНОГО
+неудачного `SELECT 1` модуль до конца жизни процесса работает на in-memory —
+даже если база поднялась через секунду. Повторной попытки нет ни одной.
+
+**Почему это не теория.** Отказ ПЕРВОГО запроса на непрогретом пуле — измеренный
+факт: ровно из-за него в `lib/appSubscriptions` пришлось добавить вторую попытку
+(покупатель, открывший страницу сразу после редеплоя, видел пустой веер при
+купленных модулях). Значит на каждом редеплое Railway есть реальный шанс, что
+модуль, к которому обратились первым, останется без базы навсегда: данные пишутся
+в память и теряются при следующем рестарте, а в логах — одна строка `warn`.
+
+**Масштаб: 21 файл из 23.** deepsan, devhub, kids-ai, lifebox, mapreality,
+psyapp, qcore, qevents, qgood, qjobs, qlearn, qlife, qnews, qpersona, qsocial,
+qstore и другие. Шаблон явно скопирован, поэтому чинить стоит один раз и всем.
+
+**Починка — кулдаун вместо защёлки** (тот же приём, что уже применён в
+`discountIntegrityLog` и `appSubscriptions`):
+```ts
+let ensured = false;
+let lastFailureAt = 0;
+const ENSURE_RETRY_MS = 60_000;
+// в начале:
+if (ensured) return;
+if (lastFailureAt && Date.now() - lastFailureAt < ENSURE_RETRY_MS) return; // не долбим
+// в catch: lastFailureAt = Date.now();  (ensured НЕ трогаем)
+// после успеха: ensured = true; lastFailureAt = 0;
+```
+Тест обязан держать три половины: сбой не роняет → в кулдаун повторов нет →
+после кулдауна попытка повторяется и база подхватывается. Без третьей проверка
+совместима с «навсегда in-memory», то есть с самим дефектом.

@@ -371,6 +371,22 @@ describe("deal terms vs the market", () => {
     expect(a.redFlags.some((f) => f.severity === "high" && /× годовой выручки/.test(f.message))).toBe(true);
   });
 
+  test("a price far below the claimed revenue is questioned, not treated as a bargain", () => {
+    // Nobody sells a working product for less than half a year of its own
+    // revenue unless something is wrong with one of the two numbers. Saying
+    // nothing here would let an inflated revenue figure pass as a discount.
+    const a = assessBody(
+      ideaBody({
+        tier: "product",
+        demoUrl: "https://example.com",
+        deal: { intent: "sell_full", askingPriceUsd: 30_000 },
+        metrics: { arrUsd: 200_000 },
+      }),
+    );
+    const flag = a.redFlags.find((f) => /меньше половины заявленной годовой выручки/.test(f.message));
+    expect(flag?.severity).toBe("medium");
+  });
+
   test("the valuation band never depends on the asking price it is compared against", () => {
     // If the ask could move the band, the comparison would be circular and every
     // listing would look fairly priced.

@@ -546,6 +546,18 @@ function dealChecks(listing: ListingInput, implied: ImpliedTerms, revenue: numbe
         severity: "high",
         message: `Цена = ${mult.toFixed(1)}× годовой выручки. В 2026 продукты до $1M ARR закрываются в районе 2.5–4× — выше 6× сделки почти не происходят.`,
       });
+    } else if (mult < 0.5) {
+      // The opposite inconsistency, and the more informative one: nobody sells a
+      // working product for half a year of its own revenue unless something is
+      // wrong with the revenue or with the product. Silence here would let an
+      // inflated revenue figure sail through as a bargain.
+      flags.push({
+        severity: "medium",
+        message:
+          `Цена ${fmt(implied.postMoneyUsd)} — меньше половины заявленной годовой выручки ($${fmt(revenue)}). ` +
+          `Так бывает (срочная продажа, зависимость от одного клиента, тяжёлая поддержка), но покупатель ` +
+          `первым делом решит, что цифра выручки завышена. Объясните причину в описании — иначе это сделает он.`,
+      });
     }
   }
 

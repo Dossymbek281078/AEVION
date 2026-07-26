@@ -34,7 +34,11 @@ export default function OffersPage() {
       return;
     }
     try {
-      setData(await startupxApi.offers(id, token));
+      const fresh = await startupxApi.offers(id, token);
+      setData(fresh);
+      // Reloading the page must not offer to withdraw a listing that is already
+      // withdrawn — the server state, not the click history, decides this.
+      setWithdrawn(fresh.listing.visibility !== "public");
       setState("ready");
     } catch {
       setState("denied");

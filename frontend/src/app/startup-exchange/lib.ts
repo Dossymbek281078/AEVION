@@ -114,6 +114,8 @@ export interface Listing {
   contact_method: string | null;
   content_hash: string | null;
   qright_protected: boolean;
+  /** "public" | "withdrawn" — снятая заявка не видна в ленте, но открыта по личной ссылке. */
+  visibility: string;
   created_at: string;
   interest_count?: number;
 }

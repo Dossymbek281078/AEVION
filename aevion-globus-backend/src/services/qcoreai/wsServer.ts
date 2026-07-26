@@ -39,6 +39,7 @@ import type { Server as HttpServer } from "http";
 import { URL } from "url";
 
 import { verifyBearerToken } from "../../lib/authJwt";
+import { premiumQuotaGateForPayload } from "../../lib/qcoreQuota";
 import {
   runMultiAgent,
   OrchestratorEvent,
@@ -134,6 +135,7 @@ export function attachQCoreWebSocket(server: HttpServer, path = "/api/qcoreai/ws
   wss.on("connection", (ws: WebSocket, req: IncomingMessage, reqUrl: URL) => {
     const auth = verifyBearerToken(reqUrl.searchParams.get("token"));
     const userId = auth?.sub ?? null;
+    const premiumGate = premiumQuotaGateForPayload(auth as Record<string, unknown> | null);
 
     let runActive = false;
     let abortRequested = false;
@@ -262,6 +264,7 @@ export function attachQCoreWebSocket(server: HttpServer, path = "/api/qcoreai/ws
               return out;
             },
             maxCostUsd,
+            premiumGate,
           }) as AsyncGenerator<OrchestratorEvent>) {
             if (abortRequested) {
               status = "stopped";

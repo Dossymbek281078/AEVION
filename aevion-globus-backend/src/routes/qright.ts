@@ -6,6 +6,7 @@ import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -602,10 +603,14 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
 
     // RFC 4180 CSV escaping: wrap field in quotes if it contains comma, quote, or newline;
     // escape internal double-quotes by doubling them.
+    // Плюс гашение формул из общего lib/csv: заголовки и описания объектов
+    // заполняет пользователь, а выгрузку открывают в Excel/Sheets, где значение
+    // с ведущим = + - @ исполняется как формула.
     function csvField(value: unknown): string {
       if (value === null || value === undefined) return "";
-      const s =
-        value instanceof Date ? value.toISOString() : String(value);
+      const s = csvNeutralizeFormula(
+        value instanceof Date ? value.toISOString() : String(value),
+      );
       if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
         return `"${s.replace(/"/g, '""')}"`;
       }

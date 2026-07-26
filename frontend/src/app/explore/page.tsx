@@ -7,7 +7,9 @@ import { apiUrl } from "@/lib/apiBase";
 import { LIVE_MODULES } from "@/data/pitchFacts";
 
 type Status = "live" | "new" | "soon";
-type Item = { name: string; slug: string; desc: string; status: Status };
+// noAuth — модуль показывает суть БЕЗ регистрации. Пометка нужна там, где
+// иначе человек упрётся в форму входа и уйдёт, так и не увидев продукт.
+type Item = { name: string; slug: string; desc: string; status: Status; noAuth?: string };
 type Region = { name: string; code: string; items: Item[] };
 
 const REGIONS: Region[] = [
@@ -25,7 +27,7 @@ const REGIONS: Region[] = [
     name: "Artificial Intelligence",
     code: "AI",
     items: [
-      { name: "Multichat Engine", slug: "multichat-engine", desc: "Консилиум ИИ: агенты отвечают независимо, карта разногласий показывает, где им нельзя верить, и каждый ответ идёт с проверяемым чеком.", status: "live" },
+      { name: "Multichat Engine", slug: "multichat-engine", desc: "Консилиум ИИ: агенты отвечают независимо, карта разногласий показывает, где им нельзя верить, и каждый ответ идёт с проверяемым чеком.", status: "live", noAuth: "Пример разногласий — без входа" },
       { name: "QReal Studio", slug: "qreal", desc: "Fully-alive AI video from a text brief — no actor, one face across every shot, scored realism QC, built-in provenance.", status: "live" },
       { name: "QVenture", slug: "qventure", desc: "AI investment analyst: quant score, four-role council, entry strategy.", status: "live" },
       { name: "QCoreAI", slug: "qcoreai", desc: "Multi-agent pipeline — Analyst → Writer → Critic, eval harness, batch runs.", status: "live" },
@@ -233,6 +235,7 @@ export default function ExplorePlanet() {
                   <span className="aevx-callsign">{it.slug}</span>
                   <h4>{it.name}</h4>
                   <p>{it.desc}</p>
+                  {it.noAuth && <p className="aevx-noauth">{it.noAuth}</p>}
                   <div className="aevx-foot">
                     <span className={`aevx-pill aevx-${it.status}`}>{STATUS_LABEL[it.status]}</span>
                     <span className="aevx-arrow">→</span>
@@ -344,6 +347,10 @@ const CSS = `
 .aevx-callsign{font-family:var(--aevx-mono); font-size:10.5px; letter-spacing:.1em; color:var(--aevx-muted); text-transform:uppercase;}
 .aevx-card h4{font-size:17px; margin:8px 0 7px; font-weight:700; letter-spacing:-.01em;}
 .aevx-card p{margin:0; font-size:13.5px; color:var(--aevx-muted); line-height:1.45; flex:1;}
+/* Пометка «без входа» не должна тянуть на себя внимание сильнее описания —
+   это подсказка, снимающая страх регистрации, а не второй заголовок. */
+.aevx-card p.aevx-noauth{flex:0; font-size:12px; font-weight:600; letter-spacing:.01em;
+  color:var(--aevx-gold); margin-top:2px;}
 .aevx-foot{display:flex; align-items:center; justify-content:space-between; margin-top:14px;}
 .aevx-pill{font-family:var(--aevx-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:20px; border:1px solid;}
 .aevx-pill.aevx-live{color:var(--aevx-live); border-color:color-mix(in srgb,var(--aevx-live) 40%,transparent);}

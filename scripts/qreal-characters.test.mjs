@@ -170,5 +170,32 @@ for (const [input, expected] of names) {
 }
 ok("пустое описание не роняет", m.deriveName("") === "персонаж");
 
+/* ── 11. Правка канона не должна ломать узнавание ───────────────────────── */
+
+// Найдено вычиткой: если сопоставлять кадр с ПРАВЛЕНЫМ каноном, то режиссёр,
+// переписавший описание своими словами (например, по-русски), обнулит
+// сходство с английским описанием кадра — персонаж перестанет узнаваться, и
+// его же правка молча перестанет применяться.
+const edited = JSON.parse(JSON.stringify(chars));
+const boyEdited = edited.find((c) => c.kind === "child");
+boyEdited.canonical = "Ақтөс, семилетний казахский мальчик в растянутом свитере";
+
+ok("персонаж узнаётся после правки канона на другом языке",
+  m.matchCharacter(drifting[0].subjects[0], edited)?.id === boyEdited.id,
+  "сопоставление обязано идти по неизменным aliases, а не по canonical");
+
+const linesAfterEdit = m.subjectLines(drifting[1].subjects, edited);
+ok("правленый канон реально уходит в кадр",
+  linesAfterEdit.some((l) => l.includes("Ақтөс")), linesAfterEdit.join(" | "));
+
+ok("aliases сохранены при выводе", boyEdited.aliases.length >= 2, String(boyEdited.aliases?.length));
+
+// Старые записи из БД (до появления aliases) не должны переставать работать.
+const legacy = edited.map((c) => { const { aliases, ...rest } = c; return rest; });
+const legacyBoy = legacy.find((c) => c.kind === "child");
+legacyBoy.canonical = "7yo boy, tousled hair, oversized sweater, childlike gait";
+ok("запись без aliases падает на canonical, а не ломается",
+  m.matchCharacter(drifting[0].subjects[0], legacy)?.id === legacyBoy.id);
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

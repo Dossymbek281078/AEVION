@@ -43,8 +43,12 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
             {band.label}
           </span>
           <p style={{ margin: 0, fontSize: 14, color: "#334155", lineHeight: 1.55 }}>{a.headline}</p>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#94a3b8" }}>
-            {a.sector.label} · доля оценки на фактических цифрах: {Math.round(a.evidenceCoverage * 100)}%
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: a.sector.origin === "fallback" ? "#b45309" : "#94a3b8" }}>
+            {a.sector.label}
+            {a.sector.origin === "detected" && " (определена по описанию)"}
+            {a.sector.origin === "fallback" && " — отрасль не распознана, цифры рынка общие"}
+            {" · доля оценки на фактических цифрах: "}
+            {Math.round(a.evidenceCoverage * 100)}%
           </p>
         </div>
       </div>

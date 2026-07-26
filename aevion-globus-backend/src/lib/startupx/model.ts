@@ -20,7 +20,8 @@
  */
 
 import { parsePlanSignals, mergeStructuredSignals, emptySignals, type PlanSignals } from "../qventure/signals";
-import { resolveSector, type SectorProfile } from "../qventure/sectors";
+import type { SectorProfile } from "../qventure/sectors";
+import { detectSector, type SectorDetection } from "./sectorDetect";
 
 // ── Tiers ────────────────────────────────────────────────────────────────────
 
@@ -369,6 +370,15 @@ export function listingSignals(listing: ListingInput): PlanSignals {
   });
 }
 
+/**
+ * The sector a listing is scored against, and where that choice came from.
+ * The form's default is "определить автоматически", so this actually has to
+ * determine something — see sectorDetect.ts for why that is not a given.
+ */
+export function listingSectorDetection(listing: ListingInput): SectorDetection {
+  return detectSector(listing.sector, listing.description);
+}
+
 export function listingSector(listing: ListingInput): SectorProfile {
-  return resolveSector(listing.sector);
+  return listingSectorDetection(listing).sector;
 }

@@ -208,6 +208,46 @@ describe("assessment honesty", () => {
   });
 });
 
+describe("the sector the market factor is scored against", () => {
+  // The submit form's default is "определить автоматически". For a while nothing
+  // determined anything: an unset sector resolved to the generic fallback whose
+  // own source note says "no sector-specific report" — so the founder was shown
+  // market numbers documented as not being about their market.
+
+  test("a Russian description is classified, not dumped into the fallback", () => {
+    const a = assessBody({ ...ideaBody(), sector: undefined });
+    expect(a.sector.origin).toBe("detected");
+    expect(a.sector.id).toBe("logistics");
+    expect(a.factors.find((f) => f.key === "market")!.rationale).toMatch(/Отрасль определена по описанию/);
+  });
+
+  test("what the founder declares beats what the words suggest", () => {
+    const a = assessBody(ideaBody({ sector: "marketplace" }));
+    expect(a.sector.id).toBe("marketplace");
+    expect(a.sector.origin).toBe("declared");
+  });
+
+  test("an unrecognised sector string is not passed off as the founder's choice", () => {
+    // resolveSector answers `other` for anything it does not know. Calling that
+    // "declared" would relabel a typo as a decision.
+    const a = assessBody(ideaBody({ sector: "квантовые единороги" }));
+    expect(a.sector.origin).not.toBe("declared");
+  });
+
+  test("when the text says nothing, the analysis admits the numbers are generic", () => {
+    const a = assessBody(
+      ideaBody({
+        sector: undefined,
+        description:
+          "Мы строим очень хороший продукт для людей. Он будет удобным и понятным, им будут " +
+          "пользоваться каждый день, и мы будем постоянно его улучшать вместе с сообществом.",
+      }),
+    );
+    expect(a.sector.origin).toBe("fallback");
+    expect(a.factors.find((f) => f.key === "market")!.rationale).toMatch(/не про ваш рынок/);
+  });
+});
+
 describe("deal terms vs the market", () => {
   test("a $10M post-money on an unbuilt idea is flagged, not quietly scored", () => {
     // $500k for 5% implies a $10M valuation for something that does not exist.

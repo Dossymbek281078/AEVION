@@ -82,7 +82,14 @@ export interface Assessment {
     implied: { postMoneyUsd: number | null; ratioToBandHigh: number | null; formula: string | null };
     ticket: { low: number; high: number; note: string };
   };
-  sector: { id: string; label: string; tamUsdBn: number; cagr: number };
+  sector: {
+    id: string;
+    label: string;
+    tamUsdBn: number;
+    cagr: number;
+    /** Откуда взялась отрасль: указал основатель, определили по тексту, или общий запас. */
+    origin: "declared" | "detected" | "fallback";
+  };
   sources: Array<{ publisher: string; year: number; claim: string; url: string }>;
   evidenceCoverage: number;
   disclaimer: string;

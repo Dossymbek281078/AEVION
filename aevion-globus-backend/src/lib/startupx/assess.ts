@@ -21,7 +21,7 @@
 import {
   TIER_SPECS,
   annualRevenueUsd,
-  listingSector,
+  listingSectorDetection,
   listingSignals,
   type ListingInput,
   type Tier,
@@ -37,6 +37,7 @@ import {
 } from "./valuation";
 import type { PlanSignals } from "../qventure/signals";
 import type { SectorProfile } from "../qventure/sectors";
+import type { SectorDetection } from "./sectorDetect";
 
 /** Bump when the rules below change, so old scores are never silently compared
  *  to new ones. The listing row stores this next to the score. */
@@ -76,7 +77,7 @@ export interface Assessment {
   redFlags: RedFlag[];
   blindSpots: string[];
   deal: DealAssessment;
-  sector: { id: string; label: string; tamUsdBn: number; cagr: number };
+  sector: { id: string; label: string; tamUsdBn: number; cagr: number; origin: "declared" | "detected" | "fallback" };
   sources: typeof MARKET_SOURCES;
   /** 0–1: share of the score backed by numbers the founder actually disclosed. */
   evidenceCoverage: number;
@@ -246,12 +247,26 @@ function scoreClarity(listing: ListingInput, signals: PlanSignals): AssessmentFa
 
 // ── 2. Market: sector prior, identical for everyone in the sector ────────────
 
-function scoreMarket(listing: ListingInput, sector: SectorProfile): AssessmentFactor {
+const SECTOR_ORIGIN_NOTE: Record<"declared" | "detected" | "fallback", string> = {
+  declared: "Отрасль указана вами.",
+  detected: "Отрасль определена по описанию",
+  fallback:
+    "Отрасль по описанию определить не удалось, поэтому взяты общие цифры — они не про ваш рынок. " +
+    "Выберите отрасль в форме, и этот балл станет осмысленным.",
+};
+
+function scoreMarket(listing: ListingInput, detection: SectorDetection): AssessmentFactor {
+  const sector = detection.sector;
   // TAM on a log scale: $1bn → 40, $10bn → 60, $100bn → 80, $1000bn → 100.
   const tamScore = clamp(40 + 20 * Math.log10(Math.max(0.1, sector.tamUsdBn)));
   const growthScore = clamp(30 + sector.cagr * 250); // 12% CAGR → 60, 28% → 100
   const crowding = clamp(100 - sector.competitiveIntensity * 100);
   const s = tamScore * 0.4 + growthScore * 0.35 + crowding * 0.25;
+
+  const origin =
+    detection.origin === "detected" && detection.evidence.length
+      ? `${SECTOR_ORIGIN_NOTE.detected} (${detection.evidence.join(", ")}).`
+      : SECTOR_ORIGIN_NOTE[detection.origin];
 
   return {
     key: "market",
@@ -261,7 +276,7 @@ function scoreMarket(listing: ListingInput, sector: SectorProfile): AssessmentFa
     rationale:
       `${sector.label}: адресуемый рынок ~$${sector.tamUsdBn}млрд, рост ${(sector.cagr * 100).toFixed(0)}%/год, ` +
       `конкурентность ${(sector.competitiveIntensity * 10).toFixed(1)}/10. ` +
-      `Это данные по отрасли — у всех проектов этой отрасли здесь одинаковый балл.`,
+      `Это данные по отрасли — у всех проектов этой отрасли здесь одинаковый балл. ${origin}`,
     basis: "sector-prior",
   };
 }
@@ -553,11 +568,12 @@ const BAND_WORDING: Record<Tier, Record<"strong" | "mixed" | "weak", string>> = 
 
 export function assessListing(listing: ListingInput): Assessment {
   const signals = listingSignals(listing);
-  const sector = listingSector(listing);
+  const detection = listingSectorDetection(listing);
+  const sector = detection.sector;
   const revenue = annualRevenueUsd(listing.metrics, signals);
 
   const clarity = scoreClarity(listing, signals);
-  const market = scoreMarket(listing, sector);
+  const market = scoreMarket(listing, detection);
   const moat = scoreMoat(listing, sector, signals);
   const evidence = scoreEvidence(listing, signals);
 
@@ -616,7 +632,13 @@ export function assessListing(listing: ListingInput): Assessment {
       implied,
       ticket: suggestedTicketUsd(listing.tier, listing.deal, TIER_SPECS[listing.tier].ticketUsd),
     },
-    sector: { id: sector.id, label: sector.label, tamUsdBn: sector.tamUsdBn, cagr: sector.cagr },
+    sector: {
+      id: sector.id,
+      label: sector.label,
+      tamUsdBn: sector.tamUsdBn,
+      cagr: sector.cagr,
+      origin: detection.origin,
+    },
     sources: MARKET_SOURCES,
     evidenceCoverage,
     disclaimer: DISCLAIMER,

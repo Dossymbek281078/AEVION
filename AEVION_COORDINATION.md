@@ -739,3 +739,41 @@ deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BI
 при HTTP 200, а `moduleForAppSlug("constructor")` возвращал функцию из прототипа.
 После починки прогрепал репозиторий на `in <СЛОВАРЬ>` — это единственное
 оставшееся место.
+
+### Тот же класс на фронтенде — два места (2026-07-26, сессия fan-pricing)
+
+Прогреп `frontend/src/` на `in <СЛОВАРЬ>` после починки монетизации. Два
+попадания, оба чужие зоны — не правил, передаю.
+
+**1. 🔴 `frontend/src/app/bank/gift/[id]/opengraph-image.tsx:63` — вход из URL.**
+Зона банка (живая сессия `aevion-backend-modules/.../bank`).
+```ts
+const themeId = decoded?.themeId && decoded.themeId in THEME_GRADIENT ? decoded.themeId : "general";
+const gradient = THEME_GRADIENT[themeId];
+const icon = THEME_ICON[themeId];
+```
+`decoded` — это `?p=` (base64-JSON), `themeId` берётся из него сырым
+(`tryDecode` не валидирует поля). `"constructor" in THEME_GRADIENT` = `true`,
+значит фолбэк на `"general"` НЕ срабатывает, и дальше:
+- `background: gradient` получает функцию вместо строки;
+- `{icon}` — функция как React-ребёнок, а это **исключение** «Functions are not
+  valid as a React child».
+
+То есть OG-картинка подарка падает по ссылке вида `?p=<base64 с
+themeId:"constructor">`. Ссылку на подарок пересылают посторонним — вход
+полностью внешний, и это единственный найденный случай класса, где итог не
+«тихий мусор», а отказ рендера.
+
+**2. 🟡 `frontend/src/app/aev/aevToken.ts:1026` — вход из localStorage.**
+Зона не занята никем по `session-state`, последняя правка 2026-05-03.
+```ts
+if (v && (v in THEME_PALETTES)) return v as ThemeId;
+```
+`v` читается из `localStorage`, поэтому подставить чужое значение нельзя —
+пострадает только тот, кто сам его записал. Severity ниже, но чинится тем же
+однострочником, заодно с первым.
+
+**Починка обоих:** `Object.prototype.hasOwnProperty.call(MAP, key)`.
+Для `gift` дополнительно стоит валидировать `tryDecode` целиком: `amount`
+уходит в `.toFixed()` без проверки типа (строка в `amount` → исключение тем же
+путём), `message` — в `.slice()`.

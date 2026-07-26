@@ -48,7 +48,11 @@ export function InterestModal({
       });
       onSubmitted(listing.id);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Не удалось отправить отклик.");
+      // Сервер присылает человеческий текст в issues (например, про адрес, по
+      // которому нельзя ответить); показывать вместо него код ошибки —
+      // значит заставлять инвестора гадать.
+      const human = e instanceof ApiError ? e.issues[0]?.message ?? null : null;
+      setError(human ?? (e instanceof ApiError ? e.message : "Не удалось отправить отклик."));
     } finally {
       setBusy(false);
     }

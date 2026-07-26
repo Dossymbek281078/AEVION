@@ -31,6 +31,7 @@ import { callProvider, pickConfiguredProvider, getProviders } from "../services/
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
+import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, type Character } from "../services/qreal/characters";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -95,6 +96,9 @@ type Project = {
   consentConfirmed: boolean;
   status: "draft" | "storyboarded" | "rendering" | "done";
   shots: Shot[];
+  /** Реестр персонажей сцены: одно каноническое описание на героя, чтобы он
+   *  не менял лицо между кадрами. Пересобирается вместе с раскадровкой. */
+  characters?: Character[];
   filmPath: string | null;
   assembledAt: string | null;
   qrightObjectId: string | null;
@@ -289,11 +293,16 @@ const REALISM_DIRECTIVES =
   "no beauty filter, no digital sharpness.";
 
 function buildRenderPrompt(p: Project, s: Shot): string {
-  const subj = s.subjects.map((x) => `${x.kind}: ${x.description}`).join("; ");
+  // Описания субъектов берём из реестра персонажей, а не из кадра: LLM пишет
+  // раскадровку покадрово и переописывает того же героя каждый раз — отсюда
+  // разные лица между кадрами. Реестр подставляет ОДИН канонический текст.
+  const cast = p.characters || [];
+  const subj = subjectLines(s.subjects, cast).join("; ");
   const dial = s.dialogue ? ` Dialogue (${p.language}): "${s.dialogue}".` : "";
+  const continuity = consistencyDirective(charactersInShot(s.subjects, cast));
   return (
     `${s.description} Subjects — ${subj}. Camera: ${s.camera}. ` +
-    `Sound: ${s.soundscape}.${dial} ${REALISM_DIRECTIVES}`
+    `Sound: ${s.soundscape}.${dial} ${REALISM_DIRECTIVES}${continuity}`
   );
 }
 
@@ -614,6 +623,8 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
     const variation = Math.min(5, Math.max(1, Number(req.body?.variation) || 1));
     const viaAi = await aiStoryboard(p, variation);
     p.shots = viaAi?.shots ?? stubStoryboard(p);
+    // Каст выводим ДО промтов: buildRenderPrompt читает p.characters.
+    p.characters = deriveCharacters(p.shots);
     for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
     p.status = "storyboarded";
     p.updatedAt = nowIso();
@@ -663,6 +674,41 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
   const estUsd = engine.usdPerSecond != null ? (engine.usdPerSecond * s.durationSec).toFixed(2) : "?";
   return `Кадр в очереди: ${engine.label}, ~$${estUsd}.`;
 }
+
+qrealRouter.get("/projects/:id/characters", (req, res) => {
+  const p = memProjects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  // Каст мог быть выведен до появления реестра (старые проекты в БД) —
+  // считаем на лету, чтобы не отдавать пустоту там, где персонажи есть.
+  const characters = p.characters?.length ? p.characters : deriveCharacters(p.shots);
+  res.json({ characters, note: "canonical — единственное описание, которое уходит во ВСЕ кадры персонажа" });
+});
+
+/** Правка каста человеком. Автовывод хорош, но режиссёр знает лучше: «алабай»
+ *  вместо «shepherd dog», конкретный возраст, порода, шрам. После правки промты
+ *  ПЕРЕСОБИРАЮТСЯ — иначе canonical поменялся бы, а в движок ушёл старый текст. */
+qrealRouter.patch("/projects/:id/characters/:cid", (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    if (!p.characters?.length) p.characters = deriveCharacters(p.shots);
+    const c = p.characters.find((x) => x.id === req.params.cid);
+    if (!c) return res.status(404).json({ error: "character not found" });
+
+    const { canonical, name, refImages } = req.body || {};
+    if (typeof canonical === "string" && canonical.trim().length >= 3) c.canonical = canonical.trim().slice(0, 600);
+    if (typeof name === "string" && name.trim()) c.name = name.trim().slice(0, 80);
+    if (Array.isArray(refImages)) {
+      // Движки принимают ограниченное число референсов (Seedance — до 9).
+      c.refImages = refImages.filter((u) => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 9);
+    }
+
+    for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
+    p.updatedAt = nowIso();
+    saveProject(p);
+    res.json({ character: c, characters: p.characters, note: "Промты кадров пересобраны под новое описание." });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "character update failed" }); }
+});
 
 qrealRouter.get("/projects/:id/estimate", (req, res) => {
   const p = memProjects.get(req.params.id);

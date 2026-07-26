@@ -3336,7 +3336,24 @@ devhubRouter.post("/media/image", async (req, res) => {
     if (attempts.length === 1) {
       return res.status(attempts[0].status).json({ error: attempts[0].error, attempts });
     }
-    return res.status(502).json({ error: "All image providers failed", attempts });
+    // Distinguish "your prompt failed" from "nobody is paying the bill".
+    // Today all three arms are the latter: OpenAI billing hard limit,
+    // Workers AI 401, no Together key — and "All image providers failed"
+    // told the user nothing they could act on.
+    const blob = attempts.map((a) => `${a.provider}:${a.status}:${a.error || ""}`).join(" | ").toLowerCase();
+    const billing = /billing|quota|insufficient|payment|402/.test(blob);
+    const auth = /401|403|authentication|unauthorized/.test(blob);
+    const fixes: string[] = [];
+    if (billing) fixes.push("top up the OpenAI account");
+    if (auth) fixes.push("the Cloudflare token needs the Workers AI permission");
+    if (!process.env.TOGETHER_API_KEY) fixes.push("or set TOGETHER_API_KEY (free tier) as a fallback");
+    return res.status(502).json({
+      error: fixes.length
+        ? `Image generation is unavailable — every provider is blocked, not your prompt. Fix: ${fixes.join("; ")}.`
+        : "All image providers failed",
+      providersBlocked: fixes.length > 0,
+      attempts,
+    });
   }
 
   // Prefer a permanent Cloudflare Images URL: upstream URLs expire within

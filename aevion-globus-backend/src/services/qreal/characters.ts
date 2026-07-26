@@ -158,6 +158,34 @@ export function consistencyDirective(shotCharacters: Character[]): string {
   );
 }
 
+/** Референс-каст кадра для движков с reference-to-video.
+ *
+ *  Seedance адресует опорные картинки прямо в тексте промта — `@Image1`,
+ *  `@Image2` (схема сверена по каталогу fal 2026-07-26). Поэтому мало
+ *  положить URL в `image_urls`: если в промте на них не сослаться, модель
+ *  их проигнорирует. Здесь нумерация и текст собираются вместе, чтобы
+ *  порядок в массиве и номера в промте не разъехались.
+ *
+ *  Возвращает пустой imageUrls, если ни у одного персонажа кадра нет
+ *  референсов — тогда вызывающий код останется на обычном text-to-video. */
+export function referenceCast(
+  subjects: SubjectLike[],
+  characters: Character[]
+): { imageUrls: string[]; lines: string[] } {
+  const imageUrls: string[] = [];
+  const lines = (subjects || []).map((s) => {
+    const c = matchCharacter(s, characters);
+    if (!c) return `${s.kind}: ${s.description}`;
+    const first = c.refImages?.[0];
+    // Один референс на персонажа: 9 слотов делятся на весь каст, и лицо
+    // фиксирует первый кадр, а не количество ракурсов.
+    if (!first || imageUrls.length >= 9) return `${c.kind}: ${c.canonical}`;
+    imageUrls.push(first);
+    return `${c.kind}: ${c.canonical} (@Image${imageUrls.length})`;
+  });
+  return { imageUrls, lines };
+}
+
 /** Персонажи, занятые в конкретном кадре. */
 export function charactersInShot(subjects: SubjectLike[], characters: Character[]): Character[] {
   const out: Character[] = [];

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { usePricingT } from "@/lib/pricingI18n";
+import { track } from "@/lib/track";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -122,7 +123,19 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   useEffect(() => {
     let cancelled = false;
     loadFanPreview(currency).then((rows) => {
-      if (!cancelled) setFanRow(rows?.find((r) => r.module === moduleId) ?? null);
+      if (cancelled) return;
+      const row = rows?.find((r) => r.module === moduleId) ?? null;
+      setFanRow(row);
+      // Одно событие на показ веерной строки конкретной витрины. Без него не
+      // узнать, КАКАЯ витрина заводит веер: панель на /pricing размечена, а 28
+      // страниц модулей молчали. Считается видимостью, не кликом.
+      if (row && row.ring1.length > 0) {
+        track({
+          type: "fan_view",
+          source: `module-chip/${moduleId}`,
+          meta: { module: moduleId, ring1: row.ring1.length, saving: row.ring1SavingMonthly },
+        });
+      }
     });
     return () => {
       cancelled = true;

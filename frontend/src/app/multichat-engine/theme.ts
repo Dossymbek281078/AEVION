@@ -8,7 +8,7 @@
 // шагом, с просмотром экранов глазами.
 
 export const T = {
-  accent: "#08816d",
+  accent: "#077361",
   accentDeep: "#6bf2e6",
   accentDeeper: "#047a99",
   bad: "#5d0000",
@@ -22,7 +22,7 @@ export const T = {
   brandInkSoft: "#817ed1",
   cyan: "#2bdbf9",
   cyanDeep: "#4dd6f7",
-  good: "#107936",
+  good: "#0f7032",
   goodBright: "#3add76",
   goodDeep: "#7feaa7",
   indigo: "#4035c7",
@@ -43,7 +43,7 @@ export const T = {
   textMute: "#47566b",
   textSoft: "#050a0f",
   warn: "#946a00",
-  warnBright: "#eabc05",
+  warnBright: "#816803",
   warnDeep: "#f6954b",
   surfaceSoft: "#f2f1ec",
   canvas: "#fbfaf7",

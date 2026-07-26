@@ -3576,3 +3576,99 @@ describe("zip round trip: export → import", () => {
     expect(Object.keys(got).sort()).toEqual(files.map((f) => f.path).sort());
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 27. Real database provisioning (schema + role per project)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("database provisioning", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DbProj", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("503 with the env var named when provisioning is not configured", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const id = await proj(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/database/provision`).send({});
+    expect(r.status).toBe(503);
+    expect(r.body.envVar).toBe("DEVHUB_DB_ADMIN_URL");
+  });
+
+  test("refuses to provision on the platform's own database", async () => {
+    const { refusesPlatformDatabase } = await import("../src/lib/devhubDbProvision");
+    const same = "postgres://admin:x@db.internal:5432/aevion";
+    expect(refusesPlatformDatabase(same, "postgres://other:y@db.internal:5432/aevion")).toBe(true);
+    expect(refusesPlatformDatabase(same, "postgres://admin:x@projects.internal:5432/aevion")).toBe(false);
+    expect(refusesPlatformDatabase(same, undefined)).toBe(false);
+  });
+
+  test("derives safe identifiers and a scoped connection string", async () => {
+    const m = await import("../src/lib/devhubDbProvision");
+    const pid = "e35bc59c-56e1-4467-bc01-dc1cb5ed5abe";
+    expect(m.schemaNameFor(pid)).toBe("p_e35bc59c56e1");
+    expect(m.roleNameFor(pid)).toBe("u_e35bc59c56e1");
+    const url = m.buildProjectUrl("postgres://admin:pw@host:5432/db", "u_x", "s3cret", "p_x");
+    expect(url).toContain("u_x:s3cret@host:5432/db");
+    // URLSearchParams encodes the space as "+", so normalise before asserting.
+    expect(decodeURIComponent(url).replace(/\+/g, " ")).toContain("options=-c search_path=p_x");
+  });
+
+  test("creates role + schema, locks it out of public, applies the project's schema.sql", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      schemaSql: "CREATE TABLE IF NOT EXISTS todos (id serial primary key);",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      platformUrl: "postgres://admin:pw@platform.internal:5432/aevion",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.appliedSchemaSql).toBe(true);
+    const joined = executed.join(" | ");
+    expect(joined).toContain("CREATE ROLE u_aaaaaaaabbbb LOGIN PASSWORD");
+    expect(joined).toContain("CREATE SCHEMA IF NOT EXISTS p_aaaaaaaabbbb AUTHORIZATION u_aaaaaaaabbbb");
+    expect(joined).toContain("REVOKE ALL ON SCHEMA public FROM u_aaaaaaaabbbb");
+    expect(joined).toContain("SET ROLE u_aaaaaaaabbbb"); // DDL runs as the project, not as admin
+    expect(joined).toContain("RESET ROLE");
+    expect(r.databaseUrl).not.toContain("admin:pw@"); // admin credential never leaks to the project
+  });
+
+  test("rotates the password instead of failing when the role already exists", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [{ "?column?": 1 }] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed.join(" | ")).toContain("ALTER ROLE u_aaaaaaaabbbb WITH LOGIN PASSWORD");
+    expect(executed.join(" | ")).not.toContain("CREATE ROLE");
+  });
+
+  test("deprovision drops schema, owned objects and role", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.deprovisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim());
+        return { rows: [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed).toContain("DROP SCHEMA IF EXISTS p_aaaaaaaabbbb CASCADE");
+    expect(executed).toContain("DROP ROLE IF EXISTS u_aaaaaaaabbbb");
+  });
+});

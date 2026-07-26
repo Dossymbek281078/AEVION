@@ -825,6 +825,75 @@ qskywayRouter.post("/airspace/anchor/verify", async (req: Request, res: Response
   res.json(await verifyAnchoredAirspace(req.body));
 });
 
+/**
+ * Register the signed ceiling layer in QRight — the platform's own registry.
+ *
+ * Until now "we routed against FAA edition 7/9/2026" lived inside QSkyway's own
+ * response. Putting it in QRight makes it a dated entry in the registry every
+ * other module already reads, which is the entire point of having one. Same
+ * bridge QReal opened for film provenance.
+ *
+ * Idempotent on contentHash rather than on a stored flag: the hash IS the
+ * identity of an edition, so re-registering the same rule set must find the
+ * existing object instead of minting a duplicate — including after a restart,
+ * a redeploy, or a call from a second instance.
+ */
+qskywayRouter.post("/airspace/register", async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.body?.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const src = AIRSPACE[resolved.id];
+  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", city: resolved.id });
+
+  const contentHash = airspaceContentHash(src);
+  const title = `${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
+  const description =
+    `Опубликованный слой ограничений высоты, использованный QSkyway для маршрутизации. ` +
+    `Орган: ${src.authority}. Режим: ${src.regime}. Ячеек: ${src.cells.length}. ` +
+    `Подписано Ed25519 платформой AEVION. Это регистрация ИСПОЛЬЗОВАННЫХ данных, не претензия на права регулятора.`;
+
+  try {
+    const pool = getPool();
+    await pool.query(`CREATE TABLE IF NOT EXISTS "QRightObject" (
+      "id" TEXT PRIMARY KEY, "title" TEXT NOT NULL, "description" TEXT NOT NULL,
+      "kind" TEXT NOT NULL, "contentHash" TEXT NOT NULL,
+      "ownerName" TEXT, "ownerEmail" TEXT, "ownerUserId" TEXT,
+      "country" TEXT, "city" TEXT, "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );`);
+    const existing = await pool.query(
+      `SELECT "id", "createdAt" FROM "QRightObject" WHERE "contentHash" = $1 AND "kind" = 'airspace-edition' LIMIT 1`,
+      [contentHash],
+    );
+    if (existing.rows.length) {
+      const row = existing.rows[0] as { id: string; createdAt: string };
+      return res.json({
+        ok: true, alreadyRegistered: true, qrightObjectId: row.id, contentHash,
+        registeredAt: row.createdAt, link: "/qright",
+        note: "Эта редакция уже зарегистрирована — хэш совпадает, дубликат не создан.",
+      });
+    }
+    const objectId = "qs-" + crypto.randomUUID().slice(0, 12);
+    await pool.query(
+      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","country","city")
+       VALUES ($1,$2,$3,'airspace-edition',$4,$5,$6)`,
+      [objectId, title.slice(0, 200), description, contentHash, src.authority === "FAA" ? "US" : null, resolved.city.city.slice(0, 120)],
+    );
+    res.status(201).json({
+      ok: true, alreadyRegistered: false, qrightObjectId: objectId, contentHash,
+      authority: src.authority, effective: src.effective, link: "/qright",
+      note: "Редакция ограничений внесена в реестр QRight как датированный объект.",
+    });
+  } catch (err) {
+    // QSkyway is deliberately DB-optional (see the slot market). The registry is
+    // not, so say so plainly instead of pretending the registration happened.
+    console.warn("[qskyway] airspace register failed:", err instanceof Error ? err.message : err);
+    res.status(503).json({
+      error: "реестр QRight недоступен — регистрация не выполнена",
+      contentHash,
+      note: "Подпись и якорь слоя не затронуты; повторите регистрацию, когда база доступна.",
+    });
+  }
+});
+
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
   const slots = await listSlots();
   res.json({ count: slots.length, capacityPerRoute: SLOT_CAPACITY, store: slotsDbAvailable ? "postgres" : "memory", slots });

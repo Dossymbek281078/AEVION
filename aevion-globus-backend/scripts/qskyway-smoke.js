@@ -234,6 +234,22 @@ async function main() {
   assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits a regulatory verdict it cannot make");
   assert(justAst.json?.scope?.includes("нет"), "[astana] scope says the regulatory part is absent");
 
+  // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
+  // both outcomes are legitimate — what must never happen is a success response
+  // when nothing was written.
+  const reg1 = await jpost("/api/qskyway/airspace/register", { city: "nyc" });
+  if (reg1.status === 503) {
+    assert(!reg1.json?.ok && typeof reg1.json?.error === "string", "registry unavailable is reported as failure, not silent success", "no DB in this env");
+  } else {
+    assert(reg1.status === 201 || reg1.status === 200, "[nyc] airspace edition registered in QRight", `status=${reg1.status}`);
+    assert(reg1.json?.contentHash === asN._signature.contentHash, "registry entry carries the signed layer's hash");
+    // Idempotency is on the hash, so a second call must resolve to the same object.
+    const reg2 = await jpost("/api/qskyway/airspace/register", { city: "nyc" });
+    assert(reg2.json?.alreadyRegistered === true && reg2.json?.qrightObjectId === reg1.json.qrightObjectId, "re-registering the same edition returns the same object, not a duplicate");
+  }
+  const regAst = await jpost("/api/qskyway/airspace/register", { city: "astana" });
+  assert(regAst.status === 422, "[astana] nothing to register without a regulator feed", `status=${regAst.status}`);
+
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
   assert(bad.status === 422, "same-vertiport route rejected", `status=${bad.status}`);

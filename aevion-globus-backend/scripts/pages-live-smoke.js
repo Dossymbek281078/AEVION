@@ -32,6 +32,7 @@ const PAGES = [
   "/bank",
   "/cyberchess",
   "/qventure",
+  "/qskyway",
   "/build",
   "/qtrade",
   "/smeta-trainer",

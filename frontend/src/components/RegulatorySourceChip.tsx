@@ -1,6 +1,7 @@
 "use client";
 
 import { InfoTip } from "@/components/InfoTip";
+import { useI18n } from "@/lib/i18n";
 import {
   type RegulatorySource,
   type RegulatoryLabels,
@@ -35,25 +36,35 @@ type Props = {
 };
 
 export function RegulatorySourceChip({ source, labels, subject }: Props) {
+  // Keyed, not left to runtime machine translation: this chip's whole job is to
+  // separate "an authority published this" from "we made it up", and those two
+  // words are exactly the ones that must not be approximated by an MT service.
+  const { t } = useI18n();
   const tier = effectiveTier(source);
-  const L: RegulatoryLabels = { ...DEFAULT_REGULATORY_LABELS, ...labels };
+  const L: RegulatoryLabels = {
+    ...DEFAULT_REGULATORY_LABELS,
+    official: t("reg.tier.official"),
+    illustrative: t("reg.tier.illustrative"),
+    none: t("reg.tier.none"),
+    ...labels,
+  };
   const color = REGULATORY_COLORS[tier];
   const headline = regulatoryHeadline(source, L);
 
   const lines: string[] = [];
   if (tier === "official") {
-    lines.push(`Источник — ${source?.authority}${source?.title ? ", " + source.title : ""}: публикация регулятора, загружена как есть.`);
-    if (source?.effective) lines.push(`Редакция: ${source.effective}.`);
-    if (source?.scopeNote) lines.push(`Область действия: ${source.scopeNote}.`);
-    if (source?.upToDate === true) lines.push("Сверено с живым фидом — снимок совпадает с тем, что публикует регулятор.");
-    if (source?.upToDate === false) lines.push("⚠ Живой фид расходится со снимком — данные требуют обновления.");
-    if (source?.upToDate == null) lines.push("Сверка с живым фидом ещё не выполнялась.");
-    if (source?.attested) lines.push("Слой подписан Ed25519 — можно доказать, по какой редакции считали.");
+    lines.push(t("reg.tip.official", { authority: source?.authority ?? "", title: source?.title ? ", " + source.title : "" }));
+    if (source?.effective) lines.push(t("reg.tip.edition", { edition: source.effective }));
+    if (source?.scopeNote) lines.push(t("reg.tip.scope", { scope: source.scopeNote }));
+    if (source?.upToDate === true) lines.push(t("reg.tip.fresh"));
+    if (source?.upToDate === false) lines.push(t("reg.tip.drift"));
+    if (source?.upToDate == null) lines.push(t("reg.tip.unchecked"));
+    if (source?.attested) lines.push(t("reg.tip.attested"));
   } else if (tier === "illustrative") {
-    lines.push("Правдоподобная заглушка нашего авторства, НЕ выгрузка из официального источника. Годится для демонстрации механики, не для планирования реальной операции.");
+    lines.push(t("reg.tip.illustrative"));
     if (source?.scopeNote) lines.push(source.scopeNote);
   } else {
-    lines.push("Ограничение здесь не применяется, и мы не делаем вид, что применяется.");
+    lines.push(t("reg.tip.none"));
     if (source?.scopeNote) lines.push(source.scopeNote);
   }
 

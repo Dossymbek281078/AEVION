@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
 import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
 import type { DataQuality } from "@/lib/dataQuality";
@@ -72,7 +73,7 @@ const VP_CLASS_COLOR: Record<string, string> = {
 /** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
 function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
   if (!a?.available) {
-    return { tier: "none", scopeNote: a?.note ?? "Открытого фида регулятора для этого города не найдено." };
+    return { tier: "none", scopeNote: a?.note };
   }
   const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
   return {
@@ -101,6 +102,7 @@ function altColor(alt: number, altMax: number, a = 1): string {
 }
 
 export default function QSkywayClient() {
+  const { t } = useI18n();
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
@@ -564,12 +566,13 @@ export default function QSkywayClient() {
         {coverage && coverage.withFeed < coverage.total && (
           <div style={{ margin: "0 0 16px", padding: "10px 13px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836", fontSize: 12.5, color: "#9fb0c4", lineHeight: 1.5 }}>
             <span style={{ color: "#22d3ee", fontFamily: "monospace" }}>
-              🛂 регуляторный слой: {coverage.withFeed} из {coverage.total} городов
+              🛂 {t("qskyway.coverage.head", { withFeed: coverage.withFeed, total: coverage.total })}
             </span>{" "}
-            — QSkyway говорит на языке регулятора там, где регулятор уже говорит машинно.
-            Для остальных ({coverage.missing.map((id) => cities.find((c) => c.id === id)?.name.split(" — ")[0] ?? id).join(", ")}) открытого машиночитаемого фида
-            низковысотных ограничений не существует: это свойство юрисдикции, а не пробел реализации,
-            и ровно тот пробел, который кому-то предстоит закрыть.
+            {t("qskyway.coverage.body", {
+              missing: coverage.missing
+                .map((id) => cities.find((c) => c.id === id)?.name.split(" — ")[0] ?? id)
+                .join(", "),
+            })}
           </div>
         )}
 
@@ -617,17 +620,16 @@ export default function QSkywayClient() {
                       regulator publication, the point zones are still ours. Showing
                       them under one badge would launder the second into the first. */}
                   <RegulatorySourceChip
-                    subject="потолки"
+                    subject={t("qskyway.reg.subject.ceilings")}
                     source={airspaceRegSource(meta.airspace)}
-                    labels={{ none: "фида нет" }}
+                    labels={{ none: t("qskyway.reg.nofeed") }}
                   />
                   <RegulatorySourceChip
-                    subject={`зоны (${meta.nofly})`}
+                    subject={`${t("qskyway.reg.subject.zones")} (${meta.nofly})`}
                     source={{
                       tier: "illustrative",
-                      scopeNote: "Точечные запретные зоны заданы нами для демонстрации обхода; официальные NOTAM/U-space фиды сюда ещё не подключены.",
+                      scopeNote: t("qskyway.reg.zones.scope"),
                     }}
-                    labels={{ illustrative: "иллюстративно" }}
                   />
                   <span
                     onClick={verify === "checking" ? undefined : verifySignature}

@@ -151,7 +151,34 @@ async function run() {
     assert("no token → 401", bare.status === 401, String(bare.status));
   }
 
-  console.log("\n9. The run cleans up after itself");
+  console.log("\n9. Correcting the terms after reading the analysis");
+  // The analysis says the ask is above market; the founder's next move is to
+  // change the number. Editing must re-score, and must not touch the text the
+  // authorship stamp covers.
+  if (listingId && created?.manageToken) {
+    const before = created.assessment?.deal?.implied?.postMoneyUsd;
+    const edited = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`, {
+      deal: { intent: "raise", askUsd: 20000, equityOfferedPct: 20, buildBy: "founder" },
+    });
+    assert("PATCH with the founder's token → 200", edited.status === 200, String(edited.status));
+    const after = edited.body?.data?.assessment?.deal?.implied?.postMoneyUsd;
+    assert("the implied valuation is recomputed", after === 100000, `before=${before} after=${after}`);
+    assert("the authorship stamp still covers the original text",
+      edited.body?.data?.listing?.content_hash === created.contentHash,
+      `${edited.body?.data?.listing?.content_hash} vs ${created.contentHash}`);
+
+    const refused = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`, {
+      deal: { intent: "raise", askUsd: 20000 },
+    });
+    assert("an edit that breaks the rules is refused → 400", refused.status === 400, String(refused.status));
+
+    const stranger = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${"0".repeat(64)}`, {
+      deal: { intent: "raise", askUsd: 1, equityOfferedPct: 99 },
+    });
+    assert("a wrong token cannot edit → 401", stranger.status === 401, String(stranger.status));
+  }
+
+  console.log("\n10. The run cleans up after itself");
   // Prod once held 19 listings, all of them "Smoke Idea …", because every night
   // this script published one more and nothing ever took it down. A withdrawal
   // is a real founder action, so the smoke exercises the feature AND stops
@@ -165,7 +192,7 @@ async function run() {
     assert("but the founder still sees the offers already received", stillMine.status === 200, String(stillMine.status));
   }
 
-  console.log("\n10. Stats");
+  console.log("\n11. Stats");
   const stats = await req("GET", "/api/startupx/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
   assert("stats.total is a number", typeof stats.body?.data?.total === "number");

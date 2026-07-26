@@ -687,6 +687,105 @@ startupExchangeRouter.get("/ideas/:id/offers", offersLimiter, async (req: Reques
   });
 });
 
+// ─── PATCH /api/startupx/ideas/:id?token= ────────────────────────────────────
+// Correcting the terms.
+//
+// The free analysis tells a founder their ask is 2.7× above what the market
+// closes at. The obvious next move is to change the number — and until now the
+// only way was to withdraw and republish, which minted a new listing and left
+// the offers behind. We created that dead end by shipping the critique without
+// the fix.
+//
+// Only the deal, the metrics and the links can be edited. Title, description
+// and tier are frozen: the SHA-256 stamp covers exactly that text on exactly
+// that date, and an authorship stamp that silently follows edits is worth
+// nothing. Changing the pitch itself means publishing a new listing.
+startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const token = req.query.token ?? body.token;
+
+  let row: ListingRow | undefined;
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM startup_ideas WHERE id=$1`, [id]);
+      row = (rows as ListingRow[])[0];
+    } catch (e) {
+      console.error("[StartupX] patch fetch error", e);
+      return fail(res, "update_failed", 500);
+    }
+  } else {
+    row = memListings.get(id);
+  }
+  if (!row) return fail(res, "not_found", 404);
+  if (!manageTokenMatches(token, row.manage_token_hash)) return fail(res, "invalid_token", 401);
+
+  const tier = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
+  // Re-validated as a whole listing, so an edited deal has to satisfy exactly
+  // the same rules a new one does — an edit cannot smuggle in terms that would
+  // have been refused at publish time.
+  const { listing, issues } = normalizeListing({
+    title: row.title,
+    description: row.description,
+    tier,
+    sector: row.sector ?? undefined,
+    geography: body.geography ?? row.geography ?? undefined,
+    demoUrl: body.demoUrl ?? row.demo_url ?? undefined,
+    repoUrl: body.repoUrl ?? row.repo_url ?? undefined,
+    deal: body.deal ?? row.deal ?? {},
+    metrics: body.metrics ?? row.metrics ?? {},
+    contactMethod: body.contactMethod ?? row.contact_method ?? undefined,
+  });
+  if (!listing) return fail(res, "validation_failed", 400, { issues });
+
+  let assessment: Assessment;
+  try {
+    assessment = assessListing(listing);
+  } catch (e) {
+    captureStartupXError(e);
+    return fail(res, "assessment_failed", 500);
+  }
+
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE startup_ideas
+            SET deal=$1, metrics=$2, geography=$3, demo_url=$4, repo_url=$5,
+                contact_method=$6, assessment=$7, assessment_score=$8, assessment_version=$9
+          WHERE id=$10
+      RETURNING *`,
+        [
+          JSON.stringify(listing.deal), JSON.stringify(listing.metrics ?? {}),
+          listing.geography ?? null, listing.demoUrl ?? null, listing.repoUrl ?? null,
+          listing.contactMethod ?? null,
+          JSON.stringify(assessment), assessment.score, assessment.version,
+          id,
+        ],
+      );
+      const updated = (rows as ListingRow[])[0];
+      return ok(res, { listing: publicView(updated), assessment });
+    } catch (e) {
+      captureStartupXError(e);
+      console.error("[StartupX] patch save error", e);
+      return fail(res, "update_failed", 500);
+    }
+  }
+
+  const existing = memListings.get(id);
+  if (!existing) return fail(res, "not_found", 404);
+  existing.deal = listing.deal;
+  existing.metrics = listing.metrics ?? null;
+  existing.geography = listing.geography ?? null;
+  existing.demo_url = listing.demoUrl ?? null;
+  existing.repo_url = listing.repoUrl ?? null;
+  existing.contact_method = listing.contactMethod ?? null;
+  existing.assessment = assessment;
+  existing.assessment_score = assessment.score;
+  existing.assessment_version = assessment.version;
+  return ok(res, { listing: publicView(existing), assessment });
+});
+
 // ─── DELETE /api/startupx/ideas/:id?token= ───────────────────────────────────
 // Withdrawing a listing. A founder who found their investor — or thought better
 // of publishing — must be able to take the listing down without writing to

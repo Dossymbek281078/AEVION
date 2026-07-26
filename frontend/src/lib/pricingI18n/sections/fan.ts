@@ -17,7 +17,9 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.title": "Один продукт открывает скидку на соседние",
     "fan.subtitle":
       "Покупка любого модуля включает веер: прямой контур — до −45%, тот же домен — до −30%. Каждый следующий модуль поднимает уровень веера. Веер открыт {days} дней с последней покупки и продлевается новой.",
-    "fan.pick": "Отметьте, что у вас уже есть",
+    "fan.pick": "Прикиньте: что у вас уже есть?",
+    "fan.pick.note":
+      "Это предварительный расчёт. Скидка применится к счёту после входа — покупки мы сверяем у себя, а не по отметкам на этой странице.",
     "fan.loading": "Загружаем веер…",
     "fan.error": "Не удалось получить веер: {reason}",
     "fan.chip.opens": "веер {n}",
@@ -57,7 +59,9 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.title": "One product unlocks a discount on its neighbours",
     "fan.subtitle":
       "Buying any module opens the fan: direct circuit up to −45%, same domain up to −30%. Every next module raises the fan level. The fan stays open {days} days from your last purchase and renews with a new one.",
-    "fan.pick": "Mark what you already own",
+    "fan.pick": "Try it: what do you already own?",
+    "fan.pick.note":
+      "This is a preview. The discount is applied to your invoice after you sign in — we verify purchases on our side, not from the marks on this page.",
     "fan.loading": "Loading the fan…",
     "fan.error": "Could not load the fan: {reason}",
     "fan.chip.opens": "fan {n}",

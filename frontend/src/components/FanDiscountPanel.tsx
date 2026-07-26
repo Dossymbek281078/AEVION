@@ -227,6 +227,18 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
           <h3 style={{ margin: "24px 0 8px", fontSize: 13, fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.03em" }}>
             {tp("fan.pick")}
           </h3>
+          {/*
+            Гостю здесь показывается ГИПОТЕЗА, а не его скидка. Раньше подпись
+            звучала как факт («отметьте, что у вас уже есть»), и это было почти
+            правдой — чекаут верил такому заявлению на слово. С 2026-07-26 не
+            верит: скидку на списание даёт сервер по своим данным. Значит без
+            этой строки панель обещала бы скидку, которой на счёте не будет, —
+            ровно то расхождение «показали одно, спишут другое», против
+            которого сделана вся ветка.
+          */}
+          <p style={{ margin: "0 0 10px", fontSize: 12.5, lineHeight: 1.5, color: "#64748b", maxWidth: 620 }}>
+            {tp("fan.pick.note")}
+          </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {starters.map((row) => {
               const on = owned.includes(row.module);

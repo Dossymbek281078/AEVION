@@ -87,7 +87,7 @@ describe("FanDiscountPanel", () => {
     await waitFor(() => expect(screen.getByText(/Fan level 2/)).toBeTruthy());
     expect(screen.getByText(/qcontract/)).toBeTruthy();
     // Ручной подбор не нужен: мы знаем, что у человека куплено.
-    expect(screen.queryByText(/Mark what you already own/)).toBeNull();
+    expect(screen.queryByText(/what do you already own/i)).toBeNull();
   });
 
   it("🔴 неполные данные НЕ выдаются за пустой веер — ручная витрина остаётся", async () => {
@@ -98,7 +98,11 @@ describe("FanDiscountPanel", () => {
     renderPanel();
 
     // Ручной выбор ДОЛЖЕН быть доступен — это единственный оставшийся путь.
-    await waitFor(() => expect(screen.getByText(/Mark what you already own/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/what do you already own/i)).toBeTruthy());
+    // И рядом обязана стоять оговорка: это ПРИКИДКА, а не его скидка. Без неё
+    // панель обещала бы то, чего на счёте не будет — чекаут с 2026-07-26 не
+    // верит отметкам на странице, владение он проверяет у себя.
+    expect(screen.getByText(/This is a preview/i)).toBeTruthy();
     // И мы не утверждаем «скидок нет».
     expect(screen.queryByText(/0 modules discounted/)).toBeNull();
   });
@@ -123,7 +127,7 @@ describe("FanDiscountPanel", () => {
     vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW }));
     renderPanel();
 
-    await waitFor(() => expect(screen.getByText(/Mark what you already own/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/what do you already own/i)).toBeTruthy());
     expect(screen.getByText(/qcontract/)).toBeTruthy();
   });
 });

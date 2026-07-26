@@ -55,6 +55,30 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    keeping visible: a rubric change that cannot be seen on your existing corpus
    has not been validated by that corpus.
 
+## How this stays true
+
+Both harnesses used to be hand-run, which is how the rubric decayed the first
+time: v1 could not reach a "pass" verdict on any input and nobody noticed for
+months. The invariants now run on every push
+(`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions):
+
+| Guard | Floor | Measured today |
+|---|---|---|
+| Each strong/weak pair separates | ≥ 6 pts | 8.8 – 30.8 |
+| Mean gap across the six models | ≥ 10 pts | 16.2 |
+| Known successes vs known failures | ≥ 4 pts | 6.7 |
+| Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
+| `pass` and `watch` both reachable on real cases | — | both present |
+
+They are floors, not targets — set well under the measured values so ordinary
+tuning does not trip them. They exist to catch a change that *collapses*
+discrimination, not one that moves it.
+
+The live deployment is checked separately by `scripts/qventure-smoke.js`
+(sections 14–15): churn periods, the stage-bar projection check, non-SaaS
+evidence, currency conversion and the self-contradiction flag all asserted
+against prod, so a merge is verified rather than assumed.
+
 ## Rubric version history
 
 | Version | What moved |

@@ -1645,6 +1645,32 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
   });
 });
 
+// GET /api/devhub/projects/:id/database — what this project's database is
+// actually using. Measured, so quota talk is never a guess.
+devhubRouter.get("/projects/:id/database", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const provisioned = !!project.envVars?.DATABASE_URL;
+  if (!process.env.DEVHUB_DB_ADMIN_URL || !provisioned) {
+    return res.json({ provisioned: false, connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5 });
+  }
+  const { projectSchemaSizeBytes } = await import("../lib/devhubDbProvision");
+  const size = await projectSchemaSizeBytes({ projectId: project.id });
+  if (!size.ok) return res.status(502).json({ provisioned: true, error: size.error });
+  res.json({
+    provisioned: true,
+    tables: size.tables,
+    bytes: size.bytes,
+    megabytes: Math.round((size.bytes / 1048576) * 100) / 100,
+    connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5,
+  });
+});
+
 // DELETE /api/devhub/projects/:id/database — drop the project's schema, role
 // and stored DATABASE_URL. Destructive and irreversible, hence its own route.
 devhubRouter.delete("/projects/:id/database", async (req, res) => {

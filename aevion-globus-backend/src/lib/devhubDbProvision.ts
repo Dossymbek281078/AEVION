@@ -28,6 +28,15 @@ export type ProvisionResult = {
 
 export type ProvisionError = { ok: false; error: string };
 
+/**
+ * One project must not be able to exhaust the shared instance. Postgres has no
+ * per-schema size quota, so the two levers that do exist are used: a hard
+ * connection cap per role (a runaway pool in one generated app cannot starve
+ * every other project of connections), and a measured size reported to the
+ * caller so limits can be enforced above rather than guessed at.
+ */
+const CONNECTION_LIMIT = Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5;
+
 /** Postgres identifiers are interpolated, never parameterised — so they are
  * generated here and validated, never taken from user input. */
 const IDENT_RE = /^[a-z][a-z0-9_]{2,62}$/;
@@ -115,10 +124,10 @@ export async function provisionProjectDatabase(args: {
     // table it later creates without further grants.
     const existing = await query("SELECT 1 FROM pg_roles WHERE rolname = $1", [role]);
     if (existing.rows.length === 0) {
-      await query(`CREATE ROLE ${role} LOGIN PASSWORD '${password.replace(/'/g, "''")}'`);
+      await query(`CREATE ROLE ${role} LOGIN PASSWORD '${password.replace(/'/g, "''")}' CONNECTION LIMIT ${CONNECTION_LIMIT}`);
     } else {
       // Re-provisioning rotates the credential rather than failing.
-      await query(`ALTER ROLE ${role} WITH LOGIN PASSWORD '${password.replace(/'/g, "''")}'`);
+      await query(`ALTER ROLE ${role} WITH LOGIN PASSWORD '${password.replace(/'/g, "''")}' CONNECTION LIMIT ${CONNECTION_LIMIT}`);
     }
 
     await query(`CREATE SCHEMA IF NOT EXISTS ${schema} AUTHORIZATION ${role}`);
@@ -182,6 +191,44 @@ export async function deprovisionProjectDatabase(args: {
     await query(`DROP OWNED BY ${role} CASCADE`).catch(() => undefined);
     await query(`DROP ROLE IF EXISTS ${role}`);
     return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    if (close) await close().catch(() => {});
+  }
+}
+
+/** Bytes currently used by a project's schema — for quota display and
+ * enforcement. Reported, never guessed. */
+export async function projectSchemaSizeBytes(args: {
+  projectId: string;
+  adminUrl?: string;
+  query?: QueryFn;
+}): Promise<{ ok: true; bytes: number; tables: number } | ProvisionError> {
+  const adminUrl = args.adminUrl ?? process.env.DEVHUB_DB_ADMIN_URL;
+  if (!adminUrl) return { ok: false, error: "database provisioning is not configured" };
+  const schema = schemaNameFor(args.projectId);
+  if (!IDENT_RE.test(schema)) return { ok: false, error: "could not derive a safe schema name" };
+
+  let query = args.query;
+  let close: (() => Promise<void>) | null = null;
+  if (!query) {
+    const { Client } = await import("pg");
+    const client = new Client({ connectionString: adminUrl });
+    await client.connect();
+    query = ((sql: string, params?: unknown[]) => client.query(sql, params)) as QueryFn;
+    close = () => client.end();
+  }
+  try {
+    const r = await query(
+      `SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint AS bytes,
+              COUNT(*)::int AS tables
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relkind = 'r'`,
+      [schema]
+    );
+    const row = r.rows[0] || {};
+    return { ok: true, bytes: Number(row.bytes ?? 0), tables: Number(row.tables ?? 0) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   } finally {

@@ -224,45 +224,64 @@ const RENDER_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_RENDER_IP_DAI
 const RENDER_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_RENDER_GLOBAL_DAILY_CAP) || 20);
 const renderCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
 
-async function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> }): Promise<{ ok: true } | { ok: false; error: string }> {
+/** Судейство VLM тоже платное, но дешевле рендера — своё ведро со своими
+ *  лимитами. Без него два публичных эндпоинта (POST /qc и /continuity с
+ *  {"judge":true}) позволяли бы анониму жечь баланс в цикле: демо на проде
+ *  открыто без логина. Найдено вычиткой дифа 2026-07-26. */
+const JUDGE_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_JUDGE_IP_DAILY_LIMIT) || 10);
+const JUDGE_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_JUDGE_GLOBAL_DAILY_CAP) || 60);
+const judgeCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
+
+async function takeRenderQuota(
+  req: { ip?: string; headers: Record<string, unknown> },
+  bucket: "render" | "judge" = "render"
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const isJudge = bucket === "judge";
+  const IP_LIMIT = isJudge ? JUDGE_IP_DAILY_LIMIT : RENDER_IP_DAILY_LIMIT;
+  const GLOBAL_CAP = isJudge ? JUDGE_GLOBAL_DAILY_CAP : RENDER_GLOBAL_DAILY_CAP;
+  const counters = isJudge ? judgeCounters : renderCounters;
+  const what = isJudge ? "судейств" : "рендеров";
   const today = nowIso().slice(0, 10);
-  if (renderCounters.day !== today) {
-    renderCounters.day = today;
-    renderCounters.byIp.clear();
-    renderCounters.total = 0;
+  if (counters.day !== today) {
+    counters.day = today;
+    counters.byIp.clear();
+    counters.total = 0;
   }
   const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  const ip = fwd || req.ip || "unknown";
+  // Ключ ведра входит в ip-ключ: у рендера и судейства раздельные счётчики,
+  // иначе судейство съедало бы квоту рендера и наоборот.
+  const ip = (isJudge ? "judge:" : "") + (fwd || req.ip || "unknown");
   // Postgres-счётчики (переживают редеплой); при недоступной БД — in-memory.
   try {
     const r = await pool.query(
-      `SELECT "ip","count" FROM "QRealQuota" WHERE "day"=$1 AND "ip" IN ($2,'__global__')`,
-      [today, ip]
+      `SELECT "ip","count" FROM "QRealQuota" WHERE "day"=$1 AND "ip" IN ($2,$3)`,
+      [today, ip, isJudge ? "__global_judge__" : "__global__"]
     );
+    const globalKey = isJudge ? "__global_judge__" : "__global__";
     const ipCount = r.rows.find((x: any) => x.ip === ip)?.count ?? 0;
-    const globalCount = r.rows.find((x: any) => x.ip === "__global__")?.count ?? 0;
-    if (globalCount >= RENDER_GLOBAL_DAILY_CAP) {
-      return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+    const globalCount = r.rows.find((x: any) => x.ip === globalKey)?.count ?? 0;
+    if (globalCount >= GLOBAL_CAP) {
+      return { ok: false, error: `Суточный лимит ${what} платформы исчерпан (${GLOBAL_CAP}/день) — попробуйте завтра.` };
     }
-    if (ipCount >= RENDER_IP_DAILY_LIMIT) {
-      return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+    if (ipCount >= IP_LIMIT) {
+      return { ok: false, error: `Лимит бесплатных ${what} на сегодня исчерпан (${IP_LIMIT}/день).` };
     }
     await pool.query(
-      `INSERT INTO "QRealQuota" ("day","ip","count") VALUES ($1,$2,1),($1,'__global__',1)
+      `INSERT INTO "QRealQuota" ("day","ip","count") VALUES ($1,$2,1),($1,$3,1)
        ON CONFLICT ("day","ip") DO UPDATE SET "count"="QRealQuota"."count"+1`,
-      [today, ip]
+      [today, ip, globalKey]
     );
     return { ok: true };
   } catch { /* БД недоступна — считаем в памяти */ }
-  if (renderCounters.total >= RENDER_GLOBAL_DAILY_CAP) {
-    return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+  if (counters.total >= GLOBAL_CAP) {
+    return { ok: false, error: `Суточный лимит ${what} платформы исчерпан (${GLOBAL_CAP}/день) — попробуйте завтра.` };
   }
-  const used = renderCounters.byIp.get(ip) || 0;
-  if (used >= RENDER_IP_DAILY_LIMIT) {
-    return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+  const used = counters.byIp.get(ip) || 0;
+  if (used >= IP_LIMIT) {
+    return { ok: false, error: `Лимит бесплатных ${what} на сегодня исчерпан (${IP_LIMIT}/день).` };
   }
-  renderCounters.byIp.set(ip, used + 1);
-  renderCounters.total += 1;
+  counters.byIp.set(ip, used + 1);
+  counters.total += 1;
   return { ok: true };
 }
 
@@ -754,7 +773,24 @@ qrealRouter.post("/projects/:id/continuity", async (req, res) => {
 
     if (!raw && req.body?.judge === true) {
       if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан." });
-      // Судья смотрит фильм по публичному URL — тот же, что отдаёт витрина.
+
+      // Судья смотрит фильм по публичному URL, а /film отдаёт 404, пока не
+      // отрендерены ВСЕ кадры. Без этой проверки платный вызов ушёл бы на
+      // заведомо мёртвую ссылку — деньги за гарантированный провал.
+      const unrendered = p.shots.filter((s) => !s.resultUrl);
+      if (!p.filmPath && unrendered.length) {
+        return res.status(409).json({
+          error: "film_not_ready",
+          message: `Фильм не собран: не отрендерено кадров — ${unrendered.length} из ${p.shots.length}. Судить нечего, платный вызов не делаю.`,
+          unrenderedShots: unrendered.map((s) => s.order),
+        });
+      }
+
+      // Судейство платное, а демо на проде открыто без логина — без квоты
+      // аноним жёг бы баланс в цикле.
+      const quota = await takeRenderQuota(req as any, "judge");
+      if (!quota.ok) return res.status(429).json({ error: "judge_quota_exceeded", message: quota.error });
+
       const base = (process.env.PUBLIC_BASE_URL || "https://aevion.vercel.app/api-backend").replace(/\/+$/, "");
       const filmUrl = `${base}/api/qreal/projects/${p.id}/film`;
       const out = await judgeRender(filmUrl, CONTINUITY_CRITERIA, { description: p.brief }, { prompt });
@@ -896,6 +932,8 @@ qrealRouter.post("/projects/:id/shots/:sid/qc", async (req, res) => {
     if (!raw && req.body?.judge === true) {
       if (!s.resultUrl) return res.status(409).json({ error: "no_render", message: "Судить нечего: у кадра нет рендера." });
       if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан — VLM-судья недоступен." });
+      const quota = await takeRenderQuota(req as any, "judge");
+      if (!quota.ok) return res.status(429).json({ error: "judge_quota_exceeded", message: quota.error });
       const verdictRaw = await judgeRender(s.resultUrl, REALISM_CRITERIA, s);
       if (!verdictRaw.ok) return res.status(502).json({ error: "vlm_judge_failed", message: verdictRaw.error });
       raw = verdictRaw.scores;

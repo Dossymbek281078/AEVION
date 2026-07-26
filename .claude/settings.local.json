@@ -134,7 +134,17 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr checks 869 --watch)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 869 --squash --delete-branch)",
       "Bash(grep -n \"Команды — \\\\$100 на Full\" aevion-globus-backend/src/data/pricing.ts)",
-      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): make the public promo banner honest about the discount cap' --body ' *)"
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'fix\\(pricing\\): make the public promo banner honest about the discount cap' --body ' *)",
+      "Bash(node -e \"const {TIERS}=require\\('./dist/data/pricing.js'\\); console.log\\('lite:',TIERS.find\\(t=>t.id==='lite'\\).priceMonthly,'medium:',TIERS.find\\(t=>t.id==='medium'\\).priceMonthly\\)\")",
+      "Bash(echo \"tsc=$?\")",
+      "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --base main --head feat/paywall-funnel-revenue-opportunity --title 'feat\\(paywall\\): revenue-opportunity ceiling on the 402 demand funnel' --body ' *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 900 --squash)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 900 --json state --template '900={{.state}}')",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 894 --json mergeable,mergeStateStatus --template '894: {{.mergeable}}/{{.mergeStateStatus}}')",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 901 --squash)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 901 --json state,mergedAt --template '{{.state}} {{.mergedAt}}')",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/paywall-funnel-revenue-opportunity)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('total:',j.totalDenies,'24h:',j.last24h,'mrrCeiling:',j.mrrCeilingUsd??'\\(pre-deploy\\)','modules:',j.byModule.map\\(m=>m.module+':'+m.denies+\\(m.mrrCeilingUsd?'=$'+m.mrrCeilingUsd:''\\)\\).join\\(', '\\)\\)}\\)\")"
     ]
   }
 }

@@ -8,6 +8,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { ListingWizard } from "./components/ListingWizard";
 import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
+import { ExampleListing } from "./components/ExampleListing";
 import { TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
 const PAGE_SIZE = 10;
@@ -263,6 +264,10 @@ export default function StartupExchangePage() {
               </button>
             </div>
           )}
+
+          {/* An empty feed used to be a dead end. One worked example — scored
+              live by the same engine — shows what the exchange actually does. */}
+          {!loading && listings.length === 0 && !showWizard && <ExampleListing />}
 
           {listings.map((l) => (
             <ListingCard key={l.id} listing={l} onInterest={setInterestFor} />

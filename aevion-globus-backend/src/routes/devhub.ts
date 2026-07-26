@@ -4773,7 +4773,10 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
+/** ZIP general purpose bit 11 — "the file name is encoded in UTF-8". */
+const UTF8_NAME_FLAG = 0x0800;
+
+export function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
@@ -4788,7 +4791,11 @@ function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buff
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0); // signature
     local.writeUInt16LE(20, 4); // version needed
-    local.writeUInt16LE(0, 6); // flags
+    // Bit 11 = UTF-8 name. Names are written as UTF-8 above, and without this
+    // flag APPNOTE 4.4.4 says a reader must treat them as CP437 — which is why
+    // "src/компоненты/Таймер.jsx" unzipped as "src/╨║╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤é╤ï/…"
+    // in every standard tool (confirmed against prod, 2026-07-26).
+    local.writeUInt16LE(UTF8_NAME_FLAG, 6); // flags
     local.writeUInt16LE(0, 8); // method (0=stored)
     local.writeUInt16LE(0, 10); // mtime
     local.writeUInt16LE(0, 12); // mdate
@@ -4806,7 +4813,7 @@ function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buff
     central.writeUInt32LE(0x02014b50, 0); // signature
     central.writeUInt16LE(20, 4); // version made by
     central.writeUInt16LE(20, 6); // version needed
-    central.writeUInt16LE(0, 8); // flags
+    central.writeUInt16LE(UTF8_NAME_FLAG, 8); // flags — must match the local header
     central.writeUInt16LE(0, 10); // method
     central.writeUInt16LE(0, 12); // mtime
     central.writeUInt16LE(0, 14); // mdate

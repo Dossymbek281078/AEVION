@@ -103,6 +103,26 @@ describe("ответ чекаута говорит правду о списан�
     expect(r.body.quotedUsd).toBeGreaterThan(0);
   }, IMPORT_TIMEOUT_MS);
 
+  test("🔴 кривое тело запроса НЕ роняет платёжный эндпоинт", async () => {
+    // Найдено 2026-07-26 прогоном враждебных входов: ownedModules приходил в
+    // движок веера БЕЗ валидации, и число/null/объект в массиве роняли .trim(),
+    // а не-массив — .map(). То есть любой кривой (или злонамеренный) клиент мог
+    // получить 500 на ПУТИ К ОПЛАТЕ. Ни один прежний тест этого не ловил: все
+    // слали корректное тело.
+    const hostile: unknown[] = [
+      { tierId: "medium", ownedModules: [42, null, { a: 1 }] },
+      { tierId: "medium", ownedModules: "qsign" },
+      { tierId: "medium", ownedModules: Array.from({ length: 500 }, (_, i) => `mod${i}`) },
+      { tierId: "medium", lastPurchaseAt: { not: "a date" } },
+      { tierId: "medium", ownedModules: [""], lastPurchaseAt: "не-дата" },
+    ];
+    for (const body of hostile) {
+      const r = await post(body, { GUMROAD_DEFAULT_PERMALINK: undefined });
+      expect(r.status, `упало на теле: ${JSON.stringify(body).slice(0, 60)}`).toBe(200);
+      expect(typeof r.body.quotedUsd).toBe("number");
+    }
+  }, IMPORT_TIMEOUT_MS);
+
   test("без скидок discountHonoured остаётся true (нечего не применять)", async () => {
     const r = await post(
       { tierId: "medium" },

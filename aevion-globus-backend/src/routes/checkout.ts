@@ -138,8 +138,13 @@ checkoutRouter.post("/session", async (req, res) => {
       period,
       currency: "USD",
       promoCode: body.promoCode,
-      ownedModules: body.ownedModules ?? [],
-      lastPurchaseAt: body.lastPurchaseAt,
+      // Валидируем так же, как POST /api/pricing/quote: тело приходит от
+      // клиента, а движок веера стоит на пути к оплате. Вторая линия обороны —
+      // в самом computeFan(), но чекаут не должен на неё полагаться.
+      ownedModules: Array.isArray(body.ownedModules)
+        ? body.ownedModules.slice(0, 60).filter((x: unknown) => typeof x === "string")
+        : [],
+      lastPurchaseAt: typeof body.lastPurchaseAt === "string" ? body.lastPurchaseAt.slice(0, 40) : undefined,
     });
 
     /** Скидки-стимулы (промо + веер). Годовая скидка сюда НЕ входит — это цена периода. */

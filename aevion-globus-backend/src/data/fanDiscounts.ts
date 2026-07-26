@@ -399,7 +399,20 @@ export function computeFan(input: FanInput = {}): FanState {
   const tier = input.tierId ? getTier(input.tierId) : null;
   const notes: string[] = [];
 
-  const ownedRaw = [...new Set((input.owned ?? []).map((s) => s.trim()).filter(Boolean))];
+  // Вход считаем ВРАЖДЕБНЫМ: сюда приходит тело HTTP-запроса, а эта функция
+  // стоит на денежном пути (buildQuoteWithFan → /checkout/session). Найдено
+  // 2026-07-26 прогоном кривых входов: число/null/объект в массиве роняли
+  // `.trim()`, а не-массив — `.map()`, то есть чекаут отвечал 500 на
+  // некорректный запрос вместо того, чтобы его пережить.
+  const ownedInput = Array.isArray(input.owned) ? input.owned : [];
+  const ownedRaw = [
+    ...new Set(
+      ownedInput
+        .filter((s): s is string => typeof s === "string")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
   const ownedKnown: string[] = [];
   for (const id of ownedRaw) {
     if (getModulePrice(id)) ownedKnown.push(id);

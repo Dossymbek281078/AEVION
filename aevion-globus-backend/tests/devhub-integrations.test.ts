@@ -3703,3 +3703,44 @@ describe("deleting a project drops its database", () => {
     delete process.env.DEVHUB_DB_ADMIN_URL;
   }, 20_000);
 });
+
+describe("capabilities tell the truth about providers", () => {
+  test("a live capability turns degraded after a real provider failure", async () => {
+    const { noteProviderFailure, __resetProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+
+    const app = makeApp();
+    const before = await request(app).get("/api/devhub/studio/capabilities");
+    expect(before.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("live");
+
+    noteProviderFailure("video", "Replicate: insufficient credit");
+
+    const after = await request(app).get("/api/devhub/studio/capabilities");
+    const video = after.body.capabilities.find((c: { id: string }) => c.id === "video");
+    expect(video.status).toBe("degraded");
+    expect(video.lastError).toMatch(/insufficient credit/);
+    expect(after.body.summary.degraded).toBe(1);
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("a later success clears it, and an unconfigured capability is untouched", async () => {
+    const { noteProviderFailure, noteProviderSuccess, __resetProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+
+    noteProviderFailure("video", "boom");
+    const app = makeApp();
+    // No token: it stays needs_token rather than being mislabelled degraded.
+    const r1 = await request(app).get("/api/devhub/studio/capabilities");
+    expect(r1.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("needs_token");
+
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    noteProviderSuccess("video");
+    const r2 = await request(app).get("/api/devhub/studio/capabilities");
+    expect(r2.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("live");
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});

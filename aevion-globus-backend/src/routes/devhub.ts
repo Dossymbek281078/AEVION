@@ -6,6 +6,7 @@ import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
+import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
@@ -3336,6 +3337,9 @@ devhubRouter.post("/media/image", async (req, res) => {
     if (attempts.length === 1) {
       return res.status(attempts[0].status).json({ error: attempts[0].error, attempts });
     }
+    // Every provider in the chain failed — the shop window must stop calling
+    // this "live" until one of them works again.
+    noteProviderFailure("image", attempts.map((a) => `${a.provider}: ${a.status}`).join("; ") || "all providers failed");
     return res.status(502).json({ error: "All image providers failed", attempts });
   }
 
@@ -3353,6 +3357,9 @@ devhubRouter.post("/media/image", async (req, res) => {
     storage = permanent ? "cloudflare" : "inline";
   }
   if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
+  // A provider in the chain worked — clear any earlier failure so the shop
+  // window goes green again on its own.
+  noteProviderSuccess("image");
   await debitCredit(imgUserId, "image").catch(() => {});
   res.json({
     ok: true, url: imageUrl, storage, provider: result.provider,
@@ -5719,6 +5726,7 @@ devhubRouter.post("/media/video", async (req, res) => {
 
     if (!resp.ok) {
       const errText = await resp.text();
+      noteProviderFailure("video", `Replicate ${resp.status}`);
       return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
     }
 
@@ -5876,8 +5884,15 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
   ];
 
-  const live = caps.filter((c) => c.status === "live").length;
-  return res.json({ capabilities: caps, summary: { total: caps.length, live, needsToken: caps.length - live } });
+  // A configured key is not a working capability — fold in what the last real
+  // call to each provider actually did (lib/providerHealth).
+  const withHealth = caps.map(applyHealth);
+  const live = withHealth.filter((c) => c.status === "live").length;
+  const degraded = withHealth.filter((c) => c.status === "degraded").length;
+  return res.json({
+    capabilities: withHealth,
+    summary: { total: withHealth.length, live, degraded, needsToken: withHealth.length - live - degraded },
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

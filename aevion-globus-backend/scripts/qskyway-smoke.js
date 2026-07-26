@@ -243,7 +243,9 @@ async function main() {
   assert(/AIP KZ/.test(justAst.json?.document?.permission?.authority ?? ""), "[astana] justification still discloses the prohibition that does apply");
   // Astana has no CEILING grid but does have a published prohibition, so the
   // scope must say which of the two is missing — "нет" alone matched either.
-  assert(/потолк/i.test(justAst.json?.scope ?? "") && /режим/i.test(justAst.json?.scope ?? ""), "[astana] scope distinguishes the missing ceiling from the published prohibition", (justAst.json?.scope ?? "").slice(0, 70));
+  assert(/потолк/i.test(justAst.json?.scope ?? "") && /ЗАПРЕТНАЯ/.test(justAst.json?.scope ?? ""), "[astana] scope calls the prohibition a prohibition, not a permission regime", (justAst.json?.scope ?? "").slice(0, 90));
+  assert(justAst.json?.document?.permission?.kind === "prohibition", "[astana] the SIGNED document carries the prohibition/permission distinction");
+  assert(!/требует индивидуального разрешения/.test(justAst.json?.scope ?? ""), "[astana] the filing never says a banned flight merely needs permission");
 
   // Phase 8: a permission regime is a published rule too — a city with no
   // ceiling grid must not be reported as having no regulator.

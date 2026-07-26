@@ -840,6 +840,9 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
       ? {
           authority: PERMISSION[resolved.id].authority,
           regime: PERMISSION[resolved.id].regime,
+          // Part of the SIGNED payload: a filing that says "permission regime"
+          // where the rule is a ban is the worst possible place to lose this.
+          kind: PERMISSION[resolved.id].kind,
           basis: PERMISSION[resolved.id].basis,
           coveragePct: PERMISSION[resolved.id].coveragePct,
         }
@@ -863,7 +866,9 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     scope: src
       ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
       : PERMISSION[resolved.id]
-        ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
+        ? PERMISSION[resolved.id].kind === "prohibition"
+          ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${PERMISSION[resolved.id].authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`
+          : `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
         : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
   });

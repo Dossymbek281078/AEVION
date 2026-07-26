@@ -950,14 +950,24 @@ qskywayRouter.post("/airspace/anchor/verify", async (req: Request, res: Response
 // no arguments and no re-anchoring. A stateless anchor is right for a caller
 // timestamping their own data, but the edition THIS service routes against
 // needs a proof that outlives the request that created it.
+// Verifying an OTS proof means talking to the calendar servers. On a public GET
+// that is two problems: ~1.5 s per request, and every visitor (or crawler)
+// making us hammer third-party infrastructure for an answer that is already
+// settled. Cached ONLY once Bitcoin-confirmed — a confirmed proof cannot become
+// unconfirmed, while a still-pending one legitimately needs re-asking, so
+// caching that would freeze it as pending forever.
+const proofVerdictCache = new Map<string, unknown>();
+
 qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
   const proof = AIRSPACE_PROOFS[resolved.id];
   if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", city: resolved.id });
+  const settled = proofVerdictCache.get(resolved.id);
+  if (settled) return res.json(settled);
   const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
   const verdict = await verifyAnchoredAirspace({ city: resolved.id, contentHash: proof.contentHash, otsProofB64: proof.otsProofB64 });
-  res.json({
+  const payload = {
     ...proof,
     currentContentHash: current,
     // Reported separately, because after a reissue the proof stays valid for the
@@ -965,7 +975,9 @@ qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
     // record, not a broken proof.
     coversCurrentEdition: current === proof.contentHash,
     verification: verdict,
-  });
+  };
+  if (verdict.ots.status === "bitcoin-confirmed") proofVerdictCache.set(resolved.id, payload);
+  res.json(payload);
 });
 
 /**

@@ -301,6 +301,11 @@ async function main() {
   assert(pf.json?.coversCurrentEdition === true, "[nyc] shipped proof still covers the current edition");
   assert(pf.json?.verification?.ots?.verified === true && pf.json?.verification?.ots?.status === "bitcoin-confirmed", "[nyc] shipped proof verifies against Bitcoin", `block=${pf.json?.verification?.ots?.bitcoinBlockHeight}`);
   assert(pf.json?.verification?.fullyProven === true && pf.json?.bitcoinBlockHeight > 0, "[nyc] edition is trustlessly timestamped", `block=${pf.json?.bitcoinBlockHeight}`);
+  // The verdict is cached once Bitcoin-confirmed so a public GET stops calling
+  // the OpenTimestamps calendars on every request; the cached answer must be the
+  // same answer, not a trimmed one.
+  const pf2 = await jget("/api/qskyway/airspace/proof?city=nyc");
+  assert(JSON.stringify(pf2.json) === JSON.stringify(pf.json), "[nyc] repeat proof request returns an identical verdict (served from cache)");
   const pfAst = await jget("/api/qskyway/airspace/proof?city=astana");
   assert(pfAst.status === 404, "[astana] no shipped proof where there is no edition to anchor", `status=${pfAst.status}`);
 

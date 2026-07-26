@@ -7,9 +7,8 @@
 //
 //   npx vitest run --config vitest.bench.config.ts
 //
-// Node environment and no setup file, for the same reason as
-// vitest.local-nosetup.ts: the jsdom setup pulls in @testing-library/react,
-// whose peer @testing-library/dom is missing from package.json.
+// Node environment and no setup file: benches are pure logic over chess.js and
+// need no DOM, so skipping jsdom and the setup file keeps them fast.
 //
 // (Line comments on purpose — a block comment cannot hold a glob like
 // "src/ ** / *.test.ts" without the "*/" inside it closing the comment early.)

@@ -9,6 +9,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc } from "@/lib/reactPreview";
+import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -670,6 +671,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Vercel deploy state
   const [vercelDeploying, setVercelDeploying] = useState(false);
 
+  // Which server-side integrations are actually configured — so a deploy
+  // button says "needs VERCEL_API_TOKEN" instead of firing a doomed request.
+  const [caps, setCaps] = useState<CapabilityIndex | null>(null);
+
   // Settings state
   const [settingsName, setSettingsName] = useState("");
   const [settingsDesc, setSettingsDesc] = useState("");
@@ -711,6 +716,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     fetch(apiUrl("/api/devhub/templates"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Failure stays silent on purpose: caps === null means "fail open", the
+    // buttons behave exactly as they did before this feature existed.
+    fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCaps(indexCapabilities(d.capabilities)))
       .catch(() => {});
   }, []);
 
@@ -1378,6 +1392,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deploy = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "railway")) {
+      showToast(capabilityHint(caps, "railway", "Railway deploy"), "warning");
+      return;
+    }
     setDeploying(true);
     showToast("Building...", "info");
     try {
@@ -1600,6 +1618,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deployToPages = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "pages")) {
+      showToast(capabilityHint(caps, "pages", "Cloudflare Pages deploy"), "warning");
+      return;
+    }
     setPagesDeploying(true);
     setPagesResult(null);
     showToast("Deploying to Cloudflare Pages...", "info");
@@ -1626,6 +1648,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deployToVercel = async () => {
     if (!project) return;
+    if (isCapabilityBlocked(caps, "vercel")) {
+      showToast(capabilityHint(caps, "vercel", "Vercel deploy"), "warning");
+      return;
+    }
     setVercelDeploying(true);
     showToast("Deploying to Vercel...", "info");
     try {
@@ -2660,11 +2686,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title="Deploy to Railway"
+            title={capabilityHint(caps, "railway", "Deploy to Railway")}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
               cursor: deploying ? "not-allowed" : "pointer",
+              opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
             }}
           >
             {deploying ? "Deploying..." : "Deploy"}
@@ -2672,12 +2699,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title="Deploy to Vercel"
+            title={capabilityHint(caps, "vercel", "Deploy to Vercel")}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
               cursor: vercelDeploying ? "not-allowed" : "pointer",
               display: "flex", alignItems: "center", gap: 6,
+              // Dimmed, not disabled: clicking still explains what is missing.
+              opacity: isCapabilityBlocked(caps, "vercel") ? 0.45 : 1,
             }}
           >
             <svg width="14" height="14" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>

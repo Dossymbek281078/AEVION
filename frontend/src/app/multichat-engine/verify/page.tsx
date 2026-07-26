@@ -106,7 +106,7 @@ export default function VerifyReceiptPage() {
             onClick={() => void check(raw)}
             disabled={busy || raw.trim().length < 10}
             style={{
-              background: busy || raw.trim().length < 10 ? T.lineSoft : T.accent,
+              background: busy || raw.trim().length < 10 ? T.btnDisabledBg : T.btnAccentBg,
               color: busy || raw.trim().length < 10 ? T.textMute : T.onAccentDeep,
               border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: 600,
               cursor: busy || raw.trim().length < 10 ? "default" : "pointer",

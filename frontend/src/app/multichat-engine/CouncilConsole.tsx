@@ -209,7 +209,7 @@ export function CouncilConsole() {
           onClick={ask}
           disabled={disabled}
           style={{
-            background: disabled ? T.lineSoft : T.accent,
+            background: disabled ? T.btnDisabledBg : T.btnAccentBg,
             color: disabled ? T.textMute : T.onAccentDeep,
             border: "none", borderRadius: 10, padding: "9px 18px",
             fontSize: 14, fontWeight: 600, cursor: disabled ? "default" : "pointer",

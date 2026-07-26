@@ -109,6 +109,7 @@ import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as 
 import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
 import { computeInsights, type Insights } from "./insights";
 import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
+import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
@@ -5926,7 +5927,7 @@ export default function CyberChessPage(){
         let streak=0;let streakType:"W"|"L"|"D"|null=null;
         for(let i=savedGames.length-1;i>=0;i--){
           const g=savedGames[i];
-          const r=g.result.includes("You win")||g.result.includes("win!")?"W":g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")?"D":"L";
+          const r=gameResultOf(g.result);
           if(streak===0){streakType=r;streak=1}
           else if(r===streakType)streak++;
           else break;
@@ -6794,8 +6795,8 @@ export default function CyberChessPage(){
             const cats=["Bullet","Blitz","Rapid","Classical"] as const;
             const catStats=cats.map(cat=>{
               const games=savedGames.filter(g=>g.category===cat);
-              const w=games.filter(g=>g.result.includes("win")).length;
-              const l=games.filter(g=>g.result.includes("AI wins")||g.result.includes("AI win")||g.result.includes("0-1")||(g.result.includes("1-0")&&g.playerColor==="b")).length;
+              const w=games.filter(g=>gameResultOf(g.result)==="W").length;
+              const l=games.filter(g=>gameResultOf(g.result)==="L").length;
               const d=games.length-w-l;
               return{cat,total:games.length,w,l,d,pct:games.length>0?Math.round(w/games.length*100):0};
             }).filter(c=>c.total>0);
@@ -6833,12 +6834,12 @@ export default function CyberChessPage(){
               <svg viewBox="0 0 400 50" style={{width:"100%",height:50,borderRadius:RADIUS.sm,overflow:"hidden"}}>
                 <rect width="400" height="50" fill={CC.surface2}/>
                 {recent.map((g,i)=>{
-                  const isWin=g.result.includes("win")&&!g.result.includes("AI win");
+                  const isWin=gameResultOf(g.result)==="W";
                   const barH=Math.max(4,((g.rating-mn)/rng)*44);
                   const x=i*(400/recent.length);
                   const w=Math.max(1,(400/recent.length)-1);
                   return <rect key={i} x={x} y={50-barH} width={w} height={barH}
-                    fill={isWin?"#759900":g.result.includes("ничья")||g.result.includes("Draw")?"#8b8987":"#e04040"}
+                    fill={isWin?"#759900":gameResultOf(g.result)==="D"?"#8b8987":"#e04040"}
                     rx="1">
                     <title>{g.category} · {g.result} · {g.rating}</title>
                   </rect>;

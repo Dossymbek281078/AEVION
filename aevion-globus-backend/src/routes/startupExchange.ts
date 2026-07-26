@@ -41,7 +41,7 @@ import {
 import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
 import { MARKET_SOURCES } from "../lib/startupx/valuation";
 import { timingSafeHexEq } from "../lib/qrightHelpers";
-import { listSectors } from "../lib/qventure/sectors";
+import { listSectors, resolveSector } from "../lib/qventure/sectors";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -299,6 +299,11 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const tier = isTier(req.query.tier) ? req.query.tier : null;
+  // Sector is stored as the founder typed it (or left empty when it was
+  // detected from the text), so filtering matches on the resolved sector id —
+  // otherwise "SaaS" and "saas" would be two different markets.
+  const sectorRaw = typeof req.query.sector === "string" ? req.query.sector.trim() : "";
+  const sector = sectorRaw ? resolveSector(sectorRaw) : null;
   const minScore = Number(req.query.minScore);
   const hasMinScore = Number.isFinite(minScore) && minScore > 0;
   // "score" ranks by the free assessment; anything else falls back to recency.
@@ -314,6 +319,13 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
         // the backfill sets it, and COALESCE keeps the filter correct even for a
         // row that slipped in between the ALTER and the UPDATE.
         where += ` AND COALESCE(tier, CASE WHEN stage='idea' THEN 'idea' WHEN stage='scaling' THEN 'product' ELSE 'mvp' END) = $${args.length}`;
+      }
+      if (sector) {
+        args.push(sector.id);
+        // The listing's own column may be empty or spelled differently; the
+        // assessment always records the sector the score was actually computed
+        // against, so that is what the filter reads.
+        where += ` AND assessment->'sector'->>'id' = $${args.length}`;
       }
       if (hasMinScore) {
         args.push(minScore);
@@ -342,6 +354,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
 
   let all = Array.from(memListings.values()).filter((r) => r.visibility === "public");
   if (tier) all = all.filter((r) => (isTier(r.tier) ? r.tier : tierFromLegacyStage(r.stage)) === tier);
+  if (sector) all = all.filter((r) => r.assessment?.sector?.id === sector.id);
   if (hasMinScore) all = all.filter((r) => (r.assessment_score ?? -1) >= minScore);
   all.sort((a, b) =>
     sort === "score"

@@ -30,16 +30,17 @@ export default function StartupExchangePage() {
   const [loading, setLoading] = useState(true);
   const [tierFilter, setTierFilter] = useState<TierFilter>("");
   const [sort, setSort] = useState<"recent" | "score">("recent");
+  const [sectorFilter, setSectorFilter] = useState("");
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [interestFor, setInterestFor] = useState<Listing | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
 
-  const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score") => {
+  const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string) => {
     setLoading(true);
     try {
-      const data = await startupxApi.list({ tier, limit: PAGE_SIZE, offset: off, sort: s });
+      const data = await startupxApi.list({ tier, sector: sector || undefined, limit: PAGE_SIZE, offset: off, sort: s });
       setListings(data.listings ?? []);
       setTotal(data.total ?? 0);
     } catch {
@@ -68,8 +69,8 @@ export default function StartupExchangePage() {
   }, []);
 
   useEffect(() => {
-    fetchListings(tierFilter, offset, sort);
-  }, [tierFilter, offset, sort, fetchListings]);
+    fetchListings(tierFilter, offset, sort, sectorFilter);
+  }, [tierFilter, offset, sort, sectorFilter, fetchListings]);
 
   useEffect(() => {
     fetchStats();
@@ -82,7 +83,8 @@ export default function StartupExchangePage() {
     // link off the screen before it could be copied.
     setOffset(0);
     setTierFilter("");
-    fetchListings("", 0, sort);
+    setSectorFilter("");
+    fetchListings("", 0, sort, "");
     fetchStats();
   }
 
@@ -217,7 +219,21 @@ export default function StartupExchangePage() {
                 </button>
               );
             })}
-            <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value={sectorFilter}
+                onChange={(e) => {
+                  setSectorFilter(e.target.value);
+                  setOffset(0);
+                }}
+                aria-label="Отрасль"
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12.5, fontWeight: 600, color: "#334155", cursor: "pointer" }}
+              >
+                <option value="">Все отрасли</option>
+                {sectors.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
               <span style={{ fontSize: 12, color: "#94a3b8" }}>Сортировка:</span>
               <button
                 type="button"
@@ -288,7 +304,7 @@ export default function StartupExchangePage() {
           onSubmitted={(id) => {
             setInterestFor(null);
             setToast(`Предложение отправлено основателю заявки №${id}`);
-            fetchListings(tierFilter, offset, sort);
+            fetchListings(tierFilter, offset, sort, sectorFilter);
           }}
         />
       )}

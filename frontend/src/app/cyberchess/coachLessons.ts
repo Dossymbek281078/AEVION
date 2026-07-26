@@ -509,7 +509,9 @@ export function lessonProgress(state: LessonsState, id: string): number {
   if (p.completedAt) return 100;
   const lesson = LESSONS.find(l => l.id === id);
   if (!lesson) return 0;
-  return Math.round((p.stepsCompleted / lesson.steps.length) * 100);
+  // Урок мог стать короче между сборками — тогда сохранённое число шагов больше
+  // текущего, и полоса прогресса нарисовалась бы за краем со «137%».
+  return Math.min(100, Math.round((p.stepsCompleted / lesson.steps.length) * 100));
 }
 
 export function totalCompleted(state: LessonsState): number {

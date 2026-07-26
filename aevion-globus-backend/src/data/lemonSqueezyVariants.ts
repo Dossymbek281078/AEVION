@@ -132,3 +132,37 @@ export function appSlugForReference(ref: LemonSqueezyReference | null): string |
   if (!ref?.startsWith("app_")) return null;
   return ref.slice(4);
 }
+
+/**
+ * App-slug → id модуля в MODULES_PRICING.
+ *
+ * Словарь слагов и словарь прайса разъехались исторически: три слага короче
+ * своих модулей (`qpaynet` vs `qpaynet-embedded`, `ip_bureau` vs
+ * `aevion-ip-bureau`, `smeta` vs `smeta-trainer`), остальные совпадают. Пока
+ * это никого не задевало: покупки одиночных приложений живут в таблице
+ * `AppSubscription`, а прайс-слой их не читал вовсе.
+ *
+ * Задело при подключении веерных скидок (2026-07-26): `/api/pricing/fan/me`
+ * читал только `data/subscriptions.jsonl` и был СЛЕП к покупкам через `app_*`.
+ * Купивший CyberChess и QContract поштучно видел «веер включается после первой
+ * покупки» — то есть механика не срабатывала ровно для тех покупателей, для
+ * которых сделана.
+ *
+ * Соответствие каждого слага реальному id проверяется тестом
+ * (tests/appSlugModules.test.ts): опечатка здесь = снова слепой веер.
+ */
+export const APP_SLUG_TO_MODULE: Record<string, string> = {
+  qventure: "qventure",
+  qpaynet: "qpaynet-embedded",
+  qcontract: "qcontract",
+  constitution: "constitution",
+  ip_bureau: "aevion-ip-bureau",
+  qrenew: "qrenew",
+  smeta: "smeta-trainer",
+  cyberchess: "cyberchess",
+};
+
+/** Слаг приложения → id модуля прайса (или null, если слаг неизвестен). */
+export function moduleForAppSlug(slug: string): string | null {
+  return APP_SLUG_TO_MODULE[slug.trim().toLowerCase()] ?? null;
+}

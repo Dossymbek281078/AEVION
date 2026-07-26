@@ -29,6 +29,7 @@ import {
   FAN_RING_BASE,
   FAN_WINDOW_DAYS,
 } from "../data/fanDiscounts";
+import { readOwnedModules } from "../lib/ownedModules";
 import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
@@ -297,7 +298,7 @@ pricingRouter.get("/fan/preview", (req, res) => {
  * Требует Bearer-токен; без него 401 (а не «пустой веер» — молчаливая пустота
  * читалась бы как «скидок нет», что неправда).
  */
-pricingRouter.get("/fan/me", (req, res) => {
+pricingRouter.get("/fan/me", async (req, res) => {
   const auth = req.headers.authorization ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token) return res.status(401).json({ error: "auth_required" });
@@ -312,22 +313,38 @@ pricingRouter.get("/fan/me", (req, res) => {
   }
   if (!email) return res.status(401).json({ error: "no_email_in_token" });
 
-  const sub = readLatestSubscription(email);
-  if (!sub) {
+  // Читаем ОБА стора: платформенные подписки (JSONL) и покупки одиночных
+  // приложений (таблица AppSubscription). Раньше здесь был только первый, и
+  // купивший модуль поштучно видел «веер включается после первой покупки» —
+  // прямую неправду, ровно для того покупателя, ради которого веер и сделан.
+  const owned = await readOwnedModules(email);
+  if (owned.modules.length === 0 && !owned.subscriptionSince) {
     return res.json({
       ...computeFan({ owned: [] }),
       subscription: null,
+      appsSource: owned.appsSource,
       generatedAt: new Date().toISOString(),
     });
   }
   res.json({
-    // Окно веера — от fanAnchorOf(), а НЕ от sub.ts: продление подписки пишет
-    // новую запись, но окно открывать заново не должно (см. resolveFanAnchor).
-    ...computeFan({ owned: sub.modules ?? [], tierId: sub.tierId, lastPurchaseAt: fanAnchorOf(sub) }),
+    // Окно веера — от fanAnchorAt, а НЕ от даты последней записи: продление
+    // подписки пишет новую запись, но окно открывать заново не должно
+    // (см. resolveFanAnchor в routes/provisioning.ts).
+    ...computeFan({
+      owned: owned.modules,
+      tierId: owned.tierId,
+      lastPurchaseAt: owned.fanAnchorAt ?? undefined,
+    }),
     subscription: {
-      tierId: sub.tierId, period: sub.period, modules: sub.modules,
-      since: sub.ts, fanAnchorAt: fanAnchorOf(sub),
+      tierId: owned.tierId,
+      modules: owned.modules,
+      appModules: owned.appModules,
+      since: owned.subscriptionSince,
+      fanAnchorAt: owned.fanAnchorAt,
     },
+    // "unavailable" — база с покупками приложений недоступна, список модулей
+    // может быть НЕПОЛНЫМ. Клиент обязан видеть это, а не считать веер полным.
+    appsSource: owned.appsSource,
     generatedAt: new Date().toISOString(),
   });
 });

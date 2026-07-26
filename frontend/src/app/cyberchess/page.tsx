@@ -108,6 +108,8 @@ import { startSession as coordStart, registerHit as coordHit, isExpired as coord
 import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as ldQuizResult, saveResult as svQuizResult, type QuizResult, type PlayerStyle } from "./personality";
 import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
 import { computeInsights, type Insights } from "./insights";
+import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
+import { getBookContinuations } from "./localOpeningBook";
 import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
 import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
@@ -133,7 +135,7 @@ import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForM
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
 type TC = {name:string;ini:number;inc:number;cat:"Bullet"|"Blitz"|"Rapid"|"Classical"};
-type AL = {name:string;elo:number;depth:number;color:string;rand:number;thinkMs:number};
+type AL = {name:string;elo:number;depth:number;color:string;thinkMs:number};
 type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
 
 const TCS: TC[] = [
@@ -148,15 +150,15 @@ const TCS: TC[] = [
   {name:"15+0",ini:900,inc:0,cat:"Rapid"},{name:"15+1",ini:900,inc:1,cat:"Rapid"},{name:"15+2",ini:900,inc:2,cat:"Rapid"},
 ];
 const ALS: AL[] = [
-  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:600},
-  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:480},
-  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:380},
-  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
-  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
-  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
+  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",thinkMs:600},
+  {name:"Casual",elo:800,depth:2,color:"#10b981",thinkMs:480},
+  {name:"Club",elo:1200,depth:3,color:"#3b82f6",thinkMs:380},
+  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",thinkMs:280},
+  {name:"Expert",elo:2000,depth:5,color:"#f87171",thinkMs:180},
+  {name:"Master",elo:2400,depth:6,color:"#fbbf24",thinkMs:100},
   // Максимум: полная сила Stockfish 18 — глубокий поиск (depth 20), без рандома.
   // Практически непобедим для человека (~3500). thinkMs 0 — без искусственной задержки.
-  {name:"Stockfish",elo:3500,depth:8,color:"#06b6d4",rand:0,thinkMs:0},
+  {name:"Stockfish",elo:3500,depth:8,color:"#06b6d4",thinkMs:0},
 ];
 // Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
 // Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
@@ -324,7 +326,9 @@ const PK=[20,30,10,0,0,10,30,20,20,20,0,0,0,0,20,20,-10,-20,-20,-20,-20,-20,-20,
 const PST:Record<PieceSymbol,number[]>={p:PP,n:PN,b:PB,r:PR,q:PQ,k:PK};
 function ev(c:Chess){let s=0;const b=c.board();for(let r=0;r<8;r++)for(let j=0;j<8;j++){const q=b[r][j];if(!q)continue;s+=(q.color==="w"?1:-1)*(PV[q.type]+(PST[q.type]?.[(q.color==="w"?r*8+j:(7-r)*8+j)]||0))}return s}
 function mm(c:Chess,d:number,a:number,b:number,mx:boolean):number{if(!d)return ev(c);const mv=c.moves({verbose:true});if(!mv.length)return c.isCheckmate()?(mx?-1e5:1e5):0;if(mx){let v=-Infinity;for(const m of mv){c.move(m);v=Math.max(v,mm(c,d-1,a,b,false));c.undo();a=Math.max(a,v);if(b<=a)break}return v}let v=Infinity;for(const m of mv){c.move(m);v=Math.min(v,mm(c,d-1,a,b,true));c.undo();b=Math.min(b,v);if(b<=a)break}return v}
-function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{c.move(m);const s=mm(c,Math.min(d,4)-1,-Infinity,Infinity,c.turn()==="w");c.undo();return{m,s:s+(Math.random()-.5)*rn}});sc.sort((a,b)=>c.turn()==="w"?b.s-a.s:a.s-b.s);return sc[0].m}
+// (Move choice for the minimax levels now lives in humanBot.ts — the old
+//  best() added uniform eval noise, which made the bot uniformly mediocre
+//  instead of human. `mm` above is still the search it scores with.)
 
 /* ═══ Move classification (lichess-grade, phase + eval-context aware) ═══
    Вместо грубого абсолютного порога centipawn-падения учитываем:
@@ -4574,14 +4578,39 @@ export default function CyberChessPage(){
       }),delay);
       return()=>clearTimeout(t);
     }
-    const t=setTimeout(()=>{
-      try{if(game.fen()!==fenAtTrigger){sThink(false);return}
-        const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
+    // ── Weak bots (Beginner/Casual/Club) — bundled minimax, humanised.
+    // Not "top move minus uniform noise" (that bot is wrong on every turn and
+    // never actually hangs a piece) but book opening → mostly-sound middlegame
+    // → occasional real blunder. See humanBot.ts for the model.
+    let cancelled=false;
+    const t=setTimeout(()=>{void(async()=>{
+      try{
+        if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+        const profile=HUMAN_PROFILES[aiI]??HUMAN_PROFILES[2];
+        // Opening book only in standard chess — a variant shares the start
+        // position but not the rules, so theory there would be nonsense.
+        if(variant==="standard"&&hist.length<profile.bookPlies){
+          try{
+            const book=await getBookContinuations(fenAtTrigger);
+            const uci=pickBookMove(book.moves.map(m=>({uci:m.uci,freq:m.freq})),hist.length,profile);
+            // The await let the board move on — re-check before committing.
+            if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+            if(uci&&uci.length>=4){
+              exec(uci.slice(0,2) as Square,uci.slice(2,4) as Square,(uci.length>4?uci[4]:undefined) as any,false);
+              sThink(false);return;
+            }
+          }catch{/* book unavailable → play it out */}
+          if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+        }
+        const c=new Chess(fenAtTrigger);
+        const d=Math.min(lv.depth,4)-1;
+        const scored=scoreMoves(c,pos=>mm(pos,d,-Infinity,Infinity,pos.turn()==="w"));
+        const b=pickHumanMove(scored,profile);
         if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}
       sThink(false);
-    },delay);
-    return()=>clearTimeout(t);
+    })()},delay);
+    return()=>{cancelled=true;clearTimeout(t)};
   },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly,mirrorActive,mirrorProfile]);
 
   /* ── Click: normal move OR premove ── */

@@ -21,8 +21,15 @@ export type Character = {
   kind: CharacterKind;
   /** Короткая метка для UI: «мальчик», «алабай». Выводится из описания. */
   name: string;
-  /** Каноническое описание — единственный текст, который уходит в промты. */
+  /** Каноническое описание — единственный текст, который уходит в промты.
+   *  РЕДАКТИРУЕМОЕ: режиссёр правит его через API. */
   canonical: string;
+  /** Исходные описания субъектов, из которых собран персонаж. Неизменны.
+   *  Сопоставление кадров идёт по НИМ, а не по canonical: стоит режиссёру
+   *  переписать канон своими словами (скажем, по-русски), сходство с
+   *  английским описанием кадра упало бы до нуля, персонаж перестал бы
+   *  узнаваться — и правка молча перестала бы применяться. */
+  aliases: string[];
   /** Референс-кадры для движков, умеющих reference-to-video. */
   refImages: string[];
   /** В каких кадрах занят (id кадров) — чтобы UI показывал охват. */
@@ -124,6 +131,7 @@ export function deriveCharacters(shots: ShotLike[]): Character[] {
       kind: g.kind as CharacterKind,
       name: deriveName(canonical),
       canonical,
+      aliases: [...new Set(g.descriptions)],
       refImages: [],
       shotIds: g.shotIds,
     };
@@ -139,7 +147,10 @@ export function matchCharacter(subj: SubjectLike, characters: Character[]): Char
   for (const c of characters) {
     const sameFamily = human ? c.kind === "human" || c.kind === "child" : c.kind === subj.kind;
     if (!sameFamily) continue;
-    const score = similarity(c.canonical, subj.description);
+    // Сравниваем с исходными описаниями (aliases), а не с правленым каноном.
+    // У старых записей без aliases падаем на canonical, чтобы не потерять их.
+    const texts = c.aliases?.length ? c.aliases : [c.canonical];
+    const score = Math.max(...texts.map((t) => similarity(t, subj.description)));
     if (score >= MATCH_THRESHOLD && (!best || score > best.score)) best = { c, score };
   }
   return best?.c ?? null;

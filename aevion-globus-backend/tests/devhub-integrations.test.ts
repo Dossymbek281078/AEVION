@@ -413,7 +413,11 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
       .send({ prompt: "a cat" });
 
     expect(r.status).toBe(502);
-    expect(r.body.error).toMatch(/All image providers failed/);
+    // The message now names the fix instead of restating the failure: this
+    // mock is a billing rejection, so it must read as a blocked provider
+    // rather than a bad prompt.
+    expect(r.body.providersBlocked).toBe(true);
+    expect(r.body.error).toMatch(/not your prompt/);
     expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
   });
 });
@@ -3999,5 +4003,30 @@ describe("capabilities tell the truth about providers", () => {
     expect(r2.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("live");
     __resetProviderHealth();
     delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("image failures name the fix, not just the failure", () => {
+  test("a billing wall plus a 401 fallback reads as 'providers blocked'", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc";
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    delete process.env.TOGETHER_API_KEY;
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"error":{"code":"billing_hard_limit_reached"}}' } as any)
+      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => '{"errors":[{"code":10000,"message":"Authentication error"}]}' } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/image").send({ prompt: "a red circle" });
+    expect(r.status).toBe(502);
+    expect(r.body.providersBlocked).toBe(true);
+    expect(r.body.error).toMatch(/not your prompt/);
+    expect(r.body.error).toMatch(/top up the OpenAI account/);
+    expect(r.body.error).toMatch(/TOGETHER_API_KEY/);
+
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_API_TOKEN;
   });
 });

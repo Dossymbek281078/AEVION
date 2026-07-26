@@ -344,7 +344,8 @@ export function detectPhase(fen: string, plyCount: number): "opening" | "middleg
   return "middlegame";
 }
 
-/** Считаем материальный баланс в центипешках */
+/** Материальный баланс в ПЕШКАХ (1/3/3/5/9), а не в центипешках: значение
+ *  идёт прямо в текст коуча «опережает на N единиц». */
 export function calcMaterialBalance(fen: string): number {
   const vals: Record<string, number> = { p:1, n:3, b:3, r:5, q:9 };
   let white = 0, black = 0;
@@ -383,8 +384,12 @@ export function assessKingSafety(fen: string): { white: string; black: string } 
     const wRank = wKing?.square[1];
     const bRank = bKing?.square[1];
 
-    const wSafe = (wFile === "g" || wFile === "b" || wFile === "c") && (wRank === "1") ? "рокировал — в безопасности" : "в центре или активен";
-    const bSafe = (bFile === "g" || bFile === "b" || bFile === "c") && (bRank === "8") ? "рокировал — в безопасности" : "в центре или активен";
+    // Формулировка — про РАСПОЛОЖЕНИЕ, а не про историю партии. Раньше здесь
+    // стояло «рокировал», но из позиции этого не видно: король, пришедший на c1
+    // ногами в эндшпиле, получал ту же фразу, и коуч утверждал то, чего не знает.
+    const tucked = (f?: string) => f === "g" || f === "b" || f === "c";
+    const wSafe = tucked(wFile) && wRank === "1" ? "укрыт на фланге" : "в центре или активен";
+    const bSafe = tucked(bFile) && bRank === "8" ? "укрыт на фланге" : "в центре или активен";
 
     return { white: wSafe, black: bSafe };
   } catch {

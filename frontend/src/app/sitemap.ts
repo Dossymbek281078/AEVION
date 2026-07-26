@@ -215,6 +215,29 @@ async function scanAppRoutes(): Promise<string[]> {
   }
 }
 
+/**
+ * Published listings on the startup exchange.
+ *
+ * A founder's whole reason to list is being found; leaving these out of the
+ * sitemap meant an idea page existed and nobody could reach it from search.
+ * Read-only, capped, and silent on failure — a sitemap must never be the reason
+ * a build fails.
+ */
+async function fetchExchangeListingIds(): Promise<number[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/startupx/ideas?limit=200&sort=score`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { data?: { listings?: Array<{ id?: unknown }> } };
+    return (j?.data?.listings ?? [])
+      .map((l) => (typeof l.id === "number" ? l.id : null))
+      .filter((v): v is number => v !== null);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchIds(path: string, idField: string = "id"): Promise<string[]> {
   try {
     const res = await fetch(`${getApiBase()}${path}`, { next: { revalidate: 3600 } });
@@ -233,7 +256,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
   const origin = BASE_URL;
-  const [projectIds, vacancyIds, employerLeaderboard, popularSkills, scannedRoutes] = await Promise.all([
+  const [projectIds, vacancyIds, employerLeaderboard, popularSkills, scannedRoutes, exchangeListingIds] = await Promise.all([
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })
@@ -243,6 +266,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .then((r) => (r.ok ? r.json() : { data: { items: [] } }))
       .catch(() => ({ data: { items: [] } })),
     scanAppRoutes(),
+    fetchExchangeListingIds(),
   ]);
 
   const employerIds: string[] = ((employerLeaderboard?.data?.employers ?? []) as { userId: string }[])
@@ -300,9 +324,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
+  const exchangeRoutes: MetadataRoute.Sitemap = exchangeListingIds.map((id) => ({
+    url: `${origin}/startup-exchange/${id}`,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
+
   // Cap total at 5000 so the sitemap stays valid (Google limit is 50k but
   // we prefer multiple smaller files long-term — single sitemap is enough
   // for now).
-  const all = [...staticRoutes, ...skillRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes];
+  const all = [...staticRoutes, ...skillRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes, ...exchangeRoutes];
   return all.slice(0, 5000);
 }

@@ -396,6 +396,53 @@ export default function DevHubPage() {
           </span>
         </div>
 
+        {/* One window vs a stack of subscriptions — deliberately honest: the
+            money gap is small and saying otherwise would be a lie. The claim
+            we can defend is the handoffs, not the price. */}
+        <div style={{
+          border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
+          padding: "18px 20px", marginBottom: 20,
+        }}>
+          <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+            Одно окно вместо семи подписок
+          </p>
+          <p style={{ fontSize: 13, color: "#475569", margin: "6px 0 12px", lineHeight: 1.55 }}>
+            Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте,
+            без переноса файлов между сервисами и без семи отдельных логинов.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>
+              <tbody>
+                {[
+                  ["Приложение по описанию", "Lovable Pro", "$25"],
+                  ["Видео", "Runway Pro", "$35"],
+                  ["Картинки", "Midjourney Standard", "$30"],
+                  ["Озвучка", "ElevenLabs Creator", "$22"],
+                  ["Музыка", "Suno", "$10"],
+                  ["3D-модели", "Meshy Pro", "$20"],
+                  ["Хостинг", "Vercel Pro", "$20"],
+                ].map(([what, who, price]) => (
+                  <tr key={what as string}>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#334155" }}>{what}</td>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{who}</td>
+                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{price}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>Итого</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>7 подписок, 7 логинов</td>
+                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "12px 0 0", lineHeight: 1.5 }}>
+            Цены — публичные тарифы сервисов на июль 2026. Мы не обещаем «в разы дешевле»:
+            выигрыш здесь не в цене подписки, а в том, что результат одного шага сразу лежит
+            в том же проекте, что и следующий.
+          </p>
+        </div>
+
         {/* Error banner */}
         {error && (
           <div style={{ background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", marginBottom: 20, color: "#991b1b", fontSize: 14, display: "flex", justifyContent: "space-between" }}>

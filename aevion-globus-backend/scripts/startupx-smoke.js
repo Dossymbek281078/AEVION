@@ -224,6 +224,12 @@ async function run() {
   assert("stats.total is a number", typeof stats.body?.data?.total === "number");
   assert("byTier present", typeof stats.body?.data?.byTier === "object");
   assert("byStage kept for older consumers", typeof stats.body?.data?.byStage === "object");
+  // Версия правил и число отставших разборов: без них подъём ASSESSMENT_VERSION
+  // остаётся теорией — непонятно, что пересчитывать.
+  assert("stats reports the rules version", typeof stats.body?.data?.assessmentVersion === "number",
+    String(stats.body?.data?.assessmentVersion));
+  assert("stats counts assessments scored by older rules",
+    typeof stats.body?.data?.staleAssessments === "number", String(stats.body?.data?.staleAssessments));
 
   console.log(`\nStartup Exchange: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

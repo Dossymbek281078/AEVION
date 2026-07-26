@@ -254,6 +254,16 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
         `SELECT COUNT(*)::int AS n, COALESCE(AVG(assessment_score), 0)::float AS avg
          FROM startup_ideas WHERE visibility='public' AND assessment_score IS NOT NULL`,
       );
+      // Заявки, разобранные прошлыми правилами. Версия защищена тестом, но
+      // без этого счётчика её подъём остаётся теорией: непонятно, сколько строк
+      // нужно пересчитать через /reassess, чтобы лента снова сравнивала
+      // сравнимое.
+      const staleQ = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM startup_ideas
+         WHERE visibility='public' AND assessment_score IS NOT NULL
+           AND COALESCE(assessment_version, 0) < $1`,
+        [ASSESSMENT_VERSION],
+      );
 
       const byTier = emptyByTier();
       for (const r of tierQ.rows as Array<{ tier: string; n: number }>) byTier[r.tier] = Number(r.n) || 0;
@@ -267,6 +277,8 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
         recentCount: recentQ.rows[0]?.n ?? 0,
         assessed: scoredQ.rows[0]?.n ?? 0,
         avgScore: Math.round(Number(scoredQ.rows[0]?.avg ?? 0)),
+        staleAssessments: staleQ.rows[0]?.n ?? 0,
+        assessmentVersion: ASSESSMENT_VERSION,
       });
     }
   } catch (e) {
@@ -292,6 +304,8 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
     avgScore: scored.length
       ? Math.round(scored.reduce((a, r) => a + (r.assessment_score ?? 0), 0) / scored.length)
       : 0,
+    staleAssessments: scored.filter((r) => (r.assessment_version ?? 0) < ASSESSMENT_VERSION).length,
+    assessmentVersion: ASSESSMENT_VERSION,
   });
 });
 

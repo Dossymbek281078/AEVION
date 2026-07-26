@@ -239,8 +239,11 @@ async function main() {
   });
   assert(tampered.json?.valid === false && tampered.json?.hashValid === false, "tampered justification is rejected as a content change", `hashValid=${tampered.json?.hashValid}`);
   const justAst = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "astana" });
-  assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits a regulatory verdict it cannot make");
-  assert(justAst.json?.scope?.includes("нет"), "[astana] scope says the regulatory part is absent");
+  assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits an altitude verdict it cannot make");
+  assert(/AIP KZ/.test(justAst.json?.document?.permission?.authority ?? ""), "[astana] justification still discloses the prohibition that does apply");
+  // Astana has no CEILING grid but does have a published prohibition, so the
+  // scope must say which of the two is missing — "нет" alone matched either.
+  assert(/потолк/i.test(justAst.json?.scope ?? "") && /режим/i.test(justAst.json?.scope ?? ""), "[astana] scope distinguishes the missing ceiling from the published prohibition", (justAst.json?.scope ?? "").slice(0, 70));
 
   // Phase 8: a permission regime is a published rule too — a city with no
   // ceiling grid must not be reported as having no regulator.
@@ -250,11 +253,17 @@ async function main() {
   assert(perm?.available === true && /MLIT/.test(perm.authority ?? ""), "[tokyo] permission regime from the real authority is reported", `${perm?.authority}`);
   assert(perm.basis === "raster-sampled", "[tokyo] permission provenance says it was sampled, not ingested", `basis=${perm?.basis}`);
   assert(perm.coveragePct === 100 && perm.uniform === true, "[tokyo] uniform coverage is stated as uniform, not drawn as a map", `${perm?.coveragePct}%`);
+  // Astana: the eAIP publishes a prohibited area that covers the whole twin.
+  // Reporting it as "no source" was the module's own worst inaccuracy.
   const permAst = await jget("/api/qskyway/city?city=astana");
-  assert(permAst.json?.airspace?.permission?.available === false, "[astana] no permission regime found is reported as absent");
+  const pa = permAst.json?.airspace?.permission;
+  assert(pa?.available === true && /AIP KZ/.test(pa.authority ?? ""), "[astana] published prohibited area is reported", `${pa?.authority}`);
+  assert(pa.kind === "prohibition", "[astana] a prohibition is not rendered as a permission", `kind=${pa?.kind}`);
+  assert(pa.basis === "ingested" && /UAP28/.test(pa.regime ?? ""), "[astana] zone identifier and provenance are stated", `${pa?.regime?.slice(0, 40)}`);
+  assert(pa.coveragePct === 100 && /ЗАПРЕТНОЙ/.test(pa.note ?? ""), "[astana] full coverage is stated as prohibition, not as 'needs permission'");
   const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
-  assert(cov?.withFeed === 2 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 1, "coverage counts any published rule, not only ceilings", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
-  assert(Array.isArray(cov?.missing) && cov.missing.length === 1 && cov.missing[0] === "astana", "only the city with nothing published is listed as missing", (cov?.missing ?? []).join(","));
+  assert(cov?.withFeed === 3 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city now has a published rule of some kind", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
+  assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));
   const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
   assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");
   // The disclaimer must not contradict the document it is attached to.

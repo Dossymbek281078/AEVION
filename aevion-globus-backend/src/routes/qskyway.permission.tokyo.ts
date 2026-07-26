@@ -16,6 +16,7 @@ export const PERMISSION_TOKYO: CityPermission = {
   "source": "Densely Inhabited District (人口集中地区), 2020 census — GSI layer did2020",
   "sourceUrl": "https://cyberjapandata.gsi.go.jp/xyz/did2020/{z}/{x}/{y}.png",
   "regime": "Civil Aeronautics Act — unmanned flight over a DID requires the Minister's permission",
+  "kind": "permission",
   "basis": "raster-sampled",
   "effective": "2020 census",
   "sampled": "2026-07-26",

@@ -1544,10 +1544,109 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
     `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
   try {
     const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
-    res.json({ ...result, note: "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned." });
+    const canProvision = !!process.env.DEVHUB_DB_ADMIN_URL;
+    res.json({
+      ...result,
+      canProvision,
+      note: canProvision
+        ? "Files generated — POST /database/provision to create the real database and get DATABASE_URL."
+        : "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned.",
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "database design failed" });
   }
+});
+
+// POST /api/devhub/projects/:id/database/provision — create the real database.
+// One schema + one login role per project on an instance dedicated to user
+// projects (see lib/devhubDbProvision.ts). Applies db/schema.sql if the project
+// has one, then stores DATABASE_URL in the project's env vars.
+devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!process.env.DEVHUB_DB_ADMIN_URL) {
+    return res.status(503).json({
+      error: "database provisioning is not configured — set DEVHUB_DB_ADMIN_URL on the server",
+      envVar: "DEVHUB_DB_ADMIN_URL",
+    });
+  }
+
+  // Apply the project's own schema if it designed one — that is the whole
+  // point of the flow: design → provision → the tables actually exist.
+  let schemaSql: string | null = null;
+  try {
+    const f = await dbGetFile(project.id, "db/schema.sql");
+    schemaSql = f?.content ?? null;
+  } catch {
+    schemaSql = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === "db/schema.sql")?.content ?? null;
+  }
+
+  const { provisionProjectDatabase } = await import("../lib/devhubDbProvision");
+  const result = await provisionProjectDatabase({ projectId: project.id, schemaSql });
+  if (!result.ok) return res.status(502).json({ error: result.error });
+
+  project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };
+  project.updatedAt = now();
+  try {
+    await dbSaveProject(project);
+  } catch {
+    memProjects.set(project.id, project);
+  }
+
+  // The URL contains the credential — returned once so the caller can show it,
+  // never logged.
+  res.json({
+    ok: true,
+    schema: result.schema,
+    role: result.role,
+    appliedSchemaSql: result.appliedSchemaSql,
+    databaseUrl: result.databaseUrl,
+    note: result.appliedSchemaSql
+      ? "Database created, schema applied, DATABASE_URL saved to this project's env vars."
+      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.",
+  });
+});
+
+// DELETE /api/devhub/projects/:id/database — drop the project's schema, role
+// and stored DATABASE_URL. Destructive and irreversible, hence its own route.
+devhubRouter.delete("/projects/:id/database", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!process.env.DEVHUB_DB_ADMIN_URL) {
+    return res.status(503).json({ error: "database provisioning is not configured" });
+  }
+
+  const { deprovisionProjectDatabase } = await import("../lib/devhubDbProvision");
+  const result = await deprovisionProjectDatabase({ projectId: project.id });
+  if (!result.ok) return res.status(502).json({ error: result.error });
+
+  const { DATABASE_URL: _dropped, ...rest } = project.envVars || {};
+  project.envVars = rest;
+  project.updatedAt = now();
+  try {
+    await dbSaveProject(project);
+  } catch {
+    memProjects.set(project.id, project);
+  }
+  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone." });
 });
 
 // POST /api/devhub/projects/:id/generate/undo — revert the project's most
@@ -5732,6 +5831,7 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
     { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },

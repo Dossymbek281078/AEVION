@@ -259,6 +259,10 @@ async function cmdSheet(argv) {
   if (!judge || judge.startsWith("--")) throw new Error("Укажи судью: --judge <имя>");
   const { scenes } = loadScenes();
   const { criteria } = await loadContinuityCriteria();
+  const mp = path.join(OUT, "manifest.json");
+  // Внятный отказ вместо сырого ENOENT: по документу легко запустить
+  // фазу не в том порядке.
+  if (!existsSync(mp)) throw new Error("Нет manifest.json — сначала prepare (и render/poll, если нужны клипы).");
   const manifest = readJson(path.join(OUT, "manifest.json"));
   const titleById = Object.fromEntries(scenes.map((s) => [s.id, s.title]));
 

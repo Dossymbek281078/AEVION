@@ -18,7 +18,7 @@
 
 "use client";
 import { useEffect, useState } from "react";
-import { Chess } from "chess.js";
+import { Chess, type Square } from "chess.js";
 import { fetchOpening, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { getBookContinuations, type BookResult } from "./localOpeningBook";
 
@@ -38,12 +38,24 @@ export default function OpeningExplorerPanel({
 
   // Play a move that may only have a SAN (our tree carries SAN, no UCI). Resolve
   // UCI from the current FEN with chess.js so onPlayMove keeps its UCI contract.
+  //
+  // Both branches resolve against the real position, not just the SAN one. The
+  // bundled book keys on placement + side to move + castling and deliberately
+  // ignores the en-passant square so transpositions collapse, so it can offer an
+  // en-passant continuation that is not legal in the position actually on the
+  // board. Handing that straight to onPlayMove reads as a dead click: exec()
+  // drops an illegal move without a word.
   const play = (uci: string, san: string) => {
     if (!onPlayMove) return;
-    if (uci) return onPlayMove(uci);
     try {
       const g = new Chess(fen);
-      const mv = g.move(san);
+      const mv = uci
+        ? g.move({
+            from: uci.slice(0, 2) as Square,
+            to: uci.slice(2, 4) as Square,
+            promotion: (uci.length > 4 ? uci[4] : "q") as "q" | "r" | "b" | "n",
+          })
+        : g.move(san);
       if (mv) onPlayMove(mv.from + mv.to + (mv.promotion || ""));
     } catch {
       /* illegal in this position — ignore */
@@ -167,7 +179,7 @@ export default function OpeningExplorerPanel({
             return (
               <div
                 key={m.uci}
-                onClick={clickable ? () => onPlayMove!(m.uci) : undefined}
+                onClick={clickable ? () => play(m.uci, m.san) : undefined}
                 style={{
                   display: "flex",
                   alignItems: "center",

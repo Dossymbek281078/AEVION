@@ -27,11 +27,41 @@ import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { buildDissentMap } from "../services/multichat/dissent";
-import { buildReceipt, signReceipt } from "../services/multichat/receipt";
+import { buildReceipt, signReceipt, verifyReceipt } from "../services/multichat/receipt";
 
 const captureMultichatError = makeServiceCapture("multichat");
 
 export const multichatRouter = Router();
+
+// Проверка чека — единственная ПУБЛИЧНАЯ ручка модуля, и объявлена до
+// requireAuth намеренно: требовать аккаунт, чтобы проверить чужой чек, значит
+// обессмыслить сам чек. Получателю артефакта не нужен доступ к нашей системе.
+// Работы тут ровно на канонизацию и хеш — состояние не меняется.
+const verifyLimiter = rateLimit({
+  capacity: 60,
+  refillPerSec: 1,
+  keyFn: (req) => `mc-verify:${req.ip || "anon"}`,
+});
+
+multichatRouter.post("/receipt/verify", verifyLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    // Принимаем и целиком скачанный файл {receipt, hash, signature}, и голый чек.
+    const receipt = body.receipt ?? body;
+    if (!receipt || typeof receipt !== "object" || !("panel" in receipt)) {
+      return res.status(400).json({ error: "not_a_receipt", message: "Ожидается чек мультичата (JSON со списком panel)." });
+    }
+    const out = await verifyReceipt({
+      receipt: receipt as never,
+      hash: typeof body.hash === "string" ? body.hash : undefined,
+      signature: body.signature ?? null,
+    });
+    res.json(out);
+  } catch (err) {
+    captureMultichatError(err, { route: "receipt-verify" });
+    res.status(500).json({ error: "verify failed" });
+  }
+});
 
 // All multichat surfaces are user-scoped — anonymous traffic gets 401.
 multichatRouter.use(requireAuth);

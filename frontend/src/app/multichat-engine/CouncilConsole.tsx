@@ -248,6 +248,9 @@ export function CouncilConsole() {
           >
             Скачать чек
           </button>
+          <a href="/multichat-engine/verify" style={{ color: C.mute, fontSize: 12, textDecoration: "underline" }}>
+            проверить чек
+          </a>
         </div>
       )}
 

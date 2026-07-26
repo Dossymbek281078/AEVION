@@ -471,6 +471,26 @@ describe("deal terms vs the market", () => {
     expect(flag?.severity).toBe("medium");
   });
 
+  test("невероятная выручка не проходит молча: цена ловит её на несогласованности", () => {
+    // Цифры основателя биржа не проверяет и честно об этом пишет. Единственное,
+    // что можно сделать без верификации, — сверить их между собой: заявленный
+    // $1млрд выручки при цене $150K означает, что одно из двух чисел выдумано.
+    // Без этой сверки фальшивая выручка читалась бы как выгодная сделка.
+    const a = assessBody(
+      ideaBody({
+        tier: "product",
+        demoUrl: "https://example.com",
+        deal: { intent: "sell_full", askingPriceUsd: 150_000 },
+        metrics: { arrUsd: 1_000_000_000 },
+      }),
+    );
+    expect(a.redFlags.some((f) => /меньше половины заявленной годовой выручки/.test(f.message))).toBe(true);
+    // И «доказательства» всё равно остаются в шкале 0–100, а не улетают в бесконечность.
+    const evidence = a.factors.find((f) => f.key === "evidence")!;
+    expect(evidence.score).toBeLessThanOrEqual(100);
+    expect(evidence.rationale).toMatch(/не проверялись биржей/);
+  });
+
   test("the valuation band never depends on the asking price it is compared against", () => {
     // If the ask could move the band, the comparison would be circular and every
     // listing would look fairly priced.

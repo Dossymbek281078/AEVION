@@ -451,7 +451,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
-    | { role: "hint"; kind: "design_db" | "deploy" | "manifest"; description: string; at: string };
+    | { role: "hint"; kind: "design_db" | "deploy" | "manifest" | "provision_db"; description: string; at: string };
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [aiImage, setAiImage] = useState<{ dataBase64: string; mediaType: string; name: string } | null>(null);
   const aiImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -1264,6 +1264,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   };
 
   const [designingDb, setDesigningDb] = useState(false);
+  const [provisioningDb, setProvisioningDb] = useState(false);
   // One-click follow-through on the design_db hint: runs /database/design with
   // the idea already in hand, renders the result as a normal assistant card
   // (diffs, checkpoint — undo works), and retires the hint.
@@ -1291,10 +1292,55 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listData = await listR.json();
       setFiles(listData.files || []);
       showToast("Database designed — db/schema.sql + client are in the file tree", "success");
+      // Schema on disk is only half the job; offer to create the real database
+      // right here when the server can (capability "database" is live).
+      if (data.canProvision) {
+        setChatHistory((h) => [...h, { role: "hint", kind: "provision_db", description, at: new Date().toISOString() }]);
+      }
     } catch (e: any) {
       showToast(e.message || "Database design failed", "error");
     } finally {
       setDesigningDb(false);
+    }
+  };
+
+  // Create the project's real database: schema + login role on the projects
+  // instance, schema.sql applied, DATABASE_URL saved into this project's env.
+  const provisionDatabase = async () => {
+    if (!project || provisioningDb) return;
+    if (isCapabilityBlocked(caps, "database")) {
+      showToast(capabilityHint(caps, "database", "Database provisioning"), "warning");
+      return;
+    }
+    setProvisioningDb(true);
+    try {
+      const r = await fetchWithRedeployRetry(
+        apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+      );
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error || "Provisioning failed");
+      setChatHistory((h) => [
+        ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
+        {
+          role: "assistant",
+          at: new Date().toISOString(),
+          files: [],
+          note: data.appliedSchemaSql
+            ? `Database ready — schema ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
+            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+        },
+      ]);
+      // Refresh the project so the Env Vars tab shows DATABASE_URL.
+      const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+      const pd = await pr.json();
+      setProject(pd.project);
+      showToast(data.appliedSchemaSql ? "Database created and schema applied" : "Database created", "success");
+    } catch (e: any) {
+      showToast(e.message || "Provisioning failed", "error");
+    } finally {
+      setProvisioningDb(false);
     }
   };
 
@@ -3031,7 +3077,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
-                          msg.kind === "manifest" ? (
+                          msg.kind === "provision_db" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                              <div style={{ color: "#3730a3", marginBottom: 8, lineHeight: 1.45 }}>
+                                🗃 Schema is on disk — create the real database now? You get your own Postgres schema, a login role only you can use, the tables from <span style={{ fontFamily: "monospace" }}>db/schema.sql</span>, and <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span> in Env Vars.
+                              </div>
+                              <button
+                                onClick={provisionDatabase}
+                                disabled={provisioningDb}
+                                title={capabilityHint(caps, "database", "Create the database")}
+                                style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
+                              >
+                                {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
+                              </button>
+                            </div>
+                          ) : msg.kind === "manifest" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#92400e", marginBottom: 8, lineHeight: 1.45 }}>
                                 📦 This project has no <span style={{ fontFamily: "monospace" }}>package.json</span> — the live preview works, but an export can&apos;t be installed or run. Generate one from what the code actually imports?

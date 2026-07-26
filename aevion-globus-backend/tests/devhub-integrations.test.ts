@@ -3672,3 +3672,34 @@ describe("database provisioning", () => {
     expect(executed).toContain("DROP ROLE IF EXISTS u_aaaaaaaabbbb");
   });
 });
+
+describe("deleting a project drops its database", () => {
+  test("no DATABASE_URL on the project → delete proceeds untouched", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoDb", stack: "next" });
+    const r = await request(app).delete(`/api/devhub/projects/${cr.body.project.id}`);
+    expect(r.status).toBe(200);
+    expect(r.body.databaseDropped).toBeUndefined();
+  });
+
+  test("if the drop fails the project is NOT deleted — no orphan schema left behind", async () => {
+    // A port nothing listens on: the real deprovision path fails fast, which
+    // is exactly the situation that used to silently orphan a schema.
+    process.env.DEVHUB_DB_ADMIN_URL = "postgres://admin:pw@127.0.0.1:1/pool";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DropFails", stack: "next" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/env`).send({ key: "DATABASE_URL", value: "postgres://u:p@h/db" });
+
+    const r = await request(app).delete(`/api/devhub/projects/${id}`);
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/could not be dropped/);
+    expect(r.body.hint).toMatch(/DELETE \/projects\/:id\/database/);
+
+    // Still there, so the user can retry instead of losing track of the schema.
+    const still = await request(app).get(`/api/devhub/projects/${id}`);
+    expect(still.status).toBe(200);
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+  }, 20_000);
+});

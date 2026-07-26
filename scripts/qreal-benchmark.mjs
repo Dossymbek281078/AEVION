@@ -32,7 +32,7 @@
 // Env: FAL_KEY (только для render/poll), QREAL_API (база API),
 //      QREAL_BENCH_ENGINE=seedance|kling, QREAL_FAL_MODEL_* (как в engines.ts).
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { randomUUID, createHash } from "node:crypto";
 import path from "node:path";
 
@@ -357,6 +357,87 @@ async function cmdSheet(argv) {
   console.log(`\nСоответствие клип→плечо лежит в manifest.json. Судья не открывает его до сдачи листа.`);
 }
 
+/* ── judge: машинный судья заполняет лист сам ─────────────────────────── */
+
+/** Бенчмарк требует минимум двух судей, и это зависимость от доступности живых
+ *  людей. VLM-судья снимает её частично: он ДОПОЛНЯЕТ панель, а не заменяет
+ *  человека. Лист помечается именем, начинающимся на «vlm», и score считает
+ *  таких судей отдельно — иначе машинная оценка молча растворилась бы в
+ *  человеческой, и было бы непонятно, чем именно доказано преимущество.
+ *
+ *  Судья слеп так же, как человек: видит клип и критерии, не видит плечо. */
+async function cmdJudge(argv) {
+  const name = (argv[argv.indexOf("--name") + 1] || "").trim();
+  if (!name || name.startsWith("--")) throw new Error("Укажи имя судьи: --name vlm1");
+  if (!name.toLowerCase().startsWith("vlm")) throw new Error("Имя машинного судьи обязано начинаться с «vlm» — по нему score отделяет машину от человека.");
+
+  const { briefs, rubric } = loadLocal();
+  const criteria = await loadCriteria(rubric);
+  const manifest = loadManifest();
+  const rendered = manifest.items.filter((i) => i.status === "rendered");
+  if (!rendered.length) throw new Error("Нечего судить: нет отрендеренных клипов.");
+  if (!process.env.FAL_KEY?.trim()) throw new Error("FAL_KEY не задан — машинный судья недоступен.");
+
+  if (!argv.includes("--confirm-spend")) {
+    console.log(`Готов отдать ${rendered.length} клипов машинному судье (по одному вызову на клип).`);
+    console.log("Цена вызова video-understanding у fal не опубликована — узнаем фактом на первом.");
+    console.log("Подтвердить: judge --name " + name + " --confirm-spend");
+    return;
+  }
+
+  const { judgeRender } = await loadVlmJudge();
+  const briefById = Object.fromEntries(briefs.briefs.map((b) => [b.id, b]));
+  const rows = [["clip_id", "brief_title", "criterion_id", "criterion_label", "weight", "score_1_5", "note"]];
+  let judged = 0;
+
+  for (const it of rendered) {
+    const b = briefById[it.briefId];
+    const out = await judgeRender(it.resultUrl, criteria, { description: b.brief, dialogue: null, soundscape: "" });
+    if (!out.ok) {
+      console.error(`  ! ${it.clipId} (${b.id}): ${out.error}`);
+      continue;
+    }
+    const byId = Object.fromEntries(out.scores.map((s) => [s.id, s]));
+    for (const c of criteria) {
+      const s = byId[c.id];
+      rows.push([it.clipId, b.title, c.id, c.label, c.weight, s?.score ?? "", (s?.note || "").replace(/\n/g, " ")]);
+    }
+    judged++;
+    console.log(`  ✓ ${it.clipId} (${b.title}) — ${out.scores.filter((s) => s.score != null).length}/${criteria.length}`);
+  }
+
+  if (!judged) throw new Error("Судья не оценил ни одного клипа — лист не пишу.");
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  writeFileSync(path.join(OUT, `scoresheet-${name}.csv`), "﻿" + csv, "utf8");
+  console.log(`\nЛист машинного судьи: scoresheet-${name}.csv (${judged} из ${rendered.length} клипов).`);
+  console.log("Он ДОПОЛНЯЕТ панель, а не заменяет человека — отчёт посчитает его отдельно.");
+}
+
+/** vlmJudge.ts тянет judge.ts и falClient.ts; грузим через .mts-копии, как
+ *  тесты (бэкенд — CommonJS, .ts в нём грузится как CJS). */
+async function loadVlmJudge() {
+  const svc = path.join(HERE, "..", "aevion-globus-backend/src/services/qreal");
+  const lib = path.join(HERE, "..", "aevion-globus-backend/src/lib");
+  const pid = process.pid;
+  const tmp = [];
+  const put = (dir, name, src) => {
+    const f = path.join(dir, `_bench-${name}-${pid}.mts`);
+    writeFileSync(f, src, "utf8");
+    tmp.push(f);
+    return f;
+  };
+  put(svc, "judge", readFileSync(path.join(svc, "judge.ts"), "utf8"));
+  put(lib, "fal", readFileSync(path.join(lib, "falClient.ts"), "utf8"));
+  const vlm = put(svc, "vlm", readFileSync(path.join(svc, "vlmJudge.ts"), "utf8")
+    .replace('from "./judge"', `from "./_bench-judge-${pid}.mts"`)
+    .replace('from "../../lib/falClient"', `from "../../lib/_bench-fal-${pid}.mts"`));
+  try {
+    return await import("file:///" + vlm.replace(/\\/g, "/"));
+  } finally {
+    for (const f of tmp) { try { unlinkSync(f); } catch { /* уже убран */ } }
+  }
+}
+
 /* ── score: агрегация и вердикт ───────────────────────────────────────── */
 
 function parseCsv(text) {
@@ -386,23 +467,50 @@ async function cmdScore() {
 
   const sheets = readdirSync(OUT).filter((f) => /^scoresheet-.+\.csv$/.test(f));
   if (!sheets.length) throw new Error("Нет заполненных листов scoresheet-*.csv");
+  // Машинные судьи считаются, но помечаются: заявление, опирающееся только на
+  // машину, слабее — она оценивает по тем же якорям, что мы сами и написали.
+  const isMachine = (f) => /^scoresheet-vlm/i.test(f);
+
+  // Листы прошлого прогона остаются в том же каталоге. Их id принадлежат
+  // другому манифесту, поэтому в тотал они не попадут, — но лист, заполненный
+  // судьёй под ДРУГОЙ набор клипов, обязан быть виден: иначе половина панели
+  // окажется от чужого прогона, а отчёт этого не покажет.
+  const knownClips = new Set(manifest.items.map((i) => i.clipId));
+  const stale = [];
 
   // scores[clipId][criterionId] = [оценки всех судей]
   const scores = {};
   let filled = 0;
+  const usedSheets = [];
   for (const f of sheets) {
     const rows = parseCsv(readFileSync(path.join(OUT, f), "utf8"));
     const head = rows[0].map((h) => h.trim());
     const ix = (n) => head.indexOf(n);
-    for (const r of rows.slice(1)) {
+    const body = rows.slice(1);
+    const unknown = body.filter((r) => !knownClips.has(r[ix("clip_id")])).length;
+    // Больше половины строк не из этого манифеста — лист чужой целиком.
+    // Считать его частично значит смешать два прогона в одном вердикте.
+    if (body.length && unknown > body.length / 2) {
+      stale.push({ file: f, unknown, total: body.length });
+      console.error(`! ${f}: ${unknown} из ${body.length} строк не из этого прогона — лист пропущен целиком.`);
+      continue;
+    }
+    usedSheets.push(f);
+    for (const r of body) {
       const clipId = r[ix("clip_id")], cid = r[ix("criterion_id")], raw = (r[ix("score_1_5")] || "").trim();
       if (!raw) continue; // неприменимо — исключаем у обоих плеч
+      if (!knownClips.has(clipId)) continue; // одиночная строка из старого прогона
       const v = Number(raw);
       if (!Number.isFinite(v) || v < 1 || v > 5) { console.error(`! ${f}: ${clipId}/${cid} — оценка "${raw}" вне 1-5, пропущена`); continue; }
       ((scores[clipId] ||= {})[cid] ||= []).push(v);
       filled++;
     }
   }
+  if (!usedSheets.length) throw new Error("Все найденные листы — от другого прогона. Убери их из каталога и пересобери sheet.");
+  // Состав панели считаем по РЕАЛЬНО учтённым листам, а не по найденным в
+  // каталоге: отброшенный чужой лист не должен создавать видимость судьи.
+  const humanSheets = usedSheets.filter((f) => !isMachine(f));
+  const machineSheets = usedSheets.filter(isMachine);
 
   // Взвешенное среднее клипа: только по критериям, которые судьи заполнили.
   const clipScore = (clipId) => {
@@ -417,6 +525,7 @@ async function cmdScore() {
   };
 
   const perBrief = [];
+  const dropped = [];
   for (const b of briefs.briefs) {
     const clips = Object.fromEntries(
       ARMS.map((arm) => {
@@ -424,7 +533,12 @@ async function cmdScore() {
         return [arm, c ? clipScore(c.clipId) : null];
       })
     );
-    if (clips.naive == null || clips.qreal == null) continue;
+    if (clips.naive == null || clips.qreal == null) {
+      // Бриф выпал: клип не отрендерился или не был оценён. Молча пропускать
+      // нельзя — выборка тихо усохнет, а вердикт будет выглядеть полноценным.
+      dropped.push({ id: b.id, title: b.title, missing: ARMS.filter((a) => clips[a] == null) });
+      continue;
+    }
     perBrief.push({ briefId: b.id, title: b.title, naive: clips.naive, qreal: clips.qreal, delta: clips.qreal - clips.naive });
   }
 
@@ -450,13 +564,31 @@ async function cmdScore() {
 
   const L = [];
   L.push(`# Бенчмарк реализма QReal — результат\n`);
-  L.push(`Судейских листов: ${sheets.length} (${sheets.join(", ")}), заполненных оценок: ${filled}.`);
+  L.push(`Судейских листов учтено: ${usedSheets.length} — людей ${humanSheets.length}, машинных ${machineSheets.length}. Заполненных оценок: ${filled}.`);
+  if (stale.length) {
+    L.push(`
+> ⚠️ **Пропущено листов от другого прогона: ${stale.length}.** ` +
+      stale.map((x) => `${x.file} (${x.unknown} из ${x.total} строк с чужими id)`).join("; ") +
+      `. Судья заполнял другой набор клипов — смешивать прогоны в одном вердикте нельзя.`);
+  }
+  if (!humanSheets.length) {
+    L.push(`
+> ⚠️ **Ни одного человеческого листа.** Вердикт ниже опирается только на машинного судью, который оценивает по тем же якорям, что написали мы. Для публичного заявления нужны минимум два человека, не участвовавших в разработке промтов.`);
+  } else if (machineSheets.length) {
+    L.push(`
+> Панель смешанная — людей: ${humanSheets.length}, машинных: ${machineSheets.length}. Машина дополняет людей, а не заменяет их.`);
+  }
   L.push(`Плечи: naive (бриф как есть) vs qreal (промт пайплайна). Движок один — ${manifest.engineId}, ${manifest.durationSec}с.\n`);
   L.push(`## Вердикт\n`);
   L.push(proven
     ? `**ПОДТВЕРЖДЕНО.** Режиссура QReal выигрывает у голого промта на том же движке: ${wins}/${perBrief.length} брифов, средняя дельта +${meanDelta.toFixed(2)} балла из 5.`
     : `**НЕ ПОДТВЕРЖДЕНО.** ${wins}/${perBrief.length} побед, средняя дельта ${meanDelta >= 0 ? "+" : ""}${meanDelta.toFixed(2)}. Порог (≥80% побед и ≥+0.50) не взят — заявлять превосходство нельзя.`);
   L.push(`\nЧто эта цифра НЕ доказывает: превосходство над чужим продуктом. Плечи naive/qreal делят одну модель, поэтому измерена наша режиссура и только она. Сравнение с Higgsfield/Veo/Kling-продуктом смешивает режиссуру с базовой моделью — такое число в публичном посте будет некорректным.\n`);
+  if (dropped.length) {
+    L.push(`\n> ⚠️ **Выпало брифов: ${dropped.length} из ${briefs.briefs.length}.** ` +
+      dropped.map((d) => `${d.title} (нет плеча: ${d.missing.join(", ")})`).join("; ") +
+      `. Выборка усохла — проверь статусы в manifest.json: обычно это провалившийся сабмит или незаполненные оценки.`);
+  }
   L.push(`## По брифам\n`);
   L.push(`| Бриф | naive | qreal | дельта |`);
   L.push(`|---|---|---|---|`);
@@ -476,7 +608,7 @@ async function cmdScore() {
 
 const cmd = process.argv[2] || "plan";
 const argv = process.argv.slice(3);
-const table = { plan: cmdPlan, prepare: cmdPrepare, render: cmdRender, poll: cmdPoll, sheet: cmdSheet, score: cmdScore };
+const table = { plan: cmdPlan, prepare: cmdPrepare, render: cmdRender, poll: cmdPoll, sheet: cmdSheet, judge: cmdJudge, score: cmdScore };
 if (!table[cmd]) {
   console.error(`Фазы: ${Object.keys(table).join(" | ")}`);
   process.exitCode = 2;

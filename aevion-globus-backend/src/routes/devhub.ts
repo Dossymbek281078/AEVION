@@ -1119,6 +1119,35 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  // Drop the project's database FIRST. A deleted project whose schema and
+  // login role survive is worse than a leak: live credentials pointing at data
+  // nobody owns any more, and nothing left in the UI to clean them up with.
+  let databaseDropped: boolean | undefined;
+  let databaseDropError: string | undefined;
+  if (process.env.DEVHUB_DB_ADMIN_URL && project.envVars?.DATABASE_URL) {
+    try {
+      const { deprovisionProjectDatabase } = await import("../lib/devhubDbProvision");
+      const dropped = await deprovisionProjectDatabase({ projectId: project.id });
+      databaseDropped = dropped.ok;
+      if (!dropped.ok) databaseDropError = dropped.error;
+    } catch (e) {
+      databaseDropped = false;
+      databaseDropError = e instanceof Error ? e.message : String(e);
+    }
+    if (databaseDropped === false) {
+      // Deleting the project anyway would orphan the schema with no way back
+      // to it, so this fails loudly instead.
+      captureException(new Error(`devhub: database deprovision failed: ${databaseDropError}`), {
+        route: "devhub/projects:delete",
+        projectId: project.id,
+      });
+      return res.status(502).json({
+        error: `project not deleted — its database could not be dropped: ${databaseDropError}`,
+        hint: "retry, or drop it explicitly with DELETE /projects/:id/database first",
+      });
+    }
+  }
+
   try {
     await dbDeleteProject(req.params.id);
   } catch (e) {
@@ -1128,7 +1157,7 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
       if (f.projectId === req.params.id) memFiles.delete(fid);
     }
   }
-  res.json({ ok: true });
+  res.json({ ok: true, ...(databaseDropped !== undefined ? { databaseDropped } : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

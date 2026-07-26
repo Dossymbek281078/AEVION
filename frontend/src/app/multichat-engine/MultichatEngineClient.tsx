@@ -9,6 +9,8 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
 import { useI18n, type Lang } from "@/lib/i18n";
+import { CouncilConsole } from "./CouncilConsole";
+import { T } from "./theme";
 
 /* ─────────────────────────────────────────────────────────────────
  * Module-local i18n — lives next to the module instead of bloating
@@ -403,12 +405,12 @@ const ROLES: Role[] = [
 ];
 
 const ROLE_COLORS: Record<Role, { bg: string; border: string; fg: string }> = {
-  General:    { bg: "rgba(94,234,212,0.18)",  border: "rgba(94,234,212,0.45)",  fg: "#5eead4" },
-  Code:       { bg: "rgba(125,211,252,0.18)", border: "rgba(125,211,252,0.45)", fg: "#7dd3fc" },
-  Finance:    { bg: "rgba(250,204,21,0.18)",  border: "rgba(250,204,21,0.45)",  fg: "#facc15" },
-  "IP/Legal": { bg: "rgba(196,181,253,0.18)", border: "rgba(196,181,253,0.45)", fg: "#c4b5fd" },
-  Compliance: { bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.45)", fg: "#fca5a5" },
-  Translator: { bg: "rgba(134,239,172,0.18)", border: "rgba(134,239,172,0.45)", fg: "#86efac" },
+  General:    { bg: "rgba(94,234,212,0.18)",  border: "rgba(94,234,212,0.45)",  fg: T.accent },
+  Code:       { bg: "rgba(125,211,252,0.18)", border: "rgba(125,211,252,0.45)", fg: T.skyLight },
+  Finance:    { bg: "rgba(250,204,21,0.18)",  border: "rgba(250,204,21,0.45)",  fg: T.warnBright },
+  "IP/Legal": { bg: "rgba(196,181,253,0.18)", border: "rgba(196,181,253,0.45)", fg: T.brand },
+  Compliance: { bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.45)", fg: T.bad },
+  Translator: { bg: "rgba(134,239,172,0.18)", border: "rgba(134,239,172,0.45)", fg: T.good },
 };
 
 const ROLE_SYSTEM_PROMPT: Record<Role, string> = {
@@ -822,7 +824,7 @@ function ProviderHealthStrip() {
         border: "1px solid rgba(148,163,184,0.25)",
         background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
         padding: "14px 16px",
-        color: "#e2e8f0",
+        color: T.text,
       }}
     >
       <div
@@ -839,7 +841,7 @@ function ProviderHealthStrip() {
             fontWeight: 800,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
-            color: "#5eead4",
+            color: T.accent,
           }}
         >
           ◉ Provider Health
@@ -853,7 +855,7 @@ function ProviderHealthStrip() {
             borderRadius: 7,
             border: "1px solid rgba(94,234,212,0.4)",
             background: "rgba(13,148,136,0.18)",
-            color: "#5eead4",
+            color: T.accent,
             cursor: "pointer",
             fontSize: 10,
             fontWeight: 800,
@@ -863,17 +865,17 @@ function ProviderHealthStrip() {
         >
           ↻ Refresh
         </button>
-        <span style={{ fontSize: 10, color: "#64748b" }}>
+        <span style={{ fontSize: 10, color: T.textFaded }}>
           {updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : "· loading…"}
         </span>
       </div>
 
       {err ? (
-        <div style={{ fontSize: 12, color: "#fca5a5" }}>Health check unavailable: {err}</div>
+        <div style={{ fontSize: 12, color: T.bad }}>Health check unavailable: {err}</div>
       ) : !providers ? (
-        <div style={{ fontSize: 12, color: "#94a3b8" }}>Pinging providers…</div>
+        <div style={{ fontSize: 12, color: T.textMute }}>Pinging providers…</div>
       ) : providers.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#94a3b8" }}>No providers reported.</div>
+        <div style={{ fontSize: 12, color: T.textMute }}>No providers reported.</div>
       ) : (
         <div
           style={{
@@ -884,10 +886,10 @@ function ProviderHealthStrip() {
         >
           {providers.map((p) => {
             const dotColor = !p.configured
-              ? "#64748b"
+              ? T.textFaded
               : p.reachable
-              ? "#22c55e"
-              : "#f87171";
+              ? T.goodBright
+              : T.badBright;
             const stateLabel = !p.configured
               ? "no key"
               : p.reachable
@@ -933,7 +935,7 @@ function ProviderHealthStrip() {
                     }}
                     aria-hidden
                   />
-                  <span style={{ fontSize: 12, fontWeight: 800, color: "#f1f5f9" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: T.textSoft }}>
                     {p.name}
                   </span>
                 </div>
@@ -944,17 +946,17 @@ function ProviderHealthStrip() {
                     alignItems: "center",
                     fontSize: 10,
                     fontFamily: "ui-monospace, SFMono-Regular, monospace",
-                    color: "#94a3b8",
+                    color: T.textMute,
                   }}
                 >
                   <span
                     style={{
                       color:
                         !p.configured
-                          ? "#64748b"
+                          ? T.textFaded
                           : p.reachable
-                          ? "#86efac"
-                          : "#fca5a5",
+                          ? T.good
+                          : T.bad,
                       fontWeight: 700,
                       letterSpacing: "0.05em",
                       textTransform: "uppercase",
@@ -1054,7 +1056,7 @@ function MissionPresetGrid() {
           borderRadius: 14,
           border: "1px solid rgba(248,113,113,0.35)",
           background: "rgba(127,29,29,0.18)",
-          color: "#fca5a5",
+          color: T.bad,
           fontSize: 12,
         }}
       >
@@ -1073,7 +1075,7 @@ function MissionPresetGrid() {
           borderRadius: 14,
           border: "1px solid rgba(148,163,184,0.25)",
           background: "rgba(15,23,42,0.7)",
-          color: "#94a3b8",
+          color: T.textMute,
           fontSize: 12,
         }}
       >
@@ -1092,7 +1094,7 @@ function MissionPresetGrid() {
         background:
           "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(45,29,84,0.45))",
         padding: "16px 18px",
-        color: "#e2e8f0",
+        color: T.text,
       }}
     >
       <div
@@ -1109,12 +1111,12 @@ function MissionPresetGrid() {
             fontWeight: 800,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
-            color: "#c4b5fd",
+            color: T.brand,
           }}
         >
           ✦ Mission presets
         </span>
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>
+        <span style={{ fontSize: 11, color: T.textMute }}>
           One click → preconfigured agent bundle on a curated system prompt.
         </span>
       </div>
@@ -1150,17 +1152,17 @@ function MissionPresetGrid() {
               >
                 <span style={{ fontSize: 18, lineHeight: 1 }}>{preset.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#f1f5f9" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: T.textSoft }}>
                     {preset.name}
                   </div>
-                  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+                  <div style={{ fontSize: 10, color: T.textMute, marginTop: 2 }}>
                     {preset.recommendedAgents.length} agent
                     {preset.recommendedAgents.length === 1 ? "" : "s"} · default {preset.defaultProvider}
                   </div>
                 </div>
               </div>
 
-              <p style={{ margin: 0, fontSize: 12, color: "#cbd5e1", lineHeight: 1.5 }}>
+              <p style={{ margin: 0, fontSize: 12, color: T.textDim, lineHeight: 1.5 }}>
                 {preset.description}
               </p>
 
@@ -1172,7 +1174,7 @@ function MissionPresetGrid() {
                     borderRadius: 8,
                     border: "1px solid rgba(94,234,212,0.25)",
                     background: "rgba(15,23,42,0.85)",
-                    color: "#cbd5e1",
+                    color: T.textDim,
                     fontSize: 11,
                     lineHeight: 1.45,
                     fontFamily: "ui-monospace, SFMono-Regular, monospace",
@@ -1199,8 +1201,8 @@ function MissionPresetGrid() {
                     background:
                       launching === preset.id
                         ? "rgba(124,58,237,0.4)"
-                        : "linear-gradient(135deg, #7c3aed, #4338ca)",
-                    color: "#fff",
+                        : `linear-gradient(135deg, ${T.brandDeep}, ${T.indigo})`,
+                    color: T.onAccent,
                     cursor: launching !== null ? "wait" : "pointer",
                     fontWeight: 800,
                     fontSize: 12,
@@ -1220,7 +1222,7 @@ function MissionPresetGrid() {
                     borderRadius: 8,
                     border: "1px solid rgba(148,163,184,0.25)",
                     background: "rgba(15,23,42,0.6)",
-                    color: "#94a3b8",
+                    color: T.textMute,
                     cursor: "pointer",
                     fontWeight: 700,
                     fontSize: 11,
@@ -1250,14 +1252,18 @@ export default function MultichatEnginePage() {
           <ModulePricingChip moduleId="multichat-engine" theme="dark" />
         </div>
 
+        {/* Рабочая консоль стоит первой: модуль должен открываться промтом
+            «опиши — сделаю», а не описанием возможностей. */}
+        <CouncilConsole />
+
         <div
           style={{
             borderRadius: 20,
             overflow: "hidden",
             marginBottom: 20,
-            background: "linear-gradient(135deg, #0f172a, #1e1b4b, #312e81)",
+            background: `linear-gradient(135deg, ${T.surface}, ${T.brandInk}, ${T.brandInkSoft})`,
             padding: "28px 28px 24px",
-            color: "#fff",
+            color: T.onAccent,
           }}
         >
           <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
@@ -1288,7 +1294,7 @@ export default function MultichatEnginePage() {
               border: "1px solid rgba(15,23,42,0.12)",
               borderRadius: 14,
               padding: 20,
-              background: "#fff",
+              background: T.cardLight,
               display: "flex",
               flexDirection: "column",
               gap: 10,
@@ -1302,11 +1308,11 @@ export default function MultichatEnginePage() {
                   width: 40,
                   height: 40,
                   borderRadius: 10,
-                  background: "linear-gradient(135deg, #0d9488, #06b6d4)",
+                  background: `linear-gradient(135deg, ${T.accentDeep}, ${T.cyan})`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#fff",
+                  color: T.onAccent,
                   fontWeight: 900,
                   fontSize: 14,
                   letterSpacing: "0.03em",
@@ -1315,15 +1321,15 @@ export default function MultichatEnginePage() {
                 S
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Single chat</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>One provider · one model · fastest path</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Single chat</div>
+                <div style={{ fontSize: 11, color: T.textFaded }}>One provider · one model · fastest path</div>
               </div>
             </div>
-            <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+            <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
               Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer.
               Best for quick lookups and informal conversation.
             </p>
-            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: "#0e7490" }}>
+            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.accentDeeper }}>
               Open single chat →
             </span>
           </Link>
@@ -1337,7 +1343,7 @@ export default function MultichatEnginePage() {
               border: "1px solid rgba(124,58,237,0.35)",
               borderRadius: 14,
               padding: 20,
-              background: "linear-gradient(180deg, #fff 0%, rgba(124,58,237,0.04) 100%)",
+              background: `linear-gradient(180deg, ${T.onAccent} 0%, rgba(124,58,237,0.04) 100%)`,
               display: "flex",
               flexDirection: "column",
               gap: 10,
@@ -1357,7 +1363,7 @@ export default function MultichatEnginePage() {
                 padding: "3px 8px",
                 borderRadius: 999,
                 background: "rgba(124,58,237,0.12)",
-                color: "#6d28d9",
+                color: T.brandDeeper,
                 border: "1px solid rgba(124,58,237,0.3)",
               }}
             >
@@ -1369,11 +1375,11 @@ export default function MultichatEnginePage() {
                   width: 40,
                   height: 40,
                   borderRadius: 10,
-                  background: "linear-gradient(135deg, #7c3aed, #4338ca)",
+                  background: `linear-gradient(135deg, ${T.brandDeep}, ${T.indigo})`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#fff",
+                  color: T.onAccent,
                   fontWeight: 900,
                   fontSize: 13,
                   letterSpacing: "0.03em",
@@ -1382,29 +1388,29 @@ export default function MultichatEnginePage() {
                 MA
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Multi-agent</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Analyst → Writer → Critic · inspectable</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Multi-agent</div>
+                <div style={{ fontSize: 11, color: T.textFaded }}>Analyst → Writer → Critic · inspectable</div>
               </div>
             </div>
-            <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+            <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
               Three specialized agents coordinate on every answer. Pick <b>Sequential</b> for a classic reflection loop,
               <b> Parallel</b> for two writers on different models merged by a Judge, or <b>Debate</b> where a Pro and a Con
               advocate argue and a Moderator synthesizes a balanced recommendation.
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
               {[
-                { t: "3 strategies", c: "#7c3aed" },
-                { t: "Live streaming", c: "#0369a1" },
-                { t: "Live cost + tokens", c: "#15803d" },
-                { t: "Mixed models per role", c: "#4338ca" },
-                { t: "Saveable presets", c: "#0d9488" },
-                { t: "Edit & resend", c: "#0891b2" },
-                { t: "Webhook on done", c: "#0284c7" },
-                { t: "Public share + OG preview", c: "#9333ea" },
-                { t: "Export JSON + Markdown", c: "#b45309" },
-                { t: "↩ Thread continuation", c: "#6d28d9" },
-                { t: "📋 Templates", c: "#1d4ed8" },
-                { t: "⚡ Batch runs", c: "#1e40af" },
+                { t: "3 strategies", c: T.brandDeep },
+                { t: "Live streaming", c: T.skyDeeper },
+                { t: "Live cost + tokens", c: T.goodDeep },
+                { t: "Mixed models per role", c: T.indigo },
+                { t: "Saveable presets", c: T.accentDeep },
+                { t: "Edit & resend", c: T.cyanDeep },
+                { t: "Webhook on done", c: T.skyDeep },
+                { t: "Public share + OG preview", c: T.brandAlt },
+                { t: "Export JSON + Markdown", c: T.warnDeep },
+                { t: "↩ Thread continuation", c: T.brandDeeper },
+                { t: "📋 Templates", c: T.indigoBright },
+                { t: "⚡ Batch runs", c: T.indigoDeep },
               ].map((b) => (
                 <span
                   key={b.t}
@@ -1422,13 +1428,13 @@ export default function MultichatEnginePage() {
                 </span>
               ))}
             </div>
-            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: "#6d28d9" }}>
+            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.brandDeeper }}>
               Open multi-agent →
             </span>
           </Link>
         </div>
 
-        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#64748b" }}>
+        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: T.textFaded }}>
           {[
             { href: "/qcoreai/analytics", label: "📊 Analytics" },
             { href: "/qcoreai/eval",      label: "🧪 Eval harness" },
@@ -1447,29 +1453,29 @@ export default function MultichatEnginePage() {
               key={href}
               href={href}
               style={{
-                border: "1px solid #7c3aed55",
+                border: `1px solid ${T.brandGlow}`,
                 background: "rgba(124,58,237,0.06)",
                 borderRadius: 8,
                 padding: "6px 10px",
                 textDecoration: "none",
-                color: "#6d28d9",
+                color: T.brandDeeper,
                 fontWeight: 700,
               }}
             >
               {label}
             </Link>
           ))}
-          <div style={{ width: 1, background: "#e2e8f0", margin: "0 2px" }} />
+          <div style={{ width: 1, background: T.divider, margin: "0 2px" }} />
           <a
             href={`${origin}/api/qcoreai/health`}
             target="_blank"
             rel="noreferrer"
             style={{
-              border: "1px solid #cbd5e1",
+              border: `1px solid ${T.textDim}`,
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: "#334155",
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1480,11 +1486,11 @@ export default function MultichatEnginePage() {
             target="_blank"
             rel="noreferrer"
             style={{
-              border: "1px solid #cbd5e1",
+              border: `1px solid ${T.textDim}`,
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: "#334155",
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1495,11 +1501,11 @@ export default function MultichatEnginePage() {
             target="_blank"
             rel="noreferrer"
             style={{
-              border: "1px solid #cbd5e1",
+              border: `1px solid ${T.textDim}`,
               borderRadius: 8,
               padding: "6px 10px",
               textDecoration: "none",
-              color: "#334155",
+              color: T.inkOnCardSoft,
               fontWeight: 650,
             }}
           >
@@ -1555,7 +1561,7 @@ function AgentPanel(props: {
   const tokenLabel =
     tokenEstimate >= 1000 ? `~${(tokenEstimate / 1000).toFixed(1)}k tok` : `~${tokenEstimate} tok`;
   const tokenColor =
-    tokenEstimate < 1000 ? "#475569" : tokenEstimate < 3000 ? "#fbbf24" : "#fca5a5";
+    tokenEstimate < 1000 ? T.line : tokenEstimate < 3000 ? T.warn : T.bad;
 
   // Click on a handoff badge → scroll-into-view + flash the target panel
   const focusPanelByTag = useCallback((tag: string) => {
@@ -1564,7 +1570,7 @@ function AgentPanel(props: {
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     const prev = target.style.boxShadow;
-    target.style.boxShadow = "0 0 0 3px #fbbf24, 0 8px 32px rgba(251,191,36,0.35)";
+    target.style.boxShadow = `0 0 0 3px ${T.warn}, 0 8px 32px rgba(251,191,36,0.35)`;
     setTimeout(() => {
       target.style.boxShadow = prev;
     }, 1200);
@@ -1649,7 +1655,7 @@ function AgentPanel(props: {
           }}
         >
           {ROLES.map((r) => (
-            <option key={r} value={r} style={{ background: "#0f172a", color: "#fff" }}>
+            <option key={r} value={r} style={{ background: T.surface, color: T.onAccent }}>
               {r}
             </option>
           ))}
@@ -1669,7 +1675,7 @@ function AgentPanel(props: {
             style={{
               fontSize: 13,
               fontWeight: 700,
-              color: "#f8fafc",
+              color: T.textBright,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -1689,7 +1695,7 @@ function AgentPanel(props: {
                     borderRadius: 6,
                     border: "1px solid rgba(148,163,184,0.25)",
                     background: "rgba(15,23,42,0.6)",
-                    color: "#cbd5e1",
+                    color: T.textDim,
                     fontSize: 10,
                     fontWeight: 700,
                     cursor: "pointer",
@@ -1700,7 +1706,7 @@ function AgentPanel(props: {
                       key={p.id}
                       value={p.id}
                       disabled={!p.configured}
-                      style={{ background: "#0f172a", color: "#fff" }}
+                      style={{ background: T.surface, color: T.onAccent }}
                     >
                       {p.name}{p.configured ? "" : " (no key)"}
                     </option>
@@ -1716,7 +1722,7 @@ function AgentPanel(props: {
                       borderRadius: 6,
                       border: "1px solid rgba(148,163,184,0.25)",
                       background: "rgba(15,23,42,0.6)",
-                      color: "#cbd5e1",
+                      color: T.textDim,
                       fontSize: 10,
                       fontWeight: 700,
                       cursor: "pointer",
@@ -1724,7 +1730,7 @@ function AgentPanel(props: {
                     }}
                   >
                     {availableModels.map((mm) => (
-                      <option key={mm} value={mm} style={{ background: "#0f172a", color: "#fff" }}>
+                      <option key={mm} value={mm} style={{ background: T.surface, color: T.onAccent }}>
                         {prettyModel(mm)}
                       </option>
                     ))}
@@ -1732,7 +1738,7 @@ function AgentPanel(props: {
                 ) : null}
               </>
             ) : (
-              <span style={{ fontSize: 10, color: "#64748b" }}>{prettyModel(agent.model)}</span>
+              <span style={{ fontSize: 10, color: T.textFaded }}>{prettyModel(agent.model)}</span>
             )}
           </div>
         </div>
@@ -1748,7 +1754,7 @@ function AgentPanel(props: {
             borderRadius: 8,
             border: "1px solid rgba(148,163,184,0.25)",
             background: "rgba(15,23,42,0.6)",
-            color: "#94a3b8",
+            color: T.textMute,
             cursor: "pointer",
             fontWeight: 800,
             fontSize: 14,
@@ -1782,7 +1788,7 @@ function AgentPanel(props: {
             background: agent.customSystemPrompt?.trim()
               ? "rgba(251,191,36,0.12)"
               : "rgba(15,23,42,0.55)",
-            color: agent.customSystemPrompt?.trim() ? "#fbbf24" : "#94a3b8",
+            color: agent.customSystemPrompt?.trim() ? T.warn : T.textMute,
             cursor: "pointer",
             fontWeight: 700,
             letterSpacing: "0.04em",
@@ -1800,7 +1806,7 @@ function AgentPanel(props: {
             borderRadius: 6,
             border: "1px solid rgba(148,163,184,0.25)",
             background: "rgba(15,23,42,0.55)",
-            color: agent.messages.length === 0 ? "#475569" : "#cbd5e1",
+            color: agent.messages.length === 0 ? T.line : T.textDim,
             cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
             fontWeight: 700,
           }}
@@ -1817,7 +1823,7 @@ function AgentPanel(props: {
             borderRadius: 6,
             border: "1px solid rgba(148,163,184,0.25)",
             background: "rgba(15,23,42,0.55)",
-            color: agent.messages.length === 0 ? "#475569" : "#cbd5e1",
+            color: agent.messages.length === 0 ? T.line : T.textDim,
             cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
             fontWeight: 700,
             fontFamily: "ui-monospace, SFMono-Regular, monospace",
@@ -1835,7 +1841,7 @@ function AgentPanel(props: {
               borderRadius: 6,
               border: "1px solid rgba(196,181,253,0.45)",
               background: "rgba(196,181,253,0.12)",
-              color: "#c4b5fd",
+              color: T.brand,
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 11,
@@ -1854,7 +1860,7 @@ function AgentPanel(props: {
               borderRadius: 6,
               border: "1px solid rgba(94,234,212,0.45)",
               background: "rgba(13,148,136,0.18)",
-              color: agent.busy ? "#475569" : "#5eead4",
+              color: agent.busy ? T.line : T.accent,
               cursor: agent.busy ? "not-allowed" : "pointer",
               fontWeight: 700,
               fontSize: 11,
@@ -1874,10 +1880,10 @@ function AgentPanel(props: {
         >
           {tokenLabel}
         </span>
-        <span style={{ color: "#475569", fontSize: 10 }}>
+        <span style={{ color: T.inkOnCardMute, fontSize: 10 }}>
           ·
         </span>
-        <span style={{ color: "#475569", fontSize: 10 }}>
+        <span style={{ color: T.inkOnCardMute, fontSize: 10 }}>
           {t(agent.messages.length === 1 ? "mc.panel.msg.one" : "mc.panel.msg.many", { n: agent.messages.length })}
         </span>
       </div>
@@ -1891,7 +1897,7 @@ function AgentPanel(props: {
             background: "rgba(2,6,23,0.55)",
           }}
         >
-          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 10, color: T.textMute, marginBottom: 6, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             {t("mc.panel.editor.label")}
           </div>
           <textarea
@@ -1906,7 +1912,7 @@ function AgentPanel(props: {
               borderRadius: 8,
               border: "1px solid rgba(148,163,184,0.25)",
               background: "rgba(15,23,42,0.7)",
-              color: "#f8fafc",
+              color: T.textBright,
               fontSize: 12,
               lineHeight: 1.4,
               fontFamily: "inherit",
@@ -1926,7 +1932,7 @@ function AgentPanel(props: {
                 borderRadius: 8,
                 border: "1px solid rgba(94,234,212,0.45)",
                 background: "linear-gradient(135deg, rgba(13,148,136,0.5), rgba(14,165,233,0.45))",
-                color: "#fff",
+                color: T.onAccent,
                 cursor: "pointer",
                 fontWeight: 800,
                 fontSize: 11,
@@ -1947,7 +1953,7 @@ function AgentPanel(props: {
                 borderRadius: 8,
                 border: "1px solid rgba(148,163,184,0.25)",
                 background: "rgba(15,23,42,0.55)",
-                color: "#94a3b8",
+                color: T.textMute,
                 cursor: "pointer",
                 fontWeight: 700,
                 fontSize: 11,
@@ -1966,7 +1972,7 @@ function AgentPanel(props: {
                 borderRadius: 8,
                 border: "1px solid rgba(148,163,184,0.25)",
                 background: "transparent",
-                color: "#94a3b8",
+                color: T.textMute,
                 cursor: "pointer",
                 fontWeight: 700,
                 fontSize: 11,
@@ -1998,16 +2004,16 @@ function AgentPanel(props: {
             style={{
               margin: "auto",
               textAlign: "center",
-              color: "#64748b",
+              color: T.textFaded,
               fontSize: 13,
               padding: 20,
             }}
           >
             <div style={{ fontSize: 28, marginBottom: 6 }}>◈</div>
-            <div style={{ fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, color: T.textDim, marginBottom: 4 }}>
               {t("mc.panel.empty.title", { role: agent.role })}
             </div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>
+            <div style={{ fontSize: 12, color: T.textFaded }}>
               {t("mc.panel.empty.desc")}
             </div>
             <div
@@ -2018,7 +2024,7 @@ function AgentPanel(props: {
                 border: "1px solid rgba(94,234,212,0.25)",
                 background: "rgba(13,148,136,0.08)",
                 fontSize: 11,
-                color: "#94a3b8",
+                color: T.textMute,
                 lineHeight: 1.6,
                 display: "flex",
                 flexDirection: "column",
@@ -2026,20 +2032,20 @@ function AgentPanel(props: {
                 textAlign: "left",
               }}
             >
-              <div style={{ color: "#5eead4", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 9 }}>
+              <div style={{ color: T.accent, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 9 }}>
                 Try
               </div>
               <div>
-                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#fbbf24" }}>@all</span>{" "}
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: T.warn }}>@all</span>{" "}
                 how big is the AEVION TAM?
               </div>
               <div>
-                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#fbbf24" }}>@finance</span>{" "}
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: T.warn }}>@finance</span>{" "}
                 — relay one panel into another
               </div>
-              <div style={{ color: "#64748b" }}>
-                or pick a <span style={{ color: "#cbd5e1" }}>preset</span> above ·{" "}
-                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#cbd5e1" }}>?demo=1</span>{" "}
+              <div style={{ color: T.textFaded }}>
+                or pick a <span style={{ color: T.textDim }}>preset</span> above ·{" "}
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: T.textDim }}>?demo=1</span>{" "}
                 for samples
               </div>
             </div>
@@ -2058,7 +2064,7 @@ function AgentPanel(props: {
             const isUserMention = !!userMention;
             const renderBody =
               handoffOut?.[2] ?? handoffIn?.[2] ?? (userMention ? `@${userMention[1]} ${userMention[2]}` : mm.content);
-            const accent = isHandoffOut || isHandoffIn || isUserMention ? "#fbbf24" : null;
+            const accent = isHandoffOut || isHandoffIn || isUserMention ? T.warn : null;
             return (
               <div
                 key={i}
@@ -2083,7 +2089,7 @@ function AgentPanel(props: {
                       borderRadius: 8,
                       border: "1px solid rgba(94,234,212,0.4)",
                       background: "rgba(15,23,42,0.85)",
-                      color: "#5eead4",
+                      color: T.accent,
                       cursor: "pointer",
                       fontSize: 10,
                       fontWeight: 800,
@@ -2105,7 +2111,7 @@ function AgentPanel(props: {
                       borderRadius: 8,
                       border: "1px solid rgba(94,234,212,0.4)",
                       background: "rgba(15,23,42,0.85)",
-                      color: "#5eead4",
+                      color: T.accent,
                       cursor: "pointer",
                       fontSize: 10,
                       fontWeight: 800,
@@ -2125,9 +2131,9 @@ function AgentPanel(props: {
                       mm.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
                     background:
                       mm.role === "user"
-                        ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
+                        ? `linear-gradient(135deg, ${T.accentDeep}, ${T.sky})`
                         : "rgba(30,41,59,0.85)",
-                    color: "#f8fafc",
+                    color: T.textBright,
                     border: accent
                       ? `1px solid ${accent}`
                       : mm.role === "user"
@@ -2249,7 +2255,7 @@ function AgentPanel(props: {
               <div
                 style={{
                   fontSize: 9,
-                  color: "#64748b",
+                  color: T.textFaded,
                   letterSpacing: "0.1em",
                   textTransform: "uppercase",
                   padding: "2px 8px 4px",
@@ -2276,7 +2282,7 @@ function AgentPanel(props: {
                     border: "1px solid transparent",
                     background:
                       i === safeIdx ? "rgba(94,234,212,0.15)" : "transparent",
-                    color: i === safeIdx ? "#5eead4" : "#cbd5e1",
+                    color: i === safeIdx ? T.accent : T.textDim,
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: 700,
@@ -2286,7 +2292,7 @@ function AgentPanel(props: {
                 >
                   @{tag}
                   {tag === "all" ? (
-                    <span style={{ marginLeft: "auto", fontSize: 9, color: "#fbbf24", fontWeight: 800 }}>
+                    <span style={{ marginLeft: "auto", fontSize: 9, color: T.warn, fontWeight: 800 }}>
                       BROADCAST
                     </span>
                   ) : null}
@@ -2348,7 +2354,7 @@ function AgentPanel(props: {
             borderRadius: 10,
             border: "1px solid rgba(148,163,184,0.25)",
             background: "rgba(15,23,42,0.7)",
-            color: "#f8fafc",
+            color: T.textBright,
             fontSize: 13,
             lineHeight: 1.4,
             outline: "none",
@@ -2366,8 +2372,8 @@ function AgentPanel(props: {
             background:
               agent.busy || !input.trim()
                 ? "rgba(94,234,212,0.18)"
-                : "linear-gradient(135deg, #0d9488, #0ea5e9)",
-            color: agent.busy || !input.trim() ? "#475569" : "#fff",
+                : `linear-gradient(135deg, ${T.accentDeep}, ${T.sky})`,
+            color: agent.busy || !input.trim() ? T.line : T.onAccent,
             fontWeight: 800,
             fontSize: 13,
             cursor: agent.busy || !input.trim() ? "not-allowed" : "pointer",
@@ -2383,7 +2389,7 @@ function AgentPanel(props: {
         style={{
           padding: "0 10px 8px",
           fontSize: 10,
-          color: "#64748b",
+          color: T.textFaded,
           letterSpacing: "0.02em",
           background: "rgba(2,6,23,0.55)",
           display: "flex",
@@ -2392,7 +2398,7 @@ function AgentPanel(props: {
           alignItems: "center",
         }}
       >
-        <span style={{ fontWeight: 700, color: "#94a3b8" }}>{t("mc.panel.relay")}</span>
+        <span style={{ fontWeight: 700, color: T.textMute }}>{t("mc.panel.relay")}</span>
         {(["all", "code", "finance", "legal", "compliance", "translator", "general"] as const).map((tag) => (
           <span
             key={tag}
@@ -2400,7 +2406,7 @@ function AgentPanel(props: {
               padding: "1px 6px",
               borderRadius: 6,
               background: "rgba(71,85,105,0.35)",
-              color: "#cbd5e1",
+              color: T.textDim,
               fontFamily: "ui-monospace, SFMono-Regular, monospace",
             }}
           >

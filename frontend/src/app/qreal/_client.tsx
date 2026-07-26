@@ -31,6 +31,12 @@ type Estimate = {
   engines: Array<{ id: string; label: string; configured: boolean; usdPerSecond: number; usdTotal: number }>;
 };
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
+type Character = { id: string; kind: string; name: string; canonical: string; refImages: string[]; shotIds: string[] };
+type Continuity = {
+  verdict: "consistent" | "drifting" | "insufficient";
+  totalScore: number | null; threshold: number;
+  weakest: Array<{ id: string; label: string; score: number }>;
+};
 
 export default function QRealClient() {
   const { t } = useI18n();
@@ -50,6 +56,10 @@ export default function QRealClient() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  const [cast, setCast] = useState<Character[]>([]);
+  const [castDraft, setCastDraft] = useState<Record<string, string>>({});
+  const [refDraft, setRefDraft] = useState<Record<string, string>>({});
+  const [continuity, setContinuity] = useState<Continuity | null>(null);
   const [openQc, setOpenQc] = useState<string | null>(null);
   const [qcScores, setQcScores] = useState<Record<string, string>>({});
 
@@ -76,13 +86,79 @@ export default function QRealClient() {
     }).catch(() => {});
   }, [loadDemo]);
 
-  // Смета проекта (пересчитывается при каждой смене раскадровки/статусов).
+  // Смета зависит от статусов кадров, поэтому пересчитывается на любое
+  // изменение проекта — включая тики автопула во время рендера.
   useEffect(() => {
     if (!project) return;
     fetch(apiUrl(`/api/qreal/projects/${project.id}/estimate`))
       .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
       .catch(() => {});
   }, [project]);
+
+  // Каст и черновики правок — только на смену ПРОЕКТА, не на каждое его
+  // обновление. Автопул рендера подменяет объект project раз в 10 секунд; будь
+  // эффект завязан на объект, набранный режиссёром текст описания стирался бы
+  // каждые 10 секунд прямо во время работы. Вердикт непрерывности тоже
+  // сбрасываем: оценка старого проекта под новым — ложное измерение.
+  const projectId = project?.id;
+  useEffect(() => {
+    if (!projectId) return;
+    setCastDraft({});
+    setRefDraft({});
+    setContinuity(null);
+    fetch(apiUrl(`/api/qreal/projects/${projectId}/characters`))
+      .then((r) => r.json()).then((d) => setCast(d?.characters || []))
+      .catch(() => {});
+  }, [projectId]);
+
+  // Правка канона режиссёром. Сервер пересобирает промты кадров, поэтому
+  // проект перечитываем целиком — иначе на экране остались бы старые промты.
+  async function saveCharacter(cid: string) {
+    if (!project || busy) return;
+    const canonical = castDraft[cid];
+    const newRef = (refDraft[cid] || "").trim();
+    const existing = cast.find((c) => c.id === cid);
+    // Сервер перезаписывает refImages целиком, поэтому шлём накопленный список,
+    // а не одну ссылку — иначе каждая новая картинка стирала бы предыдущие.
+    const refImages = newRef ? [...(existing?.refImages || []), newRef].slice(0, 9) : undefined;
+    if ((!canonical || canonical.trim().length < 3) && !refImages) return;
+    setBusy(true);
+    try {
+      const body: Record<string, unknown> = {};
+      if (canonical && canonical.trim().length >= 3) body.canonical = canonical.trim();
+      if (refImages) body.refImages = refImages;
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/characters/${cid}`), {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (d?.characters) setCast(d.characters);
+      if (d?.note) setNote(d.note);
+      setRefDraft({ ...refDraft, [cid]: "" });
+      const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
+      const pd = await pr.json();
+      if (pd?.project) setProject(pd.project);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
+
+  // Ручная оценка непрерывности: судим по собранной сцене своими глазами.
+  // VLM-вариант ({judge:true}) платный, поэтому из UI его не дёргаем — цена
+  // вызова у fal не опубликована, и жать её кнопкой вслепую нельзя.
+  async function checkContinuity() {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/continuity`), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const d = await r.json();
+      if (d?.note) setNote(d.note);
+      if (d?.message) setNote(d.message);
+      setContinuity(d?.continuity || null);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
 
   // Пустое значение = критерий неприменим к кадру. Шлём его как null, а не как
   // ноль: иначе кадр без речи получил бы штраф за липсинк.
@@ -446,6 +522,94 @@ export default function QRealClient() {
                   )}
                 </article>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* Каст сцены: канон описания героя, который уходит во ВСЕ его кадры.
+            Без этой правки режиссёром реестр остаётся догадкой LLM. */}
+        {cast.length > 0 && (
+          <section className="mt-8 border-b border-neutral-300 pb-8">
+            <h2 className="font-serif text-2xl">{t("qreal.cast.h")}</h2>
+            <p className="mt-1 max-w-3xl text-sm text-neutral-600">{t("qreal.cast.sub")}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {cast.map((c) => (
+                <div key={c.id} className="border border-neutral-300 bg-white p-3">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="font-serif text-base">{c.name}</h3>
+                    <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                      {t(`qreal.subject.${c.kind}`)} · {t("qreal.cast.shots", { n: c.shotIds.length })}
+                    </span>
+                  </div>
+                  <textarea
+                    value={castDraft[c.id] ?? c.canonical}
+                    onChange={(ev) => setCastDraft({ ...castDraft, [c.id]: ev.target.value })}
+                    rows={3}
+                    className="mt-2 w-full border border-neutral-300 bg-[#faf8f3] p-2 text-xs leading-relaxed text-neutral-700"
+                  />
+                  {/* Референс-кадр фиксирует лицо надёжнее любого текста:
+                      движок получает картинку, а не описание. Принимаем URL —
+                      хранилища для загрузки у модуля пока нет, и делать вид,
+                      что оно есть, хуже, чем честное поле со ссылкой. */}
+                  <input
+                    type="url"
+                    value={refDraft[c.id] ?? ""}
+                    onChange={(ev) => setRefDraft({ ...refDraft, [c.id]: ev.target.value })}
+                    placeholder={t("qreal.cast.ref.add")}
+                    className="mt-2 w-full border border-neutral-300 bg-white px-2 py-1 text-[11px] text-neutral-700"
+                  />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={() => saveCharacter(c.id)}
+                      disabled={
+                        busy ||
+                        ((castDraft[c.id] ?? c.canonical) === c.canonical && !(refDraft[c.id] || "").trim())
+                      }
+                      className="border border-teal-800 bg-white px-3 py-1 text-xs text-teal-800 hover:bg-teal-800 hover:text-white disabled:opacity-40"
+                    >
+                      {t("qreal.cast.save")}
+                    </button>
+                    {c.refImages.length > 0 && (
+                      <span className="text-[11px] text-teal-800">
+                        {t("qreal.cast.refs", { n: c.refImages.length })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Непрерывность измерима только там, где герой появляется дважды.
+                Показываем это состояние честно, а не прячем кнопку: «нечего
+                сравнивать» — тоже результат, и он объясняет, почему сцена не
+                демонстрирует консистентность. */}
+            <div className="mt-4 border-t border-neutral-200 pt-3 text-sm">
+              {cast.some((c) => c.shotIds.length >= 2) ? (
+                <>
+                  <button
+                    onClick={checkContinuity}
+                    disabled={busy}
+                    className="border border-neutral-900 bg-neutral-900 px-4 py-1.5 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
+                  >
+                    {t("qreal.cast.continuity.check")}
+                  </button>
+                  {continuity && (
+                    <p className="mt-2 text-xs">
+                      <span className={continuity.verdict === "consistent" ? "text-teal-800" : "text-red-700"}>
+                        {t(`qreal.cast.continuity.${continuity.verdict}`)}
+                      </span>
+                      {continuity.totalScore != null && (
+                        <span className="font-mono"> · {continuity.totalScore.toFixed(2)} / {continuity.threshold}</span>
+                      )}
+                      {continuity.weakest.length > 0 && (
+                        <span className="text-neutral-500"> · {continuity.weakest.map((w) => w.id).join(", ")}</span>
+                      )}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-neutral-500">{t("qreal.cast.continuity.na")}</p>
+              )}
             </div>
           </section>
         )}

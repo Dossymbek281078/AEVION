@@ -1,3 +1,5 @@
+import { LIVE_MODULES } from "@/data/pitchFacts";
+
 /**
  * Print-friendly acquisition brief. Open in browser → Ctrl/Cmd+P → "Save as PDF".
  * Layout is intentionally B/W with high contrast: works for both screen review
@@ -45,7 +47,7 @@ export default function AcquirePrintPage() {
       <div className="print-root">
         {/* PAGE 1 — Cover */}
         <div className="eyebrow">Partnership Brief · $10M возвратный аванс · доход 51/49 · Confidential · 2026</div>
-        <h1>Planet AEVION.<br />One settlement unit.<br />30+ modules in production.</h1>
+        <h1>Planet AEVION.<br />One settlement unit.<br />{LIVE_MODULES} modules in production.</h1>
         <p>
           Все деньги, всё IP и весь dev-цикл переезжают в интернет. AEVION — единственное место, где все три перехода
           случаются под одной расчётной единицей (AEV) и одним правовым контуром. Не «будут работать».

@@ -28,8 +28,14 @@ describe("rubric versioning", () => {
   // Update BOTH constants together, in the same commit, or not at all.
   // If this fails, the weights moved: bump RUBRIC_VERSION, add a line to its
   // changelog comment, and paste the new fingerprint here.
+  //
+  // The version can also move while the fingerprint stays put — a change to what
+  // the factors *read* shifts composites just as surely as a change to how they
+  // are weighted. v4 is such a bump: churn is now read in its stated period and a
+  // bare "<n>% monthly" no longer counts as growth, so execution scores moved
+  // without a single weight changing.
   const EXPECTED_FINGERPRINT = "612b62dfb60afcf6";
-  const EXPECTED_VERSION = 3;
+  const EXPECTED_VERSION = 4;
 
   test("weights have not changed without a version bump", () => {
     expect(weightFingerprint()).toBe(EXPECTED_FINGERPRINT);

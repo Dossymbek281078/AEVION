@@ -324,7 +324,7 @@ export default function HomePage() {
             }}
           >
             A unified platform for identity, IP registration, cryptographic signatures, authorship & prior-art bureau, and compliance — on an interactive ecosystem map with{" "}
-            <strong>37 product nodes</strong>, digital banking, chess, and open APIs.
+            <strong>{MODULE_NODES} product nodes</strong>, digital banking, chess, and open APIs.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 28 }}>
             <Link href="/auth" style={btnPrimary}>

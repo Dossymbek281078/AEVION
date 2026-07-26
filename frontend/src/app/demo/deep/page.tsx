@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { demoDeepIntro, demoDeepSections } from "@/data/demoDeep";
 import { getBackendOrigin } from "@/lib/apiBase";
@@ -168,7 +169,7 @@ export default function DemoDeepPage() {
 
         <footer style={{ marginTop: 32, textAlign: "center", color: "#94a3b8", fontSize: 14, lineHeight: 1.6 }}>
           <p style={{ margin: "0 0 20px" }}>
-            Full visual narrative across the 37 nodes lives at{" "}
+            Full visual narrative across the {MODULE_NODES} nodes lives at{" "}
             <Link href="/demo" style={{ color: "#5eead4" }}>
               /demo
             </Link>

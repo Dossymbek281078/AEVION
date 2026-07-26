@@ -63,11 +63,13 @@ export async function judgeRender(
   videoUrl: string,
   defs: CriterionDef[],
   shot: { description: string; dialogue?: string | null; soundscape?: string },
-  opts: { timeoutMs?: number } = {}
+  opts: { timeoutMs?: number; prompt?: { system: string; user: string } } = {}
 ): Promise<VlmJudgeResult> {
   if (!vlmJudgeConfigured()) return { ok: false, error: "FAL_KEY не задан — VLM-судья недоступен" };
   const model = vlmJudgeModel();
-  const { system, user } = buildJudgePrompt(defs, shot);
+  // Непрерывность судится по СОБРАННОМУ фильму и своим критериям, поэтому
+  // промт приходит снаружи; покадровый QC собирает его из кадра сам.
+  const { system, user } = opts.prompt ?? buildJudgePrompt(defs, shot);
 
   const sub = await falQueueSubmit(model, {
     video_url: videoUrl,

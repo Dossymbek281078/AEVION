@@ -490,6 +490,7 @@ async function cmdScore() {
   };
 
   const perBrief = [];
+  const dropped = [];
   for (const b of briefs.briefs) {
     const clips = Object.fromEntries(
       ARMS.map((arm) => {
@@ -497,7 +498,12 @@ async function cmdScore() {
         return [arm, c ? clipScore(c.clipId) : null];
       })
     );
-    if (clips.naive == null || clips.qreal == null) continue;
+    if (clips.naive == null || clips.qreal == null) {
+      // Бриф выпал: клип не отрендерился или не был оценён. Молча пропускать
+      // нельзя — выборка тихо усохнет, а вердикт будет выглядеть полноценным.
+      dropped.push({ id: b.id, title: b.title, missing: ARMS.filter((a) => clips[a] == null) });
+      continue;
+    }
     perBrief.push({ briefId: b.id, title: b.title, naive: clips.naive, qreal: clips.qreal, delta: clips.qreal - clips.naive });
   }
 
@@ -537,6 +543,11 @@ async function cmdScore() {
     ? `**ПОДТВЕРЖДЕНО.** Режиссура QReal выигрывает у голого промта на том же движке: ${wins}/${perBrief.length} брифов, средняя дельта +${meanDelta.toFixed(2)} балла из 5.`
     : `**НЕ ПОДТВЕРЖДЕНО.** ${wins}/${perBrief.length} побед, средняя дельта ${meanDelta >= 0 ? "+" : ""}${meanDelta.toFixed(2)}. Порог (≥80% побед и ≥+0.50) не взят — заявлять превосходство нельзя.`);
   L.push(`\nЧто эта цифра НЕ доказывает: превосходство над чужим продуктом. Плечи naive/qreal делят одну модель, поэтому измерена наша режиссура и только она. Сравнение с Higgsfield/Veo/Kling-продуктом смешивает режиссуру с базовой моделью — такое число в публичном посте будет некорректным.\n`);
+  if (dropped.length) {
+    L.push(`\n> ⚠️ **Выпало брифов: ${dropped.length} из ${briefs.briefs.length}.** ` +
+      dropped.map((d) => `${d.title} (нет плеча: ${d.missing.join(", ")})`).join("; ") +
+      `. Выборка усохла — проверь статусы в manifest.json: обычно это провалившийся сабмит или незаполненные оценки.`);
+  }
   L.push(`## По брифам\n`);
   L.push(`| Бриф | naive | qreal | дельта |`);
   L.push(`|---|---|---|---|`);

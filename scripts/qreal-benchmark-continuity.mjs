@@ -346,13 +346,19 @@ async function cmdScore() {
   };
 
   const perScene = [];
+  const dropped = [];
   for (const sc of scenes) {
     const g = {};
     for (const arm of ARMS) {
       const id = Object.keys(armByGroup).find((k) => armByGroup[k] === arm && sceneByGroup[k] === sc.id);
       g[arm] = id ? groupScore(id) : null;
     }
-    if (g.naive == null || g.qreal == null) continue;
+    if (g.naive == null || g.qreal == null) {
+      // Сцен всего три: потеря даже одной меняет вердикт, поэтому она обязана
+      // быть видна в отчёте, а не исчезнуть тихо.
+      dropped.push({ title: sc.title, missing: ARMS.filter((a) => g[a] == null) });
+      continue;
+    }
     perScene.push({ id: sc.id, title: sc.title, naive: g.naive, qreal: g.qreal, delta: g.qreal - g.naive });
   }
 
@@ -371,6 +377,11 @@ async function cmdScore() {
     ? `**ПОДТВЕРЖДЕНО.** Реестр персонажей даёт непрерывность: ${wins}/${perScene.length} сцен, средняя дельта +${meanDelta.toFixed(3)} по шкале 0-1.`
     : `**НЕ ПОДТВЕРЖДЕНО.** ${wins}/${perScene.length} сцен, средняя дельта ${meanDelta >= 0 ? "+" : ""}${meanDelta.toFixed(3)}. Порог (все сцены и ≥+0.15) не взят.`);
   L.push(`\nОговорка: сцен всего ${perScene.length}. Это проверка направления, а не статистика; для публичного заявления нужен больший набор.\n`);
+  if (dropped.length) {
+    L.push(`\n> ⚠️ **Выпало сцен: ${dropped.length} из ${scenes.length}.** ` +
+      dropped.map((d) => `${d.title} (нет плеча: ${d.missing.join(", ")})`).join("; ") +
+      `. Сцен всего три — потеря даже одной меняет вердикт.`);
+  }
   L.push("## По сценам\n");
   L.push("| Сцена | naive | qreal | дельта |");
   L.push("|---|---|---|---|");

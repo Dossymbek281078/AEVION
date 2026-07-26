@@ -1886,6 +1886,56 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
   const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
 
+  // Per-project deploys: the project's own Railway service, built from its own
+  // GitHub repo, carrying its own env vars (DATABASE_URL included). Behind a
+  // flag because enabling it makes every user click start a billable container.
+  if (process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+    const { deployProjectToRailway } = await import("../lib/devhubRailwayDeploy");
+    const result = await deployProjectToRailway({
+      projectId: project.id,
+      repoUrl: project.repoUrl,
+      envVars: project.envVars || {},
+      existingServiceId: project.envVars?.RAILWAY_SERVICE_ID || null,
+    });
+    if (!result.ok) {
+      deployment.status = "failed";
+      deployment.buildLog = result.error;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(502).json({ error: result.error, deploymentId: deployment.id });
+    }
+
+    // Remember the service so a redeploy reuses it instead of creating a new
+    // billable container on every click.
+    project.envVars = { ...(project.envVars || {}), RAILWAY_SERVICE_ID: result.serviceId };
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+
+    const url = `https://${result.domain}`;
+    deployment.buildLog = `Railway service ${result.serviceId} ${result.created ? "created" : "reused"} from ${project.repoUrl}`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // Same rule as every other deploy path: live only once the page answers.
+    (async () => {
+      const serves = await verifyDeploymentServes(url);
+      deployment.status = serves ? "live" : "failed";
+      deployment.deployUrl = serves ? url : null;
+      deployment.buildLog = serves
+        ? `${deployment.buildLog}
+Serving at ${url}`
+        : `${deployment.buildLog}
+Built, but ${url} did not answer 2xx in time`;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      if (serves) {
+        project.deployUrl = url;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    })().catch(() => {});
+
+    return res.json({ ok: true, deploymentId: deployment.id, status: "building", url, serviceId: result.serviceId, reusedService: !result.created });
+  }
   // SAFETY: this route never deployed the user's code. It fired
   // deploymentCreate at whatever RAILWAY_SERVICE_ID happens to be — and on
   // production that variable is the AEVION backend's own service id, so every

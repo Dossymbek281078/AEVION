@@ -65,6 +65,13 @@ afterEach(() => {
     "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
     "DEEPL_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME",
     "GOOGLE_DRIVE_ACCESS_TOKEN", "TOGETHER_API_KEY",
+    // Added with the media/database work: a leftover REPLICATE_API_TOKEN makes
+    // the music route take its new MusicGen fallback and fire a second fetch,
+    // which fails an unrelated test depending on file order. The others gate
+    // provisioning and per-project deploys the same way.
+    "REPLICATE_API_TOKEN", "DEVHUB_DB_ADMIN_URL", "DEVHUB_RAILWAY_PER_PROJECT",
+    "DEVHUB_DB_CONNECTION_LIMIT", "ELEVENLABS_TTS_MODEL",
+    "RAILWAY_DEPLOY_PROJECT_ID", "RAILWAY_DEPLOY_ENV_ID",
   ]) {
     delete process.env[key];
   }

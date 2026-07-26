@@ -228,6 +228,23 @@ function parseCurrency(raw: unknown): CurrencyCode {
     : "USD";
 }
 
+/**
+ * `?limit=` из query — с фолбэком, который РАБОТАЕТ.
+ *
+ * Было `Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500)`
+ * в четырёх местах. `parseInt("abc")` даёт `NaN`, а `Math.max(NaN, 1)` — снова
+ * `NaN` (не 1, как читается на глаз), и дальше `.slice(0, NaN)` возвращает
+ * ПУСТОЙ массив. То есть `?limit=abc` показывал администратору пустой список
+ * лидов и промо вместо ошибки или сотни записей — снова не падение, а тихо
+ * неверный ответ. Тот же эффект у `?limit=` (пустая строка) и у повтора
+ * параметра, когда Express отдаёт массив.
+ */
+export function parseLimit(raw: unknown, fallback = 100, max = 500): number {
+  const n = typeof raw === "string" ? parseInt(raw, 10) : Number.NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.trunc(n), 1), max);
+}
+
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
@@ -505,7 +522,7 @@ pricingRouter.get("/leads", (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = parseLimit(req.query.limit);
 
   try {
     if (!existsSync(LEADS_FILE)) return res.json({ items: [], total: 0 });
@@ -1021,7 +1038,7 @@ pricingRouter.get("/applications", (req, res) => {
   const file =
     kind === "affiliate" ? AFFILIATE_FILE : kind === "partner" ? PARTNERS_FILE : EDU_FILE;
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = parseLimit(req.query.limit);
 
   try {
     if (!existsSync(file)) return res.json({ items: [], total: 0, kind });
@@ -1056,7 +1073,7 @@ pricingRouter.get("/newsletter/list", (req, res) => {
   if (got !== required) {
     return res.status(401).json({ error: "unauthorized" });
   }
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = parseLimit(req.query.limit);
 
   try {
     if (!existsSync(NEWSLETTER_FILE)) return res.json({ items: [], total: 0 });
@@ -1440,7 +1457,7 @@ pricingRouter.get("/changelog", (req, res) => {
   const KIND_VALUES: ChangelogKind[] = ["added", "changed", "removed", "deprecated", "promo", "module"];
   const kind = typeof req.query.kind === "string" ? (req.query.kind as ChangelogKind) : undefined;
   const since = typeof req.query.since === "string" ? req.query.since : undefined;
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = parseLimit(req.query.limit);
   const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10), 0);
 
   if (kind && !KIND_VALUES.includes(kind)) {

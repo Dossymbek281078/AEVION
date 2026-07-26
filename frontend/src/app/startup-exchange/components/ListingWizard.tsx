@@ -262,6 +262,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           Анализ будет бесплатным и сразу — ни аккаунта, ни условий сделки на этом шаге не нужно.
         </p>
         <input
+          aria-label="Название проекта"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Название проекта"
@@ -269,6 +270,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
         />
         <FieldError message={issueFor("title")} />
         <textarea
+          aria-label="Описание проекта: проблема, для кого, как работает, на чём зарабатываете"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder={`Например: мелкие перевозчики ищут обратный груз вручную в чатах и теряют треть рейсов на пустом пробеге. Мы подбираем груз автоматически по маршруту освободившейся машины. Берём 5% комиссии с рейса.`}
@@ -283,7 +285,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
         <div style={twoCol}>
           <div>
             <SmallLabel>Отрасль</SmallLabel>
-            <select value={sector} onChange={(e) => setSector(e.target.value)} style={input}>
+            <select aria-label="Отрасль" value={sector} onChange={(e) => setSector(e.target.value)} style={input}>
               <option value="">Определить автоматически</option>
               {sectors.map((s) => (
                 <option key={s.id} value={s.id}>{s.label}</option>
@@ -292,7 +294,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           </div>
           <div>
             <SmallLabel>География</SmallLabel>
-            <input value={geography} onChange={(e) => setGeography(e.target.value)} placeholder="KZ, US, Global" style={input} />
+            <input aria-label="География" value={geography} onChange={(e) => setGeography(e.target.value)} placeholder="KZ, US, Global" style={input} />
           </div>
         </div>
 
@@ -300,12 +302,12 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           <div style={twoCol}>
             <div>
               <SmallLabel>Ссылка на продукт {spec?.requiresDemoUrl && <Req />}</SmallLabel>
-              <input value={demoUrl} onChange={(e) => setDemoUrl(e.target.value)} placeholder="https://…" style={input} />
+              <input aria-label="Ссылка на работающий продукт" value={demoUrl} onChange={(e) => setDemoUrl(e.target.value)} placeholder="https://…" style={input} />
               <FieldError message={issueFor("demoUrl")} />
             </div>
             <div>
               <SmallLabel>Репозиторий (необязательно)</SmallLabel>
-              <input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="https://github.com/…" style={input} />
+              <input aria-label="Ссылка на репозиторий" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="https://github.com/…" style={input} />
             </div>
           </div>
         )}
@@ -355,12 +357,12 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
               <div style={twoCol}>
                 <div>
                   <SmallLabel>Сколько нужно, USD <Req /></SmallLabel>
-                  <input value={askUsd} onChange={(e) => setAskUsd(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
+                  <input aria-label="Сколько нужно денег, USD" value={askUsd} onChange={(e) => setAskUsd(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
                   <FieldError message={issueFor("deal.askUsd")} />
                 </div>
                 <div>
                   <SmallLabel>Какую долю отдаёте, % <Req /></SmallLabel>
-                  <input value={equityPct} onChange={(e) => setEquityPct(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
+                  <input aria-label="Какую долю отдаёте, проценты" value={equityPct} onChange={(e) => setEquityPct(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
                   <FieldError message={issueFor("deal.equityOfferedPct")} />
                 </div>
               </div>
@@ -392,7 +394,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           {effectiveIntent === "sell_full" && (
             <div>
               <SmallLabel>Цена продажи целиком, USD <Req /></SmallLabel>
-              <input value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="150000" style={input} inputMode="numeric" />
+              <input aria-label="Цена продажи целиком, USD" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="150000" style={input} inputMode="numeric" />
               <FieldError message={issueFor("deal.askingPriceUsd")} />
             </div>
           )}
@@ -401,12 +403,12 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
             <div style={twoCol}>
               <div>
                 <SmallLabel>Размер доли, % <Req /></SmallLabel>
-                <input value={stakePct} onChange={(e) => setStakePct(e.target.value)} placeholder="20" style={input} inputMode="decimal" />
+                <input aria-label="Размер продаваемой доли, проценты" value={stakePct} onChange={(e) => setStakePct(e.target.value)} placeholder="20" style={input} inputMode="decimal" />
                 <FieldError message={issueFor("deal.stakeForSalePct")} />
               </div>
               <div>
                 <SmallLabel>Цена доли, USD <Req /></SmallLabel>
-                <input value={stakePrice} onChange={(e) => setStakePrice(e.target.value)} placeholder="60000" style={input} inputMode="numeric" />
+                <input aria-label="Цена доли, USD" value={stakePrice} onChange={(e) => setStakePrice(e.target.value)} placeholder="60000" style={input} inputMode="numeric" />
                 <FieldError message={issueFor("deal.stakePriceUsd")} />
               </div>
             </div>
@@ -414,6 +416,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
 
           <SmallLabel>Дополнительные условия (необязательно)</SmallLabel>
           <textarea
+            aria-label="Дополнительные условия сделки"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
@@ -428,10 +431,10 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
                 Необязательно, но именно они переводят балл с «по отрасли» на «по данным заявки».
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
-                <div><SmallLabel>MRR, USD</SmallLabel><input value={mrr} onChange={(e) => setMrr(e.target.value)} placeholder="2500" style={input} inputMode="numeric" /></div>
-                <div><SmallLabel>Пользователей</SmallLabel><input value={users} onChange={(e) => setUsers(e.target.value)} placeholder="1200" style={input} inputMode="numeric" /></div>
-                <div><SmallLabel>Рост, %/мес</SmallLabel><input value={growth} onChange={(e) => setGrowth(e.target.value)} placeholder="8" style={input} inputMode="decimal" /></div>
-                <div><SmallLabel>Команда, чел.</SmallLabel><input value={teamSize} onChange={(e) => setTeamSize(e.target.value)} placeholder="2" style={input} inputMode="numeric" /></div>
+                <div><SmallLabel>MRR, USD</SmallLabel><input aria-label="MRR в долларах" value={mrr} onChange={(e) => setMrr(e.target.value)} placeholder="2500" style={input} inputMode="numeric" /></div>
+                <div><SmallLabel>Пользователей</SmallLabel><input aria-label="Число пользователей" value={users} onChange={(e) => setUsers(e.target.value)} placeholder="1200" style={input} inputMode="numeric" /></div>
+                <div><SmallLabel>Рост, %/мес</SmallLabel><input aria-label="Рост в процентах в месяц" value={growth} onChange={(e) => setGrowth(e.target.value)} placeholder="8" style={input} inputMode="decimal" /></div>
+                <div><SmallLabel>Команда, чел.</SmallLabel><input aria-label="Размер команды" value={teamSize} onChange={(e) => setTeamSize(e.target.value)} placeholder="2" style={input} inputMode="numeric" /></div>
               </div>
             </>
           )}
@@ -440,11 +443,11 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           <div style={twoCol}>
             <div>
               <SmallLabel>Email (не публикуется)</SmallLabel>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={input} type="email" />
+              <input aria-label="Ваш email (не публикуется)" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={input} type="email" />
             </div>
             <div>
               <SmallLabel>Публичный контакт</SmallLabel>
-              <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="@telegram или сайт" style={input} />
+              <input aria-label="Публичный контакт" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="@telegram или сайт" style={input} />
             </div>
           </div>
 

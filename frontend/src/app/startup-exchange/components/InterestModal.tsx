@@ -62,6 +62,7 @@ export function InterestModal({
     <div
       role="dialog"
       aria-modal="true"
+      aria-label={`Предложение по заявке «${listing.title}»`}
       onClick={onClose}
       style={{
         position: "fixed",
@@ -120,19 +121,20 @@ export function InterestModal({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
             <SmallLabel>Ваш чек, USD</SmallLabel>
-            <input value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
+            <input aria-label="Ваш чек в долларах" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
           </div>
           <div>
             <SmallLabel>Ожидаемая доля, %</SmallLabel>
-            <input value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
+            <input aria-label="Ожидаемая доля в процентах" value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
           </div>
         </div>
 
         <SmallLabel>Ваш email</SmallLabel>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
+        <input aria-label="Ваш email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
 
         <SmallLabel>Сообщение (необязательно)</SmallLabel>
         <textarea
+          aria-label="Сообщение основателю"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={3}

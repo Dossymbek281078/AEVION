@@ -101,6 +101,7 @@ export function EditTermsForm({
 
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#64748b", margin: "4px 0" }}>Дополнительные условия</div>
       <textarea
+        aria-label="Дополнительные условия"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         rows={2}
@@ -162,7 +163,9 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <div>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{label}</div>
-      <input value={value} onChange={(e) => onChange(e.target.value)} style={input} inputMode="decimal" />
+      {/* Видимая подпись — обычный div, программно с полем не связана; без
+          aria-label читалка объявляет безымянное поле ввода. */}
+      <input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} style={input} inputMode="decimal" />
     </div>
   );
 }

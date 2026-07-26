@@ -121,12 +121,27 @@ or the build fails Module-not-found.
 
 ## Researched and closed (do not redo)
 
-Japan: MLIT publishes no data downloads; `kokuarea` (airport airspace) 404s on
+**Japan:** MLIT publishes no data downloads; `kokuarea` (airport airspace) 404s on
 every documented GSI tile path and is absent from the official catalogue, so it
 is an app-internal overlay; DIPS 2.0 is an application portal with no export.
 `did2020` IS live and usable — that is what the permission layer uses.
-Kazakhstan: nothing open found at all. Details with URLs are in the header
-comment of `qskyway.airspace.ts`.
+
+**Kazakhstan:** no feed, but the eAIP publishes prohibited areas in ICAO
+coordinates and **UAP28 covers 100% of the Astana twin** (4.5 km circle,
+GND–4800 ft, H24). The earlier "nothing found" came from searching for an API
+instead of for the rule — the single most useful correction of 26.07.
+
+**Is NYC complete?** Yes, for these categories. The FAA's `Prohibited_Areas`,
+`Special_Use_Airspace` and `Part_Time_National_Security_UAS_Flight_Restrictions`
+services all return zero features over the Midtown twin. The query shape was
+validated against a known positive (P-56 over Washington DC returns 1), so the
+zero is a real absence rather than a broken request. The UASFM ceilings are the
+applicable rule there.
+
+**The technique worth reusing:** look for the normative document — an AIP, an
+order, a published service — not for a developer-friendly feed. Coordinates are
+usually published; they are just inside HTML or a map layer rather than JSON.
+Details with URLs are in the header comment of `qskyway.airspace.ts`.
 
 ## Still illustrative (be honest about it)
 

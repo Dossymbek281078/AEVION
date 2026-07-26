@@ -5,10 +5,11 @@
 // ingested verbatim from a regulator's own published feed, per city, and
 // rasterized onto the same 20 m grid the height field uses.
 //
-// Coverage is honest and partial by design: the FAA publishes UAS Facility Map
-// ceilings as an open, keyless ArcGIS feed (→ NYC), while no equivalent free
-// feed was found for Kazakhstan's CAA (Astana) or Japan's JCAB (Tokyo). Cities
-// without a feed report `airspace: null` rather than getting invented data.
+// This file covers CEILINGS specifically, and only the FAA publishes those as an
+// open keyless feed (→ NYC); cities without one report `airspace: null` rather
+// than getting invented altitudes. That is not the same as "no rule": Astana and
+// Tokyo are governed by a prohibition and a permission regime respectively, both
+// real and both in qskyway.permission.ts. Ceilings absent ≠ regulator absent.
 //
 // ⚠️ Scope, stated the same way everywhere it surfaces: UASFM encodes Part 107
 // *small-UAS* LAANC authorization ceilings, not eVTOL air-taxi certification.
@@ -32,10 +33,22 @@
 //     not a public endpoint.
 //   · DIPS 2.0 (ossportal.dips.mlit.go.jp) is a permission-application portal
 //     with no data export.
-// Kazakhstan (Astana): no open feed found at all.
-// Conclusion: no JCAB/CAA equivalent of UASFM exists to ingest today. That is
-// not a gap in this module — it is the finding the /qskyway coverage banner
-// states, and the reason `available:false` is the honest answer for these two.
+// Kazakhstan (Astana): no FEED — but the eAIP itself publishes prohibited areas
+//   in ICAO coordinates, and UAP28 covers 100% of the twin. See
+//   qskyway.permission.astana.ts. The earlier "nothing found" was the result of
+//   looking for an API instead of for the rule.
+//
+// Is the NYC picture complete? Checked against the FAA's own services on the
+//   same host (2026-07-26): Prohibited_Areas, Special_Use_Airspace and
+//   Part_Time_National_Security_UAS_Flight_Restrictions all return ZERO features
+//   over the Midtown twin. The query was validated against a known positive —
+//   P-56 over Washington DC — so the zero is a real absence, not a broken
+//   request. For this twin the UASFM ceilings are the applicable rule.
+// Conclusion: no JCAB/CAA equivalent of UASFM — an altitude-ceiling grid — exists
+// to ingest today, so `available:false` here is the honest answer for those two.
+// It is emphatically NOT a conclusion that they are unregulated; assuming that,
+// because the search was for a feed rather than for the rule, is exactly what
+// hid Astana's UAP28 for weeks.
 
 import crypto from "crypto";
 import { AIRSPACE_NYC } from "./qskyway.airspace.nyc";

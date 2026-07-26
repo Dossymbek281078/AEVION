@@ -53,6 +53,14 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
+      # The suite existed and passed locally, but nothing ever executed it here:
+      # this job used to go install → i18n → build and stop. 476 tests across 40
+      # files gated exactly nothing, which is why pitchFacts could publish a
+      # stale module count for months while a guard test written to catch that
+      # very drift sat unrun. A test that is never invoked reads identically to
+      # a test that passes.
+      - name: Frontend unit tests
+        run: npm run test -- --run
       - run: npm run build
 
   payments-smoke:

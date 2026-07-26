@@ -41,7 +41,8 @@ import {
 import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
 import { MARKET_SOURCES } from "../lib/startupx/valuation";
 import { timingSafeHexEq } from "../lib/qrightHelpers";
-import { listSectors, resolveSector } from "../lib/qventure/sectors";
+import { listSectors } from "../lib/qventure/sectors";
+import { safeResolveSector } from "../lib/startupx/sectorDetect";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -303,7 +304,10 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   // detected from the text), so filtering matches on the resolved sector id —
   // otherwise "SaaS" and "saas" would be two different markets.
   const sectorRaw = typeof req.query.sector === "string" ? req.query.sector.trim() : "";
-  const sector = sectorRaw ? resolveSector(sectorRaw) : null;
+  // safeResolveSector, not resolveSector: the shared table is indexed by string,
+  // so a query for sector=constructor would otherwise resolve to an object that
+  // is not a sector and put `undefined` into the SQL parameter.
+  const sector = sectorRaw ? safeResolveSector(sectorRaw) : null;
   const minScore = Number(req.query.minScore);
   const hasMinScore = Number.isFinite(minScore) && minScore > 0;
   // "score" ranks by the free assessment; anything else falls back to recency.

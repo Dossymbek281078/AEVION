@@ -17,7 +17,32 @@
  * which is the same failure in a new coat.
  */
 
-import { resolveSector, type SectorProfile } from "../qventure/sectors";
+import { listSectors, resolveSector, type SectorProfile } from "../qventure/sectors";
+
+/**
+ * Sector ids that actually exist. Needed because the shared resolver looks up
+ * its table with `SECTORS[key]`, and every JavaScript object answers to
+ * `constructor`, `toString`, `valueOf` and `__proto__`. Measured: a listing
+ * submitted with sector "constructor" came back with label `undefined`,
+ * TAM `undefined` and a market score of 0 — a confidently wrong analysis with
+ * nothing failing anywhere.
+ *
+ * Anything the resolver returns is checked against this set before it is
+ * allowed to stand for a market.
+ */
+const KNOWN_SECTOR_IDS = new Set(listSectors().map((s) => s.id));
+
+/** The resolver's answer, or null when the input names no real sector. */
+export function safeResolveSector(input: string | undefined): SectorProfile | null {
+  const resolved = resolveSector(input) as SectorProfile | undefined;
+  if (!resolved || typeof resolved.id !== "string" || !KNOWN_SECTOR_IDS.has(resolved.id)) return null;
+  return resolved;
+}
+
+/** The generic fallback profile — always a real row. */
+function fallbackSector(): SectorProfile {
+  return safeResolveSector("other") ?? (resolveSector("other") as SectorProfile);
+}
 
 /** Unicode-aware left boundary — `\b` never matches before a Cyrillic letter. */
 const EDGE = "(?<![\\p{L}\\p{N}_])";
@@ -130,14 +155,16 @@ function countCues(text: string, re: RegExp): string[] {
  */
 export function detectSector(declared: string | undefined, description: string): SectorDetection {
   if (declared && declared.trim()) {
-    const resolved = resolveSector(declared);
-    // resolveSector falls back to `other` for anything it does not recognise;
-    // treating that as "declared" would relabel a typo as the founder's choice.
-    if (resolved.id !== "other") return { sector: resolved, origin: "declared", evidence: [] };
+    const resolved = safeResolveSector(declared);
+    // The resolver answers `other` for anything it does not recognise, and an
+    // object-prototype key (constructor, __proto__) makes it answer with
+    // something that is not a sector at all. Neither may be presented as the
+    // founder's choice.
+    if (resolved && resolved.id !== "other") return { sector: resolved, origin: "declared", evidence: [] };
   }
 
   const text = description ?? "";
-  if (!text.trim()) return { sector: resolveSector(undefined), origin: "fallback", evidence: [] };
+  if (!text.trim()) return { sector: fallbackSector(), origin: "fallback", evidence: [] };
 
   const scored = Object.entries(SECTOR_CUES)
     .map(([id, re]) => ({ id, hits: countCues(text, re) }))
@@ -151,7 +178,11 @@ export function detectSector(declared: string | undefined, description: string):
   );
 
   if (!decisive) {
-    return { sector: resolveSector(undefined), origin: "fallback", evidence: best?.hits ?? [] };
+    return { sector: fallbackSector(), origin: "fallback", evidence: best?.hits ?? [] };
   }
-  return { sector: resolveSector(best.id), origin: "detected", evidence: best.hits.slice(0, 5) };
+  return {
+    sector: safeResolveSector(best.id) ?? fallbackSector(),
+    origin: "detected",
+    evidence: best.hits.slice(0, 5),
+  };
 }

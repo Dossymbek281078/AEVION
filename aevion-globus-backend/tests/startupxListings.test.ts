@@ -251,6 +251,21 @@ describe("the sector the market factor is scored against", () => {
     expect(a.sector.origin).toBe("declared");
   });
 
+  test("a prototype key cannot masquerade as a sector", () => {
+    // The shared resolver looks its table up with SECTORS[key], and every object
+    // answers to constructor / toString / valueOf / __proto__. Measured before
+    // the guard: sector "constructor" produced label undefined, TAM undefined
+    // and a market score of 0 — a confident-looking analysis of nothing.
+    for (const key of ["constructor", "__proto__", "toString", "valueOf"]) {
+      const a = assessBody(ideaBody({ sector: key }));
+      expect(typeof a.sector.id).toBe("string");
+      expect(typeof a.sector.label).toBe("string");
+      expect(Number.isFinite(a.sector.tamUsdBn)).toBe(true);
+      expect(a.factors.find((f) => f.key === "market")!.score).toBeGreaterThan(0);
+      expect(a.sector.origin).not.toBe("declared");
+    }
+  });
+
   test("an unrecognised sector string is not passed off as the founder's choice", () => {
     // resolveSector answers `other` for anything it does not know. Calling that
     // "declared" would relabel a typo as a decision.

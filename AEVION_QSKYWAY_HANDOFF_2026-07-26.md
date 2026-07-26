@@ -164,10 +164,11 @@ Done so the merge decision rests on facts rather than hope:
   `all-smokes.js` ×1, `package.json` ×3). A dry-run merge auto-merged all three
   cleanly, with zero conflicted paths.
 - **The merged result is sound, not just textually mergeable.** On the merged
-  tree: i18n parity (en/ru/kk) ✅ and backend `tsc` ✅. Frontend typecheck on the
-  *merged* tree was NOT run — the attempt picked up the wrong `tsc` binary and
-  the trial merge had already been aborted. On the branch itself frontend `tsc`
-  and a full `next build` are both green.
+  tree: i18n parity (en/ru/kk) ✅, backend `tsc` ✅, frontend `tsc` ✅ (run from
+  `frontend/` — invoking it from the repo root picks up a different `tsc` binary
+  that prints "This is not the tsc command you are looking for" and exits 0,
+  which looks like a pass and checks nothing). On the branch itself a full
+  `next build` is green too.
 
 ### After merging, verification is one command
 

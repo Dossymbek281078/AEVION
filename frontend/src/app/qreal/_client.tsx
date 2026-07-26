@@ -31,6 +31,7 @@ type Estimate = {
   engines: Array<{ id: string; label: string; configured: boolean; usdPerSecond: number; usdTotal: number }>;
 };
 type Provenance = { sha256: string; disclosure: string; aiGenerated: boolean };
+type Character = { id: string; kind: string; name: string; canonical: string; refImages: string[]; shotIds: string[] };
 
 export default function QRealClient() {
   const { t } = useI18n();
@@ -50,6 +51,8 @@ export default function QRealClient() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  const [cast, setCast] = useState<Character[]>([]);
+  const [castDraft, setCastDraft] = useState<Record<string, string>>({});
   const [openQc, setOpenQc] = useState<string | null>(null);
   const [qcScores, setQcScores] = useState<Record<string, string>>({});
 
@@ -82,7 +85,32 @@ export default function QRealClient() {
     fetch(apiUrl(`/api/qreal/projects/${project.id}/estimate`))
       .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
       .catch(() => {});
+    fetch(apiUrl(`/api/qreal/projects/${project.id}/characters`))
+      .then((r) => r.json()).then((d) => { setCast(d?.characters || []); setCastDraft({}); })
+      .catch(() => {});
   }, [project]);
+
+  // Правка канона режиссёром. Сервер пересобирает промты кадров, поэтому
+  // проект перечитываем целиком — иначе на экране остались бы старые промты.
+  async function saveCharacter(cid: string) {
+    if (!project || busy) return;
+    const canonical = castDraft[cid];
+    if (!canonical || canonical.trim().length < 3) return;
+    setBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/characters/${cid}`), {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canonical: canonical.trim() }),
+      });
+      const d = await r.json();
+      if (d?.characters) setCast(d.characters);
+      if (d?.note) setNote(d.note);
+      const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
+      const pd = await pr.json();
+      if (pd?.project) setProject(pd.project);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
 
   // Пустое значение = критерий неприменим к кадру. Шлём его как null, а не как
   // ноль: иначе кадр без речи получил бы штраф за липсинк.
@@ -445,6 +473,47 @@ export default function QRealClient() {
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-neutral-200 bg-[#faf8f3] p-2 text-[11px] leading-relaxed text-neutral-600">{s.prompt}</pre>
                   )}
                 </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Каст сцены: канон описания героя, который уходит во ВСЕ его кадры.
+            Без этой правки режиссёром реестр остаётся догадкой LLM. */}
+        {cast.length > 0 && (
+          <section className="mt-8 border-b border-neutral-300 pb-8">
+            <h2 className="font-serif text-2xl">{t("qreal.cast.h")}</h2>
+            <p className="mt-1 max-w-3xl text-sm text-neutral-600">{t("qreal.cast.sub")}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {cast.map((c) => (
+                <div key={c.id} className="border border-neutral-300 bg-white p-3">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="font-serif text-base">{c.name}</h3>
+                    <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                      {t(`qreal.subject.${c.kind}`)} · {t("qreal.cast.shots", { n: c.shotIds.length })}
+                    </span>
+                  </div>
+                  <textarea
+                    value={castDraft[c.id] ?? c.canonical}
+                    onChange={(ev) => setCastDraft({ ...castDraft, [c.id]: ev.target.value })}
+                    rows={3}
+                    className="mt-2 w-full border border-neutral-300 bg-[#faf8f3] p-2 text-xs leading-relaxed text-neutral-700"
+                  />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={() => saveCharacter(c.id)}
+                      disabled={busy || (castDraft[c.id] ?? c.canonical) === c.canonical}
+                      className="border border-teal-800 bg-white px-3 py-1 text-xs text-teal-800 hover:bg-teal-800 hover:text-white disabled:opacity-40"
+                    >
+                      {t("qreal.cast.save")}
+                    </button>
+                    {c.refImages.length > 0 && (
+                      <span className="text-[11px] text-teal-800">
+                        {t("qreal.cast.refs", { n: c.refImages.length })}
+                      </span>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           </section>

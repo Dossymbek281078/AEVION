@@ -187,6 +187,32 @@ export function emptySignals(): PlanSignals {
   };
 }
 
+/** Compact USD label for the range notes ("$12k", "$1.5M"). */
+function fmtUsdShort(n: number): string {
+  return n >= 1e9 ? `$${Math.round((n / 1e9) * 10) / 10}B`
+    : n >= 1e6 ? `$${Math.round((n / 1e6) * 10) / 10}M`
+      : n >= 1e3 ? `$${Math.round(n / 1e3)}k`
+        : `$${Math.round(n)}`;
+}
+
+/**
+ * Both ends of a money range match, already converted to USD.
+ * Returns null unless two figures parsed — a half-matched range must fall
+ * through to the single-figure pattern rather than score half a band.
+ */
+function moneyRangeEnds(
+  t: string, m: RegExpMatchArray, planCurrency: MoneyCurrency | null,
+): { low: number; high: number } | null {
+  const groups = m.slice(1).filter((g): g is string => typeof g === "string");
+  const nums = groups.filter((g) => /^\d/.test(g));
+  const units = groups.filter((g) => /^[a-zа-я]{1,8}$/i.test(g) && g.toLowerCase() in MONEY_MULTIPLIER);
+  if (nums.length < 2) return null;
+  const a = parseMoney(nums[0], units[0]);
+  const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
+  if (!a || !b) return null;
+  return { low: toUsd(Math.min(a, b), planCurrency), high: toUsd(Math.max(a, b), planCurrency) };
+}
+
 /** Match the first capture group of a pattern, or null. */
 function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
   re.lastIndex = 0;
@@ -336,9 +362,25 @@ export function parsePlanSignals(text: string): PlanSignals {
   // The negative lookbehind stops "LTV/CAC 4.2" from also matching here and
   // reading the ratio's 4.2 as a $4.20 CAC — which was nonsense data and
   // inflated fieldsFound / signalCoverage with a metric the plan never disclosed.
-  const cac = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  // Bands here run in opposite directions: a HIGHER CAC and a LOWER LTV are both
+  // the worse reading, so "CAC $8-12k, LTV $40-60k" scores 12k against 40k —
+  // the pessimistic corner of the box the plan drew, not its flattering one.
+  const cacRange = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (cacRange) {
+    const ends = moneyRangeEnds(t, cacRange, planCurrency);
+    if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
+  }
+  const cac = s.cacUsd !== null ? null
+    : firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency); if (v && v > 0) s.cacUsd = v; }
-  const ltv = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+
+  const ltvRange = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (ltvRange) {
+    const ends = moneyRangeEnds(t, ltvRange, planCurrency);
+    if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
+  }
+  const ltv = s.ltvUsd !== null ? null
+    : firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;

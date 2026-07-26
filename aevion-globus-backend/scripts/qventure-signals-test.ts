@@ -274,6 +274,17 @@ ok("plain ratio, payback and churn are untouched",
   parsePlanSignals("LTV:CAC of 4:1.").ltvCacRatio === 4
   && parsePlanSignals("8 month payback.").paybackMonths === 8
   && parsePlanSignals("3% monthly churn.").churnPct === 3);
+// CAC and LTV bands run in opposite directions — the pessimistic corner of the
+// box is a higher CAC against a lower LTV.
+const cacLtvBand = parsePlanSignals("CAC $8-12k and LTV $40-60k.");
+ok("a CAC band takes the higher end", cacLtvBand.cacUsd === 12_000, String(cacLtvBand.cacUsd));
+ok("an LTV band takes the lower end", cacLtvBand.ltvUsd === 40_000, String(cacLtvBand.ltvUsd));
+ok("the derived ratio uses the pessimistic corner", cacLtvBand.ltvCacRatio === 3.3, String(cacLtvBand.ltvCacRatio));
+ok("plain CAC and LTV figures are untouched",
+  parsePlanSignals("CAC of $9,000, LTV $52,000.").cacUsd === 9000
+  && parsePlanSignals("CAC of $9,000, LTV $52,000.").ltvUsd === 52_000);
+ok("a currency CAC band converts at its high end",
+  (parsePlanSignals("CAC €10k to €14k.").cacUsd ?? 0) > 15_000, String(parsePlanSignals("CAC €10k to €14k.").cacUsd));
 ok("the range assumption reaches the report",
   analyze({ ...base, description: "SaaS with ARR between $2M and $4M depending on renewals, 500 customers." })
     .assumptions.some((a) => /low end/.test(a)));

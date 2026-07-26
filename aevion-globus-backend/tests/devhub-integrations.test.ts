@@ -636,6 +636,33 @@ describe("POST /api/devhub/projects/:id/generate — screenshot attachment (visi
   });
 });
 
+describe("POST /api/devhub/projects/:id/database/design/stream — SSE variant", () => {
+  test("streams phases and ends with the design result + honest note", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [
+        { path: "db/schema.sql", content: "CREATE TABLE IF NOT EXISTS t(id int);", language: "sql" },
+        { path: "db/client.ts", content: "export {}", language: "typescript" },
+      ] }),
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "D" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/database/design/stream`)
+      .send({ description: "a todo app" });
+    const events = r.text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+    expect(events.filter((e) => e.type === "status").map((e) => e.stage)).toEqual(
+      expect.arrayContaining(["calling_model", "saving"]));
+    const result = events.find((e) => e.type === "result");
+    expect(result.files.map((f: { path: string }) => f.path)).toEqual(["db/schema.sql", "db/client.ts"]);
+    expect(result.note).toMatch(/No database was provisioned/);
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
 describe("POST /api/devhub/projects/:id/database/design — schema by prompt", () => {
   test("400 without a description; 404 for unknown project", async () => {
     const app = makeApp();

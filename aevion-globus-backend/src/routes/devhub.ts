@@ -1513,6 +1513,64 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
 // provision a live database — hosting needs a real isolation design and is a
 // separate feature; generating files that pretend otherwise would be the same
 // class of lie the deploy paths just got cured of.
+/** One prompt, two entrypoints (/database/design and its /stream variant) —
+ * extracted so the wording can't drift between them. */
+function buildDatabaseDesignPrompt(description: string, stack: string): { prompt: string; clientFile: string } {
+  const clientFile = stack === "python" ? "db/client.py" : "db/client.ts";
+  const prompt =
+    `Design a PostgreSQL database for this application: ${description.trim()}\n\n` +
+    `Produce exactly two files:\n` +
+    `1. db/schema.sql — idempotent DDL (CREATE TABLE IF NOT EXISTS) with primary keys, ` +
+    `foreign keys with ON DELETE behavior, sensible column types, NOT NULL where appropriate, ` +
+    `created_at/updated_at timestamps, and indexes for the obvious query paths. Add a short comment above each table.\n` +
+    `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
+    `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
+    `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+  return { prompt, clientFile };
+}
+
+// POST /api/devhub/projects/:id/database/design/stream — SSE variant with the
+// same honest phase events as /generate/stream (the design takes 20-60s too).
+devhubRouter.post("/projects/:id/database/design/stream", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  const { description } = req.body || {};
+  if (!description || typeof description !== "string" || !description.trim()) {
+    return res.status(400).json({ error: "description is required" });
+  }
+  if (description.trim().length > 4000) {
+    return res.status(400).json({ error: "description too long (max 4000 chars)" });
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  const send = (event: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
+  const { prompt, clientFile } = buildDatabaseDesignPrompt(description, project.stack);
+  try {
+    const result = await runProjectGeneration(
+      project, userId, prompt, project.stack, ["db/schema.sql", clientFile], undefined, undefined,
+      (stage) => send({ type: "status", stage })
+    );
+    send({ type: "result", ...result, note: "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned." });
+  } catch (e: any) {
+    send({ type: "error", error: e?.message || "database design failed" });
+  }
+  res.end();
+});
+
 devhubRouter.post("/projects/:id/database/design", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
@@ -1532,16 +1590,7 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
   if (description.trim().length > 4000) {
     return res.status(400).json({ error: "description too long (max 4000 chars)" });
   }
-  const clientFile = project.stack === "python" ? "db/client.py" : "db/client.ts";
-  const prompt =
-    `Design a PostgreSQL database for this application: ${description.trim()}\n\n` +
-    `Produce exactly two files:\n` +
-    `1. db/schema.sql — idempotent DDL (CREATE TABLE IF NOT EXISTS) with primary keys, ` +
-    `foreign keys with ON DELETE behavior, sensible column types, NOT NULL where appropriate, ` +
-    `created_at/updated_at timestamps, and indexes for the obvious query paths. Add a short comment above each table.\n` +
-    `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
-    `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
-    `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+  const { prompt, clientFile } = buildDatabaseDesignPrompt(description, project.stack);
   try {
     const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
     res.json({ ...result, note: "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned." });

@@ -12,7 +12,11 @@
  */
 
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
+// Write legs (slot booking, registry entry) self-skip against prod so the daily
+// run can cover the whole read surface without leaving smoke rows behind.
+const READ_ONLY = process.env.READ_ONLY === "1";
 let step = 0, failed = 0;
+const skip = (n, why) => console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`);
 const ok = (n, x) => console.log(`  ${String(++step).padStart(2, "0")}  PASS  ${n}${x ? "  " + x : ""}`);
 const fail = (n, r) => { step++; failed++; console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${n}${r ? "  — " + r : ""}`); };
 const assert = (c, n, r) => (c ? ok(n) : fail(n, r));
@@ -237,6 +241,9 @@ async function main() {
   // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
   // both outcomes are legitimate — what must never happen is a success response
   // when nothing was written.
+  if (READ_ONLY) {
+    skip("[nyc] airspace edition registered in QRight", "READ_ONLY — registry write skipped");
+  } else {
   const reg1 = await jpost("/api/qskyway/airspace/register", { city: "nyc" });
   if (reg1.status === 503) {
     assert(!reg1.json?.ok && typeof reg1.json?.error === "string", "registry unavailable is reported as failure, not silent success", "no DB in this env");
@@ -249,6 +256,7 @@ async function main() {
   }
   const regAst = await jpost("/api/qskyway/airspace/register", { city: "astana" });
   assert(regAst.status === 422, "[astana] nothing to register without a regulator feed", `status=${regAst.status}`);
+  }
 
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
@@ -261,6 +269,11 @@ async function main() {
   const before = await jget("/api/qskyway/slots");
   assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
+  if (READ_ONLY) {
+    skip("slot market capacity gate", "READ_ONLY — booking writes skipped");
+    console.log(`\n${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step} checks)`);
+    process.exit(failed === 0 ? 0 : 1);
+  }
   let okCount = 0, conflict = false;
   for (let i = 0; i < 5; i++) {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });

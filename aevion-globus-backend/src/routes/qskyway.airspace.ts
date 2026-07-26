@@ -14,6 +14,28 @@
 // *small-UAS* LAANC authorization ceilings, not eVTOL air-taxi certification.
 // It is the real published altitude constraint over the twin — that is exactly
 // the claim, and no more.
+//
+// ── What was checked for the other two cities (2026-07-26) ──────────────────
+// Recorded so nobody re-derives it. Japan (Tokyo / JCAB-MLIT):
+//   · MLIT's own drone page (mlit.go.jp/en/koku/uas.html) does not publish data
+//     downloads; it links to a GSI map view with layers `did2020` + `kokuarea`.
+//   · `did2020` (Densely Inhabited Districts) IS live as raster tiles —
+//     https://cyberjapandata.gsi.go.jp/xyz/did2020/{z}/{x}/{y}.png (verified 200,
+//     z=14 covers the Nishi-Shinjuku twin at ~9.5 m/px, finer than our 20 m grid).
+//     Two caveats before using it: it is raster, so polygons would be inferred
+//     from pixel colour rather than ingested; and semantically DID means "flight
+//     needs permission", NOT a ceiling — it does not fit CityAirspace as modelled
+//     and would need its own permission-required concept.
+//   · `kokuarea` (airspace around airports) returns 404 on every documented GSI
+//     tile path (z=8..16) and does not appear in the official tile catalogue
+//     (maps.gsi.go.jp/development/ichiran.html) — it is an app-internal overlay,
+//     not a public endpoint.
+//   · DIPS 2.0 (ossportal.dips.mlit.go.jp) is a permission-application portal
+//     with no data export.
+// Kazakhstan (Astana): no open feed found at all.
+// Conclusion: no JCAB/CAA equivalent of UASFM exists to ingest today. That is
+// not a gap in this module — it is the finding the /qskyway coverage banner
+// states, and the reason `available:false` is the honest answer for these two.
 
 import crypto from "crypto";
 import { AIRSPACE_NYC } from "./qskyway.airspace.nyc";

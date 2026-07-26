@@ -256,5 +256,17 @@ export const MODULES: Product[] = [
 
 export const ALL_PRODUCTS: Product[] = [...SUBSCRIPTIONS, ...GUIDES, ...MODULES];
 
+const BY_ID = new Map(ALL_PRODUCTS.map((p) => [p.id, p]));
+
+/**
+ * Позиция каталога по id. Нужна страницам, у которых своя подача и свои данные
+ * (например `/apps` — иконки, категории, highlights), чтобы **цена и ссылка на
+ * оплату** брались отсюда, а не дублировались у них. Ровно это дублирование и
+ * развело каталоги: на 26.07.2026 `/apps` и `/shop` показывали разные наборы.
+ */
+export function productById(id: string): Product | undefined {
+  return BY_ID.get(id);
+}
+
 /** Сумма разовых цен модулей — используется, чтобы честно показать выгоду подписки. */
 export const MODULES_TOTAL_USD = MODULES.reduce((s, p) => s + p.priceUsd, 0);

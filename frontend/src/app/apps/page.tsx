@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { productById } from "@/lib/products";
 
 type Billing = "monthly" | "annual";
 
@@ -10,27 +11,35 @@ type Billing = "monthly" | "annual";
 const PLANET_MONTHLY = 250;
 const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
 
-interface App {
+/**
+ * Описание приложения — только подача: иконка, категория, highlights.
+ * Цены и ссылки на оплату здесь НЕ живут: их единственный источник —
+ * `@/lib/products`, откуда их берёт и витрина `/shop`. До 26.07.2026 они были
+ * захардкожены и тут, и там, из-за чего каталоги показывали разные наборы.
+ */
+interface AppDef {
   id: string;
   icon: string;
   name: string;
   tagline: string;
-  price: number; // 0 = free
   href: string;
   cat: string;
   highlights: string[];
   badge?: string;
-  checkoutUrl?: string;
+  /** id позиции в `@/lib/products`. Отсутствует у бесплатных приложений. */
+  productId?: string;
 }
 
-const APPS: App[] = [
+type App = AppDef & { price: number; checkoutUrl?: string };
+
+const APP_DEFS: AppDef[] = [
   /* ── Developer ──────────────────────────────────────────────────────── */
   {
     id: "devhub",
+    productId: "devhub",
     icon: "🛠",
     name: "DevHub Studio Pro",
     tagline: "Full-stack browser IDE + AI + deploy",
-    price: 149,
     href: "/devhub",
     cat: "Developer",
     highlights: [
@@ -42,14 +51,12 @@ const APPS: App[] = [
       "Team collaborators",
     ],
     badge: "Most popular",
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57",
   },
   {
     id: "qcoreai",
     icon: "🧠",
     name: "QCoreAI",
     tagline: "Multi-model AI assistant",
-    price: 0,
     href: "/qcoreai",
     cat: "Developer",
     highlights: ["Claude · GPT · Gemini in one UI", "Unlimited usage", "Always free"],
@@ -58,33 +65,31 @@ const APPS: App[] = [
   /* ── Finance ────────────────────────────────────────────────────────── */
   {
     id: "qventure",
+    productId: "qventure",
     icon: "📈",
     name: "QVenture",
     tagline: "AI investment analyst · score 0–100",
-    price: 39,
     href: "/qventure",
     cat: "Finance",
     highlights: ["4-role advice panel", "Market sizing & risk matrix", "PDF export"],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/79ca3e07-6c75-4de7-8052-0f3bb99277a2",
   },
   {
     id: "qpaynet",
+    productId: "qpaynet",
     icon: "💳",
     name: "QPayNet",
     tagline: "Embedded payment infrastructure",
-    price: 29,
     href: "/qpaynet",
     cat: "Finance",
     highlights: ["KZT · USD · multi-currency", "Virtual cards", "API + webhooks"],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/f0966b9a-6c3c-41ee-9b36-e2fd1a0a82a3",
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
     id: "qcontract",
+    productId: "qcontract",
     icon: "💣",
     name: "QContract",
     tagline: "Self-destructing secure documents",
-    price: 19,
     href: "/qcontract",
     cat: "Business",
     highlights: [
@@ -92,14 +97,13 @@ const APPS: App[] = [
       "Password & e-signature gates",
       "QRight IP timestamping",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/8175a6b2-f3fa-4b51-bed6-da993267701d",
   },
   {
     id: "constitution",
+    productId: "pyiaz",
     icon: "📜",
     name: "Constitution Design Lab",
     tagline: "AI-powered IP registration",
-    price: 9,
     href: "/constitution",
     cat: "Business",
     highlights: [
@@ -108,14 +112,13 @@ const APPS: App[] = [
       "QSign cryptographic proof",
     ],
     // Единая цена везде: Gumroad Constitution Pro $9 (та же ссылка, что на /constitution).
-    checkoutUrl: "https://aevion.gumroad.com/l/pyiaz?wanted=true",
   },
   {
     id: "bureau",
+    productId: "bureau",
     icon: "🔐",
     name: "AEVION IP Bureau",
     tagline: "Proof-of-creation & authorship",
-    price: 29,
     href: "/bureau",
     cat: "Business",
     highlights: [
@@ -123,15 +126,14 @@ const APPS: App[] = [
       "OpenTimestamps blockchain anchoring",
       "Tamper-evident certificates",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/be5cf241-159f-4f1c-9818-1e9634ba5fab",
   },
   /* ── Health ─────────────────────────────────────────────────────────── */
   {
     id: "qrenew",
+    productId: "kkiavh",
     icon: "🌱",
     name: "QRenew / QMelanin",
     tagline: "Longevity & cellular renewal protocol",
-    price: 19,
     href: "/qrenew",
     cat: "Health",
     highlights: [
@@ -140,15 +142,14 @@ const APPS: App[] = [
       "Zn:Cu 8–15:1 melanin support guide",
     ],
     // Единая цена везде: Gumroad Anti-Grey Protocol $19 (та же ссылка, что на /qmelanin).
-    checkoutUrl: "https://aevion.gumroad.com/l/kkiavh?wanted=true",
   },
   /* ── Education ──────────────────────────────────────────────────────── */
   {
     id: "smeta",
+    productId: "smeta",
     icon: "🏗",
     name: "Smeta Trainer",
     tagline: "AI construction estimating (Kazakhstan)",
-    price: 49,
     href: "/smeta-trainer",
     cat: "Education",
     highlights: [
@@ -156,14 +157,13 @@ const APPS: App[] = [
       "AI error detection on student estimates",
       "Form 1–3 · КС-2 · КС-3 output",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/91c430c8-74f8-46f2-9499-816c93533ef4",
   },
   {
     id: "cyberchess",
+    productId: "cyberchess",
     icon: "♟",
     name: "CyberChess Pro",
     tagline: "AI chess coaching & tournament platform",
-    price: 19,
     href: "/cyberchess",
     cat: "Education",
     highlights: [
@@ -171,9 +171,18 @@ const APPS: App[] = [
       "Real-time AI coaching during games",
       "Club & tournament management",
     ],
-    checkoutUrl: "https://aevion.lemonsqueezy.com/checkout/buy/11a4bb2a-2549-4352-a87f-80a8bdad64bd",
   },
 ];
+
+/**
+ * Цена и чекаут подставляются из каталога — здесь их нет ни у одной записи.
+ * Приложение без `productId` (или с id, которого в каталоге нет) считается
+ * бесплатным и рисуется без кнопки покупки, а не с ценой $0 и битой ссылкой.
+ */
+const APPS: App[] = APP_DEFS.map((a) => {
+  const product = a.productId ? productById(a.productId) : undefined;
+  return { ...a, price: product?.priceUsd ?? 0, checkoutUrl: product?.href };
+});
 
 const CATS = ["Developer", "Finance", "Business", "Health", "Education"];
 

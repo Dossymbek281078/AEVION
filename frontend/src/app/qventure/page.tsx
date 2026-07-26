@@ -64,7 +64,17 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
     if (isFinite(ask) && ask > 0) payload.askUsd = ask;
 
     // Optional exact financials → override the text parser.
-    const num = (s: string) => { const v = parseFloat((s || "").replace(/[^0-9.]/g, "")); return isFinite(v) && v > 0 ? v : undefined; };
+    // Stripping non-digits turned a range typed into an exact field into a
+    // different number entirely: "2-4" became 24, "8 to 12" became 812. These
+    // fields mean one figure, so a range is dropped here and left to the plan
+    // text, where the parser reads bands properly and says which end it used.
+    const RANGE_IN_ONE_FIELD = /\d\s*(?:-|–|—|to|\.\.)\s*\d/i;
+    const num = (s: string) => {
+      const raw = (s || "").trim();
+      if (RANGE_IN_ONE_FIELD.test(raw)) return undefined;
+      const v = parseFloat(raw.replace(/[^0-9.]/g, ""));
+      return isFinite(v) && v > 0 ? v : undefined;
+    };
     const financials: Record<string, number> = {};
     const map: [string, string][] = [
       ["arrUsd", data.finArr], ["grossMarginPct", data.finGrossMargin], ["ltvCacRatio", data.finLtvCac],
@@ -585,6 +595,11 @@ function FormFields({ form, set, sectors, full = false }: {
           <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#334155" }}>
             Exact financials & projections (optional — precise numbers beat parsing the text)
           </summary>
+          <p style={{ margin: "10px 0 0", fontSize: 12.5, lineHeight: 1.55, color: "var(--ink-faint, #74767c)" }}>
+            One figure per field. If a number is a range, write it in the description
+            instead (&ldquo;ARR between $2M and $4M&rdquo;) — the engine reads bands there and states
+            which end the score used.
+          </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
             <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>

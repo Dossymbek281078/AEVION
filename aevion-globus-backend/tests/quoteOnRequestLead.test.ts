@@ -22,6 +22,9 @@ process.env.LEADS_FILE = LEADS;
 
 let app: express.Express;
 
+/** Запас на первый импорт роутера под нагрузкой — см. tests/tier3OgRoutes. */
+const IMPORT_TIMEOUT_MS = 30_000;
+
 beforeAll(async () => {
   const { pricingRouter } = await import("../src/routes/pricing");
   app = express();
@@ -51,7 +54,7 @@ describe("лид «цена по запросу» доносит имя моду
     expect(mine).toHaveLength(1);
     expect(mine[0].modules).toEqual(["qskyway"]);          // спрос виден поимённо
     expect(mine[0].source).toContain("module=qskyway");    // и видно, откуда пришёл
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("лид без модулей по-прежнему принимается (обычное обращение)", async () => {
     const r = await request(app).post("/api/pricing/lead").send({
@@ -64,5 +67,5 @@ describe("лид «цена по запросу» доносит имя моду
     const mine = storedLeads().filter((l) => l.email === "plain@test.aevion.dev");
     expect(mine).toHaveLength(1);
     expect(mine[0].modules ?? []).toEqual([]);
-  });
+  }, IMPORT_TIMEOUT_MS);
 });

@@ -31,18 +31,41 @@ afterAll(() => {
   process.env = { ...OLD_ENV };
 });
 
+/**
+ * Роутер импортируется ОДИН раз и кэшируется.
+ *
+ * Раньше `await import()` стоял внутри каждого запроса. Node кэширует модули,
+ * но ПЕРВЫЙ импорт тянет половину графа (Prisma, пул Postgres, провайдеры
+ * оплаты), и на загруженной машине он один съедал дефолтные 5 секунд теста:
+ * замерено — файл шёл 13.7 с и ронял проверку, хотя в изоляции проходит меньше
+ * секунды. Ветвление по каналам от этого не страдает: `channelHonoursAmount` и
+ * `gumroadPermalinkConfigured` читают env В МОМЕНТ ЗАПРОСА, а не при импорте,
+ * поэтому env можно менять между тестами и после загрузки модуля.
+ */
+let appPromise: Promise<express.Express> | null = null;
+function getApp(): Promise<express.Express> {
+  if (!appPromise) {
+    appPromise = import("../src/routes/checkout").then(({ checkoutRouter }) => {
+      const app = express();
+      app.use(express.json());
+      app.use("/api/pricing/checkout", checkoutRouter);
+      return app;
+    });
+  }
+  return appPromise;
+}
+
 async function post(body: unknown, env: Record<string, string | undefined> = {}) {
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
-  // Роутер импортируем внутри, чтобы env успел примениться к модулю.
-  const { checkoutRouter } = await import("../src/routes/checkout");
-  const app = express();
-  app.use(express.json());
-  app.use("/api/pricing/checkout", checkoutRouter);
+  const app = await getApp();
   return request(app).post("/api/pricing/checkout/session").send(body as object);
 }
+
+/** Запас на первый импорт под нагрузкой — см. комментарий у getApp(). */
+const IMPORT_TIMEOUT_MS = 30_000;
 
 const ORDER = {
   tierId: "medium",
@@ -56,7 +79,7 @@ describe("ответ чекаута говорит правду о списан�
     const r = await post(ORDER, { GUMROAD_DEFAULT_PERMALINK: undefined });
     expect(r.status).toBe(200);
     expect(r.body.chargeCurrency).toBe("USD");
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("канал, который списывает нашу сумму: chargedUsd == quotedUsd и скидка учтена", async () => {
     const r = await post(ORDER, { GUMROAD_DEFAULT_PERMALINK: undefined });
@@ -65,7 +88,7 @@ describe("ответ чекаута говорит правду о списан�
     expect(r.body.incentiveDiscountUsd).toBeGreaterThan(0);
     expect(r.body.fan.status).toBe("active");
     expect(r.body.fan.appliedUsd).toBeGreaterThan(0);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("🔴 канал с фиксированной ценой: chargedUsd === null и названа причина", async () => {
     // Раньше здесь молча отдавалась ссылка на полную цену. Красивое выдуманное
@@ -78,7 +101,7 @@ describe("ответ чекаута говорит правду о списан�
     expect(String(r.body.discountNotHonouredReason)).toMatch(/Gumroad/);
     // Смета всё равно названа — покупателю и владельцу видно расхождение.
     expect(r.body.quotedUsd).toBeGreaterThan(0);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   test("без скидок discountHonoured остаётся true (нечего не применять)", async () => {
     const r = await post(
@@ -87,5 +110,5 @@ describe("ответ чекаута говорит правду о списан�
     );
     expect(r.body.incentiveDiscountUsd).toBe(0);
     expect(r.body.discountHonoured).toBe(true);
-  });
+  }, IMPORT_TIMEOUT_MS);
 });

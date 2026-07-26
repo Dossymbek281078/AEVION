@@ -1859,6 +1859,29 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
   const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
 
+  // SAFETY: this route never deployed the user's code. It fired
+  // deploymentCreate at whatever RAILWAY_SERVICE_ID happens to be — and on
+  // production that variable is the AEVION backend's own service id, so every
+  // click of "Deploy" in someone's project restarted our production API. The
+  // returned <slug>.aevion.app URL was invented and never pointed at anything.
+  //
+  // Refusing outright until per-project deploys exist (github push -> new
+  // Railway service -> project env vars). Static projects already have a real,
+  // serve-verified path through Cloudflare Pages.
+  const targetsOurOwnService = !railwayServiceId || railwayServiceId === process.env.RAILWAY_SELF_SERVICE_ID || !process.env.DEVHUB_RAILWAY_PER_PROJECT;
+  if (targetsOurOwnService) {
+    deployment.status = "failed";
+    deployment.buildLog = "Backend deploys are not available yet: the Railway path would have redeployed the AEVION platform service rather than this project.";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(501).json({
+      error: "Backend deploys are not available yet",
+      detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.build subdomain.",
+      deploymentId: deployment.id,
+    });
+  }
+
   if (railwayToken && railwayProjectId && railwayServiceId) {
     // Real Railway API deployment via GraphQL mutation
     (async () => {
@@ -5862,7 +5885,7 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
     { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
-    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
+    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
     { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
     { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },

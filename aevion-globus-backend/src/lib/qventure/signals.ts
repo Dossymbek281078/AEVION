@@ -21,6 +21,9 @@ import {
   monthlyRateFrom, ratePeriodFromWords, growthPeriodFromWords, parseMoney,
   NUMBER_PATTERN, MONEY_UNIT_PATTERN, type RatePeriod,
 } from "../metrics/periods";
+import {
+  CURRENCY_PREFIX_PATTERN, detectCurrency, detectCurrencyFirst, toUsd, type MoneyCurrency,
+} from "../metrics/currency";
 
 /**
  * Period a churn figure is quoted over — the platform rate period. Decks quote
@@ -56,6 +59,12 @@ export interface PlanSignals {
   mentionsRevenueNoNumber: boolean;
   /** Plan asserts patents / proprietary IP — a small moat signal. */
   mentionsPatent: boolean;
+  /**
+   * Currency the plan quotes money in, when it marks one. Every *Usd field above
+   * is already converted; this records what it was converted FROM so the report
+   * can disclose the rate instead of presenting a converted figure as native.
+   */
+  currency: MoneyCurrency | null;
 
   // ── Evidence that is not SaaS-shaped ────────────────────────────────────────
   // A marketplace, a defence-hardware programme, a therapeutic and a power plant
@@ -167,7 +176,7 @@ export function emptySignals(): PlanSignals {
     grossMarginPct: null, cacUsd: null, ltvUsd: null, ltvCacRatio: null,
     paybackMonths: null, churnPct: null, churnPeriod: null, churnMonthlyPct: null,
     retentionPct: null, customers: null,
-    bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false,
+    bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
     pilots: null, regulatoryMilestones: [], technicalProof: [],
     fieldsFound: 0,
@@ -184,22 +193,54 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
 const NUM = NUMBER_PATTERN;
 const UNIT = MONEY_UNIT_PATTERN;
+// Money can be marked with any currency, not just "$" — "€3M ARR" and
+// "₸450 млн GMV" have to reach the same patterns before they can be converted.
+const CUR = CURRENCY_PREFIX_PATTERN;
+
+/** Does this match start with the figure (possibly currency-marked) rather than a keyword? */
+function startsWithFigure(matched: string): boolean {
+  return new RegExp(String.raw`^\s*${CURRENCY_PREFIX_PATTERN}\d`, "i").test(matched);
+}
+
+/**
+ * Money from a match, normalized to USD.
+ *
+ * The currency is taken from the text immediately around the figure when it is
+ * marked there, otherwise from the plan-level currency (the first currency the
+ * plan names). An unmarked plan is read as USD — stated in the assumptions, not
+ * assumed silently.
+ */
+function moneyUsd(
+  t: string, m: RegExpMatchArray, numStr: string, unitStr: string | undefined, planCurrency: MoneyCurrency | null,
+): number | null {
+  const raw = parseMoney(numStr, unitStr);
+  if (raw === null || !isFinite(raw)) return null;
+  const at = m.index ?? 0;
+  const near = t.slice(Math.max(0, at - 14), at + m[0].length + 16);
+  return toUsd(raw, detectCurrency(near) ?? planCurrency);
+}
 
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
   const t = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
 
+  // The currency the plan quotes in, established once from the first marker it
+  // uses. Figures marked with a different currency still win locally; an
+  // unmarked plan is read as USD and the engine discloses that assumption.
+  const planCurrency = detectCurrencyFirst(t);
+  s.currency = planCurrency;
+
   // ── Revenue: "$2M ARR" / "$500k MRR" / "$1.2m in revenue" / "arr of $3m" ──
-  const arr = firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(arr|mrr|revenue)\s*(?:of|=|:|at)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
+  const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(arr|mrr|revenue)\s*(?:of|=|:|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (arr) {
     // group order differs between the two alternatives; detect which matched
-    const hasLeadingNum = /^\s*\$?\s*\d/.test(arr[0]);
+    const hasLeadingNum = startsWithFigure(arr[0]);
     const numStr = hasLeadingNum ? arr[1] : arr[2];
     const unitStr = hasLeadingNum ? arr[2] : arr[3];
     const kindStr = (hasLeadingNum ? arr[3] : arr[1]) || "";
-    const val = parseMoney(numStr, unitStr);
+    const val = moneyUsd(t, arr, numStr, unitStr, planCurrency);
     if (val && val > 0) {
       const isMrr = /mrr/i.test(kindStr);
       s.revenueUsd = isMrr ? val * 12 : val;
@@ -251,10 +292,10 @@ export function parsePlanSignals(text: string): PlanSignals {
   // The negative lookbehind stops "LTV/CAC 4.2" from also matching here and
   // reading the ratio's 4.2 as a $4.20 CAC — which was nonsense data and
   // inflated fieldsFound / signalCoverage with a metric the plan never disclosed.
-  const cac = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
-  if (cac) { const v = parseMoney(cac[1], cac[2]); if (v && v > 0) s.cacUsd = v; }
-  const ltv = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"));
-  if (ltv) { const v = parseMoney(ltv[1], ltv[2]); if (v && v > 0) s.ltvUsd = v; }
+  const cac = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency); if (v && v > 0) s.cacUsd = v; }
+  const ltv = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
   }
@@ -292,14 +333,14 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
 
   // ── Bottom-up TAM: "TAM of $12B" / "$500M TAM" / "addressable market of $8B" ──
-  const tam = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
+  const tam = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
   if (tam) {
     // detect group layout
-    const lead = /^\s*\$?\s*\d/.test(tam[0]) && !/^(tam|total|addressable)/i.test(tam[0].trim());
+    const lead = startsWithFigure(tam[0]) && !/^(tam|total|addressable)/i.test(tam[0].trim());
     const numStr = lead ? tam[1] : tam[1];
     const unitStr = lead ? tam[2] : tam[2];
-    const v = parseMoney(numStr, unitStr);
+    const v = moneyUsd(t, tam, numStr, unitStr, planCurrency);
     if (v && v > 0) s.bottomUpTamUsd = v;
   }
 
@@ -325,9 +366,9 @@ export function parsePlanSignals(text: string): PlanSignals {
  */
 function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // ── Marketplace: GMV / gross bookings / TPV, and the take rate on it ──
-  const gmv = firstMatch(t, new RegExp(String.raw`(?:gmv|gross merchandise (?:value|volume)|gross bookings|total payment volume|tpv|transaction volume|annualized volume)\s*(?:of|=|:|at|is|reached)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?(?:gmv|gross merchandise (?:value|volume)|gross bookings|tpv|transaction volume)`, "i"));
-  if (gmv) { const v = parseMoney(gmv[1], gmv[2]); if (v && v > 0) s.gmvUsd = v; }
+  const gmv = firstMatch(t, new RegExp(String.raw`(?:gmv|gross merchandise (?:value|volume)|gross bookings|total payment volume|tpv|transaction volume|annualized volume)\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:gmv|gross merchandise (?:value|volume)|gross bookings|tpv|transaction volume)`, "i"));
+  if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
   const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
@@ -345,19 +386,19 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // businesses show demand. It is weaker than realised revenue and the engine
   // credits it as such — but reading it as "no traction" was plainly wrong.
   const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
-  const backlog = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"));
+  const backlog = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"));
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
-    const v = parseMoney(backlog[1], backlog[2]);
+    const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);
     if (v && v > 0) s.contractedRevenueUsd = v;
   }
 
   // ── Non-dilutive capital: grants, prizes, awarded public programmes ──
   const grantRe = String.raw`(?:non[- ]dilutive(?: funding| capital)?|grants?(?: funding)?|sbir|sttr|darpa|horizon europe|innovate uk|arpa-?e|prize)`;
-  const grant = firstMatch(t, new RegExp(String.raw`${grantRe}\s*(?:of|worth|totall?ing|=|:|at|award(?:ed)?)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?${grantRe}`, "i"));
+  const grant = firstMatch(t, new RegExp(String.raw`${grantRe}\s*(?:of|worth|totall?ing|=|:|at|award(?:ed)?)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${grantRe}`, "i"));
   if (grant && mentionsUnnegated(t, new RegExp(grantRe, "i"))) {
-    const v = parseMoney(grant[1], grant[2]);
+    const v = moneyUsd(t, grant, grant[1], grant[2], s.currency);
     if (v && v > 0) s.nonDilutiveUsd = v;
   }
 

@@ -192,6 +192,29 @@ ok("contract-shaped evidence raises signal coverage", infraStrong.signalCoverage
 ok("science can be company evidence", infraStrong.factors.find((f) => f.key === "science")!.basis === "company-evidence");
 ok("legal can be company evidence", infraStrong.factors.find((f) => f.key === "legal")!.basis === "company-evidence");
 ok("a science-gated plan with no evidence is charged for it", infraWeak.redFlags.some((f) => /no working hardware|no signed contracts/i.test(f)), infraWeak.redFlags.join("|"));
+
+console.log("\n12. A figure without its currency is not a figure");
+const eur = parsePlanSignals("Berlin SaaS with €3M ARR and a CAC of €900.");
+ok("EUR revenue converted to USD (not read as $3M)", eur.revenueUsd !== null && eur.revenueUsd > 3_300_000 && eur.revenueUsd < 3_600_000, String(eur.revenueUsd));
+ok("plan currency recorded as EUR", eur.currency === "EUR", String(eur.currency));
+ok("EUR CAC converted too", eur.cacUsd !== null && eur.cacUsd > 1000 && eur.cacUsd < 1100, String(eur.cacUsd));
+const gbp = parsePlanSignals("London fintech, £2M ARR, TAM of £8B.");
+ok("GBP revenue converted", gbp.revenueUsd !== null && gbp.revenueUsd > 2_600_000 && gbp.revenueUsd < 2_700_000, String(gbp.revenueUsd));
+ok("GBP TAM converted", gbp.bottomUpTamUsd !== null && gbp.bottomUpTamUsd > 10e9 && gbp.bottomUpTamUsd < 11e9, String(gbp.bottomUpTamUsd));
+const kzt = parsePlanSignals("Almaty marketplace: ₸450 млн GMV with a 12% take rate.");
+ok("Cyrillic scale word parsed (млн)", kzt.gmvUsd !== null, String(kzt.gmvUsd));
+ok("KZT GMV converted to ~$957k", kzt.gmvUsd !== null && kzt.gmvUsd > 900_000 && kzt.gmvUsd < 1_000_000, String(kzt.gmvUsd));
+ok("KZT recorded as the plan currency", kzt.currency === "KZT", String(kzt.currency));
+const usd = parsePlanSignals("US SaaS with $3M ARR.");
+ok("USD figures are untouched", usd.revenueUsd === 3_000_000, String(usd.revenueUsd));
+const unmarked = parsePlanSignals("SaaS with 3M ARR and no currency stated anywhere.");
+ok("an unmarked plan is read as USD, not scaled", unmarked.revenueUsd === 3_000_000, String(unmarked.revenueUsd));
+ok("unmarked plan records no currency", unmarked.currency === null, String(unmarked.currency));
+const mixed = parsePlanSignals("€5M ARR in Europe; the US market alone is worth $40B.");
+ok("first currency named wins as the plan currency", mixed.currency === "EUR", String(mixed.currency));
+ok("a locally marked USD figure stays USD", mixed.bottomUpTamUsd === null || mixed.bottomUpTamUsd === 40e9, String(mixed.bottomUpTamUsd));
+const eurDeal = analyze({ name: "E", sector: "saas", stage: "seed", description: "Berlin SaaS, €4M ARR, 2,000 customers, 85% gross margin, LTV:CAC 4." });
+ok("non-USD plan discloses the conversion in assumptions", eurDeal.assumptions.some((a) => /converted to USD/i.test(a)), eurDeal.assumptions.join(" | ").slice(0, 200));
 const structuredChurn = mergeStructuredSignals(parsePlanSignals("vague pitch"), { churnPct: 24, churnPeriod: "annual" });
 ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPct !== null && structuredChurn.churnMonthlyPct < 3, String(structuredChurn.churnMonthlyPct));
 ok("unspecified-period churn is disclosed in assumptions",

@@ -18,6 +18,7 @@ import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
 import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
 import { defineBands } from "../verdictBands";
+import { conversionNote } from "../metrics/currency";
 
 /**
  * Rubric version — bump on any change that moves a composite for unchanged input.
@@ -36,7 +37,9 @@ import { defineBands } from "../verdictBands";
  * v5  non-SaaS evidence is read and scored: GMV × take rate, contracted
  *     backlog, non-dilutive awards, pilots/design wins, regulatory milestones
  *     held and technical validation. Science and legal can now be company
- *     evidence instead of always sector constants.
+ *     evidence instead of always sector constants. Money is also read in the
+ *     currency it was quoted in and converted to USD (EUR/GBP/KZT/… were
+ *     previously scored as if the number were dollars).
  */
 export const RUBRIC_VERSION = 5;
 
@@ -617,6 +620,8 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     ...(signals.churnPct !== null && (signals.churnPeriod === null || signals.churnPeriod === "unspecified")
       ? [`Churn of ${signals.churnPct}% was disclosed without a period and is read as monthly (the deck convention). State it as monthly or annual to remove the assumption.`]
       : []),
+    // A converted figure must never be presented as if it were native.
+    ...(signals.currency && signals.currency !== "USD" ? [conversionNote(signals.currency)] : []),
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 

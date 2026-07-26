@@ -78,6 +78,8 @@ export function growthPeriodFromWords(words: string): GrowthPeriod {
 export const MONEY_MULTIPLIER: Record<string, number> = {
   k: 1e3, m: 1e6, b: 1e9, bn: 1e9, t: 1e12, tn: 1e12,
   thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12,
+  // Cyrillic scale words: KZ/RU decks write "$450 млн ARR" and "₸2 млрд GMV".
+  тыс: 1e3, млн: 1e6, млрд: 1e9, трлн: 1e12,
 };
 
 /** Regex source for a number, capturing one group. */
@@ -90,7 +92,7 @@ export const NUMBER_PATTERN = String.raw`(\d[\d,]*(?:\.\d+)?)`;
  * alternation backtracks, so "million"/"billion" still match; only a bare letter
  * glued to the following word is rejected.
  */
-export const MONEY_UNIT_PATTERN = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion)(?![a-z]))?`;
+export const MONEY_UNIT_PATTERN = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion|тыс|млн|млрд|трлн)(?![a-zа-я]))?`;
 
 /** Parse a money-ish token like "$1.2M", "500k", "2 million", "1,500,000". */
 export function parseMoney(numRaw: string, unitRaw?: string): number | null {

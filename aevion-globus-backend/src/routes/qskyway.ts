@@ -7,6 +7,7 @@ import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
+import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -45,7 +46,9 @@ import { getPool } from "../lib/dbPool";
  *   GET  /vertiports?city=id — площадки со скорингом пригодности
  *   POST /route           — {from,to,city?,respectCeiling?} → 4D-маршрут
  *                           (обход зон + ветер в ETA + регуляторный потолок)
+ *   POST /route/justification — один подписанный документ «почему рейс обоснован»
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
+ *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
  */
 
@@ -609,8 +612,18 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       bbox: c.bbox, meters: c.meters, maxHeightM: c.grid.heights.reduce((m, v) => Math.max(m, v), 0),
       noFlyZones: (NOFLY[id] ?? []).length,
       dataQuality: c.dataQuality,
+      airspaceFeed: AIRSPACE[id]?.authority ?? null,
       signature: { alg: "Ed25519", contentHash: signCity(id, c).contentHash },
     })),
+    // Not a shortfall to apologise for — a map of where low-altitude airspace is
+    // machine-readable at all. The US publishes an open ceiling grid; Kazakhstan
+    // and Japan publish nothing equivalent, so no provider can obey it there yet.
+    airspaceCoverage: {
+      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
+      total: Object.keys(CITIES).length,
+      missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id]),
+      note: "Регуляторный слой есть там, где регулятор публикует ограничения машиночитаемо. Отсутствие фида — свойство юрисдикции, а не пробел реализации.",
+    },
   });
 });
 
@@ -676,6 +689,107 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
   res.json(route);
 });
 
+/**
+ * One document that answers "why is this flight defensible?".
+ *
+ * Everything in it already existed — twin hash, airspace hash, published
+ * edition, ceiling verdict, wind source — but scattered across three responses,
+ * so anyone who actually had to justify a flight was left stitching them
+ * together by hand and hoping they matched. Filing paperwork is where a
+ * navigation layer either earns its place or stays a demo, so the assembly is
+ * ours to do, not the operator's.
+ *
+ * The whole document is signed as one unit: it is the *combination* — this
+ * corridor, over this twin, against this edition — that is being attested, and
+ * signing the parts separately would let a correct-looking set of pieces be
+ * recombined into a claim we never made.
+ *
+ * Honest by construction: it states the verdict, including a non-compliant one.
+ * A justification that can only come out green is not a justification.
+ */
+qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
+  const { from, to, city, respectCeiling } = req.body ?? {};
+  if (typeof from !== "number" || typeof to !== "number")
+    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  const resolved = resolveCity(city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const route = buildRoute(resolved.id, resolved.city, from, to, respectCeiling === true);
+  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего" });
+
+  const src = AIRSPACE[resolved.id];
+  const twinSig = signCity(resolved.id, resolved.city);
+  const asSig = signAirspace(resolved.id);
+
+  // ASCII-only and explicitly ordered: this is the byte sequence the signature
+  // covers, so it must not depend on locale, key order, or JSON escaping
+  // (the transport bug in #712).
+  const document = {
+    kind: "qskyway.route.justification/1",
+    city: resolved.id,
+    from,
+    to,
+    respectCeiling: route.respectCeiling,
+    distanceKm: route.distanceKm,
+    cruiseAltM: route.cruiseAltM,
+    etaMinWind: route.etaMinWind,
+    twinContentHash: twinSig.contentHash,
+    airspace: src
+      ? {
+          authority: src.authority,
+          source: src.source,
+          regime: src.regime,
+          effective: src.effective,
+          contentHash: asSig?.contentHash ?? null,
+          compliant: route.airspace.compliant,
+          exceedingSegments: route.airspace.exceedingSegments,
+          maxExceedanceM: route.airspace.maxExceedanceM,
+          lowestCeilingM: route.airspace.lowestCeilingM,
+        }
+      : null,
+    windSource: windSourceOf(resolved.id),
+    heightConfidencePct: route.heightConfidencePct,
+    issuedAt: new Date().toISOString(),
+  };
+  const canonical = JSON.stringify(document);
+  const contentHash = crypto.createHash("sha256").update(canonical).digest("hex");
+  const signature = crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64");
+
+  res.json({
+    document,
+    attestation: { alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64, ephemeral: SIGN_EPHEMERAL },
+    // The scope limit travels WITH the document. A justification that gets
+    // forwarded without it is exactly how "routed against FAA data" turns into
+    // "FAA approved".
+    scope: src
+      ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
+      : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
+    verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
+  });
+});
+
+qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) => {
+  const { document, attestation } = req.body ?? {};
+  if (!document || !attestation?.signature || !attestation?.contentHash)
+    return res.status(400).json({ error: "нужны document и attestation {contentHash, signature}" });
+  const contentHash = crypto.createHash("sha256").update(JSON.stringify(document)).digest("hex");
+  const hashValid = contentHash === attestation.contentHash;
+  let signatureValid = false;
+  try {
+    signatureValid = crypto.verify(null, Buffer.from(attestation.contentHash, "hex"), SIGN_PK, Buffer.from(attestation.signature, "base64"));
+  } catch { signatureValid = false; }
+  // Reported separately on purpose: a tampered value and a forged signature are
+  // different failures, and one verdict would hide which happened.
+  res.json({
+    valid: hashValid && signatureValid,
+    hashValid,
+    signatureValid,
+    isPlatformKey: signatureValid,
+    note: hashValid
+      ? signatureValid ? "Документ подписан ключом платформы и не изменён." : "Содержимое цело, но подпись не принадлежит ключу платформы."
+      : "Содержимое документа изменено — хэш не совпадает.",
+  });
+});
+
 qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
@@ -695,6 +809,20 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
     twin: { valid: twinValid, contentHash: sig.contentHash },
     airspace,
   });
+});
+
+// Bitcoin-anchor the ceiling layer: Ed25519 says who signed it, OpenTimestamps
+// says it existed by block N — the edition date stops resting on our clock.
+qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.body?.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const anchor = await anchorAirspace(resolved.id);
+  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", city: resolved.id });
+  res.json(anchor);
+});
+
+qskywayRouter.post("/airspace/anchor/verify", async (req: Request, res: Response) => {
+  res.json(await verifyAnchoredAirspace(req.body));
 });
 
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {

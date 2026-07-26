@@ -119,6 +119,7 @@ export default function QSkywayClient() {
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [coverage, setCoverage] = useState<{ withFeed: number; total: number; missing: string[] } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
   const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
@@ -319,7 +320,11 @@ export default function QSkywayClient() {
     (async () => {
       try {
         const r = await fetch(apiUrl("/api/qskyway/cities"));
-        if (r.ok) { const j = await r.json(); setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))); }
+        if (r.ok) {
+          const j = await r.json();
+          setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+          if (j.airspaceCoverage) setCoverage(j.airspaceCoverage);
+        }
       } catch { /* selector optional */ }
       loadCity("astana");
       fetchSlots();
@@ -549,6 +554,22 @@ export default function QSkywayClient() {
                 {c.name}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Two of three cities have no regulator feed. Left unexplained that reads
+            as unfinished work; stated plainly it is the actual finding — the US
+            publishes low-altitude limits machine-readably and most of the world
+            does not, so no provider can obey them there yet. */}
+        {coverage && coverage.withFeed < coverage.total && (
+          <div style={{ margin: "0 0 16px", padding: "10px 13px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836", fontSize: 12.5, color: "#9fb0c4", lineHeight: 1.5 }}>
+            <span style={{ color: "#22d3ee", fontFamily: "monospace" }}>
+              🛂 регуляторный слой: {coverage.withFeed} из {coverage.total} городов
+            </span>{" "}
+            — QSkyway говорит на языке регулятора там, где регулятор уже говорит машинно.
+            Для остальных ({coverage.missing.map((id) => cities.find((c) => c.id === id)?.name.split(" — ")[0] ?? id).join(", ")}) открытого машиночитаемого фида
+            низковысотных ограничений не существует: это свойство юрисдикции, а не пробел реализации,
+            и ровно тот пробел, который кому-то предстоит закрыть.
           </div>
         )}
 

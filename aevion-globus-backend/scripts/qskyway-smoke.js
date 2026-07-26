@@ -212,6 +212,28 @@ async function main() {
   assert(padCeil.length === nycVp, "[nyc] every pad reports its published ceiling", `${padCeil.length}/${nycVp}`);
   assert(padCeil.some((v) => v.needsAtcCoordination === true), "[nyc] pads under a 0 ft ceiling are flagged for ATC coordination");
 
+  // One signed document an operator can actually file, instead of stitching
+  // three responses together by hand.
+  const just = await jpost("/api/qskyway/route/justification", { from: 1, to: 2, city: "nyc" });
+  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/1", "[nyc] route justification issued", `status=${just.status}`);
+  const jd = just.json.document;
+  assert(jd.twinContentHash === cityNyc.json._signature.contentHash, "justification binds the twin actually routed over");
+  assert(jd.airspace?.contentHash === asN._signature.contentHash, "justification binds the airspace edition actually obeyed");
+  assert(jd.airspace?.effective === asN.effective && jd.airspace?.authority === "FAA", "justification names the authority and edition", `${jd.airspace?.authority} ${jd.airspace?.effective}`);
+  assert(typeof jd.airspace?.compliant === "boolean", "justification states the verdict, green or not");
+  assert(typeof just.json?.scope === "string" && just.json.scope.includes("НЕ"), "scope limit travels with the document");
+  const jver = await jpost("/api/qskyway/route/justification/verify", { document: jd, attestation: just.json.attestation });
+  assert(jver.json?.valid === true && jver.json?.hashValid === true && jver.json?.signatureValid === true, "justification verifies round-trip");
+  // Tampering must be caught and attributed: a changed value is a hash failure,
+  // not a signature failure, and the two must not be reported as one.
+  const tampered = await jpost("/api/qskyway/route/justification/verify", {
+    document: { ...jd, cruiseAltM: jd.cruiseAltM + 100 }, attestation: just.json.attestation,
+  });
+  assert(tampered.json?.valid === false && tampered.json?.hashValid === false, "tampered justification is rejected as a content change", `hashValid=${tampered.json?.hashValid}`);
+  const justAst = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "astana" });
+  assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits a regulatory verdict it cannot make");
+  assert(justAst.json?.scope?.includes("нет"), "[astana] scope says the regulatory part is absent");
+
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
   assert(bad.status === 422, "same-vertiport route rejected", `status=${bad.status}`);

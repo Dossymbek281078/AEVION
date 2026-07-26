@@ -117,5 +117,66 @@ ok("в промт попали якоря 1/3/5", /1 = .+\n\s+3 = .+\n\s+5 = /.t
 ok("в промт попала реплика", prompt.user.includes("Он не позвонил"));
 ok("судье велено ставить null, а не среднее", /null/.test(prompt.system) && /НЕ ставь средн/.test(prompt.system));
 
+/* ── 6. Разбор ответа VLM-судьи ─────────────────────────────────────────── */
+
+const vlmSrc = readFileSync(path.join(ROOT, "aevion-globus-backend/src/services/qreal/vlmJudge.ts"), "utf8");
+// vlmJudge.ts импортирует judge.ts относительным путём — кладём копию рядом
+// с оригиналом, чтобы импорт разрешился, и меняем только расширение.
+const qrealDir = path.join(ROOT, "aevion-globus-backend/src/services/qreal");
+const vlmTmp = path.join(qrealDir, `_vlm-test-${process.pid}.mts`);
+// Зависимости тоже кладём как .mts: .ts внутри CommonJS-пакета грузится как CJS
+// и не отдаёт именованные экспорты. ESM вдобавок требует явных расширений.
+const judgeTmp = path.join(qrealDir, `_judge-test-${process.pid}.mts`);
+const falTmp = path.join(ROOT, "aevion-globus-backend/src/lib", `_fal-test-${process.pid}.mts`);
+writeFileSync(judgeTmp, judgeSrc, "utf8");
+writeFileSync(falTmp, readFileSync(path.join(ROOT, "aevion-globus-backend/src/lib/falClient.ts"), "utf8"), "utf8");
+writeFileSync(
+  vlmTmp,
+  vlmSrc
+    .replace('from "./judge"', `from "./_judge-test-${process.pid}.mts"`)
+    .replace('from "../../lib/falClient"', `from "../../lib/_fal-test-${process.pid}.mts"`),
+  "utf8"
+);
+let vlm;
+try {
+  vlm = await import("file:///" + vlmTmp.replace(/\\/g, "/"));
+} finally {
+  for (const f of [vlmTmp, judgeTmp, falTmp]) { try { unlinkSync(f); } catch { /* уже убран */ } }
+}
+
+const vdefs = [{ id: "lipsync", label: "Липсинк", weight: 1.3 }, { id: "room-tone", label: "Room tone", weight: 1 }];
+
+// Модель отвечает текстом, а не структурой: JSON почти всегда обёрнут в прозу.
+const wrapped = vlm.parseJudgeReply(
+  'Посмотрел клип. Вот оценки:\n```json\n{"scores":[{"id":"lipsync","score":4,"note":"почти точно"},{"id":"room-tone","score":null,"note":"тишина цифровая"}]}\n```\nГотов пояснить.',
+  vdefs
+);
+ok("JSON достаётся из прозы и code-fence", wrapped.scores.length === 2, `разобрано ${wrapped.scores.length}`);
+ok("null сохраняется как неприменимость", wrapped.scores[1].score === null);
+ok("заметка судьи не теряется", wrapped.scores[0].note === "почти точно");
+
+// Судья может выдумать критерий — вливать его в тотал нельзя.
+const invented = vlm.parseJudgeReply('{"scores":[{"id":"vibe","score":5},{"id":"lipsync","score":3}]}', vdefs);
+ok("выдуманный критерий отброшен", invented.scores.length === 1 && invented.scores[0].id === "lipsync");
+ok("отброшенное названо явно", invented.dropped.includes("vibe"));
+
+// Оценка вне шкалы от модели = не данные; пусть станет null, а не 9 баллов.
+const outOfRange = vlm.parseJudgeReply('{"scores":[{"id":"lipsync","score":9}]}', vdefs);
+ok("оценка вне 1..5 от модели → null", outOfRange.scores[0].score === null);
+
+// Мусор не должен притворяться судейством.
+ok("не-JSON → пусто", vlm.parseJudgeReply("Извините, не могу оценить это видео.", vdefs).scores.length === 0);
+ok("пустой ответ → пусто", vlm.parseJudgeReply("", vdefs).scores.length === 0);
+
+// Без ключа судья обязан честно сказать, что недоступен, а не молчать.
+const hadKey = process.env.FAL_KEY;
+delete process.env.FAL_KEY;
+ok("без FAL_KEY судья не сконфигурирован", vlm.vlmJudgeConfigured() === false);
+const noKey = await vlm.judgeRender("https://example/x.mp4", vdefs, { description: "тест" });
+ok("без ключа возвращает ошибку, а не пустой скор", noKey.ok === false);
+if (hadKey) process.env.FAL_KEY = hadKey;
+
+ok("model-id по умолчанию — проверенный по каталогу fal", vlm.vlmJudgeModel() === "fal-ai/video-understanding");
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

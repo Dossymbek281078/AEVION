@@ -9782,7 +9782,13 @@ export default function CyberChessPage(){
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
                   {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
+                  {/* Названо «Показать ход», а не «Подсказка»: это не намёк — сразу
+                    выдаётся решение, и приём ходов после него блокируется (см.
+                    проверку pzAttempt==="shown" в клике по доске), то есть попытка
+                    на этом закончена. Плюс тост: блок с ответом рисуется в правой
+                    колонке и на невысоком экране уходит ниже сгиба, так что без
+                    него платное действие выглядит как «ничего не произошло». */}
+                {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"показать ход"))return;sPzAttempt("shown");showToast(`💡 Правильный ход: ${pzCurrent.sol[0]}`,"info")}}>Показать ход · 5</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
                 <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>

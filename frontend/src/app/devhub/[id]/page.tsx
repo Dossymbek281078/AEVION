@@ -1265,6 +1265,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const [designingDb, setDesigningDb] = useState(false);
   const [provisioningDb, setProvisioningDb] = useState(false);
+  const [dbUsage, setDbUsage] = useState<{ provisioned: boolean; tables?: number; megabytes?: number; connectionLimit?: number; error?: string } | null>(null);
   // One-click follow-through on the design_db hint: runs /database/design with
   // the idea already in hand, renders the result as a normal assistant card
   // (diffs, checkpoint — undo works), and retires the hint.
@@ -5170,6 +5171,32 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Settings Tab */}
               {activeTab === "settings" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* Database state — the numbers are measured on the instance,
+                      not estimated, so limits can be discussed honestly. */}
+                  {dbUsage && (
+                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>База данных</div>
+                      {dbUsage.provisioned ? (
+                        <div style={{ fontSize: 12.5, color: "#334155", lineHeight: 1.6 }}>
+                          {dbUsage.error ? (
+                            <span style={{ color: "#991b1b" }}>Не удалось измерить: {dbUsage.error}</span>
+                          ) : (
+                            <>
+                              Таблиц: <b>{dbUsage.tables ?? 0}</b> · занято <b>{dbUsage.megabytes ?? 0} МБ</b> ·
+                              одновременных подключений: <b>до {dbUsage.connectionLimit ?? 5}</b>
+                              <div style={{ color: "#64748b", marginTop: 4 }}>
+                                Строка подключения лежит в Env Vars как <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span>.
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                          База ещё не создана. Опишите её в чате — после генерации схемы появится кнопка «Создать базу данных».
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Project Name</label>
                     <input

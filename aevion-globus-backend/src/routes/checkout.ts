@@ -169,6 +169,11 @@ checkoutRouter.post("/session", async (req, res) => {
         provider, tier: tier.id, incentiveUsd, quotedUsd: quote.total, honoured,
       });
       const truth: Record<string, unknown> = {
+        // Валюта списания есть в КАЖДОМ ответе, а не только там, где она не USD:
+        // клиент не должен догадываться о ней по наличию/отсутствию поля.
+        // PayBox-ветка дополняет её `chargedKzt` — там человек платит в тенге, и
+        // сумма в долларах ему ни о чём не говорит.
+        chargeCurrency: "USD",
         quotedUsd: quote.total,
         incentiveDiscountUsd: incentiveUsd,
         discountHonoured: incentiveUsd > 0 ? honoured : true,

@@ -122,6 +122,22 @@ async function run() {
       : fail("props are not treated as characters", chars.map((c) => c.kind).join(","));
   }
 
+  // 8h. Судья непрерывности обязан отказываться судить сцену без повторов
+  // героя. Если он начнёт выдавать «непрерывно» там, где сравнивать нечего,
+  // мы получим зелёный отчёт, подтверждающий непроверенное заявление —
+  // хуже, чем отсутствие проверки. Демо как раз такая сцена.
+  const cont = await fetch(`${BASE}/api/qreal/projects/demo-steppe-morning/continuity`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    signal: AbortSignal.timeout(15000),
+  }).then((r) => r.json().then((b) => ({ status: r.status, body: b }))).catch(() => null);
+  if (!cont || cont.status === 404) {
+    pend("continuity refuses unmeasurable scenes");
+  } else {
+    cont.status === 409 && cont.body?.error === "not_measurable"
+      ? ok("continuity refuses unmeasurable scenes")
+      : fail("continuity refuses unmeasurable scenes", `${cont.status} ${JSON.stringify(cont.body).slice(0, 120)}`);
+  }
+
   // 9-11. Демо целиком (persistence/пересеивание)
   const d = await req("GET", "/api/qreal/demo");
   d.status === 200 ? ok("GET /demo → 200") : fail("GET /demo → 200", String(d.status));

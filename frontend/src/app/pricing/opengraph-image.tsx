@@ -78,7 +78,7 @@ export default async function Image() {
               maxWidth: 980,
             }}
           >
-            37 модулей в одной подписке
+            42 модуля в одной подписке
           </h1>
           <p
             style={{
@@ -90,16 +90,16 @@ export default async function Image() {
               lineHeight: 1.3,
             }}
           >
-            Цифровая собственность · AI · подписи · платежи. От $19/мес.
+            Цифровая собственность · AI · подписи · платежи. От $24/мес.
           </p>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 32 }}>
-            <Stat value="27" label="модулей" />
+            <Stat value="43" label="модуля в прайсе" />
             <Stat value="30+" label="стран" />
-            <Stat value="$19" label="от/мес" />
-            <Stat value="14" label="дней trial" />
+            <Stat value="$24" label="от/мес" />
+            <Stat value="−45%" label="веер скидок" />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing</div>
         </div>

@@ -96,10 +96,10 @@ export default async function Image() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 28 }}>
-            <Tier name="FREE" price="$0" highlight={false} />
-            <Tier name="PRO" price="$19" highlight />
-            <Tier name="BUSINESS" price="$99" highlight={false} />
-            <Tier name="ENTERPRISE" price="по запросу" highlight={false} />
+            <Tier name="LITE" price="$24" highlight={false} />
+            <Tier name="MEDIUM" price="$39" highlight />
+            <Tier name="FULL" price="$89" highlight={false} />
+            <Tier name="UNIVERSE" price="$249.99" highlight={false} />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/compare</div>
         </div>

@@ -172,6 +172,7 @@ const SMOKES = [
   // начнёт обещать то, чего код не делает. Спор с платящим клиентом дороже
   // любого рефакторинга.
   { name: "fan-terms", script: "fan-terms-consistency.js", readOnly: true },
+  { name: "public-price-drift", script: "public-price-drift.js", readOnly: true },
   // Цена LS-варианта == цена в data/pricing.ts. Без LEMON_SQUEEZY_API_KEY
   // скрипт печатает SKIP и выходит с 0 — то есть в наборе он безвреден, а на
   // Railway с ключом ловит дрейф «код обещает одно, LS списывает другое».

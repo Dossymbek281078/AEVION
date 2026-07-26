@@ -14,21 +14,27 @@ const TIER_DATA: Record<string, { name: string; price: string; tagline: string; 
   },
   lite: {
     name: "Lite",
-    price: "$19",
+    price: "$24",
     tagline: "Один продукт на выбор",
     gradient: "linear-gradient(135deg, #0d9488, #0ea5e9)",
   },
   medium: {
     name: "Medium",
-    price: "$29",
+    price: "$39",
     tagline: "Бандл из 10 продуктов",
     gradient: "linear-gradient(135deg, #0ea5e9, #6366f1)",
   },
   full: {
     name: "Full",
-    price: "$49",
+    price: "$89",
     tagline: "Вся экосистема AEVION",
     gradient: "linear-gradient(135deg, #7c3aed, #ec4899)",
+  },
+  pro: {
+    name: "Universe",
+    price: "$249.99",
+    tagline: "Вся платформа AEVION",
+    gradient: "linear-gradient(135deg, #6366f1, #a855f7)",
   },
   enterprise: {
     name: "Enterprise",

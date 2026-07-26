@@ -41,6 +41,7 @@
     "smoke:rest-prod": "node scripts/aevion-rest-prod-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "check:fan-terms": "node scripts/fan-terms-consistency.js",
+    "check:public-prices": "node scripts/public-price-drift.js",
     "check:ls-price-drift": "node scripts/ls-variant-price-drift.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",

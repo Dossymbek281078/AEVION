@@ -98,10 +98,11 @@ or the build fails Module-not-found.
 
 ## Verified (26.07)
 
-- `npm run smoke:qskyway` — **90/90** (was 44 on 22.07); **76/76** under
-  `READ_ONLY=1`, where the two write legs self-skip. QSkyway is now in
+- `npm run smoke:qskyway` — **96/96** (was 44 on 22.07); under `READ_ONLY=1` the
+  two write legs self-skip and the summary says so explicitly (`82/84 checks,
+  2 skipped`) rather than counting skips as passes. QSkyway is now in
   `smoke:all`, so the daily cron covers it.
-- `/qskyway` added to `scripts/pages-live-smoke.js` — it had 90 API assertions
+- `/qskyway` added to `scripts/pages-live-smoke.js` — it had 96 API assertions
   and zero daily checks that the page opens.
 - QSkyway documented in `/api/openapi.json` — it was absent entirely.
 - Live click-tested: strict mode, refusal banner, justification build + verify
@@ -112,9 +113,10 @@ or the build fails Module-not-found.
 - **Success path of the QRight registry write** — Postgres listens on 5432 but
   the credential is commented out in `.env`; passwords are not guessed. The
   failure path is covered. Needs a working `DATABASE_URL` or prod.
-- **Bitcoin confirmation of the anchor** — still `pending`; OTS takes 1–6h. The
-  chain is proven up to that point (3 calendars accepted, 912-byte proof,
-  `matchesCurrentSnapshot:true`).
+- ~~Bitcoin confirmation of the anchor~~ — **DONE**: confirmed at block 959707,
+  `fullyProven:true`. The confirmed proof now ships in
+  `qskyway.airspace.proof.ts` and `GET /airspace/proof` verifies it with no
+  arguments — a proof nobody keeps is a proof that does not exist.
 - **Prod verification of everything above** — waits on the merge.
 
 ## Researched and closed (do not redo)

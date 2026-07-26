@@ -690,16 +690,26 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
  * request rather than stored — nothing to go stale, and the page can show a
  * live figure instead of a hardcoded one.
  */
+// Deterministic over compile-time data, so a city's answer cannot change while
+// the process lives — the same reason ceilingField() is cached. Worth caching
+// rather than not: measured 0.4-0.55 s against 0.025 s for /city, and this one
+// sits on the first screen.
+const impactCache = new Map<string, unknown>();
+
 qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const cached = impactCache.get(resolved.id);
+  if (cached) return res.json(cached);
   const { id, city } = resolved;
   const field = ceilingField(id, city);
   if (!field) {
-    return res.json({
+    const none = {
       city: id, available: false,
       note: "Сетки потолков для этого города регулятор не публикует — измерять нечего.",
-    });
+    };
+    impactCache.set(id, none);
+    return res.json(none);
   }
   const n = city.vertiports.length;
   let pairs = 0, routable = 0, compliant = 0, strictRoutable = 0;
@@ -717,7 +727,7 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   // Pads the regulator authorizes nothing over: they cannot launch at all, which
   // is a different and harsher fact than a corridor merely flying too high.
   const padsNeedingAtc = suitability(id, city).filter((v) => v.needsAtcCoordination).length;
-  res.json({
+  const payload = {
     city: id,
     available: true,
     authority: AIRSPACE[id].authority,
@@ -734,7 +744,9 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     zeroCeilingCells: field.zeroCeilingCells,
     gridCells: field.cols * field.rows,
     note: `${compliant} из ${pairs} пар площадок укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
-  });
+  };
+  impactCache.set(id, payload);
+  res.json(payload);
 });
 
 qskywayRouter.get("/vertiports", (req: Request, res: Response) => {

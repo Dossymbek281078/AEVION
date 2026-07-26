@@ -158,6 +158,17 @@ describe("GET /airspace/impact — what the ceiling costs", () => {
     expect(r.body.strictRoutable).toBeGreaterThanOrEqual(r.body.compliant);
   });
 
+  test("the cached second answer is identical to the computed first", async () => {
+    // Memoized because it walks every pair (0.4-0.55 s cold) and sits on the
+    // first screen. Asserting equality rather than timing: a cache that returns
+    // a different or partial payload is the failure worth catching, and a
+    // stopwatch assertion would just be flaky.
+    const first = await request(app).get("/api/qskyway/airspace/impact?city=nyc");
+    const second = await request(app).get("/api/qskyway/airspace/impact?city=nyc");
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual(first.body);
+  });
+
   test("says plainly there is nothing to measure without a ceiling grid", async () => {
     const r = await request(app).get("/api/qskyway/airspace/impact?city=tokyo");
     expect(r.body.available).toBe(false);

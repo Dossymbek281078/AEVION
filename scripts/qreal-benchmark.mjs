@@ -470,25 +470,47 @@ async function cmdScore() {
   // Машинные судьи считаются, но помечаются: заявление, опирающееся только на
   // машину, слабее — она оценивает по тем же якорям, что мы сами и написали.
   const isMachine = (f) => /^scoresheet-vlm/i.test(f);
-  const humanSheets = sheets.filter((f) => !isMachine(f));
-  const machineSheets = sheets.filter(isMachine);
+
+  // Листы прошлого прогона остаются в том же каталоге. Их id принадлежат
+  // другому манифесту, поэтому в тотал они не попадут, — но лист, заполненный
+  // судьёй под ДРУГОЙ набор клипов, обязан быть виден: иначе половина панели
+  // окажется от чужого прогона, а отчёт этого не покажет.
+  const knownClips = new Set(manifest.items.map((i) => i.clipId));
+  const stale = [];
 
   // scores[clipId][criterionId] = [оценки всех судей]
   const scores = {};
   let filled = 0;
+  const usedSheets = [];
   for (const f of sheets) {
     const rows = parseCsv(readFileSync(path.join(OUT, f), "utf8"));
     const head = rows[0].map((h) => h.trim());
     const ix = (n) => head.indexOf(n);
-    for (const r of rows.slice(1)) {
+    const body = rows.slice(1);
+    const unknown = body.filter((r) => !knownClips.has(r[ix("clip_id")])).length;
+    // Больше половины строк не из этого манифеста — лист чужой целиком.
+    // Считать его частично значит смешать два прогона в одном вердикте.
+    if (body.length && unknown > body.length / 2) {
+      stale.push({ file: f, unknown, total: body.length });
+      console.error(`! ${f}: ${unknown} из ${body.length} строк не из этого прогона — лист пропущен целиком.`);
+      continue;
+    }
+    usedSheets.push(f);
+    for (const r of body) {
       const clipId = r[ix("clip_id")], cid = r[ix("criterion_id")], raw = (r[ix("score_1_5")] || "").trim();
       if (!raw) continue; // неприменимо — исключаем у обоих плеч
+      if (!knownClips.has(clipId)) continue; // одиночная строка из старого прогона
       const v = Number(raw);
       if (!Number.isFinite(v) || v < 1 || v > 5) { console.error(`! ${f}: ${clipId}/${cid} — оценка "${raw}" вне 1-5, пропущена`); continue; }
       ((scores[clipId] ||= {})[cid] ||= []).push(v);
       filled++;
     }
   }
+  if (!usedSheets.length) throw new Error("Все найденные листы — от другого прогона. Убери их из каталога и пересобери sheet.");
+  // Состав панели считаем по РЕАЛЬНО учтённым листам, а не по найденным в
+  // каталоге: отброшенный чужой лист не должен создавать видимость судьи.
+  const humanSheets = usedSheets.filter((f) => !isMachine(f));
+  const machineSheets = usedSheets.filter(isMachine);
 
   // Взвешенное среднее клипа: только по критериям, которые судьи заполнили.
   const clipScore = (clipId) => {
@@ -542,7 +564,13 @@ async function cmdScore() {
 
   const L = [];
   L.push(`# Бенчмарк реализма QReal — результат\n`);
-  L.push(`Судейских листов: ${sheets.length} — людей ${humanSheets.length}, машинных ${machineSheets.length}. Заполненных оценок: ${filled}.`);
+  L.push(`Судейских листов учтено: ${usedSheets.length} — людей ${humanSheets.length}, машинных ${machineSheets.length}. Заполненных оценок: ${filled}.`);
+  if (stale.length) {
+    L.push(`
+> ⚠️ **Пропущено листов от другого прогона: ${stale.length}.** ` +
+      stale.map((x) => `${x.file} (${x.unknown} из ${x.total} строк с чужими id)`).join("; ") +
+      `. Судья заполнял другой набор клипов — смешивать прогоны в одном вердикте нельзя.`);
+  }
   if (!humanSheets.length) {
     L.push(`
 > ⚠️ **Ни одного человеческого листа.** Вердикт ниже опирается только на машинного судью, который оценивает по тем же якорям, что написали мы. Для публичного заявления нужны минимум два человека, не участвовавших в разработке промтов.`);

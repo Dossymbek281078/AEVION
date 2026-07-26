@@ -59,6 +59,7 @@
     "coord:update-commit": "node scripts/coord-update.js --commit",
     "wait-for-deploy": "node scripts/wait-for-deploy.js",
     "test": "vitest run",
+    "test:stable": "vitest run --maxWorkers=2",
     "test:watch": "vitest"
   },
   "keywords": [],

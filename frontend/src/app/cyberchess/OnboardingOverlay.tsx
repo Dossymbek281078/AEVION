@@ -94,7 +94,9 @@ const INTENTS: Array<{
   title: string;
   hint: string;
 }> = [
-  { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 800–2400 — 5 секунд до старта" },
+  // Диапазон должен совпадать с ALS в page.tsx: Beginner 400 … Stockfish 3500.
+  // Здесь стояло «800–2400» — обещание уже, чем то, что игрок реально получает.
+  { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 400–3500 — 5 секунд до старта" },
   { intent: "learn", icon: "🎓", title: "Учиться", hint: "Курс из 14 уроков и живой AI-тренер" },
   { intent: "puzzles", icon: "⚡", title: "Пазлы", hint: "Тысячи задач под твой уровень" },
 ];

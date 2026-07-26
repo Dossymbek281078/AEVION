@@ -2,6 +2,7 @@
 
 import { useI18n } from "./i18n";
 import { migrationsDict } from "./pricingI18n/sections/migrations";
+import { fanDict } from "./pricingI18n/sections/fan";
 
 /**
  * Локализация pricing-секции. Отдельный словарь, чтобы не раздувать
@@ -999,8 +1000,8 @@ const baseDict: Record<Lang, Record<string, string>> = {
  * Section keys имеют приоритет (override) над baseDict.
  */
 const dict: Record<string, Record<string, string>> = {
-  ru: { ...baseDict.ru, ...migrationsDict.ru },
-  en: { ...baseDict.en, ...migrationsDict.en },
+  ru: { ...baseDict.ru, ...migrationsDict.ru, ...fanDict.ru },
+  en: { ...baseDict.en, ...migrationsDict.en, ...fanDict.en },
 };
 
 export function usePricingT() {

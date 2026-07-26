@@ -21,6 +21,14 @@
  * 13.  POST /api/pricing/promo/validate {code:"NO_SUCH"} → invalid=true (400/200)
  * 14.  POST /api/pricing (non-existent) → 4xx graceful (not 500)
  * 15.  Content-Type application/json on /pricing/tiers
+ * 18.  POST /api/pricing/fan → веерные ставки + потолки не пробиты
+ * 19.  GET /api/pricing/fan/preview → items[] с ring1[]
+ * 20.  GET /api/pricing/fan/me без токена → 401
+ * 21.  POST /api/pricing/quote {tierId:"pro"} → 200 (до 2026-07-26 отдавал 400)
+ *
+ * Веерные проверки (18-21) добавлены сразу вместе с фичей: в этом репо уже
+ * пять раз squash-merge тихо ронял смонтированные роуты, и смоук — единственное,
+ * что это ловит до пользователя.
  */
 
 const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
@@ -169,6 +177,48 @@ async function run() {
   if (r.status === 401) {
     ok("GET /pricing/subscription/me (bad token) → 401");
   } else fail("GET /pricing/subscription/me (bad token) → 401", `got=${r.status}`);
+
+  // 18. Веер: ставки, кольца и потолок скидки
+  r = await req("POST", "/api/pricing/fan", { body: { owned: ["qsign"], currency: "USD" } });
+  const fan = r.body || {};
+  if (
+    r.status === 200 &&
+    fan.status === "active" &&
+    fan.level === 1 &&
+    Array.isArray(fan.offers) &&
+    fan.offers.length > 0 &&
+    fan.summary &&
+    typeof fan.summary.discounted === "number"
+  ) {
+    const cap = fan.params?.maxDiscountRatio ?? 0.5;
+    const overCap = fan.offers.filter((o) => o.discountRatio > cap);
+    const negative = fan.offers.filter((o) => o.priceMonthly > o.listMonthly);
+    const ring1 = fan.offers.filter((o) => o.ring === 1);
+    if (overCap.length) fail("POST /pricing/fan потолок скидки", `пробит: ${overCap.map((o) => o.module).join(",")}`);
+    else if (negative.length) fail("POST /pricing/fan цена выше прайса", negative.map((o) => o.module).join(","));
+    else if (ring1.length === 0) fail("POST /pricing/fan ring1 пуст для qsign", "ожидались соседи по контуру документов");
+    else ok("POST /pricing/fan", `level=${fan.level} ring1=${ring1.length} discounted=${fan.summary.discounted}`);
+  } else fail("POST /pricing/fan", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
+
+  // 19. Витрина веера «купи один — вот что подешевеет»
+  r = await req("GET", "/api/pricing/fan/preview");
+  if (r.status === 200 && Array.isArray(r.body?.items) && r.body.items.length > 0 && Array.isArray(r.body.items[0].ring1)) {
+    const withFan = r.body.items.filter((x) => x.ring1.length > 0).length;
+    ok("GET /pricing/fan/preview", `modules=${r.body.items.length} с веером=${withFan}`);
+  } else fail("GET /pricing/fan/preview", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
+
+  // 20. Персональный веер без токена → 401. Именно 401, а не пустой веер:
+  //     пустота читалась бы как «скидок нет», а это неправда.
+  r = await req("GET", "/api/pricing/fan/me");
+  if (r.status === 401) ok("GET /pricing/fan/me (no auth) → 401");
+  else fail("GET /pricing/fan/me (no auth) → 401", `got=${r.status}`);
+
+  // 21. Смета флагманского тарифа. Регрессия 2026-07-26: `pro` отсутствовал в
+  //     валидаторе, и калькулятор отдавал 400 на самый дорогой тариф.
+  r = await req("POST", "/api/pricing/quote", { body: { tierId: "pro", period: "annual" } });
+  if (r.status === 200 && typeof r.body?.total === "number" && r.body.total > 0) {
+    ok("POST /pricing/quote tierId=pro", `total=${r.body.total} discount=${r.body.discount}`);
+  } else fail("POST /pricing/quote tierId=pro", `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
 
   console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
   process.exit(failed > 0 ? 1 : 0);

@@ -206,9 +206,19 @@ reprice them off a guessed comparison; benchmark first»), а бенчмарко
 | GET | `/api/pricing/fan/me` | веер текущего покупателя из его подписки (Bearer) |
 | POST | `/api/pricing/quote` | смета; принимает `ownedModules`/`lastPurchaseAt`, отдаёт блок `fan` |
 | POST | `/api/pricing/checkout/session` | тот же движок + правда о реально списываемой сумме |
+| GET | `/api/pricing/checkout/discount-integrity` | сколько скидок пообещали и не применили (агрегаты по каналам, **с момента старта процесса** — `sinceBoot: true`) |
 
-Фронт: `frontend/src/components/FanDiscountPanel.tsx` на `/pricing`. Ставки на
-фронте не дублируются — всё из API.
+Фронт (ставки нигде не дублируются, всё из API):
+- `components/FanDiscountPanel.tsx` — панель на `/pricing`;
+- `components/ModulePricingChip.tsx` — строка «веер: N модулей дешевле на $X/мес»
+  на 28 витринах модулей (у одиночек строки нет: «веер 0» — пустое обещание);
+- `components/PaywallModal.tsx` — веерное предложение в стене 402 для
+  авторизованного покупателя (без токена молчим: придумать скидку, которую
+  чекаут не выполнит, хуже, чем не предложить);
+- копирайт — `lib/pricingI18n/sections/fan.ts` (ru/en), не хардкод.
+
+Смоук: `scripts/pricing-prod-smoke.js` 17 → **21 проверка** (веер, витрина,
+401 на `/fan/me`, смета тарифа `pro`). Прогнано локально: 21/21 PASS.
 
 ## 8. Открытые пункты
 

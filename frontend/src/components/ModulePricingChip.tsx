@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { usePricingT } from "@/lib/pricingI18n";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -43,6 +44,33 @@ interface PricingResponse {
 // subsequent chip reuses the same promise. Survives chip-mount churn.
 let pricingPromise: Promise<PricingResponse | null> | null = null;
 
+/**
+ * Веерная витрина: что подешевеет, если купить ЭТОТ модуль. Тот же приём, что
+ * у Higgsfield — список того, что откроется, показан ДО оплаты (см.
+ * docs/FAN_DISCOUNTS_2026-07.md). Числа берём из /api/pricing/fan/preview,
+ * ставки на фронте не считаем.
+ *
+ * Кэш по валюте: preview возвращает суммы уже конвертированными, поэтому один
+ * общий promise для всех валют дал бы чужие цифры при переключении тумблера.
+ */
+interface FanPreviewRow {
+  module: string;
+  ring1: string[];
+  ring1SavingMonthly: number;
+}
+const fanPromises = new Map<CurrencyCode, Promise<FanPreviewRow[] | null>>();
+
+function loadFanPreview(currency: CurrencyCode): Promise<FanPreviewRow[] | null> {
+  const cached = fanPromises.get(currency);
+  if (cached) return cached;
+  const p = fetch(apiUrl(`/api/pricing/fan/preview?currency=${currency}`))
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (Array.isArray(j?.items) ? (j.items as FanPreviewRow[]) : null))
+    .catch(() => null);
+  fanPromises.set(currency, p);
+  return p;
+}
+
 function loadPricing(): Promise<PricingResponse | null> {
   if (!pricingPromise) {
     pricingPromise = fetch(apiUrl("/api/pricing"))
@@ -69,7 +97,9 @@ interface Props {
 }
 
 export default function ModulePricingChip({ moduleId, currency = "USD", theme = "light", hideBuy = false }: Props) {
+  const tp = usePricingT();
   const [data, setData] = useState<PricingResponse | null>(null);
+  const [fanRow, setFanRow] = useState<FanPreviewRow | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState(false);
 
@@ -82,6 +112,16 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFanPreview(currency).then((rows) => {
+      if (!cancelled) setFanRow(rows?.find((r) => r.module === moduleId) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currency, moduleId]);
 
   if (!data || !Array.isArray(data.tiers)) return null;
 
@@ -161,6 +201,21 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           </>
         )}
       </Link>
+      {/* Веер: только когда покупка реально что-то открывает. Модуль-одиночка
+          (lifebox/constitution — их соседи по кластеру пока без цены) не
+          получает бодрую строку «веер 0» — пустое обещание хуже молчания. */}
+      {fanRow && fanRow.ring1.length > 0 && (
+        <span
+          style={{ color: palette.accent, fontWeight: 700, whiteSpace: "nowrap" }}
+          title={tp("fan.module.tooltip", { module: moduleId, list: fanRow.ring1.join(", ") })}
+        >
+          {tp("fan.module.opens", {
+            n: fanRow.ring1.length,
+            cur: (data.currencies?.[currency] ?? data.currencies?.USD)?.symbol ?? "$",
+            sum: fanRow.ring1SavingMonthly,
+          })}
+        </span>
+      )}
       {!hideBuy && (
         <button
           type="button"

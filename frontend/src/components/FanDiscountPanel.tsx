@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { usePricingT } from "@/lib/pricingI18n";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Веерная скидка — панель для /pricing.
@@ -15,6 +17,10 @@ import { apiUrl } from "@/lib/apiBase";
  *
  * apiUrl() зовём только в useEffect: вызов на рендере ломает гидрацию
  * (React #418) — грабли уже ловили на этом проекте.
+ *
+ * Весь копирайт — через usePricingT() (секция `fan` в
+ * lib/pricingI18n/sections/fan.ts). Хардкод RU здесь = KK/EN-переключатель
+ * переводит страницу частично, ровно как было в `constitution`.
  */
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
@@ -55,13 +61,11 @@ interface PreviewRow {
 
 const SYMBOL: Record<CurrencyCode, string> = { USD: "$", EUR: "€", KZT: "₸", RUB: "₽" };
 
-const RING_LABEL: Record<1 | 2 | 3, string> = {
-  1: "Прямой контур",
-  2: "Тот же домен",
-  3: "Остальная планета",
-};
-
 export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode }) {
+  const tp = usePricingT();
+  const { lang } = useI18n();
+  // Дата окна веера — в локали интерфейса, а не всегда ru-RU.
+  const locale = lang === "ru" ? "ru-RU" : "en-US";
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [owned, setOwned] = useState<string[]>([]);
   const [fan, setFan] = useState<FanState | null>(null);
@@ -117,29 +121,27 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
       }}
     >
       <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-        Веерная скидка
+        {tp("fan.badge")}
       </div>
       <h2 style={{ margin: "6px 0 4px", fontSize: 24, fontWeight: 900, color: "#0f172a" }}>
-        Один продукт открывает скидку на соседние
+        {tp("fan.title")}
       </h2>
       <p style={{ margin: 0, fontSize: 14, color: "#475569", maxWidth: 720 }}>
-        Покупка любого модуля включает веер: прямой контур — до −45%, тот же домен — до −30%.
-        Каждый следующий модуль поднимает уровень веера. Веер открыт{" "}
-        {fan?.windowDays ?? 14} дней с последней покупки и продлевается новой.
+        {tp("fan.subtitle", { days: fan?.windowDays ?? 14 })}
       </p>
 
       {error && (
         <div style={{ marginTop: 16, padding: 12, background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 8, fontSize: 13 }}>
-          Не удалось получить веер: {error}
+          {tp("fan.error", { reason: error })}
         </div>
       )}
 
       {/* Витрина до покупки */}
-      {!preview && !error && <div style={{ marginTop: 20, color: "#64748b", fontSize: 14 }}>Загружаем веер…</div>}
+      {!preview && !error && <div style={{ marginTop: 20, color: "#64748b", fontSize: 14 }}>{tp("fan.loading")}</div>}
       {preview && (
         <>
           <h3 style={{ margin: "24px 0 8px", fontSize: 13, fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-            Отметьте, что у вас уже есть
+            {tp("fan.pick")}
           </h3>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {starters.map((row) => {
@@ -158,12 +160,12 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
                     fontWeight: 700,
                     cursor: "pointer",
                   }}
-                  title={`${row.module}: открывает ${row.ring1.length} модулей прямого контура`}
+                  title={tp("fan.chip.tooltip", { module: row.module, n: row.ring1.length })}
                 >
                   {row.module}
                   <span style={{ fontWeight: 500, opacity: 0.75 }}>
                     {" "}· {sym}
-                    {row.listMonthly} · веер {row.ring1.length}
+                    {row.listMonthly} · {tp("fan.chip.opens", { n: row.ring1.length })}
                   </span>
                 </button>
               );
@@ -176,18 +178,18 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
       {fan && (
         <div style={{ marginTop: 24 }}>
           <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>
-            Уровень веера {fan.level} · со скидкой {fan.summary.discounted} модулей · максимум экономии {sym}
-            {fan.summary.maxSavingMonthly}/мес
+            {tp("fan.level", { n: fan.level })} · {tp("fan.discountedCount", { n: fan.summary.discounted })} ·{" "}
+            {tp("fan.maxSaving", { cur: sym, sum: fan.summary.maxSavingMonthly })}
             {fan.validUntil && (
               <span style={{ fontWeight: 500, color: "#64748b" }}>
-                {" "}· открыт до {new Date(fan.validUntil).toLocaleDateString("ru-RU")}
+                {" "}· {tp("fan.openUntil", { date: new Date(fan.validUntil).toLocaleDateString(locale) })}
               </span>
             )}
           </div>
 
           {discounted.length === 0 && (
             <div style={{ marginTop: 12, fontSize: 14, color: "#64748b" }}>
-              Для этого набора скидок нет — выбранные продукты не соседствуют ни с одним платным модулем.
+              {tp("fan.empty")}
             </div>
           )}
 
@@ -209,8 +211,8 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{o.module}</div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
-                    {RING_LABEL[o.ring]} — {o.reason}
-                    {o.cogsCapped && " · глубина ограничена себестоимостью вызовов"}
+                    {tp(`fan.ring.${o.ring}`)} — {o.reason}
+                    {o.cogsCapped && ` · ${tp("fan.cogsCapped")}`}
                   </div>
                 </div>
                 <div style={{ whiteSpace: "nowrap", textAlign: "right" }}>
@@ -241,7 +243,7 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
           </div>
 
           <p style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            Скидка веера фиксируется на оплаченный период; вместе с промокодом она не превышает 50% заказа.
+            {tp("fan.footnote")}
           </p>
         </div>
       )}

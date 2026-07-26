@@ -13,11 +13,38 @@ import {
   formatTiers,
   type PaywallPayload,
 } from "@/lib/paywall";
+import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/aevionCatalog";
+import { usePricingT } from "@/lib/pricingI18n";
+
+/**
+ * Веерное предложение в стене 402.
+ *
+ * Стена умеет только «оформи тариф» — и это дороже всего, что человеку нужно
+ * прямо сейчас. Если у него уже что-то куплено, веер даёт заблокированный
+ * модуль дешевле розницы (docs/FAN_DISCOUNTS_2026-07.md). Спрос на этих
+ * модулях уже собирается в `/api/paywall/funnel`; здесь мы наконец отвечаем
+ * на него предложением, а не только апселлом.
+ *
+ * Без токена молчим: /fan/me отдаёт 401, и придумывать скидку «наверное, есть»
+ * нельзя — это обещание, которое чекаут не выполнит.
+ */
+interface FanMeOffer {
+  module: string;
+  discountPercent: number;
+  priceMonthly: number;
+  listMonthly: number;
+}
 
 export function PaywallModal() {
+  const tp = usePricingT();
   const [info, setInfo] = useState<PaywallPayload | null>(null);
+  const [fanOffer, setFanOffer] = useState<FanMeOffer | null>(null);
 
-  const close = useCallback(() => setInfo(null), []);
+  const close = useCallback(() => {
+    setInfo(null);
+    setFanOffer(null);
+  }, []);
 
   useEffect(() => {
     installPaywallInterceptor();
@@ -28,6 +55,27 @@ export function PaywallModal() {
     window.addEventListener(PAYWALL_EVENT, onPaywall as EventListener);
     return () => window.removeEventListener(PAYWALL_EVENT, onPaywall as EventListener);
   }, []);
+
+  // Веер для заблокированного модуля — только для авторизованного покупателя.
+  useEffect(() => {
+    setFanOffer(null);
+    const token = getAuthToken();
+    if (!info || !token) return;
+    let alive = true;
+    fetch(apiUrl("/api/pricing/fan/me"), { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive || j?.status !== "active") return;
+        const hit = (j.offers as FanMeOffer[] | undefined)?.find(
+          (o) => o.module === info.module && o.discountPercent > 0,
+        );
+        if (hit) setFanOffer(hit);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [info]);
 
   // Close on Escape while the modal is open.
   useEffect(() => {
@@ -144,9 +192,34 @@ export function PaywallModal() {
           Тариф: {tiers}
         </div>
 
+        {fanOffer && (
+          <div
+            style={{
+              margin: "0 0 18px",
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "rgba(13,148,136,0.16)",
+              border: "1px solid rgba(45,212,191,0.45)",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#5eead4", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {tp("fan.paywall.title")}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#f0fdfa" }}>
+              {tp("fan.paywall.offer", {
+                module: fanOffer.module,
+                cur: "$",
+                price: fanOffer.priceMonthly,
+                list: fanOffer.listMonthly,
+              })}{" "}
+              <span style={{ fontWeight: 900, color: "#5eead4" }}>−{fanOffer.discountPercent}%</span>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a
-            href={info.upgradeUrl}
+            href={fanOffer ? `/pricing?module=${encodeURIComponent(fanOffer.module)}` : info.upgradeUrl}
             style={{
               flex: 1,
               minWidth: 160,

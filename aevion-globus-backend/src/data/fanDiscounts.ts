@@ -386,6 +386,30 @@ function round2(n: number): number {
 }
 
 /**
+ * Курс валюты — со вторым слоем защиты, а не «вызывающий проверил».
+ *
+ * `CURRENCY_RATES[currency].rate` напрямую держится только на дисциплине
+ * вызывающего: `currency` приходит из тела HTTP-запроса, а прототипный ключ
+ * (`"constructor"`, `"__proto__"`) даёт функцию, у которой нет `.rate` — курс
+ * становится `undefined`, и ВСЯ смета уезжает в `NaN` при HTTP 200. Ровно это
+ * и было найдено 2026-07-26 в `routes/pricing.ts` и починено там `parseCurrency`.
+ *
+ * Сегодня все четыре вызывающих безопасны (три ручки нормализуют вход,
+ * checkout передаёт литерал `"USD"`) — то есть живого дефекта здесь нет.
+ * Слой всё равно нужен: эти функции экспортированы и стоят на денежном пути,
+ * а правило после того разбора записано прямо — защищать в ДВУХ слоях, потому
+ * что функцию зовут из нескольких мест и следующий вызывающий про
+ * `parseCurrency` знать не обязан.
+ */
+function normalizeCurrency(currency: unknown): CurrencyCode {
+  return typeof currency === "string" &&
+    Object.prototype.hasOwnProperty.call(CURRENCY_RATES, currency) &&
+    typeof CURRENCY_RATES[currency as CurrencyCode]?.rate === "number"
+    ? (currency as CurrencyCode)
+    : "USD";
+}
+
+/**
  * Главный расчёт: что и на сколько дешевеет для владельца набора `owned`.
  *
  * Возвращает ТОЛЬКО предложения — ничего не списывает и не сохраняет.
@@ -394,7 +418,7 @@ function round2(n: number): number {
  */
 export function computeFan(input: FanInput = {}): FanState {
   const now = input.now ?? new Date();
-  const currency: CurrencyCode = input.currency ?? "USD";
+  const currency: CurrencyCode = normalizeCurrency(input.currency);
   const rate = CURRENCY_RATES[currency].rate;
   const tier = input.tierId ? getTier(input.tierId) : null;
   const notes: string[] = [];
@@ -530,7 +554,8 @@ export interface FanPreviewRow {
  * Это марketинговая витрина («купи один — вот что подешевеет»), тот же приём,
  * которым Higgsfield показывает список unlimited-моделей ДО оплаты плана.
  */
-export function fanPreview(currency: CurrencyCode = "USD"): FanPreviewRow[] {
+export function fanPreview(currencyInput: CurrencyCode = "USD"): FanPreviewRow[] {
+  const currency = normalizeCurrency(currencyInput);
   const rate = CURRENCY_RATES[currency].rate;
   const rows: FanPreviewRow[] = [];
   for (const m of MODULES_PRICING) {
@@ -597,11 +622,26 @@ export interface QuoteWithFanInput {
  * Веер НЕ трогает строки tier/seat (см. шапку файла).
  */
 export function buildQuoteWithFan(input: QuoteWithFanInput): QuoteWithFan {
-  const currency: CurrencyCode = input.currency ?? "USD";
+  // Второй слой защиты на самой денежной точке входа.
+  //
+  // Обе ручки сегодня нормализуют вход до вызова (`parseCurrency`, `seats`
+  // через `Number.isFinite` + зажим 1..1000) — живого дефекта нет. Но
+  // `buildQuote` внутри делает `CURRENCY_RATES[currency].rate` и
+  // `Math.max(1, input.seats ?? 1)`, а оба выражения тихо дают мусор, а не
+  // отказ: прототипный ключ валюты уводит курс в `undefined` и всю смету в
+  // `NaN`, а `Math.max(1, NaN)` — это `NaN`, а не 1 (тот же капкан, что был
+  // найден в `?limit=`). Полагаться на дисциплину вызывающего там, где
+  // считаются деньги, — ровно та ошибка, из-за которой «смета ≠ списание»
+  // уже случалось.
+  const currency: CurrencyCode = normalizeCurrency(input.currency);
+  const seats =
+    typeof input.seats === "number" && Number.isFinite(input.seats)
+      ? Math.min(1000, Math.max(1, Math.floor(input.seats)))
+      : 1;
   const base = buildQuote({
     tierId: input.tierId,
     modules: input.modules,
-    seats: input.seats,
+    seats,
     period: input.period,
     currency,
     promoCode: input.promoCode,

@@ -16,6 +16,7 @@ import {
   FAN_KNOWN_LONERS,
 } from "../src/data/fanDiscounts";
 import {
+  CURRENCY_RATES,
   MODULES_PRICING,
   buildQuote,
   computePromoDiscountUsd,
@@ -326,6 +327,56 @@ describe("смета с веером", () => {
     // Годовая скидка = 2 месяца тарифа (39*12 - 390 = 78)
     const annualPart = q.discount - q.fan.applied - (q.promo?.applied ?? 0);
     expect(annualPart).toBeCloseTo(78, 2);
+  });
+});
+
+describe("веер в валютах — KZT это единственный живой канал, который спишет нашу сумму", () => {
+  // PayBox (тенге) и PayPal — единственные каналы, которые списывают
+  // ПРОИЗВОЛЬНУЮ сумму (docs §3). То есть до настройки LS веер превращается в
+  // реальные деньги именно там, и конвертация обязана быть точной.
+  const args = { tierId: "medium" as const, modules: ["qright", "qcontract"], ownedModules: ["qsign"], now: NOW };
+
+  it("итог в тенге == итог в долларах × курс (без потерь на округлениях)", () => {
+    const usd = buildQuoteWithFan({ ...args, currency: "USD" });
+    const kzt = buildQuoteWithFan({ ...args, currency: "KZT" });
+    const rate = CURRENCY_RATES.KZT.rate;
+    expect(kzt.total).toBeCloseTo(usd.total * rate, 0);
+    expect(kzt.subtotal).toBeCloseTo(usd.subtotal * rate, 0);
+  });
+
+  it("доля скидки не зависит от валюты", () => {
+    const usd = buildQuoteWithFan({ ...args, currency: "USD" });
+    const kzt = buildQuoteWithFan({ ...args, currency: "KZT" });
+    expect(kzt.discount / kzt.subtotal).toBeCloseTo(usd.discount / usd.subtotal, 4);
+  });
+
+  it("веер реально уменьшает сумму к списанию в тенге", () => {
+    const withFan = buildQuoteWithFan({ ...args, currency: "KZT" });
+    const without = buildQuoteWithFan({ ...args, ownedModules: [], currency: "KZT" });
+    expect(withFan.total).toBeLessThan(without.total);
+    expect(without.total - withFan.total).toBeCloseTo(withFan.fan.applied, 0);
+  });
+
+  it("на ГОДОВОМ периоде веер считается от суммы за 12 месяцев, а не за один", () => {
+    // При месячной оплате unitPrice == total, и ошибка «взяли не ту базу»
+    // остаётся невидимой. На годовом qty=12, и разница в 12 раз сразу видна —
+    // проверено мутацией: подмена базы на unitPrice роняет именно этот тест.
+    const annual = buildQuoteWithFan({ ...args, period: "annual", currency: "USD" });
+    const addonTotal = annual.lines
+      .filter((l) => l.kind === "addon")
+      .reduce((sum, l) => sum + l.total, 0);
+    expect(addonTotal).toBeGreaterThan(0);
+    // Оба add-on модуля в ring1 первого уровня → 30% от годовой суммы add-on'ов.
+    expect(annual.fan.applied).toBeCloseTo(addonTotal * FAN_RING_BASE[1], 1);
+  });
+
+  it("в EUR и RUB та же пропорция — валюта не создаёт скидку и не съедает её", () => {
+    const usd = buildQuoteWithFan({ ...args, currency: "USD" });
+    for (const cur of ["EUR", "RUB"] as const) {
+      const q = buildQuoteWithFan({ ...args, currency: cur });
+      expect(q.total).toBeCloseTo(usd.total * CURRENCY_RATES[cur].rate, 0);
+      expect(q.fan.applied).toBeCloseTo(usd.fan.applied * CURRENCY_RATES[cur].rate, 0);
+    }
   });
 });
 

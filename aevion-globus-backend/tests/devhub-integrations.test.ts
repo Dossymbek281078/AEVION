@@ -3922,3 +3922,41 @@ describe("realism pass shared with QReal", () => {
     delete process.env.REPLICATE_API_TOKEN;
   });
 });
+
+describe("database quotas", () => {
+  test("roles are created with a connection cap so one app cannot starve the rest", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    await m.provisionProjectDatabase({
+      projectId: "cccccccc-dddd-eeee-ffff-000000000000",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => { executed.push(sql.trim().split("\n")[0]); return { rows: [] }; },
+    });
+    expect(executed.join(" | ")).toMatch(/CREATE ROLE u_ccccccccdddd LOGIN PASSWORD '.*' CONNECTION LIMIT 5/);
+  });
+
+  test("size is measured, not estimated", async () => {
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.projectSchemaSizeBytes({
+      projectId: "cccccccc-dddd-eeee-ffff-000000000000",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql, params) => {
+        expect(sql).toContain("pg_total_relation_size");
+        expect(params).toEqual(["p_ccccccccdddd"]);
+        return { rows: [{ bytes: "2097152", tables: 3 }] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) { expect(r.bytes).toBe(2097152); expect(r.tables).toBe(3); }
+  });
+
+  test("usage endpoint answers honestly for an unprovisioned project", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoDbYet", stack: "next" });
+    const r = await request(app).get(`/api/devhub/projects/${cr.body.project.id}/database`);
+    expect(r.status).toBe(200);
+    expect(r.body.provisioned).toBe(false);
+    expect(r.body.connectionLimit).toBe(5);
+  });
+});

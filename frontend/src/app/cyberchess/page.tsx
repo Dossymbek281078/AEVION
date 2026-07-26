@@ -11226,8 +11226,10 @@ ${question.trim()}`;
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       // Library v2 — full search/sort/filter/PGN export/delete.
-      const isWinG=(g:SavedGame)=>g.result.includes("You win")||g.result.includes("win!");
-      const isLossG=(g:SavedGame)=>g.result.includes("AI wins")||g.result.includes("resigned");
+      // Через общий gameResultOf: isLossG не знал про "Time out", поэтому партия,
+      // проигранная по флагу, экспортировалась в PGN как ничья (1/2-1/2).
+      const isWinG=(g:SavedGame)=>gameResultOf(g.result)==="W";
+      const isLossG=(g:SavedGame)=>gameResultOf(g.result)==="L";
       const isDrawG=(g:SavedGame)=>g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);
       const categoryFilter=gamesFilter;

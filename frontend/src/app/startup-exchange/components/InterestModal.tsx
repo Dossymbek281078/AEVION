@@ -63,9 +63,16 @@ export function InterestModal({
       }
     };
     document.addEventListener("keydown", onKey);
-    emailRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Стартовый фокус — ровно один раз на открытие. Раньше он стоял в эффекте с
+  // зависимостью [onClose], а onClose приходит из родителя новой функцией на
+  // каждый его рендер: всплывший тост или обновление ленты перебрасывали бы
+  // курсор в поле почты посреди набора суммы.
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
 
   async function submit() {
     if (!email.trim()) {

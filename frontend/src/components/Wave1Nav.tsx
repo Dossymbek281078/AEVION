@@ -141,6 +141,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/healthai" style={{ color: link, fontWeight: 600 }}>HealthAI</Link>
       <Link href="/qcontract" style={{ color: link, fontWeight: 600 }}>QContract</Link>
       <Link href="/qpaynet" style={{ color: link, fontWeight: 600 }}>QPayNet</Link>
+      <Link href="/startup-exchange" style={{ color: link, fontWeight: 600 }}>Биржа стартапов</Link>
       <Link href="/studio" style={{ color: "#0d9488", fontWeight: 800 }}>Studio</Link>
       <Link href="/devhub" style={{ color: link, fontWeight: 600 }}>DevHub</Link>
       <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>Смета</Link>

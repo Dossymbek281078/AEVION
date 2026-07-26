@@ -22,7 +22,8 @@
 //
 // Фазы (ничего не тратит, пока не передан --confirm-spend):
 //   node scripts/qreal-benchmark.mjs plan                    # $0 — смета и проверка шкалы
-//   node scripts/qreal-benchmark.mjs prepare                 # ~$0 — собрать промты обоих плеч
+//   node scripts/qreal-benchmark.mjs prepare                 # НЕ бесплатен: пишет 10 проектов
+//                                                            # в прод и жжёт токены LLM (см. протокол)
 //   node scripts/qreal-benchmark.mjs render --confirm-spend  # ТРАТИТ деньги fal.ai
 //   node scripts/qreal-benchmark.mjs poll                    # дождаться ссылок
 //   node scripts/qreal-benchmark.mjs sheet --judge anna      # слепой лист оценки

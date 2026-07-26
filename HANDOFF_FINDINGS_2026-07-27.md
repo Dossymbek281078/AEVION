@@ -156,6 +156,13 @@ deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BI
   **неверно**: зонд подавал в `isModuleEntitled` сырой `tier:"pro"` в обход
   `normalizeTier`, которая мапит его в `full`. Реальный путь всегда нормализует,
   права полные.
+- **Фронтенд системной защёлки НЕ имеет.** Прогрепан тем же правилом: всего пять
+  модульных булевых флагов. `sentry.inited` и `AutoTranslate.i18nWarned` —
+  намеренные (init-once и warn-once); `Globus3D.countriesCacheBuildStarted` и
+  `borderVerticesBuildStarted` работают над СТАТИЧЕСКИ импортированными данными,
+  сети там нет — повтор детерминированного вычисления ничего бы не дал.
+  Настоящих ловушек на фронте было две, обе в кэшах промисов, обе починены
+  (`ModulePricingChip`, `FanDiscountPanel`).
 - **`lib/sentry.ts`** кэширует неудачу загрузки CDN намеренно и это
   задокументировано — заблокированный ad-блокером скрипт дёргать снова
   бессмысленно. Не путать с защёлками из пункта 1.

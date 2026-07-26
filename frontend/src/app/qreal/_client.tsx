@@ -86,16 +86,30 @@ export default function QRealClient() {
     }).catch(() => {});
   }, [loadDemo]);
 
-  // Смета проекта (пересчитывается при каждой смене раскадровки/статусов).
+  // Смета зависит от статусов кадров, поэтому пересчитывается на любое
+  // изменение проекта — включая тики автопула во время рендера.
   useEffect(() => {
     if (!project) return;
     fetch(apiUrl(`/api/qreal/projects/${project.id}/estimate`))
       .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
       .catch(() => {});
-    fetch(apiUrl(`/api/qreal/projects/${project.id}/characters`))
-      .then((r) => r.json()).then((d) => { setCast(d?.characters || []); setCastDraft({}); setRefDraft({}); })
-      .catch(() => {});
   }, [project]);
+
+  // Каст и черновики правок — только на смену ПРОЕКТА, не на каждое его
+  // обновление. Автопул рендера подменяет объект project раз в 10 секунд; будь
+  // эффект завязан на объект, набранный режиссёром текст описания стирался бы
+  // каждые 10 секунд прямо во время работы. Вердикт непрерывности тоже
+  // сбрасываем: оценка старого проекта под новым — ложное измерение.
+  const projectId = project?.id;
+  useEffect(() => {
+    if (!projectId) return;
+    setCastDraft({});
+    setRefDraft({});
+    setContinuity(null);
+    fetch(apiUrl(`/api/qreal/projects/${projectId}/characters`))
+      .then((r) => r.json()).then((d) => setCast(d?.characters || []))
+      .catch(() => {});
+  }, [projectId]);
 
   // Правка канона режиссёром. Сервер пересобирает промты кадров, поэтому
   // проект перечитываем целиком — иначе на экране остались бы старые промты.

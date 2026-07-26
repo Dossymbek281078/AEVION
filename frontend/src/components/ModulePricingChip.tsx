@@ -47,10 +47,6 @@ interface PricingResponse {
   currencies: Record<CurrencyCode, CurrencyRate>;
 }
 
-// Module-scoped cache: first chip on the page triggers the fetch, every
-// subsequent chip reuses the same promise. Survives chip-mount churn.
-let pricingPromise: Promise<PricingResponse | null> | null = null;
-
 /**
  * Веерная витрина: что подешевеет, если купить ЭТОТ модуль. Тот же приём, что
  * у Higgsfield — список того, что откроется, показан ДО оплаты (см.
@@ -65,26 +61,57 @@ interface FanPreviewRow {
   ring1: string[];
   ring1SavingMonthly: number;
 }
-const fanPromises = new Map<CurrencyCode, Promise<FanPreviewRow[] | null>>();
+/**
+ * Кэш запроса, который НЕ запоминает неудачу навсегда.
+ *
+ * 🔴 Найдено вычиткой дифа 2026-07-27. Оба кэша ниже клали промис в память до
+ * того, как он разрешится, и больше никогда не перезапрашивали. Один сетевой
+ * сбой или холодный старт бэкенда — и `null` оставался в кэше на всю жизнь
+ * страницы: веерная строка не появлялась уже никогда, а у `loadPricing`
+ * пропадала и сама цена. Перерисовка компонента не помогала, помогала только
+ * перезагрузка вкладки — то есть человек видел «скидки нет» из-за нашей
+ * ошибки, ровно тот же тупик, что уже чинился в FanDiscountPanel.
+ *
+ * Почему кулдаун, а не «просто не кэшировать неудачу»: на странице бывает
+ * несколько чипов, и мгновенный перезапрос каждым из них превратил бы лежачий
+ * бэкенд в шторм. Тот же приём применён на сервере в discountIntegrityLog.
+ */
+const FAILED_RETRY_MS = 30_000;
 
-function loadFanPreview(currency: CurrencyCode): Promise<FanPreviewRow[] | null> {
-  const cached = fanPromises.get(currency);
+function cachedFetch<T>(
+  store: Map<string, Promise<T | null>>,
+  key: string,
+  run: () => Promise<T | null>,
+): Promise<T | null> {
+  const cached = store.get(key);
   if (cached) return cached;
-  const p = fetch(apiUrl(`/api/pricing/fan/preview?currency=${currency}`))
-    .then((r) => (r.ok ? r.json() : null))
-    .then((j) => (Array.isArray(j?.items) ? (j.items as FanPreviewRow[]) : null))
-    .catch(() => null);
-  fanPromises.set(currency, p);
+  const p = run()
+    .catch(() => null)
+    .then((v) => {
+      // Успех держим; неудачу забываем через кулдаун, чтобы следующий
+      // рендер попробовал снова, а не наследовал чужой сбой.
+      if (v === null) setTimeout(() => store.delete(key), FAILED_RETRY_MS);
+      return v;
+    });
+  store.set(key, p);
   return p;
 }
 
-function loadPricing(): Promise<PricingResponse | null> {
-  if (!pricingPromise) {
-    pricingPromise = fetch(apiUrl("/api/pricing"))
+const fanPromises = new Map<string, Promise<FanPreviewRow[] | null>>();
+const pricingPromises = new Map<string, Promise<PricingResponse | null>>();
+
+function loadFanPreview(currency: CurrencyCode): Promise<FanPreviewRow[] | null> {
+  return cachedFetch(fanPromises, currency, () =>
+    fetch(apiUrl(`/api/pricing/fan/preview?currency=${encodeURIComponent(currency)}`))
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-  }
-  return pricingPromise;
+      .then((j) => (Array.isArray(j?.items) ? (j.items as FanPreviewRow[]) : null)),
+  );
+}
+
+function loadPricing(): Promise<PricingResponse | null> {
+  return cachedFetch(pricingPromises, "pricing", () =>
+    fetch(apiUrl("/api/pricing")).then((r) => (r.ok ? r.json() : null)),
+  );
 }
 
 function fmt(usd: number, code: CurrencyCode, rates: Record<CurrencyCode, CurrencyRate>): string {

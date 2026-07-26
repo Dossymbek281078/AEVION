@@ -78,3 +78,72 @@ describe("ModulePricingChip — веер и цена по запросу", () =>
     expect(link.closest("a")?.getAttribute("href")).toBe("/pricing/contact?module=qskyway");
   });
 });
+
+/**
+ * 🔴 Разовый сбой сети не должен выключать чип навсегда.
+ *
+ * Найдено вычиткой дифа 2026-07-27: кэш клал промис в память ДО того, как тот
+ * разрешится, и неудача оставалась в нём на всю жизнь страницы. Один холодный
+ * старт бэкенда — и веерная строка не появлялась уже никогда, а у /api/pricing
+ * пропадала и сама цена; перерисовка не помогала, помогала только перезагрузка
+ * вкладки. Тот же тупик уже чинился в FanDiscountPanel — здесь он остался.
+ *
+ * Модуль импортируется заново (`resetModules`), иначе тест унаследует успешный
+ * кэш от тестов выше и ничего не проверит.
+ */
+describe("кэш чипа не запоминает сбой навсегда", () => {
+  it("после неудачного запроса следующий рендер пробует снова", async () => {
+    // Фейковые таймеры — С САМОГО НАЧАЛА. Кулдаун ставится setTimeout'ом в
+    // момент неудачи; если подменить таймеры ПОСЛЕ неё, этот таймер останется
+    // настоящим, и промотка времени его не тронет (проверено — тест падал).
+    vi.useFakeTimers();
+    vi.resetModules();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        calls += 1;
+        if (calls <= 2) throw new Error("network down"); // первый заход по каждому адресу падает
+        return { ok: true, status: 200, json: async () => (url.includes("/fan/preview") ? FAN_PREVIEW : PRICING) } as Response;
+      }),
+    );
+    // Провайдер тоже из свежего графа: после resetModules старый I18nProvider
+    // держит ДРУГОЙ объект контекста, и свежий чип его не видит.
+    const Fresh = (await import("@/components/ModulePricingChip")).default;
+    const { I18nProvider: FreshProvider } = await import("@/lib/i18n");
+
+    const first = render(
+      <FreshProvider>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </FreshProvider>,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls, "первый рендер должен сходить за прайсом и за веером").toBe(2);
+    first.unmount();
+
+    // Кулдаун ещё идёт — сеть не дёргаем повторно.
+    const second = render(
+      <FreshProvider>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </FreshProvider>,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls, "в кулдаун повторных запросов быть не должно").toBe(2);
+    second.unmount();
+
+    // Кулдаун истёк — новый рендер обязан сходить снова и показать веер.
+    await vi.advanceTimersByTimeAsync(31_000);
+    render(
+      <FreshProvider>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </FreshProvider>,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    // Точное число вызовов хрупко (два независимых кэша + перерисовки), поэтому
+    // проверяем сам факт: после кулдауна в сеть снова сходили.
+    expect(calls, "после кулдауна запрос должен повториться").toBeGreaterThan(2);
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.getByText(/fan: 3 modules cheaper/i)).toBeTruthy());
+  });
+});

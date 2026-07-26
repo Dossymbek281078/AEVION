@@ -30,8 +30,16 @@ export interface Product {
   /** Формат/язык — короткая строка под заголовком */
   format: string;
   desc: string;
-  /** Цена в USD. Для подписок — за месяц. */
+  /** Цена в USD. Для повторяющихся списаний — за месяц. */
   priceUsd: number;
+  /**
+   * Как списываются деньги. ПРОВЕРЕНО 26.07.2026 на живых чекаутах, а не по
+   * названию товара: все семь модулей на LemonSqueezy отдают «billed every
+   * month». До этой проверки они были подписаны в каталоге как «разовая
+   * лицензия» — человек, нажав «Купить» за $149, попадал бы на ежемесячное
+   * списание. Поле обязательное именно поэтому: угадывать здесь нельзя.
+   */
+  billing: "monthly" | "once";
   kind: ProductKind;
   processor: Processor;
   href: string;
@@ -54,6 +62,7 @@ export const SUBSCRIPTIONS: Product[] = [
     format: "подписка · $59 / мес",
     desc: "Доступ ко всей экосистеме AEVION одной подпиской — вместо покупки модулей поштучно.",
     priceUsd: 59,
+    billing: "monthly",
     kind: "subscription",
     processor: "gumroad",
     href: GUM("xpxzam"),
@@ -73,6 +82,7 @@ export const SUBSCRIPTIONS: Product[] = [
     format: "подписка · $49 / мес",
     desc: "Constitution Design Lab для команды: совместная работа над IP-конституцией, общие объекты и подписи.",
     priceUsd: 49,
+    billing: "monthly",
     kind: "subscription",
     processor: "gumroad",
     href: GUM("wjvquw"),
@@ -85,6 +95,7 @@ export const SUBSCRIPTIONS: Product[] = [
     format: "подписка · $9 / мес",
     desc: "Конструктор IP-конституции на 12 страниц, 27+ эндпоинтов подачи, криптографическое подтверждение через QSign.",
     priceUsd: 9,
+    billing: "monthly",
     kind: "subscription",
     processor: "gumroad",
     href: GUM("pyiaz"),
@@ -104,6 +115,7 @@ export const GUIDES: Product[] = [
       "20 вмешательств с градацией доказательности A/B/C/E, 12-недельный таймлайн и таблица результата. " +
       "Отдельный раздел — что переоценено (NMN/NR, теломеры, «волновые» гаджеты).",
     priceUsd: 19,
+    billing: "once",
     kind: "guide",
     processor: "gumroad",
     href: GUM("oijxmq"),
@@ -118,6 +130,7 @@ export const GUIDES: Product[] = [
       "Наука о том, почему волос седеет и что реально её замедляет — без хайпа. " +
       "Медь/цинк, спермидин, окислительный стресс + 12-недельный протокол.",
     priceUsd: 9,
+    billing: "once",
     kind: "guide",
     processor: "gumroad",
     href: GUM("tmuyxw"),
@@ -131,6 +144,7 @@ export const GUIDES: Product[] = [
       "The evidence-first science of pigment aging and what actually slows it. " +
       "Copper/zinc, spermidine, oxidative stress + a 12-week protocol.",
     priceUsd: 19,
+    billing: "once",
     kind: "guide",
     processor: "gumroad",
     href: GUM("kkiavh"),
@@ -142,6 +156,7 @@ export const GUIDES: Product[] = [
     format: "PDF + EPUB + аудио · книга",
     desc: "90-дневная практика благодарности и молодости: 4 минуты в день. Книга, аудиокнига и материалы одним пакетом.",
     priceUsd: 29.99,
+    billing: "once",
     kind: "book",
     processor: "gumroad",
     href: GUM("ghvzq"),
@@ -153,6 +168,7 @@ export const GUIDES: Product[] = [
     format: "PDF + EPUB + аудио",
     desc: "Книга и полная аудиоверсия. Для тех, кто слушает в дороге.",
     priceUsd: 14.99,
+    billing: "once",
     kind: "book",
     processor: "gumroad",
     href: GUM("lelzw"),
@@ -164,6 +180,7 @@ export const GUIDES: Product[] = [
     format: "PDF + EPUB",
     desc: "Только текст книги. Самый доступный вход.",
     priceUsd: 9.99,
+    billing: "once",
     kind: "book",
     processor: "gumroad",
     href: GUM("orcfbo"),
@@ -171,15 +188,17 @@ export const GUIDES: Product[] = [
   },
 ];
 
-/** Модули с разовой лицензией. Ссылки сверены с `/apps/page.tsx` — там же живут
- *  описания и highlights; здесь короткая витринная строка. */
+/** Модули. ВСЕ СЕМЬ — ежемесячная подписка через LemonSqueezy (проверено на живых
+ *  чекаутах 26.07.2026: «billed every month»), а не разовая покупка. Ссылки сверены
+ *  с `/apps/page.tsx` — там же живут описания и highlights. */
 export const MODULES: Product[] = [
   {
     id: "devhub",
     title: "DevHub Studio Pro",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Браузерная IDE на движке VS Code, генерация кода AI и деплой на Railway / Vercel / Cloudflare Pages.",
     priceUsd: 149,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("ab30b6f3-1d69-4db6-b7ab-86ef0d363a57"),
@@ -189,9 +208,10 @@ export const MODULES: Product[] = [
   {
     id: "smeta",
     title: "Smeta Trainer",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "AI-тренажёр сметного дела РК: корпус ССЦ/ЭСН, разбор ошибок студента, формы 1–3 и КС-2/КС-3.",
     priceUsd: 49,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("91c430c8-74f8-46f2-9499-816c93533ef4"),
@@ -200,9 +220,10 @@ export const MODULES: Product[] = [
   {
     id: "qventure",
     title: "QVenture",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Разбор венчурной сделки: TAM/SAM/SOM, юнит-экономика, проверка допущений основателя.",
     priceUsd: 39,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("79ca3e07-6c75-4de7-8052-0f3bb99277a2"),
@@ -211,9 +232,10 @@ export const MODULES: Product[] = [
   {
     id: "bureau",
     title: "AEVION IP Bureau",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Доказательство авторства: подпись Ed25519, хеш SHA-256, привязка ко времени через OpenTimestamps.",
     priceUsd: 29,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("be5cf241-159f-4f1c-9818-1e9634ba5fab"),
@@ -222,9 +244,10 @@ export const MODULES: Product[] = [
   {
     id: "qpaynet",
     title: "QPayNet",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Встраиваемые платежи и расчёты внутри продукта.",
     priceUsd: 29,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("f0966b9a-6c3c-41ee-9b36-e2fd1a0a82a3"),
@@ -233,9 +256,10 @@ export const MODULES: Product[] = [
   {
     id: "cyberchess",
     title: "CyberChess",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Шахматная платформа: 500k пазлов, AI-коуч, человечные боты по уровням.",
     priceUsd: 19,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("11a4bb2a-2549-4352-a87f-80a8bdad64bd"),
@@ -244,9 +268,10 @@ export const MODULES: Product[] = [
   {
     id: "qcontract",
     title: "QContract",
-    format: "модуль · лицензия",
+    format: "модуль · подписка",
     desc: "Разбор и генерация договоров с проверкой рисков.",
     priceUsd: 19,
+    billing: "monthly",
     kind: "module",
     processor: "lemonsqueezy",
     href: LS("8175a6b2-f3fa-4b51-bed6-da993267701d"),
@@ -268,5 +293,6 @@ export function productById(id: string): Product | undefined {
   return BY_ID.get(id);
 }
 
-/** Сумма разовых цен модулей — используется, чтобы честно показать выгоду подписки. */
+/** Сумма месячных цен модулей — используется, чтобы честно показать выгоду подписки.
+ *  Все модули списываются ежемесячно, поэтому сумма тоже месячная. */
 export const MODULES_TOTAL_USD = MODULES.reduce((s, p) => s + p.priceUsd, 0);

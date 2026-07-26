@@ -20,7 +20,7 @@ import {
 export const metadata: Metadata = {
   title: "Магазин AEVION — подписки, гайды, модули",
   description:
-    "Все товары AEVION в одном месте: подписка на всю экосистему, научные гайды о долголетии, книга и модули с разовой лицензией. Мгновенная выдача. Wellness и образование, не медицина.",
+    "Все товары AEVION в одном месте: подписка на всю экосистему, научные гайды о долголетии и книга разовой покупкой, отдельные модули помесячно. Мгновенная выдача. Wellness и образование, не медицина.",
 };
 
 const CURRENCY = new Intl.NumberFormat("en-US", {
@@ -31,7 +31,10 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 });
 
 function Card({ p }: { p: Product }) {
-  const isSub = p.kind === "subscription";
+  // Ориентируемся на СПОСОБ СПИСАНИЯ, а не на тип товара: модули формально не
+  // «подписки», но списываются ежемесячно — и покупатель обязан видеть это
+  // до нажатия кнопки, а не в письме от LemonSqueezy.
+  const isSub = p.billing === "monthly";
   return (
     <a href={p.href} target="_blank" rel="noopener noreferrer" style={styles.card}>
       <div style={styles.cardTop}>
@@ -88,7 +91,7 @@ export default function ShopPage() {
         <div style={styles.eyebrow}>AEVION · Магазин</div>
         <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>
         <p style={styles.lede}>
-          Подписка на экосистему, научные гайды и книга, отдельные модули с разовой лицензией.
+          Подписка на всю экосистему, гайды и книга разовой покупкой, отдельные модули помесячно.
           Оплата и мгновенная выдача — через Gumroad и LemonSqueezy.
         </p>
 
@@ -96,7 +99,7 @@ export default function ShopPage() {
           title="Подписки"
           note={`Те же модули по отдельности — ${CURRENCY.format(
             MODULES_TOTAL_USD,
-          )} разовыми платежами.`}
+          )} в месяц.`}
           items={SUBSCRIPTIONS}
         />
 
@@ -107,8 +110,8 @@ export default function ShopPage() {
         />
 
         <Section
-          title="Модули"
-          note="Разовая лицензия на отдельный продукт — если нужен один инструмент, а не вся экосистема."
+          title="Модули по подписке"
+          note="Отдельный продукт помесячно — если нужен один инструмент, а не вся экосистема. Списание ежемесячное, отменить можно в любой момент."
           items={MODULES}
         />
 

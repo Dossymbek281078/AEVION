@@ -4606,6 +4606,17 @@ devhubRouter.post("/media/translate", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+      // endpoint happily reports 0 of 1,000,000 characters used while every
+      // translate call is refused — the account state is only visible from a
+      // real call (verified against our own key, 2026-07-26).
+      if (r.status === 456) {
+        return res.status(456).json({
+          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+          provider: "deepl",
+          accountUrl: "https://www.deepl.com/account/usage",
+        });
+      }
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
@@ -4655,6 +4666,17 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+      // endpoint happily reports 0 of 1,000,000 characters used while every
+      // translate call is refused — the account state is only visible from a
+      // real call (verified against our own key, 2026-07-26).
+      if (r.status === 456) {
+        return res.status(456).json({
+          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+          provider: "deepl",
+          accountUrl: "https://www.deepl.com/account/usage",
+        });
+      }
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string }> };
@@ -6109,6 +6131,7 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "translate", name: "Translation", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
     { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
     { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },

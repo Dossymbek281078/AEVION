@@ -109,6 +109,7 @@ import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as 
 import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
 import { computeInsights, type Insights } from "./insights";
 import { themeLabel } from "./puzzleThemes";
+import { claimReward, loadSolved } from "./puzzleProgress";
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
 import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
@@ -1300,6 +1301,10 @@ export default function CyberChessPage(){
   const[pzSolvedCount,sPzSolvedCount]=useState(0);
   const[pzFailedCount,sPzFailedCount]=useState(0);
   // Cross-session puzzle streak — persisted in localStorage
+  // Позиции, за которые Chessy уже начислены. Ref, а не state: читается и
+  // пишется внутри обработчика хода, перерисовка тут не нужна.
+  const pzSolvedRef=useRef<Set<string>>(new Set());
+  useEffect(()=>{pzSolvedRef.current=loadSolved()},[]);
   const PZ_STREAK_KEY="aevion_pz_streak_v1";
   const[pzStreak,sPzStreak]=useState<{cur:number;best:number}>(()=>{try{const v=JSON.parse(localStorage.getItem(PZ_STREAK_KEY)||"{}");return{cur:v.cur??0,best:v.best??0}}catch{return{cur:0,best:0}}});
   const savePzStreak=(s:{cur:number;best:number})=>{try{localStorage.setItem(PZ_STREAK_KEY,JSON.stringify(s))}catch{}};
@@ -3108,12 +3113,16 @@ export default function CyberChessPage(){
                 }else{
                   showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 }
+                // Платим за позицию только в первый раз: без этого один лёгкий
+                // пазл фармится бесконечно, а Chessy открывают реальные вещи
+                // (Master AI — 30). Перерешать можно, это смысл тренажёра.
+                const firstTime=claimReward(pzSolvedRef.current,pzCurrent.fen);
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
-                addChessy(reward,"пазл решён");
+                if(firstTime)addChessy(reward,"пазл решён");
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
-                {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
+                {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;if(firstTime){addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}else showToast("↻ Повтор — награда уже получена","info");}
                 bumpDaily("puzzle");
-                if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+                if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   bumpDaily("daily-puzzle");
@@ -3147,12 +3156,13 @@ export default function CyberChessPage(){
           }else{
             showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           }
+          const firstTime=claimReward(pzSolvedRef.current,pzCurrent.fen);
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
-          addChessy(reward,"пазл решён");
+          if(firstTime)addChessy(reward,"пазл решён");
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
-          {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
+          {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;if(firstTime){addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}else showToast("↻ Повтор — награда уже получена","info");}
           bumpDaily("puzzle");
-          if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+          if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);

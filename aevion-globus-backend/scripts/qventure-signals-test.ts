@@ -163,6 +163,35 @@ ok("real units still parse: $500k MRR", parsePlanSignals("$500k MRR").revenueUsd
 ok("real units still parse: TAM of $12B", parsePlanSignals("TAM of $12B").bottomUpTamUsd === 12_000_000_000);
 ok("real units still parse: TAM of $2 trillion", parsePlanSignals("TAM of $2 trillion").bottomUpTamUsd === 2e12, String(parsePlanSignals("TAM of $2 trillion").bottomUpTamUsd));
 ok("customers with a unit still parse: 12k customers", parsePlanSignals("12k customers on the platform").customers === 12_000, String(parsePlanSignals("12k customers on the platform").customers));
+
+console.log("\n11. Evidence that is not SaaS-shaped");
+const market = parsePlanSignals("Marketplace with GMV of $180M annualized and a 14% take rate across 4,200 carriers.");
+ok("GMV parsed", market.gmvUsd === 180_000_000, String(market.gmvUsd));
+ok("take rate parsed", market.takeRatePct === 14, String(market.takeRatePct));
+ok("revenue implied from GMV × take rate", market.revenueUsd === 25_200_000, String(market.revenueUsd));
+const defence = parsePlanSignals("Backlog of $62M across signed contracts with two federal agencies. ITAR registered. 11 deployments live. $8M non-dilutive from an OTA award.");
+ok("contracted backlog parsed", defence.contractedRevenueUsd === 62_000_000, String(defence.contractedRevenueUsd));
+ok("non-dilutive award parsed", defence.nonDilutiveUsd === 8_000_000, String(defence.nonDilutiveUsd));
+ok("deployments counted as pilots/design wins", defence.pilots === 11, String(defence.pilots));
+ok("defence contracting status recognised", defence.regulatoryMilestones.some((m) => /Defence/i.test(m)), defence.regulatoryMilestones.join("|"));
+const device = parsePlanSignals("FDA 510(k) clearance granted and CE marked. Clinical validation reported 93% sensitivity and 89% specificity, peer-reviewed.");
+ok("FDA clearance recognised", device.regulatoryMilestones.some((m) => /FDA/.test(m)), device.regulatoryMilestones.join("|"));
+ok("CE mark recognised", device.regulatoryMilestones.some((m) => /CE mark/.test(m)));
+ok("peer review recognised", device.technicalProof.some((p) => /Peer-reviewed/.test(p)), device.technicalProof.join("|"));
+// The negation layer has to hold here too: a plan that says it has none of this
+// must not be credited with all of it.
+const denied = parsePlanSignals("No contracts signed yet. No deployments. No FDA clearance. No peer-reviewed data. No backlog.");
+ok("denied backlog is not credited", denied.contractedRevenueUsd === null, String(denied.contractedRevenueUsd));
+ok("denied clearance is not credited", denied.regulatoryMilestones.length === 0, denied.regulatoryMilestones.join("|"));
+ok("denied peer review is not credited", !denied.technicalProof.some((p) => /Peer-reviewed/.test(p)), denied.technicalProof.join("|"));
+
+const infraStrong = analyze({ name: "S", sector: "climate", stage: "growth", description: "Utility-scale storage. Grid interconnection agreement executed and a 15-year power purchase agreement signed. Pilot plant running 14 months.", tractionNotes: "Contracted revenue of $210M under signed offtake agreements. 3 production sites operational. Gross margin 34%." });
+const infraWeak = analyze({ name: "W", sector: "climate", stage: "growth", description: "Utility-scale storage. In discussions with a utility, applied for grid interconnection. No plant has been built.", tractionNotes: "No signed offtake. No interconnection agreement. No revenue." });
+ok("contract-shaped evidence lifts the composite", infraStrong.composite - infraWeak.composite >= 15, `${infraStrong.composite} vs ${infraWeak.composite}`);
+ok("contract-shaped evidence raises signal coverage", infraStrong.signalCoverage >= 0.5 && infraWeak.signalCoverage === 0, `${infraStrong.signalCoverage} vs ${infraWeak.signalCoverage}`);
+ok("science can be company evidence", infraStrong.factors.find((f) => f.key === "science")!.basis === "company-evidence");
+ok("legal can be company evidence", infraStrong.factors.find((f) => f.key === "legal")!.basis === "company-evidence");
+ok("a science-gated plan with no evidence is charged for it", infraWeak.redFlags.some((f) => /no working hardware|no signed contracts/i.test(f)), infraWeak.redFlags.join("|"));
 const structuredChurn = mergeStructuredSignals(parsePlanSignals("vague pitch"), { churnPct: 24, churnPeriod: "annual" });
 ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPct !== null && structuredChurn.churnMonthlyPct < 3, String(structuredChurn.churnMonthlyPct));
 ok("unspecified-period churn is disclosed in assumptions",

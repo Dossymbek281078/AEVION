@@ -17,41 +17,20 @@
  */
 
 import { mentionsUnnegated } from "../textNegation";
+import {
+  monthlyRateFrom, ratePeriodFromWords, growthPeriodFromWords, parseMoney,
+  NUMBER_PATTERN, MONEY_UNIT_PATTERN, type RatePeriod,
+} from "../metrics/periods";
 
 /**
- * Period a churn figure is quoted over. Decks quote churn monthly *or* annually
- * and rarely say which explicitly — but 4% means "excellent" annually and
- * "the company is bleeding out" monthly (4%/mo ≈ 39%/yr). Reading every figure
- * as monthly punished plans that disclosed a good annual number and let bad
- * annual numbers pass as fine. So the period is parsed and the rate is
- * normalized to monthly before anything scores it.
+ * Period a churn figure is quoted over — the platform rate period. Decks quote
+ * churn monthly *or* annually and rarely say which, but 4% means "excellent"
+ * annually and "the company is bleeding out" monthly (4%/mo ≈ 39%/yr).
  */
-export type ChurnPeriod = "monthly" | "quarterly" | "annual" | "weekly" | "unspecified";
+export type ChurnPeriod = RatePeriod;
 
-/** Compounding periods per month, used to normalize a churn rate to monthly. */
-const PERIODS_PER_MONTH: Record<Exclude<ChurnPeriod, "unspecified">, number> = {
-  weekly: 52 / 12,
-  monthly: 1,
-  quarterly: 1 / 3,
-  annual: 1 / 12,
-};
-
-/**
- * Convert a churn rate quoted over `period` into its monthly equivalent,
- * compounding properly (20%/yr is 1.84%/mo, not 1.67%/mo).
- * An unspecified period is read as monthly — the deck convention — and the
- * engine says so in its assumptions instead of hiding the choice.
- */
-export function monthlyChurnFrom(pct: number, period: ChurnPeriod | null): number {
-  if (!isFinite(pct) || pct <= 0) return 0;
-  if (pct >= 100) return 100;
-  const p = period && period !== "unspecified" ? period : "monthly";
-  const perMonth = PERIODS_PER_MONTH[p];
-  if (perMonth === 1) return Math.round(pct * 100) / 100;
-  const survivalPerPeriod = 1 - pct / 100;
-  const monthly = 1 - Math.pow(survivalPerPeriod, perMonth);
-  return Math.round(monthly * 10000) / 100;
-}
+/** Churn quoted over `period`, expressed as a monthly rate. */
+export const monthlyChurnFrom = monthlyRateFrom;
 
 export interface PlanSignals {
   revenueUsd: number | null;
@@ -77,6 +56,29 @@ export interface PlanSignals {
   mentionsRevenueNoNumber: boolean;
   /** Plan asserts patents / proprietary IP — a small moat signal. */
   mentionsPatent: boolean;
+
+  // ── Evidence that is not SaaS-shaped ────────────────────────────────────────
+  // A marketplace, a defence-hardware programme, a therapeutic and a power plant
+  // do not have ARR, MoM and LTV/CAC — they have GMV and take rate, contracted
+  // backlog and design wins, a trial phase and a regulatory clearance, an offtake
+  // agreement. Reading only SaaS metrics made every one of those companies look
+  // like a plan with no evidence, so five of eight factors stayed sector
+  // constants and the whole score compressed to the middle.
+  /** Gross merchandise value / gross bookings / total payment volume. */
+  gmvUsd: number | null;
+  /** Marketplace take rate or commission, %. */
+  takeRatePct: number | null;
+  /** Signed-but-not-yet-recognised revenue: backlog, order book, offtake, bookings. */
+  contractedRevenueUsd: number | null;
+  /** Grants, prizes and awarded government programmes — capital a hard-to-fool funder committed. */
+  nonDilutiveUsd: number | null;
+  /** Count of pilots / LOIs / design wins / deployments disclosed. */
+  pilots: number | null;
+  /** Regulatory milestones the plan claims to have REACHED (not merely planned). */
+  regulatoryMilestones: string[];
+  /** Technical validation the plan claims: peer review, trial phase, benchmark, working plant. */
+  technicalProof: string[];
+
   /** Count of concrete quantitative fields parsed (drives signal coverage). */
   fieldsFound: number;
 }
@@ -143,12 +145,20 @@ export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinanci
   }
   if (s.revenueUsd !== null) s.mentionsRevenueNoNumber = false;
 
+  s.fieldsFound = countFields(s);
+  return s;
+}
+
+/** Every quantitative field that counts toward disclosure coverage. */
+function countFields(s: PlanSignals): number {
   const quant: Array<number | null> = [
     s.revenueUsd, s.growthPct, s.grossMarginPct, s.cacUsd, s.ltvUsd, s.ltvCacRatio,
     s.paybackMonths, s.churnPct, s.retentionPct, s.customers, s.bottomUpTamUsd,
+    s.gmvUsd, s.takeRatePct, s.contractedRevenueUsd, s.nonDilutiveUsd, s.pilots,
   ];
-  s.fieldsFound = quant.filter((x) => x !== null).length;
-  return s;
+  return quant.filter((x) => x !== null).length
+    + (s.regulatoryMilestones.length ? 1 : 0)
+    + (s.technicalProof.length ? 1 : 0);
 }
 
 export function emptySignals(): PlanSignals {
@@ -158,22 +168,10 @@ export function emptySignals(): PlanSignals {
     paybackMonths: null, churnPct: null, churnPeriod: null, churnMonthlyPct: null,
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false,
+    gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
+    pilots: null, regulatoryMilestones: [], technicalProof: [],
     fieldsFound: 0,
   };
-}
-
-const MULT: Record<string, number> = {
-  k: 1e3, m: 1e6, b: 1e9, bn: 1e9, t: 1e12, tn: 1e12,
-  thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12,
-};
-
-/** Parse a money-ish token like "$1.2M", "500k", "2 million", "1,500,000". */
-function parseMoney(numRaw: string, unitRaw?: string): number | null {
-  const n = parseFloat(numRaw.replace(/,/g, ""));
-  if (!isFinite(n)) return null;
-  const unit = (unitRaw || "").trim().toLowerCase();
-  const mult = MULT[unit] ?? 1;
-  return n * mult;
 }
 
 /** Match the first capture group of a pattern, or null. */
@@ -182,15 +180,10 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
   return re.exec(text);
 }
 
-const NUM = String.raw`(\d[\d,]*(?:\.\d+)?)`;
-/**
- * Money multiplier. The `(?![a-z])` guard is load-bearing: without it the single
- * letters k/m/b/t matched the START of the next word, so "CAC $3, LTV $2, monthly
- * churn 14%" read LTV as $2 **m**illion (ratio 666,666:1 instead of 0.7) and
- * "$50 tests" would have been fifty trillion. Alternation backtracks, so
- * "million"/"billion" still match — only a bare letter glued to a word is rejected.
- */
-const UNIT = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion)(?![a-z]))?`;
+// Number + money-unit patterns come from the platform metric primitives, which
+// carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
+const NUM = NUMBER_PATTERN;
+const UNIT = MONEY_UNIT_PATTERN;
 
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
@@ -236,7 +229,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     if (isFinite(g)) {
       s.growthPct = g;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
-      s.growthPeriod = /mom|month/.test(p) ? "MoM" : /yoy|year|annual/.test(p) ? "YoY" : /wow|week/.test(p) ? "WoW" : "unspecified";
+      s.growthPeriod = growthPeriodFromWords(p);
     }
   }
 
@@ -283,11 +276,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     if (isFinite(v) && v >= 0 && v <= 100) {
       const words = groups.filter((g) => !/^\d/.test(g)).join(" ").toLowerCase();
       s.churnPct = v;
-      s.churnPeriod = /annual|yearly|year/.test(words) ? "annual"
-        : /quarter/.test(words) ? "quarterly"
-          : /week/.test(words) ? "weekly"
-            : /month/.test(words) ? "monthly"
-              : "unspecified";
+      s.churnPeriod = ratePeriodFromWords(words);
       s.churnMonthlyPct = monthlyChurnFrom(v, s.churnPeriod);
     }
   }
@@ -319,12 +308,97 @@ export function parsePlanSignals(text: string): PlanSignals {
   // and the engine then credited +0.1 moat realization for the patents it denied.
   s.mentionsPatent = mentionsUnnegated(t, /\b(patents?|patented|proprietary technolog(?:y|ies)|proprietary algorithms?|patent[- ]pending)\b/i);
 
-  // ── Count concrete quantitative fields for coverage ──
-  const quant: Array<number | null> = [
-    s.revenueUsd, s.growthPct, s.grossMarginPct, s.cacUsd, s.ltvUsd, s.ltvCacRatio,
-    s.paybackMonths, s.churnPct, s.retentionPct, s.customers, s.bottomUpTamUsd,
-  ];
-  s.fieldsFound = quant.filter((x) => x !== null).length;
+  parseNonSaasEvidence(t, s);
+
+  s.fieldsFound = countFields(s);
 
   return s;
+}
+
+/**
+ * Evidence produced by business models that are not subscription software.
+ *
+ * Mutates `s` in place; `t` must already be lowercased and whitespace-collapsed.
+ * Every claim goes through the negation layer, so "no regulatory approvals yet"
+ * and "we have no backlog" cannot be read as achievements — the same mistake the
+ * qualitative traction heuristic used to make.
+ */
+function parseNonSaasEvidence(t: string, s: PlanSignals): void {
+  // ── Marketplace: GMV / gross bookings / TPV, and the take rate on it ──
+  const gmv = firstMatch(t, new RegExp(String.raw`(?:gmv|gross merchandise (?:value|volume)|gross bookings|total payment volume|tpv|transaction volume|annualized volume)\s*(?:of|=|:|at|is|reached)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?(?:gmv|gross merchandise (?:value|volume)|gross bookings|tpv|transaction volume)`, "i"));
+  if (gmv) { const v = parseMoney(gmv[1], gmv[2]); if (v && v > 0) s.gmvUsd = v; }
+
+  const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
+  if (take) { const v = parseFloat(take[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
+
+  // Revenue the plan never stated directly but implied: GMV × take rate.
+  if (s.revenueUsd === null && s.gmvUsd !== null && s.takeRatePct !== null) {
+    s.revenueUsd = Math.round(s.gmvUsd * (s.takeRatePct / 100));
+    s.revenueBasis = "revenue";
+    s.mentionsRevenueNoNumber = false;
+  }
+
+  // ── Contracted but unrecognised revenue: backlog, order book, offtake ──
+  // This is how defence, infrastructure, hardware and project-financed
+  // businesses show demand. It is weaker than realised revenue and the engine
+  // credits it as such — but reading it as "no traction" was plainly wrong.
+  const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
+  const backlog = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"));
+  if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
+    const v = parseMoney(backlog[1], backlog[2]);
+    if (v && v > 0) s.contractedRevenueUsd = v;
+  }
+
+  // ── Non-dilutive capital: grants, prizes, awarded public programmes ──
+  const grantRe = String.raw`(?:non[- ]dilutive(?: funding| capital)?|grants?(?: funding)?|sbir|sttr|darpa|horizon europe|innovate uk|arpa-?e|prize)`;
+  const grant = firstMatch(t, new RegExp(String.raw`${grantRe}\s*(?:of|worth|totall?ing|=|:|at|award(?:ed)?)?\s*\$?\s*${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`\$?\s*${NUM}\s*${UNIT}\s*(?:in\s*)?${grantRe}`, "i"));
+  if (grant && mentionsUnnegated(t, new RegExp(grantRe, "i"))) {
+    const v = parseMoney(grant[1], grant[2]);
+    if (v && v > 0) s.nonDilutiveUsd = v;
+  }
+
+  // ── Pilots, LOIs, design wins, deployments ──
+  const pilots = firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:paid\s*|active\s*|commercial\s*)?(?:pilots?|lois?|letters of intent|design wins?|deployments?|installations?|production sites?|customer trials?)`, "i"));
+  if (pilots) {
+    const v = parseFloat(pilots[1].replace(/,/g, ""));
+    if (isFinite(v) && v >= 1 && v < 100000) s.pilots = Math.round(v);
+  }
+
+  // ── Regulatory milestones actually REACHED ──
+  // "FDA approval expected in 2027" is a plan, not a milestone; the negation
+  // layer plus the explicit past-tense wording keep those out.
+  const REG: Array<[RegExp, string]> = [
+    [/\b510\(k\)\s*(?:clearance|cleared)|fda\s*(?:clearance|cleared|approval|approved)|de novo (?:grant|authorization)|pma approval/i, "FDA clearance/approval"],
+    [/\bbreakthrough (?:device|therapy) designation\b/i, "FDA breakthrough designation"],
+    [/\bce mark(?:ed|ing)?\b|\bmdr certifi/i, "CE mark"],
+    [/\bema approval|\bmhra approval/i, "EMA/MHRA approval"],
+    [/\bphase\s*(?:iii|3)\b/i, "Phase 3 clinical"],
+    [/\bphase\s*(?:ii|2)\b/i, "Phase 2 clinical"],
+    [/\bphase\s*(?:i|1)\b(?!\w)/i, "Phase 1 clinical"],
+    [/\bind (?:cleared|filed|accepted)\b/i, "IND cleared"],
+    [/\b(?:faa|easa) (?:certifi\w+|type certificate|approval)\b/i, "Aviation authority certification"],
+    [/\b(?:banking|e-?money|emi|money transmitter|payment institution|broker[- ]dealer|lending) licen[cs]e\b/i, "Financial licence held"],
+    [/\bitar (?:registered|registration)|\bdefense contract awarded|\bidiq\b|\bota\b (?:award|contract)/i, "Defence contracting status"],
+    [/\bgrid interconnection agreement|\bppa\b|\bpower purchase agreement\b/i, "Grid/PPA agreement"],
+  ];
+  for (const [re, label] of REG) {
+    if (mentionsUnnegated(t, re) && !s.regulatoryMilestones.includes(label)) s.regulatoryMilestones.push(label);
+  }
+
+  // ── Technical validation ──
+  const PROOF: Array<[RegExp, string]> = [
+    [/\bpeer[- ]reviewed\b|\bpublished in (?:nature|science|nejm|the lancet|cell)\b/i, "Peer-reviewed result"],
+    [/\bclinical(?:ly)? validat\w+|\bsensitivity\b.*\bspecificity\b|\b\d{2,3}% sensitivity\b/i, "Clinical validation data"],
+    [/\bbenchmark(?:ed|s)?\b|\bstate[- ]of[- ]the[- ]art\b|\bsota\b|\boutperform\w*\b/i, "Benchmark result claimed"],
+    [/\bpilot plant\b|\bproduction line\b|\bat scale in production\b|\bfactory (?:running|operational)\b/i, "Plant / production line running"],
+    [/\bflight[- ]tested\b|\bfield[- ]tested\b|\bin operational use\b|\bdeployed (?:with|to) (?:customers|operators|units)\b/i, "Field / flight tested"],
+    [/\bworking prototype\b|\bfunctional prototype\b|\bdemonstrat(?:ed|or) (?:unit|system|vehicle)\b/i, "Working prototype"],
+  ];
+  for (const [re, label] of PROOF) {
+    if (mentionsUnnegated(t, re) && !s.technicalProof.includes(label)) s.technicalProof.push(label);
+  }
 }

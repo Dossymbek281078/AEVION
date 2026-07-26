@@ -1,0 +1,55 @@
+{
+  "module": "qventure",
+  "claim": "The QVenture rubric separates deals on disclosed evidence, including business models that have no SaaS metrics.",
+  "harnesses": {
+    "calibration": "aevion-globus-backend/scripts/qventure-calibration.ts",
+    "hardCases": "aevion-globus-backend/scripts/qventure-hardcases.ts"
+  },
+  "historical": {
+    "recordedAt": "2026-07-26",
+    "recordedBy": "human-reviewed run, rubric v5",
+    "calibration": {
+      "rubricVersion": 5,
+      "n": 24,
+      "note": "Reconstructed descriptions of companies with public outcomes, written with hindsight. Measures DISCRIMINATION and RANGE only — never predictive accuracy.",
+      "failedMean": 53.8,
+      "succeededMean": 60.8,
+      "separationPoints": 7.0,
+      "overlapFailedAboveWeakestSuccess": 6,
+      "rangeUsed": [49.6, 66.3],
+      "verdictDistribution": {
+        "failed": { "invest": 0, "watch": 4, "pass": 8 },
+        "succeeded": { "invest": 0, "watch": 11, "pass": 1 }
+      },
+      "byBusinessType": {
+        "capitalIntensive": { "separationPoints": 1.2, "nFailed": 5, "nSucceeded": 1 },
+        "softwareLike": { "separationPoints": 5.7, "nFailed": 7, "nSucceeded": 11 }
+      },
+      "caveat": "These fixtures state almost no figures, so rubric v5's non-SaaS evidence layer never fires on them: the v4 and v5 numbers are identical to the decimal. This harness cannot measure the capability added in v5 — that is what the hard-cases harness is for. The capital-intensive arm has n=1 on the success side and is not a measurement."
+    },
+    "hardCases": {
+      "rubricVersion": 5,
+      "pairs": 6,
+      "assertions": 30,
+      "assertionsPassed": 30,
+      "meanStrongWeakGapPoints": 16.2,
+      "minGapPoints": 8.8,
+      "maxGapPoints": 30.8,
+      "note": "Matched strong/weak pairs inside one sector and stage, so sector priors are held constant and the gap comes only from what the plan discloses.",
+      "perPair": [
+        { "model": "Defence hardware programme", "strong": 62.3, "weak": 46.1, "gap": 16.2, "strongCoveragePct": 73 },
+        { "model": "Therapeutics", "strong": 62.5, "weak": 50.8, "gap": 11.7, "strongCoveragePct": 51 },
+        { "model": "Energy / infrastructure project finance", "strong": 69.5, "weak": 38.7, "gap": 30.8, "strongCoveragePct": 73 },
+        { "model": "Marketplace", "strong": 72.6, "weak": 63.8, "gap": 8.8, "strongCoveragePct": 59 },
+        { "model": "Medical device", "strong": 69.6, "weak": 57.8, "gap": 11.8, "strongCoveragePct": 73 },
+        { "model": "Semiconductor / hard hardware", "strong": 67.2, "weak": 49.6, "gap": 17.6, "strongCoveragePct": 51 }
+      ]
+    },
+    "openIssues": [
+      "On plans that disclose no figures at all, the composite still compresses into roughly 49-66 of a nominal 0-100 scale. That is defensible (no evidence, no movement) but the scale as presented overstates its own resolution.",
+      "No case in the calibration corpus reaches 'invest'. On disclosure-rich input the hard-cases harness does reach it (marketplace strong, 72.6), so the band is reachable — but not on evidence-free descriptions.",
+      "Capital-intensive discrimination in the calibration corpus is 1.2 points, on n=1 success. Needs more known-outcome capital-intensive companies before any claim is made about it."
+    ]
+  },
+  "latest": null
+}

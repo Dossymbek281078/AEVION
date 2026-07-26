@@ -33,8 +33,12 @@ import { defineBands } from "../verdictBands";
  *     company evidence (execution 0.12 -> 0.28); orphan metric flags weighted
  * v4  churn read in its stated period (annual != monthly) and a bare "<n>%
  *     monthly" no longer counted as growth — both moved execution scores
+ * v5  non-SaaS evidence is read and scored: GMV × take rate, contracted
+ *     backlog, non-dilutive awards, pilots/design wins, regulatory milestones
+ *     held and technical validation. Science and legal can now be company
+ *     evidence instead of always sector constants.
  */
-export const RUBRIC_VERSION = 4;
+export const RUBRIC_VERSION = 5;
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -242,7 +246,9 @@ function fmtMoney(n: number): string {
  *  customers, retention). Returns null when no quantitative traction is parsed,
  *  so the caller falls back to the qualitative tractionSignal heuristic. */
 function quantifiedExecution(sig: PlanSignals): { score: number; note: string } | null {
-  if (sig.revenueUsd === null && sig.customers === null && sig.growthPct === null) return null;
+  const nonSaasEvidence = sig.contractedRevenueUsd !== null || sig.pilots !== null
+    || sig.nonDilutiveUsd !== null || sig.gmvUsd !== null;
+  if (sig.revenueUsd === null && sig.customers === null && sig.growthPct === null && !nonSaasEvidence) return null;
   let s = 50;
   const notes: string[] = [];
   if (sig.revenueUsd !== null) {
@@ -269,6 +275,25 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
   // is not punished like "20% monthly churn" (92%/yr, fatal).
   const churnMonthly = sig.churnMonthlyPct ?? sig.churnPct;
   if (churnMonthly !== null && churnMonthly > 5) { s -= 6; notes.push(`${churnMonthly}%/mo churn`); }
+
+  // Evidence from non-subscription business models. Contracted revenue is
+  // demand a counterparty signed for but has not yet paid, so it earns roughly
+  // two-thirds of what the same figure would earn as realised revenue.
+  if (sig.contractedRevenueUsd !== null) {
+    const c = sig.contractedRevenueUsd;
+    s += c >= 100e6 ? 20 : c >= 10e6 ? 15 : c >= 1e6 ? 10 : 5;
+    notes.push(`${fmtMoney(c)} contracted / backlog`);
+  }
+  if (sig.pilots !== null) {
+    s += sig.pilots >= 10 ? 8 : sig.pilots >= 3 ? 5 : 2;
+    notes.push(`${sig.pilots} pilot${sig.pilots === 1 ? "" : "s"} / design win${sig.pilots === 1 ? "" : "s"}`);
+  }
+  if (sig.nonDilutiveUsd !== null) {
+    // A grant board or defence programme did its own diligence before wiring money.
+    s += sig.nonDilutiveUsd >= 10e6 ? 8 : sig.nonDilutiveUsd >= 1e6 ? 5 : 2;
+    notes.push(`${fmtMoney(sig.nonDilutiveUsd)} non-dilutive`);
+  }
+  if (sig.gmvUsd !== null) notes.push(`${fmtMoney(sig.gmvUsd)} GMV${sig.takeRatePct !== null ? ` at ${sig.takeRatePct}% take rate` : ""}`);
   return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
 }
 
@@ -361,6 +386,33 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
     add("economics", 20, "Plan discloses negative unit economics — growth compounds the loss rather than the return.");
   }
 
+  // ── Science-gated models: absent technical evidence is the missing benchmark.
+  // In a therapeutics, device, deep-tech or infrastructure company, revenue is
+  // not the stage benchmark — cleared trials, validation data, working hardware
+  // and signed offtake are. Charging only "no revenue" left those plans looking
+  // merely early when what they had disclosed was no evidence of any kind.
+  const SCIENCE_GATED = new Set(["biotech", "healthtech", "space", "climate", "ai_infra", "agtech"]);
+  if (SCIENCE_GATED.has(sector.id) && (stage === "series-a" || stage === "growth")) {
+    if (/\bno (?:clinical|trial|efficacy|safety|validation) data\b|\bno clinical (?:evidence|results?)\b/.test(t)) {
+      add("execution", 14, "Plan states it has no clinical or validation data at a stage where that evidence is the benchmark — the core technical risk is entirely unretired.");
+    }
+    if (/\bno (?:ind|510\(k\)|ce mark|clearances?|regulatory (?:approvals?|clearances?))\b|\bno approvals?\b/.test(t)) {
+      add("legal", 12, "Plan states no regulatory clearance has been obtained — the approval path remains a gating, unpriced risk.");
+    }
+    if (/\bno (?:publications?|peer[- ]reviewed (?:results?|data))\b|\bnot (?:yet )?peer[- ]reviewed\b/.test(t)) {
+      add("moat", 8, "Plan states its results are unpublished and unreviewed — the technical claim rests on internal assertion only.");
+    }
+    if (/\bno (?:working )?(?:prototype|silicon|hardware|plant|units? (?:built|shipped))\b|\bprototype (?:is )?not (?:yet )?(?:built|tested|field[- ]tested)\b|\bno plant has been built\b/.test(t)) {
+      add("execution", 12, "Plan states no working hardware exists yet — at this stage the build risk is still ahead of the company, not behind it.");
+    }
+  }
+  // Signed demand is how contract-shaped businesses show traction; its explicit
+  // absence is as informative as an empty revenue line in a subscription model.
+  if ((stage === "series-a" || stage === "growth")
+    && /\bno (?:signed )?(?:contracts?|offtake|purchase orders?|design wins?|deployments?|interconnection agreements?)\b|\bno contracts? (?:signed|awarded)\b/.test(t)) {
+    add("execution", 12, "Plan states it has no signed contracts, offtake or design wins — for a contract-driven model that is the demand evidence, and it is absent.");
+  }
+
   return out;
 }
 
@@ -415,6 +467,13 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     econCompany = true;
     econNotes.push(`${signals.paybackMonths}mo payback`);
   }
+  // A marketplace prices itself with a take rate, not a gross margin line. Only
+  // used when no margin was disclosed, so an explicit margin still wins.
+  if (signals.grossMarginPct === null && signals.takeRatePct !== null) {
+    econScoreRaw += signals.takeRatePct >= 15 ? 8 : signals.takeRatePct >= 8 ? 4 : signals.takeRatePct >= 3 ? 0 : -6;
+    econCompany = true;
+    econNotes.push(`${signals.takeRatePct}% take rate${signals.gmvUsd !== null ? ` on ${fmtMoney(signals.gmvUsd)} GMV` : ""}`);
+  }
   const econScore = clamp(econScoreRaw);
 
   // ── Moat: archetype ceiling × realization (from stage & the now-company-
@@ -425,8 +484,24 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
   const moatCompany = execCompany || signals.mentionsPatent;
 
-  const scienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
-  const legalScore = clamp(100 - sector.regulatoryIntensity * 65); // higher = less legal drag
+  // ── Science: sector frontier, plus what THIS company has actually proven. ──
+  // A deep-tech or therapeutics company's evidence is a cleared trial phase, a
+  // peer-reviewed result, a running pilot plant — never ARR. Scoring those as
+  // "no evidence" left science a constant for exactly the companies whose whole
+  // risk is technical, which is why capital-intensive deals barely separated.
+  const sectorScienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
+  const proofCount = signals.technicalProof.length;
+  const clearedTrial = signals.regulatoryMilestones.filter((m) => /clinical|clearance|approval|certification/i.test(m));
+  const scienceCompany = proofCount > 0 || clearedTrial.length > 0;
+  const scienceScore = clamp(sectorScienceScore + Math.min(18, proofCount * 7) + Math.min(12, clearedTrial.length * 8));
+
+  // ── Legal: sector regulatory drag, minus the drag already discharged. ──
+  // A licence held or a clearance granted is regulatory risk that has been
+  // retired, not risk that remains. Held approvals are the only thing credited —
+  // an application in progress is still an open risk.
+  const heldApprovals = signals.regulatoryMilestones.filter((m) => /licence|clearance|approval|certification|contracting status|agreement/i.test(m));
+  const legalCompany = heldApprovals.length > 0;
+  const legalScore = clamp(100 - sector.regulatoryIntensity * 65 + Math.min(20, heldApprovals.length * 10)); // higher = less legal drag
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
 
   const factors: ScoreFactor[] = [
@@ -450,11 +525,15 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       basis: execCompany ? "company-evidence" : ((rawInput.tractionNotes || "").trim() ? "company-evidence" : "no-evidence"),
       rationale: traction.note },
     { key: "science", label: "Scientific / tech feasibility", weight: 0.07, score: round(scienceScore),
-      basis: "sector-prior",
-      rationale: sector.scienceFrontier },
+      basis: scienceCompany ? "company-evidence" : "sector-prior",
+      rationale: scienceCompany
+        ? `${sector.scienceFrontier} Plan evidences: ${[...signals.technicalProof, ...clearedTrial].join("; ")}.`
+        : sector.scienceFrontier },
     { key: "legal", label: "Regulatory / legal headroom", weight: 0.07, score: round(legalScore),
-      basis: "sector-prior",
-      rationale: `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
+      basis: legalCompany ? "company-evidence" : "sector-prior",
+      rationale: legalCompany
+        ? `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}%, partly discharged — plan holds: ${heldApprovals.join("; ")}.`
+        : `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
     { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
       basis: "sector-prior",
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
@@ -521,7 +600,8 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // ── Signal coverage: share of the composite weight backed by company data. ──
   const companyWeight =
     (marketCompany ? 0.14 : 0) + (econCompany ? 0.15 : 0) +
-    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0);
+    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0) +
+    (scienceCompany ? 0.07 : 0) + (legalCompany ? 0.07 : 0);
   const signalCoverage = round(companyWeight, 2);
 
 

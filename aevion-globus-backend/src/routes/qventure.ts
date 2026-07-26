@@ -22,6 +22,7 @@ import {
 } from "../lib/ensureQVentureTables";
 import { analyze, STAGES, RUBRIC_VERSION, type AnalysisInput, type Stage } from "../lib/qventure/engine";
 import type { StructuredFinancials } from "../lib/qventure/signals";
+import { asRatePeriod } from "../lib/metrics/periods";
 import type { ProjectionPoint } from "../lib/qventure/projections";
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
@@ -263,10 +264,8 @@ function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
   };
   const period = r.growthPeriod;
   if (period === "MoM" || period === "YoY" || period === "WoW" || period === "unspecified") f.growthPeriod = period;
-  const churnPeriod = r.churnPeriod;
-  if (churnPeriod === "monthly" || churnPeriod === "quarterly" || churnPeriod === "annual" || churnPeriod === "weekly" || churnPeriod === "unspecified") {
-    f.churnPeriod = churnPeriod;
-  }
+  const churnPeriod = asRatePeriod(r.churnPeriod);
+  if (churnPeriod) f.churnPeriod = churnPeriod;
   const hasAny = Object.values(f).some((v) => v !== undefined);
   return hasAny ? f : undefined;
 }

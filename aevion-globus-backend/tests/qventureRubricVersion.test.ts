@@ -34,8 +34,11 @@ describe("rubric versioning", () => {
   // are weighted. v4 is such a bump: churn is now read in its stated period and a
   // bare "<n>% monthly" no longer counts as growth, so execution scores moved
   // without a single weight changing.
+  // v5 is another read-side bump: the engine now scores GMV × take rate,
+  // contracted backlog, non-dilutive awards, pilots, regulatory milestones held
+  // and technical validation, so composites move while the weights do not.
   const EXPECTED_FINGERPRINT = "612b62dfb60afcf6";
-  const EXPECTED_VERSION = 4;
+  const EXPECTED_VERSION = 5;
 
   test("weights have not changed without a version bump", () => {
     expect(weightFingerprint()).toBe(EXPECTED_FINGERPRINT);

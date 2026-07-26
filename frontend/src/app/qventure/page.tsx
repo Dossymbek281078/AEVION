@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { MetricWithPeriod, RATE_PERIOD_OPTIONS, RATE_PERIOD_LABELS, GROWTH_PERIOD_OPTIONS } from "@/components/MetricWithPeriod";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
@@ -588,30 +589,21 @@ function FormFields({ form, set, sectors, full = false }: {
             <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
             <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
-            <div>
-              <label style={LABEL}>Churn (%)</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
-                  <option value="weekly">/ week</option>
-                  <option value="monthly">/ month</option>
-                  <option value="quarterly">/ quarter</option>
-                  <option value="annual">/ year</option>
-                </select>
-              </div>
-            </div>
+            <MetricWithPeriod
+              label="Churn (%)" placeholder="3"
+              value={form.finChurn} onValueChange={set("finChurn")}
+              period={form.finChurnPeriod} onPeriodChange={set("finChurnPeriod")}
+              periods={RATE_PERIOD_OPTIONS} periodLabels={RATE_PERIOD_LABELS}
+              inputStyle={INPUT} labelStyle={LABEL}
+            />
             <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
-            <div>
-              <label style={LABEL}>Growth (%)</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
-                  <option value="WoW">WoW</option>
-                  <option value="MoM">MoM</option>
-                  <option value="YoY">YoY</option>
-                </select>
-              </div>
-            </div>
+            <MetricWithPeriod
+              label="Growth (%)" placeholder="15"
+              value={form.finGrowth} onValueChange={set("finGrowth")}
+              period={form.finGrowthPeriod} onPeriodChange={set("finGrowthPeriod")}
+              periods={GROWTH_PERIOD_OPTIONS}
+              inputStyle={INPUT} labelStyle={LABEL}
+            />
             <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>

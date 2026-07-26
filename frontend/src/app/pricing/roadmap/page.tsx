@@ -81,7 +81,7 @@ export default function PricingRoadmapPage() {
             marginBottom: 16,
           }}
         >
-          PUBLIC ROADMAP · 27 MODULES
+          PUBLIC ROADMAP · 43 MODULES
         </div>
         <h1
           style={{

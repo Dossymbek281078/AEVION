@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION Pricing — 37 modules in one subscription";
+export const alt = "AEVION Pricing — 43 modules in one subscription";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

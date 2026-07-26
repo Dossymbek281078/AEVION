@@ -147,7 +147,7 @@ export const unitEconomics = {
   ],
   totals: { beachhead: "≈ $0.8M ARR", regional: "≈ $9.4M ARR" },
   note:
-    "Three flagships only — the other 38 modules are upside, not in this figure. Deliberately modest " +
+    "Three flagships only — the other 40 modules are upside, not in this figure. Deliberately modest " +
     "and defensible: a first-question-of-due-diligence model, not a hockey stick. Market-size and " +
     "conversion inputs are the assumptions most worth challenging.",
 } as const;

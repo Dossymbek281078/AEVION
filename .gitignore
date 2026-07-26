@@ -72,3 +72,6 @@ page_v*_backup.*
 # — must NOT sit in the watched project tree or Turbopack HMR-reloads mid-test
 .playwright-mcp/
 **/.playwright-mcp/
+
+# Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
+benchmark-out/

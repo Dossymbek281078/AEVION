@@ -15,21 +15,34 @@
 
 export type PreviewFile = { path: string; content: string };
 
-const ENTRY_CANDIDATES = [
-  "src/main.jsx", "src/main.tsx", "main.jsx", "main.tsx",
-  "src/index.jsx", "src/index.tsx", "index.jsx", "index.tsx",
-  "src/App.jsx", "src/App.tsx", "App.jsx", "App.tsx",
-];
+// Models routinely emit CRA-style React in plain .js ("src/index.js" +
+// "src/App.js") — a real generation shape, not a defect. Extensions are
+// therefore ranked, not required: .jsx/.tsx first, .js/.ts right behind.
+const ENTRY_BASENAMES = ["src/main", "main", "src/index", "index", "src/App", "App"];
+const ENTRY_EXTS = [".jsx", ".tsx", ".js", ".ts"];
+const ENTRY_CANDIDATES = ENTRY_BASENAMES.flatMap((b) => ENTRY_EXTS.map((e) => b + e));
 
 const CODE_RE = /\.(jsx|tsx|js|ts|mjs)$/i;
+/** An entry that mounts itself (CRA/Vite index) rather than exporting a component. */
+const SELF_MOUNT_RE = /createRoot\s*\(|ReactDOM\.render\s*\(/;
 const REACT_VERSION = "18.3.1";
 
 export function findReactEntry(files: PreviewFile[]): string | null {
   for (const c of ENTRY_CANDIDATES) {
     if (files.some((f) => f.path === c)) return c;
   }
-  const anyCode = files.find((f) => CODE_RE.test(f.path));
-  return anyCode?.path ?? null;
+  const code = files.filter((f) => CODE_RE.test(f.path));
+  if (!code.length) return null;
+  // No conventional name: mounting code identifies the entry far better than
+  // file order does — picking the first code file alphabetically once made
+  // "src/components/Settings.js" the root of the whole preview.
+  const mounts = code.find((f) => SELF_MOUNT_RE.test(f.content));
+  if (mounts) return mounts.path;
+  // Still ambiguous — prefer the shallowest path (an app root sits above its
+  // components), tie-broken by order, so the choice is at least deterministic.
+  return code.reduce((best, f) =>
+    f.path.split("/").length < best.path.split("/").length ? f : best
+  ).path;
 }
 
 /** Resolve "./Button" from "src/App.jsx" to an actual project path, trying
@@ -74,7 +87,7 @@ type Babel = { transform: (code: string, opts: Record<string, unknown>) => { cod
 
 export async function buildReactPreviewSrcdoc(files: PreviewFile[], overlayScript: string): Promise<{ srcdoc: string } | { error: string }> {
   const entry = findReactEntry(files);
-  if (!entry) return { error: "No .jsx/.tsx entry file found — add src/App.jsx to use the live preview." };
+  if (!entry) return { error: "No React entry file found — add src/App.jsx (or src/App.js) to use the live preview." };
 
   const babel = (await import("@babel/standalone")) as unknown as Babel;
 
@@ -116,7 +129,7 @@ export async function buildReactPreviewSrcdoc(files: PreviewFile[], overlayScrip
   const entryContent = files.find((f) => f.path === entry)?.content ?? "";
   // main.jsx-style entries call createRoot themselves; App.jsx-style entries
   // export a component we mount ourselves.
-  const selfMounting = /createRoot\s*\(|ReactDOM\.render\s*\(/.test(entryContent);
+  const selfMounting = SELF_MOUNT_RE.test(entryContent);
   const boot = selfMounting
     ? `import ${JSON.stringify(`local/${entry}`)};`
     : `import React from "react";

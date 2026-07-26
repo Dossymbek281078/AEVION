@@ -46,7 +46,11 @@ test.describe("founder flow: describe → built app", () => {
 
     // The founder's broken first impression: everything dumped into output.ts.
     expect(paths).not.toEqual(["output.ts"]);
-    expect(paths.some((p) => /\.(jsx|tsx)$/.test(p))).toBe(true);
+    // Real app structure — source files under src/. The extension is NOT
+    // pinned to .jsx/.tsx: a nightly run (2026-07-25) failed on a perfectly
+    // good CRA-style generation (src/App.js, src/components/Timer.js) purely
+    // because the model chose .js. What matters is source files, not spelling.
+    expect(paths.some((p) => /^src\/.+\.(jsx|tsx|js|ts)$/.test(p))).toBe(true);
 
     // Live preview renders: open Visual Edit and ask the overlay for element 0.
     await page.getByRole("button", { name: /Visual Edit/ }).click();

@@ -3442,3 +3442,46 @@ describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 24. Export ZIP — non-ASCII file names (confirmed broken on prod 2026-07-26)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("export zip: UTF-8 file names", () => {
+  test("sets general purpose bit 11 so readers decode names as UTF-8, not CP437", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const zip = buildZipStored([
+      { path: "src/компоненты/Таймер.jsx", content: Buffer.from("export default 1;", "utf8") },
+      { path: "README.md", content: Buffer.from("# hi", "utf8") },
+    ]);
+
+    // Local header: signature at 0, flags at offset 6.
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.readUInt16LE(6) & 0x0800).toBe(0x0800);
+
+    // Every central directory entry must agree — a mismatch makes some tools
+    // trust the local header and others the central one.
+    for (let i = 0; i < zip.length - 4; i++) {
+      if (zip.readUInt32LE(i) === 0x02014b50) {
+        expect(zip.readUInt16LE(i + 8) & 0x0800).toBe(0x0800);
+      }
+    }
+
+    // The name really is UTF-8 bytes in the archive.
+    expect(zip.includes(Buffer.from("src/компоненты/Таймер.jsx", "utf8"))).toBe(true);
+  });
+
+  test("round-trips a Cyrillic name through our own import endpoint", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Utf8Zip", stack: "next" });
+    const id = cr.body.project.id;
+    const zip = buildZipStored([{ path: "проект/файл.txt", content: Buffer.from("данные", "utf8") }]);
+
+    const up = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+    expect(up.status).toBe(200);
+    expect(up.body.imported.map((x: { path: string }) => x.path)).toContain("проект/файл.txt");
+  });
+});

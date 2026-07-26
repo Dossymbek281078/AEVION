@@ -40,6 +40,19 @@ async function run() {
   assert("GET /health → 200", h.status === 200, String(h.status));
   assert("ok === true", h.body?.ok === true);
 
+  // Every route falls back to an in-memory store when Postgres is unavailable,
+  // and that fallback is deliberately silent — it keeps preview deploys usable.
+  // The danger is that it is ALSO silent when the migration breaks in an
+  // environment that does have a database: listings would be served from RAM,
+  // every assertion below would still pass, and the data would vanish on the
+  // next restart. So where a database is configured, using it is not optional.
+  if (process.env.DATABASE_URL) {
+    assert("Postgres is actually in use (DATABASE_URL is set)", h.body?.dbReady === true,
+      `dbReady=${h.body?.dbReady} — миграция или подключение сломаны, данные уходят в память`);
+  } else {
+    console.log("  · DATABASE_URL не задан — проверка идёт на in-memory сторе");
+  }
+
   const tiers = await req("GET", "/api/startupx/tiers");
   assert("GET /tiers → 200", tiers.status === 200, String(tiers.status));
   const tierIds = (tiers.body?.data?.tiers ?? []).map((t) => t.id);

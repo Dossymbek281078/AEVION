@@ -49,6 +49,13 @@ type Dissent = {
   note: string;
 };
 
+type SignedReceipt = {
+  receipt: Record<string, unknown> & { askedAt: string; cost: { calls: number; answered: number; failed: number } };
+  hash: string;
+  signature: { algo: string; kid: string; value: string } | null;
+  signatureNote: string | null;
+};
+
 // Три разные роли, а не одна модель трижды: модели одной семьи ошибаются
 // согласованно, и «спор» между ними был бы декорацией.
 const PANEL = [
@@ -75,6 +82,7 @@ export function CouncilConsole() {
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<AgentResult[] | null>(null);
   const [dissent, setDissent] = useState<Dissent | null>(null);
+  const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
 
@@ -108,6 +116,7 @@ export function CouncilConsole() {
       if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
       setResults(d.results || []);
       setDissent(d.dissent || null);
+      setReceipt(d.receipt || null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "запрос не прошёл");
     } finally {
@@ -211,6 +220,34 @@ export function CouncilConsole() {
               {dissent.hedges.map((h) => `${h.agentId} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Чек: происхождение ответа. Ответ без него — мнение; с ним — то, что
+          можно предъявить. Хеш пересчитывается кем угодно из скачанного файла. */}
+      {receipt && (
+        <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: C.faded }}>
+          <span>
+            Чек · вызовов {receipt.receipt.cost.calls}, ответили {receipt.receipt.cost.answered}
+            {receipt.receipt.cost.failed > 0 ? `, не ответили ${receipt.receipt.cost.failed}` : ""}
+          </span>
+          <span style={{ fontFamily: "ui-monospace, monospace" }}>sha256 {receipt.hash.slice(0, 16)}…</span>
+          <span style={{ color: receipt.signature ? C.accent : C.warn }}>
+            {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
+          </span>
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" });
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `aevion-receipt-${receipt.hash.slice(0, 12)}.json`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }}
+            style={{ background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8, padding: "4px 10px", color: C.dim, fontSize: 12, cursor: "pointer" }}
+          >
+            Скачать чек
+          </button>
         </div>
       )}
 

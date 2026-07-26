@@ -36,10 +36,15 @@ describe("themeLabel", () => {
   /* The point of the map: no theme in the shipped corpus should reach the player
      as a raw identifier. Reads the real data file, so a corpus refresh that adds
      new Lichess themes fails here instead of surfacing them in the UI. */
-  it("covers every latin-script theme present in public/puzzles.json", () => {
-    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{ theme?: string }>;
+  it("covers every latin-script theme AND phase present in public/puzzles.json", () => {
+    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{ theme?: string; phase?: string }>;
     const themes = new Set<string>();
-    for (const p of puzzles) if (p.theme) themes.add(p.theme);
+    // Both fields render through themeLabel — the puzzle header maps over
+    // [phase, theme] — so a raw phase leaks to the player just like a raw theme.
+    for (const p of puzzles) {
+      if (p.theme) themes.add(p.theme);
+      if (p.phase) themes.add(p.phase);
+    }
 
     const untranslated = [...themes].filter((t) => {
       const label = themeLabel(t);

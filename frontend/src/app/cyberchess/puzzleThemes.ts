@@ -57,6 +57,12 @@ const THEME_RU: Record<string, string> = {
   // Эндшпиль
   bishopEndgame: "Слоновый эндшпиль",
   knightEndgame: "Коневой эндшпиль",
+
+  // Стадия партии — рендерится тем же чипом, что и тема (см. заголовок пазла,
+  // где мапится [phase, theme]), поэтому переводится этой же функцией.
+  Opening: "Дебют",
+  Middlegame: "Миттельшпиль",
+  Endgame: "Эндшпиль",
 };
 
 /** Human-readable Russian label for a puzzle theme. Unknown ids pass through. */

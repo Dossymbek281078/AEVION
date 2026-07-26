@@ -68,7 +68,23 @@ export interface AnalysisResult {
     // Company-specific scoring (added 2026-07; optional for older persisted records).
     signalCoverage?: number;
     redFlags?: string[];
-    signals?: { fieldsFound: number };
+    signals?: {
+      fieldsFound: number;
+      // Everything below is optional: reports scored before rubric v5 do not carry it.
+      currency?: string | null;
+      revenueUsd?: number | null;
+      revenueBasis?: string | null;
+      gmvUsd?: number | null;
+      takeRatePct?: number | null;
+      contractedRevenueUsd?: number | null;
+      nonDilutiveUsd?: number | null;
+      pilots?: number | null;
+      churnPct?: number | null;
+      churnPeriod?: string | null;
+      churnMonthlyPct?: number | null;
+      regulatoryMilestones?: string[];
+      technicalProof?: string[];
+    };
     stress?: {
       base: { ltvCac: number | null; paybackMonths: number | null };
       scenarios: { label: string; shock: string; ltvCac: number | null; paybackMonths: number | null; health: "healthy" | "tight" | "underwater" }[];
@@ -721,6 +737,65 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
   );
 }
 
+/**
+ * What the engine actually read out of the plan.
+ *
+ * The score moves on these and the reader could not see any of them: a defence
+ * deal scored on $62M of backlog and eleven deployments looked identical to one
+ * scored on nothing. Shows only what was parsed — an empty panel means the plan
+ * disclosed nothing, which is itself the finding.
+ */
+function EvidencePanel({ s }: { s: NonNullable<AnalysisResult["result"]["signals"]> }) {
+  const money = (n: number) =>
+    n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
+
+  const items: Array<[string, string]> = [];
+  if (s.revenueUsd) items.push([s.revenueBasis === "MRR" ? "Revenue (from MRR)" : s.revenueBasis === "ARR" ? "ARR" : "Revenue", money(s.revenueUsd)]);
+  if (s.gmvUsd) items.push(["GMV", money(s.gmvUsd) + (s.takeRatePct ? ` at ${s.takeRatePct}% take rate` : "")]);
+  if (s.contractedRevenueUsd) items.push(["Contracted / backlog", money(s.contractedRevenueUsd)]);
+  if (s.nonDilutiveUsd) items.push(["Non-dilutive awarded", money(s.nonDilutiveUsd)]);
+  if (s.pilots) items.push(["Pilots / design wins", String(s.pilots)]);
+  if (s.churnPct != null) {
+    const period = s.churnPeriod && s.churnPeriod !== "unspecified" ? s.churnPeriod : "monthly (period not stated)";
+    const monthly = s.churnMonthlyPct != null && s.churnMonthlyPct !== s.churnPct ? ` → ${s.churnMonthlyPct}%/mo` : "";
+    items.push(["Churn", `${s.churnPct}% ${period}${monthly}`]);
+  }
+  const badges = [...(s.regulatoryMilestones ?? []), ...(s.technicalProof ?? [])];
+  if (!items.length && !badges.length) return null;
+
+  return (
+    <div style={SECTION}>
+      <h2 style={H2}>Evidence read from the plan</h2>
+      {items.length > 0 && (
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: badges.length ? 14 : 0 }}>
+          {items.map(([label, value]) => (
+            <div key={label} style={{ minWidth: 130 }}>
+              <div style={{ fontSize: 11, color: "var(--ink-faint, #74767c)", textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "var(--ink, #17181a)" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {badges.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {badges.map((b) => (
+            <span key={b} style={{
+              padding: "4px 10px", borderRadius: 999, fontSize: 12,
+              background: "var(--paper-2, #efeee8)", border: "1px solid var(--rule-mid, #b9b8b0)",
+              color: "var(--ink-soft, #45474c)",
+            }}>{b}</span>
+          ))}
+        </div>
+      )}
+      {s.currency && s.currency !== "USD" && (
+        <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--ink-faint, #74767c)" }}>
+          Disclosed in {s.currency}; figures above are converted to USD at the rate quoted in the assumptions.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
   return (
     <>
@@ -790,6 +865,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Entry strategy</h2>
         <StrategyPanel s={result.result.strategy} />
       </div>
+
+      {result.result.signals && <EvidencePanel s={result.result.signals} />}
 
       {result.result.tam && <TamPanel tam={result.result.tam} />}
 

@@ -597,6 +597,49 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     doc.fillColor("#166534").text(`Portfolio: ${s.portfolioNote}`, { width: W });
     doc.moveDown(0.8);
 
+    // Evidence read from the plan — the same list the on-screen report shows, so
+    // an exported memo never looks thinner than the page it was exported from.
+    // Read defensively: records stored before rubric v5 lack the newer keys, so
+    // the runtime shape is a subset of the current type.
+    const sig = r.signals as unknown as Record<string, unknown> | undefined;
+    if (sig) {
+      const m = (n: unknown): string | null => {
+        const v = typeof n === "number" && isFinite(n) && n > 0 ? n : null;
+        if (v === null) return null;
+        return v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}k` : `$${Math.round(v)}`;
+      };
+      const lines: string[] = [];
+      const rev = m(sig.revenueUsd);
+      if (rev) lines.push(`${sig.revenueBasis === "MRR" ? "Revenue (from MRR)" : sig.revenueBasis === "ARR" ? "ARR" : "Revenue"}: ${rev}`);
+      const gmv = m(sig.gmvUsd);
+      if (gmv) lines.push(`GMV: ${gmv}${typeof sig.takeRatePct === "number" ? ` at ${sig.takeRatePct}% take rate` : ""}`);
+      const backlog = m(sig.contractedRevenueUsd);
+      if (backlog) lines.push(`Contracted / backlog: ${backlog}`);
+      const grant = m(sig.nonDilutiveUsd);
+      if (grant) lines.push(`Non-dilutive awarded: ${grant}`);
+      if (typeof sig.pilots === "number") lines.push(`Pilots / design wins: ${sig.pilots}`);
+      if (typeof sig.churnPct === "number") {
+        const period = typeof sig.churnPeriod === "string" && sig.churnPeriod !== "unspecified" ? sig.churnPeriod : "monthly (period not stated)";
+        const monthly = typeof sig.churnMonthlyPct === "number" && sig.churnMonthlyPct !== sig.churnPct ? ` -> ${sig.churnMonthlyPct}%/mo` : "";
+        lines.push(`Churn: ${sig.churnPct}% ${period}${monthly}`);
+      }
+      const badges = [
+        ...(Array.isArray(sig.regulatoryMilestones) ? sig.regulatoryMilestones as string[] : []),
+        ...(Array.isArray(sig.technicalProof) ? sig.technicalProof as string[] : []),
+      ];
+      if (lines.length || badges.length) {
+        doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Evidence read from the plan");
+        doc.moveDown(0.2);
+        doc.fontSize(9.5).font("Helvetica").fillColor("#334155");
+        for (const l of lines) doc.text(`  • ${l}`, { width: W });
+        if (badges.length) doc.text(`  • Milestones / validation: ${badges.join("; ")}`, { width: W });
+        if (typeof sig.currency === "string" && sig.currency && sig.currency !== "USD") {
+          doc.fillColor("#475569").text(`  • Disclosed in ${sig.currency}; converted to USD at the rate stated under assumptions.`, { width: W });
+        }
+        doc.moveDown(0.7);
+      }
+    }
+
     // Bottom-up TAM triangulation
     if (r.tam && r.tam.mode !== "insufficient") {
       doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Bottom-up TAM triangulation");

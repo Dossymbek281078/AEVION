@@ -131,6 +131,22 @@ describe("денежные пути переживают враждебный в
     expect(after[0]).toContain("real.buyer@example.com");
   }, IMPORT_TIMEOUT_MS);
 
+  test("публичные ручки с записью на диск: /lead и /promo/validate", async () => {
+    // Обе публичны и обе пишут/читают: /lead кладёт лид в JSONL, /promo/validate
+    // разбирает произвольный код. Их не проверял никто — а тело у них такое же
+    // внешнее, как у чекаута.
+    for (const field of ["name", "email", "company", "industry", "tier", "seats", "message", "source", "modules"]) {
+      for (const junk of JUNK) {
+        await expectNo5xx("/api/pricing/lead", { name: "x", email: "a@b.co", [field]: junk });
+      }
+    }
+    for (const field of ["code", "tierId", "period"]) {
+      for (const junk of JUNK) {
+        await expectNo5xx("/api/pricing/promo/validate", { code: "AEVION20", tierId: "medium", [field]: junk });
+      }
+    }
+  }, IMPORT_TIMEOUT_MS);
+
   test("пустое и не-объектное тело не роняют ручки", async () => {
     const app = await getApp();
     for (const path of ["/api/pricing/checkout/session", "/api/pricing/quote", "/api/pricing/fan"]) {

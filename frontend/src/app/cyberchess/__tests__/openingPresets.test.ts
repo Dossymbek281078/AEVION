@@ -1,0 +1,53 @@
+import { describe, it, expect } from "vitest";
+import { Chess } from "chess.js";
+import { ECO_PRESETS } from "../openingRepertoireData";
+
+/* The repertoire builder offers these as starting points. A typo in one move makes
+   the whole line unplayable, and nothing would say so — the UI just shows the string.
+   Checked here so a bad preset fails a test instead of reaching a player. */
+
+describe("ECO_PRESETS", () => {
+  it("has presets to offer", () => {
+    expect(ECO_PRESETS.length).toBeGreaterThan(0);
+  });
+
+  it("every line replays legally from the start position", () => {
+    const broken: string[] = [];
+    for (const p of ECO_PRESETS) {
+      const c = new Chess();
+      for (const san of p.moves) {
+        try {
+          if (!c.move(san)) { broken.push(`${p.eco} ${p.name}: ${san}`); break; }
+        } catch {
+          broken.push(`${p.eco} ${p.name}: ${san}`);
+          break;
+        }
+      }
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it("uses unique ECO codes so selection cannot be ambiguous", () => {
+    const ecos = ECO_PRESETS.map((p) => p.eco);
+    expect(new Set(ecos).size).toBe(ecos.length);
+  });
+
+  it("declares a colour and at least one move for each", () => {
+    for (const p of ECO_PRESETS) {
+      expect(["white", "black"]).toContain(p.color);
+      expect(p.moves.length).toBeGreaterThan(0);
+      expect(p.name.length).toBeGreaterThan(0);
+    }
+  });
+
+  /* Note, deliberately not asserted: most white presets end on a White move, but
+     "King's Pawn Game" and "Queen's Pawn Game" are two plies (1.e4 e5 / 1.d4 d5)
+     because that is what those openings are named for. The moves are only rendered
+     as a caption, so the parity carries no meaning — worth recording so the next
+     reader does not mistake it for a bug, as I did. */
+  it("writes castling with letters, matching chess.js output", () => {
+    for (const p of ECO_PRESETS) {
+      for (const san of p.moves) expect(san).not.toMatch(/0-0/);
+    }
+  });
+});

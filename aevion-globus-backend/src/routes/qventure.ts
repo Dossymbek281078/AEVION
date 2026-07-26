@@ -377,7 +377,7 @@ qventureRouter.get("/examples", async (_req: Request, res: Response) => {
  * The split is enforced here rather than in the UI, because a public payload
  * that merely goes unrendered is still published.
  */
-function showcasePublicView(r: StoredAnalysis, seed: ExampleSeed | undefined) {
+export function showcasePublicView(r: StoredAnalysis, seed: ExampleSeed | undefined) {
   const result = r.result;
   const flags = Array.isArray(result?.redFlags) ? result.redFlags.length : 0;
   return {

@@ -16,7 +16,10 @@ type Shot = {
   subjects: Subject[]; camera: string; dialogue: string | null; soundscape: string;
   durationSec: number; prompt: string | null; engine: string | null;
   status: string; resultUrl: string | null;
-  qc: { totalScore: number | null; method: string; criteria: QcCriterion[] } | null;
+  qc: {
+    totalScore: number | null; method: string; criteria: QcCriterion[];
+    verdict?: { verdict: string; weakest: Array<{ id: string; label: string; score: number }> };
+  } | null;
 };
 type Project = {
   id: string; title: string; brief: string; format: string; language: string;
@@ -47,6 +50,8 @@ export default function QRealClient() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  const [openQc, setOpenQc] = useState<string | null>(null);
+  const [qcScores, setQcScores] = useState<Record<string, string>>({});
 
   const loadDemo = useCallback(async () => {
     try {
@@ -78,6 +83,26 @@ export default function QRealClient() {
       .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
       .catch(() => {});
   }, [project]);
+
+  // Пустое значение = критерий неприменим к кадру. Шлём его как null, а не как
+  // ноль: иначе кадр без речи получил бы штраф за липсинк.
+  async function submitQc(shotId: string) {
+    if (!project || busy) return;
+    setBusy(true);
+    try {
+      const scores = criteria.map((c) => ({ id: c.id, score: qcScores[c.id] ? Number(qcScores[c.id]) : null }));
+      const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/shots/${shotId}/qc`), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scores, method: "manual" }),
+      });
+      const d = await r.json();
+      if (d?.note) setNote(d.note);
+      const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
+      const pd = await pr.json();
+      if (pd?.project) setProject(pd.project);
+    } catch { setNote(t("qreal.note.backend.down")); }
+    finally { setBusy(false); }
+  }
 
   async function renderAll() {
     if (!project || busy) return;
@@ -368,7 +393,54 @@ export default function QRealClient() {
                     <button onClick={() => setOpenPrompt(openPrompt === s.id ? null : s.id)} className="text-neutral-600 underline underline-offset-2 hover:text-neutral-900">
                       {openPrompt === s.id ? t("qreal.shot.prompt.hide") : t("qreal.shot.prompt.show")}
                     </button>
+                    {/* Судить можно только то, что отрендерено. Панель даёт человеку
+                        те же якоря, по которым судит VLM, — иначе две оценки
+                        несопоставимы. */}
+                    {s.resultUrl && (
+                      <button onClick={() => { setOpenQc(openQc === s.id ? null : s.id); setQcScores({}); }} className="text-neutral-600 underline underline-offset-2 hover:text-neutral-900">
+                        {openQc === s.id ? t("qreal.qc.judge.hide") : t("qreal.qc.judge")}
+                      </button>
+                    )}
                   </div>
+                  {openQc === s.id && (
+                    <div className="mt-2 border-t border-neutral-200 pt-2">
+                      <table className="w-full text-[11px]">
+                        <tbody>
+                          {criteria.map((c) => (
+                            <tr key={c.id} className="border-b border-dotted border-neutral-200">
+                              <td className="py-1 pr-2 align-top text-neutral-700" title={anchors[c.id] ? `1 — ${anchors[c.id]["1"]}\n3 — ${anchors[c.id]["3"]}\n5 — ${anchors[c.id]["5"]}` : undefined}>
+                                {c.label}
+                              </td>
+                              <td className="w-28 py-1 text-right">
+                                <select
+                                  value={qcScores[c.id] ?? ""}
+                                  onChange={(ev) => setQcScores({ ...qcScores, [c.id]: ev.target.value })}
+                                  className="border border-neutral-300 bg-white px-1 py-0.5"
+                                >
+                                  <option value="">{t("qreal.qc.na")}</option>
+                                  {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <button onClick={() => submitQc(s.id)} disabled={busy} className="mt-2 border border-teal-800 bg-white px-3 py-1 text-xs text-teal-800 hover:bg-teal-800 hover:text-white disabled:opacity-40">
+                        {t("qreal.qc.submit")}
+                      </button>
+                      {s.qc?.verdict && (
+                        <p className="mt-2 text-xs">
+                          <span className={s.qc.verdict.verdict === "pass" ? "text-teal-800" : "text-red-700"}>
+                            {t(`qreal.qc.verdict.${s.qc.verdict.verdict}`)}
+                          </span>
+                          {s.qc.totalScore != null && <span className="font-mono"> · {s.qc.totalScore.toFixed(2)}</span>}
+                          {s.qc.verdict.weakest.length > 0 && (
+                            <span className="text-neutral-500"> · {s.qc.verdict.weakest.map((w) => w.id).join(", ")}</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {openPrompt === s.id && s.prompt && (
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-neutral-200 bg-[#faf8f3] p-2 text-[11px] leading-relaxed text-neutral-600">{s.prompt}</pre>
                   )}

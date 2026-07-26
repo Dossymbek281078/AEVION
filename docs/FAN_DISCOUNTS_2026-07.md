@@ -218,7 +218,7 @@ reprice them off a guessed comparison; benchmark first»), а бенчмарко
 | GET | `/api/pricing/fan/me` | веер текущего покупателя из его подписки (Bearer) |
 | POST | `/api/pricing/quote` | смета; принимает `ownedModules`/`lastPurchaseAt`, отдаёт блок `fan` |
 | POST | `/api/pricing/checkout/session` | тот же движок + правда о реально списываемой сумме |
-| GET | `/api/pricing/checkout/discount-integrity` | сколько скидок пообещали и не применили (агрегаты по каналам, **с момента старта процесса** — `sinceBoot: true`) |
+| GET | `/api/pricing/checkout/discount-integrity?days=N` | сколько скидок пообещали и не применили: агрегаты по каналам за окно. `source: "db"` — из Postgres (`discount_integrity_log`), `source: "memory"` + `bootedAt` — база недоступна, числа с момента старта процесса. `sessions`/`withIncentive` всегда «с момента старта» (в базу пишутся только расхождения) — в ответе это сказано полем `note`, чтобы одно не делили на другое |
 
 Фронт (ставки нигде не дублируются, всё из API):
 - `components/FanDiscountPanel.tsx` — панель на `/pricing`;

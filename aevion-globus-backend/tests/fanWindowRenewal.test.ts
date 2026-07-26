@@ -146,6 +146,44 @@ describe("окно веера vs продление подписки", () => {
     expect(fanAnchorOf(back.subscription)).toBe(back.subscription.ts);
   });
 
+  test("вернувшийся клиент (подписка истекла давно) — это НОВАЯ покупка, не продление", async () => {
+    // PayBox/PayPal — разовые платежи. Без проверки срока покупатель, вернувшийся
+    // через месяцы, попадал бы под «продление»: тишина вместо письма и никакого
+    // окна веера. Возврат клиента — это новая покупка.
+    const email = "returning@test.aevion.dev";
+    const stale = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    writeSubscription({
+      id: "sub_stale", ts: stale, email, tierId: "lite", period: "monthly",
+      seats: 1, modules: ["qsign"], trialDays: 0,
+      // истекла 60 дней назад — далеко за пределами RENEWAL_GRACE_DAYS
+      validUntil: new Date(Date.now() - 60 * 86_400_000).toISOString(),
+      source: "paybox",
+    });
+    const back = await provisionSubscription({
+      email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "paybox",
+    });
+    expect(back.emailSkipped).toBeUndefined();
+    expect(back.emailSent).toBe(true);
+    expect(fanAnchorOf(back.subscription)).toBe(back.subscription.ts);
+  });
+
+  test("продление чуть позже срока (дрейф вебхука) остаётся продлением", async () => {
+    const email = "jitter@test.aevion.dev";
+    const anchor = new Date(Date.now() - 31 * 86_400_000).toISOString();
+    writeSubscription({
+      id: "sub_jitter", ts: anchor, email, tierId: "lite", period: "monthly",
+      seats: 1, modules: ["qsign"], trialDays: 0,
+      // истекла ВЧЕРА — это дрейф сроков LS, а не возвращение клиента
+      validUntil: new Date(Date.now() - 1 * 86_400_000).toISOString(),
+      fanAnchorAt: anchor, source: "lemonsqueezy",
+    });
+    const renewal = await provisionSubscription({
+      email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+    expect(renewal.emailSkipped).toBe("renewal");
+    expect(fanAnchorOf(renewal.subscription)).toBe(anchor);
+  });
+
   test("запись без fanAnchorAt (до 2026-07-26) читается по ts — старые данные не ломаются", () => {
     const legacy = {
       id: "sub_legacy", ts: "2026-07-01T00:00:00.000Z", email: "legacy@test.dev",

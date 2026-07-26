@@ -9,6 +9,7 @@ import {
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { buildQuoteWithFan } from "../data/fanDiscounts";
+import { recordCheckoutSession, integritySummary } from "../lib/discountIntegrityLog";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
@@ -85,29 +86,6 @@ interface CheckoutBody {
  * тогда скидка на LS становится настоящей (цена фиксируется на весь срок
  * подписки, это осознанная семантика «зафиксируй цену, пока веер открыт»).
  */
-/**
- * Счётчик «скидок, которые мы пообещали и не применили».
- *
- * До 2026-07-26 такой цифры не существовало вообще: расхождение сметы и счёта
- * на LS/Gumroad не логировалось и не считалось. Теперь каждый чекаут, ушедший
- * на канал с фиксированной ценой, здесь фиксируется — это прямой индикатор
- * упущенной конверсии («человеку показали −$21.80, а счёт пришёл на полную»).
- *
- * ЧЕСТНО о природе данных: счётчик в памяти процесса. Railway-редеплой его
- * обнуляет, инстансов может быть больше одного. Поэтому в ответе всегда идёт
- * `sinceBoot: true` + `bootedAt` — это выборка с момента старта, а НЕ
- * бухгалтерия за всё время. Постоянное хранение — отдельная задача (шаблон
- * рядом: lib/paywallDenyLog.ts пишет в Postgres).
- */
-const BOOTED_AT = new Date().toISOString();
-const discountIntegrity = {
-  sessions: 0,
-  withIncentive: 0,
-  notHonoured: 0,
-  droppedUsdTotal: 0,
-  byProvider: {} as Record<string, { notHonoured: number; droppedUsd: number }>,
-};
-
 function channelHonoursAmount(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub"): boolean {
   switch (provider) {
     case "paybox":
@@ -184,17 +162,12 @@ checkoutRouter.post("/session", async (req, res) => {
     function charge(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub") {
       const honoured = channelHonoursAmount(provider);
       const cents = honoured ? discountedCents : listCents;
-      discountIntegrity.sessions++;
-      if (incentiveUsd > 0) discountIntegrity.withIncentive++;
-      if (incentiveUsd > 0 && !honoured) {
-        discountIntegrity.notHonoured++;
-        discountIntegrity.droppedUsdTotal =
-          Math.round((discountIntegrity.droppedUsdTotal + incentiveUsd) * 100) / 100;
-        const slot = discountIntegrity.byProvider[provider] ?? { notHonoured: 0, droppedUsd: 0 };
-        slot.notHonoured++;
-        slot.droppedUsd = Math.round((slot.droppedUsd + incentiveUsd) * 100) / 100;
-        discountIntegrity.byProvider[provider] = slot;
-      }
+      // Учёт расхождения «обещали / списали» — в lib/discountIntegrityLog.ts
+      // (Postgres, при недоступной базе — счётчики в памяти). Fire-and-forget:
+      // упасть на учёте нельзя, это путь к оплате.
+      recordCheckoutSession({
+        provider, tier: tier.id, incentiveUsd, quotedUsd: quote.total, honoured,
+      });
       const truth: Record<string, unknown> = {
         quotedUsd: quote.total,
         incentiveDiscountUsd: incentiveUsd,
@@ -376,29 +349,34 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 });
 
 // ── GET /discount-integrity ───────────────────────────────────────────────────
-// Сколько скидок мы пообещали и не применили. Публично и read-only: тут нет ни
-// email'ов, ни id — только агрегаты по каналам.
-checkoutRouter.get("/discount-integrity", (_req, res) => {
-  const ratio =
-    discountIntegrity.withIncentive > 0
-      ? Math.round((discountIntegrity.notHonoured / discountIntegrity.withIncentive) * 1000) / 1000
-      : 0;
-  res.json({
-    ...discountIntegrity,
-    notHonouredRatio: ratio,
-    // Оба поля обязательны в ответе: без них цифру прочитают как «за всё время»,
-    // а это выборка с момента старта процесса (см. комментарий у счётчика).
-    sinceBoot: true,
-    bootedAt: BOOTED_AT,
-    channels: {
-      honoursExactAmount: ["paybox", "paypal"],
-      fixedProductPrice: [
-        process.env.LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE === "1" ? null : "lemonsqueezy",
-        "gumroad",
-      ].filter(Boolean),
-    },
-    generatedAt: new Date().toISOString(),
-  });
+// Сколько скидок мы пообещали и не применили. Публично и read-only: только
+// агрегаты по каналам, ни email, ни id. ?days=N (1..365, по умолчанию 30).
+checkoutRouter.get("/discount-integrity", async (req, res) => {
+  try {
+    const summary = await integritySummary(Number(req.query.days) || 30);
+    res.json({
+      ...summary,
+      // Что вообще может донести скидку до счёта, а что спишет цену своего
+      // продукта — чтобы цифру выше было с чем сопоставить.
+      channels: {
+        honoursExactAmount: ["paybox", "paypal"],
+        fixedProductPrice: [
+          process.env.LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE === "1" ? null : "lemonsqueezy",
+          "gumroad",
+        ].filter(Boolean),
+      },
+      // sessions/withIncentive считаются только в памяти процесса (в базу пишутся
+      // лишь расхождения). При source="db" они означают «с момента старта», а
+      // notHonoured/droppedUsd — «за окно»: делить одно на другое нельзя.
+      note:
+        summary.source === "db"
+          ? "notHonoured/droppedUsdTotal — за окно из базы; sessions/withIncentive — с момента старта процесса"
+          : "база недоступна: все числа — с момента старта процесса",
+      generatedAt: new Date().toISOString(),
+    });
+  } catch {
+    res.status(500).json({ error: "integrity_summary_failed" });
+  }
 });
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────

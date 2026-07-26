@@ -401,6 +401,26 @@ PORT=4192 DATABASE_URL='postgresql://postgres:<пароль>@localhost:5432/aevi
 Таблицы `AppSubscription` и `discount_integrity_log` модули создают сами при
 первом обращении.
 
+## 7р. Прод-сборка прошла — гейт перед мержем закрыт
+
+`next build` на ветке: **успешно**, `BUILD_ID` создан.
+
+```
+✓ Compiled successfully in 5.3min
+✓ Completed runAfterProductionCompile in 5.0s
+✓ Generating static pages using 31 workers (738/738) in 3.4s
+```
+
+Страницы, которых касается веер, собраны статически: `/pricing`,
+`/pricing/refund-policy` (раздел оферты), витрины модулей. `npm run verify` в
+этом репо = backend `tsc` + `next build`, и обе половины теперь проверены на
+ветке, а не только по типам.
+
+Заняло это больше 20 минут TypeScript-фазы — не из-за кода: параллельно шли
+сборки ещё трёх сессий (`aevion-shop`, `aevion-qreal`, `aevion-qskyway`), у
+процесса 804 CPU-секунды реальной работы. Та же нагрузка объясняет флаки сюиты
+из §7л.
+
 ## 7п. Дедуп LS-вебхука: осознанно НЕ переписан
 
 `SEEN` в `routes/lemonSqueezyWebhook.ts` — `Set` в памяти процесса, то есть после

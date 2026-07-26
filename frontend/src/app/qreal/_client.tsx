@@ -53,6 +53,7 @@ export default function QRealClient() {
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
   const [cast, setCast] = useState<Character[]>([]);
   const [castDraft, setCastDraft] = useState<Record<string, string>>({});
+  const [refDraft, setRefDraft] = useState<Record<string, string>>({});
   const [openQc, setOpenQc] = useState<string | null>(null);
   const [qcScores, setQcScores] = useState<Record<string, string>>({});
 
@@ -86,7 +87,7 @@ export default function QRealClient() {
       .then((r) => r.json()).then((d) => { if (d?.engines) setEstimate(d); })
       .catch(() => {});
     fetch(apiUrl(`/api/qreal/projects/${project.id}/characters`))
-      .then((r) => r.json()).then((d) => { setCast(d?.characters || []); setCastDraft({}); })
+      .then((r) => r.json()).then((d) => { setCast(d?.characters || []); setCastDraft({}); setRefDraft({}); })
       .catch(() => {});
   }, [project]);
 
@@ -95,16 +96,25 @@ export default function QRealClient() {
   async function saveCharacter(cid: string) {
     if (!project || busy) return;
     const canonical = castDraft[cid];
-    if (!canonical || canonical.trim().length < 3) return;
+    const newRef = (refDraft[cid] || "").trim();
+    const existing = cast.find((c) => c.id === cid);
+    // Сервер перезаписывает refImages целиком, поэтому шлём накопленный список,
+    // а не одну ссылку — иначе каждая новая картинка стирала бы предыдущие.
+    const refImages = newRef ? [...(existing?.refImages || []), newRef].slice(0, 9) : undefined;
+    if ((!canonical || canonical.trim().length < 3) && !refImages) return;
     setBusy(true);
     try {
+      const body: Record<string, unknown> = {};
+      if (canonical && canonical.trim().length >= 3) body.canonical = canonical.trim();
+      if (refImages) body.refImages = refImages;
       const r = await fetch(apiUrl(`/api/qreal/projects/${project.id}/characters/${cid}`), {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ canonical: canonical.trim() }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (d?.characters) setCast(d.characters);
       if (d?.note) setNote(d.note);
+      setRefDraft({ ...refDraft, [cid]: "" });
       const pr = await fetch(apiUrl(`/api/qreal/projects/${project.id}`));
       const pd = await pr.json();
       if (pd?.project) setProject(pd.project);
@@ -499,10 +509,24 @@ export default function QRealClient() {
                     rows={3}
                     className="mt-2 w-full border border-neutral-300 bg-[#faf8f3] p-2 text-xs leading-relaxed text-neutral-700"
                   />
+                  {/* Референс-кадр фиксирует лицо надёжнее любого текста:
+                      движок получает картинку, а не описание. Принимаем URL —
+                      хранилища для загрузки у модуля пока нет, и делать вид,
+                      что оно есть, хуже, чем честное поле со ссылкой. */}
+                  <input
+                    type="url"
+                    value={refDraft[c.id] ?? ""}
+                    onChange={(ev) => setRefDraft({ ...refDraft, [c.id]: ev.target.value })}
+                    placeholder={t("qreal.cast.ref.add")}
+                    className="mt-2 w-full border border-neutral-300 bg-white px-2 py-1 text-[11px] text-neutral-700"
+                  />
                   <div className="mt-2 flex items-center gap-3">
                     <button
                       onClick={() => saveCharacter(c.id)}
-                      disabled={busy || (castDraft[c.id] ?? c.canonical) === c.canonical}
+                      disabled={
+                        busy ||
+                        ((castDraft[c.id] ?? c.canonical) === c.canonical && !(refDraft[c.id] || "").trim())
+                      }
                       className="border border-teal-800 bg-white px-3 py-1 text-xs text-teal-800 hover:bg-teal-800 hover:text-white disabled:opacity-40"
                     >
                       {t("qreal.cast.save")}

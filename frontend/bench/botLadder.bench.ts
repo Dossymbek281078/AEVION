@@ -10,8 +10,7 @@
    Run it explicitly — the filename is outside the `*.test.ts` glob on purpose,
    because a few hundred real games takes minutes:
 
-     npx vitest run --config vitest.local-nosetup.ts \
-       --include "bench/botLadder.bench.ts"
+     npx vitest run --config vitest.bench.config.ts
 
    Honest about what it proves: this measures the ladder RELATIVE to itself. A
    level scoring 91% against the level below it shows a ~400-point gap between

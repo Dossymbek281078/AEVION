@@ -252,9 +252,18 @@ export function suggestedTicketUsd(tier: Tier, deal: DealTerms, ticketNorm: { lo
   return { low: ticketNorm.low, high: ticketNorm.high, note: `Типичный чек на уровне «${tier}».` };
 }
 
+/**
+ * Money, short. A trailing ".0" is noise — "$30.0K за 15%" reads like a
+ * measurement, "$30K за 15%" reads like a deal — so the decimal appears only
+ * when it carries information.
+ */
 export function fmt(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
+  const short = (value: number, digits: number): string => {
+    const rounded = value.toFixed(digits);
+    return rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded;
+  };
+  if (Math.abs(n) >= 1_000_000) return `${short(n / 1_000_000, n >= 10_000_000 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1_000) return `${short(n / 1_000, n >= 100_000 ? 0 : 1)}K`;
   return String(Math.round(n));
 }

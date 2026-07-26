@@ -257,10 +257,15 @@ export const startupxApi = {
 
 // ── Formatting ───────────────────────────────────────────────────────────────
 
+/** Деньги коротко. ".0" не несёт информации, поэтому не показывается. */
 export function usd(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
+  const short = (value: number, digits: number): string => {
+    const rounded = value.toFixed(digits);
+    return rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded;
+  };
+  if (Math.abs(n) >= 1_000_000) return `$${short(n / 1_000_000, n >= 10_000_000 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${short(n / 1_000, n >= 100_000 ? 0 : 1)}K`;
   return `$${Math.round(n)}`;
 }
 

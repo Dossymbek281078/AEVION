@@ -53,6 +53,14 @@ function dealLine(deal: DealTerms | null | undefined): string | null {
   return null;
 }
 
+/** Trim to a whole word, with an ellipsis only when something was cut. */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:—–-]+$/, "")}…`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -83,7 +91,9 @@ export async function generateMetadata({
     const tier = Object.prototype.hasOwnProperty.call(TIER_LABEL, tierKey) ? TIER_LABEL[tierKey] : "Заявка";
     const deal = dealLine(l.deal as DealTerms | null);
     const score = typeof l.assessment_score === "number" ? `${l.assessment_score}/100` : null;
-    const summary = typeof l.description === "string" ? l.description.replace(/\s+/g, " ").slice(0, 180) : "";
+    // Обрезка по границе слова: "…транспортные компании. М" в превью выглядит
+    // как сломанная страница, а не как сокращённый текст.
+    const summary = typeof l.description === "string" ? clip(l.description.replace(/\s+/g, " "), 180) : "";
 
     const title = `${l.title} — ${tier}${deal ? `, ${deal}` : ""} · Биржа стартапов AEVION`;
     const description = [deal, score ? `балл разбора ${score}` : null, summary]

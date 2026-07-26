@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 
+import { MODULE_NODES } from "@/data/pitchFacts";
 export const runtime = "edge";
 export const alt = "AEVION — Trust infrastructure for digital assets & IP";
 export const size = { width: 1200, height: 630 };
@@ -76,7 +77,7 @@ export default function RootOg() {
             </span>
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 1000, lineHeight: 1.45, display: "flex" }}>
-            37 nodes on one Trust Graph. IP registry, cryptographic signatures, authorship & prior-art bureau,
+            {MODULE_NODES} nodes on one Trust Graph. IP registry, cryptographic signatures, authorship & prior-art bureau,
             validator quorum, creator awards, digital bank — one identity, one pipeline.
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
@@ -123,7 +124,7 @@ export default function RootOg() {
           }}
         >
           <div style={{ display: "flex" }}>aevion.app</div>
-          <div style={{ color: "#a78bfa", display: "flex" }}>37 nodes · one Trust Graph</div>
+          <div style={{ color: "#a78bfa", display: "flex" }}>{MODULE_NODES} nodes · one Trust Graph</div>
         </div>
       </div>
     ),

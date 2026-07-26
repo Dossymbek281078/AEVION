@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 
+import { MODULE_NODES } from "@/data/pitchFacts";
 export const runtime = "edge";
 export const alt = "AEVION Ecosystem — activity feed + module health matrix";
 export const size = { width: 1200, height: 630 };
@@ -192,7 +193,7 @@ export default function EcosystemOg() {
           }}
         >
           <div style={{ display: "flex" }}>aevion.app/ecosystem</div>
-          <div style={{ color: "#f472b6", display: "flex" }}>37 nodes · one Trust Graph</div>
+          <div style={{ color: "#f472b6", display: "flex" }}>{MODULE_NODES} nodes · one Trust Graph</div>
         </div>
       </div>
     ),

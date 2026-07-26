@@ -4574,9 +4574,15 @@ export default function CyberChessPage(){
     // never actually hangs a piece) but book opening → mostly-sound middlegame
     // → occasional real blunder. See humanBot.ts for the model.
     let cancelled=false;
+    // Every other branch here is synchronous, so clearTimeout is enough to stop
+    // it. This one awaits the book, so a cancelled run can still be mid-flight
+    // when the next one starts and calls sThink(true) — clearing the indicator
+    // then would blank it while the new move is being thought out. A cancelled
+    // run must leave the flag to whoever owns it now.
+    const done=()=>{if(!cancelled)sThink(false)};
     const t=setTimeout(()=>{void(async()=>{
       try{
-        if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+        if(cancelled||game.fen()!==fenAtTrigger){done();return}
         // A Stockfish level reaches this branch only when the engine is not
         // ready yet (still loading, or WASM blocked). Someone who picked Master
         // or Stockfish must not get a bot that hangs pieces on purpose while it
@@ -4590,13 +4596,13 @@ export default function CyberChessPage(){
             const book=await getBookContinuations(fenAtTrigger);
             const uci=pickBookMove(book.moves.map(m=>({uci:m.uci,freq:m.freq})),hist.length,profile);
             // The await let the board move on — re-check before committing.
-            if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+            if(cancelled||game.fen()!==fenAtTrigger){done();return}
             if(uci&&uci.length>=4){
               exec(uci.slice(0,2) as Square,uci.slice(2,4) as Square,(uci.length>4?uci[4]:undefined) as any,false);
-              sThink(false);return;
+              done();return;
             }
           }catch{/* book unavailable → play it out */}
-          if(cancelled||game.fen()!==fenAtTrigger){sThink(false);return}
+          if(cancelled||game.fen()!==fenAtTrigger){done();return}
         }
         const c=new Chess(fenAtTrigger);
         // Floor of 1: Beginner's nominal depth 1 would search 0 ply, i.e. score
@@ -4613,7 +4619,7 @@ export default function CyberChessPage(){
           :scored.reduce((best,s)=>s.score>best.score?s:best,scored[0])?.move??null;
         if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}
-      sThink(false);
+      done();
     })()},delay);
     return()=>{cancelled=true;clearTimeout(t)};
   },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly,mirrorActive,mirrorProfile]);

@@ -3485,3 +3485,48 @@ describe("export zip: UTF-8 file names", () => {
     expect(up.body.imported.map((x: { path: string }) => x.path)).toContain("проект/файл.txt");
   });
 });
+
+describe("import zip: file name encoding", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ImpEnc", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("refuses non-UTF-8 names with an actionable message instead of importing U+FFFD paths", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    // "файл.txt" as CP866 bytes — what a Russian Windows archiver writes when
+    // it does not set bit 11. Decoded as UTF-8 these become replacement chars.
+    const cp866Name = Buffer.from([0xa4, 0xa0, 0xa9, 0xab, 0x2e, 0x74, 0x78, 0x74]);
+    // Swap the name bytes in place: same length, and CRC covers data only, so
+    // the archive stays structurally valid — only its name encoding changes.
+    const zip = buildSimpleZip([{ name: "aaaa.txt", data: Buffer.from("data", "utf8") }]);
+    const placeholder = Buffer.from("aaaa.txt", "utf8");
+    let at = zip.indexOf(placeholder);
+    while (at !== -1) {
+      cp866Name.copy(zip, at);
+      at = zip.indexOf(placeholder, at + 1);
+    }
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/not UTF-8/);
+    expect(r.body.error).toMatch(/Re-create the archive/);
+  });
+
+  test("plain ASCII names still import from archives with no UTF-8 flag (the common case)", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    const zip = buildSimpleZip([{ name: "src/App.jsx", data: Buffer.from("export default 1;", "utf8") }]);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(200);
+    expect(r.body.imported.map((x: { path: string }) => x.path)).toContain("src/App.jsx");
+  });
+});

@@ -259,13 +259,28 @@ const TIER_DISPLAY: Record<TierId, string> = {
  * Записи до 2026-07-26 поля не имеют — для них читатели берут `ts` (см.
  * fanAnchorOf()); это то же поведение, что было, никого не ломает.
  */
-function resolveFanAnchor(email: string, tierId: TierId, modules: string[], now: string): string {
-  const prev = readLatestSubscription(email);
+function resolveFanAnchor(
+  prev: Subscription | null,
+  tierId: TierId,
+  modules: string[],
+  now: string,
+): string {
   if (!prev) return now;
-  const gainedModule = modules.some((m) => !(prev.modules ?? []).includes(m));
-  const tierChanged = prev.tierId !== tierId;
-  if (gainedModule || tierChanged) return now;
-  return prev.fanAnchorAt ?? prev.ts;
+  return isRenewalOf(prev, tierId, modules) ? prev.fanAnchorAt ?? prev.ts : now;
+}
+
+/**
+ * Продление или новая покупка? ОДИН предикат на два решения — якорь окна веера
+ * и отправку welcome-письма. Два независимых определения «что такое продление»
+ * разъехались бы, и одно из них молча работало бы неправильно.
+ *
+ * Продление = тот же тариф и ни одного нового модуля. Возврат после отмены
+ * продлением НЕ считается: отмена пишет запись с tierId "free", то есть тариф
+ * меняется, и это честно новая покупка.
+ */
+function isRenewalOf(prev: Subscription, tierId: TierId, modules: string[]): boolean {
+  if (prev.tierId !== tierId) return false;
+  return !modules.some((m) => !(prev.modules ?? []).includes(m));
 }
 
 /** Дата, от которой считается окно веера. Старые записи — по `ts`. */
@@ -416,12 +431,17 @@ export async function provisionSubscription(input: {
   stripeSessionId?: string;
   paddleTransactionId?: string;
   source?: string;
-}): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
+}): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean; emailSkipped?: "renewal" }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
   const validityDays = trialDays > 0 ? trialDays : period === "annual" ? 365 : 30;
   const now = new Date().toISOString();
   const modules = input.modules ?? [];
+  // Предыдущая подписка читается ДО записи новой — иначе readLatestSubscription
+  // вернёт запись, которую мы только что добавили, и продление перестанет
+  // отличаться от новой покупки.
+  const prev = readLatestSubscription(input.email);
+  const isRenewal = prev ? isRenewalOf(prev, input.tierId, modules) : false;
 
   const subscription: Subscription = {
     id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -437,10 +457,26 @@ export async function provisionSubscription(input: {
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
     source: input.source,
-    fanAnchorAt: resolveFanAnchor(input.email, input.tierId, modules, now),
+    fanAnchorAt: resolveFanAnchor(prev, input.tierId, modules, now),
   };
 
   writeSubscription(subscription);
+
+  // Welcome-письмо — только на НОВОЙ покупке.
+  //
+  // Почему это важно: ACTIVATE_EVENTS в routes/lemonSqueezyWebhook.ts включает
+  // `subscription_updated`, и на каждом ежемесячном продлении вебхук снова зовёт
+  // эту функцию. Без проверки покупатель получал «Добро пожаловать в AEVION» и
+  // «Подписка активна» КАЖДЫЙ МЕСЯЦ — при том, что чек за списание присылает сам
+  // процессинг (LS/Gumroad). Найдено 2026-07-26 тем же чтением вебхука, что
+  // вскрыло вечное окно веера.
+  //
+  // Возврат после отмены письмо получит: отмена пишет запись tierId "free", то
+  // есть тариф меняется и isRenewalOf() вернёт false.
+  if (isRenewal) {
+    console.log(`[provisioning] продление ${subscription.email} (${input.tierId}) — welcome-письмо не отправляем`);
+    return { subscription, emailSent: false, emailMode: "stub", emailSkipped: "renewal" };
+  }
 
   const subjPrefix = trialDays > 0 ? "Триал активен" : "Подписка активна";
   const result = await sendEmail({

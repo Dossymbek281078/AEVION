@@ -27,6 +27,7 @@ delete process.env.RESEND_API_KEY;
 import {
   provisionSubscription,
   readLatestSubscription,
+  writeSubscription,
   fanAnchorOf,
 } from "../src/routes/provisioning";
 import { computeFan, FAN_WINDOW_DAYS } from "../src/data/fanDiscounts";
@@ -100,6 +101,49 @@ describe("окно веера vs продление подписки", () => {
     });
     expect(fan.status).toBe("expired");
     expect(fan.offers.every((o) => o.discountRatio === 0)).toBe(true);
+  });
+
+  test("продление НЕ присылает welcome-письмо, новая покупка — присылает", async () => {
+    // ACTIVATE_EVENTS включает subscription_updated → вебхук зовёт провижининг
+    // на каждом ежемесячном списании. Без этой проверки покупатель получал
+    // «Добро пожаловать в AEVION» каждый месяц (чек за списание присылает сам
+    // процессинг, наше письмо было и дублем, и по смыслу неверным).
+    const email = "mail@test.aevion.dev";
+    const first = await provisionSubscription({
+      email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+    expect(first.emailSkipped).toBeUndefined();
+    expect(first.emailSent).toBe(true);
+
+    const renewal = await provisionSubscription({
+      email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+    expect(renewal.emailSkipped).toBe("renewal");
+    expect(renewal.emailSent).toBe(false);
+
+    // Апгрейд — это новая покупка, письмо должно уйти.
+    const upgrade = await provisionSubscription({
+      email, tierId: "full", period: "monthly", modules: ["qsign"], source: "lemonsqueezy",
+    });
+    expect(upgrade.emailSkipped).toBeUndefined();
+    expect(upgrade.emailSent).toBe(true);
+  });
+
+  test("возврат после отмены получает письмо (отмена пишет tierId free)", async () => {
+    const email = "resub@test.aevion.dev";
+    await provisionSubscription({ email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "ls" });
+    // Отмена: вебхук пишет запись с tierId "free" напрямую через writeSubscription
+    writeSubscription({
+      id: "sub_cancel", ts: new Date().toISOString(), email, tierId: "free",
+      period: "monthly", seats: 1, modules: [], trialDays: 0, source: "lemonsqueezy:cancel",
+    });
+    const back = await provisionSubscription({
+      email, tierId: "lite", period: "monthly", modules: ["qsign"], source: "ls",
+    });
+    expect(back.emailSkipped).toBeUndefined();
+    expect(back.emailSent).toBe(true);
+    // И окно веера открывается заново — это честно новая покупка.
+    expect(fanAnchorOf(back.subscription)).toBe(back.subscription.ts);
   });
 
   test("запись без fanAnchorAt (до 2026-07-26) читается по ts — старые данные не ломаются", () => {

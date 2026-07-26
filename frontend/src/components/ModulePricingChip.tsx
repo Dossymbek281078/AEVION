@@ -35,8 +35,14 @@ interface CurrencyRate {
   symbol: string;
   label: string;
 }
+interface PricingModule {
+  id: string;
+  addonMonthly: number | null;
+  availability?: string;
+}
 interface PricingResponse {
   tiers: Tier[];
+  modules?: PricingModule[];
   currencies: Record<CurrencyCode, CurrencyRate>;
 }
 
@@ -139,6 +145,13 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
 
   const litePrice = fmt(lite.priceMonthly, currency, data.currencies);
 
+  // Модули без à-la-carte цены (addonMonthly: null — 8 из 43) купить поштучно
+  // нельзя ничем; витрина про это молчала. Даём явный запрос цены — он уходит
+  // лидом с названием модуля (/api/pricing/lead), т.е. спрос становится видимым
+  // вместо того, чтобы теряться. См. docs/FAN_DISCOUNTS_2026-07.md §6.
+  const thisModule = data.modules?.find((m) => m.id === moduleId);
+  const quoteOnRequest = thisModule ? thisModule.addonMonthly === null : false;
+
   // One-click checkout: Lite tier + this module → live LemonSqueezy hosted page.
   // The backend /checkout/session picks the processor (LS primary → Gumroad →
   // stub), treats this module as Lite's "one of choice" (no add-on), and returns
@@ -204,7 +217,16 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       {/* Веер: только когда покупка реально что-то открывает. Модуль-одиночка
           (lifebox/constitution — их соседи по кластеру пока без цены) не
           получает бодрую строку «веер 0» — пустое обещание хуже молчания. */}
-      {fanRow && fanRow.ring1.length > 0 && (
+      {quoteOnRequest && (
+        <Link
+          href={`/pricing/contact?module=${encodeURIComponent(moduleId)}`}
+          style={{ color: palette.accent, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}
+          title={tp("fan.quote.tooltip", { module: moduleId })}
+        >
+          {tp("fan.quote.cta")}
+        </Link>
+      )}
+      {!quoteOnRequest && fanRow && fanRow.ring1.length > 0 && (
         <span
           style={{ color: palette.accent, fontWeight: 700, whiteSpace: "nowrap" }}
           title={tp("fan.module.tooltip", { module: moduleId, list: fanRow.ring1.join(", ") })}

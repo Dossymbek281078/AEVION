@@ -15,12 +15,22 @@ import { tierLabel, type PaywallPayload, type CanonicalTier } from "@/lib/paywal
  * Pair with <PaywallScreen> in any RSC page that calls fetchOrPaywall().
  */
 
+/**
+ * Акценты тарифов — 700-оттенки, потому что экран светлый.
+ *
+ * Раньше здесь стояли яркие 400/500 (#06b6d4, #f59e0b, #34d399): они читались
+ * на тёмном фоне `#0f172a`, но этот же цвет используется КАК ТЕКСТ на подложке
+ * `${color}22` и как фон кнопки под белым текстом. После перевода экрана в
+ * светлую схему (2026-07-26) amber на белом давал ~2:1 при норме WCAG AA 4.5:1
+ * — то есть «просто поменять фон» означало бы отдать нечитаемую страницу тем,
+ * кому и так отказали в доступе. Значения подобраны под светлый фон.
+ */
 const TIER_ACCENT: Record<CanonicalTier, string> = {
-  free: "#94a3b8",
-  lite: "#06b6d4",
-  medium: "#8b5cf6",
-  full: "#f59e0b",
-  enterprise: "#34d399",
+  free: "#64748b",
+  lite: "#0e7490",
+  medium: "#6d28d9",
+  full: "#b45309",
+  enterprise: "#047857",
 };
 
 interface Props {
@@ -40,8 +50,8 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
     <main
       style={{
         minHeight: "100vh",
-        background: "#0f172a",
-        color: "#f1f5f9",
+        background: "#f8fafc",
+        color: "#0f172a",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -52,7 +62,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
       <div style={{ maxWidth: 520, width: "100%", textAlign: "center" }}>
         <Link
           href={backHref}
-          style={{ fontSize: 12, color: "#94a3b8", textDecoration: "none", display: "inline-block", marginBottom: 24 }}
+          style={{ fontSize: 12, color: "#64748b", textDecoration: "none", display: "inline-block", marginBottom: 24 }}
         >
           {backLabel}
         </Link>
@@ -73,8 +83,8 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           Модуль «{module}» доступен на старших тарифах
         </h1>
 
-        <p style={{ fontSize: 14, color: "#cbd5e1", margin: "0 0 24px", lineHeight: 1.5 }}>
-          Ваш текущий план — <strong style={{ color: "#f1f5f9" }}>{tierLabel(plan)}</strong>.
+        <p style={{ fontSize: 14, color: "#475569", margin: "0 0 24px", lineHeight: 1.5 }}>
+          Ваш текущий план — <strong style={{ color: "#0f172a" }}>{tierLabel(plan)}</strong>.
           Чтобы открыть {module}, выберите один из тарифов ниже.
         </p>
 
@@ -117,7 +127,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
             display: "inline-block",
             padding: "12px 28px",
             background: accent,
-            color: "#0f172a",
+            color: "#fff",
             borderRadius: 10,
             fontSize: 15,
             fontWeight: 800,
@@ -128,8 +138,8 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           Перейти к тарифам →
         </a>
 
-        <p style={{ fontSize: 11, color: "#64748b", marginTop: 28, lineHeight: 1.5 }}>
-          Уже оплатили? <Link href="/account" style={{ color: "#94a3b8", textDecoration: "underline" }}>Проверьте статус подписки</Link>
+        <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 28, lineHeight: 1.5 }}>
+          Уже оплатили? <Link href="/account" style={{ color: "#0d9488", textDecoration: "underline" }}>Проверьте статус подписки</Link>
         </p>
       </div>
     </main>

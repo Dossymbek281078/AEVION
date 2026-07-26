@@ -39,19 +39,31 @@ function ContactInner() {
   const { t } = useI18n();
   const sp = useSearchParams();
   const [form, setForm] = useState<LeadForm>(INITIAL);
+  /** Модуль из deep-link — уходит в лид как modules[], чтобы спрос был виден по названию. */
+  const [moduleId, setModuleId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Префилл из query-параметров (deep-links с других страниц)
+  // Префилл из query-параметров (deep-links с других страниц).
+  // `module` приходит с витрин тех модулей, у которых нет à-la-carte цены
+  // (addonMonthly: null — 8 из 43, см. docs/FAN_DISCOUNTS_2026-07.md §6): их
+  // нельзя купить ничем, кроме тарифа $89+, и раньше витрина на этот счёт
+  // просто молчала. Теперь запрос цены превращается в лид с именем модуля.
   useEffect(() => {
     const tier = sp.get("tier") as TierId | null;
     const industry = sp.get("industry");
+    const mod = sp.get("module");
     setForm((f) => ({
       ...f,
       tier: tier && ["free", "lite", "medium", "full", "enterprise"].includes(tier) ? tier : f.tier,
       industry: industry ?? f.industry,
+      message:
+        mod && !f.message
+          ? `Интересует модуль ${mod} — нужна цена и условия подключения.`
+          : f.message,
     }));
+    if (mod) setModuleId(mod);
   }, [sp]);
 
   function update<K extends keyof LeadForm>(key: K, value: LeadForm[K]) {
@@ -74,8 +86,9 @@ function ContactInner() {
           industry: form.industry || undefined,
           tier: form.tier || undefined,
           seats: form.seats,
+          modules: moduleId ? [moduleId] : undefined,
           message: form.message || undefined,
-          source: "pricing/contact",
+          source: moduleId ? `pricing/contact?module=${moduleId}` : "pricing/contact",
         }),
       });
       const j = await r.json();

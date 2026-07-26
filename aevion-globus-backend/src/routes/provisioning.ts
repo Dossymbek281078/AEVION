@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { computeFan } from "../data/fanDiscounts";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
 
@@ -206,10 +207,76 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // legacy aliases (deprecated)
-  pro: "Lite",
+  // `pro` — это ЖИВОЙ флагман «Universe» ($249.99/мес, см. TIERS в
+  // data/pricing.ts), а не legacy-алиас Lite. Пока стояло "Lite", покупатель
+  // самого дорогого тарифа получал письмо «Добро пожаловать в AEVION Lite».
+  // Тот же класс ошибки уже правили в lib/planGate.ts 2026-07-22 (там `pro`
+  // гейтился как lite и 402-ил $249.99-подписчика); здесь он остался
+  // незамеченным до 2026-07-26.
+  pro: "Universe",
+  // legacy alias без своего тарифа: старые Gumroad/LS-подписки → all-access.
   business: "Full",
 };
+
+/**
+ * Веерный блок в welcome-письме.
+ *
+ * Окно веера — 14 дней от покупки (data/fanDiscounts.ts), но до сих пор оно
+ * жило только в UI: человек, закрывший вкладку после оплаты, о нём не узнавал,
+ * и окно истекало впустую. Письмо — единственный канал, который его догонит.
+ *
+ * Показываем максимум 4 предложения и только реальные (discountPercent > 0).
+ * Если веер пуст (нечего предложить, всё уже в тарифе) — блока нет вовсе:
+ * пустое «у вас открыт веер!» без списка хуже молчания.
+ *
+ * Цифры считает тот же движок, что применяет скидку в чекауте, — здесь ничего
+ * не пересчитывается локально, иначе письмо начнёт обещать своё.
+ */
+function fanBlock(sub: Subscription): { html: string; text: string } {
+  let fan;
+  try {
+    fan = computeFan({ tierId: sub.tierId, owned: sub.modules ?? [], lastPurchaseAt: sub.ts });
+  } catch (e) {
+    // Письмо о состоявшейся оплате важнее веера: если расчёт упал, отправляем
+    // письмо без блока, а не роняем всё письмо.
+    console.error("[provisioning] fanBlock failed", e);
+    return { html: "", text: "" };
+  }
+  if (fan.status !== "active") return { html: "", text: "" };
+  const offers = fan.offers.filter((o) => o.discountPercent > 0).slice(0, 4);
+  if (offers.length === 0) return { html: "", text: "" };
+
+  const until = fan.validUntil ? new Date(fan.validUntil).toLocaleDateString("ru-RU") : "";
+  const rows = offers
+    .map(
+      (o) =>
+        `<tr>
+           <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:700">${o.module}</td>
+           <td style="padding:6px 0;font-size:13px;color:#94a3b8;text-align:right;text-decoration:line-through">$${o.listMonthly}</td>
+           <td style="padding:6px 0 6px 10px;font-size:15px;color:#0f766e;font-weight:900;text-align:right;white-space:nowrap">$${o.priceMonthly} <span style="font-size:11px">−${o.discountPercent}%</span></td>
+         </tr>`,
+    )
+    .join("");
+
+  const html = `
+    <div style="margin:20px 0;padding:16px;background:#f0fdfa;border:1px solid #5eead4;border-radius:10px">
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.06em;color:#0f766e;margin-bottom:6px">ВЕЕРНАЯ СКИДКА ОТКРЫТА${until ? ` ДО ${until}` : ""}</div>
+      <div style="font-size:14px;color:#134e4a;line-height:1.5;margin-bottom:10px">
+        Ваша покупка открыла скидку на соседние модули. Каждая следующая покупка продлевает окно и увеличивает глубину скидки.
+      </div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+      <div style="margin-top:12px">
+        <a href="${FRONTEND_URL}/pricing" style="font-size:13px;font-weight:800;color:#0f766e;text-decoration:none">Посмотреть весь веер →</a>
+      </div>
+    </div>`;
+
+  const text =
+    `\nВЕЕРНАЯ СКИДКА ОТКРЫТА${until ? ` ДО ${until}` : ""}\n` +
+    offers.map((o) => `  ${o.module}: $${o.listMonthly} → $${o.priceMonthly} (−${o.discountPercent}%)`).join("\n") +
+    `\n  Весь веер: ${FRONTEND_URL}/pricing\n`;
+
+  return { html, text };
+}
 
 function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
@@ -235,6 +302,7 @@ function welcomeHtml(sub: Subscription): string {
             Ваша подписка активна. Можете сразу зарегистрировать первую идею в QRight, подписать документ через QSign или открыть аналитику в Globus.
           </p>
           ${trialBlock}
+          ${fanBlock(sub).html}
           <p style="font-size:13px;color:#64748b;line-height:1.5;margin:16px 0">
             <strong>Что входит:</strong><br/>
             ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
@@ -264,7 +332,7 @@ function welcomeText(sub: Subscription): string {
     : "";
   return `Добро пожаловать в AEVION ${tierName}!
 
-Ваша подписка активна.${trial}
+Ваша подписка активна.${trial}${fanBlock(sub).text}
 Что входит:
 ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
 

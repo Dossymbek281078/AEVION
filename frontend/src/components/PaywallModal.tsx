@@ -108,7 +108,7 @@ export function PaywallModal() {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "rgba(2, 6, 23, 0.72)",
+        background: "rgba(15, 23, 42, 0.45)",
         backdropFilter: "blur(6px)",
         WebkitBackdropFilter: "blur(6px)",
       }}
@@ -120,10 +120,10 @@ export function PaywallModal() {
           width: "min(440px, calc(100vw - 40px))",
           borderRadius: 18,
           padding: "28px 26px 24px",
-          color: "#f8fafc",
-          background: "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.98))",
-          border: "1px solid rgba(148, 163, 184, 0.45)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)",
+          color: "#0f172a",
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
         }}
       >
         <button
@@ -137,8 +137,8 @@ export function PaywallModal() {
             height: 28,
             borderRadius: "50%",
             border: "none",
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.7)",
+            background: "#f1f5f9",
+            color: "#64748b",
             cursor: "pointer",
             fontSize: 18,
             fontWeight: 900,
@@ -153,8 +153,8 @@ export function PaywallModal() {
             width: 46,
             height: 46,
             borderRadius: 14,
-            background: "linear-gradient(135deg, rgba(99,102,241,0.35), rgba(168,85,247,0.35))",
-            border: "1px solid rgba(168,85,247,0.5)",
+            background: "#f0fdfa",
+            border: "1px solid #5eead4",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -170,7 +170,7 @@ export function PaywallModal() {
           Доступно на платном тарифе
         </h2>
 
-        <p style={{ margin: "0 0 6px", fontSize: 14.5, lineHeight: 1.5, color: "rgba(226,232,240,0.92)" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 14.5, lineHeight: 1.5, color: "#475569" }}>
           {message}
         </p>
 
@@ -182,11 +182,11 @@ export function PaywallModal() {
             margin: "10px 0 22px",
             padding: "5px 11px",
             borderRadius: 999,
-            background: "rgba(168,85,247,0.15)",
-            border: "1px solid rgba(168,85,247,0.4)",
+            background: "#f0fdfa",
+            border: "1px solid #5eead4",
             fontSize: 12.5,
             fontWeight: 700,
-            color: "#e9d5ff",
+            color: "#0f766e",
           }}
         >
           Тариф: {tiers}
@@ -198,21 +198,21 @@ export function PaywallModal() {
               margin: "0 0 18px",
               padding: "12px 14px",
               borderRadius: 12,
-              background: "rgba(13,148,136,0.16)",
-              border: "1px solid rgba(45,212,191,0.45)",
+              background: "#f0fdfa",
+              border: "1px solid #5eead4",
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#5eead4", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", textTransform: "uppercase", letterSpacing: "0.04em" }}>
               {tp("fan.paywall.title")}
             </div>
-            <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#f0fdfa" }}>
+            <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#134e4a" }}>
               {tp("fan.paywall.offer", {
                 module: fanOffer.module,
                 cur: "$",
                 price: fanOffer.priceMonthly,
                 list: fanOffer.listMonthly,
               })}{" "}
-              <span style={{ fontWeight: 900, color: "#5eead4" }}>−{fanOffer.discountPercent}%</span>
+              <span style={{ fontWeight: 900, color: "#0f766e" }}>−{fanOffer.discountPercent}%</span>
             </div>
           </div>
         )}
@@ -229,9 +229,9 @@ export function PaywallModal() {
               fontSize: 15,
               fontWeight: 800,
               textDecoration: "none",
-              color: "#0b1020",
-              background: "linear-gradient(135deg, #a78bfa, #818cf8)",
-              boxShadow: "0 8px 24px rgba(129,140,248,0.4)",
+              color: "#fff",
+              background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+              boxShadow: "0 8px 24px rgba(13,148,136,0.35)",
             }}
           >
             Перейти к тарифам
@@ -244,9 +244,9 @@ export function PaywallModal() {
               fontSize: 15,
               fontWeight: 700,
               cursor: "pointer",
-              color: "rgba(226,232,240,0.85)",
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(148,163,184,0.35)",
+              color: "#475569",
+              background: "#f8fafc",
+              border: "1px solid #cbd5e1",
             }}
           >
             Позже

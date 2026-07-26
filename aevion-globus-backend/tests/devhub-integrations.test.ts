@@ -137,7 +137,10 @@ describe("POST /api/devhub/media/tts (ElevenLabs)", () => {
     expect((opts as any).headers["xi-api-key"]).toBe("fake-key");
     const body = JSON.parse((opts as any).body);
     expect(body.text).toBe("Hello world");
-    expect(body.model_id).toBe("eleven_monolingual_v1");
+    // Was pinned to eleven_monolingual_v1 — a model ElevenLabs has since
+    // REMOVED. The test stayed green while prod voice was fully broken, which
+    // is why this now tracks the model we actually send.
+    expect(body.model_id).toBe("eleven_multilingual_v2");
   });
 });
 
@@ -3801,5 +3804,48 @@ describe("3D assets and music fallback", () => {
     const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
     expect(r.status).toBe(503);
     expect(r.body.error).toMatch(/ELEVENLABS_API_KEY or REPLICATE_API_TOKEN/);
+  });
+});
+
+describe("provider realities: retired TTS model, empty video balance", () => {
+  test("TTS no longer sends the removed eleven_monolingual_v1", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      arrayBuffer: async () => new ArrayBuffer(64),
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.model_id).toBe("eleven_multilingual_v2"); // multilingual: our prompts are Russian
+    expect(body.model_id).not.toBe("eleven_monolingual_v1");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("a retired model is survived by retrying the fallback chain", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"detail":{"code":"unsupported_model"}}' } as any)
+      .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(32) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    expect(r.headers["x-tts-model"]).toBe("eleven_turbo_v2_5");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("an empty Replicate balance says 'top up', not 'Replicate error'", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: false, status: 402,
+      text: async () => '{"title":"Insufficient credit"}',
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a cat" });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toMatch(/no credit/i);
+    expect(r.body.topUpUrl).toContain("replicate.com");
+    delete process.env.REPLICATE_API_TOKEN;
   });
 });

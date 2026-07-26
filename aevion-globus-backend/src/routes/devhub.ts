@@ -3080,17 +3080,34 @@ devhubRouter.post("/media/tts", async (req, res) => {
       },
       body: JSON.stringify({
         text: text.trim(),
-        model_id: "eleven_monolingual_v1",
+        model_id: TTS_MODEL,
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
 
-    if (!elResp.ok) {
-      const errText = await elResp.text();
-      return res.status(elResp.status).json({ error: `ElevenLabs error: ${errText.slice(0, 200)}` });
+    // A retired model id is a provider-side change we cannot prevent, only
+    // survive: retry down the fallback chain before failing the user.
+    let finalResp = elResp;
+    let usedModel = TTS_MODEL;
+    if (!finalResp.ok) {
+      const firstErr = await finalResp.text();
+      if (/unsupported_model|deprecat/i.test(firstErr)) {
+        for (const alt of TTS_MODEL_FALLBACKS) {
+          const retry = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify({ text: text.trim(), model_id: alt }),
+          });
+          if (retry.ok) { finalResp = retry; usedModel = alt; break; }
+        }
+      }
+      if (!finalResp.ok) {
+        return res.status(finalResp.status).json({ error: `ElevenLabs error: ${firstErr.slice(0, 200)}`, triedModels: [TTS_MODEL, ...TTS_MODEL_FALLBACKS] });
+      }
     }
 
-    const audioBuffer = Buffer.from(await elResp.arrayBuffer());
+    const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
+    res.setHeader("X-Tts-Model", usedModel);
     await debitCredit(ttsUserId, "tts", text.trim().length).catch(() => {});
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
@@ -3656,7 +3673,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
     const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+      body: JSON.stringify({ text, model_id: TTS_MODEL }),
     });
     if (!ttsResp.ok) {
       const errText = await ttsResp.text();
@@ -3999,7 +4016,7 @@ async function executeWorkflowStep(
       const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        body: JSON.stringify({ text, model_id: TTS_MODEL }),
       });
       if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
       const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
@@ -5615,6 +5632,20 @@ function parseZipStored(buf: Buffer): Array<{ path: string; content: Buffer }> |
   return entries;
 }
 
+/**
+ * ElevenLabs TTS model.
+ *
+ * eleven_monolingual_v1 was hard-coded in three places and ElevenLabs has
+ * since REMOVED it — every voice call on prod returned
+ * "unsupported_model ... have been deprecated" (confirmed live 2026-07-26),
+ * so voice was silently dead while /studio still reported it live. It was
+ * also English-only, which was wrong for this product: our prompts are
+ * Russian. multilingual_v2 is the quality default; turbo/flash are the
+ * cheaper fallbacks, all three verified against our key.
+ */
+const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || "eleven_multilingual_v2";
+const TTS_MODEL_FALLBACKS = ["eleven_turbo_v2_5", "eleven_flash_v2_5"];
+
 const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
 
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
@@ -5758,6 +5789,15 @@ devhubRouter.post("/media/video", async (req, res) => {
 
     if (!resp.ok) {
       const errText = await resp.text();
+      if (resp.status === 402) {
+        // Having the token is not having the money — /studio reported video
+        // "live" while every generation failed on an empty balance.
+        return res.status(402).json({
+          error: "Video provider has no credit — top up the Replicate account to generate",
+          provider: "replicate",
+          topUpUrl: "https://replicate.com/account/billing#billing",
+        });
+      }
       return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
     }
 

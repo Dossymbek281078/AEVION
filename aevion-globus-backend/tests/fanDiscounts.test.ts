@@ -13,6 +13,7 @@ import {
   FAN_WINDOW_DAYS,
   FAN_RING_BASE,
   FAN_RING_CAP,
+  FAN_KNOWN_LONERS,
 } from "../src/data/fanDiscounts";
 import {
   MODULES_PRICING,
@@ -193,6 +194,24 @@ describe("состав предложений", () => {
     // и без кластера. Если тест покраснел — не «поправь ожидание», а добавь
     // модулю строку в реестр или кластер в FAN_EXTRA_CLUSTERS.
     expect(computeFan({ owned: ["qsign"], now: NOW }).taxonomyGap).toEqual([]);
+  });
+});
+
+describe("веер не должен быть пустым без причины", () => {
+  it("у каждого платного модуля есть ring 1, кроме известных одиночек", () => {
+    // Пустой ring1 = покупка НИЧЕГО не открывает, т.е. веер для этого модуля
+    // не работает как механика. Чаще всего причина не в кластерах, а в том, что
+    // сосед остался без цены (addonMonthly: null) и в веер не попадает.
+    const empty = fanPreview()
+      .filter((r) => r.ring1.length === 0)
+      .map((r) => r.module)
+      .sort();
+    expect(empty).toEqual([...FAN_KNOWN_LONERS].sort());
+  });
+
+  it("флагманский cyberchess открывает веер (релиз 25.07.2026)", () => {
+    const row = fanPreview().find((r) => r.module === "cyberchess")!;
+    expect(row.ring1.length).toBeGreaterThan(0);
   });
 });
 

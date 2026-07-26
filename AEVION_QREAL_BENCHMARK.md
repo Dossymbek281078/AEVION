@@ -131,3 +131,16 @@ node scripts/qreal-benchmark.mjs score                   # вердикт → be
 | Реальный прогон рендера | ⏸ ждёт решения основателя: $36.41 (или $15.12 на Kling) |
 | Судьи | ⏸ нужны 2 человека, не участвовавших в разработке промтов |
 | Публикация сравнения | 🔒 только после «ПОДТВЕРЖДЕНО» в `report.md` |
+
+## 9. Как это проверяется
+
+```bash
+npm run test:qreal                    # 32 юнит-проверки судьи + сверка якорей с кодом
+node scripts/qreal-sync-rubric.mjs    # пересобрать rubric.json из judge.ts
+BASE=<prod> node aevion-globus-backend/scripts/qreal-prod-smoke.js   # контракт судьи на проде
+npm run verify                        # полный gate репозитория (tsc + next build)
+```
+
+Прогон 2026-07-26: `test:qreal` — все зелёные; прод-смок — 14 PASS / 0 FAIL /
+5 PENDING-DEPLOY (позеленеют после мержа); `npm run verify` — сборка проходит,
+`/qreal` в манифесте маршрутов.

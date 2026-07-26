@@ -629,6 +629,10 @@ function isCachedShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEn
 
 /** Один кадр: кэш → мгновенно; иначе submit в движок с одним ретраем. */
 async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): Promise<string> {
+  // Перерендер кадра, который судья уже забраковал, — это следующая попытка.
+  // Считаем её здесь, а не в /qc: лимит должен ограничивать РЕНДЕРЫ (деньги),
+  // а не пересуждения одного и того же файла.
+  if (s.qc?.verdict?.verdict === "regenerate") s.qcAttempts = (s.qcAttempts || 0) + 1;
   s.prompt = buildRenderPrompt(p, s);
   if (!engine) {
     s.engine = null;

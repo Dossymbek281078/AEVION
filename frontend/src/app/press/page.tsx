@@ -183,23 +183,7 @@ export default async function PressPage() {
   return (
     <main style={{ background: "linear-gradient(180deg, #f8fafc 0%, #fff 200px)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 20px 64px" }}>
-        {/*
-          On a phone this page used to open with TWO full navigations stacked:
-          the global header (three rows of links plus status pills) and then
-          Wave1Nav's six more rows. The "AEVION Press Kit" heading landed around
-          1250px — a screen and a half of scrolling before any content. A press
-          kit is read by a stranger arriving from an outreach email; a wall of
-          module links is the worst possible first thing to hand them.
-
-          Hidden below 720px only. Desktop is unchanged, and the global header
-          still carries full navigation on mobile, so nobody is stranded.
-          Scoped to this page — Wave1Nav renders on 115 others and is not ours
-          to change.
-        */}
-        <div className="press-shell-nav">
-          <Wave1Nav />
-        </div>
-        <style>{`@media (max-width: 720px) { .press-shell-nav { display: none; } }`}</style>
+        <Wave1Nav />
 
         <div style={{ marginTop: 12 }}>
           <p

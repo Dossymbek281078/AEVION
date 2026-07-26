@@ -27,7 +27,15 @@ export type EventType =
   | "affiliate_apply"
   | "partner_apply"
   | "edu_apply"
-  | "ab_assigned";
+  | "ab_assigned"
+  // Веер: без этих событий механику нельзя измерить, а её параметры (окно 14
+  // дней, глубина 30/45%) пока выбраны, а не замерены. Список обязан совпадать
+  // с ALLOWED_TYPES в aevion-globus-backend/src/routes/events.ts — иначе событие
+  // молча отбрасывается на бэкенде (тест на это есть в fanTracking.test.ts).
+  | "fan_view"
+  | "fan_owned_pick"
+  | "fan_offer_click"
+  | "fan_terms_open";
 
 export interface TrackPayload {
   type: EventType;

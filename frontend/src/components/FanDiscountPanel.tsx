@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
+import { track } from "@/lib/track";
 
 /**
  * Веерная скидка — панель для /pricing.
@@ -70,6 +71,8 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
   const [owned, setOwned] = useState<string[]>([]);
   const [fan, setFan] = useState<FanState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Ключ последнего отправленного fan_view — защита от дублей на ререндерах. */
+  const viewedRef = useRef<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -94,7 +97,27 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
       body: JSON.stringify({ owned, currency }),
     })
       .then((r) => r.json())
-      .then((j) => alive && setFan(j as FanState))
+      .then((j) => {
+        if (!alive) return;
+        const state = j as FanState;
+        setFan(state);
+        // Одно событие на состояние веера, а не на каждый ререндер: ключ из
+        // уровня и числа скидок, чтобы повторный показ того же не дублировался.
+        const key = `${state.status}:${state.level}:${state.summary?.discounted ?? 0}`;
+        if (viewedRef.current !== key) {
+          viewedRef.current = key;
+          track({
+            type: "fan_view",
+            source: "pricing/fan-panel",
+            meta: {
+              status: state.status,
+              level: state.level,
+              discounted: state.summary?.discounted ?? 0,
+              owned: state.ownedPaid?.length ?? 0,
+            },
+          });
+        }
+      })
       .catch((e) => alive && setError(String(e)));
     return () => {
       alive = false;
@@ -106,7 +129,11 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
   const discounted = useMemo(() => (fan?.offers ?? []).filter((o) => o.discountPercent > 0), [fan]);
 
   function toggle(id: string) {
-    setOwned((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setOwned((prev) => {
+      const on = prev.includes(id);
+      track({ type: "fan_owned_pick", source: "pricing/fan-panel", meta: { module: id, on: !on } });
+      return on ? prev.filter((x) => x !== id) : [...prev, id];
+    });
   }
 
   return (
@@ -194,9 +221,21 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
           )}
 
           <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            {/* Каждое предложение — путь к покупке, а не строка в таблице:
+                клик ведёт на /pricing с предвыбранным модулем (тот же deep-link,
+                что у витрин модулей). Мёртвый список скидок не продаёт. */}
             {discounted.map((o) => (
-              <div
+              <a
                 key={o.module}
+                href={`/pricing?module=${encodeURIComponent(o.module)}`}
+                onClick={() =>
+                  track({
+                    type: "fan_offer_click",
+                    source: "pricing/fan-panel",
+                    value: o.priceMonthly,
+                    meta: { module: o.module, ring: o.ring, percent: o.discountPercent },
+                  })
+                }
                 style={{
                   display: "flex",
                   alignItems: "baseline",
@@ -206,6 +245,8 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
                   background: "#fff",
                   border: "1px solid #e2e8f0",
                   borderRadius: 10,
+                  textDecoration: "none",
+                  color: "inherit",
                 }}
               >
                 <div style={{ minWidth: 0 }}>
@@ -238,13 +279,17 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
                     −{o.discountPercent}%
                   </span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
 
           <p style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
             {tp("fan.footnote")}{" "}
-            <a href="/pricing/refund-policy#fan" style={{ color: "#0f766e", fontWeight: 700 }}>
+            <a
+              href="/pricing/refund-policy#fan"
+              onClick={() => track({ type: "fan_terms_open", source: "pricing/fan-panel" })}
+              style={{ color: "#0f766e", fontWeight: 700 }}
+            >
               {tp("fan.termsLink")}
             </a>
           </p>

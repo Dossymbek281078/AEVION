@@ -55,6 +55,17 @@ const ALLOWED_TYPES = new Set([
   "partner_apply",
   "edu_apply",
   "ab_assigned",
+  // Веерная скидка. Без этих типов механику нельзя измерить, а окно 14 дней и
+  // глубина 30/45% — выбранные значения, не измеренные (docs/FAN_DISCOUNTS_2026-07.md
+  // §9). Первые же продажи должны дать данные, а не ощущения:
+  //   fan_view        — панель веера показана (meta: level, discounted)
+  //   fan_owned_pick  — покупатель отметил, что у него уже есть (meta: module)
+  //   fan_offer_click — клик по конкретному предложению веера (meta: module, ring, percent)
+  //   fan_terms_open  — открыл условия веера (сигнал, что дедлайн вызывает вопросы)
+  "fan_view",
+  "fan_owned_pick",
+  "fan_offer_click",
+  "fan_terms_open",
 ]);
 
 function rateLimitKey(ip: string) {

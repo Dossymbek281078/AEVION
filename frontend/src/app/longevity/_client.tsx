@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
+import { productById } from "@/lib/products";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -10,6 +11,9 @@ import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 // and the reference panel. Honest grading (A/B/C/E) is the point.
 
 const GRADE_COLOR: Record<string, string> = { A: "#55C093", B: "#5BB6D0", C: "#DDB253", E: "#b39ddb" };
+
+/** PDF-версия этого же протокола. Позиция каталога, а не хардкод цены/ссылки. */
+const PROTOCOL_PDF = productById("oijxmq");
 
 interface AField { key: string; label: string; unit: string; placeholder: string; }
 const ASSESS_FIELDS: AField[] = [
@@ -307,8 +311,27 @@ export default function LongevityClient() {
           </section>
         )}
 
+        {/* Протокол в PDF — модуль был живым с 13.07, но купить в нём было нечего.
+            Цена и ссылка берутся из каталога @/lib/products, а не пишутся здесь. */}
+        {PROTOCOL_PDF && (
+          <a href={PROTOCOL_PDF.href} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
+            <div style={styles.buyLeft}>
+              <div style={styles.buyKicker}>{PROTOCOL_PDF.format}</div>
+              <div style={styles.buyTitle}>Забрать протокол с собой</div>
+              <p style={styles.buyDesc}>
+                Вся панель, стек с градацией доказательности и таблица результата — в PDF,
+                чтобы заполнять на нулевой и двенадцатой неделе, не открывая сайт.
+              </p>
+            </div>
+            <div style={styles.buyRight}>
+              <div style={styles.buyPrice}>${PROTOCOL_PDF.priceUsd}</div>
+              <div style={styles.buyBtn}>Купить&nbsp;→</div>
+            </div>
+          </a>
+        )}
+
         <p style={styles.foot}>
-          Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu).
+          Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href="/shop" style={styles.link}>магазин</a>.
         </p>
       </div>
     </main>
@@ -377,4 +400,39 @@ const styles: Record<string, React.CSSProperties> = {
   panelShows: { fontSize: 12.5, color: "#8b9bb0", marginTop: 2 },
   foot: { marginTop: 26, color: "#8b9bb0", fontSize: 14 },
   link: { color: "#35c9b3" },
+  buyCard: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 18,
+    background: "linear-gradient(135deg,#0f1a2c 0%,#0d1422 100%)",
+    border: "1px solid #2a3f5f",
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 26,
+    textDecoration: "none",
+    color: "#e8eef6",
+  },
+  buyLeft: { flex: "1 1 320px", minWidth: 0 },
+  buyKicker: {
+    fontFamily: "monospace",
+    fontSize: 11.5,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "#35c9b3",
+  },
+  buyTitle: { fontSize: 19, fontWeight: 700, margin: "8px 0 0" },
+  buyDesc: { color: "#9fb0c4", fontSize: 13.5, lineHeight: 1.55, margin: "8px 0 0" },
+  buyRight: { display: "flex", alignItems: "center", gap: 14, flexShrink: 0 },
+  buyPrice: { fontSize: 24, fontWeight: 700 },
+  buyBtn: {
+    background: "#35c9b3",
+    color: "#06231f",
+    borderRadius: 10,
+    padding: "11px 20px",
+    fontSize: 14,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
 };

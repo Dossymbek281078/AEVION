@@ -23,6 +23,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
+import { T } from "./theme";
 
 type AgentResult = {
   agentId: string;
@@ -99,18 +100,6 @@ const EXAMPLE_ANSWERS = [
   },
 ];
 
-const C = {
-  line: "#334155",
-  faint: "#1e293b",
-  panel: "#0f172a",
-  text: "#e2e8f0",
-  dim: "#cbd5e1",
-  mute: "#94a3b8",
-  faded: "#64748b",
-  accent: "#5eead4",
-  warn: "#fbbf24",
-  bad: "#fca5a5",
-};
 
 export function CouncilConsole() {
   const [prompt, setPrompt] = useState("");
@@ -197,11 +186,11 @@ export function CouncilConsole() {
         : "Сравнивать не с чем";
 
   return (
-    <section style={{ marginTop: 32, paddingTop: 28, borderTop: `1px solid ${C.faint}` }}>
-      <h2 style={{ fontSize: 24, color: C.text, margin: "0 0 6px", fontWeight: 600 }}>Консилиум</h2>
-      <p style={{ fontSize: 15, color: C.mute, lineHeight: 1.6, maxWidth: 720, margin: "0 0 18px" }}>
+    <section style={{ marginTop: 32, paddingTop: 28, borderTop: `1px solid ${T.surfaceSoft}` }}>
+      <h2 style={{ fontSize: 24, color: T.text, margin: "0 0 6px", fontWeight: 600 }}>Консилиум</h2>
+      <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.6, maxWidth: 720, margin: "0 0 18px" }}>
         Опишите задачу — три агента с разными ролями ответят независимо. Мы не сводим их в один
-        причёсанный ответ: сначала показываем, <span style={{ color: C.accent }}>где они разошлись</span>, потому
+        причёсанный ответ: сначала показываем, <span style={{ color: T.accent }}>где они разошлись</span>, потому
         что именно там ответу нельзя верить на слово.
       </p>
 
@@ -211,8 +200,8 @@ export function CouncilConsole() {
         rows={3}
         placeholder="Например: стоит ли запускать платный тариф до первой продажи?"
         style={{
-          width: "100%", background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10,
-          padding: 12, fontSize: 14, lineHeight: 1.6, color: C.text, fontFamily: "inherit",
+          width: "100%", background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 10,
+          padding: 12, fontSize: 14, lineHeight: 1.6, color: T.text, fontFamily: "inherit",
         }}
       />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 10 }}>
@@ -220,8 +209,8 @@ export function CouncilConsole() {
           onClick={ask}
           disabled={disabled}
           style={{
-            background: disabled ? C.line : C.accent,
-            color: disabled ? C.mute : "#042f2e",
+            background: disabled ? T.lineSoft : T.accent,
+            color: disabled ? T.textMute : T.onAccentDeep,
             border: "none", borderRadius: 10, padding: "9px 18px",
             fontSize: 14, fontWeight: 600, cursor: disabled ? "default" : "pointer",
           }}
@@ -232,25 +221,25 @@ export function CouncilConsole() {
           onClick={runExample}
           disabled={busy}
           style={{
-            background: "transparent", color: busy ? C.faded : C.dim,
-            border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px",
+            background: "transparent", color: busy ? T.textFaded : T.textDim,
+            border: `1px solid ${T.lineSoft}`, borderRadius: 10, padding: "9px 16px",
             fontSize: 14, cursor: busy ? "default" : "pointer",
           }}
         >
           Показать на примере
         </button>
-        <span style={{ fontSize: 12, color: C.faded }}>
+        <span style={{ fontSize: 12, color: T.textFaded }}>
           {authed === false
             ? "Свой запрос — после входа: консилиум расходует токены. Пример открыт всем"
             : "3 агента · 3 вызова · ответы независимы"}
         </span>
       </div>
-      {error && <p style={{ fontSize: 12, color: C.bad, margin: "8px 0 0" }}>{error}</p>}
+      {error && <p style={{ fontSize: 12, color: T.bad, margin: "8px 0 0" }}>{error}</p>}
 
       {/* Пометка обязательна: принять пример за свой прогон — то же самое, что
           показать нарисованный результат. */}
       {isExample && (
-        <p style={{ fontSize: 12, color: C.warn, margin: "12px 0 0", lineHeight: 1.6, maxWidth: 720 }}>
+        <p style={{ fontSize: 12, color: T.warn, margin: "12px 0 0", lineHeight: 1.6, maxWidth: 720 }}>
           Это пример: ответы трёх агентов заданы заранее, а разногласия ниже посчитаны
           на сервере тем же алгоритмом, что и для настоящего запроса. Свой вопрос —
           после входа.
@@ -259,31 +248,31 @@ export function CouncilConsole() {
 
       {/* Карта разногласий стоит ПЕРЕД ответами — она и есть продукт. */}
       {dissent && (
-        <div style={{ marginTop: 22, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
+        <div style={{ marginTop: 22, background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 12 }}>
-            <h3 style={{ fontSize: 18, margin: 0, color: dissent.verdict === "split" ? C.bad : C.accent }}>
+            <h3 style={{ fontSize: 18, margin: 0, color: dissent.verdict === "split" ? T.bad : T.accent }}>
               {verdictLabel}
             </h3>
             {dissent.agreement != null && (
-              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: C.faded }}>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded }}>
                 схожесть {dissent.agreement}
               </span>
             )}
-            <span style={{ fontSize: 12, color: C.mute }}>{dissent.note}</span>
+            <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
           </div>
 
           {dissent.numericConflicts.length > 0 && (
             <>
-              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: C.faded, margin: "14px 0 6px" }}>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "14px 0 6px" }}>
                 Расхождения в числах
               </p>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 14 }}>
                 {dissent.numericConflicts.slice(0, 5).map((c, i) => (
-                  <li key={i} style={{ borderBottom: `1px dotted ${C.line}`, padding: "5px 0" }}>
-                    <span style={{ color: C.text }}>
+                  <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0" }}>
+                    <span style={{ color: T.text }}>
                       {c.values.map((v) => `${v.agentId}: ${v.raw}`).join("  ·  ")}
                     </span>
-                    <span style={{ marginLeft: 8, fontSize: 12, color: C.faded }}>«{c.context}»</span>
+                    <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{c.context}»</span>
                   </li>
                 ))}
               </ul>
@@ -291,18 +280,18 @@ export function CouncilConsole() {
           )}
 
           {dissent.outlier && (
-            <p style={{ fontSize: 14, color: C.dim, margin: "14px 0 0" }}>
-              <span style={{ color: C.faded }}>Особняком: </span>
-              <span style={{ color: C.warn }}>{dissent.outlier.agentId}</span>
-              <span style={{ fontSize: 12, color: C.faded }}>
+            <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
+              <span style={{ color: T.textFaded }}>Особняком: </span>
+              <span style={{ color: T.warn }}>{dissent.outlier.agentId}</span>
+              <span style={{ fontSize: 12, color: T.textFaded }}>
                 {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
               </span>
             </p>
           )}
 
           {dissent.hedges.length > 0 && (
-            <p style={{ fontSize: 14, color: C.dim, margin: "8px 0 0" }}>
-              <span style={{ color: C.faded }}>Осторожность и отказы: </span>
+            <p style={{ fontSize: 14, color: T.textDim, margin: "8px 0 0" }}>
+              <span style={{ color: T.textFaded }}>Осторожность и отказы: </span>
               {dissent.hedges.map((h) => `${h.agentId} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
             </p>
           )}
@@ -312,13 +301,13 @@ export function CouncilConsole() {
       {/* Чек: происхождение ответа. Ответ без него — мнение; с ним — то, что
           можно предъявить. Хеш пересчитывается кем угодно из скачанного файла. */}
       {receipt && (
-        <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: C.faded }}>
+        <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: T.textFaded }}>
           <span>
             Чек · вызовов {receipt.receipt.cost.calls}, ответили {receipt.receipt.cost.answered}
             {receipt.receipt.cost.failed > 0 ? `, не ответили ${receipt.receipt.cost.failed}` : ""}
           </span>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>sha256 {receipt.hash.slice(0, 16)}…</span>
-          <span style={{ color: receipt.signature ? C.accent : C.warn }}>
+          <span style={{ color: receipt.signature ? T.accent : T.warn }}>
             {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
           </span>
           <button
@@ -330,11 +319,11 @@ export function CouncilConsole() {
               a.click();
               URL.revokeObjectURL(a.href);
             }}
-            style={{ background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8, padding: "4px 10px", color: C.dim, fontSize: 12, cursor: "pointer" }}
+            style={{ background: "transparent", border: `1px solid ${T.lineSoft}`, borderRadius: 8, padding: "4px 10px", color: T.textDim, fontSize: 12, cursor: "pointer" }}
           >
             Скачать чек
           </button>
-          <a href="/multichat-engine/verify" style={{ color: C.mute, fontSize: 12, textDecoration: "underline" }}>
+          <a href="/multichat-engine/verify" style={{ color: T.textMute, fontSize: 12, textDecoration: "underline" }}>
             проверить чек
           </a>
         </div>
@@ -343,15 +332,15 @@ export function CouncilConsole() {
       {results && (
         <div style={{ marginTop: 16, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
           {results.map((r) => (
-            <article key={r.agentId} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${C.faint}`, paddingBottom: 6 }}>
-                <h4 style={{ fontSize: 15, margin: 0, color: C.text }}>{r.agentId}</h4>
-                <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: C.faded }}>
+            <article key={r.agentId} style={{ background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${T.surfaceSoft}`, paddingBottom: 6 }}>
+                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{r.agentId}</h4>
+                <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded }}>
                   {r.provider || "—"}
                 </span>
               </div>
-              <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-                {r.ok ? r.reply : <span style={{ color: C.bad }}>{r.error || "не ответил"}</span>}
+              <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
+                {r.ok ? r.reply : <span style={{ color: T.bad }}>{r.error || "не ответил"}</span>}
               </p>
             </article>
           ))}

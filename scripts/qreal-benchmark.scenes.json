@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "note": "Многокадровые сцены для замера КОНСИСТЕНТНОСТИ. Отличие от briefs.json: там одиночные клипы и покадровый реализм, здесь герой обязан повторяться минимум в двух кадрах — иначе сравнивать нечего. Кадры у обоих плеч ОДИНАКОВЫЕ; разница только в том, несёт ли промт единый канон героя.",
+  "durationSecDefault": 6,
+  "scenes": [
+    {
+      "id": "sc1-boy-dog",
+      "title": "Мальчик и алабай",
+      "cast": [
+        {
+          "id": "boy",
+          "kind": "child",
+          "canonical": "7-year-old Kazakh boy, sun-bleached tousled hair, oversized grey knitted sweater, bare feet, childlike gait"
+        },
+        {
+          "id": "dog",
+          "kind": "animal",
+          "canonical": "white Central Asian shepherd dog (alabai), cropped ears, heavy build, dark patch over the left eye"
+        }
+      ],
+      "shots": [
+        { "order": 1, "description": "The boy runs through tall feather grass at dawn, the dog bounding beside him.", "camera": "handheld tracking, 35mm, knee height", "soundscape": "wind in grass, bare feet on soil, dog panting", "cast": ["boy", "dog"] },
+        { "order": 2, "description": "Close-up: the boy kneels and hugs the dog around the neck, laughing.", "camera": "static 50mm, chest level, shallow DOF", "soundscape": "child's laughter, dog collar jingle, distant birds", "cast": ["boy", "dog"] },
+        { "order": 3, "description": "Wide shot: the dog runs alone toward the horizon, the boy watching from the foreground.", "camera": "locked wide 24mm", "soundscape": "wind, paws on dry ground, one short bark", "cast": ["boy", "dog"] }
+      ],
+      "why": "Оба героя во всех трёх кадрах, включая крупный план и общий — дрейф лица и окраса виден сразу."
+    },
+    {
+      "id": "sc2-grandmother-tea",
+      "title": "Бабушка и чай",
+      "cast": [
+        {
+          "id": "granny",
+          "kind": "human",
+          "canonical": "Kazakh woman about 70, deep wrinkles, age spots on hands, dark blue headscarf with small white pattern, warm squint"
+        }
+      ],
+      "shots": [
+        { "order": 1, "description": "The woman pours tea from a copper kettle into a piala; steam rises in a sunbeam.", "camera": "static 50mm, table level", "soundscape": "pouring tea, fire crackle, dense room tone", "cast": ["granny"] },
+        { "order": 2, "description": "Close-up of her face as she blows on the tea and smiles at someone off-camera.", "camera": "close-up 85mm, slight handheld", "soundscape": "quiet breath, muffled wind outside", "cast": ["granny"] },
+        { "order": 3, "description": "She stands at the yurt entrance holding the piala, looking out at the steppe.", "camera": "medium wide 35mm, backlit", "soundscape": "wind at the doorway, fabric moving", "cast": ["granny"] }
+      ],
+      "why": "Один герой, три разные крупности и разный свет — самый чистый тест на устойчивость лица."
+    },
+    {
+      "id": "sc3-eagle-hunter",
+      "title": "Беркутчи и беркут",
+      "cast": [
+        {
+          "id": "hunter",
+          "kind": "human",
+          "canonical": "Kazakh man about 45, weathered face, short black beard, fox-fur hat, brown leather gauntlet on the right arm"
+        },
+        {
+          "id": "eagle",
+          "kind": "bird",
+          "canonical": "golden eagle, dark brown plumage with pale golden nape, yellow cere, leather jesses on both legs"
+        }
+      ],
+      "shots": [
+        { "order": 1, "description": "The hunter raises his gauntleted arm; the eagle sits on it, turning its head.", "camera": "medium 50mm, low angle", "soundscape": "wind, leather creak, feather rustle", "cast": ["hunter", "eagle"] },
+        { "order": 2, "description": "The eagle takes off with two heavy wing beats, the hunter leaning back from the force.", "camera": "pan with subject 135mm, slight lag", "soundscape": "heavy wing beats, gust, man's grunt", "cast": ["hunter", "eagle"] },
+        { "order": 3, "description": "Close-up of the hunter's face watching the sky, then the eagle returns into frame.", "camera": "close-up 85mm then rack focus to sky", "soundscape": "wind, single eagle cry with natural echo", "cast": ["hunter", "eagle"] }
+      ],
+      "why": "Человек и птица вместе: у птицы дрейфует оперение и посадка головы, у человека — борода и шапка."
+    }
+  ]
+}

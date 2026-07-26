@@ -137,7 +137,10 @@ describe("POST /api/devhub/media/tts (ElevenLabs)", () => {
     expect((opts as any).headers["xi-api-key"]).toBe("fake-key");
     const body = JSON.parse((opts as any).body);
     expect(body.text).toBe("Hello world");
-    expect(body.model_id).toBe("eleven_monolingual_v1");
+    // Was pinned to eleven_monolingual_v1 — a model ElevenLabs has since
+    // REMOVED. The test stayed green while prod voice was fully broken, which
+    // is why this now tracks the model we actually send.
+    expect(body.model_id).toBe("eleven_multilingual_v2");
   });
 });
 
@@ -3745,5 +3748,174 @@ describe("Railway deploy no longer restarts our own backend", () => {
     const r = await request(app).get("/api/devhub/studio/capabilities");
     const railway = r.body.capabilities.find((c: { id: string }) => c.id === "railway");
     expect(railway.status).toBe("not_available");
+// ═════════════════════════════════════════════════════════════════════════════
+// 28. Video model catalogue (Veo 3 / Seedance / Kling instead of 2024 models)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("video models", () => {
+  test("catalogue exposes the current generation and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/video/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toContain("google/veo-3-fast");
+    expect(ids).toContain("bytedance/seedance-1-pro");
+    expect(ids).toContain("kwaivgi/kling-v2.1");
+    const def = r.body.models.filter((m: { default: boolean }) => m.default);
+    expect(def).toHaveLength(1);
+    expect(def[0].audio).toBe(true); // the default is the one that ships sound
+  });
+
+  test("maps our request onto each model's real input schema", async () => {
+    const { findVideoModel } = await import("../src/lib/devhubVideoModels");
+    const veo = findVideoModel("google/veo-3-fast")!.toInput({ prompt: "a cat", aspectRatio: "9:16", resolution: "720p" });
+    expect(veo).toMatchObject({ prompt: "a cat", aspect_ratio: "9:16", resolution: "720p", generate_audio: true });
+    expect(veo).not.toHaveProperty("num_frames"); // the old code sent this; Veo ignores it
+
+    const seed = findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "a car", duration: 10, imageUrl: "https://x/y.png" });
+    expect(seed).toMatchObject({ duration: 10, image: "https://x/y.png", fps: 24 });
+
+    const kling = findVideoModel("kwaivgi/kling-v2.1")!.toInput({ prompt: "a city", imageUrl: "https://x/y.png", resolution: "1080p" });
+    expect(kling).toMatchObject({ start_image: "https://x/y.png", mode: "pro" }); // not "image"
+    // Durations outside a model's list fall back rather than erroring at the provider.
+    expect(findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "x", duration: 7 })).toMatchObject({ duration: 5 });
+  });
+
+  test("unknown model id is refused with the list instead of a provider error", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "x", model: "made/up" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/unknown video model/);
+    expect(r.body.models).toContain("google/veo-3-fast");
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("3D assets and music fallback", () => {
+  test("3D catalogue lists both meshers and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/3d/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toEqual(expect.arrayContaining(["firtoz/trellis", "tencent/hunyuan3d-2"]));
+    expect(r.body.models.filter((m: { default: boolean }) => m.default)).toHaveLength(1);
+  });
+
+  test("3D refuses a non-URL image with an actionable message", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/3d").send({ imageUrl: "not-a-url" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/imageUrl/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("3D maps inputs onto each mesher's real schema", async () => {
+    const { find3dModel } = await import("../src/lib/devhub3dModels");
+    const trellis = find3dModel("firtoz/trellis")!.toInput({ imageUrl: "https://x/y.png" });
+    expect(trellis).toMatchObject({ images: ["https://x/y.png"], generate_model: true, generate_color: true });
+    const hunyuan = find3dModel("tencent/hunyuan3d-2")!.toInput({ imageUrl: "https://x/y.png", removeBackground: false });
+    expect(hunyuan).toMatchObject({ image: "https://x/y.png", remove_background: false });
+  });
+
+  test("music falls back to MusicGen when ElevenLabs is not configured", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "pred-music-1", status: "starting" }),
+    } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat", musicLengthMs: 12000 });
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toBe("replicate/musicgen");
+    expect(r.body.async).toBe(true);
+    expect(r.body.predictionId).toBe("pred-music-1");
+    expect(r.body.fallbackFrom).toMatch(/ELEVENLABS_API_KEY/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("without either provider music says which env vars would fix it", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/ELEVENLABS_API_KEY or REPLICATE_API_TOKEN/);
+  });
+});
+
+describe("provider realities: retired TTS model, empty video balance", () => {
+  test("TTS no longer sends the removed eleven_monolingual_v1", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      arrayBuffer: async () => new ArrayBuffer(64),
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.model_id).toBe("eleven_multilingual_v2"); // multilingual: our prompts are Russian
+    expect(body.model_id).not.toBe("eleven_monolingual_v1");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("a retired model is survived by retrying the fallback chain", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"detail":{"code":"unsupported_model"}}' } as any)
+      .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(32) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    expect(r.headers["x-tts-model"]).toBe("eleven_turbo_v2_5");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("an empty Replicate balance says 'top up', not 'Replicate error'", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: false, status: 402,
+      text: async () => '{"title":"Insufficient credit"}',
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a cat" });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toMatch(/no credit/i);
+    expect(r.body.topUpUrl).toContain("replicate.com");
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("realism pass shared with QReal", () => {
+  test("video prompts carry QReal's realism directives by default", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p1", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a barista pours milk" });
+    expect(r.status).toBe(200);
+    expect(r.body.realism).toBe(true);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    // Same text QReal renders with — imported, not duplicated.
+    const { REALISM_DIRECTIVES } = await import("../src/services/qreal/directives");
+    expect(sent.input.prompt).toContain("a barista pours milk");
+    expect(sent.input.prompt).toContain(REALISM_DIRECTIVES);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("realism:false leaves a stylised prompt untouched", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p2", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "flat 2d cartoon fox", realism: false });
+    expect(r.body.realism).toBe(false);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(sent.input.prompt).toBe("flat 2d cartoon fox");
+    expect(sent.input.prompt).not.toMatch(/ARRI Alexa/);
+    delete process.env.REPLICATE_API_TOKEN;
   });
 });

@@ -44,7 +44,7 @@ const OVERPASS = [
 
 import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL, M_PER_LAT, M_PER_LON_EQ,
-  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, heightOutliers,
+  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, overpassBodyProblem, heightOutliers,
 } from "./lib/city-twin-geometry.mjs";
 import { parsePlateauGml } from "./lib/plateau-heights.mjs";
 import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
@@ -207,7 +207,13 @@ async function overpass() {
         // 429/504 are Overpass telling us to wait, not that the data is absent.
         if (res.status === 429 || res.status === 504) throw new Error(`Overpass HTTP ${res.status} (busy)`);
         if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`);
-        const json = await res.json();
+        // A busy instance says so with HTTP 200 and an HTML page; parsing that
+        // as JSON throws something about token '<' and loses the server's own
+        // explanation.
+        const body = await res.text();
+        const bodyProblem = overpassBodyProblem(body);
+        if (bodyProblem) throw new Error(bodyProblem);
+        const json = JSON.parse(body);
         // A truncated answer arrives as HTTP 200 with fewer buildings and a
         // remark — never as an error. Treat it as a failure, not as data.
         const problem = overpassProblem(json);

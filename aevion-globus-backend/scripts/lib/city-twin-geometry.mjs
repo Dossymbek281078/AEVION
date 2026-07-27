@@ -39,6 +39,31 @@ export const M_PER_LON_EQ = 111320;
  *
  * Returns a reason string when the payload must not be trusted, else null.
  */
+/**
+ * An OVERLOADED Overpass answers with HTTP **200** and an HTML page:
+ *
+ *   <strong style="color:#FF0000">Error</strong>: runtime error: …
+ *   The server is probably too busy to handle your request.
+ *
+ * Checking `res.ok` therefore passes, and `res.json()` then throws
+ * "Unexpected token '<'" — which reads like a bug in our parser rather than a
+ * busy server, and hides the explanation the server actually gave. Markup has to
+ * be stripped before looking for the message, because the word Error sits in its
+ * own tag.
+ *
+ * Returns a reason string when the body is not the JSON we asked for, else null.
+ */
+export function overpassBodyProblem(body) {
+  if (typeof body !== "string" || !body.trimStart().startsWith("{")) {
+    const plain = String(body ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+    const said = /Error:?\s*(.{0,160})/.exec(plain);
+    return said && said[1].trim()
+      ? `Overpass answered with a page, not data — ${said[1].trim()}`
+      : "Overpass answered with a non-JSON body (server busy?)";
+  }
+  return null;
+}
+
 export function overpassProblem(json) {
   if (!json || typeof json !== "object") return "Overpass returned a non-object payload";
   if (!Array.isArray(json.elements)) return "Overpass returned no elements array";

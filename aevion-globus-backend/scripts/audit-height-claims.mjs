@@ -24,7 +24,7 @@
 import {
   parseInfoboxHeights, compareTagToArticle, storeyRatio, rawHeightFields,
 } from "./lib/wiki-infobox.mjs";
-import { parseMetres } from "./lib/city-twin-geometry.mjs";
+import { parseMetres, overpassBodyProblem } from "./lib/city-twin-geometry.mjs";
 import fs from "node:fs";
 
 const BBOX = {
@@ -77,15 +77,8 @@ async function overpass(query) {
         // request." Parsing that as JSON throws something unreadable about
         // token '<', which reads like a bug here rather than a busy server.
         const body = await res.text();
-        if (!body.trimStart().startsWith("{")) {
-          // The word "Error" is wrapped in its own tag —
-          // `<strong style="color:#FF0000">Error</strong>: runtime error: …` —
-          // so strip markup before looking, or the message is lost and the log
-          // says only "non-JSON answer" when the server explained itself.
-          const plain = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-          const said = /Error:?\s*(.{0,160})/.exec(plain);
-          throw new Error(said ? `server said: ${said[1].trim()}` : "non-JSON answer (server busy?)");
-        }
+        const bodyProblem = overpassBodyProblem(body);
+        if (bodyProblem) throw new Error(bodyProblem);
         return JSON.parse(body).elements;
       } catch (e) {
         last = e;

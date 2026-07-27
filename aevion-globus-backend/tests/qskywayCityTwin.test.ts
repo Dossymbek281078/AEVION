@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers, MIN_STOREY_M, CONTRADICTION_MIN_LEVELS,
+  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers, MIN_STOREY_M, CONTRADICTION_MIN_LEVELS, overpassBodyProblem,
   LEVELS_MEANINGLESS_FOR,
   projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
@@ -400,5 +400,31 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
   it("still needs BOTH tags — one alone says nothing about the other", () => {
     expect(heightOf({ height: "7" })).toMatchObject({ h: 7, hs: 0 });
     expect(heightOf({ "building:levels": "47" })).toMatchObject({ hs: 1 });
+  });
+});
+
+describe("overpassBodyProblem — занятый сервер отвечает кодом 200", () => {
+  // Verbatim shape of what overpass-api.de returns when overloaded. `res.ok` is
+  // true, so only the BODY reveals it; res.json() would throw about token '<'
+  // and lose the explanation the server gave.
+  const BUSY = `<html><head><title>OSM3S Response</title></head><body>
+<p>The data included in this document is from www.openstreetmap.org.</p>
+<p><strong style="color:#FF0000">Error</strong>: runtime error: open64: 0 Success /osm3s_osm_base Dispatcher_Client::request_read_and_idx::timeout. The server is probably too busy to handle your request. </p>
+</body></html>`;
+
+  it("recognises the busy page and repeats what the server said", () => {
+    const problem = overpassBodyProblem(BUSY);
+    expect(problem).toMatch(/not data/);
+    expect(problem).toMatch(/too busy/);
+  });
+
+  it("lets a real JSON answer through untouched", () => {
+    expect(overpassBodyProblem('{"elements":[]}')).toBeNull();
+    expect(overpassBodyProblem('  {"elements":[1]}')).toBeNull();
+  });
+
+  it("still reports a page that explains nothing", () => {
+    expect(overpassBodyProblem("<html><body>gateway</body></html>")).toMatch(/non-JSON/);
+    expect(overpassBodyProblem(null as unknown as string)).toMatch(/non-JSON/);
   });
 });

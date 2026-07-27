@@ -924,6 +924,35 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form S-1/A, March 2021",
+    sources: ["https://www.sec.gov/Archives/edgar/data/1611052/000119312521065779/d564161ds1a.htm"],
+    input: {
+      name: "Procore Technologies",
+      sector: "saas",
+      stage: "growth",
+      geography: "US",
+      askUsd: 600_000_000,
+      description:
+        "Construction management software sold to owners, general contractors and specialty contractors, priced on annual subscriptions rather than per seat.",
+      tractionNotes:
+        "Our revenue was $186.4 million in 2018, $289.2 million in 2019, and $400.3 million in 2020, representing annual revenue growth of 55% in 2019 and 38% in 2020. Our net retention rate was 121% as of December 31, 2018, 117% as of December 31, 2019, and 107% as of December 31, 2020. Our gross retention rate was 94% as of December 31, 2018, 95% as of December 31, 2019, and 94% as of December 31, 2020.",
+    },
+    expect: [
+      // The first case in this corpus stating a trend in ONE sentence, which is
+      // how an S-1 normally does it. Every figure below used to come back as
+      // the oldest of its three: revenue $186.4M instead of $400.3M.
+      { label: "revenue $400.3M, the latest of three years", read: (s) => s.revenueUsd, ...num(400_300_000) },
+      { label: "growth 38%, not the flattering 55% of the year before", read: (s) => s.growthPct, ...num(38) },
+      { label: "net retention 107%, the latest of three", read: (s) => s.retentionPct, ...num(107) },
+      // And the first case stating BOTH retentions on the same dates, which is
+      // what makes them comparable at all: 94% gross against 107% net.
+      { label: "the retention is named as net, not assumed", read: (s) => s.retentionKind === "net", expected: true },
+      { label: "the reader is told a series was read", read: (s) => s.parseNotes.some((n) => /several periods in one sentence/i.test(n)), expected: true },
+    ],
+  },
+
 ];
 
 // ── Reporting ───────────────────────────────────────────────────────────────

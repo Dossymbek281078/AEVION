@@ -1130,7 +1130,16 @@ export function parsePlanSignals(text: string): PlanSignals {
     if (isFinite(g)) {
       // The sign follows the SELECTED match, not the mere presence of a decline
       // elsewhere in the text.
-      s.growthPct = usingDecline ? -g : g;
+      // "growth of 55% in 2019 and 38% in 2020" is the same one-sentence trend
+      // the top line has, and the first figure — the older, flattering one —
+      // was winning. Only on a rise: a decline series would have to carry the
+      // sign forward, which is how a sign gets lost.
+      const gTail = !usingDecline ? lastInSeries(t, (growth.index ?? 0) + growth[0].length, "percent", g) : null;
+      const gVal = gTail ? parseLocaleNumber(gTail[1]) : g;
+      if (gTail && isFinite(gVal)) {
+        s.parseNotes.push(`Growth was stated for several periods in one sentence; the score uses the latest (${gVal}%).`);
+      }
+      s.growthPct = usingDecline ? -g : (isFinite(gVal) ? gVal : g);
       s.growthBasis = growthBasis;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
       s.growthPeriod = growthPeriodFromWords(p);

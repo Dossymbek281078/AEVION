@@ -78,7 +78,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    cancel, so it is shown to the reader rather than credited.
 
 5. **Measured on the disclosed-figures corpus (30 entries, 29 real companies,
-   rubric v6):** parse coverage **95/95**, mean success **71.2** vs mean failure
+   rubric v6):** parse coverage **100/100**, mean success **71.2** vs mean failure
    **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 13
    `open`**. Infosys appears twice on purpose — once as the dollar release and
    once as the rupee release of the same quarter — because the pair is the only
@@ -1498,6 +1498,25 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
 
    All four guards clean: corpus 95/95, hard-cases gap 16.5, calibration range
    unchanged, verdict bands reachable.
+
+61. **Procore, and the fifth metric the series rule needed.** Added as the
+   first corpus case that states a trend in ONE sentence — which is how an S-1
+   normally does it — and the first that states both retentions on the same
+   dates. Coverage goes from 95 figures to 100.
+
+   It found a gap on its first run. "Annual revenue growth of 55% in 2019 and
+   38% in 2020" gave **55%**, the older and more flattering figure: the same
+   shape, on the metric the shape was originally found in, and the one place
+   limit 59 had not reached. Growth now walks the series too, on a rise only —
+   a decline would have to carry its sign forward, which is how a sign gets
+   lost.
+
+   Also pinned, and pre-dating all of this: "revenue grew 42% year over year,
+   and churn is 3%" reads **no growth at all**. The level-metric filter from
+   limit 42 is clause-bounded and a comma does not end a clause, so naming a
+   level metric in the same breath suppresses the growth beside it. Split by a
+   full stop it reads correctly. Verified against the commit before the series
+   work, so it is recorded rather than blamed on it.
 
 ## How this stays true
 

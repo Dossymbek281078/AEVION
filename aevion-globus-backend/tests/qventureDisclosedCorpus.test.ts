@@ -6236,3 +6236,45 @@ describe("the series rule covers the metrics that share its shape", () => {
     expect(p("We are targeting a gross margin of 70%.").grossMarginPct).toBeNull();
   });
 });
+
+describe("growth stated across several periods in one sentence", () => {
+  // Found by the Procore case on its first run: "annual revenue growth of 55%
+  // in 2019 and 38% in 2020" gave 55%, the older and more flattering figure.
+  // Same shape as the top line, on the metric the shape was found in.
+  const g = (t: string) => parsePlanSignals(t).growthPct;
+
+  test("Procore's own sentence", () => {
+    expect(g("Our revenue was $186.4 million in 2018, $289.2 million in 2019, and $400.3 million in 2020, representing annual revenue growth of 55% in 2019 and 38% in 2020."))
+      .toBe(38);
+  });
+
+  test.each([
+    ["a bare growth series", "Revenue growth of 55% in 2019 and 38% in 2020.", 38],
+    ["a single rate", "Revenue grew 42% year over year.", 42],
+    ["a prior period", "Growth of 38%, up from 55% a year earlier.", 38],
+    ["a sentence boundary", "Revenue grew 42% year over year. Margin is 70%.", 42],
+    ["a range", "Growing 20-40% year over year.", 20],
+  ])("%s", (_l, text, want) => {
+    expect(g(text)).toBe(want);
+  });
+
+  test("a decline never enters a series", () => {
+    // Carrying the sign forward through a walk is how a sign gets lost, and a
+    // fall is stated once.
+    expect(g("Revenue declined 12% year over year.")).toBe(-12);
+  });
+
+  test("a level stated with a rise verb is still not growth", () => {
+    expect(g("Our gross margin increased to 59.9%.")).toBeNull();
+  });
+
+  test("KNOWN, pre-dating this: a level metric in the same clause blocks the growth", () => {
+    // "Revenue grew 42% year over year, and churn is 3%" reads no growth,
+    // because the level-metric filter is clause-bounded and a comma does not
+    // end a clause. Pinned as the current behaviour, not caused by the series
+    // work — it reproduces on the commit before it.
+    expect(g("Revenue grew 42% year over year, and churn is 3%.")).toBeNull();
+    // The same sentence split by a full stop reads correctly.
+    expect(g("Revenue grew 42% year over year. Churn is 3%.")).toBe(42);
+  });
+});

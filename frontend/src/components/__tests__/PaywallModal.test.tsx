@@ -3,6 +3,11 @@ import { render, screen, cleanup, act } from "@testing-library/react";
 import { PaywallModal } from "../PaywallModal";
 import { PAYWALL_EVENT, type PaywallEventDetail } from "@/lib/paywall";
 
+// Рендер React в jsdom при полном параллельном прогоне выходил за дефолтные
+// 5с (замер: 5614 мс) и ронял файл ложной краснотой. Тяжёлому тесту — свой
+// явный таймаут; на скорость одиночного прогона это не влияет.
+vi.setConfig({ testTimeout: 20_000 });
+
 /**
  * Регрессия 2026-07-27, найдена на живом проде.
  *

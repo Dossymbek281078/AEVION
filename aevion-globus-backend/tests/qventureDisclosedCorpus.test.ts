@@ -914,3 +914,28 @@ describe("a filing states the size of a move before its rate", () => {
     expect(parsePlanSignals("Customers fell to 900 from 1,200.").customers).toBe(900);
   });
 });
+
+describe("a per-customer figure is not the company's revenue", () => {
+  /**
+   * Nubank's F-1 states "Monthly ARPAC was approximately US$4". Annualizing the
+   * top line when a plan says "monthly" was added earlier today, and this is the
+   * sentence that could have turned it into a defect: $4 a month is a
+   * per-customer figure, and reading it as the company's MRR would report $48 of
+   * annual revenue for a bank with $1.06B. It does not — recorded as a verified
+   * negative, because a guard nobody checks is a guard nobody has.
+   */
+  test("ARPAC is not read as revenue", () => {
+    const s = parsePlanSignals("Monthly average revenue per active customer of approximately $4.");
+    expect(s.revenueUsd).toBeNull();
+    expect(parsePlanSignals("Monthly ARPAC was approximately US$4.").revenueUsd).toBeNull();
+  });
+
+  test("and it does not disturb the real revenue line beside it", () => {
+    const s = parsePlanSignals(
+      "Revenue of $1.06B in the nine months ended 30 September 2021, up 98% year over year from $534M. 48.1 million active customers as of 30 September 2021. Monthly average revenue per active customer of approximately $4.",
+    );
+    expect(s.revenueUsd).toBe(1_060_000_000);
+    expect(s.customers).toBe(48_100_000);
+    expect(s.growthPct).toBe(98);
+  });
+});

@@ -495,7 +495,7 @@ export const CASES: DisclosedCase[] = [
       description:
         "Digital bank operating without branches across Brazil, Mexico and Colombia, acquiring customers through a fee-free credit card and cross-selling deposits, lending and investments on the same account.",
       tractionNotes:
-        "Revenue of $1.06B in the nine months ended 30 September 2021, up 98% year over year from $534M. 48.1 million active customers as of 30 September 2021.",
+        "Revenue of $1.06B in the nine months ended 30 September 2021, up 98% year over year from $534M. 48.1 million active customers as of 30 September 2021. Monthly average revenue per active customer of approximately $4.",
     },
     // A bank's disclosure shape: a customer base an order of magnitude larger
     // than any SaaS case in the corpus, and a period that is neither a fiscal

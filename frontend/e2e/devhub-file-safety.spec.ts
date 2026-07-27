@@ -287,4 +287,40 @@ test.describe("DevHub — writes that must not lose a file", () => {
     // looked stored — a deploy would then run without it.
     await expect(page.getByText(/Переменная НЕ сохранена/)).toBeVisible({ timeout: 10_000 });
   });
+
+  test("the file context menu actually acts, and a refused delete keeps the file", async ({ page }) => {
+    // Two defects in one flow. The menu closed on mousedown — including
+    // mousedown INSIDE it — so the click never reached the button and Rename
+    // and Delete did nothing at all. And when Delete did run, the tree dropped
+    // the file whatever the server answered.
+    await page.route("**/api/devhub/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/file") && req.method() === "DELETE") return json({ error: "nope" }, 500);
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: { id: PROJECT_ID, name: "del", description: "", stack: "react", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: FILES,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      return json({ ok: true });
+    });
+    page.on("dialog", (d) => d.accept()); // deleteFile() asks for confirmation
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const row = page.getByText("src/App.jsx", { exact: true }).first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await row.click({ button: "right" });
+
+    const menu = page.locator('div[style*="position: fixed"]').filter({ hasText: "Rename" });
+    await menu.getByRole("button", { name: "Delete", exact: true }).click();
+
+    // The menu acted at all — before the fix nothing here ever fired.
+    await expect(page.getByText(/Файл НЕ удалён/)).toBeVisible({ timeout: 10_000 });
+    await expect(row).toBeVisible();
+  });
 });

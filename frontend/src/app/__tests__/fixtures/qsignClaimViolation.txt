@@ -9,3 +9,5 @@ note: "ML-DSA-65 FIPS 204 в production — единственный в реги
 desc: "Enterprises are starting to require post-quantum signatures. We already ship it."
 Ours will. Only B2C product with ML-DSA-65 on the shelf.
 { title: "Post-quantum on day 1", desc: "No one else ships ML-DSA-65 B2C." }
+ML-DSA-65 FIPS 204 GA — only commercial product of this type in the region.
+<div className="card-label">In production · QSign</div>

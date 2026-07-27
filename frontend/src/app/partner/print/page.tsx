@@ -105,10 +105,10 @@ export default function PartnerPrintPage() {
 
         <div className="grid2">
           <div className="card">
-            <div className="card-label">In production · QSign</div>
+            <div className="card-label">QSign</div>
             <h3>Post-quantum e-signature infrastructure</h3>
             <p style={{ fontSize: "10pt", color: "#444", margin: "4pt 0 6pt" }}>
-              ML-DSA-65 FIPS 204 GA — only commercial product of this type in the region.
+              ML-DSA-65, FIPS 204 — implemented, key-activated.
               National infrastructure potential: KZ, UAE, Saudi Arabia.
             </p>
             <div className="card-arr">$20-100M/year</div>

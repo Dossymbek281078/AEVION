@@ -23,8 +23,12 @@ const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Phrases that assert the signature is live in production, not merely implemented. */
 const FORBIDDEN: { pattern: RegExp; why: string }[] = [
-  { pattern: /ML-DSA-65\s+GA\b/i, why: "«GA» — прод отвечает preview" },
-  { pattern: /ML-DSA-65[^.\n]{0,40}\bGA\)/i, why: "«GA» рядом с ML-DSA-65" },
+  // Ловим «GA» на любом расстоянии в пределах предложения, а не только вплотную
+  // и не только в скобках: partner/print писал «ML-DSA-65 FIPS 204 GA», и обе
+  // прежние узкие формы это пропустили — нашёл рантайм-смок claims-vs-runtime.
+  { pattern: /ML-DSA-65[^.\n]{0,60}\bGA\b/i, why: "«GA» в одном предложении с ML-DSA-65" },
+  { pattern: /FIPS\s*204[^.\n]{0,60}\bGA\b/i, why: "«GA» в одном предложении с FIPS 204" },
+  { pattern: /In production\s*·\s*QSign/i, why: "«In production» над блоком QSign" },
   { pattern: /FIPS\s*204[^.\n]{0,30}\bin prod\b/i, why: "«in prod» — прод отвечает preview" },
   { pattern: /FIPS\s*204[^.\n]{0,30}в production/i, why: "«в production» — прод отвечает preview" },
   { pattern: /we already ship it/i, why: "«we already ship it» о постквантовой подписи" },
@@ -60,15 +64,20 @@ export function findClaimViolations(files: string[]): string[] {
   return violations;
 }
 
-describe("post-quantum claims match what production answers", () => {
-  const files = collectSourceFiles(APP_DIR);
+// Сканирование сотен файлов делается один раз при загрузке модуля, а не внутри
+// it(): в одиночном прогоне это 0.5 с, но в полном — параллельно с остальными
+// 45 файлами тестов — упиралось в дефолтные 5 с и падало по таймауту. Тест,
+// который краснеет от загруженности машины, не отличить от настоящей находки.
+const FILES = collectSourceFiles(APP_DIR);
+const VIOLATIONS = findClaimViolations(FILES);
 
+describe("post-quantum claims match what production answers", () => {
   it("scans a real, non-trivial set of page sources", () => {
-    expect(files.length).toBeGreaterThan(50);
+    expect(FILES.length).toBeGreaterThan(50);
   });
 
   it("no page claims the signature is GA or in production", () => {
-    expect(findClaimViolations(files)).toEqual([]);
+    expect(VIOLATIONS).toEqual([]);
   });
 
   it("the guard actually catches a violation (negative test)", () => {

@@ -53,7 +53,41 @@ export function similarity(a: string, b: string): number {
 
 /* ── Числа: самая проверяемая форма разногласия ───────────────────────── */
 
-export type NumericClaim = { value: number; raw: string; context: string };
+export type NumericClaim = {
+  value: number;
+  raw: string;
+  context: string;
+  /**
+   * Что именно измеряется — 1–2 значимых слова сразу после числа, огрублённых
+   * до основы («посетителей в месяц» → «посетител месяц»).
+   *
+   * Нужно потому, что схожести предложений мало. Замерено 27.07: независимые
+   * агенты формулируют по-разному, и «На текущем трафике это примерно 40
+   * посетителей в месяц, выборки не хватит» против «Трафика около 300
+   * посетителей в месяц, этого достаточно» давало similarity ниже порога —
+   * расхождение 40 против 300 НЕ находилось. В демо-примере ответы написаны в
+   * одном стиле, поэтому фича выглядела работающей: классический зелёный тест
+   * на синтетике.
+   */
+  unit: string;
+};
+
+/**
+ * Огрубление до основы: сравниваем «посетителей» и «посетители» как одно.
+ * Полноценный стеммер тут не нужен и вреден — достаточно снять хвост, который
+ * несёт падеж и число. Слова короче 6 букв не трогаем: там хвост — часть корня
+ * («месяц», «тонна»).
+ */
+function stem(word: string): string {
+  return word.length >= 6 ? word.slice(0, Math.max(5, word.length - 2)) : word;
+}
+
+/** 1–2 значимых слова после числа, огрублённые. Пусто — если их нет. */
+function unitAfter(src: string, at: number, len: number): string {
+  const tail = src.slice(at + len, at + len + 40);
+  const words = tokens(tail).slice(0, 2).map(stem);
+  return words.join(" ");
+}
 
 const MAX_CONTEXT = 180;
 
@@ -107,7 +141,12 @@ export function numericClaims(text: string): NumericClaim[] {
     if (!Number.isFinite(num)) continue;
     // Годы и порядковые номера шумят и почти никогда не являются предметом спора.
     if (num >= 1900 && num <= 2100 && !/[$€₸%]/.test(raw)) continue;
-    out.push({ value: num, raw, context: sentenceAround(src, m.index, raw.length) });
+    out.push({
+      value: num,
+      raw,
+      context: sentenceAround(src, m.index, raw.length),
+      unit: unitAfter(src, m.index, m[0].length),
+    });
   }
   return out;
 }
@@ -135,7 +174,12 @@ export function numericConflicts(answers: AgentAnswer[], minContextSim = 0.3): N
     for (let j = i + 1; j < all.length; j++) {
       if (used.has(j)) continue;
       if (all[i].agentId === all[j].agentId) continue; // спорят агенты, не абзацы
-      if (similarity(all[i].context, all[j].context) >= minContextSim) group.push(j);
+      // Числа сравнимы, если измеряют ОДНО И ТО ЖЕ. Совпавшая единица —
+      // сигнал сильнее схожести предложений: она устойчива к тому, что агенты
+      // обрамляют цифру разными словами. Схожесть контекста оставлена как
+      // второй путь — для чисел без явной единицы («вырастет до 300»).
+      const sameUnit = !!all[i].unit && all[i].unit === all[j].unit;
+      if (sameUnit || similarity(all[i].context, all[j].context) >= minContextSim) group.push(j);
     }
     if (group.length < 2) continue;
     const values = group.map((k) => ({ agentId: all[k].agentId, raw: all[k].raw, value: all[k].value }));

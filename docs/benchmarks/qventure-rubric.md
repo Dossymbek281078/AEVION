@@ -15,7 +15,7 @@ baseline; `latest` is whatever a re-run produced).
 ## The claim we are willing to make
 
 > On plans that disclose evidence, QVenture separates a strong deal from a weak
-> one **in the same sector and stage** by a mean of **16.6 points** (min 8.8,
+> one **in the same sector and stage** by a mean of **16.5 points** (min 8.8,
 > max 30.8), including business models with no SaaS metrics — defence contracts,
 > clinical phases, offtake agreements, GMV × take rate, design wins.
 
@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 288
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 290
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -486,12 +486,12 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 288):
+`tests/qventureDisclosedCorpus.test.ts`, 290):
 
 | Guard | Floor | Measured today |
 |---|---|---|
 | Each strong/weak pair separates | ≥ 6 pts | 8.8 – 30.8 |
-| Mean gap across the six models | ≥ 10 pts | 16.6 |
+| Mean gap across the six models | ≥ 10 pts | 16.5 |
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |

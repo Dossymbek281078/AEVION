@@ -1326,3 +1326,31 @@ describe("one filing uses the same words for a holding and a definition", () => 
     expect(held("FDA 510(k) clearance granted.", l)).toBe(true);
   });
 });
+
+describe("a benchmark is something run, not a word in a valuation note", () => {
+  /**
+   * The bare noun credited three real filings for saying nothing technical at
+   * all: Nubank's "risk-free and benchmark interest rates", AeroVironment's
+   * "corroborated with benchmarks of similar transactions" in a valuation note,
+   * and Rocket Lab's "our state of the art 97,000 square foot Long Beach
+   * facility" — a building.
+   *
+   * "State of the art" as a bare adjective is dropped outright. Anyone can
+   * write it about anything, and it was carrying no evidence even when it did
+   * describe technology. What remains is a benchmark actually run, or an
+   * outperformance stated against something nameable.
+   */
+  const claimed = (t: string) => parsePlanSignals(t).technicalProof.includes("Benchmark result claimed");
+
+  test("a benchmark run counts", () => {
+    expect(claimed("Benchmarked against the incumbent, our model outperforms it by 18%.")).toBe(true);
+    expect(claimed("Benchmark results show a 3x speedup over the baseline.")).toBe(true);
+    expect(claimed("Our system outperforms the state-of-the-art baseline on MLPerf.")).toBe(true);
+  });
+  test("a financial or architectural use of the word does not", () => {
+    expect(claimed("Assumptions include risk-free and benchmark interest rates, credit spreads and other inputs.")).toBe(false);
+    expect(claimed("Valuation studies corroborated with benchmarks of similar transactions in the industry.")).toBe(false);
+    expect(claimed("We moved production operations to our state of the art 97,000 square foot Long Beach facility in March 2020.")).toBe(false);
+    expect(claimed("Progress towards a state of the art propulsion development and testing facility near Auckland.")).toBe(false);
+  });
+});

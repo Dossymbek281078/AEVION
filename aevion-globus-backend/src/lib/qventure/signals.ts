@@ -1262,7 +1262,15 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const PROOF: Array<[RegExp, string]> = [
     [/\bpeer[- ]reviewed\b|\bpublished in (?:nature|science|nejm|the lancet|cell)\b/i, "Peer-reviewed result"],
     [/\bclinical(?:ly)? validat\w+|\bsensitivity\b.*\bspecificity\b|\b\d{2,3}% sensitivity\b/i, "Clinical validation data"],
-    [/\bbenchmark(?:ed|s)?\b|\bstate[- ]of[- ]the[- ]art\b|\bsota\b|\boutperform\w*\b/i, "Benchmark result claimed"],
+    // The bare noun credited three filings for saying nothing technical at all:
+    // Nubank's "risk-free and benchmark interest rates", AeroVironment's
+    // "corroborated with benchmarks of similar transactions" in a valuation
+    // note, and Rocket Lab's "our state of the art 97,000 square foot Long Beach
+    // facility" — a building. "State of the art" as a bare adjective is dropped
+    // outright: anyone can write it about anything, and it was carrying no
+    // evidence even when it was about technology. What remains is a benchmark
+    // actually run, or an outperformance stated against something.
+    [/\bbenchmark(?:ed)?\s+(?:against|versus|vs\.?|on)\b|\bbenchmark results?\b|\bon (?:the )?(?:mlperf|imagenet|glue|superglue|swe[- ]bench)\b|\bsota\b|\boutperform\w*\b[^.;]{0,40}?\b(?:baseline|incumbent|state[- ]of[- ]the[- ]art|competitors?|prior art|sota|by \d)/i, "Benchmark result claimed"],
     [/\bpilot plant\b|\bproduction line\b|\bat scale in production\b|\bfactory (?:running|operational)\b|\bin commercial operation\b/i, "Plant / production line running"],
     // The single most important sentence in a clinical filing, and the reader
     // knew every phrasing around it — trial phase, peer review, sensitivity —

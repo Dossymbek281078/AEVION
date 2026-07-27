@@ -24,7 +24,7 @@ That is a statement about *reading disclosure*, not about predicting outcomes.
 ## The claim we are **not** willing to make
 
 QVenture does not predict success. The calibration corpus (32 companies)
-separates known failures from known successes by **6.7 points of mean
+separates known failures from known successes by **6.6 points of mean
 composite**, and **8 of 15 failures still score at or above the weakest
 success**. Those descriptions were reconstructed by an author who knew the
 outcome, so even that 6.7 is generous to the rubric, not conservative.
@@ -32,7 +32,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
 ## Known limits, stated plainly
 
 1. **On evidence-free plans the scale compresses.** Real range used across the
-   calibration corpus is 49.6–66.3 of a nominal 0–100. A plan that discloses
+   calibration corpus is 49.6–68.0 of a nominal 0–100. A plan that discloses
    nothing cannot move the score, which is correct behaviour — but the 0–100
    presentation implies more resolution than the input supports.
 2. **`invest` is unreachable without disclosure.** No calibration case reaches
@@ -41,7 +41,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
 3. **Capital-intensive discrimination is now measured, and it is ordinary.**
    The arm was extended to 8 failures and 6 successes (SpaceX, Moderna, First
    Solar, Enphase, Illumina; Northvolt, Solyndra, Nikola) and separates by
-   **6.6 points** — marginally better than the software-like arm's 5.7, and on
+   **6.6 points** — marginally better than the software-like arm's 5.6, and on
    the same order. Worth stating plainly: that is *discrimination*, not skill.
 
    Northvolt is the case to look at. It held the largest contracted backlog in
@@ -133,7 +133,7 @@ months. The invariants now run on every push
 |---|---|---|
 | Each strong/weak pair separates | ≥ 6 pts | 8.8 – 30.8 |
 | Mean gap across the six models | ≥ 10 pts | 16.2 |
-| Known successes vs known failures | ≥ 4 pts | 6.7 |
+| Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |
 | Every figure real filings state is recovered | 43/43 | 43/43 |

@@ -3975,16 +3975,15 @@ export default function CyberChessPage(){
       const youLost=lossSide===pCol;
       sOver(youLost?"Твой королевский ферзь пал — поражение":"Королевский ферзь соперника пал — победа!");
       sOn(false);snd("x");
-      if(!youLost){
-        const nr=Math.min(3000,rat+12);sRat(nr);svR(nr);
-        const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);
-        setTimeout(()=>addChessy(15,"👑 Twin Kings — захват второго короля"),400);
-      }else{
-        const nr=Math.max(100,rat-10);sRat(nr);svR(nr);
-        const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);
-      }
+      /* Рейтинг у вариантов был фиксированным (+10/-8, у Twin Kings +12/-10) и не
+         смотрел на уровень бота. Обычная партия против Beginner при рейтинге 2000
+         даёт +5 за победу и -170 за поражение, а вариант — +10/-8 при любом уровне,
+         то есть рейтинг фармился вариантами против самого слабого бота. Теперь
+         варианты считаются той же формулой, что и всё остальное. */
+      applyResult(!youLost);
+      if(!youLost)setTimeout(()=>addChessy(15,"👑 Twin Kings — захват второго короля"),400);
     }
-  },[bk,variant,over,on,game,pCol,rat,sts,addChessy]);
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult]);
 
   /* ── Variant: King of the Hill — king on center square = win ── */
   useEffect(()=>{
@@ -3994,16 +3993,10 @@ export default function CyberChessPage(){
       const youWon=winner===pCol;
       sOver(youWon?"⛰ Король взошёл на холм — победа!":"⛰ Соперник занял центр — поражение");
       sOn(false);snd("x");
-      if(youWon){
-        const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);
-        const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);
-        setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
-      }else{
-        const nr=Math.max(100,rat-8);sRat(nr);svR(nr);
-        const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);
-      }
+      applyResult(youWon);
+      if(youWon)setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
     }
-  },[bk,variant,over,on,game,pCol,rat,sts,addChessy]);
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult]);
 
   /* ── Variant: Three-Check — track checks; 3 = win ── */
   useEffect(()=>{
@@ -4025,11 +4018,11 @@ export default function CyberChessPage(){
       setTimeout(()=>{
         sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
         sOn(false);snd("x");
-        if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
-        else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+        applyResult(youWon);
+        if(youWon)addChessy(12,"⚡ Three-Check");
       },50);
     }
-  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,checksByWhite,checksByBlack]);
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,checksByWhite,checksByBlack,applyResult]);
 
   /* ── Variant: Atomic — explosion on every capture ── */
   const lastAtomicBkRef=useRef(-1);
@@ -4052,8 +4045,8 @@ export default function CyberChessPage(){
         setTimeout(()=>{
           sOver(youDied?"💥 Твой король взорван — поражение":"💥 Король соперника взорван — победа!");
           sOn(false);snd("x");
-          if(!youDied){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(15,"💥 Atomic")}
-          else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+          applyResult(!youDied);
+          if(!youDied)addChessy(15,"💥 Atomic");
         },100);
       }else{
         try{
@@ -4063,7 +4056,7 @@ export default function CyberChessPage(){
         }catch{}
       }
     }catch{}
-  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast]);
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast,applyResult]);
 
   /* ── Variant: Power Drop / Crazyhouse — capture goes to pool ── */
   useEffect(()=>{

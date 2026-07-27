@@ -787,6 +787,7 @@ function lastInSeries(
   const STOP = /\b(?:compared (?:to|with)|versus|vs\.?|up from|down from|from|against|rather than)\b/i;
   const OTHER_METRIC = /\b(?:churn|retention|margin|customers|users|arr|mrr|gmv|cac|ltv|tam|payback|take[- ]rate)\b/i;
   const YEAR = /(?:19|20)[0-9]{2}/;
+  const NAMES_ITSELF = /^\s*(?:premium |paying |active |monthly |daily )*(?:subscribers|customers|users|maus?|daus?|members|merchants|clients|revenues?|arr|mrr|gmv|margins?|retention)\b/i;
 
   /** The year attached to a figure: the first one after it, inside its clause. */
   const yearAfter = (at: number): number | null => {
@@ -811,6 +812,13 @@ function lastInSeries(
     const bridge = m[0].slice(0, m[0].search(/[,]|\band\b/i) + 1);
     if (STOP.test(bridge) || OTHER_METRIC.test(bridge)) break;
     if (!comparable(m)) break;
+    // A continuation never repeats the noun. "5,000 in 2019" is the same
+    // metric again; "290 million Premium Subscribers" is a different one that
+    // happens to follow an "and". Spotify states "751 million MAUs and 290
+    // million Premium Subscribers" and the walk took the smaller second figure
+    // as the MAU count.
+    const afterTail = t.slice(cursor + m[0].length, cursor + m[0].length + 26);
+    if (NAMES_ITSELF.test(afterTail)) break;
     found.push({ m, year: yearAfter(cursor + m[0].length) });
     cursor += m[0].length;
   }

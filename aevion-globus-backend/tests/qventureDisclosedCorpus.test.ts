@@ -6332,3 +6332,34 @@ describe("the remaining window rules, swept and clean", () => {
     expect(s.retentionKind).toBe(kind);
   });
 });
+
+describe("Spotify: two metrics in one sentence, and years stated first", () => {
+  // Tenth new company, and it caught a defect MY OWN series work had just
+  // introduced. Both sentences are verbatim from the 20-F.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("a second metric is not a continuation of the first", () => {
+    // "751 million MAUs and 290 million Premium Subscribers" was read as 290
+    // million MAUs: the series walker took the smaller second figure as more of
+    // the first metric. A continuation never repeats the noun — "5,000 in 2019"
+    // is the same metric again, "290 million Premium Subscribers" is not.
+    expect(p("Our platform includes 751 million MAUs and 290 million Premium Subscribers as of December 31, 2025.").customers)
+      .toBe(751_000_000);
+  });
+
+  test("and the genuine series still walks", () => {
+    expect(p("We had 3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020.").customers).toBe(8000);
+  });
+
+  test("KNOWN MISS: years stated before the figures, with 'respectively'", () => {
+    // "As of December 31, 2025 and 2024, we had 290 million and 263 million
+    // Premium Subscribers, respectively" gives 263 million — the older. Nothing
+    // follows a figure to date it, so position decides and takes the last.
+    //
+    // A rule for it was written and reverted unverified with minutes left: when
+    // the leading year list opens with its latest year, the head is already the
+    // answer. Pinned here so a proper fix reports itself.
+    expect(p("As of December 31, 2025 and 2024, we had 290 million and 263 million Premium Subscribers, respectively.").customers)
+      .toBe(263_000_000);
+  });
+});

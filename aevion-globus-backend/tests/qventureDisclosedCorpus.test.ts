@@ -6268,13 +6268,25 @@ describe("growth stated across several periods in one sentence", () => {
     expect(g("Our gross margin increased to 59.9%.")).toBeNull();
   });
 
-  test("KNOWN, pre-dating this: a level metric in the same clause blocks the growth", () => {
-    // "Revenue grew 42% year over year, and churn is 3%" reads no growth,
-    // because the level-metric filter is clause-bounded and a comma does not
-    // end a clause. Pinned as the current behaviour, not caused by the series
-    // work — it reproduces on the commit before it.
-    expect(g("Revenue grew 42% year over year, and churn is 3%.")).toBeNull();
-    // The same sentence split by a full stop reads correctly.
-    expect(g("Revenue grew 42% year over year. Churn is 3%.")).toBe(42);
+  // Closed. The pin said naming a level metric in the same breath suppressed
+  // the growth beside it; the filter now decides by which noun is NEARER
+  // rather than by which nouns appear. Sixth pin to report its own closure.
+  test.each([
+    ["churn named beside it", "Revenue grew 42% year over year, and churn is 3%.", 42],
+    ["a margin named beside it", "Revenue grew 42% year over year, and gross margin is 70%.", 42],
+    ["split by a full stop", "Revenue grew 42% year over year. Churn is 3%.", 42],
+    ["a customer growth rate", "Customers grew 30% year over year, and churn is 3%.", 30],
+  ])("growth survives %s", (_l, text, want) => {
+    expect(g(text)).toBe(want);
+  });
+
+  test.each([
+    ["a margin", "Our gross margin increased to 59.9%."],
+    ["a retention", "Net revenue retention increased to 120%."],
+    ["a take rate", "Take rate increased to 15%."],
+    ["a churn", "Churn declined to 3% monthly."],
+    ["a margin standing nearer than the top line", "Revenue was $10M and gross margin rose to 70%."],
+  ])("and %s is still not growth", (_l, text) => {
+    expect(g(text)).toBeNull();
   });
 });

@@ -1511,12 +1511,18 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    a decline would have to carry its sign forward, which is how a sign gets
    lost.
 
-   Also pinned, and pre-dating all of this: "revenue grew 42% year over year,
-   and churn is 3%" reads **no growth at all**. The level-metric filter from
-   limit 42 is clause-bounded and a comma does not end a clause, so naming a
-   level metric in the same breath suppresses the growth beside it. Split by a
-   full stop it reads correctly. Verified against the commit before the series
-   work, so it is recorded rather than blamed on it.
+   That run also surfaced something pre-dating all of this, since closed:
+   "revenue grew 42% year over year, and churn is 3%" read **no growth at all**.
+   The level-metric filter from limit 42 asked whether a level noun appeared
+   anywhere in the clause, and a clause ends at a full stop — so naming churn in
+   the same breath suppressed the rate beside it.
+
+   It now decides by which noun is **nearer**, the same rule that fixed
+   attribution in limit 44. A margin standing closer than the top line still
+   claims its figure, and "gross margin increased to 59.9%" is still not growth;
+   what changed is that a comma no longer counts as a claim. Nine traps, all
+   four guards clean, and the pin reported its own closure — sixth time, five
+   closures out of five.
 
 ## How this stays true
 

@@ -682,20 +682,48 @@ function percentBandLowEnd(
 }
 
 /**
- * Is the percentage at this position attached to a metric that is a LEVEL
- * rather than a change — gross margin, retention, take rate, churn?
+ * Does the percentage at this position belong to a LEVEL metric rather than to
+ * a change — gross margin, retention, take rate, churn?
  *
- * Those four each read "increased to X%" correctly as their own value. The
- * growth parser was reading the same X as a growth rate, so a plan stating
- * "retention increased to 120%" scored 120% growth on top of 120% retention.
- * Bounded to the clause, so "revenue grew 42%; margin rose to 60%" still
- * records 42% growth.
+ * Those four each read "increased to X%" correctly as their own value, and the
+ * growth parser was reading the same X as a growth rate: "retention increased
+ * to 120%" scored 120% growth on top of 120% retention, the same figure twice
+ * under two names.
+ *
+ * Decided by which noun is NEARER, not by which nouns appear. The first version
+ * asked whether a level noun was anywhere in the clause, and a clause ends at a
+ * full stop — so "revenue grew 42% year over year, and churn is 3%" read no
+ * growth at all, because naming churn in the same breath suppressed the rate
+ * beside it. A comma does not change what a figure is about.
  */
 const LEVEL_METRIC_NEAR = (text: string, at: number, len: number): boolean => {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
-  const clause = text.slice(from, ends.length ? Math.min(...ends) : text.length);
-  return /gross\s*margins?|retention|expansion|\bnrr\b|\bndr\b|take[- ]rate|commission|churn/i.test(clause);
+  const to = ends.length ? Math.min(...ends) : text.length;
+  const clause = text.slice(from, to);
+  const here = at - from;
+
+  const LEVEL = /gross\s*margins?|retention|expansion|\bnrr\b|\bndr\b|take[- ]rate|commission|churn/gi;
+  const CHANGE = /\b(?:revenues?|arr|mrr|net sales|sales|gmv|gtv|customers|users|subscribers|bookings|volume)\b/gi;
+
+  /** Distance from the figure to the nearest occurrence, or null if absent. */
+  const nearest = (re: RegExp): number | null => {
+    re.lastIndex = 0;
+    let best: number | null = null;
+    for (let m = re.exec(clause); m; m = re.exec(clause)) {
+      const d = m.index <= here ? here - m.index : m.index - here;
+      if (best === null || d < best) best = d;
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return best;
+  };
+
+  const level = nearest(LEVEL);
+  if (level === null) return false;
+  const change = nearest(CHANGE);
+  // With nothing to compete against, a level noun in the clause still claims
+  // the figure — "gross margin increased to 59.9%" names only the margin.
+  return change === null || level <= change;
 };
 
 /**

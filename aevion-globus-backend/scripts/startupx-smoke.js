@@ -17,11 +17,27 @@ function assert(label, cond, info = "") {
   else { console.error(`  ✗ ${label}${info ? " — " + info : ""}`); failed++; }
 }
 
-async function req(method, path, body) {
+// Смоук делает больше сорока запросов за секунды и упирается в лимитер модуля
+// (30/мин общий, 5/мин на публикации). Ослаблять защиту прода ради теста нельзя,
+// угадывать паузы — тоже: лимитер сам отдаёт X-RateLimit-Remaining и Retry-After,
+// поэтому тест ждёт ровно столько, сколько сказал сервер, и повторяет запрос.
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function req(method, path, body, attempt = 0) {
   const opts = { method, headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000) };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(`${BASE}${path}`, opts);
   const text = await r.text();
+
+  if (r.status === 429 && attempt < 2) {
+    const wait = (Number(r.headers.get("retry-after")) || 60) + 1;
+    console.log(`  · лимит запросов: жду ${wait}с (сказал сервер) и повторяю`);
+    await sleep(wait * 1000);
+    return req(method, path, body, attempt + 1);
+  }
+
   try { return { status: r.status, body: JSON.parse(text) }; }
   catch { return { status: r.status, body: text }; }
 }
@@ -140,6 +156,15 @@ async function run() {
   const literal = await req("GET", "/api/startupx/ideas?q=" + encodeURIComponent("5%"));
   assert("процент как обычный символ находится", (literal.body?.data?.total ?? 0) >= 1,
     String(literal.body?.data?.total));
+
+  console.log("\n5b. Подписка без аккаунта: RSS");
+  const rss = await req("GET", "/api/startupx/rss.xml");
+  assert("GET /rss.xml → 200", rss.status === 200, String(rss.status));
+  const xml = typeof rss.body === "string" ? rss.body : "";
+  assert("это валидный RSS-канал", xml.includes(String.raw`<rss version="2.0">`) && xml.includes("</channel>"));
+  assert("в элементе есть уровень, условия и балл", xml.includes("Только идея") && xml.includes("за 15%") && xml.includes("балл"), xml.slice(0, 160));
+  const rssFiltered = await req("GET", "/api/startupx/rss.xml?tier=product");
+  assert("срез по уровню отдаёт свой канал", String(rssFiltered.body).includes("<channel>"));
 
   console.log("\n6. Single listing");
   if (listingId) {

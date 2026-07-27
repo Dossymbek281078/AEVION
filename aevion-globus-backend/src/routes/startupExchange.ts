@@ -40,7 +40,7 @@ import {
   type Tier,
 } from "../lib/startupx/model";
 import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
-import { MARKET_SOURCES } from "../lib/startupx/valuation";
+import { MARKET_SOURCES, fmt as fmtMoney } from "../lib/startupx/valuation";
 import { timingSafeHexEq } from "../lib/qrightHelpers";
 import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
@@ -432,6 +432,111 @@ function shouldCountView(listingId: number, req: Request): boolean {
   }
   return true;
 }
+
+// ─── GET /api/startupx/rss.xml ───────────────────────────────────────────────
+//
+// Подписка на биржу без аккаунта и без писем: инвестор кладёт ссылку в свою
+// читалку и видит новые заявки сам. Это единственный канал доставки, который мы
+// можем дать сегодня честно — почтовых рассылок у модуля нет, а обещать их,
+// не имея, нельзя.
+//
+// Фильтры те же, что в ленте (`tier`, `sector`, `q`), поэтому подписаться можно
+// на срез: «только идеи в логистике». В элемент кладём то, по чему инвестор
+// принимает решение открывать или нет: уровень, условия сделки и балл разбора.
+startupExchangeRouter.get("/rss.xml", async (req: Request, res: Response) => {
+  const tier = isTier(req.query.tier) ? req.query.tier : null;
+  const sectorRaw = typeof req.query.sector === "string" ? req.query.sector.trim() : "";
+  const sector = sectorRaw ? safeResolveSector(sectorRaw) : null;
+  const qRaw = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
+
+  let rows: ListingRow[] = [];
+  try {
+    if (isStartupExchangeDbReady()) {
+      const args: unknown[] = [];
+      let where = `WHERE visibility='public'`;
+      if (tier) {
+        args.push(tier);
+        where += ` AND COALESCE(tier, 'idea') = $${args.length}`;
+      }
+      if (sector) {
+        args.push(sector.id);
+        where += ` AND assessment->'sector'->>'id' = $${args.length}`;
+      }
+      if (qRaw) {
+        args.push(`%${qRaw.replace(/[\%_]/g, (m) => `\${m}`)}%`);
+        where += ` AND (title ILIKE $${args.length} ESCAPE '\' OR description ILIKE $${args.length} ESCAPE '\')`;
+      }
+      const r = await pool.query(
+        `SELECT * FROM startup_ideas ${where} ORDER BY created_at DESC LIMIT 50`,
+        args,
+      );
+      rows = r.rows as ListingRow[];
+    } else {
+      rows = Array.from(memListings.values())
+        .filter((l) => l.visibility === "public")
+        .filter((l) => !tier || (isTier(l.tier) ? l.tier : tierFromLegacyStage(l.stage)) === tier)
+        .filter((l) => !sector || l.assessment?.sector?.id === sector.id)
+        .filter((l) => !qRaw || `${l.title} ${l.description}`.toLowerCase().includes(qRaw.toLowerCase()))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 50);
+    }
+  } catch (e) {
+    console.error("[StartupX] rss error", e);
+    return res.status(500).send("rss_failed");
+  }
+
+  const esc = (v: string): string =>
+    String(v ?? "").replace(/[<>&"']/g, (c) =>
+      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c] as string,
+    );
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app").replace(/\/+$/, "");
+
+  const items = rows
+    .map((row) => {
+      const tierId = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
+      const link = `${site}/startup-exchange/${row.id}`;
+      const deal = row.deal;
+      let terms = "условия не указаны";
+      if (deal?.intent === "raise" && deal.askUsd && deal.equityOfferedPct) {
+        terms = `$${fmtMoney(deal.askUsd)} за ${deal.equityOfferedPct}%`;
+      } else if (deal?.intent === "sell_stake" && deal.stakePriceUsd && deal.stakeForSalePct) {
+        terms = `${deal.stakeForSalePct}% за $${fmtMoney(deal.stakePriceUsd)}`;
+      } else if (deal?.intent === "sell_full" && deal.askingPriceUsd) {
+        terms = `продажа целиком — $${fmtMoney(deal.askingPriceUsd)}`;
+      }
+      const score = typeof row.assessment_score === "number" ? `${row.assessment_score}/100` : "без разбора";
+      const summary =
+        `${TIER_SPECS[tierId].label} · ${terms} · балл ${score}
+
+` +
+        `${(row.description || "").slice(0, 600)}`;
+      return `    <item>
+      <title>${esc(row.title)}</title>
+      <link>${esc(link)}</link>
+      <guid isPermaLink="true">${esc(link)}</guid>
+      <pubDate>${new Date(row.created_at).toUTCString()}</pubDate>
+      <description>${esc(summary)}</description>
+    </item>`;
+    })
+    .join("\n");
+
+  const slice = [tier ? TIER_SPECS[tier].label : "", sector?.label ?? "", qRaw].filter(Boolean).join(" · ");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${esc(slice ? `AEVION · биржа стартапов · ${slice}` : "AEVION · биржа стартапов")}</title>
+    <link>${esc(`${site}/startup-exchange`)}</link>
+    <description>${esc("Новые заявки: идея, MVP или готовый продукт — с условиями сделки и бесплатным разбором.")}</description>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <ttl>15</ttl>
+${items}
+  </channel>
+</rss>`;
+
+  res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+  return res.send(xml);
+});
 
 // ─── GET /api/startupx/ideas/:id ─────────────────────────────────────────────
 startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {

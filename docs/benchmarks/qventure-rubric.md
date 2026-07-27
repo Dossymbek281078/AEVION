@@ -469,16 +469,31 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    of our subsidiaries is licensed to operate as a bank", which the negation
    layer already handled correctly.
 
-   That is the WHOLE regulatory list now tested against real documents — defence, PPA,
-   financial licence, security certification, IND and breakthrough designation.
-   **Five of the six were wrong on the first real sentence they met**; the
-   breakthrough entry survived, including the sentence most likely to fool a
-   keyword reader ("designation as a breakthrough therapy is at the discretion
-   of the FDA"), and Moderna cost only one fix: "the program has an open IND"
-   is how a filing says an application cleared, and the pattern wanted
-   "cleared", "filed" or "accepted". The entries were written against
-   examples this repository invented, and inventing an example means inventing
-   one that fits.
+   **Both lists have now met real documents in full** — regulatory milestones
+   and technical validation, every entry. Ten of fourteen were wrong on the
+   first real sentence they met, and the failures share one shape:
+
+   > **The entries that failed recognised a NOUN. The entries that held
+   > recognised an EVENT, through a verb.**
+
+   A noun matches every context the word appears in, and a filing uses the same
+   word four ways: to announce an achievement, to define a procedure, to list a
+   risk, and to name a financial term. Hence a *definition* of an IDIQ contract
+   read as an award, `benchmark interest rates` read as a technical benchmark,
+   a `state of the art 97,000 square foot facility` — a building — read as a
+   benchmark result, and the sentence explaining that clinical trials are
+   "conducted in three sequential phases, known as Phase 1, Phase 2 and Phase 3"
+   read as three clinical milestones reached.
+
+   The two that held from the start — `510(k) cleared` and `breakthrough
+   designation granted` — were the two written around what happened rather than
+   what it is called. Every other entry has now been rebuilt that way.
+
+   Three filters, applied in order and shared by both lists: the negation layer
+   (`no FDA approval`, `never been a Phase 3 trial`), the intention filter
+   (`we plan to pursue`, `may apply for`, `expect ... next year`), and the verb
+   requirement. The first two were not enough on their own — a definition
+   states no intention and a contract clause denies nothing.
 
 ## How this stays true
 

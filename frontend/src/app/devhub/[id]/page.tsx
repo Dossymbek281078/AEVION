@@ -10,6 +10,7 @@ import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -1339,6 +1340,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Create the project's real database: schema + login role on the projects
   // instance, schema.sql applied, DATABASE_URL saved into this project's env.
+  // Append a generated asset to the open file instead of replacing it.
+  //
+  // The media buttons used to call setEditorContent(url) and save — which
+  // overwrites the entire file with a single line. Open App.jsx, generate a
+  // video, press the button, and the app is gone. Appending keeps the work and
+  // still puts the asset where the code can reach it. With no file open there
+  // is nothing to append to, so the URL goes to the clipboard and we say so —
+  // silently doing nothing would look like the button was broken.
+  const appendAssetToFile = (url: string, kind: AssetKind) => {
+    if (!selectedFile) {
+      navigator.clipboard?.writeText(url).catch(() => {});
+      showToast("Нет открытого файла — ссылка скопирована в буфер", "info");
+      return;
+    }
+    const next = appendSnippet(editorContent, assetSnippet(selectedFile.path, url, kind));
+    setEditorContent(next);
+    saveCurrentFile(selectedFile.path, next, selectedFile.language);
+    showToast(`Добавлено в ${selectedFile.path}`, "success");
+  };
+
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
@@ -3993,7 +4014,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
-                            <button onClick={() => { setEditorContent(videoUrl); if (selectedFile) saveCurrentFile(selectedFile.path, videoUrl, selectedFile.language); showToast("Video URL saved to current file", "success"); }} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save URL to File</button>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Insert into file</button>
                           </div>
                         </div>
                       )}
@@ -4084,14 +4105,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {threeDUrl && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>
-                            GLB готов — скачайте или сохраните ссылку в файл проекта.
+                            GLB готов — скачайте или вставьте ссылку в открытый файл проекта.
                           </div>
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={threeDUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", borderRadius: 7, fontWeight: 700, fontSize: 13, textAlign: "center", textDecoration: "none" }}>Скачать GLB</a>
                             <button
-                              onClick={() => { setEditorContent(threeDUrl); if (selectedFile) saveCurrentFile(selectedFile.path, threeDUrl, selectedFile.language); showToast("Ссылка на модель сохранена в файл", "success"); }}
+                              onClick={() => appendAssetToFile(threeDUrl, "model")}
+                              title="Дописывает ссылку на модель в файл, открытый в редакторе"
                               style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                            >Сохранить ссылку в файл</button>
+                            >Вставить в файл</button>
                           </div>
                         </div>
                       )}
@@ -4246,6 +4268,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
                               </button>
                             )}
+                            <button
+                              onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
+                              title="Appends an <img> tag to the file open in the editor"
+                              style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                            >
+                              Insert into file
+                            </button>
                             {cfImgPermanentUrl && (
                               <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>
                                 ✓ Permanent CDN

@@ -121,6 +121,7 @@ import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
 import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { isPlayerPly, isPlayerIndex } from "./plyOwner";
+import { accuracyOf } from "./accuracy";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -5366,12 +5367,9 @@ export default function CyberChessPage(){
       const isWhite=pCol==="w";
       const pm=results.filter((_,i)=>isWhite?(i%2===0):(i%2===1));
       const n=pm.length||1;
-      const grt=pm.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
-      const goo=pm.filter(m=>m.quality==="good").length;
-      const ina=pm.filter(m=>m.quality==="inacc").length;
       const mis=pm.filter(m=>m.quality==="mistake").length;
       const blu=pm.filter(m=>m.quality==="blunder").length;
-      const acc=Math.round(100*(grt*1+goo*0.85+ina*0.6+mis*0.3)/n);
+      const acc=accuracyOf(pm)??0;
       const acpl=Math.round(pm.reduce((s,m)=>s+m.cpLoss,0)/n);
       showToast(`✅ Точность ${acc}% · ср. потеря ${acpl}cp${blu?` · ${blu} зев.`:""}${mis?` · ${mis} ош.`:""}`,blu||acc<60?"info":"success");
     })();
@@ -6056,12 +6054,7 @@ export default function CyberChessPage(){
                 // ply считается с 1, а правило стояло для индекса — график рисовал ходы БОТА
                 const myMvs=g.analysis!.filter(m=>isPlayerPly(m.ply,g.playerColor));
                 if(!myMvs.length)return null;
-                const gr=myMvs.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
-                const go=myMvs.filter(m=>m.quality==="good").length;
-                const ia=myMvs.filter(m=>m.quality==="inacc").length;
-                const mk=myMvs.filter(m=>m.quality==="mistake").length;
-                const bl=myMvs.filter(m=>m.quality==="blunder").length;
-                return Math.round(100*(gr*1+go*0.85+ia*0.6+mk*0.3+bl*0)/myMvs.length);
+                return accuracyOf(myMvs);
               }).filter((v):v is number=>v!==null);
               /* Партия без единого разобранного хода игрока раньше давала в график
                  ровно 50% — выдуманное число, которое ничем не измерено и тянуло
@@ -8208,7 +8201,7 @@ export default function CyberChessPage(){
                 const inacc=myMoves.filter(m=>m.quality==="inacc").length;
                 const mistake=myMoves.filter(m=>m.quality==="mistake").length;
                 const blunder=myMoves.filter(m=>m.quality==="blunder").length;
-                const acc=Math.round(100*((brilliant+great)*1+good*0.85+inacc*0.6+mistake*0.3+blunder*0)/(myMoves.length));
+                const acc=accuracyOf(myMoves)??0;
                 const accColor=acc>=85?"#10b981":acc>=65?"#f59e0b":"#ef4444";
                 const avgCpl=myMoves.length>0?Math.round(myMoves.reduce((s,m)=>s+m.cpLoss,0)/myMoves.length):0;
                 const oppG=oppMoves.filter(m=>m.quality==="great").length;
@@ -8216,7 +8209,7 @@ export default function CyberChessPage(){
                 const oppIa=oppMoves.filter(m=>m.quality==="inacc").length;
                 const oppMk=oppMoves.filter(m=>m.quality==="mistake").length;
                 const oppBl=oppMoves.filter(m=>m.quality==="blunder").length;
-                const oppAcc=oppMoves.length>0?Math.round(100*(oppG*1+oppGo*0.85+oppIa*0.6+oppMk*0.3+oppBl*0)/oppMoves.length):0;
+                const oppAcc=accuracyOf(oppMoves)??0;
                 // Consecutive good-move streak (no mistakes/blunders)
                 let streak=0;
                 for(let k=myMoves.length-1;k>=0;k--){
@@ -9619,15 +9612,7 @@ export default function CyberChessPage(){
               <span style={{color:"#ef4444",fontWeight:800}}>??</span><span>зевок</span>
             </div>}
             {analysis.length>=2&&hist.length>=2&&(()=>{
-              const calcAcc=(moves:{quality:string}[])=>{
-                if(!moves.length)return 0;
-                const g=moves.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
-                const go=moves.filter(m=>m.quality==="good").length;
-                const ia=moves.filter(m=>m.quality==="inacc").length;
-                const mk=moves.filter(m=>m.quality==="mistake").length;
-                const bl=moves.filter(m=>m.quality==="blunder").length;
-                return Math.round(100*(g*1+go*0.85+ia*0.6+mk*0.3)/moves.length);
-              };
+              const calcAcc=(moves:{quality:string}[])=>accuracyOf(moves)??0;
               const wMoves=analysis.filter((_,i)=>i%2===0);
               const bMoves=analysis.filter((_,i)=>i%2!==0);
               const wAcc=calcAcc(wMoves);const bAcc=calcAcc(bMoves);
@@ -14486,15 +14471,7 @@ ${question.trim()}`;
       const isDraw=ovRes==="D";
       const accentClr=isWin?"#759900":isDraw?"#888":"#c03030";
       const glowClr=isWin?"rgba(117,153,0,0.5)":isDraw?"rgba(120,120,120,0.4)":"rgba(180,30,30,0.5)";
-      const calcSideAcc=(moves:{quality:string}[])=>{
-        if(!moves.length)return 0;
-        const g=moves.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
-        const go=moves.filter(m=>m.quality==="good").length;
-        const ia=moves.filter(m=>m.quality==="inacc").length;
-        const mk=moves.filter(m=>m.quality==="mistake").length;
-        const bl=moves.filter(m=>m.quality==="blunder").length;
-        return Math.round(100*(g*1+go*0.85+ia*0.6+mk*0.3+bl*0)/moves.length);
-      };
+      const calcSideAcc=(moves:{quality:string}[])=>accuracyOf(moves)??0;
       const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
       const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
       const myAcc=calcSideAcc(myMoves);

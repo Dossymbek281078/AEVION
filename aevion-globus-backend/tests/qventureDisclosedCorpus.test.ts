@@ -6417,18 +6417,31 @@ describe("KNOWN MISS: collapsing whitespace erases table structure", () => {
   const TAB = String.fromCharCode(9);
   const p = (t: string) => parsePlanSignals(t);
 
-  test("a metric in the next row is treated as adjacent", () => {
-    // Collapsed to "revenue growth 42% churn 3%", churn stands nearer to the
-    // figure than growth, so the level-metric filter claims it and no growth is
-    // read. In the table they are different rows.
-    expect(p(`Revenue growth${TAB}42%${NL}Churn${TAB}3%`).growthPct).toBeNull();
+  test("a metric in the next row is no longer adjacent", () => {
+    // Closed. The row break becomes a semicolon, which every clause-bounded
+    // rule already treats as a boundary, so churn on the next row no longer
+    // stands nearer to the growth figure than growth does.
+    expect(p(`Revenue growth${TAB}42%${NL}Churn${TAB}3%`).growthPct).toBe(42);
+    expect(p(`Revenue growth${TAB}42%${NL}Churn${TAB}3%`).churnPct).toBe(3);
   });
 
-  test("a cell separator is not accepted as a connector", () => {
-    // "Customers: 5,000" reads; "Customers<tab>5,000" does not, because the tab
-    // becomes a space and a space is deliberately not a connector — that rule
-    // is what stops "we serve customers 24 hours a day" being a count.
-    expect(p(`Customers${TAB}5,000${NL}Revenue${TAB}$10M`).customers).toBeNull();
+  test("a cell separator is accepted as a connector", () => {
+    // The tab becomes a colon, which is already a connector everywhere, so a
+    // tab-separated count reads exactly as "Customers: 5,000" does — while a
+    // plain space still does not, which is what stops "we serve customers 24
+    // hours a day" being a count.
+    expect(p(`Customers${TAB}5,000${NL}Revenue${TAB}$10M`).customers).toBe(5000);
+    expect(p(`Customers${TAB}5,000${NL}Revenue${TAB}$10M`).revenueUsd).toBe(10_000_000);
+    expect(p("We serve customers 24 hours a day.").customers).toBeNull();
+  });
+
+  test("growth reads its noun-first form, which the connector sweep had missed", () => {
+    // Growth kept its own connector list - by|at|of|to - and so never received
+    // the notation separators every other metric got. "Revenue growth: 42%" was
+    // unreadable while "Revenue growth of 42%" was fine.
+    expect(p("Revenue growth: 42%.").growthPct).toBe(42);
+    expect(p("Growth: 42%.").growthPct).toBe(42);
+    expect(p("Growth of 42%.").growthPct).toBe(42);
   });
 
   test("and the forms that already work still do", () => {

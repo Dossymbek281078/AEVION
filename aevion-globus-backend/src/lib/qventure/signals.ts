@@ -886,7 +886,22 @@ function respectivelyHead(t: string, at: number): { value: string; unit?: string
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
-  const raw = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
+  // A pasted table carries meaning in its whitespace. The row break separates
+  // one metric from the next, and the cell separator does the work of a
+  // connector. Flattening both to a space lost both: "Revenue growth<tab>42%"
+  // on one row and "Churn<tab>3%" on the next became a single line where churn
+  // stood nearer to the figure than growth, so the level-metric filter claimed
+  // it and no growth was read at all.
+  //
+  // Mapped into punctuation the parser already understands rather than taught
+  // to every rule separately — a row break becomes ";", which every
+  // clause-bounded rule already treats as a boundary, and a tab becomes ":",
+  // which is already a connector everywhere. Nothing downstream changes.
+  const structured = text
+    .toLowerCase()
+    .replace(/[^\S\r\n]*\r?\n[^\S\r\n]*/g, "; ")
+    .replace(/[^\S\t]*\t[^\S\t]*/g, ": ");
+  const raw = ` ${structured.replace(/\s+/g, " ")} `;
   RAW_FOR_DATES = raw;
   const t = maskDates(raw);
 
@@ -1045,7 +1060,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const GROWTH_PATTERNS = [
     // "increased approximately 3% year-on-year" is Sony's own wording, and
     // the qualifier between the verb and the figure broke the match outright.
-    String.raw`(?:grow(?:ing|th|s|n)?|grew|rose|climbed|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*(?:approximately|approx\.?|about|around|nearly|almost|roughly|some|over|more than|just under)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
+    String.raw`(?:grow(?:ing|th|s|n)?|grew|rose|climbed|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|to|${LINK})?\s*(?:approximately|approx\.?|about|around|nearly|almost|roughly|some|over|more than|just under)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
     String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`,
     // Growth written as a NOUN with the figure in front of it — "a 31.6%
     // increase over 2024", which is how TSMC states its own growth. Every

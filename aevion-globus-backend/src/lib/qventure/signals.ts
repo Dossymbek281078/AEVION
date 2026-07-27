@@ -83,6 +83,16 @@ export interface PlanSignals {
   nonDilutiveUsd: number | null;
   /** Count of pilots / LOIs / design wins / deployments disclosed. */
   pilots: number | null;
+  /**
+   * Reservations and pre-orders — demand the customer can walk away from.
+   *
+   * Deliberately NOT merged into `pilots` or `contractedRevenueUsd`, and it
+   * backs no factor: a reservation book is not a backlog, and hardware plans
+   * lead with it precisely because it is the largest number they have. It is
+   * parsed so the reader sees it and so the engine can say out loud that it is
+   * uncommitted, rather than silently crediting it as traction.
+   */
+  reservations: number | null;
   /** Regulatory milestones the plan claims to have REACHED (not merely planned). */
   regulatoryMilestones: string[];
   /** Technical validation the plan claims: peer review, trial phase, benchmark, working plant. */
@@ -182,7 +192,8 @@ export function emptySignals(): PlanSignals {
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
-    pilots: null, regulatoryMilestones: [], technicalProof: [], conflicts: [], parseNotes: [],
+    pilots: null, reservations: null,
+    regulatoryMilestones: [], technicalProof: [], conflicts: [], parseNotes: [],
     fieldsFound: 0,
   };
 }
@@ -327,11 +338,33 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.parseNotes.push(`Gross margin was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
     }
   }
-  const gm = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*gross\s*margin`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*\(?\s*${NUM}\s*%`, "i"));
+  // A NEGATIVE gross margin is the strongest thing a plan can disclose against
+  // itself — it says every unit sold loses money. Until this read the sign, all
+  // four ways of writing it ("-45%", "(45)%", "negative 45%", "minus 45%") were
+  // dropped as unparseable, the factor fell back to the sector prior, and a
+  // company selling below cost scored like an average one in its sector. The
+  // sign is captured explicitly rather than inferred, and the range widened to
+  // allow it.
+  // The sign must touch the digit. An en/em dash is prose punctuation —
+  // "Gross margin — 45%" is a positive margin behind a dash — so those
+  // characters are deliberately NOT signs here, and a hyphen preceded by a digit
+  // is a range separator ("70-80%"), not a minus. Getting this wrong would flip
+  // a healthy margin negative, which is the same class of silent corruption in
+  // the opposite direction.
+  const NEG = String.raw`(-|−|minus\s+|negative\s+)?`;
+  const NOT_RANGE = String.raw`(?<![\d.,])`;
+  const gm = firstMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"))
+    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*${NEG}${NUM}\s*%`, "i"))
+    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*(\()\s*${NUM}\s*\)\s*%`, "i"));
   if (gm && s.grossMarginPct === null) {
-    const m = parseLocaleNumber(gm[1]);
-    if (isFinite(m) && m > 0 && m <= 100) s.grossMarginPct = m;
+    const magnitude = parseLocaleNumber(gm[2]);
+    const negative = Boolean(gm[1]);
+    if (isFinite(magnitude) && magnitude > 0 && magnitude <= 100) {
+      s.grossMarginPct = negative ? -magnitude : magnitude;
+      if (negative) {
+        s.parseNotes.push(`Gross margin was disclosed as negative (${s.grossMarginPct}%); it is scored at that sign, not as ${magnitude}%.`);
+      }
+    }
   }
 
   // ── LTV:CAC ratio stated directly: "LTV:CAC of 4:1" / "LTV/CAC 3.5" / "3-5x" ──
@@ -442,12 +475,21 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.churnMonthlyPct = monthlyChurnFrom(v, s.churnPeriod);
     }
   }
-  const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:net\s*)?(?:revenue\s*)?retention`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:net\s*revenue\s*retention|nrr|retention)\s*(?:of|=|:|at|is)?\s*\(?\s*${NUM}\s*%`, "i"));
+  // Filings do not agree on a name for this number. "Net revenue retention",
+  // "net dollar expansion rate", "dollar-based net retention rate" and "NDR" are
+  // the same disclosure, and the word "rate" sits between the name and the
+  // figure often enough that omitting it dropped the standard S-1 phrasing.
+  const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
+  const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was)?\s*\(?\s*${NUM}\s*%`, "i"));
   if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
-  const cust = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:paying\s*)?(?:customers|users|clients|subscribers|merchants|seats)`, "i"));
+  // Not every business calls them customers: a workspace operator discloses
+  // memberships, a marketplace sellers, a platform accounts or stores. Reading
+  // only the SaaS nouns made those filings look like plans with no customer
+  // disclosure at all.
+  const cust = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|sellers|tenants)`, "i"));
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
@@ -626,6 +668,29 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   if (pilots) {
     const v = parseLocaleNumber(pilots[1]);
     if (isFinite(v) && v >= 1 && v < 100000) s.pilots = Math.round(v);
+  }
+  // Units actually delivered are the hardware equivalent of a deployment count,
+  // and the exact fact that separates a shipping hardware company from one with
+  // a reservation book. Only counted when the sentence says they reached a
+  // customer, so a production-capacity figure is not read as demand.
+  if (s.pilots === null) {
+    const delivered = firstMatch(t, new RegExp(String.raw`${NUM}\s+(?:[A-Za-z]+\s+){0,2}(?:sold|delivered|shipped)\s+to\s+(?:customers|clients|operators)`, "i"))
+      || firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:units|vehicles|systems|devices)\s+(?:sold|delivered|shipped)`, "i"));
+    if (delivered) {
+      const v = parseLocaleNumber(delivered[1]);
+      if (isFinite(v) && v >= 1 && v < 100000) {
+        s.pilots = Math.round(v);
+        s.parseNotes.push(`${s.pilots} units disclosed as delivered to customers are counted as deployments.`);
+      }
+    }
+  }
+
+  // ── Reservations / pre-orders — read, but kept apart from committed demand ──
+  const resv = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:reservations?|pre[- ]?orders?|orders? reserved|non[- ]binding orders?)`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(?:reservations?|pre[- ]?orders?)\s*(?:for|of|totalling|totaling)?\s*(?:approximately\s*)?${NUM}\s*${UNIT}`, "i"));
+  if (resv) {
+    const v = parseMoney(resv[1], resv[2]);
+    if (v && v >= 1 && v < 1e9) s.reservations = Math.round(v);
   }
 
   // ── Regulatory milestones actually REACHED ──

@@ -40,8 +40,19 @@ import { conversionNote } from "../metrics/currency";
  *     evidence instead of always sector constants. Money is also read in the
  *     currency it was quoted in and converted to USD (EUR/GBP/KZT/… were
  *     previously scored as if the number were dollars).
+ *
+ *   v6 — read-side only, no weight moved: the readers were measured against real
+ *     filing prose for the first time (`scripts/qventure-disclosed.ts`) and
+ *     missed 6 of 31 stated figures. A negative gross margin is now read at its
+ *     sign instead of dropped (a company selling below cost previously scored on
+ *     its sector's margin prior), "net dollar expansion" and "retention rate of"
+ *     are read as retention, memberships and other non-SaaS customer nouns are
+ *     counted, units delivered to customers count as deployments, and
+ *     reservations/pre-orders are parsed into a field that backs no factor and
+ *     raises a flag — a reservation book is not a backlog. Composites moved
+ *     (Solyndra 68.5 → 63.6), so the version moves with them.
  */
-export const RUBRIC_VERSION = 5;
+export const RUBRIC_VERSION = 6;
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -587,6 +598,17 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   //   LTV/CAC < 1  → econScoreRaw already takes -18 in the unit-economics factor
   //   churn > 5    → quantifiedExecution already takes -6 in the execution factor
   const textOnlyFlags: string[] = [];
+  // A reservation book is the largest number a pre-revenue hardware plan has,
+  // and it is the one number the customer can cancel. It backs no factor, so it
+  // is stated rather than scored — and stated loudest when there is no revenue
+  // and no contracted backlog standing behind it.
+  if (signals.reservations !== null) {
+    const backing = signals.contractedRevenueUsd !== null || signals.revenueUsd !== null;
+    textOnlyFlags.push(
+      `${signals.reservations.toLocaleString("en-US")} reservations / pre-orders are disclosed as demand, not as contracted revenue` +
+      (backing ? "." : " — and no revenue or signed backlog is disclosed behind them."),
+    );
+  }
   if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
     textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
   }

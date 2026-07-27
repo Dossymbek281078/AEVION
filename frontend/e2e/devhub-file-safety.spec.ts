@@ -231,4 +231,29 @@ test.describe("DevHub — writes that must not lose a file", () => {
     // applying it emptied the screen while claiming success.
     await expect(existing).toBeVisible();
   });
+
+  test("a failed env read says so instead of showing an empty project", async ({ page }) => {
+    // "Could not load" is not the same fact as "there are none": the env list
+    // swallowed its error and rendered empty, so a failed read looked like a
+    // project with no variables at all.
+    await page.route("**/api/devhub/**", async (route) => {
+      const url = route.request().url();
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/env")) return json({ error: "nope" }, 500);
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: { id: PROJECT_ID, name: "env-read", description: "", stack: "react", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: FILES,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      return json({ ok: true });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("button", { name: "Env Vars", exact: true }).click();
+    await expect(page.getByText(/не загрузился/)).toBeVisible({ timeout: 10_000 });
+  });
 });

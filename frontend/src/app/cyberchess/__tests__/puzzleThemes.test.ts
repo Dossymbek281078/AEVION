@@ -110,3 +110,17 @@ describe("puzzleTitle", () => {
   });
 });
 
+
+/* Формат Lichess: FEN — позиция ДО хода соперника, решение начинается с этого хода.
+   После верного сдвига игрок ходит первым и последним, значит полуходов НЕЧЁТНОЕ число.
+   Чётная длина = сдвиг не сделан, и игроку показывают позицию на полуход раньше, ожидая
+   от него ход соперника. Замер боевого пула 2026-07-27: все 20 000 задач были чётными,
+   и во всех 6370 матовых мат ставил соперник, а не игрок. Запасной корпус собран верным
+   импортёром — здесь это и закрепляется. */
+describe("puzzles.json corpus", () => {
+  it("gives the player the first and the last move of every solution", () => {
+    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{ sol: string[] }>;
+    const even = puzzles.filter((p) => Array.isArray(p.sol) && p.sol.length % 2 === 0);
+    expect(even).toHaveLength(0);
+  });
+});

@@ -68,8 +68,14 @@ export function SiteHeader() {
             API
           </a>
           <AiOfflineToggle />
-          <PlatformAiSavings />
-          <RevenueGoalBadge />
+          {/* Ops-виджеты для нас, не для посетителя: на телефоне скрыты
+              (.aevion-ops-pill в globals.css), на десктопе остаются. */}
+          <span className="aevion-ops-pill">
+            <PlatformAiSavings />
+          </span>
+          <span className="aevion-ops-pill">
+            <RevenueGoalBadge />
+          </span>
           <div style={{ marginLeft: 4 }}>
             <LanguageSwitcher />
           </div>

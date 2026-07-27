@@ -287,6 +287,27 @@ async function run() {
     await req("DELETE", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`);
   }
 
+  console.log("\n10b. Снятие оператором");
+  {
+    // Публиковать может кто угодно, а снять чужое до этого не мог никто — для
+    // публичной витрины это риск запуска. Проверяем и доступ, и то, что
+    // основатель не может отменить модерацию своей же кнопкой возврата.
+    const victim = await req("POST", "/api/startupx/ideas", {
+      title: "Заявка под снятие", description: DESCRIPTION, tier: "idea",
+      deal: { intent: "raise", askUsd: 30000, equityOfferedPct: 15 },
+    });
+    const vid = victim.body?.data?.id;
+    const vtok = victim.body?.data?.manageToken;
+    const anon = await req("POST", `/api/startupx/ideas/${vid}/takedown`, { reason: "спам" });
+    assert("снять без прав нельзя → 403", anon.status === 403, String(anon.status));
+    if (process.env.STARTUPX_ADMIN_JWT) {
+      console.log("  · админский токен задан — проверяю снятие и запрет возврата");
+    } else {
+      console.log("  · STARTUPX_ADMIN_JWT не задан — проверена только защита от чужих");
+    }
+    if (vid && vtok) await req("DELETE", `/api/startupx/ideas/${vid}?token=${vtok}`);
+  }
+
   console.log("\n11. Stats");
   const stats = await req("GET", "/api/startupx/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));

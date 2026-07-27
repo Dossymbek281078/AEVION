@@ -116,6 +116,8 @@ export interface Listing {
   qright_protected: boolean;
   /** Сколько раз открывали страницу заявки (открытия, не уникальные посетители). */
   views: number;
+  /** Причина снятия оператором площадки — видна основателю, если это произошло. */
+  removed_reason?: string | null;
   /** "public" | "withdrawn" — снятая заявка не видна в ленте, но открыта по личной ссылке. */
   visibility: string;
   created_at: string;

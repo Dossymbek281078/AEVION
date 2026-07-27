@@ -80,6 +80,11 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     // отличить «меня не видят» от «видят, но условия не устраивают», а лечатся
     // эти два состояния противоположным: первое — охватом, второе — ценой.
     await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS views INTEGER NOT NULL DEFAULT 0;`);
+    // Снятие оператором: причина и время. Заявка, исчезнувшая без объяснения, —
+    // это то, за что площадки справедливо ругают; основатель должен увидеть, что
+    // именно и почему сняли, у себя в кабинете.
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS removed_reason TEXT;`);
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ;`);
 
     // Backfill: every pre-tier row gets the tier its legacy stage implies.
     // Runs once — after this, `tier IS NULL` matches nothing.

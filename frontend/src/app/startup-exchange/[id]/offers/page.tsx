@@ -187,7 +187,20 @@ export default function OffersPage() {
           </div>
         )}
 
-        {!withdrawn && (
+        {listing.removed_reason && (
+          <div style={{ marginTop: 22, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 4 }}>
+              Заявка снята площадкой
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: "#7f1d1d", lineHeight: 1.6 }}>
+              Причина: {listing.removed_reason}. Эта страница и полученные предложения остаются у вас,
+              но в ленте заявки больше нет, и вернуть её кнопкой нельзя — сначала нужно устранить
+              причину и написать нам.
+            </p>
+          </div>
+        )}
+
+        {!withdrawn && !listing.removed_reason && (
           <div style={{ marginTop: 26, display: "grid", gap: 14 }}>
             <EditTermsForm
               listing={listing}

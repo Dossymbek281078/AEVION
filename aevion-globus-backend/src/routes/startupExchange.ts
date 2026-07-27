@@ -42,6 +42,8 @@ import {
 import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
 import { MARKET_SOURCES, fmt as fmtMoney } from "../lib/startupx/valuation";
 import { timingSafeHexEq } from "../lib/qrightHelpers";
+import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../lib/authJwt";
 import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
 
@@ -93,6 +95,8 @@ interface ListingRow {
   content_hash: string | null;
   manage_token_hash: string | null;
   views: number;
+  removed_reason: string | null;
+  removed_at: string | null;
   visibility: string;
   created_at: string;
 }
@@ -174,6 +178,33 @@ function manageTokenMatches(token: unknown, hash: string | null): boolean {
   return timingSafeHexEq(candidate, hash);
 }
 
+/**
+ * Оператор площадки. Тот же приём, что в awards: JWT + список почт в env, плюс
+ * роль admin. Отдельного механизма для биржи не заводим — второй способ делать
+ * то же самое расходится с первым ровно тогда, когда это дороже всего.
+ */
+function verifyBearer(req: Request): { sub?: string; email?: string; role?: string } | null {
+  const header = req.headers?.authorization;
+  const token = typeof header === "string" && header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return null;
+  try {
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as {
+      sub?: string; email?: string; role?: string;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isStartupXAdmin(auth: { role?: string; email?: string } | null): boolean {
+  if (!auth) return false;
+  if (auth.role === "admin" || auth.role === "ADMIN") return true;
+  const raw = (process.env.STARTUPX_ADMIN_EMAILS || process.env.AEVION_ADMIN_EMAILS || "").trim();
+  if (!raw || !auth.email) return false;
+  const allow = new Set(raw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+  return allow.has(auth.email.toLowerCase());
+}
+
 /** Public projection: founder_email never leaves the server. */
 function publicView(row: ListingRow, interest_count?: number) {
   const tier = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
@@ -199,6 +230,7 @@ function publicView(row: ListingRow, interest_count?: number) {
     content_hash: row.content_hash,
     qright_protected: Boolean(row.qright_object_id || row.content_hash),
     views: row.views ?? 0,
+    removed_reason: row.removed_reason ?? null,
     visibility: row.visibility,
     created_at: row.created_at,
     ...(interest_count !== undefined ? { interest_count } : {}),
@@ -673,6 +705,8 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     content_hash: contentHash,
     manage_token_hash: manage.hash,
     views: 0,
+    removed_reason: null,
+    removed_at: null,
     visibility: "public",
   });
   return ok(res, {
@@ -936,7 +970,10 @@ startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, re
   // Withdrawal was one-way: a founder who took the listing down by mistake had
   // to publish a new one, with a new id, a new stamp and none of the offers.
   // Nothing about that had to be irreversible.
-  const restore = body.restore === true;
+  // Возврат — право основателя на СВОЁ снятие. Снятое оператором возвращать
+  // нельзя, иначе кнопка «вернуть заявку» отменяла бы модерацию: снятый за
+  // мусор вернул бы себя сам.
+  const restore = body.restore === true && row.visibility !== "removed";
   const nextVisibility = restore ? "public" : row.visibility;
 
   if (isStartupExchangeDbReady()) {
@@ -1021,6 +1058,52 @@ startupExchangeRouter.delete("/ideas/:id", offersLimiter, async (req: Request, r
     if (existing) existing.visibility = "withdrawn";
   }
   return ok(res, { id, visibility: "withdrawn" });
+});
+
+// ─── POST /api/startupx/ideas/:id/takedown ───────────────────────────────────
+//
+// Снятие заявки оператором площадки. До этого снять чужую заявку было нельзя
+// вообще: единственная кнопка принадлежала основателю, а публиковать может кто
+// угодно. Для публичной витрины это риск запуска, а не гигиена.
+//
+// Заявка не удаляется, а помечается снятой с ПРИЧИНОЙ, и причина видна
+// основателю в его кабинете: контент, исчезающий без объяснения, — то, за что
+// площадки справедливо ругают.
+startupExchangeRouter.post("/ideas/:id/takedown", postLimiter, async (req: Request, res: Response) => {
+  const auth = verifyBearer(req);
+  if (!isStartupXAdmin(auth)) return fail(res, "forbidden", 403);
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const reason = clampStr(req.body?.reason, 500);
+  if (!reason) {
+    return fail(res, "reason_required", 400, {
+      issues: [{ field: "reason", message: "Причина обязательна — основатель увидит именно её" }],
+    });
+  }
+
+  const at = new Date().toISOString();
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE startup_ideas SET visibility='removed', removed_reason=$1, removed_at=$2 WHERE id=$3`,
+        [reason, at, id],
+      );
+      if (!rowCount) return fail(res, "not_found", 404);
+    } catch (e) {
+      captureStartupXError(e);
+      return fail(res, "takedown_failed", 500);
+    }
+  } else {
+    const row = memListings.get(id);
+    if (!row) return fail(res, "not_found", 404);
+    row.visibility = "removed";
+    row.removed_reason = reason;
+    row.removed_at = at;
+  }
+
+  console.warn(`[StartupX] takedown id=${id} by=${auth?.email ?? auth?.sub ?? "admin"} reason=${reason}`);
+  return ok(res, { id, visibility: "removed", reason, at });
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────

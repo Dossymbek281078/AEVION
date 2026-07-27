@@ -6290,3 +6290,45 @@ describe("growth stated across several periods in one sentence", () => {
     expect(g(text)).toBeNull();
   });
 });
+
+describe("the remaining window rules, swept and clean", () => {
+  // "Is X nearby" was the wrong question three times today — attribution, the
+  // level filter, the series. Asked of the four window rules left, it came back
+  // clean, and the sweep is pinned so it stays that way.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["a real monthly figure", "Revenue of $500k per month.", 6_000_000],
+    ["MRR", "MRR of $500k.", 6_000_000],
+    ["'monthly' about reporting, not revenue", "Revenue of $500k, and we report monthly.", 500_000],
+    ["a monthly churn beside it", "Revenue of $500k, with churn of 3% monthly.", 500_000],
+    ["monthly active users", "Revenue of $500k from 10,000 monthly active users.", 500_000],
+    ["'monthly' before the figure", "We report monthly. Revenue of $500k.", 500_000],
+    ["a yearly figure", "Revenue of $6 million per year.", 6_000_000],
+  ])("the monthly window: %s", (_l, text, want) => {
+    // Precise because it demands "per month", "/mo" or "monthly recurring" and
+    // not a bare "monthly" anywhere in the window.
+    expect(p(text).revenueUsd).toBe(want);
+  });
+
+  test.each([
+    ["a rival's figure then the plan's", "Our competitor reached $10M ARR. We reached $5M ARR.", 5_000_000],
+    ["the plan's then a rival's", "We reached $5M ARR. Our competitor reached $10M ARR.", 5_000_000],
+    ["separated by a semicolon", "Our competitor is at $10M ARR; we reached $5M ARR.", 5_000_000],
+  ])("the ownership filter: %s", (_l, text, want) => {
+    expect(p(text).revenueUsd).toBe(want);
+  });
+
+  test("and a rival's figure alone is still refused", () => {
+    expect(p("Our competitor reached $10M ARR.").revenueUsd).toBeNull();
+  });
+
+  test.each([
+    ["gross named first", "Gross retention of 88% and net retention of 107%.", 88, "gross"],
+    ["net named first", "Net retention of 107% and gross retention of 88%.", 107, "net"],
+  ])("the retention-kind window takes the nearer noun: %s", (_l, text, pct, kind) => {
+    const s = p(text);
+    expect(s.retentionPct).toBe(pct);
+    expect(s.retentionKind).toBe(kind);
+  });
+});

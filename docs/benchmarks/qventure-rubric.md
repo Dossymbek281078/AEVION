@@ -1524,6 +1524,22 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    four guards clean, and the pin reported its own closure — sixth time, five
    closures out of five.
 
+62. **The rest of the window rules, swept and clean.** "Is X nearby" turned out
+   to be the wrong question three times today — attribution, the level filter,
+   the series choice. Asked of the four window rules left, the answer was that
+   they are already right, and the sweep is pinned so they stay right.
+
+   The monthly-revenue window is the interesting one: it demands "per month",
+   "/mo" or "monthly recurring" rather than a bare "monthly" anywhere near the
+   figure, so "revenue of $500k, and we report monthly", "with churn of 3%
+   monthly" and "from 10,000 monthly active users" all leave the figure alone.
+   Seven cases pinned. The ownership filter is clause-bounded and a rival'''s
+   sentence beside the plan'''s does not suppress it. The retention-kind window
+   takes the nearer noun when both are named.
+
+   An empty sweep is a result. Recording it means the next person does not spend
+   the afternoon rediscovering that these three are fine.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

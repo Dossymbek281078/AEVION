@@ -421,6 +421,11 @@ async function ensureSnapshotTable(): Promise<void> {
   // там, где на самом деле её просто перестали завышать.
   await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalUsd" NUMERIC(14,2);`);
   await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalCount" INT;`);
+  // Отдельный явный признак вместо «internalUsd IS NULL значит гросс завышен».
+  // Эта перегрузка сломалась ровно в тот момент, когда досчёт заполнил колонку:
+  // у снимков, снятых ПОСЛЕ 27.07.2026, гросс уже без своих покупок, и вычитать
+  // их повторно нельзя — на графике выходило минус сто тридцать девять долларов.
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "grossIncludesInternal" BOOLEAN;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "RevenueSnapshot_time_idx" ON "RevenueSnapshot" ("capturedAt" DESC);`);
   snapshotTableReady = true;
 }
@@ -525,6 +530,8 @@ interface SnapshotRow {
   /** NULL у снимков до 27.07.2026 — тогда свои покупки ещё сидели в grossUsd. */
   internalUsd: string | number | null;
   internalCount: number | null;
+  /** true — свои покупки СИДЯТ в grossUsd (снимки до 27.07.2026). */
+  grossIncludesInternal: boolean | null;
 }
 
 function serializeSnapshot(r: SnapshotRow) {
@@ -541,9 +548,10 @@ function serializeSnapshot(r: SnapshotRow) {
     source: r.source,
     internalUsd: r.internalUsd === null || r.internalUsd === undefined ? null : Number(r.internalUsd),
     internalCount: r.internalCount ?? null,
-    // Явный флаг вместо «догадайся по null»: график обязан отличать снимок,
-    // где свои покупки лежали внутри выручки, от снимка, где их не было вовсе.
-    includesInternal: r.internalUsd === null || r.internalUsd === undefined,
+    // Строки старше самой колонки трактуем как «гросс завышен» — это
+    // консервативная сторона: показать предупреждение там, где его можно было
+    // не показывать, дешевле, чем вычесть свои покупки дважды.
+    includesInternal: r.grossIncludesInternal ?? true,
   };
 }
 
@@ -948,9 +956,9 @@ revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
     const id = crypto.randomUUID();
     const pool = getPool();
     const r = await pool.query(
-      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined',$9,$10)
-       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"`,
+      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined',$9,$10,false)
+       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"`,
       [
         id, totals.grossUsd, totals.netUsd, totals.feesUsd, totals.saleCount, totals.refundedCount,
         JSON.stringify(totals.byApp), JSON.stringify(totals.byChannel),
@@ -987,7 +995,7 @@ revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
     }
     params.push(limit);
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"
        FROM "RevenueSnapshot" ${where}
        ORDER BY "capturedAt" DESC LIMIT $${params.length}`,
       params,
@@ -1048,9 +1056,10 @@ revenueRouter.post("/snapshots/backfill-internal", async (req, res) => {
       const cutoff = Date.parse(String(row.capturedAt));
       const before = internalDated.filter((p) => p.at <= cutoff);
       const usd = round2(before.reduce((sum, p) => sum + p.usd, 0));
-      await pool.query(`UPDATE "RevenueSnapshot" SET "internalUsd"=$2,"internalCount"=$3 WHERE "id"=$1`, [
-        row.id, usd, before.length,
-      ]);
+      await pool.query(
+        `UPDATE "RevenueSnapshot" SET "internalUsd"=$2,"internalCount"=$3,"grossIncludesInternal"=true WHERE "id"=$1`,
+        [row.id, usd, before.length],
+      );
       updated++;
     }
     res.json({
@@ -1076,7 +1085,7 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
     const windowDays = Math.min(365, Math.max(1, parseInt(String(req.query.windowDays ?? "30"), 10) || 30));
     const pool = getPool();
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"
        FROM "RevenueSnapshot"
        WHERE "capturedAt" > NOW() - ($1 || ' days')::interval
        ORDER BY "capturedAt" ASC`,

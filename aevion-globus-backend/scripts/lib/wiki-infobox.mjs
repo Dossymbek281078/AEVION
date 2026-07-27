@@ -165,6 +165,28 @@ export function parseInfoboxHeights(rawWikitext) {
  * Comparing the wrong pair manufactures disagreements: NYC's own survey puts the
  * Empire State Building at 377.6 m and OSM at 443 m, and neither is wrong.
  */
+/**
+ * The raw text of every height-ish field the infobox carries, parsed or not.
+ *
+ * Lets a caller separate two very different silences: an article that simply
+ * does not publish a height (ja:ルミネ新宿 has no such field, ja:新宿アルタ
+ * leaves `|高さ =` empty) from one that publishes it in a shape this parser
+ * cannot read. The first is the world; the second is our backlog, and lumping
+ * them together makes a tool look finished when it is not.
+ */
+export function rawHeightFields(rawWikitext) {
+  if (typeof rawWikitext !== "string") return [];
+  const wikitext = extractInfobox(rawWikitext) ?? rawWikitext;
+  const out = [];
+  for (const [field, re] of Object.entries(FIELD)) {
+    const m = re.exec(wikitext);
+    if (!m) continue;
+    const raw = m[1].trim();
+    if (raw) out.push({ field, raw });
+  }
+  return out;
+}
+
 export function publishedHeights(box) {
   const tallest = [box.tip, box.architectural, box.height, box.roof]
     .filter((v) => typeof v === "number");

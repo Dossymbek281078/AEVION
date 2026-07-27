@@ -22,7 +22,7 @@
  */
 
 import {
-  parseInfoboxHeights, compareTagToArticle, storeyRatio,
+  parseInfoboxHeights, compareTagToArticle, storeyRatio, rawHeightFields,
 } from "./lib/wiki-infobox.mjs";
 import { parseMetres } from "./lib/city-twin-geometry.mjs";
 import fs from "node:fs";
@@ -153,7 +153,8 @@ for (const el of elements) {
 
 const findings = [];
 const notFetched = [];  // we never saw the article
-const noHeight = [];    // we read it, and it states no height we understand
+const noHeight = [];    // we read it, and it publishes no height at all
+const unparsed = [];    // it publishes one, in a shape we cannot read — our backlog
 for (const r of rows) {
   if (!r.wikipedia) continue;
   const got = await articleText(r.wikipedia);
@@ -164,7 +165,12 @@ for (const r of rows) {
   r.article = compareTagToArticle(r.h, box);
   // Neither of these is a clean bill of health, and reporting them as one is how
   // a tool ends up saying "no findings" about a city it never checked.
-  if (r.article.verdict === "unknown") noHeight.push(r);
+  if (r.article.verdict === "unknown") {
+    // Two different silences: the article states no height at all, or it states
+    // one we could not read. Only the second is our backlog.
+    r.rawFields = rawHeightFields(got.text);
+    (r.rawFields.length ? unparsed : noHeight).push(r);
+  }
   if (r.article.verdict === "over" || r.article.verdict === "under") findings.push(r);
 }
 
@@ -192,7 +198,8 @@ process.stdout.write(
   + (rows.some((r) => r.wikipedia)
     ? `  (read ${rows.filter((r) => r.wikipedia).length - notFetched.length - noHeight.length}`
       + ` of ${rows.filter((r) => r.wikipedia).length} linked articles`
-      + `${noHeight.length ? `; ${noHeight.length} state no height this parser understands` : ""}`
+      + `${noHeight.length ? `; ${noHeight.length} publish no height at all` : ""}`
+      + `${unparsed.length ? `; ${unparsed.length} publish one we could not read — OUR backlog` : ""}`
       + `${notFetched.length ? `; ${notFetched.length} could not be fetched at all — that is our network, not their data` : ""}`
       + `${notFetched.length + noHeight.length ? ` — "none" above says nothing about those` : ""})\n`
     : "")
@@ -200,8 +207,13 @@ process.stdout.write(
   + `${suspicious.length ? suspicious.map(line).join("\n") : "  none"}\n`
   // The unread list is the audit's own backlog: every one of these may hide a
   // finding, and printing only their COUNT makes the gap easy to leave open.
+  + (showAll && unparsed.length
+    ? `\n· publish a height we could not read — fix the parser, then re-run:\n`
+      + unparsed.map((r) => `    ${r.id.padEnd(20)} tag ${r.h} m   ${r.wikipedia}`
+        + `   [${r.rawFields.map((f) => `${f.field}=${f.raw.slice(0, 40)}`).join(", ")}]`).join("\n") + "\n"
+    : "")
   + (showAll && noHeight.length
-    ? `\n· read, but stating no height this parser understands:\n`
+    ? `\n· read, and they publish no height at all — nothing to fix here:\n`
       + noHeight.map((r) => `    ${r.id.padEnd(20)} tag ${r.h} m   ${r.wikipedia}`).join("\n") + "\n"
     : "")
   + (showAll && notFetched.length

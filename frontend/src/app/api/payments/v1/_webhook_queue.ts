@@ -1,5 +1,5 @@
 import { signHmac } from "./_lib";
-import { kvList, kvSet } from "./_persist";
+import { kvList, kvSet, withKeyLock } from "./_persist";
 
 export type QueuedAttempt = {
   id: string;
@@ -14,7 +14,10 @@ export type QueuedAttempt = {
   last_attempt_at: number | null;
   last_error: string | null;
   last_http_code: number | null;
-  status: "pending" | "delivered" | "failed";
+  // "in_flight" — попытка взята в работу: доставка идёт по сети и может
+  // занять секунды. Без этого состояния параллельный проход брал ту же
+  // попытку и слал вебхук ДВАЖДЫ.
+  status: "pending" | "in_flight" | "delivered" | "failed";
 };
 
 const QUEUE_KEY = "webhook.queue.v1";
@@ -47,9 +50,14 @@ export async function enqueueAttempt(opts: {
     last_http_code: null,
     status: "pending",
   };
-  const all = await readQueue();
-  all.unshift(attempt);
-  await persistQueue(all);
+  // Под замком: `processDue` читает очередь целиком и в конце пишет её целиком.
+  // Попытка, добавленная во время прохода, иначе просто ЗАТИРАЛАСЬ — вебхук
+  // молча не уходил никогда.
+  await withKeyLock(QUEUE_KEY, async () => {
+    const all = await readQueue();
+    all.unshift(attempt);
+    await persistQueue(all);
+  });
   return attempt;
 }
 
@@ -125,28 +133,63 @@ export type ProcessResult = {
 };
 
 export async function processDue(maxBatch = 20): Promise<ProcessResult> {
-  const all = await readQueue();
-  const now = Date.now();
-  const due = all
-    .filter((a) => a.status === "pending" && a.next_retry_at <= now)
-    .slice(0, maxBatch);
+  // Зависшая попытка: проход упал между «взял в работу» и «записал результат».
+  // Через это окно возвращаем её в очередь, иначе она застрянет навсегда.
+  const STALE_IN_FLIGHT_MS = 5 * 60_000;
 
+  // 1) Берём партию ПОД ЗАМКОМ и сразу помечаем «в работе»: параллельный проход
+  //    не возьмёт те же попытки и не отправит вебхук дважды.
+  const taken = await withKeyLock(QUEUE_KEY, async () => {
+    const all = await readQueue();
+    const now = Date.now();
+    const due = all
+      .filter(
+        (a) =>
+          (a.status === "pending" && a.next_retry_at <= now) ||
+          (a.status === "in_flight" &&
+            (a.last_attempt_at ?? a.first_attempt_at) < now - STALE_IN_FLIGHT_MS)
+      )
+      .slice(0, maxBatch);
+    for (const a of due) a.status = "in_flight";
+    await persistQueue(all);
+    return { due, scanned: all.length };
+  });
+
+  if (taken === "locked") {
+    // Другой проход уже разбирает очередь — второй здесь не нужен.
+    return { scanned: 0, processed: 0, delivered: 0, failed: 0, retrying: 0 };
+  }
+
+  // 2) Доставка — ВНЕ замка: это сетевые запросы, они могут идти секундами, и
+  //    держать на них очередь значит блокировать добавление новых событий.
+  const results: QueuedAttempt[] = [];
   let delivered = 0;
   let failed = 0;
   let retrying = 0;
-
-  for (const a of due) {
-    const updated = await processOne(a);
+  for (const a of taken.due) {
+    const updated = await processOne({ ...a, status: "pending" });
+    results.push(updated);
     if (updated.status === "delivered") delivered++;
     else if (updated.status === "failed") failed++;
     else retrying++;
-    const idx = all.findIndex((x) => x.id === updated.id);
-    if (idx >= 0) all[idx] = updated;
   }
-  await persistQueue(all);
+
+  // 3) Слияние — снова под замком и по СВЕЖЕЙ очереди. Раньше сюда писался
+  //    снимок, прочитанный до доставки, и всё добавленное за это время
+  //    пропадало.
+  await withKeyLock(QUEUE_KEY, async () => {
+    const fresh = await readQueue();
+    for (const updated of results) {
+      const idx = fresh.findIndex((x) => x.id === updated.id);
+      if (idx >= 0) fresh[idx] = updated;
+      else fresh.unshift(updated);
+    }
+    await persistQueue(fresh);
+  });
+
   return {
-    scanned: all.length,
-    processed: due.length,
+    scanned: taken.scanned,
+    processed: taken.due.length,
     delivered,
     failed,
     retrying,
@@ -162,7 +205,10 @@ export async function queueStats(): Promise<{
 }> {
   const all = await readQueue();
   const now = Date.now();
-  const pending = all.filter((a) => a.status === "pending");
+  // "in_flight" — тоже недоставленная попытка: если считать только "pending",
+  // взятые в работу пропадут из счётчика, и очередь покажется пустее, чем она
+  // есть. Учитывать надо на ВСЕХ незавершённых состояниях, а не на одном.
+  const pending = all.filter((a) => a.status === "pending" || a.status === "in_flight");
   const upcoming = pending
     .map((a) => a.next_retry_at - now)
     .filter((d) => d > 0)

@@ -51,7 +51,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Build a canonical upstream URL from allowlisted params + a matching cache key.
 function buildQuery(req: Request): { db: string; qs: string; key: string } | null {
   const db = String(req.query.db || "masters").toLowerCase();
-  if (!UPSTREAM[db]) return null;
+  // hasOwnProperty.call: `db` приходит из адреса, а обычный объект наследует
+  // ключи прототипа — `?db=constructor` проходил этот самый белый список, потому что
+  // `UPSTREAM["constructor"]` не пусто. Дальше значение подставлялось в адрес
+  // апстрима, давая мусорный URL. Наблюдаемого симптома на проде сейчас нет:
+  // апстрим Lichess закрыт логином и ответ одинаково пустой для любого db,
+  // включая заведомо неверный, — но проверка обязана отсекать по факту, а не
+  // потому что дальше всё равно ничего не работает.
+  if (!Object.prototype.hasOwnProperty.call(UPSTREAM, db)) return null;
   const sp = new URLSearchParams();
   for (const k of ALLOWED) {
     const v = req.query[k];

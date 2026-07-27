@@ -162,7 +162,14 @@ async function claudeBatch(texts: string[], langName: string): Promise<string[]>
  */
 async function translateBatch(target: string, texts: string[]): Promise<string[]> {
   const deeplReady = !!process.env.DEEPL_API_KEY?.trim();
-  const deeplTarget = DEEPL_TARGET[target];
+  // `target` приходит из тела запроса (req.body.target), а обычный объект
+  // наследует ключи прототипа: при `target=constructor` отсюда возвращалась
+  // ФУНКЦИЯ, проверка `if (deeplReady && deeplTarget)` её пропускала, и в DeepL
+  // уходил запрос с мусорным target_lang — то есть платный вызов впустую перед
+  // откатом на Claude.
+  const deeplTarget = Object.prototype.hasOwnProperty.call(DEEPL_TARGET, target)
+    ? DEEPL_TARGET[target]
+    : undefined;
   if (deeplReady && deeplTarget) {
     try {
       return await deeplBatch(texts, deeplTarget);

@@ -659,10 +659,15 @@ const BOARD_THEMES: BoardTheme[] = [
 type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string};
 function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarProps){
   const isOver=!!over;
-  const isWin=isOver&&over!.includes("You win");
+  /* Было `over.includes("You win")`, и всё остальное красилось в красный: НИЧЬЯ
+     показывалась игроку как поражение, а победа по времени и в вариантах — тоже,
+     потому что в них нет этих двух слов. */
+  const sRes=isOver?gameResultOf(over!):null;
+  const isWin=sRes==="W";
+  const isDrawn=sRes==="D";
   const sz={width:18,height:18,flexShrink:0};
-  const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
-  const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
+  const bg=isOver?(isWin?"#ecfdf5":isDrawn?"#f8fafc":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
+  const bc=isOver?(isWin?"#a7f3d0":isDrawn?"#e2e8f0":"#fecaca"):chk?"#fecaca":T.border;
   const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
   const label=isOver?ruResult(over):chk?"Шах!":think?(useSF?"Stockfish думает…":"ИИ думает…"):myT?"Ваш ход":"Ход ИИ";
   const icon=isOver?(isWin
@@ -3883,10 +3888,13 @@ export default function CyberChessPage(){
       else if(m.type==="mate_threat")lines.push(`К ${num}-му ходу на доске возникла матовая угроза.`);
     }
     if(over){
-      if(over.includes("You win"))lines.push(`В итоге ты одержал победу. Хорошая работа.`);
-      else if(over.includes("AI wins")||over.includes("resigned"))lines.push(`К сожалению, на этот раз победа осталась за соперником.`);
-      else if(over.includes("Stalemate")||over.includes("draw")||over.includes("Insufficient")||over.includes("repetition"))lines.push(`Партия завершилась вничью.`);
+      /* Цепочка ловила только английские окончания: победа в варианте не подходила
+         ни под одну ветку, и разбор молча заканчивался БЕЗ строки об исходе. */
+      const cRes=gameResultOf(over);
+      if(cRes==="W")lines.push(`В итоге ты одержал победу. Хорошая работа.`);
+      else if(cRes==="D")lines.push(`Партия завершилась вничью.`);
       else if(over.toLowerCase().includes("time"))lines.push(`Время сыграло свою роль — флаг упал.`);
+      else lines.push(`К сожалению, на этот раз победа осталась за соперником.`);
     }
     return lines.join(" ");
   },[pCol,hist.length,currentOpening,analysis,lv.name,over]);
@@ -3942,9 +3950,9 @@ export default function CyberChessPage(){
     rivalLearnedRef.current=gameKey;
     // Determine result from Rival's perspective
     let rivalResult:"W"|"L"|"D";
-    if(over.includes("You win")||over.includes("timed out")){rivalResult="L"}
-    else if(over.includes("AI wins")||over.includes("resigned")){rivalResult="W"}
-    else rivalResult="D";
+    // исход соперника — зеркало исхода игрока; свой словарь считал варианты ничьёй
+    const pRes=gameResultOf(over);
+    rivalResult=pRes==="W"?"L":pRes==="L"?"W":"D";
     const updated=learnFromEncounter(rivalProfile,rivalResult,currentOpening?.name,hist.length,rat);
     sRivalProfile(updated);
     // Bonus Chessy for Rival encounters (twice regular)
@@ -4122,7 +4130,8 @@ export default function CyberChessPage(){
     const key=`${activeGhost.id}-${fenHist.length}-${over}`;
     if(ghostLearnedRef.current===key)return;
     ghostLearnedRef.current=key;
-    if(over.includes("You win")||over.includes("timed out")){
+    const ghRes=gameResultOf(over);
+    if(ghRes==="W"){
       addChessy(25,`👻 победа над призраком ${activeGhost.name}`);
     }else if(over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient")||over.includes("50-move")){
       addChessy(8,`🤝 ничья с призраком ${activeGhost.name}`);
@@ -4135,7 +4144,8 @@ export default function CyberChessPage(){
     const key=`${variant}-${fenHist.length}-${over}`;
     if(lastWinKeyRef.current===key)return;
     lastWinKeyRef.current=key;
-    if(over.includes("You win")||over.includes("timed out")||over.includes("победа!")||over.includes("Победили")||over.includes("ВЗОШЁЛ")||over.includes("взошёл")||over.includes("ЧЕМПИОН")){
+    // семь слов вручную, и «Вы победили!» всё равно мимо: регистр не совпадал
+    if(gameResultOf(over)==="W"){
       sShowConfetti(true);
     }
   },[over,variant,fenHist.length]);
@@ -4147,9 +4157,8 @@ export default function CyberChessPage(){
     if(variantResultLearnedRef.current===key)return;
     variantResultLearnedRef.current=key;
     let res:"w"|"l"|"d";
-    if(over.includes("You win")||over.includes("timed out")||over.includes("победа")||over.includes("ВЗОШЁЛ")||over.includes("взошёл"))res="w";
-    else if(over.includes("AI wins")||over.includes("Checkmate — AI")||over.includes("поражение")||over.includes("resigned"))res="l";
-    else res="d";
+    const vRes=gameResultOf(over);
+    res=vRes==="W"?"w":vRes==="L"?"l":"d";
     sVariantStats(s=>{
       const next=recordVariantResult(s,variant,res);
       // Variant achievements: trigger on first / 5 / 25 wins per variant
@@ -4180,9 +4189,11 @@ export default function CyberChessPage(){
     if(tournamentLearnedRef.current===gameKey)return;
     tournamentLearnedRef.current=gameKey;
     let res:"win"|"lose"|"draw";
-    if(over.includes("You win")||over.includes("timed out"))res="win";
-    else if(over.includes("AI wins")||over.includes("Checkmate — AI"))res="lose";
-    else res="draw";
+    /* Всё, что не подходило под два английских шаблона, объявлялось НИЧЬЁЙ: сдача
+       в турнирной партии записывалась ничьёй, двигала сетку как ничью и платила
+       5 Chessy — то есть сдаться было выгоднее, чем проиграть. */
+    const tRes=gameResultOf(over);
+    res=tRes==="W"?"win":tRes==="L"?"lose":"draw";
     const reward=res==="win"?15:res==="draw"?5:0;
     if(reward>0)addChessy(reward,`турнир: ${res==="win"?"победа":"ничья"} с ${tournamentOpponent.name}`);
     /* Сетка считается ЗДЕСЬ, а не внутри sTournament(prev=>…). Раньше приз за место и

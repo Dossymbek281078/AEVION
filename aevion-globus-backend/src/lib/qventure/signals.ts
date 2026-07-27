@@ -1282,7 +1282,14 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\b\d+\s+successful\s+(?:missions?|launches|flights?)\b|\bsuccessfully (?:launched|flown)\b/i, "Flight record"],
     [/\bworking prototype\b|\bfunctional prototype\b|\bdemonstrat(?:ed|or) (?:unit|system|vehicle)\b/i, "Working prototype"],
   ];
+  // The intention filter was written for the regulatory list and not asked here,
+  // so "we expect clinical validation to follow next year" counted as clinical
+  // validation data. Same distinction, same helper — the negation layer already
+  // handled "not clinically validated", which is a different sentence.
   for (const [re, label] of PROOF) {
-    if (mentionsUnnegated(t, re) && !s.technicalProof.includes(label)) s.technicalProof.push(label);
+    if (!mentionsUnnegated(t, re) || s.technicalProof.includes(label)) continue;
+    const m = firstMatch(t, new RegExp(re.source, re.flags.replace("g", "")));
+    if (m && !statedAsAchieved(t, m.index ?? 0, m[0].length)) continue;
+    s.technicalProof.push(label);
   }
 }

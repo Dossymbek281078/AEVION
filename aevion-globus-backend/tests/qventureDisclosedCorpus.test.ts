@@ -1354,3 +1354,29 @@ describe("a benchmark is something run, not a word in a valuation note", () => {
     expect(claimed("Progress towards a state of the art propulsion development and testing facility near Auckland.")).toBe(false);
   });
 });
+
+describe("the intention filter belongs to both lists, not one", () => {
+  /**
+   * It was written for the regulatory milestones and never asked by the
+   * technical-validation list, so "we expect clinical validation to follow next
+   * year" counted as clinical validation data. The negation layer was already
+   * handling a different sentence correctly — Moderna's "targets and pathways
+   * NOT clinically validated by one or more approved drugs" — which is why the
+   * gap was invisible until a real filing supplied the intention form.
+   */
+  const proved = (t: string, label: string) => parsePlanSignals(t).technicalProof.includes(label);
+
+  test("evidence stated as achieved counts", () => {
+    expect(proved("Clinical validation reported 93% sensitivity and 89% specificity in a 1,400-patient study.", "Clinical validation data")).toBe(true);
+    expect(proved("Results were published in a peer-reviewed journal.", "Peer-reviewed result")).toBe(true);
+    expect(proved("The trial met its primary endpoint with statistical significance.", "Primary endpoint met")).toBe(true);
+  });
+  test("the same evidence intended does not", () => {
+    expect(proved("We expect clinical validation to follow next year.", "Clinical validation data")).toBe(false);
+    expect(proved("We plan to publish in a peer-reviewed journal next year.", "Peer-reviewed result")).toBe(false);
+    expect(proved("We expect the trial to meet its primary endpoint next year.", "Primary endpoint met")).toBe(false);
+  });
+  test("and a denial still does not", () => {
+    expect(proved("The biology risk represents targets and pathways not clinically validated by approved drugs.", "Clinical validation data")).toBe(false);
+  });
+});

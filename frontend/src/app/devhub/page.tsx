@@ -326,6 +326,30 @@ export default function DevHubPage() {
               {ideaStarting ? "Создаю…" : "⚡ Построить"}
             </button>
           </div>
+          {/* An empty box is the hardest thing to answer. These are not
+              decoration: each one exercises a different part of the pipeline
+              (plain UI, a real database, media), so the first thing a person
+              builds shows what the tool can do rather than the least of it. */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>Или начните с примера:</span>
+            {[
+              "лендинг кофейни с меню и формой брони",
+              "трекер задач с базой данных и статусами",
+              "портфолио фотографа с галереей и тёмной темой",
+            ].map((example) => (
+              <button
+                key={example}
+                onClick={() => setIdeaPrompt(example)}
+                style={{
+                  padding: "5px 11px", background: "rgba(255,255,255,0.12)", color: "#ccfbf1",
+                  border: "1px solid rgba(255,255,255,0.22)", borderRadius: 999,
+                  fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                {example}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Studio Pro upgrade banner */}

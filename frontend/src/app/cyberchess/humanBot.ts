@@ -97,9 +97,14 @@ export const HUMAN_PROFILES: Record<number, HumanProfile> = {
      Взято 0.7, а не 1.4: резкость обязана РАСТИ с уровнем (0.7 / 0.8 / 1.4) — Beginner по
      замыслу реже держится главных линий, чем Club, и это проверяет тест pickBookMove.
      При 1.4 тест краснеет, при 0.7 зелёный, а выигрыш тот же.
-     ⚠️ Влияние на СИЛУ не перемерено: книга уводит в здоровые позиции. Замер запущен,
-     читать %TEMP%evion-bot-ladder.txt; до правки разрыв был 319, интервал 210..532. */
-  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.7, bestChance: 0.20, temperature: 95, blunderChance: 0.24 },
+     ЗАМЕРЕНО, и книга действительно отдаёт силу — чем резче, тем здоровее позиции:
+       0.4: мусор 15-20%, разрыв 319, интервал 210..532 (400 внутри)
+       0.5: мусор 13%,    разрыв 269, интервал 156..475 (400 внутри) — ВЫБРАНО
+       0.7: мусор 5%,     разрыв 228, интервал 129..378 — 400 ВНЕ, «отличается сверх шума»
+     Поэтому 0.7 откачен к 0.5 по собственному критерию, записанному до замера: если 400
+     выходит за интервал — снижать. Выигрыш в дебюте при 0.5 скромный (13% против 15-20%),
+     но он не оплачен силой; 0.7 был оплачен. */
+  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.5, bestChance: 0.20, temperature: 95, blunderChance: 0.24 },
   // Casual ~800: plays the first few book moves, blunders a few times a game.
   1: { bookPlies: 10, bookChance: 0.85, bookSharpness: 0.8, bestChance: 0.38, temperature: 75, blunderChance: 0.15 },
   // Club ~1200: solid opening, occasional tactical oversight.

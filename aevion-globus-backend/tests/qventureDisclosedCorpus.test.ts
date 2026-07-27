@@ -6360,9 +6360,15 @@ describe("Spotify: two metrics in one sentence, and years stated first", () => {
     // series walker is not involved: the noun follows BOTH figures, so the
     // figure-then-noun pattern binds to the nearer one and there is a single
     // match on the wrong figure. A helper keyed off the leading year list was
-    // written, and never fired — the customer count reaches this sentence
-    // through a different assignment site than the one it was wired into.
-    // There are three. That is where a proper fix begins.
+    // written, and appeared never to fire. Traced further: it IS called, and
+    // returns at one of its two early exits — the debug print sat after them,
+    // which is why it looked dead. Of the three assignment sites, this sentence
+    // reaches the second, the one the helper was wired into, so the wiring was
+    // right and the guard conditions are what reject it.
+    //
+    // Next attempt starts by printing at the TOP of the helper rather than
+    // after its guards. Recorded because two sessions have now been spent
+    // establishing where the problem is not.
     expect(p("As of December 31, 2025 and 2024, we had 290 million and 263 million Premium Subscribers, respectively.").customers)
       .toBe(263_000_000);
   });

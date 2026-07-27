@@ -897,6 +897,29 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
 
   /** The best rise the text states, with what it is attached to. */
+  /**
+   * Growth stated as a multiple rather than a percentage: "revenue grew 3x",
+   * "revenue doubled". A deck writes it this way constantly and every pattern
+   * above wants a percent sign, so it read as nothing at all.
+   *
+   * A growth VERB is required in front. Without one, "LTV/CAC of 4x" and
+   * "valued at 10x revenue" — both multiples, neither a growth rate — would be
+   * read as 300% and 900% growth, which is the wrong-number failure mode this
+   * whole branch exists to avoid.
+   */
+  const MULTIPLE_VERB = String.raw`(?:grew|grow(?:n|ing|s)?|increas(?:ed|ing)|expand(?:ed|ing)|rose|up|multiplied)`;
+  const multipleRise = (() => {
+    const word: Record<string, number> = { doubled: 2, tripled: 3, quadrupled: 4 };
+    const w = firstMatch(t, /\b(?:revenues?|arr|mrr|sales|gmv|customers|users)\b[^.;]{0,40}?\b(doubled|tripled|quadrupled)\b/i);
+    if (w) return { pct: (word[w[1].toLowerCase()] - 1) * 100, m: w };
+    const x = firstMatch(t, new RegExp(String.raw`${MULTIPLE_VERB}\s+(?:by\s+)?${NUM}\s*x(?![a-z])`, "i"));
+    if (x) {
+      const n = parseLocaleNumber(x[1]);
+      if (isFinite(n) && n > 1 && n <= 100) return { pct: Math.round((n - 1) * 1000) / 10, m: x };
+    }
+    return null;
+  })();
+
   const risePreferred = (): { m: RegExpMatchArray; basis: GrowthBasis } | undefined => {
     const found: Array<{ m: RegExpMatchArray; basis: GrowthBasis }> = [];
     for (const pat of GROWTH_PATTERNS) {
@@ -916,6 +939,16 @@ export function parsePlanSignals(text: string): PlanSignals {
     return found.find((f) => f.basis === "revenue") ?? found[0];
   };
 
+  // A multiple only speaks when no percentage did: an explicit rate is always
+  // the better reading of the same sentence.
+  if (s.growthPct === null && !decline && multipleRise
+      && statedAsAchieved(t, multipleRise.m.index ?? 0, multipleRise.m[0].length)
+      && !LEVEL_METRIC_NEAR(t, multipleRise.m.index ?? 0, multipleRise.m[0].length)) {
+    s.growthPct = multipleRise.pct;
+    s.growthBasis = basisFor(multipleRise.m.index ?? 0);
+    s.growthPeriod = growthPeriodFromWords(t.slice(multipleRise.m.index ?? 0, (multipleRise.m.index ?? 0) + multipleRise.m[0].length + 24));
+    s.parseNotes.push(`Growth was stated as a multiple; it is scored as ${multipleRise.pct}%.`);
+  }
   let growth: RegExpMatchArray | null = s.growthPct !== null ? null : decline;
   let growthBasis: GrowthBasis = decline ? basisFor(decline.index ?? 0) : "unspecified";
   // A decline wins by default, because a plan that mentions one is usually

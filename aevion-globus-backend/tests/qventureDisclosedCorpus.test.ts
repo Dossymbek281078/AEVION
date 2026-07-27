@@ -2691,3 +2691,48 @@ describe("known misses, pinned so they fail when fixed", () => {
     expect(p("Take rate of 15%.").takeRatePct).toBe(15);
   });
 });
+
+describe("growth stated as a multiple", () => {
+  // A deck writes "revenue grew 3x" constantly and every growth pattern wanted
+  // a percent sign, so it read as nothing. The danger is the neighbours: a
+  // multiple is also how an LTV/CAC ratio and a valuation are written, and
+  // reading those as growth would be 300% and 900% out of thin air.
+  const g = (t: string) => parsePlanSignals(t).growthPct;
+
+  test.each([
+    ["3x", "Revenue grew 3x year over year.", 200],
+    ["2.5x", "Revenue grew 2.5x year over year.", 150],
+    ["doubled", "Revenue doubled year over year.", 100],
+    ["tripled", "Revenue tripled last year.", 200],
+    ["customers doubled", "Customers doubled year over year.", 100],
+  ])("%s", (_l, text, want) => {
+    expect(g(text)).toBe(want);
+  });
+
+  test.each([
+    ["a ratio is not growth", "LTV/CAC of 4x."],
+    ["a ratio improving is not growth", "LTV/CAC improved 4x."],
+    ["a valuation multiple is not growth", "Valued at 10x revenue."],
+    ["a multiple with no verb is not growth", "Revenue 3x."],
+    ["one times is not growth", "Revenue grew 1x."],
+    ["nor is an absurd multiple", "Revenue grew 500x."],
+    ["a target is not a result", "We aim to grow 3x next year."],
+    ["nor a plan", "We plan to double revenue."],
+    ["nor a rival's", "Our competitor grew 3x last year."],
+    ["a margin doubling is not company growth", "Gross margin doubled to 60%."],
+    ["nor is churn doubling", "Churn doubled last quarter."],
+  ])("%s", (_l, text) => {
+    expect(g(text)).toBeNull();
+  });
+
+  test("an explicit rate always beats the multiple beside it", () => {
+    expect(g("Revenue grew 3x, or 200% year over year.")).toBe(200);
+    expect(g("Revenue grew 3x in 2023 but declined 12% in 2025.")).toBe(-12);
+  });
+
+  test("and the reader is told the figure was a multiple", () => {
+    const s = parsePlanSignals("Revenue grew 3x year over year.");
+    expect(s.parseNotes.some((n) => /stated as a multiple/i.test(n))).toBe(true);
+    expect(s.growthPeriod).toBe("YoY");
+  });
+});

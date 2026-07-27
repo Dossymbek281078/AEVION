@@ -1214,6 +1214,23 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    it is ambiguous between a label separator and a minus sign, and that is the
    one ambiguity here with a wrong-number failure mode.
 
+47. **Growth stated as a multiple.** A deck writes "revenue grew 3x" and
+   "revenue doubled" constantly, and every growth pattern wanted a percent
+   sign, so both read as nothing.
+
+   The danger is entirely in the neighbours. A multiple is also how an LTV/CAC
+   ratio and a valuation are written, and reading `LTV/CAC of 4x` or `valued at
+   10x revenue` as growth would invent 300% and 900%. A growth verb is
+   therefore required in front of the multiple, an explicit rate in the same
+   sentence always wins, and the multiple passes through the same achievement
+   gate and level-metric filter as everything else.
+
+   Fourteen traps: a target, a plan, a rival'''s multiple, a doubling margin, a
+   doubling churn, a bare "revenue 3x", "grew 1x", an absurd 500x, the ratio
+   and the valuation. All refused. The reader is told in a parse note that the
+   figure arrived as a multiple, because 3x scored as 200% is an interpretation
+   and not a disclosure.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

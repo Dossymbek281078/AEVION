@@ -4133,7 +4133,7 @@ export default function CyberChessPage(){
     const ghRes=gameResultOf(over);
     if(ghRes==="W"){
       addChessy(25,`👻 победа над призраком ${activeGhost.name}`);
-    }else if(over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient")||over.includes("50-move")){
+    }else if(ghRes==="D"){
       addChessy(8,`🤝 ничья с призраком ${activeGhost.name}`);
     }
   },[over,ghostMode,activeGhost,fenHist.length,addChessy]);
@@ -7341,7 +7341,7 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&gameResultOf(over)==="W"?" cc-win-glow":""}${over&&gameResultOf(over)==="L"?" cc-loss-dim":""}`}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
@@ -7702,8 +7702,8 @@ export default function CyberChessPage(){
               </div>}
               {/* Post-game inline overlay — appears on the board after game ends for instant rematch/new */}
               {over&&!setup&&tab==="play"&&!showGameOver&&(()=>{
-                const isWin=over.includes("You win")||over.includes("timed out — you")||over.includes("timed out");
-                const isDraw=over.includes("Draw")||over.includes("draw")||over.includes("Ничья")||over.includes("ничья")||over.includes("1/2");
+                const iRes=gameResultOf(over);const isWin=iRes==="W";
+                const isDraw=iRes==="D";
                 const accentCol=isWin?"#22c55e":isDraw?"#f59e0b":"#ef4444";
                 const resultLabel=isWin?"Вы выиграли":isDraw?"Ничья":"Вы проиграли";
                 const resultIcon=isWin?"🏆":isDraw?"½":"💀";
@@ -8301,7 +8301,7 @@ export default function CyberChessPage(){
                 <Btn size="sm" variant="secondary" onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
                   const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-                  const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
+                  const shRes=over?gameResultOf(over):null;const isWin=shRes==="W";const isDraw=shRes==="D";
                   const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
                   const blob=new Blob([svg],{type:"image/svg+xml"});
                   downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
@@ -8880,8 +8880,8 @@ export default function CyberChessPage(){
 
           {/* ── Game Insights — info sub-tab (play) or coach tab ── */}
           {over&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>3&&(()=>{
-            const isWin=over.includes("win")||over.includes("win!");
-            const isDraw=over.includes("draw")||over.includes("Draw")||over.includes("Stalemate");
+            // «AI wins» тоже содержит "win": проигрыш показывался как победа
+            const oRes=gameResultOf(over);const isWin=oRes==="W";const isDraw=oRes==="D";
             const isLoss=!isWin&&!isDraw;
             // User's move quality summary
             const myPlies=analysis.filter((_,i)=>(pCol==="w")===(i%2===0));
@@ -10380,7 +10380,7 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sEditorMode(true);sOn(false);sOver(null);sPms([]);sPmSel(null);showToast("Расставляй фигуры — нажми «Применить» для загрузки в анализ","info");sTab("coach");}} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:"1px solid #c4b5fd",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#5b21b6",textAlign:"left"}}>✎ Позиция</button>
                 {savedGames.length>0&&savedGames.slice(0,5).map((sg,gi)=>{
                   const glabel=sg.opening?sg.opening.split(" ").slice(0,2).join(" "):"Партия #"+(savedGames.length-gi);
-                  const gresult=(sg.result.includes("win")||sg.result.includes("Win"))?"🏆":(sg.result.includes("Draw")||sg.result.includes("draw"))?"🤝":"💔";
+                  const sgRes=gameResultOf(sg.result);const gresult=sgRes==="W"?"🏆":sgRes==="D"?"🤝":"💔";
                   return <button key={sg.id||gi} onClick={()=>{
                     const gc=new Chess();const gfh:string[]=[gc.fen()];const gmh:string[]=[];
                     for(const san of sg.moves){try{const mv=gc.move(san);if(mv){gmh.push(mv.san);gfh.push(gc.fen())}}catch{break}}
@@ -10489,7 +10489,7 @@ export default function CyberChessPage(){
             {setup&&savedGames.length>=3&&(()=>{
               // третий свой словарь на той же истории: победы у живого соперника и в вариантах сюда не попадали
               const isW=(g:SavedGame)=>gameResultOf(g.result)==="W";
-              const isD=(g:SavedGame)=>g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+              const isD=(g:SavedGame)=>gameResultOf(g.result)==="D";
               const wins=savedGames.filter(g=>isW(g)).slice(0,3);
               const toShow=wins.length>=3?wins:savedGames.slice(0,3);
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fefce8,#fef9c3)",border:"1px solid #fde047",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
@@ -11299,7 +11299,7 @@ ${question.trim()}`;
       // проигранная по флагу, экспортировалась в PGN как ничья (1/2-1/2).
       const isWinG=(g:SavedGame)=>gameResultOf(g.result)==="W";
       const isLossG=(g:SavedGame)=>gameResultOf(g.result)==="L";
-      const isDrawG=(g:SavedGame)=>g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+      const isDrawG=(g:SavedGame)=>gameResultOf(g.result)==="D";
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);
       const categoryFilter=gamesFilter;
       const sCategoryFilter=sGamesFilter;

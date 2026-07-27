@@ -131,10 +131,21 @@ vacanciesRouter.get("/", async (req, res) => {
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`v."status" = $${params.length}`);
     } else {
-      // Default behavior: exclude ARCHIVED from the public feed. Recruiters
-      // can still see their own archived vacancies via the dashboard endpoint
-      // (mine/funnel) which doesn't filter by status.
-      where.push(`v."status" <> 'ARCHIVED'`);
+      // Публичная витрина показывает только то, на что можно откликнуться.
+      //
+      // Раньше исключался лишь ARCHIVED, и CLOSED доезжал до соискателя:
+      // на проде так висела закрытая «Маляр-штукатур» (ae000800) от старого
+      // .ru-аккаунта — вакансия закрыта ADMIN'ом ещё 16.07, а отклик по ней
+      // предлагался до 27.07. Это тот же дефект гигиены витрины, что чинили
+      // для проектов в #661 (там исключили DONE).
+      //
+      // Статусов всего три (OPEN / CLOSED / ARCHIVED), поэтому условие
+      // сформулировано положительно: любой новый «неактивный» статус не
+      // просочится сам собой, в отличие от списка исключений.
+      //
+      // Рекрутёр по-прежнему видит свои закрытые: через явный ?status=CLOSED
+      // и через дашбордные ручки (mine/funnel), которые сюда не заходят.
+      where.push(`v."status" = 'OPEN'`);
     }
     if (typeof req.query.projectStatus === "string") {
       const v = vEnum(req.query.projectStatus, "projectStatus", PROJECT_STATUSES);

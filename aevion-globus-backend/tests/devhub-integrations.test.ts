@@ -4270,3 +4270,98 @@ describe("A ZIP import is undoable, like every other bulk write", () => {
     expect(hist.body.checkpoints || []).toHaveLength(0);
   });
 });
+
+
+describe("Deleting a project takes its Railway service with it", () => {
+  // The project delete path already drops the database schema and role, for a
+  // stated reason. The service was the same thing with a bill attached: a
+  // container built from the user's repo, carrying their env, on a live
+  // domain, with nothing left pointing at it once the project row was gone.
+  test("the service is deleted, and only after Railway confirms it is in the user-deploy project", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    const calls: string[] = [];
+    const r = await deleteProjectService({
+      serviceId: "svc-user-1",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      platformServiceIds: ["svc-platform"],
+      gql: async (q) => {
+        calls.push(q.includes("serviceDelete") ? "delete" : "lookup");
+        if (q.includes("service(id")) return { service: { projectId: "users" } };
+        return { serviceDelete: true };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toEqual(["lookup", "delete"]);
+  });
+
+  test("refuses to delete the platform's own service", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    let deleted = false;
+    const r = await deleteProjectService({
+      serviceId: "svc-platform",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      platformServiceIds: ["svc-platform"],
+      gql: async (q) => { if (q.includes("serviceDelete")) deleted = true; return {}; },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/platform's own/i);
+    expect(deleted).toBe(false); // never even asked
+  });
+
+  test("refuses a service that lives outside the user-deploy project", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    let deleted = false;
+    const r = await deleteProjectService({
+      serviceId: "svc-elsewhere",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      gql: async (q) => {
+        if (q.includes("serviceDelete")) { deleted = true; return {}; }
+        return { service: { projectId: "someone-elses-project" } };
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/not the user-deploy project/);
+    expect(deleted).toBe(false);
+  });
+
+  test("a service Railway no longer knows about counts as cleaned up", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deleteProjectService({
+      serviceId: "svc-gone",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      gql: async () => ({ service: null }),
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  test("a failed service delete blocks the project delete instead of orphaning it", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "OrphanGuard", stack: "next" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/env`).send({ key: "RAILWAY_SERVICE_ID", value: "svc-user-1" });
+
+    const prevToken = process.env.RAILWAY_API_TOKEN;
+    const prevFlag = process.env.DEVHUB_RAILWAY_PER_PROJECT;
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.DEVHUB_RAILWAY_PER_PROJECT = "1";
+    // No RAILWAY_DEPLOY_PROJECT_ID: the guard refuses, so the delete must fail.
+    const del = await request(app).delete(`/api/devhub/projects/${id}`);
+    if (prevToken === undefined) delete process.env.RAILWAY_API_TOKEN; else process.env.RAILWAY_API_TOKEN = prevToken;
+    if (prevFlag === undefined) delete process.env.DEVHUB_RAILWAY_PER_PROJECT; else process.env.DEVHUB_RAILWAY_PER_PROJECT = prevFlag;
+
+    expect(del.status).toBe(502);
+    expect(del.body.serviceId).toBe("svc-user-1");
+    // The project must still be there — a deleted row with a live service is
+    // exactly the orphan this is meant to prevent.
+    const still = await request(app).get(`/api/devhub/projects/${id}`);
+    expect(still.status).toBe(200);
+  });
+});

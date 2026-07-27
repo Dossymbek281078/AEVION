@@ -1149,6 +1149,35 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
     }
   }
 
+  // Same reasoning as the database above, with a bill attached: the project's
+  // Railway service keeps running the user's code with the user's env on a
+  // live domain, and once the project row is gone nothing points at it.
+  let serviceDeleted: boolean | undefined;
+  const orphanServiceId = project.envVars?.RAILWAY_SERVICE_ID;
+  if (orphanServiceId && process.env.RAILWAY_API_TOKEN && process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+    let dropError: string | undefined;
+    try {
+      const { deleteProjectService } = await import("../lib/devhubRailwayDeploy");
+      const dropped = await deleteProjectService({ serviceId: orphanServiceId });
+      serviceDeleted = dropped.ok;
+      if (!dropped.ok) dropError = dropped.error;
+    } catch (e) {
+      serviceDeleted = false;
+      dropError = e instanceof Error ? e.message : String(e);
+    }
+    if (serviceDeleted === false) {
+      captureException(new Error(`devhub: railway service delete failed: ${dropError}`), {
+        route: "devhub/projects:delete",
+        projectId: project.id,
+      });
+      return res.status(502).json({
+        error: `project not deleted — its Railway service could not be removed: ${dropError}`,
+        serviceId: orphanServiceId,
+        hint: "retry, or delete that service in the Railway dashboard first — deleting the project now would leave it running and billable with nothing pointing at it",
+      });
+    }
+  }
+
   try {
     await dbDeleteProject(req.params.id);
   } catch (e) {
@@ -1158,7 +1187,11 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
       if (f.projectId === req.params.id) memFiles.delete(fid);
     }
   }
-  res.json({ ok: true, ...(databaseDropped !== undefined ? { databaseDropped } : {}) });
+  res.json({
+    ok: true,
+    ...(databaseDropped !== undefined ? { databaseDropped } : {}),
+    ...(serviceDeleted !== undefined ? { serviceDeleted } : {}),
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

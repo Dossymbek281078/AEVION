@@ -150,3 +150,66 @@ export async function deployProjectToRailway(args: {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * Delete a project's Railway service.
+ *
+ * Deleting a DevHub project already drops its database schema and login role,
+ * for a stated reason: credentials pointing at data nobody owns any more, with
+ * nothing left in the UI to clean them up with. Its service is the same thing
+ * with a bill attached — a running container built from the user's repo,
+ * carrying that project's env (DATABASE_URL included), on a live domain.
+ *
+ * Three guards, because the id comes out of stored project state and this
+ * mutation is not reversible:
+ *  - never the platform's own service (that is the "Deploy restarted our own
+ *    backend" defect, one mutation further along),
+ *  - the deploy project must be a dedicated one, same check as creating,
+ *  - the service is asked which project it belongs to, and a service outside
+ *    the deploy project is refused rather than deleted on trust.
+ */
+export async function deleteProjectService(args: {
+  serviceId: string;
+  token?: string;
+  deployProjectId?: string;
+  platformProjectId?: string;
+  platformServiceIds?: Array<string | undefined>;
+  gql?: Gql;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const token = args.token ?? process.env.RAILWAY_API_TOKEN;
+  const deployProjectId = args.deployProjectId ?? process.env.RAILWAY_DEPLOY_PROJECT_ID;
+  const platformProjectId = args.platformProjectId ?? process.env.RAILWAY_PROJECT_ID;
+  const platformServiceIds = (
+    args.platformServiceIds ?? [process.env.RAILWAY_SERVICE_ID, process.env.RAILWAY_SELF_SERVICE_ID]
+  ).filter(Boolean) as string[];
+
+  if (!args.serviceId) return { ok: false, error: "no service id" };
+  if (!token) return { ok: false, error: "RAILWAY_API_TOKEN is not set" };
+  if (platformServiceIds.includes(args.serviceId)) {
+    return { ok: false, error: "refusing to delete the AEVION platform's own Railway service" };
+  }
+  if (!isSafeDeployTarget(deployProjectId, platformProjectId)) {
+    return {
+      ok: false,
+      error:
+        "RAILWAY_DEPLOY_PROJECT_ID must be set to a Railway project dedicated to user deploys, and must differ from the platform's own project",
+    };
+  }
+
+  const gql = args.gql ?? makeGql(token);
+  try {
+    const owner = await gql(`query S($id: String!) { service(id: $id) { projectId } }`, { id: args.serviceId });
+    const ownerProjectId = owner?.service?.projectId;
+    if (!ownerProjectId) {
+      // Already gone is the outcome we wanted; nothing to clean up.
+      return { ok: true };
+    }
+    if (ownerProjectId !== deployProjectId) {
+      return { ok: false, error: `service ${args.serviceId} lives in Railway project ${ownerProjectId}, not the user-deploy project — refusing to delete it` };
+    }
+    await gql(`mutation D($id: String!) { serviceDelete(id: $id) }`, { id: args.serviceId });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}

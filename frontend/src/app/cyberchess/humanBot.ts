@@ -59,8 +59,16 @@ export type HumanProfile = {
    almost nothing in soundness (loss when not blundering only moves 30cp->18cp)
    and hands the level's character back to blunderChance, where it belongs. */
 export const HUMAN_PROFILES: Record<number, HumanProfile> = {
-  // Beginner ~400: barely knows theory, hangs material often.
-  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 40, blunderChance: 0.30 },
+  /* Beginner ~400: barely knows theory, hangs material often.
+     Температура поднята 40 -> 95 (2026-07-27). Была САМОЙ ХОЛОДНОЙ из трёх уровней, то
+     есть вне ветки зевка Beginner выбирал ходы ТОЧНЕЕ, чем Casual с его 75: зевает вдвое
+     чаще, а в остальное время играет аккуратнее — эффекты гасят друг друга. Замер это и
+     показал: 40 партий Casual vs Beginner дали разрыв 191 Эло при заявленных 400,
+     интервал 88..340, вердикт «отличается сверх шума». Club/Casual при этом в цель (382),
+     поэтому трогается ТОЛЬКО нижний уровень.
+     95 выбрано как монотонное продолжение ряда (слабее -> горячее: 95 / 75 / 65) и много
+     ниже прежних 260, на которых Beginner вешал материал на 37% ходов и играл 1.h4. */
+  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 95, blunderChance: 0.30 },
   // Casual ~800: plays the first few book moves, blunders a few times a game.
   1: { bookPlies: 10, bookChance: 0.85, bookSharpness: 0.8, bestChance: 0.38, temperature: 75, blunderChance: 0.15 },
   // Club ~1200: solid opening, occasional tactical oversight.

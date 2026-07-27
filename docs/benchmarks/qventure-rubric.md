@@ -1550,7 +1550,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    by any guard. The doc gate checks the headline claim and nothing else.
 
    A guard for it was written and removed: a test file cannot count its own
-   assertions, because  turns one  into many, so the file
+   assertions, because `test.each` turns one `expect(` into many, so the file
    holds 574 calls and the runner reports 894. A guard that cannot measure what
    it claims to measure is worse than none — the same reason the structural
    duplicate guard was removed earlier today.

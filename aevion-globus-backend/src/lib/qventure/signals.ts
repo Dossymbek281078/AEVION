@@ -370,11 +370,32 @@ export function metricStatedAsIntention(text: string, metric: RegExp): boolean {
 
 /** The year a match's own clause is about, or null. Bounded to the clause so a
  *  date from a neighbouring sentence cannot date this figure. */
+/**
+ * The plan text before dates were masked out of it.
+ *
+ * Metric patterns must not see a date's year — it reads as a metric value. The
+ * period chooser must see it, or it cannot tell which of two disclosed periods
+ * is later. Masking with equal-length spaces keeps every index identical
+ * between the two strings, so the same offset means the same place in both.
+ *
+ * Read only by `clauseYearAt`, which is the single door to "what year is this
+ * figure from". Putting the fallback there rather than at the call sites is
+ * deliberate: `clauseYearAt` has FOUR callers — `latestMatch`, the top-line
+ * chooser, the growth chooser and the contradiction dedupe — and wiring three
+ * of them is how this class of defect is born.
+ *
+ * Module-scoped because parsePlanSignals is synchronous and single-entry; it is
+ * set at the top of every parse and never read outside one.
+ */
+let RAW_FOR_DATES = "";
+
 function clauseYearAt(text: string, at: number, len: number): number | null {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const afterDot = text.indexOf(".", at + len);
   const to = afterDot === -1 ? text.length : afterDot;
-  const years = [...text.slice(from, to).matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
+  // Years live in the unmasked twin; offsets are identical by construction.
+  const dated = RAW_FOR_DATES.length === text.length ? RAW_FOR_DATES : text;
+  const years = [...dated.slice(from, to).matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
   return years.length ? Math.max(...years) : null;
 }
 
@@ -494,10 +515,48 @@ function moneyUsd(
   return toUsd(raw, detectCurrencyFirst(tight) ?? planCurrency);
 }
 
+/**
+ * Blank out calendar dates before any metric pattern sees the text.
+ *
+ * A date's year is a bare four-digit number sitting immediately before the
+ * metric noun, and "For the year ended December 31, 2025, revenue grew" is the
+ * most common opening clause in filed disclosure there is. Every suffix pattern
+ * read it: GMV $2,025, revenue $2,025, ARR $2,024, 2,025 customers, TPV $2,026.
+ * Kaspi.kz's real marketplace GMV of tenge 9,053 billion came back as $4,
+ * because the year matched first and then converted at the tenge rate.
+ *
+ * Guarding each pattern would mean guarding the next one too. Dates are not
+ * metrics, so they are removed once, here, and every pattern present and future
+ * inherits it. Only month-anchored dates are removed — "we have 2,025
+ * customers" contains no month and is left exactly as written.
+ *
+ * Masked with equal-length spaces so every index and clause boundary is
+ * identical between the masked text and its raw twin. That is what lets the
+ * period chooser read years from the raw text at offsets found in the masked
+ * one.
+ */
+const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*`;
+const DATE_FORMS = new RegExp(
+  [
+    String.raw`\b${MONTH}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}`,
+    String.raw`\b\d{1,2}(?:st|nd|rd|th)?\s+${MONTH},?\s+\d{4}`,
+    String.raw`\b${MONTH},?\s+\d{4}`,
+    String.raw`\b(?:fy|cy)\s?\d{2,4}\b`,
+    String.raw`\bq[1-4]\s?(?:fy)?\s?\d{2,4}\b`,
+  ].join("|"),
+  "gi",
+);
+
+export function maskDates(t: string): string {
+  return t.replace(DATE_FORMS, (d) => " ".repeat(d.length));
+}
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
-  const t = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
+  const raw = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
+  RAW_FOR_DATES = raw;
+  const t = maskDates(raw);
 
   // The currency the plan quotes in, established once from the first marker it
   // uses. Figures marked with a different currency still win locally; an
@@ -529,13 +588,10 @@ export function parsePlanSignals(text: string): PlanSignals {
    * The year a figure's own clause is about. Bounded to the clause so a date
    * from a neighbouring sentence cannot date this figure.
    */
-  const clauseYear = (at: number, len: number): number | null => {
-    const from = Math.max(t.lastIndexOf(".", at), t.lastIndexOf(";", at)) + 1;
-    const afterDot = t.indexOf(".", at + len);
-    const to = afterDot === -1 ? t.length : afterDot;
-    const years = [...t.slice(from, to).matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
-    return years.length ? Math.max(...years) : null;
-  };
+  // Was a byte-for-byte copy of clauseYearAt, closed over `t`. Two
+  // implementations of "what year is this figure from" meant a fix to one left
+  // the other reading masked text and finding no year at all.
+  const clauseYear = (at: number, len: number) => clauseYearAt(t, at, len);
   const statedCandidates = (pattern: string) => {
     const out: Array<{ m: RegExpMatchArray; year: number | null }> = [];
     for (const m of t.matchAll(new RegExp(pattern, "gi"))) {

@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 490
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 500
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (490
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (500
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -664,8 +664,8 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    most. Pinned, together with a test asserting the parser source contains **no
    control characters at all** — the class, not the instance.
 
-25. **Open, with reproduction: a date's year is read as a metric value.** Also
-   found by the same live-filing probe, and not yet fixed.
+25. **Closed: a date's year was read as a metric value.** Found by the same
+   live-filing probe.
 
    | Sentence | Reads as |
    |---|---|
@@ -679,17 +679,28 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    tenge rate. Five metrics, one cause: a bare four-digit number immediately
    before the metric noun.
 
-   The fix attempted was to mask month-anchored dates once before any pattern
-   sees the text, rather than guard five patterns and then the sixth. It works
-   on all five, and it broke period selection: `latestMatch` reads those same
-   years to choose the later of two disclosed periods, and two corpus cases
-   (Lemonade, Moderna) went to the earlier one. Passing the unmasked twin to
-   the date reader did not restore them within the session, so the change was
-   reverted rather than shipped half-diagnosed. The probe cases above are the
-   starting point for the next attempt.
+   The fix masks month-anchored dates once before any pattern sees the text,
+   rather than guarding five patterns and then the sixth. Masking uses
+   equal-length spaces, so every index and clause boundary is identical between
+   the masked text and its raw twin — which is what lets the period chooser
+   still read years at the same offsets. Only month-anchored dates go: "we have
+   2,025 customers" has no month and is untouched, and a test says so.
 
-   Recorded as open because a documented wrong number is worth more than an
-   undocumented one, and because the reproduction is three lines long.
+   **Why the first attempt was reverted, and what it turned out to be.** Masking
+   broke period selection on two corpus cases (Lemonade, Moderna), and passing
+   the unmasked twin to `clauseYearAt` did not fix them. The reason was a third
+   instance of the shape in limits 22–23: `clauseYear`, a local closure inside
+   the top-line parser, was a **byte-for-byte duplicate** of `clauseYearAt`,
+   closed over the masked text. Fixing one implementation left the other reading
+   spaces and finding no year at all. The duplicate is now a one-line call to
+   the shared function, so "what year is this figure from" has one answer.
+
+   Both halves proven by mutation: disabling the mask reddens 6 tests; pointing
+   the year reader back at the masked text reddens 7.
+
+   Worth stating plainly, since it took two attempts: the bug was not the
+   masking. It was that the codebase had two implementations of the same
+   question, and only one of them was in view.
 
 ## How this stays true
 
@@ -697,7 +708,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 490):
+`tests/qventureDisclosedCorpus.test.ts`, 500):
 
 | Guard | Floor | Measured today |
 |---|---|---|

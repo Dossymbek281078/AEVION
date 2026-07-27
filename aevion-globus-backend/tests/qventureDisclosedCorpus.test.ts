@@ -1946,3 +1946,48 @@ describe("a stated target is not a stated result", () => {
     expect(src).not.toMatch(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/);
   });
 });
+
+describe("a date is not a metric", () => {
+  // Found by running sentences verbatim from live SEC filings. "For the year
+  // ended December 31, 2025, revenue grew" is the most common opening clause in
+  // filed disclosure there is, and every suffix pattern read the year as the
+  // figure. Kaspi.kz's real marketplace GMV of tenge 9,053 billion came back as
+  // $4: the year matched first, then converted at the tenge rate.
+  const g = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["GMV", "For the year ended December 31, 2025, GMV of our segment grew."],
+    ["revenue", "For the year ended December 31, 2025, revenue grew sharply."],
+    ["ARR", "As of March 31, 2024, ARR continued to compound."],
+    ["customers", "For the year ended December 31, 2025, customers grew."],
+    ["TPV", "In the quarter ended June 30, 2026, TPV expanded."],
+    ["the Kaspi sentence", "For the year ended December 31, 2025, GMV of our Marketplace segment including Turkiye was 9,053 billion, which is an increase of 52%."],
+  ])("%s: the year is not the value", (_l, text) => {
+    const s = g(text);
+    expect(s.gmvUsd).toBeNull();
+    expect(s.revenueUsd).toBeNull();
+    expect(s.customers).toBeNull();
+  });
+
+  test("a four-digit figure with no month beside it is still read", () => {
+    // Masking is anchored on month names precisely so this keeps working.
+    expect(g("We have 2,025 customers.").customers).toBe(2025);
+  });
+
+  test.each([
+    ["GMV", "We processed $10 million in GMV.", "gmvUsd", 10_000_000],
+    ["revenue", "We generated $10 million in revenue.", "revenueUsd", 10_000_000],
+  ])("%s is still read normally", (_l, text, field, expected) => {
+    expect((g(text) as Record<string, unknown>)[field as string]).toBe(expected);
+  });
+
+  test("period selection still reads the years masking hides", () => {
+    // The reason the first attempt at this was reverted: clauseYearAt had a
+    // byte-for-byte duplicate closed over the masked text, so the top line kept
+    // choosing the earlier period. One concept, two implementations — the third
+    // instance of that shape found today.
+    const s = g("In-force premium of $116M in 2019. In-force premium of $133M as of 31 March 2020.");
+    expect(s.revenueUsd).toBe(133_000_000);
+    expect(s.parseNotes.some((n) => /latest \(2020\)/i.test(n))).toBe(true);
+  });
+});

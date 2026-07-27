@@ -47,6 +47,7 @@ import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
 import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
+import { sendOfferNotice } from "../lib/startupx/notifyFounder";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -866,13 +867,21 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
   const equityRaw = Number(req.body?.equityPct);
   const equityPct = Number.isFinite(equityRaw) && equityRaw > 0 && equityRaw <= 100 ? equityRaw : null;
 
+  // Путей записи два — письмо основателю должно уходить с обоих, иначе на
+  // in-memory окружении отклик снова тихо ложится в таблицу и никто не узнает.
+  const notifyOffer = (founderEmail: string | null, listingId: number, listingTitle: string) => {
+    if (!founderEmail) return;
+    sendOfferNotice({ founderEmail, listingId, listingTitle, ticketUsd, equityPct, intent });
+  };
+
   try {
     if (isStartupExchangeDbReady()) {
       const { rows: exists } = await pool.query(
-        `SELECT id FROM startup_ideas WHERE id=$1 AND visibility='public'`,
+        `SELECT id, title, founder_email FROM startup_ideas WHERE id=$1 AND visibility='public'`,
         [id],
       );
-      if (!(exists as Array<{ id: number }>)[0]) return fail(res, "idea_not_found", 404);
+      const target = (exists as Array<{ id: number; title: string; founder_email: string | null }>)[0];
+      if (!target) return fail(res, "idea_not_found", 404);
 
       const { rows } = await pool.query(
         `INSERT INTO startup_interests (idea_id, investor_email, message, intent, ticket_usd, equity_pct)
@@ -880,6 +889,7 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
         [id, investorEmail, message, intent, ticketUsd, equityPct],
       );
       const row = (rows as InterestRow[])[0];
+      notifyOffer(target.founder_email, id, target.title);
       return ok(res, { id: row.id, ideaId: row.idea_id, intent: row.intent, createdAt: row.created_at }, 201);
     }
   } catch (e) {
@@ -897,6 +907,7 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
     ticket_usd: ticketUsd,
     equity_pct: equityPct,
   });
+  notifyOffer(listing.founder_email, id, listing.title);
   return ok(res, { id: row.id, ideaId: row.idea_id, intent: row.intent, createdAt: row.created_at }, 201);
 });
 

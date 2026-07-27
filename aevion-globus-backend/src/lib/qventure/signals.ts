@@ -1204,9 +1204,16 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     // The mark has to be attached to this company or to an act of issuing it.
     [/\bce marked\b|\bour ce mark\b|\bce mark\b[^.;]{0,30}?\b(?:granted|issued|obtained|received|held|awarded)\b|\b(?:granted|issued|obtained|received|holds?|awarded)\b[^.;]{0,30}?\bce mark\b|\bmdr certifi/i, "CE mark"],
     [/\bema approval|\bmhra approval/i, "EMA/MHRA approval"],
-    [/\bphase\s*(?:iii|3)\b/i, "Phase 3 clinical"],
-    [/\bphase\s*(?:ii|2)\b/i, "Phase 2 clinical"],
-    [/\bphase\s*(?:i|1)\b(?!\w)/i, "Phase 1 clinical"],
+    // A bare phase token fires on every context the words appear in. Moderna's
+    // S-1 supplied three at once that are not a programme in that phase: the
+    // DEFINITION of the process ("clinical trials generally are conducted in
+    // three sequential phases, known as Phase 1, Phase 2 and Phase 3"), a risk
+    // sentence listing all of them, and a cost-sharing clause in the AstraZeneca
+    // collaboration. The phase now has to sit beside a word saying the company
+    // is in it or through it.
+    [/\b(?:in|entered|entering|initiated|started|commenced|completed|ongoing|dosing)\b[^.;]{0,18}?\bphase\s*(?:iii|3)\b|\bphase\s*(?:iii|3)\b[^.;]{0,18}?\b(?:complete[d]?|ongoing|underway|readout|initiated|started|enrolling|dosing)\b/i, "Phase 3 clinical"],
+    [/\b(?:in|entered|entering|initiated|started|commenced|completed|ongoing|dosing)\b[^.;]{0,18}?\bphase\s*(?:ii|2)\b|\bphase\s*(?:ii|2)\b[^.;]{0,18}?\b(?:complete[d]?|ongoing|underway|readout|initiated|started|enrolling|dosing)\b/i, "Phase 2 clinical"],
+    [/\b(?:in|entered|entering|initiated|started|commenced|completed|ongoing|dosing)\b[^.;]{0,18}?\bphase\s*(?:i|1)\b(?!\w)|\bphase\s*(?:i|1)\b(?!\w)[^.;]{0,18}?\b(?:complete[d]?|ongoing|underway|readout|initiated|started|enrolling|dosing)\b/i, "Phase 1 clinical"],
     // "The program has an open IND" is how a filing says the application
     // cleared and is live. The pattern missed it while correctly ignoring the
     // two neighbouring phrasings in the same S-1 that are NOT a cleared IND:

@@ -1380,3 +1380,44 @@ describe("the intention filter belongs to both lists, not one", () => {
     expect(proved("The biology risk represents targets and pathways not clinically validated by approved drugs.", "Clinical validation data")).toBe(false);
   });
 });
+
+describe("a clinical phase is a programme's state, not a word in a contract", () => {
+  /**
+   * The bare phase token fired on every context the words appear in. Moderna's
+   * S-1 supplied three at once that are NOT a programme in that phase:
+   *
+   *   - the definition of the process: "clinical trials generally are conducted
+   *     in three sequential phases, known as Phase 1, Phase 2 and Phase 3";
+   *   - a risk sentence listing all of them: "Phase 1, Phase 2, Phase 3, and
+   *     other types of clinical trials may not be completed successfully";
+   *   - a cost-sharing clause from the AstraZeneca collaboration: "we and
+   *     AstraZeneca will equally share the costs of Phase 2 clinical
+   *     development activities".
+   *
+   * The negation layer already caught "there has never been a Phase 3 trial",
+   * and the intention filter already caught "we plan to launch a Phase 2 trial".
+   * Neither could help with a definition or a contract clause — those state no
+   * intention and deny nothing.
+   */
+  const inPhase = (t: string, label: string) => parsePlanSignals(t).regulatoryMilestones.includes(label);
+
+  test("a programme in or through a phase counts", () => {
+    expect(inPhase("Two clinical stage programs are in ongoing Phase 1 trials.", "Phase 1 clinical")).toBe(true);
+    expect(inPhase("Phase 2 complete, IND cleared for the follow-on indication.", "Phase 2 clinical")).toBe(true);
+    expect(inPhase("Phase 2 readout met its primary endpoint; results are peer-reviewed and published.", "Phase 2 clinical")).toBe(true);
+    expect(inPhase("The lead programme entered Phase 3 in March.", "Phase 3 clinical")).toBe(true);
+    expect(inPhase("We initiated a Phase 2 trial for the lead candidate.", "Phase 2 clinical")).toBe(true);
+  });
+
+  test("a definition, a risk list and a contract clause do not", () => {
+    expect(inPhase("Clinical trials generally are conducted in three sequential phases, known as Phase 1, Phase 2 and Phase 3, and may overlap.", "Phase 3 clinical")).toBe(false);
+    expect(inPhase("Phase 1, Phase 2, Phase 3, and other types of clinical trials may not be completed successfully within any specified period.", "Phase 3 clinical")).toBe(false);
+    expect(inPhase("We and AstraZeneca will equally share the costs of Phase 2 clinical development activities in excess of such dollar threshold.", "Phase 2 clinical")).toBe(false);
+  });
+
+  test("the older guards still hold on their own sentences", () => {
+    expect(inPhase("To date, there has never been a Phase 3 trial in which mRNA is the primary active ingredient.", "Phase 3 clinical")).toBe(false);
+    expect(inPhase("Pending successful results from the Phase 1 trial, we plan to launch a Phase 2 trial.", "Phase 2 clinical")).toBe(false);
+    expect(inPhase("We may never obtain EMA or other foreign regulatory body approval for any of our investigational medicines.", "EMA/MHRA approval")).toBe(false);
+  });
+});

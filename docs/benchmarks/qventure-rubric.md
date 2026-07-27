@@ -536,6 +536,14 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    $10M — and the corpus is unchanged at 73/73, so no figure in any real filing
    was lost to it.
 
+   **The deck path got it for free, which is the part worth pinning.** When a
+   model reads an uploaded slide deck, its figures are vetoed by
+   `metricStatedAsIntention`, which asks the same gate. So a deck saying "our
+   competitor reached $10M ARR" no longer yields `arrUsd: 10000000` — without a
+   line of new extraction code. Inheritance like that is true today and stops
+   being true the moment someone adds a second gate beside the first, so it is
+   asserted rather than assumed.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

@@ -141,12 +141,27 @@ export async function POST(
   }
   const cur = all[idx];
 
-  const target: DisputeStatus =
-    body.action === "respond"
-      ? "under_review"
-      : body.action === "resolve_won"
-        ? "won"
-        : "lost";
+  // Раньше здесь был тернарный каскад с «иначе lost»: ЛЮБОЕ неизвестное
+  // значение — опечатка `resolve_wonn`, чужой клиент, старая версия SDK —
+  // молча помечало спор ПРОИГРАННЫМ, то есть худшим для продавца исходом.
+  // Сообщение об ошибке рядом перечисляет три действия, и читается это как
+  // «значение проверяется». Не проверялось.
+  const ACTION_TO_STATUS: Record<string, DisputeStatus> = {
+    respond: "under_review",
+    resolve_won: "won",
+    resolve_lost: "lost",
+  };
+  if (!Object.prototype.hasOwnProperty.call(ACTION_TO_STATUS, body.action)) {
+    return attachRateHeaders(
+      withCors(
+        badRequest(
+          "action must be one of: respond, resolve_won, resolve_lost."
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  const target: DisputeStatus = ACTION_TO_STATUS[body.action];
 
   const allowed = ALLOWED_TRANSITIONS[cur.status] as readonly DisputeStatus[];
   if (!allowed.includes(target)) {

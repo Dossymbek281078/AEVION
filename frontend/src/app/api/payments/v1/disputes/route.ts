@@ -190,8 +190,14 @@ export async function POST(req: NextRequest) {
     status: "warning_needs_response",
     evidence_url: body.evidence_url ? String(body.evidence_url).slice(0, 500) : null,
     evidence_text: body.evidence_text ? String(body.evidence_text).slice(0, 2000) : null,
+    // `Infinity > now` — истина, а `1e400` в JSON и есть Infinity: срок ответа
+    // по спору можно было выставить бесконечным, то есть отменить дедлайн.
+    // Потолок — год: спор с ответом «когда-нибудь» не спор.
     due_by:
-      typeof body.due_by === "number" && body.due_by > now
+      typeof body.due_by === "number" &&
+      Number.isFinite(body.due_by) &&
+      body.due_by > now &&
+      body.due_by <= now + 365 * 24 * 60 * 60 * 1000
         ? body.due_by
         : now + 7 * 24 * 60 * 60 * 1000,
     created: now,

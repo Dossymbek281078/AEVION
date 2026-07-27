@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { GUIDES, SUBSCRIPTIONS, productById, type Product } from "@/lib/products";
+import {
+  GUIDES,
+  SUBSCRIPTIONS,
+  productById,
+  channelFrom,
+  withChannel,
+  type Product,
+} from "@/lib/products";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -71,7 +78,15 @@ function priceOf(p: Product | undefined): string | undefined {
   return CURRENCY.format(p.priceUsd) + (p.billing === "monthly" ? " / мес" : "");
 }
 
-export default function GoPage() {
+export default async function GoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  // Метка канала из адреса: /go?c=ig в шапке Instagram, ?c=tt в TikTok и т.д.
+  // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
+  // «какой канал принёс деньги» остаётся без ответа.
+  const channel = channelFrom((await searchParams).c);
   const protocol = productById("oijxmq");
   const antiGreyRu = productById("tmuyxw");
   const bookFull = productById("ghvzq");
@@ -99,7 +114,7 @@ export default function GoPage() {
           />
           {protocol && (
             <LinkCard
-              href={protocol.href}
+              href={withChannel(protocol.href, channel)}
               external
               kicker={protocol.format}
               title="Тот же протокол в PDF"
@@ -109,7 +124,7 @@ export default function GoPage() {
           )}
           {antiGreyRu && (
             <LinkCard
-              href={antiGreyRu.href}
+              href={withChannel(antiGreyRu.href, channel)}
               external
               kicker={antiGreyRu.format}
               title="Протокол «Анти-седина»"
@@ -123,7 +138,7 @@ export default function GoPage() {
           <h2 style={styles.h2}>Книга</h2>
           {bookFull && (
             <LinkCard
-              href={bookFull.href}
+              href={withChannel(bookFull.href, channel)}
               external
               kicker={bookFull.format}
               title="Благодарность ∞ Вечная Молодость"
@@ -150,7 +165,7 @@ export default function GoPage() {
           />
           {allAccess && (
             <LinkCard
-              href={allAccess.href}
+              href={withChannel(allAccess.href, channel)}
               external
               kicker={allAccess.format}
               title="Доступ ко всему сразу"

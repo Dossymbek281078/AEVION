@@ -327,3 +327,52 @@ export function productById(id: string): Product | undefined {
 /** Сумма месячных цен модулей — используется, чтобы честно показать выгоду подписки.
  *  Все модули списываются ежемесячно, поэтому сумма тоже месячная. */
 export const MODULES_TOTAL_USD = MODULES.reduce((s, p) => s + p.priceUsd, 0);
+
+/* ── Атрибуция канала ────────────────────────────────────────────────────────
+ *
+ * Вопрос «какой канал принёс продажу» на 27.07.2026 не имел ответа: ссылки
+ * уходили в чекаут голыми, и в дашборде выручки видно ЧТО купили, но не откуда
+ * пришёл человек. При том что весь смысл раздачи роликов — узнать, что работает.
+ *
+ * Решение без внешней аналитики и куки: метка едет прямо в чекаут.
+ *   - Gumroad кладёт произвольные query-параметры в `url_params` и отдаёт их
+ *     обратно в ping-вебхуке → канал виден рядом с продажей;
+ *   - LemonSqueezy принимает `checkout[custom][key]` и возвращает в custom_data.
+ *
+ * Метка берётся из адреса самой страницы: в шапке профиля Instagram стоит
+ * `/go?c=ig`, в TikTok — `/go?c=tt`, и так далее. Одна страница, разные суффиксы.
+ */
+
+/** Разрешённые метки. Белый список, а не любая строка: параметр приходит из
+ *  адресной строки, и пускать его в чекаут без проверки нельзя. */
+export const CHANNELS: Record<string, string> = {
+  ig: "instagram",
+  tt: "tiktok",
+  th: "threads",
+  yt: "youtube",
+  tg: "telegram",
+  fb: "facebook",
+  x: "x",
+  qr: "qr-code",
+};
+
+/** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет). */
+export function channelFrom(raw: string | string[] | undefined): string | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return null;
+  return CHANNELS[v.trim().toLowerCase()] ?? null;
+}
+
+/**
+ * Добавляет метку канала к ссылке оплаты. Для Gumroad и LemonSqueezy параметр
+ * называется по-разному, поэтому разбираем по домену, а не по типу товара:
+ * товар может переехать с одного процессинга на другой, домен — нет.
+ */
+export function withChannel(href: string, channel: string | null): string {
+  if (!channel) return href;
+  const sep = href.includes("?") ? "&" : "?";
+  if (href.includes("lemonsqueezy.com")) {
+    return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
+  }
+  return `${href}${sep}channel=${encodeURIComponent(channel)}`;
+}

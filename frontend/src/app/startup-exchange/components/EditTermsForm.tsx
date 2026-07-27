@@ -39,6 +39,18 @@ export function EditTermsForm({
   const [stakePct, setStakePct] = useState(deal?.stakeForSalePct ? String(deal.stakeForSalePct) : "");
   const [stakePrice, setStakePrice] = useState(deal?.stakePriceUsd ? String(deal.stakePriceUsd) : "");
   const [notes, setNotes] = useState(deal?.notes ?? "");
+  // Цифры правятся здесь же по прямой причине: разбор говорит «балл поднимут
+  // раскрытые цифры, а не текст», а показать их основателю было негде — он
+  // видел совет и не мог ему последовать.
+  const m = listing.metrics;
+  const [mrr, setMrr] = useState(m?.mrrUsd ? String(m.mrrUsd) : "");
+  const [arr, setArr] = useState(m?.arrUsd ? String(m.arrUsd) : "");
+  const [users, setUsers] = useState(m?.users ? String(m.users) : "");
+  const [paying, setPaying] = useState(m?.payingCustomers ? String(m.payingCustomers) : "");
+  const [growth, setGrowth] = useState(m?.growthMomPct ? String(m.growthMomPct) : "");
+  const [churn, setChurn] = useState(m?.churnMonthlyPct ? String(m.churnMonthlyPct) : "");
+  const [margin, setMargin] = useState(m?.grossMarginPct ? String(m.grossMarginPct) : "");
+  const [team, setTeam] = useState(m?.teamSize ? String(m.teamSize) : "");
   const [busy, setBusy] = useState(false);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [saved, setSaved] = useState(false);
@@ -64,7 +76,17 @@ export function EditTermsForm({
           stakePriceUsd: num(stakePrice),
           notes: notes.trim() || undefined,
         },
-        metrics: listing.metrics ?? undefined,
+        metrics: {
+          mrrUsd: num(mrr),
+          arrUsd: num(arr),
+          users: num(users),
+          payingCustomers: num(paying),
+          growthMomPct: num(growth),
+          churnMonthlyPct: num(churn),
+          grossMarginPct: num(margin),
+          teamSize: num(team),
+          monthsInDevelopment: listing.metrics?.monthsInDevelopment,
+        },
         demoUrl: listing.demo_url ?? undefined,
         repoUrl: listing.repo_url ?? undefined,
       });
@@ -108,6 +130,29 @@ export function EditTermsForm({
         style={{ ...input, resize: "vertical" }}
         placeholder="Например: готов остаться в проекте на 6 месяцев после сделки"
       />
+
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: "#0f172a", margin: "18px 0 4px" }}>Цифры проекта</div>
+      <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "#64748b", lineHeight: 1.55 }}>
+        Именно они переводят балл с «по отрасли» на «по данным заявки» — и именно их просит разбор.
+        Заполняйте только то, что можете показать: биржа цифры не проверяет и честно об этом пишет,
+        но сверяет их между собой.
+      </p>
+      <div style={row}>
+        <Field label="MRR, USD" value={mrr} onChange={setMrr} />
+        <Field label="ARR, USD" value={arr} onChange={setArr} />
+      </div>
+      <div style={row}>
+        <Field label="Пользователей" value={users} onChange={setUsers} />
+        <Field label="Платящих клиентов" value={paying} onChange={setPaying} />
+      </div>
+      <div style={row}>
+        <Field label="Рост, %/мес" value={growth} onChange={setGrowth} />
+        <Field label="Отток, %/мес" value={churn} onChange={setChurn} />
+      </div>
+      <div style={row}>
+        <Field label="Валовая маржа, %" value={margin} onChange={setMargin} />
+        <Field label="Команда, человек" value={team} onChange={setTeam} />
+      </div>
 
       {issues.length > 0 && (
         <ul style={{ margin: "6px 0 10px", paddingLeft: 18 }}>

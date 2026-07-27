@@ -212,6 +212,18 @@ async function run() {
       edited.body?.data?.listing?.content_hash === created.contentHash,
       `${edited.body?.data?.listing?.content_hash} vs ${created.contentHash}`);
 
+    // Раскрытые цифры должны поднимать балл — иначе совет разбора «покажите
+    // цифры» ни к чему не ведёт. Проверяем это тем же путём, которым пойдёт
+    // основатель: PATCH с метриками.
+    const beforeScore = edited.body?.data?.assessment?.score ?? 0;
+    const withNumbers = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`, {
+      deal: { intent: "raise", askUsd: 20000, equityOfferedPct: 20, buildBy: "founder" },
+      metrics: { users: 400, teamSize: 3 },
+    });
+    assert("PATCH с цифрами → 200", withNumbers.status === 200, String(withNumbers.status));
+    const afterScore = withNumbers.body?.data?.assessment?.score ?? 0;
+    assert("раскрытые цифры поднимают балл", afterScore > beforeScore, `${beforeScore} → ${afterScore}`);
+
     const refused = await req("PATCH", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`, {
       deal: { intent: "raise", askUsd: 20000 },
     });

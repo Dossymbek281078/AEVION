@@ -72,7 +72,21 @@ async function overpass(query) {
         });
         // 429/504 is Overpass asking us to wait, not saying the data is absent.
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()).elements;
+        // …and an overloaded instance says so with HTTP **200** and an HTML page:
+        // "Error: runtime error: … The server is probably too busy to handle your
+        // request." Parsing that as JSON throws something unreadable about
+        // token '<', which reads like a bug here rather than a busy server.
+        const body = await res.text();
+        if (!body.trimStart().startsWith("{")) {
+          // The word "Error" is wrapped in its own tag —
+          // `<strong style="color:#FF0000">Error</strong>: runtime error: …` —
+          // so strip markup before looking, or the message is lost and the log
+          // says only "non-JSON answer" when the server explained itself.
+          const plain = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+          const said = /Error:?\s*(.{0,160})/.exec(plain);
+          throw new Error(said ? `server said: ${said[1].trim()}` : "non-JSON answer (server busy?)");
+        }
+        return JSON.parse(body).elements;
       } catch (e) {
         last = e;
         process.stderr.write(`  ${host} round ${round}: ${e.message}\n`);

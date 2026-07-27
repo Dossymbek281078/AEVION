@@ -6407,3 +6407,41 @@ describe("every reader of years reads the unmasked text", () => {
     expect(twinUses).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("KNOWN MISS: collapsing whitespace erases table structure", () => {
+  // The parser normalises all whitespace to single spaces before matching. For
+  // prose that is right; for a pasted table it destroys the two things a table
+  // uses to carry meaning — the cell separator, which plays the role of a
+  // connector, and the row break, which separates one metric from the next.
+  const NL = String.fromCharCode(10);
+  const TAB = String.fromCharCode(9);
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("a metric in the next row is treated as adjacent", () => {
+    // Collapsed to "revenue growth 42% churn 3%", churn stands nearer to the
+    // figure than growth, so the level-metric filter claims it and no growth is
+    // read. In the table they are different rows.
+    expect(p(`Revenue growth${TAB}42%${NL}Churn${TAB}3%`).growthPct).toBeNull();
+  });
+
+  test("a cell separator is not accepted as a connector", () => {
+    // "Customers: 5,000" reads; "Customers<tab>5,000" does not, because the tab
+    // becomes a space and a space is deliberately not a connector — that rule
+    // is what stops "we serve customers 24 hours a day" being a count.
+    expect(p(`Customers${TAB}5,000${NL}Revenue${TAB}$10M`).customers).toBeNull();
+  });
+
+  test("and the forms that already work still do", () => {
+    // Two-column tables where each row names a different metric are fine, and
+    // bullets are fine, because the colon does the work of the separator.
+    expect(p(`Revenue${TAB}$10M${NL}Gross margin${TAB}70%`).revenueUsd).toBe(10_000_000);
+    expect(p(`Revenue${TAB}$10M${NL}Gross margin${TAB}70%`).grossMarginPct).toBe(70);
+    expect(p(`• ARR: $2M${NL}• Churn: 3%`).revenueUsd).toBe(2_000_000);
+    expect(p(`• ARR: $2M${NL}• Churn: 3%`).churnPct).toBe(3);
+  });
+
+  // The fix is to keep the row break as a clause boundary and the cell
+  // separator as a connector, rather than flattening both into a space —
+  // one change to the normalisation, upstream of every pattern. Not attempted
+  // with twenty minutes left: it touches what every rule on this branch reads.
+});

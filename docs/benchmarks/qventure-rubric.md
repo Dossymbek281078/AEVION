@@ -1559,6 +1559,29 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    mean gap are all checked against fresh runs. The assertion count is prose,
    and prose is now marked as approximate rather than pinned.
 
+64. **Open, pinned: collapsing whitespace erases table structure.** The
+   question that found three defects today — what else reads the transformed
+   string — was asked of the other transformation the parser applies. It
+   normalises all whitespace to single spaces before matching, which is right
+   for prose and destroys the two things a pasted table uses to carry meaning.
+
+   The row break separates one metric from the next: collapsed, "Revenue growth
+   / 42%" and "Churn / 3%" become one line where churn stands nearer to the
+   figure than growth, the level-metric filter claims it, and no growth is read.
+
+   The cell separator does the work of a connector: "Customers: 5,000" reads and
+   "Customers<tab>5,000" does not, because the tab becomes a space and a space
+   is deliberately not a connector — the rule that stops "we serve customers 24
+   hours a day" being a count.
+
+   Two-column tables naming a different metric per row are unaffected, and so
+   are bullets, where the colon does the separator work. Both are pinned.
+
+   The fix is one change to the normalisation — keep the row break as a clause
+   boundary and the cell separator as a connector instead of flattening both —
+   and it sits upstream of every pattern on this branch, so it is not something
+   to attempt with twenty minutes left.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

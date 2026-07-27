@@ -2,6 +2,9 @@ import { describe, test, expect } from "vitest";
 import { CASES } from "../scripts/qventure-disclosed";
 import { analyze } from "../src/lib/qventure/engine";
 import { parsePlanSignals } from "../src/lib/qventure/signals";
+import { PAIRS } from "../scripts/qventure-hardcases";
+import fs from "node:fs";
+import path from "node:path";
 import { toUsd } from "../src/lib/metrics/currency";
 
 /**
@@ -1150,4 +1153,40 @@ describe("a defence contracting status is an award, not a definition", () => {
   ]) {
     test(`not a status: ${text.slice(0, 46)}`, () => { expect(held(text)).toBe(false); });
   }
+});
+
+describe("the document's headline number is the harness's number", () => {
+  /**
+   * The rubric doc opens with "QVenture separates a strong deal from a weak one
+   * ... by a mean of N points". That figure went stale by 0.4 when today's
+   * reader fixes changed what the engine can see — tracked carefully for two
+   * corpora and missed on the one number the document leads with.
+   *
+   * A number maintained by hand drifts the moment the thing it describes moves.
+   * This reads the claim out of the document and checks it against a fresh run,
+   * so the drift fails here instead of being published.
+   */
+  const docPath = path.resolve(__dirname, "../../docs/benchmarks/qventure-rubric.md");
+
+  test("the published mean gap matches a fresh hard-cases run", () => {
+    const doc = fs.readFileSync(docPath, "utf8");
+    const claimed = doc.match(/by a mean of \*\*([\d.]+) points\*\*/);
+    expect(claimed, "headline claim not found in the rubric doc").not.toBeNull();
+
+    const gaps = PAIRS.map((p) => {
+      const strong = analyze(p.strong).composite;
+      const weak = analyze(p.weak).composite;
+      return Math.round((strong - weak) * 10) / 10;
+    });
+    const mean = Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10;
+    expect(Number(claimed![1])).toBe(mean);
+  });
+
+  test("the guard table carries the same figure as the claim", () => {
+    const doc = fs.readFileSync(docPath, "utf8");
+    const claimed = doc.match(/by a mean of \*\*([\d.]+) points\*\*/)?.[1];
+    const table = doc.match(/Mean gap across the six models \| ≥ 10 pts \| ([\d.]+) \|/)?.[1];
+    expect(table, "guard-table row not found").toBeDefined();
+    expect(table).toBe(claimed);
+  });
 });

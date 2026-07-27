@@ -114,6 +114,8 @@ export interface Listing {
   contact_method: string | null;
   content_hash: string | null;
   qright_protected: boolean;
+  /** Сколько раз открывали страницу заявки (открытия, не уникальные посетители). */
+  views: number;
   /** "public" | "withdrawn" — снятая заявка не видна в ленте, но открыта по личной ссылке. */
   visibility: string;
   created_at: string;

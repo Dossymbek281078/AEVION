@@ -92,6 +92,7 @@ interface ListingRow {
   qright_object_id: string | null;
   content_hash: string | null;
   manage_token_hash: string | null;
+  views: number;
   visibility: string;
   created_at: string;
 }
@@ -197,6 +198,7 @@ function publicView(row: ListingRow, interest_count?: number) {
     qright_object_id: row.qright_object_id,
     content_hash: row.content_hash,
     qright_protected: Boolean(row.qright_object_id || row.content_hash),
+    views: row.views ?? 0,
     visibility: row.visibility,
     created_at: row.created_at,
     ...(interest_count !== undefined ? { interest_count } : {}),
@@ -388,6 +390,34 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * Показы страницы заявки.
+ *
+ * Считаем открытия, а не «уникальных посетителей»: проверить уникальность мы не
+ * можем, и называть одно другим — ровно тот сорт цифры, которого биржа избегает
+ * везде. Единственное, что делаем, — не даём одному и тому же адресу надувать
+ * счётчик перезагрузками: одно открытие с адреса на заявку в час.
+ */
+const VIEW_WINDOW_MS = 60 * 60 * 1000;
+const recentViews = new Map<string, number>();
+
+function shouldCountView(listingId: number, req: Request): boolean {
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    || req.socket.remoteAddress
+    || "unknown";
+  const key = `${listingId}:${ip}`;
+  const now = Date.now();
+  const last = recentViews.get(key);
+  if (last !== undefined && now - last < VIEW_WINDOW_MS) return false;
+  recentViews.set(key, now);
+  // Карта живёт в памяти процесса и не должна расти бесконечно: раз в N записей
+  // выкидываем всё, что старше окна.
+  if (recentViews.size > 5000) {
+    for (const [k, t] of recentViews) if (now - t >= VIEW_WINDOW_MS) recentViews.delete(k);
+  }
+  return true;
+}
+
 // ─── GET /api/startupx/ideas/:id ─────────────────────────────────────────────
 startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
@@ -401,6 +431,13 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
       );
       const row = (rows as ListingRow[])[0];
       if (!row) return fail(res, "not_found", 404);
+      if (shouldCountView(id, req)) {
+        // Счётчик не должен ронять выдачу заявки: если UPDATE не прошёл,
+        // читатель всё равно получает страницу.
+        pool.query(`UPDATE startup_ideas SET views = COALESCE(views, 0) + 1 WHERE id=$1`, [id])
+          .catch((e: unknown) => console.error("[StartupX] view counter", e));
+        row.views = (row.views ?? 0) + 1;
+      }
       const { rows: cnt } = await pool.query(
         `SELECT COUNT(*)::int AS n FROM startup_interests WHERE idea_id=$1`,
         [id],
@@ -413,6 +450,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
 
   const row = memListings.get(id);
   if (!row || row.visibility !== "public") return fail(res, "not_found", 404);
+  if (shouldCountView(id, req)) row.views = (row.views ?? 0) + 1;
   const interest_count = Array.from(memInterests.values()).filter((i) => i.idea_id === id).length;
   return ok(res, publicView(row, interest_count));
 });
@@ -514,6 +552,7 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     qright_object_id: qrightObjectId,
     content_hash: contentHash,
     manage_token_hash: manage.hash,
+    views: 0,
     visibility: "public",
   });
   return ok(res, {

@@ -131,6 +131,15 @@ async function run() {
     assert("id matches", single.body?.data?.id === listingId);
     assert("interest_count present", typeof single.body?.data?.interest_count === "number");
     assert("assessment stored with the row", typeof single.body?.data?.assessment?.score === "number");
+
+    // Показы: без этого числа основатель не отличит «не видят» от «видят, но не
+    // берут». Считаем открытия и не даём одному адресу надувать счётчик —
+    // второй запрос подряд не должен увеличить его.
+    const firstViews = single.body?.data?.views;
+    assert("views counted on the first open", firstViews === 1, String(firstViews));
+    const again = await req("GET", `/api/startupx/ideas/${listingId}`);
+    assert("a refresh from the same address does not inflate views",
+      again.body?.data?.views === 1, String(again.body?.data?.views));
   } else {
     console.log("  (skipped — no listing id)");
   }

@@ -76,6 +76,10 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     // Without this the offers investors send simply accumulate in a table
     // nobody can read, which is what the first version did.
     await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS manage_token_hash TEXT;`);
+    // Сколько раз открывали страницу заявки. Без этого числа основатель не может
+    // отличить «меня не видят» от «видят, но условия не устраивают», а лечатся
+    // эти два состояния противоположным: первое — охватом, второе — ценой.
+    await pool.query(`ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS views INTEGER NOT NULL DEFAULT 0;`);
 
     // Backfill: every pre-tier row gets the tier its legacy stage implies.
     // Runs once — after this, `tier IS NULL` matches nothing.

@@ -218,7 +218,7 @@ const COPY = {
   ru: {
     title: "Модули экосистемы AEVION",
     subtitle:
-      "Все 37 узлов с актуальным tier и статусом. Используйте фильтры или скачайте CSV.",
+      "Все все узлы с актуальным tier и статусом. Используйте фильтры или скачайте CSV.",
     headTotal: "Всего модулей",
     headLive: "MVP live",
     headApi: "Platform API",

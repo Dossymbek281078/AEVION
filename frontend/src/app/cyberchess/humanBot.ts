@@ -90,7 +90,16 @@ export const HUMAN_PROFILES: Record<number, HumanProfile> = {
      поднимать blunderChance к 0.25 (там зевки 24.2%, ещё в полосе) и мерять снова.
      Менять эти числа только вместе с замером: правка без перемера здесь уже приводила к
      обратному от задуманного. */
-  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 95, blunderChance: 0.24 },
+  /* bookSharpness 0.4 -> 0.7 (2026-07-27). Подъём температуры вернул мусорные первые ходы
+     (15% и 20% против 8% раньше, с 1.h4). `bookChance` тут не рычаг — 0.88 дал 18%, 0.94
+     дал 17%: мусор идёт ИЗ книги, где 3807 линий вместе с Гробом и Амаром, а вес линии =
+     частота^sharpness. Замеры: 0.4 -> 15-20%, 0.7 -> 5%, 1.4 -> 5%.
+     Взято 0.7, а не 1.4: резкость обязана РАСТИ с уровнем (0.7 / 0.8 / 1.4) — Beginner по
+     замыслу реже держится главных линий, чем Club, и это проверяет тест pickBookMove.
+     При 1.4 тест краснеет, при 0.7 зелёный, а выигрыш тот же.
+     ⚠️ Влияние на СИЛУ не перемерено: книга уводит в здоровые позиции. Замер запущен,
+     читать %TEMP%evion-bot-ladder.txt; до правки разрыв был 319, интервал 210..532. */
+  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.7, bestChance: 0.20, temperature: 95, blunderChance: 0.24 },
   // Casual ~800: plays the first few book moves, blunders a few times a game.
   1: { bookPlies: 10, bookChance: 0.85, bookSharpness: 0.8, bestChance: 0.38, temperature: 75, blunderChance: 0.15 },
   // Club ~1200: solid opening, occasional tactical oversight.

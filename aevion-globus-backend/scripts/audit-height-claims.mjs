@@ -105,14 +105,21 @@ for (const el of elements) {
 }
 
 const findings = [];
+const unreadable = [];
 for (const r of rows) {
   if (!r.wikipedia) continue;
   const text = await articleText(r.wikipedia);
   await new Promise((res) => setTimeout(res, 400)); // be polite to Wikipedia
-  if (!text) { r.article = { verdict: "no-article" }; continue; }
+  if (!text) { r.article = { verdict: "no-article" }; unreadable.push(r); continue; }
   const box = parseInfoboxHeights(text);
   r.box = box;
   r.article = compareTagToArticle(r.h, box);
+  // An article this parser could not read a height out of is NOT a clean bill of
+  // health, and reporting it as one is how a tool ends up saying "no findings"
+  // about a city it never actually checked. Japanese infoboxes, for one, name
+  // their fields in Japanese — so a Tokyo run reads far fewer articles than it
+  // fetches, and the count below is what makes that visible instead of silent.
+  if (r.article.verdict === "unknown") unreadable.push(r);
   if (r.article.verdict === "over" || r.article.verdict === "under") findings.push(r);
 }
 
@@ -132,6 +139,11 @@ process.stdout.write(
   + ` overrides these:\n${impossible.length ? impossible.map(line).join("\n") : "  none"}\n`
   + `\n⚠ the element disagrees with the article IT links to:\n`
   + `${findings.length ? findings.map((r) => `${line(r)}   [${r.article.verdict}]`).join("\n") : "  none"}\n`
+  + (rows.some((r) => r.wikipedia)
+    ? `  (checked ${rows.filter((r) => r.wikipedia).length - unreadable.length}`
+      + ` of ${rows.filter((r) => r.wikipedia).length} linked articles`
+      + `${unreadable.length ? `; ${unreadable.length} published no height this parser could read — "none" above says nothing about those` : ""})\n`
+    : "")
   + `\n· unusual but possible (2-2.8 m per storey), reported only:\n`
   + `${suspicious.length ? suspicious.map(line).join("\n") : "  none"}\n`
   + (showAll ? `\n· every height tag:\n${rows.map(line).join("\n")}\n` : "")

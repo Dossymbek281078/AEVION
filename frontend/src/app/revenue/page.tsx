@@ -559,7 +559,14 @@ export default function RevenuePage() {
   );
 }
 
-interface TrendPoint { capturedAt: string; netUsd: number; grossUsd: number; saleCount: number }
+interface TrendPoint {
+  capturedAt: string;
+  netUsd: number;
+  grossUsd: number;
+  saleCount: number;
+  /** true у снимков до 27.07.2026: в их суммах ещё сидели свои покупки. */
+  includesInternal?: boolean;
+}
 interface TrendResp {
   windowDays: number;
   points: number;
@@ -616,6 +623,11 @@ function RevenueTrend() {
 
   const series = trend?.series ?? [];
   const change = trend?.change;
+  // Снимки до 27.07.2026 считали свои проверочные покупки выручкой. Линия на
+  // их границе падает не потому, что деньги ушли, а потому что их перестали
+  // приписывать. Без подписи это читается как обвал — а Δ за окно уже читается
+  // как убыток.
+  const mixedHistory = series.some((p) => p.includesInternal) && series.some((p) => p.includesInternal === false);
 
   return (
     <section>
@@ -632,6 +644,14 @@ function RevenueTrend() {
       {note && (
         <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${note.startsWith("✓") ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300" : "bg-rose-500/10 border-rose-500/30 text-rose-300"}`}>
           {note}
+        </div>
+      )}
+
+      {mixedHistory && (
+        <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/30 text-amber-200">
+          Ступенька на графике 27.07.2026 — не падение выручки. До этой даты в суммы
+          входили наши собственные проверочные покупки ($158.99); с 27.07 они
+          считаются отдельно. Точки левее границы завышены на эту величину.
         </div>
       )}
 

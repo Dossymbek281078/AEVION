@@ -409,9 +409,18 @@ async function ensureSnapshotTable(): Promise<void> {
       "refundedCount"  INT NOT NULL DEFAULT 0,
       "byApp"          JSONB NOT NULL DEFAULT '{}'::jsonb,
       "byChannel"      JSONB NOT NULL DEFAULT '{}'::jsonb,
-      "source"         TEXT NOT NULL DEFAULT 'combined'
+      "source"         TEXT NOT NULL DEFAULT 'combined',
+      "internalUsd"    NUMERIC(14,2),
+      "internalCount"  INT
     );
   `);
+  // Таблица уже существует на проде с 26.05.2026 — CREATE ... IF NOT EXISTS её
+  // не тронет, поэтому колонки добавляются отдельно. NULL здесь значимый: он
+  // отмечает снимки, снятые ДО 27.07.2026, когда свои проверочные покупки ещё
+  // входили в grossUsd. Без этой отметки график тренда покажет падение выручки
+  // там, где на самом деле её просто перестали завышать.
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalUsd" NUMERIC(14,2);`);
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalCount" INT;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "RevenueSnapshot_time_idx" ON "RevenueSnapshot" ("capturedAt" DESC);`);
   snapshotTableReady = true;
 }
@@ -513,6 +522,9 @@ interface SnapshotRow {
   byApp: Record<string, unknown>;
   byChannel: Record<string, unknown>;
   source: string;
+  /** NULL у снимков до 27.07.2026 — тогда свои покупки ещё сидели в grossUsd. */
+  internalUsd: string | number | null;
+  internalCount: number | null;
 }
 
 function serializeSnapshot(r: SnapshotRow) {
@@ -527,6 +539,11 @@ function serializeSnapshot(r: SnapshotRow) {
     byApp: r.byApp,
     byChannel: r.byChannel,
     source: r.source,
+    internalUsd: r.internalUsd === null || r.internalUsd === undefined ? null : Number(r.internalUsd),
+    internalCount: r.internalCount ?? null,
+    // Явный флаг вместо «догадайся по null»: график обязан отличать снимок,
+    // где свои покупки лежали внутри выручки, от снимка, где их не было вовсе.
+    includesInternal: r.internalUsd === null || r.internalUsd === undefined,
   };
 }
 
@@ -931,12 +948,13 @@ revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
     const id = crypto.randomUUID();
     const pool = getPool();
     const r = await pool.query(
-      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined')
-       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"`,
+      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined',$9,$10)
+       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"`,
       [
         id, totals.grossUsd, totals.netUsd, totals.feesUsd, totals.saleCount, totals.refundedCount,
         JSON.stringify(totals.byApp), JSON.stringify(totals.byChannel),
+        totals.internalUsd, totals.internalCount,
       ],
     );
     // Bound the table's growth: /snapshots and /trend never query past 365
@@ -969,7 +987,7 @@ revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
     }
     params.push(limit);
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"
        FROM "RevenueSnapshot" ${where}
        ORDER BY "capturedAt" DESC LIMIT $${params.length}`,
       params,
@@ -993,7 +1011,7 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
     const windowDays = Math.min(365, Math.max(1, parseInt(String(req.query.windowDays ?? "30"), 10) || 30));
     const pool = getPool();
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount"
        FROM "RevenueSnapshot"
        WHERE "capturedAt" > NOW() - ($1 || ' days')::interval
        ORDER BY "capturedAt" ASC`,

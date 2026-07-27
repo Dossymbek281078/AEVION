@@ -1190,3 +1190,39 @@ describe("the document's headline number is the harness's number", () => {
     expect(table).toBe(claimed);
   });
 });
+
+describe("a milestone's words also describe a business", () => {
+  /**
+   * Sunrun's S-1 explains its product with the same words a milestone uses:
+   * "homeowners who buy energy from us under leases or power purchase
+   * agreements are covered by production guaranties". No agreement is being
+   * announced there — the sentence describes what the company sells.
+   *
+   * It missed only because the plural "agreements" broke a word boundary. Luck,
+   * not a rule: the singular form of the same descriptive sentence would have
+   * been credited. The entry now requires the agreement to be stated as
+   * concluded, which is the thing that makes it a milestone.
+   *
+   * Nubank's F-1 supplied the licence half: "we may apply for a banking licence
+   * in the future" was read as a licence held, because the intention list knew
+   * "applying for" but not the modal.
+   */
+  const held = (t: string, label: string) => parsePlanSignals(t).regulatoryMilestones.includes(label);
+
+  test("a signed agreement counts", () => {
+    expect(held("A 15-year power purchase agreement is signed with the regional utility.", "Grid/PPA agreement")).toBe(true);
+    expect(held("Grid interconnection agreement is executed.", "Grid/PPA agreement")).toBe(true);
+    expect(held("PPA executed for 120 MW.", "Grid/PPA agreement")).toBe(true);
+  });
+  test("describing the product does not", () => {
+    expect(held("Homeowners who buy energy from us under leases or power purchase agreements are covered by production guaranties.", "Grid/PPA agreement")).toBe(false);
+    expect(held("We have a power purchase agreement with the utility covering our systems.", "Grid/PPA agreement")).toBe(false);
+    expect(held("Regulations relate to electricity pricing, net metering and the interconnection of solar energy systems to the electrical grid.", "Grid/PPA agreement")).toBe(false);
+  });
+  test("a licence held counts, a licence contemplated does not", () => {
+    expect(held("We hold a payment institution licence.", "Financial licence held")).toBe(true);
+    expect(held("An e-money licence is held in two jurisdictions.", "Financial licence held")).toBe(true);
+    expect(held("We may apply for a banking licence in the future.", "Financial licence held")).toBe(false);
+    expect(held("None of our subsidiaries is licensed to operate as a bank.", "Financial licence held")).toBe(false);
+  });
+});

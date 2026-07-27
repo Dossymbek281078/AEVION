@@ -290,7 +290,7 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  * drift apart.
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
-const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply|deploy|have)|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
 function statedAsAchieved(text: string, at: number, len: number): boolean {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
@@ -1211,7 +1211,13 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     // natural passive "we were awarded a defense contract" did not match a
     // pattern fixed to the words "defense contract awarded".
     [/\bitar (?:registered|registration)\b|\b(?:awarded|won|received|secured)[^.;]{0,40}?\b(?:defen[cs]e|military|government) contract\b|\bdefen[cs]e contract awarded\b|\b(?:awarded|won|holds?|received|secured)[^.;]{0,40}?\bidiq\b|\bidiq\b[^.;]{0,30}?\b(?:award(?:ed)?|win|won)\b|\bota\b (?:award|contract)/i, "Defence contracting status"],
-    [/\bgrid interconnection agreement|\bppa\b|\bpower purchase agreement\b/i, "Grid/PPA agreement"],
+    // Sunrun's S-1 describes its BUSINESS with the same words a milestone uses:
+    // "homeowners who buy energy from us under leases or power purchase
+    // agreements are covered by production guaranties". That sentence announces
+    // no agreement; it explains the product. It missed only because the plural
+    // "agreements" broke the word boundary — luck, not a rule — so the entry now
+    // requires the agreement to be stated as concluded.
+    [/\bgrid interconnection agreement\b[^.;]{0,30}?\b(?:executed|signed|secured|in place|granted|approved)\b|\b(?:executed|signed|secured|concluded|awarded)\b[^.;]{0,30}?\b(?:grid interconnection agreement|ppa|power purchase agreements?)\b|\b(?:ppa|power purchase agreements?)\b[^.;]{0,30}?\b(?:is |are |was |were )?(?:executed|signed|secured|concluded|in place)\b/i, "Grid/PPA agreement"],
   ];
   /**
    * The comment above this list has always promised that "FDA approval expected

@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 274
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 279
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -450,13 +450,38 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    sentences this repository invented for itself, and the first real document
    broke the one it met.
 
+20. **A milestone's words also describe a business.** Two more entries taken to
+   real filings, and both bent the same way: the vocabulary that announces an
+   achievement is the vocabulary that explains a product.
+
+   Sunrun's S-1 says "homeowners who buy energy from us under leases or **power
+   purchase agreements** are covered by production guaranties". No agreement is
+   announced there — that sentence is the product description. It escaped the
+   milestone list only because the plural `agreements` broke a word boundary:
+   luck, not a rule, and the singular form of the same descriptive sentence
+   would have been credited. The entry now requires the agreement to be stated
+   as concluded, which is the thing that makes it a milestone rather than a
+   noun.
+
+   Nubank's F-1 supplied the licence half. "**We may apply for** a banking
+   licence in the future" was read as a licence held, because the intention list
+   knew "applying for" and "applied for" but not the modal. It also states "none
+   of our subsidiaries is licensed to operate as a bank", which the negation
+   layer already handled correctly.
+
+   That is four list entries now tested against real documents — defence, PPA,
+   financial licence, security certification — and **every one of them was wrong
+   on the first real sentence it met**. The entries were written against
+   examples this repository invented, and inventing an example means inventing
+   one that fits.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 274):
+`tests/qventureDisclosedCorpus.test.ts`, 279):
 
 | Guard | Floor | Measured today |
 |---|---|---|

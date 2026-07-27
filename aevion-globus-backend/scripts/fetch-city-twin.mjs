@@ -88,7 +88,10 @@ const CITIES = {
       "    /** Heights that tower over the rest of the city — a wrong tag is trusted",
       "     *  as completely as a right one, so it is published, not hidden.",
       "     *  Absent when there is nothing to report. */",
-      "    suspect?: { i: number; h: number; times: number }[];",
+      "    suspect?: { i: number; h: number; why: string;",
+      "                 /** set when the height stands out from the city */ times?: number;",
+      "                 /** set when the source's own floor count contradicted its height tag */",
+      "                 was?: number; levels?: number }[];",
       "  };",
       "}",
     ].join("\n"),
@@ -237,9 +240,13 @@ const buildings = [];
 // Parallel array, diagnostics only — never emitted, so the twin keeps exactly
 // the shape src/routes/qskyway.ts already consumes.
 const meta = [];
+const contradicted = [];
 for (const el of elements) {
-  const { h, hs } = heightOf(el.tags);
+  const { h, hs, contradicted: was } = heightOf(el.tags);
   for (const r of ringsOf(el, proj)) {
+    if (was !== undefined) {
+      contradicted.push({ i: buildings.length, h, was, levels: Number(el.tags["building:levels"]) });
+    }
     buildings.push({ h, hs, r });
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
@@ -478,10 +485,14 @@ if (compareOnly) {
   process.exit(0);
 }
 
-const suspect = heightOutliers(buildings).map((o) => ({ i: o.index, h: o.h, times: o.times }));
+const suspect = [
+  ...heightOutliers(buildings).map((o) => ({ i: o.index, h: o.h, times: o.times, why: "towers over the city" })),
+  ...contradicted.map((c) => ({ i: c.i, h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
+];
 if (suspect.length) {
   process.stderr.write(
-    `  ⚠ ${suspect.length} height(s) towering over the city: ${suspect.map((o) => `${o.h} m (${o.times}x p99)`).join(", ")}
+    `  ⚠ ${suspect.length} height(s) the source could not vouch for: ` +
+    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
 `,
   );
 }

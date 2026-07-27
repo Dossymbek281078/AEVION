@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers,
+  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers, MIN_STOREY_M, CONTRADICTION_MIN_LEVELS,
   projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
 import { CITY } from "../src/routes/qskyway.city";
@@ -319,6 +319,66 @@ describe("the committed twins publish what the generator could not vouch for", (
     // An always-present empty array reads, on a chip, as "checked and fine" in
     // exactly the same way as "never checked". Absence is the honest shape.
     expect(CITY_NYC.dataQuality.suspect).toBeUndefined();
-    expect(CITY_TOKYO.dataQuality.suspect).toBeUndefined();
+  });
+
+  it("Tokyo reports the height tags its own floor counts contradicted", () => {
+    // Two buildings carry a height tag impossible beside their floor count
+    // (14 m over 8 and over 10 storeys). The twin uses the floor-derived height
+    // and says so, instead of publishing the impossible number as measured.
+    const suspect = CITY_TOKYO.dataQuality.suspect ?? [];
+    expect(suspect.length).toBeGreaterThan(0);
+    for (const o of suspect) {
+      expect(o.why).toMatch(/contradicted/);
+      expect(o.h).toBeGreaterThan(o.was!);
+      // Deliberately NOT asserting the building's final provenance: a later
+      // stage may still identify it with a surveyed outline and re-measure it.
+      // The record says what the OSM tag claimed and what we used instead of
+      // it — not how the story ended.
+      expect(CITY_TOKYO.buildings[o.i]).toBeDefined();
+    }
+  });
+});
+
+describe("heightOf — a measured tag its own source contradicts is not a measurement", () => {
+  it("prefers the floor count when the height tag is impossible beside it", () => {
+    // way/572495079 in Nishi-Shinjuku: height=7 with building:levels=47, i.e.
+    // 0.15 m per storey. It shipped in the twin as MEASURED, which buys zero
+    // safety clearance, so corridors were planned through a 47-storey building
+    // at seven metres. PLATEAU did not cover that footprint, so nothing
+    // downstream caught it.
+    const got = heightOf({ height: "7", "building:levels": "47" });
+    expect(got.h).toBe(Math.round(47 * METRES_PER_LEVEL + PARAPET_M));
+    expect(got.hs).toBe(1);
+    expect(got.contradicted).toBe(7);
+  });
+
+  it("does not touch a height tag that merely sits low", () => {
+    // 3 m per storey is a normal building, not a contradiction. The rule must
+    // fire on the impossible, not on the merely short — otherwise it becomes a
+    // second, silent height model competing with the source.
+    const got = heightOf({ height: "30", "building:levels": "10" });
+    expect(got).toMatchObject({ h: 30, hs: 0 });
+    expect(got.contradicted).toBeUndefined();
+  });
+
+  it("leaves single-storey structures alone, where the two tags do not really disagree", () => {
+    // A canopy tagged levels=1, height=1 is a modelling convention. Treating it
+    // as a hidden tower would inflate every awning in the city — eleven such
+    // rows exist in Nishi-Shinjuku against three genuine contradictions.
+    expect(heightOf({ height: "1", "building:levels": "1" })).toMatchObject({ h: 1, hs: 0 });
+    expect(heightOf({ height: "1", "building:levels": "2" })).toMatchObject({ h: 1, hs: 0 });
+    expect(CONTRADICTION_MIN_LEVELS).toBe(3);
+  });
+
+  it("keeps the boundary where a storey stops being possible", () => {
+    expect(MIN_STOREY_M).toBe(2);
+    // exactly 2 m per storey is allowed; below it is not
+    expect(heightOf({ height: "20", "building:levels": "10" })).toMatchObject({ hs: 0 });
+    expect(heightOf({ height: "19", "building:levels": "10" })).toMatchObject({ hs: 1 });
+  });
+
+  it("still needs BOTH tags — one alone says nothing about the other", () => {
+    expect(heightOf({ height: "7" })).toMatchObject({ h: 7, hs: 0 });
+    expect(heightOf({ "building:levels": "47" })).toMatchObject({ hs: 1 });
   });
 });

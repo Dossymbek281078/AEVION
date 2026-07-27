@@ -86,10 +86,36 @@ export function parseMetres(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+// The shortest storey anyone builds. Used only to decide whether a `height` tag
+// CONTRADICTS the floor count published beside it — not to estimate anything.
+export const MIN_STOREY_M = 2;
+// Below this many floors the two tags stop disagreeing in any meaningful way: a
+// canopy tagged `building:levels=1, height=1` is a modelling convention, not a
+// hidden tower, and "correcting" it would inflate every awning in the city.
+export const CONTRADICTION_MIN_LEVELS = 3;
+
 export function heightOf(tags = {}) {
   const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
-  if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
   const levels = parseMetres(tags["building:levels"]);
+
+  // A measured tag that its OWN source contradicts is not a measurement.
+  //
+  // Found in the shipped Tokyo twin on 2026-07-27: way/572495079 carries
+  // height=7 alongside building:levels=47 — 0.15 m per storey. It entered the
+  // obstacle grid as hs=0, MEASURED, which buys zero safety clearance, so the
+  // router planned corridors through a 47-storey building at seven metres.
+  // PLATEAU did not cover that footprint, so nothing downstream caught it.
+  //
+  // Understating an obstacle is the expensive direction of this failure, and no
+  // outside source is needed to see it: the source disagrees with itself, so we
+  // fall back to its other claim and mark the result DERIVED — which is both
+  // honest and buys back the clearance a guess deserves.
+  if (explicit !== null && levels !== null && levels >= CONTRADICTION_MIN_LEVELS
+      && explicit / levels < MIN_STOREY_M) {
+    return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1, contradicted: Math.round(explicit) };
+  }
+
+  if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
   if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1 };
   return { h: DEFAULT_HEIGHT_M, hs: 2 };
 }

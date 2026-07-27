@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchAiSavings } from "@/lib/aiSavings";
 
 interface Capability {
   id: string;
@@ -140,9 +141,10 @@ export default function StudioPage() {
       .then((r) => r.json())
       .then((d: CreditsData) => setCredits(d))
       .catch(() => {});
-    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: SmartSavings) => { if (d && typeof d.runs === "number") setSavings(d); })
+    // Общий счётчик, а не прямой fetch: то же число рисует виджет в шапке, и
+    // два запроса за одним значением давали дубль в сети (issue #1016).
+    fetchAiSavings()
+      .then((d) => { if (d) setSavings(d); })
       .catch(() => {});
   }, []);
 

@@ -1160,3 +1160,41 @@ describe("Brevo capabilities report delivery, not key presence", () => {
     __resetProviderHealth();
   });
 });
+
+
+describe("music reports the capability, not one provider", () => {
+  test("a MusicGen fallback still counts as working", async () => {
+    // Crying "degraded" while the user is holding a track would train people
+    // to ignore the strip.
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes("elevenlabs")
+        ? { ok: false, status: 429, text: async () => "rate limited" }
+        : { ok: true, status: 201, json: async () => ({ id: "pred-1", status: "starting" }), text: async () => "{}" },
+    );
+
+    const r = await request(makeApp()).post("/api/devhub/media/music").send({ prompt: "lofi" });
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toMatch(/musicgen/i);
+    expect(getProviderHealth("audio_music")?.ok).toBe(true);
+    __resetProviderHealth();
+  });
+
+  test("both providers out is a real failure", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    delete process.env.REPLICATE_API_TOKEN; // no fallback available
+    fetchMock.mockResolvedValue({ ok: false, status: 429, text: async () => "rate limited" } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/media/music").send({ prompt: "lofi" });
+    expect(r.status).toBe(429);
+    const h = getProviderHealth("audio_music");
+    expect(h?.ok).toBe(false);
+    expect(h?.reason).toMatch(/no MusicGen fallback/i);
+    __resetProviderHealth();
+  });
+});

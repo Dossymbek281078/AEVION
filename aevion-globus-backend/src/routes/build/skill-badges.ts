@@ -45,6 +45,19 @@ async function ensureTable(): Promise<void> {
 interface Question { id: string; text: string; options: string[]; correct: number; }
 interface SkillTest { id: string; title: string; description: string; questions: Question[]; passingScore: number; }
 
+/** Ищет тест по идентификатору из адреса. Обычный `TESTS[id]` возвращал ключи
+ *  прототипа: на проде `GET /api/build/skill-tests/constructor` (а также
+ *  `toString`, `__proto__`) отдавал **500 internal_error** вместо 404 —
+ *  проверка `if (!test)` пропускала функцию `Object`, и падение случалось
+ *  дальше, на `test.questions`. Проверено живыми запросами 27.07.2026. */
+function findTest(id: unknown): SkillTest | null {
+  if (typeof id !== "string") return null;
+  // hasOwnProperty.call, а не Object.hasOwn: у бэкенда цель компиляции ниже
+  // ES2022, и `Object.hasOwn` там не объявлен — tsc падает с TS2550, хотя в
+  // рантайме Node метод есть. Такой вариант работает при любой цели.
+  return Object.prototype.hasOwnProperty.call(TESTS, id) ? TESTS[id] : null;
+}
+
 const TESTS: Record<string, SkillTest> = {
   welding: {
     id: "welding",
@@ -128,7 +141,7 @@ skillBadgesRouter.get("/skill-tests", (_req, res) => {
 
 // GET /api/build/skill-tests/:id — get test with questions (options only, no correct)
 skillBadgesRouter.get("/skill-tests/:id", (req, res) => {
-  const test = TESTS[req.params.id];
+  const test = findTest(req.params.id);
   if (!test) return fail(res, 404, "test_not_found");
   return ok(res, {
     test: {
@@ -146,7 +159,7 @@ skillBadgesRouter.post("/skill-tests/:id/submit", async (req, res) => {
     if (!auth) return;
     await ensureTable();
 
-    const test = TESTS[req.params.id];
+    const test = findTest(req.params.id);
     if (!test) return fail(res, 404, "test_not_found");
 
     const answers = req.body?.answers;
@@ -197,7 +210,7 @@ skillBadgesRouter.get("/skill-badges/me", async (req, res) => {
     );
     const badges = rows.rows.map((r: { testId: string; id: string; score: number; passed: boolean; grantedAt: string }) => ({
       ...r,
-      testTitle: TESTS[r.testId]?.title ?? r.testId,
+      testTitle: findTest(r.testId)?.title ?? r.testId,
     }));
     return ok(res, { badges });
   } catch (err: unknown) {
@@ -216,7 +229,7 @@ skillBadgesRouter.get("/skill-badges/user/:userId", async (req, res) => {
     );
     const badges = rows.rows.map((r: { testId: string; id: string; score: number; grantedAt: string }) => ({
       ...r,
-      testTitle: TESTS[r.testId]?.title ?? r.testId,
+      testTitle: findTest(r.testId)?.title ?? r.testId,
     }));
     return ok(res, { badges });
   } catch (err: unknown) {

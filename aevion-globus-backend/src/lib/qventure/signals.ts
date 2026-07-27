@@ -1200,7 +1200,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\bphase\s*(?:iii|3)\b/i, "Phase 3 clinical"],
     [/\bphase\s*(?:ii|2)\b/i, "Phase 2 clinical"],
     [/\bphase\s*(?:i|1)\b(?!\w)/i, "Phase 1 clinical"],
-    [/\bind (?:cleared|filed|accepted)\b/i, "IND cleared"],
+    // "The program has an open IND" is how a filing says the application
+    // cleared and is live. The pattern missed it while correctly ignoring the
+    // two neighbouring phrasings in the same S-1 that are NOT a cleared IND:
+    // "IND-enabling toxicology studies" and "included in the IND filing".
+    [/\bind (?:cleared|filed|accepted)\b|\b(?:open|active)\s+ind\b|\bind\s+is\s+(?:open|active|cleared)\b/i, "IND cleared"],
     [/\b(?:faa|easa) (?:certifi\w+|type certificate|approval)\b/i, "Aviation authority certification"],
     [/\b(?:banking|e-?money|emi|money transmitter|payment institution|broker[- ]dealer|lending) licen[cs]e\b/i, "Financial licence held"],
     // A bare "IDIQ" matched any mention of the words, including AeroVironment's

@@ -1226,3 +1226,36 @@ describe("a milestone's words also describe a business", () => {
     expect(held("None of our subsidiaries is licensed to operate as a bank.", "Financial licence held")).toBe(false);
   });
 });
+
+describe("what a clinical filing calls a cleared application", () => {
+  /**
+   * Moderna's S-1 uses "the program has an open IND" for an application that
+   * cleared and is live — a real milestone the pattern missed, while correctly
+   * ignoring the two neighbouring phrasings in the same document that are NOT a
+   * cleared IND: "IND-enabling GLP toxicology studies" (pre-IND work) and "data
+   * to be included in the IND filing" (not yet submitted).
+   *
+   * The same filing's breakthrough-designation language stayed out on its own,
+   * including the sentence most likely to fool a keyword reader: "designation as
+   * a breakthrough therapy is at the discretion of the FDA".
+   */
+  const held = (t: string, label = "IND cleared") => parsePlanSignals(t).regulatoryMilestones.includes(label);
+
+  test("an open or active IND is a cleared IND", () => {
+    expect(held("The program has an open IND.")).toBe(true);
+    expect(held("An active IND is in place for the lead programme.")).toBe(true);
+    expect(held("Phase 2 complete, IND cleared for the follow-on indication.")).toBe(true);
+  });
+  test("pre-IND work and an unfiled application are not", () => {
+    expect(held("IND-enabling GLP toxicology studies are underway.")).toBe(false);
+    expect(held("CMC activities including data to be included in the IND filing.")).toBe(false);
+    expect(held("We intend to open an IND once formulation work completes.")).toBe(false);
+    expect(held("No IND has been filed.")).toBe(false);
+  });
+  test("a designation discussed is not a designation granted", () => {
+    const label = "FDA breakthrough designation";
+    expect(held("We may seek a breakthrough therapy designation for one or more of our investigational medicines.", label)).toBe(false);
+    expect(held("Designation as a breakthrough therapy is at the discretion of the FDA.", label)).toBe(false);
+    expect(held("Granted breakthrough therapy designation.", label)).toBe(true);
+  });
+});

@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 279
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 282
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -469,9 +469,14 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    of our subsidiaries is licensed to operate as a bank", which the negation
    layer already handled correctly.
 
-   That is four list entries now tested against real documents — defence, PPA,
-   financial licence, security certification — and **every one of them was wrong
-   on the first real sentence it met**. The entries were written against
+   That is six list entries now tested against real documents — defence, PPA,
+   financial licence, security certification, IND and breakthrough designation.
+   **Five of the six were wrong on the first real sentence they met**; the
+   breakthrough entry survived, including the sentence most likely to fool a
+   keyword reader ("designation as a breakthrough therapy is at the discretion
+   of the FDA"), and Moderna cost only one fix: "the program has an open IND"
+   is how a filing says an application cleared, and the pattern wanted
+   "cleared", "filed" or "accepted". The entries were written against
    examples this repository invented, and inventing an example means inventing
    one that fits.
 
@@ -481,7 +486,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 279):
+`tests/qventureDisclosedCorpus.test.ts`, 282):
 
 | Guard | Floor | Measured today |
 |---|---|---|

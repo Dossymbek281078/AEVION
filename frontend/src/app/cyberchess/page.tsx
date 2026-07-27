@@ -120,6 +120,19 @@ import { computeInsights, type Insights } from "./insights";
 import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
 import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
+
+/* Тема приводится к одному виду сразу на входе — и с бэкенда, и из запасного
+   puzzles.json. Половина корпуса пришла из дампа Lichess с темами вида "fork" и
+   "attraction", вторая половина несёт русские ("Вилка", "Завлечение"). Без этого для
+   кода это ДВЕ разные темы: в списке фильтра они стояли двумя пунктами, и выбор одного
+   прятал задачи другого, счётчики и статистика по теме делились пополам, а эмодзи с
+   цветом не находились вовсе — THEME_META ключуется по русским названиям. Оба пути
+   загрузки обязаны проходить через нормализацию: бэкенд отдаёт основной пул и выходит
+   раньше, так что фикс только на запасном пути не работал бы почти никогда.
+   themeLabel неизвестную тему возвращает как есть — ничего не проглатывается. */
+function normalizeThemes<T extends { theme?: string }>(list: T[]): T[] {
+  return list.map((p) => (p.theme ? { ...p, theme: themeLabel(p.theme) } : p));
+}
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
 import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
@@ -2566,16 +2579,10 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(normalizeThemes(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
-      /* Тема приводится к одному виду сразу на входе. Половина корпуса пришла из дампа
-         Lichess с темами вида "fork"/"kingsideAttack", вторая половина — с русскими
-         ("Вилка"). Без нормализации это ДВЕ разных темы: в списке фильтра они стояли
-         двумя пунктами, каждый показывал свою половину задач, счётчики и статистика по
-         теме делились пополам, а эмодзи с цветом не находились (THEME_META — по русским
-         ключам). themeLabel не знает тему — возвращает как есть. */
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles((d2 as Puzzle[]).map(p=>p.theme?{...p,theme:themeLabel(p.theme)}:p));}catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(normalizeThemes(d2 as Puzzle[]));}catch{}
     })();
   },[tab]);
 

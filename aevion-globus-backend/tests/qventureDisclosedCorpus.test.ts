@@ -6482,3 +6482,43 @@ describe("the last three connector lists join the shared constant", () => {
     expect(p("Growing 20-40% year over year.").growthPct).toBe(20);
   });
 });
+
+describe("the series rules are order-independent, which is why they are rules", () => {
+  // The lesson that cost an hour twice today: a case that passes may pass for
+  // the wrong reason. The third year reader looked correct because the corpus
+  // states its years ascending, where "take the last figure" happens to agree
+  // with "take the latest year".
+  //
+  // The test for that is not a code mutation but a DATA one: reverse the year
+  // order and require the same answer. A rule that chooses by year does not
+  // notice; a rule that chooses by position gives a different number.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["revenue",
+      "Our revenue was $186.4 million in 2018, $289.2 million in 2019, and $400.3 million in 2020.",
+      "Our revenue was $400.3 million in 2020, $289.2 million in 2019, and $186.4 million in 2018.",
+      (x: Sig) => x.revenueUsd],
+    ["net retention",
+      "Our net retention rate was 121% as of December 31, 2018, 117% as of December 31, 2019, and 107% as of December 31, 2020.",
+      "Our net retention rate was 107% as of December 31, 2020, 117% as of December 31, 2019, and 121% as of December 31, 2018.",
+      (x: Sig) => x.retentionPct],
+    ["customers",
+      "We had 3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020.",
+      "We had 8,000 customers in 2020, 5,000 in 2019, and 3,000 in 2018.",
+      (x: Sig) => x.customers],
+    ["gross margin",
+      "Gross margin was 60% in 2018, 70% in 2019, and 80% in 2020.",
+      "Gross margin was 80% in 2020, 70% in 2019, and 60% in 2018.",
+      (x: Sig) => x.grossMarginPct],
+    ["growth",
+      "Revenue growth of 55% in 2019 and 38% in 2020.",
+      "Revenue growth of 38% in 2020 and 55% in 2019.",
+      (x: Sig) => x.growthPct],
+  ])("%s reads the same whichever way the years run", (_l, ascending, descending, read) => {
+    const a = read(p(ascending) as Sig);
+    const b = read(p(descending) as Sig);
+    expect(a).not.toBeNull();
+    expect(b).toBe(a);
+  });
+});

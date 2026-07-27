@@ -278,8 +278,13 @@ export function parsePlanSignals(text: string): PlanSignals {
   detectRevenueRange(t, s, planCurrency);
 
   // ── Revenue: "$2M ARR" / "$500k MRR" / "$1.2m in revenue" / "arr of $3m" ──
-  const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(arr|mrr|revenue)\s*(?:of|=|:|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  // "Net revenues of $87.9M" — the plural is how filings write it, and the
+  // singular-only pattern matched "revenue" inside "revenues" and then failed on
+  // the trailing "s", so the figure was dropped entirely. "Net sales" is the
+  // same disclosure again under the name consumer-goods filings use.
+  const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues?|net sales|sales`;
+  const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (arr) {
     // group order differs between the two alternatives; detect which matched
     const hasLeadingNum = startsWithFigure(arr[0]);
@@ -356,6 +361,20 @@ export function parsePlanSignals(text: string): PlanSignals {
   const gm = firstMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"))
     || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*${NEG}${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*(\()\s*${NUM}\s*\)\s*%`, "i"));
+  // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
+  // a share of revenue, which is how a filing writes it when it never uses the
+  // words "gross margin".
+  // The gap between "gross profit" and the percentage must be allowed to cross
+  // a decimal point — "$17.6 million" sits in it — so the span is length-bounded
+  // rather than punctuation-bounded, and the tail ("% of net revenue") is what
+  // keeps it from reaching into an unrelated sentence.
+  const gmShare = gm ? null : firstMatch(t, new RegExp(String.raw`gross\s*profit.{0,48}?${NEG}${NUM}\s*%\s*of\s*(?:net\s*|total\s*)?(?:revenues?|sales)`, "i"));
+  if (gmShare && s.grossMarginPct === null) {
+    const magnitude = parseLocaleNumber(gmShare[2]);
+    if (isFinite(magnitude) && magnitude > 0 && magnitude <= 100) {
+      s.grossMarginPct = gmShare[1] ? -magnitude : magnitude;
+    }
+  }
   if (gm && s.grossMarginPct === null) {
     const magnitude = parseLocaleNumber(gm[2]);
     const negative = Boolean(gm[1]);
@@ -489,7 +508,16 @@ export function parsePlanSignals(text: string): PlanSignals {
   // memberships, a marketplace sellers, a platform accounts or stores. Reading
   // only the SaaS nouns made those filings look like plans with no customer
   // disclosure at all.
-  const cust = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|sellers|tenants)`, "i"));
+  // Filings qualify the noun: "511,202 Connected Fitness Subscribers", "1,200
+  // paying enterprise customers". Up to three qualifying words are allowed
+  // between the count and the noun — but not a preposition, which means the
+  // count belongs to a different clause ("$144.1M on marketing to acquire
+  // customers" must not read as 144 million customers), and not a figure that
+  // carries a currency symbol.
+  const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
+  const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
+  const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|sellers|tenants`;
+  const cust = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);

@@ -103,16 +103,51 @@ describe("expansion and retention are the same disclosure under different names"
   }
 });
 
+describe("filings name revenue in the plural, and sometimes call it sales", () => {
+  // "revenue" matched inside "revenues" and then failed on the trailing "s", so
+  // the most standard phrasing in the corpus dropped the figure entirely.
+  for (const [text, expected] of [
+    ["Net revenues of $87.9M in 2018.", 87_900_000],
+    ["Net sales of $423M in 2019.", 423_000_000],
+    ["Revenue of $1.54B in the first half of 2019.", 1_540_000_000],
+    ["$2M ARR.", 2_000_000],
+  ] as const) {
+    test(text, () => {
+      expect(parsePlanSignals(text).revenueUsd).toBe(expected);
+    });
+  }
+});
+
+describe("a margin stated as a share of revenue is still a margin", () => {
+  test("gross profit of $17.6 million, or 20% of net revenue", () => {
+    const s = parsePlanSignals("Gross profit of $17.6 million, or 20% of net revenue.");
+    expect(s.grossMarginPct).toBe(20);
+    // Gross profit is not revenue — the same sentence must not set both.
+    expect(s.revenueUsd).toBeNull();
+  });
+});
+
 describe("customers are not always called customers", () => {
   for (const [text, expected] of [
     ["Approximately 527,000 memberships.", 527_000],
     ["162,261 merchants on the platform.", 162_261],
     ["4,200 active sellers.", 4_200],
+    ["511,202 Connected Fitness Subscribers.", 511_202],
+    ["1,200 paying enterprise customers.", 1_200],
   ] as const) {
     test(text, () => {
       expect(parsePlanSignals(text).customers).toBe(expected);
     });
   }
+
+  // Allowing qualifier words between the count and the noun creates the risk of
+  // swallowing a money figure from a different clause. These pin the guards.
+  test("a spend figure in another clause is not a customer count", () => {
+    expect(parsePlanSignals("$144.1 million on marketing to acquire customers.").customers).toBeNull();
+  });
+  test("a per-customer figure is not a customer count", () => {
+    expect(parsePlanSignals("Spent $5 million per customer.").customers).toBeNull();
+  });
 });
 
 describe("a reservation book is disclosed, never credited", () => {

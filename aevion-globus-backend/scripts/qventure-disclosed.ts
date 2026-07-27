@@ -63,7 +63,14 @@ export interface Expectation {
 
 export interface DisclosedCase {
   input: AnalysisInput;
-  outcome: "failed" | "succeeded";
+  /**
+   * "open" is not a hedge — it is the honest label for a company that is still
+   * trading and whose story is not over. Forcing Rivian or Peloton into
+   * failed/succeeded to pad the separation statistic would be picking the
+   * outcome that suits the number. Open cases count toward parse coverage,
+   * which needs no outcome, and are excluded from the separation figure.
+   */
+  outcome: "failed" | "succeeded" | "open";
   /** The filing or round the figures are taken from. */
   round: string;
   /** Where every figure in the text can be checked. */
@@ -226,6 +233,108 @@ export const CASES: DisclosedCase[] = [
         "No revenue, customer count, growth rate or unit economics disclosed at the round.",
     },
     expect: [],
+  },
+
+  {
+    outcome: "failed",
+    round: "Form S-1, June 2017",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/0001701114/000104746917003765/a2232259zs-1.htm",
+      "https://thecounter.org/blue-aprons-revenue-could-top-1-billion-this-year-but-will-it-ever-make-a-profit/",
+    ],
+    input: {
+      name: "Blue Apron",
+      sector: "ecommerce",
+      stage: "growth",
+      geography: "US",
+      askUsd: 300_000_000,
+      description:
+        "Meal-kit subscription: pre-portioned ingredients and recipes shipped weekly from company-operated fulfilment centres, with the menu and supply chain planned in-house.",
+      tractionNotes:
+        "Net revenue of $795.4M in 2016. Net loss of $54.9M in 2016. Marketing spend of $144.1M in 2016. Over 1,000,000 customers.",
+    },
+    expect: [
+      { label: "revenue $795.4M", read: (s) => s.revenueUsd, ...num(795_400_000) },
+      { label: "1,000,000 customers", read: (s) => s.customers, ...num(1_000_000) },
+    ],
+  },
+
+  // ── Outcome: open — parse tests only, excluded from separation ─────────────
+  {
+    outcome: "open",
+    round: "Form S-1, October 2021",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1874178/000119312521289903/d157488ds1.htm",
+      "https://insideevs.com/news/537919/rivian-ipo-financial-losses-preorder/",
+      "https://www.ttnews.com/articles/rivian-details-1-billion-loss-amazon-deal-ipo-filing",
+    ],
+    input: {
+      name: "Rivian",
+      sector: "climate",
+      stage: "growth",
+      geography: "US",
+      askUsd: 8_000_000_000,
+      description:
+        "Electric pickup, SUV and commercial delivery van built on a shared skateboard platform, sold direct to consumers and to a single fleet customer under a long-term supply agreement.",
+      tractionNotes:
+        "Approximately 48,390 preorders in the United States and Canada as of 30 September 2021, each held with a $1,000 refundable deposit. Amazon has ordered 100,000 delivery vans through 2030. Net loss of $994M in the first six months of 2021.",
+    },
+    // The direct counterpart to Nikola: a real reservation book at a real
+    // company that went on to ship. The engine must read the book the same way
+    // in both cases — as demand, not as backlog.
+    expect: [
+      { label: "48,390 preorders read as reservations", read: (s) => s.reservations, ...num(48_390) },
+      { label: "preorders are not contracted revenue", read: (s) => s.contractedRevenueUsd, expected: 0 },
+      { label: "the $1,000 deposit is not read as revenue", read: (s) => s.revenueUsd, expected: 0 },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "Form S-1, August 2019",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1639825/000119312519230923/d738839ds1.htm",
+      "https://www.forbes.com/sites/bizcarson/2019/08/27/peloton-bike-ipo-filing/",
+    ],
+    input: {
+      name: "Peloton",
+      sector: "consumer",
+      stage: "growth",
+      geography: "US",
+      askUsd: 1_200_000_000,
+      description:
+        "Connected fitness: company-designed stationary bikes and treadmills sold with a recurring subscription to live and on-demand classes, with content produced in an owned studio.",
+      tractionNotes:
+        "Revenue of $915M in the fiscal year ended 30 June 2019. 511,202 Connected Fitness Subscribers as of 30 June 2019. Net loss of $195.6M.",
+    },
+    expect: [
+      { label: "revenue $915M", read: (s) => s.revenueUsd, ...num(915_000_000) },
+      { label: "511,202 subscribers", read: (s) => s.customers, ...num(511_202) },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "Form S-1, April 2019",
+    sources: [
+      "https://stockdividendscreener.com/packaged-foods/beyond-meat-bynd-sales-revenue/",
+      "https://www.globenewswire.com/news-release/2020/02/27/1992251/0/en/Beyond-Meat-Reports-Fourth-Quarter-and-Full-Year-2019-Financial-Results.html",
+    ],
+    input: {
+      name: "Beyond Meat",
+      sector: "agtech",
+      stage: "growth",
+      geography: "US",
+      askUsd: 240_000_000,
+      description:
+        "Plant-based meat substitutes manufactured to sit in the meat case rather than the vegetarian aisle, sold through grocery retail and foodservice partners.",
+      tractionNotes:
+        "Net revenues of $87.9M in 2018. Gross profit of $17.6M, or 20% of net revenue.",
+    },
+    // "Gross profit of $X, or N% of net revenue" is how filings state a margin
+    // when they do not use the words "gross margin".
+    expect: [
+      { label: "revenue $87.9M", read: (s) => s.revenueUsd, ...num(87_900_000) },
+      { label: "gross margin 20% stated as a share of revenue", read: (s) => s.grossMarginPct, ...num(20) },
+    ],
   },
 
   // ── Outcome: succeeded ────────────────────────────────────────────────────

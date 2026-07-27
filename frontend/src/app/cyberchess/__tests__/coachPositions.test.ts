@@ -57,6 +57,52 @@ describe("coach teaching positions", () => {
     expect(bad).toEqual([]);
   });
 
+  /* Сверка с таблицей окончаний показала три карточки, где показанный ход просто
+     подставлял фигуру: в «ферзь против короля» 1.Фd5+? Крxd5 — вместо мата ничья, в
+     «двух слонах» 1.Сd3? Крxd3 — то же самое. Ход при этом легален, позиция возможна,
+     разбор играется — все прежние тесты молчали. Здесь считается материал после
+     лучшего взятия соперника; жертва разрешена, только если за ней следует мат. */
+  it("never teaches a move that simply hangs a piece", () => {
+    const VAL: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+    const material = (c: Chess, side: "w" | "b") =>
+      c
+        .board()
+        .flat()
+        .reduce((s, sq) => (sq ? s + (sq.color === side ? VAL[sq.type] : -VAL[sq.type]) : s), 0);
+
+    const bad: string[] = [];
+    for (const r of [...knowledgeRows, ...lessonRows].filter((x) => x.fen && x.bestMove)) {
+      let c: Chess;
+      try {
+        c = new Chess(r.fen);
+      } catch {
+        continue;
+      }
+      const side = c.turn();
+      const before = material(c, side);
+      let moved;
+      try {
+        moved = c.move(r.bestMove!.replace(/[!?]/g, ""));
+      } catch {
+        continue; // ловит соседний тест
+      }
+      for (const cap of c.moves({ verbose: true }).filter((m) => m.to === moved.to)) {
+        const t = new Chess(c.fen());
+        t.move(cap.san);
+        const answers = t.moves({ verbose: true });
+        /* Жертва — это ход, за который платят продолжением: взятием обратно на том же
+           поле, шахом или матом. Если ничего из этого нет, фигуру просто отдали. */
+        const paidFor =
+          answers.some((m) => m.to === moved.to) || answers.some((m) => /[+#]/.test(m.san));
+        if (paidFor) continue;
+        if (before - material(t, side) >= 2) {
+          bad.push(`${r.where}: после ${r.bestMove} соперник играет ${cap.san} и остаётся с материалом`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
   /* `solution` печатается игроку дословно как «правильный разбор». Восемь из тринадцати
      разборов остались от прежних, уже заменённых позиций: они называли ходы, которых на
      этой доске нет — ладью на h3, короля на d5, взятие давно исчезнувшей фигуры. Ход

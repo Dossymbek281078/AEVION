@@ -102,6 +102,13 @@ function live(balance) {
       points.every((p) => typeof p.includesInternal === "boolean"),
       `первая точка: ${JSON.stringify(points[0])}`,
     );
+    // Флага мало: график вычитает саму сумму, чтобы рисовать деньги снаружи на
+    // всей истории. Поле уже терялось при сужении формы точки — дважды.
+    check(
+      "точки тренда несут сумму своих покупок",
+      points.every((p) => "internalUsd" in p),
+      `первая точка: ${JSON.stringify(points[0])}`,
+    );
   }
 
   console.log(

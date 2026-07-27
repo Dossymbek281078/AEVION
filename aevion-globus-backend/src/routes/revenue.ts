@@ -1001,6 +1001,71 @@ revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
 });
 
 /**
+ * POST /api/revenue/snapshots/backfill-internal
+ * Досчитывает internalUsd/internalCount для снимков, снятых до 27.07.2026 —
+ * тогда свои проверочные покупки ещё сидели в grossUsd, и на графике это
+ * выглядит как обрыв выручки в день правки.
+ *
+ * Заказы у провайдеров лежат с датами, поэтому «сколько своих денег было в
+ * сумме на момент снимка» — это не догадка, а пересчёт: берутся внутренние
+ * покупки, созданные ДО capturedAt.
+ *
+ * Трогает ТОЛЬКО строки, где internalUsd IS NULL, и только эти две колонки:
+ * grossUsd остаётся как был, чтобы историю можно было сверить с тем, что
+ * показывал дашборд в тот день.
+ */
+revenueRouter.post("/snapshots/backfill-internal", async (req, res) => {
+  try {
+    const guard = process.env.REVENUE_SNAPSHOT_TOKEN?.trim();
+    if (guard && String(req.header("x-revenue-token") ?? "") !== guard) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    await ensureSnapshotTable();
+    const pool = getPool();
+
+    const [sales, orders] = await Promise.all([gumroadSales(), lsOrders()]);
+    const internalDated: { at: number; usd: number }[] = [];
+    for (const sale of sales ?? []) {
+      if (sale.refunded || sale.disputed || sale.chargedback) continue;
+      if (!isInternalPurchase(sale.email)) continue;
+      const at = Date.parse(sale.created_at ?? "");
+      if (Number.isNaN(at)) continue;
+      internalDated.push({ at, usd: sale.price ? sale.price / 100 : 0 });
+    }
+    for (const order of orders ?? []) {
+      if (order.status !== "paid" || order.refunded) continue;
+      if (!isInternalPurchase(order.email)) continue;
+      const at = Date.parse(order.created_at ?? "");
+      if (Number.isNaN(at)) continue;
+      internalDated.push({ at, usd: order.total / 100 });
+    }
+
+    const pending = await pool.query(
+      `SELECT "id","capturedAt" FROM "RevenueSnapshot" WHERE "internalUsd" IS NULL ORDER BY "capturedAt" ASC`,
+    );
+    let updated = 0;
+    for (const row of pending.rows as { id: string; capturedAt: string }[]) {
+      const cutoff = Date.parse(String(row.capturedAt));
+      const before = internalDated.filter((p) => p.at <= cutoff);
+      const usd = round2(before.reduce((sum, p) => sum + p.usd, 0));
+      await pool.query(`UPDATE "RevenueSnapshot" SET "internalUsd"=$2,"internalCount"=$3 WHERE "id"=$1`, [
+        row.id, usd, before.length,
+      ]);
+      updated++;
+    }
+    res.json({
+      updated,
+      internalPurchasesFound: internalDated.length,
+      note: "grossUsd не изменён — досчитаны только internalUsd/internalCount",
+    });
+  } catch (err: unknown) {
+    capture(err, { route: "POST /snapshots/backfill-internal" });
+    console.error("[revenue] backfill_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "backfill_failed" });
+  }
+});
+
+/**
  * GET /api/revenue/trend
  * Latest snapshot vs the oldest within the window → absolute + % growth.
  * Also returns the ascending series so the dashboard can draw a sparkline.
@@ -1045,6 +1110,10 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
         grossUsd: s.grossUsd,
         saleCount: s.saleCount,
         includesInternal: s.includesInternal,
+        // Не только флаг, но и сама сумма: график вычитает её из точки, чтобы
+        // рисовать деньги снаружи на всей истории, а не ставить подпись под
+        // ступенькой. Флага для этого недостаточно.
+        internalUsd: s.internalUsd,
       })),
     });
   } catch (err: unknown) {

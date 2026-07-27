@@ -566,6 +566,8 @@ interface TrendPoint {
   saleCount: number;
   /** true у снимков до 27.07.2026: в их суммах ещё сидели свои покупки. */
   includesInternal?: boolean;
+  /** Сумма своих покупок на момент снимка; null — ещё не досчитана. */
+  internalUsd?: number | null;
 }
 interface TrendResp {
   windowDays: number;
@@ -627,7 +629,22 @@ function RevenueTrend() {
   // их границе падает не потому, что деньги ушли, а потому что их перестали
   // приписывать. Без подписи это читается как обвал — а Δ за окно уже читается
   // как убыток.
-  const mixedHistory = series.some((p) => p.includesInternal) && series.some((p) => p.includesInternal === false);
+  // Линия рисуется по деньгам СНАРУЖИ на каждой точке: у снимков до правки
+  // internalUsd досчитан по датам заказов, поэтому ступеньки нет — она была
+  // артефактом того, что в старых точках свои покупки сидели внутри суммы.
+  const externalAt = (p: TrendPoint) => p.grossUsd - (p.internalUsd ?? 0);
+  // Подпись остаётся, только пока есть точки, для которых свои покупки НЕ
+  // досчитаны: там линия по-прежнему завышена, и молчать об этом нельзя.
+  const unresolved = series.filter((p) => p.includesInternal && p.internalUsd == null).length;
+  const externalFirst = series.length ? externalAt(series[0]) : 0;
+  const externalLast = series.length ? externalAt(series[series.length - 1]) : 0;
+  const externalChange = Math.round((externalLast - externalFirst) * 100) / 100;
+  const externalGrowthPct =
+    externalFirst === 0
+      ? externalLast > 0
+        ? 100
+        : 0
+      : Math.round(((externalLast - externalFirst) / externalFirst) * 10000) / 100;
 
   return (
     <section>
@@ -647,11 +664,10 @@ function RevenueTrend() {
         </div>
       )}
 
-      {mixedHistory && (
+      {unresolved > 0 && (
         <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/30 text-amber-200">
-          Ступенька на графике 27.07.2026 — не падение выручки. До этой даты в суммы
-          входили наши собственные проверочные покупки ($158.99); с 27.07 они
-          считаются отдельно. Точки левее границы завышены на эту величину.
+          У {unresolved} точек свои проверочные покупки не досчитаны — там линия
+          завышена на их сумму. Досчитать: POST /api/revenue/snapshots/backfill-internal.
         </div>
       )}
 
@@ -667,19 +683,21 @@ function RevenueTrend() {
         <div className="bg-gray-900 border border-emerald-500/20 rounded-xl p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
             <div>
-              <div className="text-xs text-gray-400 mb-1">Net сейчас</div>
-              <div className="text-2xl font-semibold text-white">${(trend?.latest?.netUsd ?? 0).toFixed(2)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Δ Net за окно</div>
-              <div className={`text-2xl font-semibold ${(change?.netUsd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netUsd ?? 0) >= 0 ? "+" : ""}${(change?.netUsd ?? 0).toFixed(2)}
+              <div className="text-xs text-gray-400 mb-1">Снаружи сейчас</div>
+              <div className="text-2xl font-semibold text-white">
+                ${(series.length ? externalAt(series[series.length - 1]) : 0).toFixed(2)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Рост Net</div>
-              <div className={`text-2xl font-semibold ${(change?.netGrowthPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netGrowthPct ?? 0) >= 0 ? "▲" : "▼"} {Math.abs(change?.netGrowthPct ?? 0).toFixed(1)}%
+              <div className="text-xs text-gray-400 mb-1">Δ снаружи за окно</div>
+              <div className={`text-2xl font-semibold ${externalChange >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalChange >= 0 ? "+" : ""}${externalChange.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Рост снаружи</div>
+              <div className={`text-2xl font-semibold ${externalGrowthPct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalGrowthPct >= 0 ? "▲" : "▼"} {Math.abs(externalGrowthPct).toFixed(1)}%
               </div>
             </div>
             <div>
@@ -692,7 +710,7 @@ function RevenueTrend() {
               </div>
             </div>
           </div>
-          <Sparkline points={series.map((s) => s.netUsd)} />
+          <Sparkline points={series.map(externalAt)} />
           <div className="flex justify-between text-[10px] text-gray-500 mt-1.5 font-mono">
             <span>{trend?.first ? new Date(trend.first.capturedAt).toLocaleDateString("ru") : ""}</span>
             <span>{trend?.points ?? 0} точек</span>

@@ -132,6 +132,16 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
     ).toBe(total - MAP_SHELL_ENTRIES);
   });
 
+  it("REGISTRY_ENTRIES equals the total number of entries in projects.ts", async () => {
+    const { total } = countRegistry();
+    const { REGISTRY_ENTRIES } = await import("@/data/pitchFacts");
+    expect(
+      REGISTRY_ENTRIES,
+      `projects.ts now holds ${total} entries, so REGISTRY_ENTRIES should be ` +
+        `${total}. Update src/data/pitchFacts.ts.`,
+    ).toBe(total);
+  });
+
   it('LIVE_MODULES equals the count of status:"live" in projects.ts', async () => {
     const { byStatus } = countRegistry();
     const live = byStatus.live ?? 0;

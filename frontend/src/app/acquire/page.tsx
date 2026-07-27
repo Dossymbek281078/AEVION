@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MODULE_NODES } from "@/data/pitchFacts";
+import { MODULE_NODES, REGISTRY_ENTRIES } from "@/data/pitchFacts";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -123,7 +123,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Доказательство, что инфраструктура держит массовых пользователей, а не только слайды.",
     modules: ["CyberChess (AEVION CPI)", "HealthAI v3", "Multichat", "KidsAI", "Smeta Trainer", "MapReality", "LifeBox", "StartupX"],
-    proof: "Stockfish 18 в браузере · 5818 пазлов · HealthAI 19 commits · Multichat 12 фич",
+    proof: "Stockfish 18 в браузере · 10 818 пазлов · HealthAI 19 commits · Multichat 12 фич",
     tamAnchor: "Proof of execution (не TAM-якорь)",
     accent: "#fbbf24",
   },
@@ -133,7 +133,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Constitution v1 + Planet attestations + публичный health-board.",
     modules: ["Constitution v1", "/planet", "/transparency", "/launch-status", "AEVION_COORDINATION"],
-    proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · 24/24 daily smoke",
+    proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · daily smoke полностью зелёный",
     tamAnchor: "Trust premium для всех четырёх слоёв",
     accent: "#f472b6",
   },
@@ -195,7 +195,7 @@ export default function AcquirePage() {
     });
   }, []);
 
-  const totalModules = registry?.total ?? registry?.totalModules ?? 30;
+  const totalModules = registry?.total ?? registry?.totalModules ?? REGISTRY_ENTRIES;
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #050810 0%, #0a0e1a 40%, #0f172a 100%)", color: "#f8fafc", fontFamily: "Inter, system-ui, -apple-system, sans-serif" }}>
@@ -282,7 +282,7 @@ export default function AcquirePage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 24, padding: 28, background: "rgba(255,255,255,0.03)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
           <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/registry" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
-          <Counter label="Daily smoke" value="24/24" sub="PASS today" />
+          <Counter label="Daily smoke" value="PASS" sub="все проверки зелёные" />
           <Counter
             label="DevHub integrations"
             value={devhubLive ? devhubLive.live.toString() : "9"}

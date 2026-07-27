@@ -30,6 +30,13 @@
  */
 
 // ── Ecosystem scale ────────────────────────────────────────────────────────
+/**
+ * Всего записей в реестре, включая `globus` — оболочку карты.
+ * Именно это число /api/aevion/registry отдаёт в поле `total`, поэтому
+ * счётчики, подписанные этим эндпоинтом, должны падать сюда, а не в
+ * MODULE_NODES (тот на единицу меньше — он считает продуктовые узлы карты).
+ */
+export const REGISTRY_ENTRIES = 41;
 /** Public "product nodes on the Globus map" = registry entries − the globus map shell. */
 export const MODULE_NODES = 40;
 /** Registry entries with status:"live". The remaining 5 are status:"mvp". */

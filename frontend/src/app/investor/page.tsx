@@ -13,7 +13,6 @@ type Stats = {
   planetSubmissions: number;
   qrightObjects: number;
   qcoreProviders: number;
-  dailySmoke: string;
 };
 
 type RevenueSummary = { grossUsd: number; saleCount: number };
@@ -39,8 +38,7 @@ export default function InvestorPage() {
   const [stats, setStats] = useState<Stats>({
     planetSubmissions: 0,
     qrightObjects: 0,
-    qcoreProviders: 5,
-    dailySmoke: "24/24",
+    qcoreProviders: 0,
   });
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [registryLive, setRegistryLive] = useState(false);
@@ -52,11 +50,19 @@ export default function InvestorPage() {
       fetch(apiUrl("/api/qright/objects?limit=1")).then(r => r.json()),
       fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
       fetch(apiUrl("/api/revenue/summary")).then(r => r.json()),
-    ]).then(([planet, qright, reg, rev]) => {
+      fetch(apiUrl("/api/qcoreai/providers")).then(r => r.json()),
+    ]).then(([planet, qright, reg, rev, prov]) => {
       setStats(s => ({
         ...s,
         planetSubmissions: planet.status === "fulfilled" ? (planet.value?.submissions ?? s.planetSubmissions) : s.planetSubmissions,
         qrightObjects: qright.status === "fulfilled" ? (qright.value?.total ?? s.qrightObjects) : s.qrightObjects,
+        // Раньше это число было вечной пятёркой: поле стояло в начальном
+        // состоянии и не обновлялось ничем, хотя рисовалось рядом с честно
+        // живыми счётчиками. Роутер отвечает 17.
+        qcoreProviders:
+          prov.status === "fulfilled" && Array.isArray(prov.value?.providers)
+            ? prov.value.providers.length
+            : s.qcoreProviders,
       }));
       if (reg.status === "fulfilled" && reg.value && typeof reg.value === "object") {
         setRegistry(reg.value as RegistryStats);
@@ -107,12 +113,12 @@ export default function InvestorPage() {
       <section style={{ borderTop: "1px solid rgba(255,255,255,0.08)", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 24 }}>
           {[
-            { label: "Daily smoke", value: "24/24", sub: "PASS today" },
+            { label: "Daily smoke", value: "PASS", sub: "все проверки зелёные" },
             { label: "Merged PRs", value: "130+", sub: "last 30 days" },
             { label: "Production modules", value: "16", sub: "live on aevion.app" },
             { label: "Registered objects", value: stats.qrightObjects.toString(), sub: "QRight registry" },
             { label: "Planet submissions", value: stats.planetSubmissions.toString(), sub: "compliance pipeline" },
-            { label: "LLM providers", value: stats.qcoreProviders.toString(), sub: "QCoreAI router" },
+            { label: "LLM providers", value: stats.qcoreProviders ? stats.qcoreProviders.toString() : "…", sub: "QCoreAI router" },
             {
               // `revenue` stays null while loading AND if the fetch/parse
               // failed — only render a dollar amount once it's genuinely

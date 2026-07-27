@@ -1103,8 +1103,8 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Parse coverage 95/95. A guard placed one step too late is not a guard; it is
    a way of losing data quietly.
 
-44. **Open, with reproduction: a fall written as a noun — and why the obvious
-   fix was reverted.** The mirror of limit 43. `Revenue saw a 12% decline in
+44. **Closed, on the third pass: a fall written as a noun — and the two
+   attempts it took to get there.** The mirror of limit 43. `Revenue saw a 12% decline in
    2025` reads as nothing, so a stated fall is a missing figure rather than a
    negative one and the factor falls back to a sector prior.
 
@@ -1142,12 +1142,27 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    the metric in one sentence and state its rate in the next, so the
    ninety-character look-back is doing work no clause-bounded version can.
 
-   That is the finding, and it cost one corpus run to get: the diagnosis in this
-   limit was right about the cause and wrong about the cure. Which leaves the
-   fix genuinely open — attribution here needs something better than "nearest
-   noun backwards", not a tighter version of it. Every other clause-bounded rule
-   on this branch was cheap because a clause is the right unit for that
-   question; for attribution it is not.
+   That cost one corpus run to learn: the diagnosis was right about the cause
+   and wrong about the cure. Attribution needed something better than "nearest
+   noun backwards", not a tighter version of it.
+
+   **The answer was that "costs" is not the absence of a metric — it is a
+   different one.** A `NOT_A_BASIS` list (costs, expenses, opex, burn,
+   headcount, marketing, churn, inventory, debt and the rest) now claims a
+   figure away from any basis noun standing further back. The window is
+   unchanged, so Affirm's 93% still crosses the sentence boundary correctly;
+   what changed is that something nearer can now contradict it. With that in
+   place the precedence rule earns its keep — a classified rise outranks a
+   decline classified as belonging to nothing we score — and the noun-shaped
+   decline became safe to add. "Revenue saw a 12% decline" reads −12% where it
+   used to read nothing and fall back to a sector prior.
+
+   Fourteen traps, all held, including the four that reverted the earlier
+   attempts. Corpus unchanged at 95/95, hard cases 30/30.
+
+   Three passes for one limit, and the two failures were worth more than the
+   success: the first found the cause, the second refuted the obvious cure.
+   Neither reached the branch.
 
    Third time today the same judgement. Masking dates was reverted, diagnosed,
    and closed an hour later; this is diagnosed and waiting. The diagnosis is the

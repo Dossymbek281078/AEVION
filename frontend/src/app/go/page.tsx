@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getApiBase } from "@/lib/apiBase";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -32,6 +33,31 @@ export const metadata: Metadata = {
   description:
     "Научные протоколы о долголетии и седине, книга о благодарности, живые инструменты AEVION. Всё в одном месте.",
 };
+
+
+/**
+ * Сколько модулей у платформы — из реестра, а не из головы.
+ *
+ * В первой версии страницы здесь стояло «29 живых модулей». Реестр на тот же
+ * день отвечал 36 live из 41 — то есть страница, на которую мы ведём платный
+ * трафик, занижала собственный масштаб на семь модулей. Ровно тот случай, ради
+ * которого числа на публичных страницах берутся из живого источника: захардкоженное
+ * число не устаревает заметно, оно просто тихо врёт.
+ *
+ * `null` при недоступном API — тогда заголовок обходится без числа: «модули
+ * AEVION» честнее, чем цифра, которую не удалось подтвердить.
+ */
+async function fetchLiveModules(): Promise<number | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/aevion/registry-stats`, { next: { revalidate: 3600 } });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { byStatus?: { live?: number; launched?: number } };
+    const live = (j.byStatus?.live ?? 0) + (j.byStatus?.launched ?? 0);
+    return live > 0 ? live : null;
+  } catch {
+    return null;
+  }
+}
 
 const CURRENCY = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -86,6 +112,7 @@ export default async function GoPage({
   // Метка канала из адреса: /go?c=ig в шапке Instagram, ?c=tt в TikTok и т.д.
   // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
   // «какой канал принёс деньги» остаётся без ответа.
+  const liveModules = await fetchLiveModules();
   const rawChannel = (await searchParams).c;
   const channel = channelFrom(rawChannel);
   // Внутренние переходы тоже несут метку: человек с /go часто уходит сначала в
@@ -165,7 +192,7 @@ export default async function GoPage({
           <LinkCard
             href={keep("/explore")}
             kicker="Бесплатно · обзор"
-            title="29 живых модулей AEVION"
+            title={liveModules ? `${liveModules} живых модулей AEVION` : "Живые модули AEVION"}
             note="Шахматы с ИИ-коучем, сметный тренажёр, венчурный аналитик, IP-бюро и другие."
           />
           {allAccess && (

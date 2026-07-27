@@ -4419,3 +4419,57 @@ describe("A GitHub push that lost files does not report a clean push", () => {
     delete process.env.GITHUB_TOKEN;
   });
 });
+
+
+describe("An exported project says how to run it", () => {
+  test("the ZIP carries HOW-TO-RUN.md built from the project's real files", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "RunNote", stack: "react" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=src/App.jsx`).send({ content: "export default () => null;" });
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=package.json`)
+      .send({ content: JSON.stringify({ scripts: { dev: "vite" }, dependencies: { react: "^18.0.0" } }) });
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(r.status).toBe(200);
+
+    const zipText = (r.body as Buffer).toString("utf8");
+    expect(zipText).toContain("HOW-TO-RUN.md");
+    // The command comes from the project's own manifest, not a template.
+    expect(zipText).toContain("npm run dev");
+  });
+});
+
+
+describe("Export metadata does not come back as project content", () => {
+  test("a re-imported export does not gain HOW-TO-RUN.md as a file", async () => {
+    // Каждый round-trip иначе добавлял бы файл: экспорт кладёт заметку,
+    // импорт принимал бы её за исходник проекта.
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RoundNote", stack: "react" })).body.project.id;
+    await request(app).put(`/api/devhub/projects/${src}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
+
+    const exp = await request(app).get(`/api/devhub/projects/${src}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(exp.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RoundNoteTarget", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exp.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    const paths = (await request(app).get(`/api/devhub/projects/${dst}/files`)).body.files.map((f: any) => f.path);
+    expect(paths).toContain("index.html");
+    expect(paths).not.toContain("HOW-TO-RUN.md");
+    expect(paths).not.toContain("aevion-export.json");
+  });
+});

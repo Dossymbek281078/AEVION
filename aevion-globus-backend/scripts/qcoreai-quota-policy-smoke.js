@@ -106,6 +106,18 @@ function matchesExpectation(actual, expected) {
     pass(`response.freeTokenLimit — ${body.freeTokenLimit.toLocaleString()}`);
   }
 
+  // premiumQuotaScope proves the DEPLOYED build carries each premium-gate
+  // wire-in — "orchestrator" appeared 2026-07-26. A missing entry means the
+  // build predates that coverage and flipping QCOREAI_PREMIUM_QUOTA would
+  // leave multi-agent runs unmetered.
+  if (!Array.isArray(body?.premiumQuotaScope)) {
+    fail(`response.premiumQuotaScope is not an array (build predates 2026-07-26 orchestrator coverage?)`);
+  } else {
+    const missingScopes = ["chat", "chat-stream", "orchestrator"].filter((s) => !body.premiumQuotaScope.includes(s));
+    if (missingScopes.length) fail(`premiumQuotaScope missing: ${missingScopes.join(", ")}`);
+    else pass(`premiumQuotaScope covers chat + chat-stream + orchestrator`);
+  }
+
   if (!Array.isArray(body?.tiers)) {
     fail(`response.tiers is not an array (got ${typeof body?.tiers})`);
   } else {

@@ -49,6 +49,11 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
+  // document. Prod-safe — the slot-booking and QRight-registry write legs
+  // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
+  // surface without leaving smoke rows in a live registry.
+  { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).
@@ -58,9 +63,33 @@ const SMOKES = [
   { name: "aev", script: "aev-smoke.js", readOnly: false },
   { name: "build", script: "build-smoke.js", readOnly: false, env: { BUILD_PAYMENT_WEBHOOK_SECRET: process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "4wSqkQHVbttaDO02zDJiPZcmyRVU3gO9fhSY6nicb9kIYxFI" } },
   // Offline: exercises the QCoreAI free fleet + council assembly against dist (no server/DB/keys).
-  { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true },
+  // `offline` because it require()s the COMPILED backend (dist/services/...), not the
+  // target BASE. It is read-only, but running it in the prod sweep — a job that never
+  // builds — crashed with "Cannot find module .../dist/..." every single day.
+  { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true, offline: true },
   // Offline: exercises the QCoreAI "auto" router (classify → council vs single) via the stub.
-  { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true },
+  { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true, offline: true },
+  // Offline: проверяет, что health честно сообщает состояние хранилища событий
+  // (см. issue #960 — аналитика на файловой системе контейнера стирается
+  // каждым деплоем, и снаружи это неотличимо от «событий ещё не было»).
+  // Работает против dist/, а не против BASE, поэтому offline.
+  { name: "events-store", script: "events-store-status-smoke.js", readOnly: true, offline: true },
+  // Offline: health обязан честно называть режим подписи. Письма партнёрам
+  // утверждают ML-DSA-65/FIPS 204, а это включается ключом — и самый коварный
+  // случай, когда ключ задан, но битый, снаружи неотличим от рабочего.
+  { name: "qsign-mode", script: "qsign-mode-smoke.js", readOnly: true, offline: true },
+  // Offline: и сам real-путь обязан работать, а не только честно называться.
+  // qsign-mode выше проверяет РАПОРТ о режиме; эта — что при заданном ключе
+  // выходит настоящая ML-DSA-65 (6618 hex), которая ОТВЕРГАЕТ подмену тела,
+  // подмену подписи и нулевую подпись нужной длины. Без этих трёх случаев
+  // проверку прошла бы и заглушка `return true`.
+  { name: "qsign-real-signature", script: "qsign-real-signature-smoke.js", readOnly: true, offline: true },
+  // Сверяет ПУБЛИЧНЫЕ УТВЕРЖДЕНИЯ на страницах с живым health. 26.07 нашлось,
+  // что /acquire, /partner и /investor обещают «ML-DSA-65 in prod / GA /
+  // Completed», пока health отвечал preview/seed_unset — и это прожило
+  // незамеченным, потому что сторож консистентности смотрит только письма,
+  // а страницы не смотрел никто. Не offline: нужен живой BASE.
+  { name: "claims-vs-runtime", script: "claims-vs-runtime-smoke.js", readOnly: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.
@@ -262,11 +291,20 @@ const SMOKES = [
 // target actually looks like prod.
 const isProdTarget = !/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(BASE);
 const prodSkipped = [];
+// `offline` smokes assert against the COMPILED backend in dist/, not against BASE.
+// They are read-only, so `readOnly: true` used to let them into the prod sweep — a
+// job that only queries live Railway and never builds. They crashed on a missing
+// dist/ every day and turned the whole daily smoke red for a reason unrelated to prod.
+const offlineSkipped = [];
 
 const eligible = SMOKES.filter((sm) => {
   if (ONLY.length > 0 && !ONLY.includes(sm.name)) return false;
   if (SKIP.includes(sm.name)) return false;
   if (READ_ONLY && !sm.readOnly) return false;
+  if (sm.offline && isProdTarget && !ONLY.includes(sm.name)) {
+    offlineSkipped.push(sm.name);
+    return false;
+  }
   if (!isProdTarget && /-prod$/.test(sm.name) && !ONLY.includes(sm.name)) {
     prodSkipped.push(sm.name);
     return false;
@@ -285,6 +323,10 @@ console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
 if (prodSkipped.length > 0) {
   console.log(`  skipped    = ${prodSkipped.length} *-prod smoke(s) (BASE is not prod): ${prodSkipped.join(", ")}`);
+}
+if (offlineSkipped.length > 0) {
+  console.log(`  skipped    = ${offlineSkipped.length} offline smoke(s) (they assert against the compiled backend, not ${BASE}): ${offlineSkipped.join(", ")}`);
+  console.log(`               these still run in the ephemeral-backend job, where dist/ exists.`);
 }
 console.log("");
 

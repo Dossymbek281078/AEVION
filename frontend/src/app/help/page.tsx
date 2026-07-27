@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -53,7 +54,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "What are the biggest risks?",
-    a: "Honestly listed at /pitch in the Risks section: regulatory drift, cold-start on Trust Graph density, LLM cost compression, single-vertical competitors, execution focus across 37 nodes, and post-quantum cliff. Each risk has a mitigation tied to a shipped product feature, not just a slide bullet.",
+    a: `Honestly listed at /pitch in the Risks section: regulatory drift, cold-start on Trust Graph density, LLM cost compression, single-vertical competitors, execution focus across ${MODULE_NODES} nodes, and post-quantum cliff. Each risk has a mitigation tied to a shipped product feature, not just a slide bullet.`,
   },
   {
     q: "Can I see live product, not just slides?",

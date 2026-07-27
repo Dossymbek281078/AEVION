@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { enforcePremiumModelQuota } from "../src/lib/qcoreQuota";
+import { enforcePremiumModelQuota, premiumQuotaGateForPayload, premiumQuotaGateForRequest } from "../src/lib/qcoreQuota";
 import { isPremiumModel, getPremiumModelNames } from "../src/services/qcoreai/pricing";
 
 function mockRes() {
@@ -64,5 +64,37 @@ describe("enforcePremiumModelQuota", () => {
     const req = { headers: {} }; // no Authorization header — anonymous
     const blocked = await enforcePremiumModelQuota(req as any, mockRes(), "anthropic", "claude-fable-5");
     expect(blocked).toBe(false);
+  });
+});
+
+describe("premiumQuotaGateForPayload (orchestrator gate)", () => {
+  const savedFlag = process.env.QCOREAI_PREMIUM_QUOTA;
+  afterEach(() => {
+    if (savedFlag === undefined) delete process.env.QCOREAI_PREMIUM_QUOTA;
+    else process.env.QCOREAI_PREMIUM_QUOTA = savedFlag;
+  });
+
+  it("never blocks (null) while the flag is dormant", async () => {
+    delete process.env.QCOREAI_PREMIUM_QUOTA;
+    const gate = premiumQuotaGateForPayload({ sub: "user-1", plan: "medium" });
+    expect(await gate("anthropic", "claude-fable-5")).toBeNull();
+  });
+
+  it("never blocks a non-premium model even with the flag on", async () => {
+    process.env.QCOREAI_PREMIUM_QUOTA = "1";
+    const gate = premiumQuotaGateForPayload({ sub: "user-1", plan: "medium" });
+    expect(await gate("openai", "gpt-4o-mini")).toBeNull();
+  });
+
+  it("never blocks an anonymous caller (null payload) even with the flag on", async () => {
+    process.env.QCOREAI_PREMIUM_QUOTA = "1";
+    const gate = premiumQuotaGateForPayload(null);
+    expect(await gate("anthropic", "claude-fable-5")).toBeNull();
+  });
+
+  it("builds an equivalent gate from an unauthenticated Express request", async () => {
+    process.env.QCOREAI_PREMIUM_QUOTA = "1";
+    const gate = premiumQuotaGateForRequest({ headers: {} } as any);
+    expect(await gate("anthropic", "claude-fable-5")).toBeNull();
   });
 });

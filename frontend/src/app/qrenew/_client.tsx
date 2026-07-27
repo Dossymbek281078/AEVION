@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
+import { productById } from "@/lib/products";
 
 // QRenew — cellular-renewal program. Two live tools over the deterministic
 // backend: a biological-age calculator (PhenoAge / Levine 2018) and the
@@ -39,6 +40,12 @@ interface StackResponse {
   tiers: Record<string, { label: string; items: StackItem[] }>;
   disclaimer: string;
 }
+
+/** Покупаемые PDF по этой теме — позиции каталога, а не хардкод цен и ссылок.
+ *  filter(Boolean) на случай, если позицию из каталога уберут. */
+const BUY = [productById("oijxmq"), productById("tmuyxw")].filter(
+  (p): p is NonNullable<typeof p> => Boolean(p),
+);
 
 const TIER_COLOR: Record<string, string> = { A: "#55C093", B: "#5BB6D0", C: "#DDB253", D: "#E0787F" };
 
@@ -181,6 +188,21 @@ export default function QRenewClient() {
           </section>
         )}
 
+        {/* Два PDF по этой теме. Цены и ссылки — из каталога @/lib/products,
+            здесь не дублируются. */}
+        <div style={styles.buyRow}>
+          {BUY.map((p) => (
+            <a key={p.id} href={p.href} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
+              <div style={styles.buyKicker}>{p.format}</div>
+              <div style={styles.buyTitle}>{p.title}</div>
+              <div style={styles.buyFoot}>
+                <span style={styles.buyPrice}>${p.priceUsd}</span>
+                <span style={styles.buyBtn}>Купить&nbsp;→</span>
+              </div>
+            </a>
+          ))}
+        </div>
+
         <p style={styles.foot}>
           Связанный модуль: <a href="/qmelanin" style={styles.link}>QMelanin</a> — видимый дашборд седины
           и пищевой протокол против дефицитов пигмента.
@@ -229,4 +251,45 @@ const styles: Record<string, React.CSSProperties> = {
   disclaimer: { marginTop: 18, fontSize: 12.5, color: "#8b9bb0", borderTop: "1px solid #1c2942", paddingTop: 14 },
   foot: { marginTop: 26, color: "#8b9bb0", fontSize: 14 },
   link: { color: "#c8823f" },
+  buyRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 16,
+    marginTop: 26,
+  },
+  buyCard: {
+    display: "flex",
+    flexDirection: "column",
+    background: "linear-gradient(135deg,#161222 0%,#0d1422 100%)",
+    border: "1px solid #3a2f22",
+    borderRadius: 16,
+    padding: 22,
+    textDecoration: "none",
+    color: "#e8eef6",
+  },
+  buyKicker: {
+    fontFamily: "monospace",
+    fontSize: 11.5,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "#c8823f",
+  },
+  buyTitle: { fontSize: 17, fontWeight: 700, margin: "10px 0 0", lineHeight: 1.3, flex: 1 },
+  buyFoot: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 18,
+  },
+  buyPrice: { fontSize: 21, fontWeight: 700 },
+  buyBtn: {
+    background: "#c8823f",
+    color: "#1a1206",
+    borderRadius: 10,
+    padding: "10px 18px",
+    fontSize: 13.5,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
 };

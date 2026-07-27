@@ -1,3 +1,5 @@
+import { LIVE_MODULES } from "@/data/pitchFacts";
+
 /**
  * Print-friendly acquisition brief. Open in browser → Ctrl/Cmd+P → "Save as PDF".
  * Layout is intentionally B/W with high contrast: works for both screen review
@@ -45,7 +47,7 @@ export default function AcquirePrintPage() {
       <div className="print-root">
         {/* PAGE 1 — Cover */}
         <div className="eyebrow">Partnership Brief · $10M возвратный аванс · доход 51/49 · Confidential · 2026</div>
-        <h1>Planet AEVION.<br />One settlement unit.<br />30+ modules in production.</h1>
+        <h1>Planet AEVION.<br />One settlement unit.<br />{LIVE_MODULES} modules in production.</h1>
         <p>
           Все деньги, всё IP и весь dev-цикл переезжают в интернет. AEVION — единственное место, где все три перехода
           случаются под одной расчётной единицей (AEV) и одним правовым контуром. Не «будут работать».
@@ -65,7 +67,7 @@ export default function AcquirePrintPage() {
 
         <h3>Что покупатель проверит сам</h3>
         <ul>
-          <li><strong>aevion.app/launch-status</strong> — daily smoke 24/24</li>
+          <li><strong>aevion.app/launch-status</strong> — daily smoke полностью зелёный</li>
           <li><strong>aevion.app/transparency</strong> — health-board всех модулей</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 9 интеграций в проде, единый AEV-биллинг</li>
@@ -99,7 +101,7 @@ export default function AcquirePrintPage() {
           </div>
           <div className="pillar">
             <div className="title">2. Защита и право</div>
-            <div className="body">QSign v2 (FIPS 204 ML-DSA-65 GA) · QShield (threshold + Lagrange) · QRight · QContract · QChainGov · QMaskCard · VeilNetX · Z-Tide.</div>
+            <div className="body">QSign v2 (FIPS 204 ML-DSA-65, key-activated) · QShield (threshold + Lagrange) · QRight · QContract · QChainGov · QMaskCard · VeilNetX · Z-Tide.</div>
           </div>
           <div className="pillar">
             <div className="title">3. Dev-слой / DevHub</div>

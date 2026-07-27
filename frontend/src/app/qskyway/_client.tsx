@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
+import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
 import type { DataQuality } from "@/lib/dataQuality";
+import type { RegulatorySource } from "@/lib/regulatorySource";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -12,6 +15,34 @@ import type { DataQuality } from "@/lib/dataQuality";
 // Честно: движок и доказательство концепции, не сертифицированное авиационное ПО.
 
 interface NoFly { id: string; name: string; kind: string; x: number; y: number; radiusM: number; }
+/** Published regulatory ceiling feed for the city — absent where no open feed exists. */
+interface AirspaceSummary {
+  available: boolean;
+  authority?: string;
+  source?: string;
+  regime?: string;
+  effective?: string;
+  cells?: number;
+  coveragePct?: number;
+  minCeilingM?: number | null;
+  maxCeilingM?: number | null;
+  zeroCeilingCells?: number;
+  note?: string;
+  freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
+  /** a regulator gate on the operation, published separately from any ceiling */
+  permission?: { available: boolean; authority?: string; regime?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
+  _signature?: { alg: string; contentHash: string };
+}
+/** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
+interface AirspaceCompliance {
+  available: boolean;
+  compliant: boolean | null;
+  exceedingSegments: number;
+  zeroCeilingSegments: number;
+  maxExceedanceM: number;
+  lowestCeilingM: number | null;
+  note: string;
+}
 interface CityData {
   city: string;
   meters: { w: number; h: number };
@@ -20,13 +51,22 @@ interface CityData {
   vertiports: { c: number; r: number; x: number; y: number }[];
   nofly?: NoFly[];
   wind?: { fromDeg: number; groundMs: number; topMs: number; source?: "metar" | "illustrative" };
-  vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number }[];
+  airspace?: AirspaceSummary;
+  vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number; ceilingM?: number | null; needsAtcCoordination?: boolean }[];
   dataQuality?: DataQuality;
   _signature?: { alg: string; contentHash: string };
 }
+/** The filing document /route/justification returns, signed as one unit. */
+interface JustDoc {
+  kind: string; city: string; from: number; to: number; respectCeiling: boolean;
+  distanceKm: number; cruiseAltM: number; etaMinWind: number;
+  twinContentHash: string; windSource: string; heightConfidencePct: number; issuedAt: string;
+  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
+}
+interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
-interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; }
+interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean; }
 interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
 
 const VP_CLASS_LABEL: Record<string, string> = {
@@ -39,6 +79,40 @@ const VP_CLASS_COLOR: Record<string, string> = {
   "needs-infrastructure": "#fbbf24",
   unsuitable: "#fb7185",
 };
+
+/** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
+function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
+  if (!a?.available) {
+    // No ceiling grid does not mean no regulator. Tokyo publishes no altitudes
+    // but governs every flight over the twin, and calling that "no source"
+    // would understate the regulator, not just our coverage.
+    const perm = a?.permission;
+    if (perm?.available) {
+      return {
+        tier: "official",
+        authority: perm.authority,
+        // The statute text is long; it belongs in the tooltip, not wrapping
+        // across the toolbar. The chip line answers "whose rule", the hover
+        // answers "which rule".
+        effective: perm.effective,
+        scopeNote: [perm.regime, perm.note, perm.provenanceNote].filter(Boolean).join(" "),
+        upToDate: null,
+        attested: false,
+      };
+    }
+    return { tier: "none", scopeNote: a?.note };
+  }
+  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
+  return {
+    tier: "official",
+    authority: a.authority,
+    title: (a.source ?? "") + range,
+    effective: a.effective,
+    scopeNote: a.regime ? `${a.regime} — не сертификация аэротакси` : undefined,
+    upToDate: a.freshness?.checked ? a.freshness.upToDate : null,
+    attested: Boolean(a._signature),
+  };
+}
 
 const FLOOR = 50, CLEAR = 15, BAND = 25, ALT_MIN = 50;
 // Phase 5: extra safety clearance by height-data confidence (measured/derived/guessed).
@@ -55,6 +129,7 @@ function altColor(alt: number, altMax: number, a = 1): string {
 }
 
 export default function QSkywayClient() {
+  const { t } = useI18n();
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
@@ -73,8 +148,20 @@ export default function QSkywayClient() {
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [coverage, setCoverage] = useState<{ withFeed: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
+  const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; airspace?: AirspaceSummary } | null>(null);
+  // Strict mode asks the backend to treat the published ceiling as a hard
+  // constraint instead of an advisory verdict. Off by default: the honest
+  // default is "fly the corridor and tell me what it would require".
+  const [strictCeiling, setStrictCeiling] = useState(false);
+  const strictRef = useRef(false);
+  const [airspaceRoute, setAirspaceRoute] = useState<AirspaceCompliance | null>(null);
+  const [ceilingBlocked, setCeilingBlocked] = useState<string | null>(null);
+  const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
+  const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
+  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
@@ -182,15 +269,44 @@ export default function QSkywayClient() {
       if (n < 2) throw new Error("недостаточно вертипортов");
       const from = Math.floor(Math.random() * n);
       let to = from; while (to === from) to = Math.floor(Math.random() * n);
+      // strictRef, not the state value — newHero is held by the animation loop,
+      // so reading state here would freeze whatever was set at mount (same
+      // stale-closure trap cityIdRef already guards against).
       const res = await fetch(apiUrl("/api/qskyway/route"), {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, city: cityIdRef.current }),
+        body: JSON.stringify({ from, to, city: cityIdRef.current, respectCeiling: strictRef.current }),
       });
+      if (res.status === 422) {
+        const j = await res.json().catch(() => ({}));
+        if (j.reason === "airspace-ceiling") {
+          // Not an error to swallow: this IS the answer — the corridor exists but
+          // needs ATC coordination. Show it instead of silently faking a route.
+          setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${j.note ?? "нет коридора в пределах опубликованного потолка"}`);
+          setAirspaceRoute(j.airspaceIfUnrestricted ?? null);
+          heroRef.current = null;
+          setHeroPair(null);
+          setJustification(null);
+          setJustState("idle");
+          // There is no flight — leaving the previous route's telemetry on screen
+          // next to a "refused" banner would read as if those numbers described it.
+          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null }));
+          return;
+        }
+      }
       if (!res.ok) throw new Error("route " + res.status);
       const r = await res.json();
+      setCeilingBlocked(null);
+      setAirspaceRoute(r.airspace ?? null);
+      setHeroPair({ from, to });
+      // A justification describes one specific flight. Carrying the previous
+      // one over to a new route would attach a signed document to the wrong trip.
+      setJustification(null);
+      setJustState("idle");
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
       setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null }));
     } catch {
+      setCeilingBlocked(null);
+      setAirspaceRoute(null);
       localHero();
     } finally {
       heroBusyRef.current = false;
@@ -201,6 +317,13 @@ export default function QSkywayClient() {
   const loadCity = useCallback(async (id: string) => {
     cityIdRef.current = id;
     setLoaded(false); setErr(null); setVerify("idle");
+    setAirspaceRoute(null); setCeilingBlocked(null); setImpact(null);
+    // Measured server-side across every pair, never typed in by hand: the whole
+    // point of this figure is that it comes from the same engine the routes do.
+    fetch(apiUrl(`/api/qskyway/airspace/impact?city=${encodeURIComponent(id)}`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setImpact(j?.available ? j : null))
+      .catch(() => setImpact(null));
     try {
       const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
       if (!res.ok) throw new Error("city " + res.status);
@@ -219,12 +342,18 @@ export default function QSkywayClient() {
         heightPct: city.dataQuality?.measuredPct ?? 0,
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
+        airspace: city.airspace,
       });
-      const scoreOf = new Map<string, { suitability: number; cls: string; openRadiusM: number; clearanceM: number; distNoFlyM: number }>();
-      for (const s of city.vertiportScores ?? []) scoreOf.set(s.c + "," + s.r, { suitability: s.suitability, cls: s.class, openRadiusM: s.openRadiusM, clearanceM: s.clearanceM, distNoFlyM: s.distNoFlyM });
+      type VpScore = NonNullable<CityData["vertiportScores"]>[number];
+      const scoreOf = new Map<string, VpScore>();
+      for (const s of city.vertiportScores ?? []) scoreOf.set(s.c + "," + s.r, s);
       setVpRows(city.vertiports.map((v, i) => {
         const s = scoreOf.get(v.c + "," + v.r);
-        return { id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.cls ?? "unscored", openRadiusM: s?.openRadiusM ?? null, clearanceM: s?.clearanceM ?? null, distNoFlyM: s?.distNoFlyM ?? null };
+        return {
+          id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.class ?? "unscored",
+          openRadiusM: s?.openRadiusM ?? null, clearanceM: s?.clearanceM ?? null, distNoFlyM: s?.distNoFlyM ?? null,
+          ceilingM: s?.ceilingM ?? null, needsAtc: s?.needsAtcCoordination === true,
+        };
       }).sort((a, b) => b.suitability - a.suitability));
       setLoaded(true);
       newHero();
@@ -238,7 +367,11 @@ export default function QSkywayClient() {
     (async () => {
       try {
         const r = await fetch(apiUrl("/api/qskyway/cities"));
-        if (r.ok) { const j = await r.json(); setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))); }
+        if (r.ok) {
+          const j = await r.json();
+          setCities((j.cities ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+          if (j.airspaceCoverage) setCoverage(j.airspaceCoverage);
+        }
       } catch { /* selector optional */ }
       loadCity("astana");
       fetchSlots();
@@ -441,6 +574,51 @@ export default function QSkywayClient() {
     } catch (e) { setBooking("ошибка сети: " + String(e)); }
   }, [cityId, fetchSlots]);
 
+  // ── filing document ────────────────────────────────────────────────────────
+  const requestJustification = useCallback(async () => {
+    if (!heroPair) return;
+    setJustState("busy");
+    try {
+      const res = await fetch(apiUrl("/api/qskyway/route/justification"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...heroPair, city: cityIdRef.current, respectCeiling: strictRef.current }),
+      });
+      if (!res.ok) throw new Error("justification " + res.status);
+      const j = await res.json();
+      setJustification({ doc: j.document, attestation: j.attestation, scope: j.scope });
+      setJustState("idle");
+    } catch { setJustState("idle"); setJustification(null); }
+  }, [heroPair]);
+
+  // Verification runs against the backend, not in the browser: a document that
+  // only ever checks itself locally proves nothing to the person receiving it.
+  const verifyJustification = useCallback(async () => {
+    if (!justification) return;
+    setJustState("busy");
+    try {
+      const res = await fetch(apiUrl("/api/qskyway/route/justification/verify"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document: justification.doc, attestation: justification.attestation }),
+      });
+      const j = await res.json();
+      setJustState(j?.valid === true ? "verified" : "invalid");
+    } catch { setJustState("invalid"); }
+  }, [justification]);
+
+  const downloadJustification = useCallback(() => {
+    if (!justification) return;
+    const payload = JSON.stringify(
+      { document: justification.doc, attestation: justification.attestation, scope: justification.scope },
+      null, 2,
+    );
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qskyway-justification-${justification.doc.city}-${justification.doc.from}-${justification.doc.to}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [justification]);
+
   const wrap: React.CSSProperties = { maxWidth: 1180, margin: "0 auto", padding: "24px 18px 48px", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", color: "#e8eef7" };
   const card: React.CSSProperties = { background: "#0e141f", border: "1px solid #1e2836", borderRadius: 12, overflow: "hidden" };
   const cardH: React.CSSProperties = { padding: "10px 14px", borderBottom: "1px solid #1e2836", background: "#131b28", fontFamily: "monospace", fontSize: 11.5, letterSpacing: 1.5, textTransform: "uppercase", color: "#9fb0c4" };
@@ -453,7 +631,8 @@ export default function QSkywayClient() {
         <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>AEVION · планета городского неба</div>
         <h1 style={{ fontFamily: "monospace", fontSize: 24, margin: "2px 0 4px" }}><span style={{ color: "#fbbf24" }}>Q</span>Skyway</h1>
         <p style={{ color: "#9fb0c4", fontSize: 14, margin: "0 0 4px", maxWidth: 720 }}>
-          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города. Данные зданий — OpenStreetMap.
+          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города.
+          Здания — OpenStreetMap, ограничения — из публикаций самих регуляторов там, где они существуют.
         </p>
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
           Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC). Данные зданий — OpenStreetMap (открытые, ODbL).
@@ -471,6 +650,45 @@ export default function QSkywayClient() {
           </div>
         )}
 
+        {/* Two of three cities have no regulator feed. Left unexplained that reads
+            as unfinished work; stated plainly it is the actual finding — the US
+            publishes low-altitude limits machine-readably and most of the world
+            does not, so no provider can obey them there yet. */}
+        {coverage && (
+          <div style={{ margin: "0 0 16px", padding: "10px 13px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836", fontSize: 12.5, color: "#9fb0c4", lineHeight: 1.5 }}>
+            <span style={{ color: "#22d3ee", fontFamily: "monospace" }}>
+              🛂 {t("qskyway.coverage.head", { withFeed: coverage.withFeed, total: coverage.total })}
+            </span>{" "}
+            {coverage.missing.length === 0
+              ? t("qskyway.coverage.full", {
+                  ceilings: coverage.withCeilings ?? 0,
+                  regimes: coverage.withPermissionRegime ?? 0,
+                })
+              : t("qskyway.coverage.body", {
+                  missing: coverage.missing
+                    .map((id) => cities.find((c) => c.id === id)?.name.split(" — ")[0] ?? id)
+                    .join(", "),
+                })}
+          </div>
+        )}
+
+        {/* The strongest thing this module can say about a city, and it was
+            computed nowhere until now: how much of the network the published
+            ceiling actually rules out. */}
+        {impact && (
+          <div style={{ margin: "0 0 16px", padding: "12px 14px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836" }}>
+            <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e8eef7" }}>
+              <span style={{ color: impact.compliantPct >= 50 ? "#fbbf24" : "#fb7185", fontSize: 17, fontWeight: 700 }}>
+                {impact.compliant} / {impact.pairs}
+              </span>{" "}
+              {t("qskyway.impact.head", { authority: impact.authority })}
+            </div>
+            <div style={{ fontSize: 12, color: "#9fb0c4", marginTop: 5, lineHeight: 1.5 }}>
+              {t("qskyway.impact.body", { strict: impact.strictRoutable, pairs: impact.pairs, pads: impact.padsNeedingAtc })}
+            </div>
+          </div>
+        )}
+
         {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
 
         {!err && (
@@ -484,7 +702,22 @@ export default function QSkywayClient() {
                 <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? "⏸ Пауза" : "▶ Пуск"}</button>
                 <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>＋ Трафик</button>
                 <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>Высотная раскраска</button>
+                <button
+                  style={strictCeiling ? { ...btn, borderColor: "#2dd4bf", color: "#2dd4bf" } : btn}
+                  disabled={!meta?.airspace?.available}
+                  title={meta?.airspace?.available
+                    ? "Строгий режим: маршрут строится только в пределах опубликованного потолка регулятора. Часть пар площадок станет недостижимой — это и есть реальная картина допусков."
+                    : "Для этого города нет открытого фида регулятора — строгий режим неприменим."}
+                  onClick={() => { const v = !strictCeiling; setStrictCeiling(v); strictRef.current = v; newHero(); }}
+                >
+                  {strictCeiling ? "🛂 Строго по потолку: вкл" : "🛂 Строго по потолку: выкл"}
+                </button>
               </div>
+              {ceilingBlocked && (
+                <div style={{ margin: "0 14px 12px", padding: "10px 12px", borderRadius: 8, background: "#2a1620", border: "1px solid #7f2f42", fontSize: 12, color: "#fda4af" }}>
+                  🛂 {ceilingBlocked}
+                </div>
+              )}
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>
@@ -496,7 +729,31 @@ export default function QSkywayClient() {
                       · {meta.windSource === "metar" ? "METAR" : "демо"}
                     </span>
                   </span>
-                  <span style={{ color: "#fb7185" }}>⛔ запретных зон: {meta.nofly}</span>
+                  {/* Two chips, deliberately side by side: the ceiling layer is a real
+                      regulator publication, the point zones are still ours. Showing
+                      them under one badge would launder the second into the first. */}
+                  <RegulatorySourceChip
+                    // A prohibition labelled "permission regime" would read as
+                    // "you may fly if you ask" where the rule is "you may not
+                    // fly" — the one distinction the data layer keeps separate,
+                    // so the label must keep it too.
+                    subject={meta.airspace?.available
+                      ? t("qskyway.reg.subject.ceilings")
+                      : meta.airspace?.permission?.available
+                        ? t(meta.airspace.permission.kind === "prohibition"
+                            ? "qskyway.reg.subject.prohibition"
+                            : "qskyway.reg.subject.permission")
+                        : t("qskyway.reg.subject.ceilings")}
+                    source={airspaceRegSource(meta.airspace)}
+                    labels={{ none: t("qskyway.reg.nofeed") }}
+                  />
+                  <RegulatorySourceChip
+                    subject={`${t("qskyway.reg.subject.zones")} (${meta.nofly})`}
+                    source={{
+                      tier: "illustrative",
+                      scopeNote: t("qskyway.reg.zones.scope"),
+                    }}
+                  />
                   <span
                     onClick={verify === "checking" ? undefined : verifySignature}
                     title="Проверить подпись двойника на бэкенде (GET /verify)"
@@ -546,9 +803,59 @@ export default function QSkywayClient() {
                     </div>
                   ))}
                 </div>
+                {airspaceRoute?.available && (
+                  <div style={{ padding: "10px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11, color: airspaceRoute.compliant ? "#2dd4bf" : "#fbbf24" }}>
+                    {/* When the flight was refused, this verdict describes the corridor
+                        an unrestricted flight would have needed — say so, don't let it
+                        read as the current route. */}
+                    {ceilingBlocked && <span style={{ color: "#5f7086" }}>без ограничения потолком: </span>}
+                    🛂 {airspaceRoute.compliant ? "в пределах потолка регулятора" : `выше потолка на ${airspaceRoute.maxExceedanceM} м · участков ${airspaceRoute.exceedingSegments}`}
+                    {airspaceRoute.lowestCeilingM != null && (
+                      <span style={{ color: "#5f7086" }}> · мин. потолок по трассе {airspaceRoute.lowestCeilingM} м</span>
+                    )}
+                    <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{airspaceRoute.note}</div>
+                  </div>
+                )}
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
+
+                  {/* The filing document. Until now it existed only as an endpoint,
+                      which is the same as not existing for the person who has to
+                      justify a flight. */}
+                  <div style={{ marginTop: 12, borderTop: "1px solid #1e2836", paddingTop: 12 }}>
+                    {!justification ? (
+                      <button style={btn} onClick={requestJustification} disabled={!heroPair || justState === "busy"}>
+                        {justState === "busy" ? "…" : t("qskyway.just.build")}
+                      </button>
+                    ) : (
+                      <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
+                        <div style={{ color: "#2dd4bf" }}>
+                          📄 {t("qskyway.just.ready")} · H-{justification.doc.from + 1} → H-{justification.doc.to + 1}
+                        </div>
+                        <div style={{ color: "#5f7086", marginTop: 3, wordBreak: "break-all" }}>
+                          sha256 {justification.attestation.contentHash.slice(0, 24)}…
+                        </div>
+                        {justification.doc.airspace && (
+                          <div style={{ marginTop: 3, color: justification.doc.airspace.compliant ? "#2dd4bf" : "#fbbf24" }}>
+                            {justification.doc.airspace.authority} · {justification.doc.airspace.effective} ·{" "}
+                            {justification.doc.airspace.compliant ? t("qskyway.just.within") : t("qskyway.just.above")}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          <button style={btn} onClick={downloadJustification}>{t("qskyway.just.download")}</button>
+                          <button style={btn} onClick={verifyJustification} disabled={justState === "busy"}>
+                            {justState === "verified" ? "✓ " + t("qskyway.just.verified")
+                              : justState === "invalid" ? "✗ " + t("qskyway.just.invalid")
+                              : t("qskyway.just.verify")}
+                          </button>
+                        </div>
+                        <div style={{ marginTop: 8, color: "#5f7086", fontSize: 10.5, whiteSpace: "normal", lineHeight: 1.45 }}>
+                          {justification.scope}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -565,6 +872,12 @@ export default function QSkywayClient() {
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
                             откр. радиус {v.openRadiusM}м · просвет {v.clearanceM}м · до запретной зоны {v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м"}
+                            {v.ceilingM != null && <> · потолок {v.ceilingM}м</>}
+                          </div>
+                        )}
+                        {v.needsAtc && (
+                          <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title="В этой ячейке регулятор не даёт автоматического допуска (потолок 0 ft) — вылет только по координации с УВД.">
+                            🛂 нужна координация с УВД — автоматического допуска нет
                           </div>
                         )}
                       </div>

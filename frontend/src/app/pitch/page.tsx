@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import {
   ask,
   billionDefense,
@@ -729,7 +730,7 @@ export default function PitchPage() {
       </Section>
 
       {/* ───────── PILLARS ───────── */}
-      <Section anchor="pillars" eyebrow="Three architectural pillars" title="Why this is one product, not 27">
+      <Section anchor="pillars" eyebrow="Three architectural pillars" title={`Why this is one product, not ${MODULE_NODES}`}>
         <div
           style={{
             display: "grid",

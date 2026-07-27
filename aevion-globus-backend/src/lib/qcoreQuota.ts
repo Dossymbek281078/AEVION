@@ -27,10 +27,12 @@
  *     ~$50/1M output would cost far more than any subscription price). This
  *     checks a smaller premiumTokensPerMonth sub-cap (TIERS[].limits, ~10% of
  *     the overall cap) against isPremiumModel-flagged usage only. Added
- *     2026-07-22, ships dormant. NOTE: only wired into qcoreai.ts's two
- *     single-shot /chat + /chat-stream call sites so far — the multi-agent
- *     orchestrator's per-call dispatch points are NOT yet covered (tracked as
- *     a follow-up in docs/PRICING_STRATEGY_2026-07.md).
+ *     2026-07-22, ships dormant. Wired into qcoreai.ts's single-shot /chat +
+ *     /chat-stream call sites (402 pre-dispatch) AND, since 2026-07-26, into
+ *     the multi-agent orchestrator via the res-free gate below (the
+ *     orchestrator yields a `premium_quota_exceeded` event mid-stream instead
+ *     of a 402 — see premiumQuotaGateForRequest/ForPayload). Background
+ *     scheduler ticks (no request context) remain ungated.
  *
  * qcoreai carries real per-request AI OPEX, so it is deliberately NOT placed
  * behind the all-or-nothing module paywall (that would break the advertised
@@ -40,7 +42,7 @@
  */
 
 import type { Request, Response } from "express";
-import { resolveUserPlan } from "./planGate";
+import { resolveUserPlan, resolvePlanFromPayload } from "./planGate";
 import { verifyBearerOptional } from "./authJwt";
 import { getMonthlyTokens, getMonthlyPremiumTokens } from "../services/qcoreai/store";
 import { isPremiumModel } from "../services/qcoreai/pricing";
@@ -137,35 +139,69 @@ export async function enforcePremiumModelQuota(
   provider: string,
   model: string,
 ): Promise<boolean> {
-  if (process.env.QCOREAI_PREMIUM_QUOTA !== "1") return false; // dormant unless flipped on
-  if (!isPremiumModel(provider, model)) return false; // not a premium model — nothing to check
+  const payload = verifyBearerOptional(req) as Record<string, unknown> | null;
+  const hit = await checkPremiumQuotaForPayload(payload, provider, model);
+  if (!hit) return false;
 
-  const auth = verifyBearerOptional(req) as { sub?: string } | null;
-  if (!auth?.sub) return false; // anonymous — unmetered, unchanged
-
-  const plan = resolveUserPlan(req);
-  const tier = getTier(plan.rawTier) ?? getTier(plan.tier);
-  const limit = tier?.limits.premiumTokensPerMonth;
-  if (limit == null) return false; // no sub-cap for this tier (free's overall cap already bounds it; enterprise unlimited)
-
-  let used = 0;
-  try {
-    used = await getMonthlyPremiumTokens(auth.sub);
-  } catch {
-    return false; // fail open — a metering failure must not break chat
-  }
-  if (used < limit) return false;
-
+  const plan = resolvePlanFromPayload(payload);
   res.status(402).json({
     error: "upgrade_required",
     module: "qcoreai",
     plan: plan.rawTier,
     reason: "premium_model_quota_exhausted",
-    usedTokens: used,
-    limitTokens: limit,
+    usedTokens: hit.usedTokens,
+    limitTokens: hit.limitTokens,
     requiredTiers: ["enterprise"],
     upgradeUrl: `${PUBLIC_BASE}/pricing`,
-    message: `Месячный лимит на топовые модели для вашего тарифа (${limit.toLocaleString("ru-RU")} токенов/мес) исчерпан — обычные модели остаются доступны. Upgrade → ${PUBLIC_BASE}/pricing`,
+    message: `Месячный лимит на топовые модели для вашего тарифа (${hit.limitTokens.toLocaleString("ru-RU")} токенов/мес) исчерпан — обычные модели остаются доступны. Upgrade → ${PUBLIC_BASE}/pricing`,
   });
   return true;
+}
+
+/* ───── Orchestrator premium-quota gate (res-free) ─────────────────────────
+   The multi-agent orchestrator can't 402 mid-run (the SSE/WS stream is
+   already open), so instead of Request/Response it takes a gate callback on
+   OrchestratorInput and yields a `premium_quota_exceeded` event when the
+   gate trips. The check itself is IDENTICAL to enforcePremiumModelQuota
+   above — one policy, two delivery mechanisms. */
+
+export type PremiumQuotaHit = { usedTokens: number; limitTokens: number };
+export type PremiumQuotaGate = (provider: string, model: string) => Promise<PremiumQuotaHit | null>;
+
+async function checkPremiumQuotaForPayload(
+  payload: Record<string, unknown> | null,
+  provider: string,
+  model: string,
+): Promise<PremiumQuotaHit | null> {
+  if (process.env.QCOREAI_PREMIUM_QUOTA !== "1") return null; // dormant unless flipped on
+  if (!isPremiumModel(provider, model)) return null; // not a premium model — nothing to check
+
+  const sub = payload && typeof payload.sub === "string" ? payload.sub : null;
+  if (!sub) return null; // anonymous — unmetered, unchanged
+
+  const plan = resolvePlanFromPayload(payload);
+  const tier = getTier(plan.rawTier) ?? getTier(plan.tier);
+  const limit = tier?.limits.premiumTokensPerMonth;
+  if (limit == null) return null; // no sub-cap for this tier (free's overall cap already bounds it; enterprise unlimited)
+
+  let used = 0;
+  try {
+    used = await getMonthlyPremiumTokens(sub);
+  } catch {
+    return null; // fail open — a metering failure must not break the run
+  }
+  if (used < limit) return null;
+
+  return { usedTokens: used, limitTokens: limit };
+}
+
+/** Gate for orchestrator runs started from an Express route. */
+export function premiumQuotaGateForRequest(req: Request): PremiumQuotaGate {
+  const payload = verifyBearerOptional(req) as Record<string, unknown> | null;
+  return premiumQuotaGateForPayload(payload);
+}
+
+/** Gate for orchestrator runs started outside Express (e.g. the WS server). */
+export function premiumQuotaGateForPayload(payload: Record<string, unknown> | null): PremiumQuotaGate {
+  return (provider, model) => checkPremiumQuotaForPayload(payload, provider, model);
 }

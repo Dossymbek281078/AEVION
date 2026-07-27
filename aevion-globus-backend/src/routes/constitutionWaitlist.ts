@@ -19,6 +19,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvFromRows } from "../lib/csv";
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -149,7 +150,14 @@ constitutionWaitlistAdminRouter.get(
       if (rows.length === 0) rows = Array.from(memList.values());
       const fmt = String(req.query.format ?? "json");
       if (fmt === "csv") {
-        const lines = ["email,source,createdAt", ...rows.map((r) => `${r.email},${r.source},${r.createdAt}`)];
+        // Экранирования тут не было ВООБЩЕ: поля клеились в строку как есть.
+        // Запятая в source ломала разметку файла, а значение с ведущим = + - @
+        // исполнялось как формула при открытии. Оба поля приходят из формы
+        // подписки, то есть заполняются посторонним.
+        const lines = [
+          "email,source,createdAt",
+          ...rows.map((r) => csvFromRows([[r.email, r.source, r.createdAt]])),
+        ];
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="constitution-waitlist-${Date.now()}.csv"`);
         return res.send(lines.join("\n"));

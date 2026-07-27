@@ -582,6 +582,23 @@ export const openapiSpec = {
     },
     "/api/qsign/sign": { post: { summary: "Sign payload (legacy)" } },
     "/api/qsign/verify": { post: { summary: "Verify signature (legacy)" } },
+    // QSkyway — air-corridor navigation. Documented in full rather than only the
+    // newest routes: the justification and verify endpoints exist to be handed to
+    // an outside party, and an endpoint absent from the public spec cannot be
+    // discovered by the person it was built for.
+    "/api/qskyway/health": { get: { summary: "QSkyway status: cities, altitude model, regulator feeds, slot store", security: [] } },
+    "/api/qskyway/cities": { get: { summary: "City registry + airspaceCoverage (how many cities have a regulator feed at all)", security: [] } },
+    "/api/qskyway/city": { get: { summary: "City twin: buildings, height field, no-fly zones, wind, published ceilings, Ed25519 signature (?city=astana|nyc|tokyo)", security: [] } },
+    "/api/qskyway/vertiports": { get: { summary: "Pad suitability scoring + published ceiling per pad (?city=)", security: [] } },
+    "/api/qskyway/route": { post: { summary: "4D route between pads. {from,to,city?,respectCeiling?} — respectCeiling makes the regulator's ceiling a hard constraint; 422 reason 'airspace-ceiling' when only the ceiling blocks it", security: [] } },
+    "/api/qskyway/route/justification": { post: { summary: "Signed single document: twin hash + airspace hash + published edition + ceiling verdict, for attaching to a filing", security: [] } },
+    "/api/qskyway/route/justification/verify": { post: { summary: "Verify a justification document {document, attestation}; reports content-tamper and signature failure separately", security: [] } },
+    "/api/qskyway/verify": { get: { summary: "Verify Ed25519 over the city twin AND the airspace layer (?city=)", security: [] } },
+    "/api/qskyway/airspace/anchor": { post: { summary: "Submit the airspace layer's content hash to OpenTimestamps (Bitcoin) — trustless proof of when the edition was in use", security: [] } },
+    "/api/qskyway/airspace/anchor/verify": { post: { summary: "Verify an OTS proof {city, contentHash, otsProofB64}; reports Bitcoin anchoring and current-snapshot match separately", security: [] } },
+    "/api/qskyway/airspace/proof": { get: { summary: "The shipped Bitcoin (OpenTimestamps) proof for the airspace edition in use, verified on the fly; says separately whether it still covers the current edition", security: [] } },
+    "/api/qskyway/airspace/register": { post: { summary: "Register the signed airspace edition in the QRight registry (idempotent on content hash)", security: [] } },
+    "/api/qskyway/slots": { get: { summary: "4D slot market (QRight receipts); POST books {routeId,t0,t1,holder}, 409 over capacity", security: [] } },
     "/api/qtrade/cap-status": { get: { summary: "Daily-cap headroom for caller (used / cap / remainingSec)" } },
     "/api/qtrade/receipt/{opId}.pdf": { get: { summary: "Server-rendered single-page PDF receipt (auth, scoped)" } },
     "/api/qtrade/statement.pdf": { get: { summary: "Multi-page PDF statement (auth; ?period=30d|90d|ytd|all)" } },

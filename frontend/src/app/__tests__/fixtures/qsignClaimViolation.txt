@@ -1,0 +1,11 @@
+Fixture for qsignClaims.guard.test.ts — do not "fix" these lines.
+They are the exact wording that shipped to buyers while production
+answered {"qsign":{"mode":"preview","reason":"seed_unset"}}, kept here
+so the guard's matcher is proven against the real defect.
+
+proof: "ML-DSA-65 GA · prod smoke 20/20 · QShield Lagrange-reconstruct"
+<li>signatures must be reissued today (ML-DSA-65, FIPS 204, in prod).</li>
+note: "ML-DSA-65 FIPS 204 в production — единственный в регионе"
+desc: "Enterprises are starting to require post-quantum signatures. We already ship it."
+Ours will. Only B2C product with ML-DSA-65 on the shelf.
+{ title: "Post-quantum on day 1", desc: "No one else ships ML-DSA-65 B2C." }

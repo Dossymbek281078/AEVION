@@ -58,6 +58,26 @@ describe("clampTemperature", () => {
 });
 
 describe("publicErrorCategory — upstream message stripping", () => {
+  // Замер 27.07.2026: NVIDIA NIM с неверным ключом отдаёт «nvidia 403: request
+  // failed (code 403)» — ни слова «api key». До этой правки человек, вставивший
+  // не тот ключ, видел безликое chat_failed и не понимал, что чинить. Коды
+  // разбираются там, где провайдер не написал словами.
+  test("голый 403 без слов → provider_auth_failed", () => {
+    expect(publicErrorCategory("nvidia 403: request failed (code 403)")).toBe("provider_auth_failed");
+    expect(publicErrorCategory("groq 401: unauthorized")).toBe("provider_auth_failed");
+  });
+
+  test("404 → model_not_found, 5xx → provider_unavailable", () => {
+    expect(publicErrorCategory("cerebras 404: unknown model")).toBe("model_not_found");
+    expect(publicErrorCategory("mistral 503: service unavailable")).toBe("provider_unavailable");
+    expect(publicErrorCategory("together 500: internal")).toBe("provider_unavailable");
+  });
+
+  test("код внутри другого числа не путается с ответом", () => {
+    // «llama-3.3-70b» и «gpt-4o» не должны читаться как HTTP-коды.
+    expect(publicErrorCategory("model llama-3.3-70b-instruct failed to load")).toBe("chat_failed");
+  });
+
   test("API-key-related → provider_auth_failed (never echoes the key itself)", () => {
     expect(publicErrorCategory("Invalid API key: sk-ant-api03-xyz123")).toBe("provider_auth_failed");
     expect(publicErrorCategory("Authentication failed: api_key not recognized")).toBe("provider_auth_failed");

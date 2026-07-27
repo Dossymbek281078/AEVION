@@ -324,6 +324,15 @@ function publicErrorCategory(msg: string): string {
   if (m.includes("timeout") || m.includes("timed out") || m.includes("etimedout")) return "provider_timeout";
   if (m.includes("model") && (m.includes("not found") || m.includes("does not exist"))) return "model_not_found";
   if (m.includes("billing") || m.includes("quota")) return "provider_quota_exceeded";
+  // Многие шлюзы вообще не пишут словами, что случилось, — только код. Замерено
+  // 27.07.2026: NVIDIA NIM с неверным ключом отдаёт «nvidia 403: request failed
+  // (code 403)», и человек, вставивший не тот ключ, видел безлико «chat_failed»
+  // вместо «ключ не принят». Разбираем код там, где слов нет.
+  const status = m.match(/(?:^|[^0-9])(4\d{2}|5\d{2})(?:[^0-9]|$)/)?.[1];
+  if (status === "401" || status === "403") return "provider_auth_failed";
+  if (status === "404") return "model_not_found";
+  if (status === "408") return "provider_timeout";
+  if (status && status.startsWith("5")) return "provider_unavailable";
   return "chat_failed";
 }
 

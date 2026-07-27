@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 658
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 670
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (658
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (670
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -949,13 +949,38 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    the conservative end of each band still wins — CAC the higher, LTV the lower.
    Both additions proven by mutation.
 
+38. **The deck cross-check knew fewer scales than the parser.** `figureAppearsInText`
+   is what stops a model reporting a figure the uploaded deck never stated. Its
+   scale list was written out as `[1e3, 1e6, 1e9]` — a fifth copy of a set that
+   already lives in `MONEY_MULTIPLIER` and the unit pattern — and had never
+   learned crore or lakh. So a deck stating "48,211 crore" and a model correctly
+   reporting 482,110,000,000 disagreed, and the model's **right** answer was
+   discarded as unsupported.
+
+   Reading the scales from the table fixed that and cost something, which is
+   worth stating because it nearly shipped: dividing by 10^7 let a model
+   claiming $100M find a match in a deck saying "$10 million", since
+   100,000,000 / 10^7 is 10. Stopping exactly that invention is the check's
+   entire job.
+
+   The rule is now that a scale applies only when **its word is in the text** —
+   "10" counts as ten crore only if the deck says crore. That closed the defect
+   the fix introduced and **three that pre-dated it**: a customer count inflated
+   tenfold, a year read as money, and a percentage read as money all used to
+   pass. Six negative cases and five positive ones are pinned.
+
+   One detail that cost a round: the word test cannot be `${word}`, because
+   an abbreviation is glued to its figure and there is no boundary between the
+   0 and the M of "$10M". A preceding letter still disqualifies, so the m of
+   "programme" is not a million.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 658):
+`tests/qventureDisclosedCorpus.test.ts`, 670):
 
 | Guard | Floor | Measured today |
 |---|---|---|

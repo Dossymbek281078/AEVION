@@ -2375,3 +2375,43 @@ describe("the fields the notation sweep had not reached", () => {
     expect(p("LTV of $1,500-2,500.").ltvUsd).toBe(1500);
   });
 });
+
+describe("the deck cross-check knows the scales the parser knows", () => {
+  // Fifth place the same set of money scales had been written out, after the
+  // unit pattern and the multiplier table. Here it said [1e3, 1e6, 1e9] and had
+  // never learned crore or lakh, so a deck stating "48,211 crore" and a model
+  // correctly reporting 482,110,000,000 disagreed — and the model's right
+  // answer was discarded as unsupported by the deck.
+  test.each([
+    ["crore", "Revenue from operations was ₹48,211 crore.", 482_110_000_000],
+    ["lakh", "Revenue of Rs. 26,047 lakh.", 2_604_700_000],
+    ["billion", "GMV was ₸9,053 billion.", 9_053_000_000_000],
+    ["million", "Revenue of $84.7 million.", 84_700_000],
+    ["the M abbreviation, glued to its figure", "We reached $10M ARR.", 10_000_000],
+  ])("a figure written in %s is found", (_l, text, value) => {
+    expect(figureAppearsInText(text, value)).toBe(true);
+  });
+
+  // Reading the scales from the table cost something, and the cost is the
+  // reason for the second half of the rule. Dividing by 10^7 let a model
+  // claiming $100M match a deck saying "$10 million", because 100,000,000/10^7
+  // is 10 — and stopping exactly that invention is why this check exists. A
+  // scale now only applies when its WORD is in the text.
+  test.each([
+    ["a tenfold overstatement", "Revenue of $10 million.", 100_000_000],
+    ["a figure simply invented", "Revenue of $10 million.", 999_000_000],
+    ["a near miss", "Revenue of $10 million.", 11_000_000],
+    ["a customer count inflated tenfold", "We have 5,000 customers.", 50_000],
+    ["a year turned into money", "For the year ended December 31, 2025.", 2_025_000_000],
+    ["a percentage turned into money", "Gross margin of 45%.", 45_000_000],
+  ])("%s is not found", (_l, text, value) => {
+    expect(figureAppearsInText(text, value)).toBe(false);
+  });
+
+  test("three of those six were wrong before today, not caused by the fix", () => {
+    // Recorded because it changes what the fix is worth: the scale-word rule
+    // closed a defect it introduced AND three that pre-dated it.
+    expect(figureAppearsInText("We have 5,000 customers.", 50_000)).toBe(false);
+    expect(figureAppearsInText("Gross margin of 45%.", 45_000_000)).toBe(false);
+  });
+});

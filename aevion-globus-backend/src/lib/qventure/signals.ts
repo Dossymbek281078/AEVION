@@ -349,8 +349,24 @@ export function figureAppearsInText(text: string, value: number): boolean {
     forms.add(n.toFixed(2).replace(/0$/, "").replace(/\.$/, ""));
   };
   add(value);
-  for (const scale of [1e3, 1e6, 1e9]) {
-    if (value >= scale) add(value / scale);
+  // Only scales whose WORD is in the text. Two defects in one line otherwise.
+  //
+  // The scales used to be written out here as [1e3, 1e6, 1e9] — a third copy of
+  // a set that already exists in MONEY_MULTIPLIER and the unit pattern — and so
+  // had never learned crore or lakh. A deck stating "48,211 crore" and a model
+  // correctly reporting 482,110,000,000 disagreed, and the model's right answer
+  // was discarded as unsupported by the deck.
+  //
+  // Reading them from the table fixed that and cost something: dividing by
+  // 10^7 let a model claiming $100M find a match in a deck that says "$10
+  // million", because 100,000,000 / 10^7 is 10. This check exists to stop
+  // exactly that. Requiring the scale word to be present makes the division
+  // mean something — "10" only counts as ten crore if the deck says crore.
+  for (const [word, scale] of Object.entries(MONEY_MULTIPLIER)) {
+    // Not `\b${word}\b` — an abbreviation is glued to its figure, and there is
+    // no word boundary between the 0 and the M of "$10M". A letter before it
+    // still disqualifies, so the m of "programme" is not a million.
+    if (value >= scale && new RegExp(String.raw`(?<![a-z])${word}\b`, "i").test(text)) add(value / scale);
   }
   for (const f of forms) {
     if (f.length >= 1 && flat.includes(f)) return true;

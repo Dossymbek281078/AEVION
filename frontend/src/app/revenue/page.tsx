@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { externalRevenueAt } from "./externalRevenue";
 import { useI18n } from "@/lib/i18n";
 import { etaLabel, type GoalPace } from "@/lib/goalEta";
 import { fmtNum, intlLocale, type NumLang } from "@/lib/locale";
@@ -632,10 +633,10 @@ function RevenueTrend() {
   // Линия рисуется по деньгам СНАРУЖИ на каждой точке: у снимков до правки
   // internalUsd досчитан по датам заказов, поэтому ступеньки нет — она была
   // артефактом того, что в старых точках свои покупки сидели внутри суммы.
-  // Вычитать можно ТОЛЬКО там, где свои покупки действительно сидят в гроссе.
-  // У снимков после 27.07.2026 гросс уже очищен, и повторное вычитание дало бы
-  // отрицательную выручку — это и вышло, пока признак выводился из «поле пустое».
-  const externalAt = (p: TrendPoint) => (p.includesInternal ? p.grossUsd - (p.internalUsd ?? 0) : p.grossUsd);
+  // Логика вынесена в externalRevenueAt и покрыта тестом на реальных строках
+  // из прод-таблицы: вычитание внутри JSX уже дважды за день давало дефект,
+  // который ловился только глазами на задеплоенной странице.
+  const externalAt = externalRevenueAt;
   // Подпись остаётся, только пока есть точки, для которых свои покупки НЕ
   // досчитаны: там линия по-прежнему завышена, и молчать об этом нельзя.
   const unresolved = series.filter((p) => p.includesInternal && p.internalUsd == null).length;

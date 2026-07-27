@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 644
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 658
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (644
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (658
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -927,13 +927,35 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    It lives in `moneyUsd`, the one door every money figure passes through, so
    the fourteen sites that read money inherit it. Corpus unchanged at 89/89.
 
+37. **The notation sweep, finished.** Limits 33 and 34 asked "how many ways can
+   this be written" of revenue, GMV, customers and the percentages. Asked of the
+   remaining six fields, payback, LTV/CAC and churn came back clean and three
+   did not:
+
+   | Not read | Field |
+   |---|---|
+   | `$500 CAC`, `$2,000 LTV` | the suffix form every other money metric has |
+   | `Customer acquisition cost of $500`, `Lifetime value of $2,000` | the spelled-out name |
+   | `TAM \| $5 billion`, `TAM — $5 billion` | TAM's own connector list |
+
+   The spelled-out names are the metric-noun lesson again: only the acronyms
+   were listed, so the way a plan writes the term **the first time**, before
+   switching to the abbreviation, read as nothing. TAM's list is the one limit
+   35 missed — its words are in a different order, which is the second time that
+   exact thing has happened and the reason the lists were consolidated at all.
+
+   Guarded against the collisions that matter: `LTV/CAC of 4x` still yields
+   neither a CAC nor an LTV, "our cost of goods" is not an acquisition cost, and
+   the conservative end of each band still wins — CAC the higher, LTV the lower.
+   Both additions proven by mutation.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 644):
+`tests/qventureDisclosedCorpus.test.ts`, 658):
 
 | Guard | Floor | Measured today |
 |---|---|---|

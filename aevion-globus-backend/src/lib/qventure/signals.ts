@@ -938,22 +938,32 @@ export function parsePlanSignals(text: string): PlanSignals {
   // Bands here run in opposite directions: a HIGHER CAC and a LOWER LTV are both
   // the worse reading, so "CAC $8-12k, LTV $40-60k" scores 12k against 40k —
   // the pessimistic corner of the box the plan drew, not its flattering one.
-  const cacRange = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  // Only the abbreviations were listed, so "customer acquisition cost of $500"
+  // and "lifetime value of $2,000" — how a plan writes them the first time,
+  // before switching to the acronym — read as nothing. Same shape as the
+  // metric nouns: the list was built from how we say it, not how they do.
+  const CAC_NAME = String.raw`(?<!ltv[:/ ]{0,4})(?:cac|customer acquisition costs?)`;
+  const LTV_NAME = String.raw`(?:ltv|lifetime values?|customer lifetime values?)`;
+  const cacRange = firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cacRange) {
     const ends = moneyRangeEnds(t, cacRange, planCurrency, s);
     if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
   }
   const cac = s.cacUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+    : firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    // "$500 CAC" is how a deck writes it, and revenue, GMV and backlog all
+    // read their suffix form already.
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${CAC_NAME}`, "i"));
   if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency, s); if (v && v > 0) s.cacUsd = v; }
 
-  const ltvRange = firstMatch(t, new RegExp(String.raw`ltv\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const ltvRange = firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
     const ends = moneyRangeEnds(t, ltvRange, planCurrency, s);
     if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
   }
   const ltv = s.ltvUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+    : firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${LTV_NAME}`, "i"));
   if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency, s); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
@@ -1108,7 +1118,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // elsewhere: the market factor is log-scaled and an inflated TAM is one of the
   // engine's red flags, so quietly taking the ceiling would flatter the plan on
   // the one number founders are most tempted to stretch.
-  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     // Numbers first, keyword after ("€2B to €4B TAM") — without this the
     // single-figure pattern matched the SECOND figure and took the ceiling.
     || firstMatch(t, new RegExp(String.raw`(?:between\s*)?${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
@@ -1129,7 +1139,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const tam = s.bottomUpTamUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:of|=|:|is|at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
   if (tam) {
     // detect group layout

@@ -2334,3 +2334,44 @@ describe("a figure too large to be a currency it did not name", () => {
     expect(p("Total payment volume of $15 trillion.").gmvUsd).toBe(15e12);
   });
 });
+
+describe("the fields the notation sweep had not reached", () => {
+  // Same question as limits 33 and 34, asked of CAC, LTV, payback, LTV/CAC,
+  // churn and TAM. Payback, LTV/CAC and churn came back clean. Three did not.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["CAC, colon", "CAC: $500", (s: Sig) => s.cacUsd, 500],
+    ["CAC, pipe", "CAC | $500", (s: Sig) => s.cacUsd, 500],
+    ["CAC, suffix", "$500 CAC.", (s: Sig) => s.cacUsd, 500],
+    ["CAC, spelled out", "Customer acquisition cost of $500.", (s: Sig) => s.cacUsd, 500],
+    ["LTV, suffix", "$2,000 LTV.", (s: Sig) => s.ltvUsd, 2000],
+    ["LTV, spelled out", "Lifetime value of $2,000.", (s: Sig) => s.ltvUsd, 2000],
+    ["TAM, pipe", "TAM | $5 billion", (s: Sig) => s.bottomUpTamUsd, 5e9],
+    ["TAM, em dash", "TAM — $5 billion", (s: Sig) => s.bottomUpTamUsd, 5e9],
+  ])("%s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("the acronym and the spelled-out name do not collide", () => {
+    const s = p("Customer acquisition cost of $500 and lifetime value of $2,000.");
+    expect(s.cacUsd).toBe(500);
+    expect(s.ltvUsd).toBe(2000);
+  });
+
+  test.each([
+    ["LTV/CAC is a ratio, not a CAC", "LTV/CAC of 4x.", (s: Sig) => s.cacUsd],
+    ["LTV/CAC is a ratio, not an LTV", "LTV/CAC of 4x.", (s: Sig) => s.ltvUsd],
+    ["LTV:CAC likewise", "LTV:CAC of 4x.", (s: Sig) => s.cacUsd],
+    ["an ordinary cost is not an acquisition cost", "Our cost of goods is $500.", (s: Sig) => s.cacUsd],
+  ])("%s", (_l, text, read) => {
+    expect(read(p(text) as Sig)).toBeNull();
+  });
+
+  test("the conservative end of each band still wins", () => {
+    // CAC takes the higher end, LTV the lower — the reading least flattering to
+    // the plan. Widening the name lists must not quietly change that.
+    expect(p("CAC of $400-600.").cacUsd).toBe(600);
+    expect(p("LTV of $1,500-2,500.").ltvUsd).toBe(1500);
+  });
+});

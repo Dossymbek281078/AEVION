@@ -151,6 +151,48 @@ async function main() {
   assert(padded > 0 && maxPad > 0, "[tokyo] confidence-clearance raises corridors over uncertain buildings", `${padded} routes padded, max=${maxPad}m`);
   // clearance invariant already holds base+conf, so the per-city loop still shows 0 violations
 
+  // ── Phase 7: regulatory airspace ceilings (real FAA UASFM feed for NYC) ─────
+  const asN = cityNyc.json?.airspace;
+  assert(asN?.available === true && asN.authority === "FAA", "[nyc] twin carries a real regulator ceiling feed", `authority=${asN?.authority}`);
+  assert(asN.cells > 0 && asN.coveragePct >= 90, "[nyc] feed covers the twin", `${asN?.cells} cells, ${asN?.coveragePct}%`);
+  assert(asN.minCeilingM === 0 && asN.maxCeilingM > 0, "[nyc] ceilings span from no-auto-authorization to a real limit", `${asN?.minCeilingM}–${asN?.maxCeilingM}m`);
+  // Cities without an open regulator feed must say so rather than inventing one.
+  const cityAst = await jget("/api/qskyway/city?city=astana");
+  assert(cityAst.json?.airspace?.available === false, "[astana] no regulator feed is reported honestly, not faked");
+
+  // Advisory (default) mode must not have changed routability — the verdict is
+  // added information, not a new restriction.
+  const advis = await jpost("/api/qskyway/route", { from: 1, to: 2, city: "nyc" });
+  assert(advis.status === 200 && advis.json?.respectCeiling === false, "[nyc] default route stays advisory", `status=${advis.status}`);
+  assert(advis.json?.airspace?.available === true && typeof advis.json.airspace.compliant === "boolean", "[nyc] route carries a ceiling verdict");
+  assert(advis.json.airspace.coveragePct >= 90, "[nyc] verdict covers the route", `${advis.json?.airspace?.coveragePct}%`);
+  const advAst = await jpost("/api/qskyway/route", { from: 1, to: 2, city: "astana" });
+  assert(advAst.json?.airspace?.compliant === null, "[astana] no feed → no verdict (null, not a green tick)");
+
+  // Strict mode: the published ceiling becomes a hard constraint. Every corridor
+  // it does return must actually respect it, and pads under a 0 ft ceiling must
+  // be unreachable — that is the real regulatory picture, not a bug.
+  let strictOk = 0, strictBlocked = 0, strictViolating = 0;
+  const nycVp = cityNyc.json?.vertiports?.length ?? 0;
+  for (let i = 0; i < nycVp; i++) for (let j = 0; j < nycVp; j++) {
+    if (i === j) continue;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "nyc", respectCeiling: true });
+    if (r.status === 200) { strictOk++; if (r.json?.airspace?.compliant !== true) strictViolating++; }
+    else if (r.status === 422 && r.json?.reason === "airspace-ceiling") strictBlocked++;
+  }
+  assert(strictOk > 0 && strictViolating === 0, "[nyc] every strict-mode corridor respects the published ceiling", `${strictOk} routed, ${strictViolating} violating`);
+  assert(strictBlocked > 0, "[nyc] pads without automatic authorization are refused in strict mode", `${strictBlocked} of ${nycVp * (nycVp - 1)} pairs`);
+  const blockedEx = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "nyc", respectCeiling: true });
+  assert(blockedEx.status === 422 && blockedEx.json?.airspaceIfUnrestricted?.available === true, "[nyc] ceiling refusal explains what an unrestricted flight would need", `status=${blockedEx.status}`);
+  // Cities with no feed must be unaffected by the flag rather than silently blocked.
+  const strictAst = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "astana", respectCeiling: true });
+  assert(strictAst.status === 200, "[astana] strict flag cannot block a city that has no published ceiling", `status=${strictAst.status}`);
+
+  // Pads inherit the same published ceiling as the grid they stand on.
+  const padCeil = (cityNyc.json?.vertiportScores ?? []).filter((v) => typeof v.ceilingM === "number");
+  assert(padCeil.length === nycVp, "[nyc] every pad reports its published ceiling", `${padCeil.length}/${nycVp}`);
+  assert(padCeil.some((v) => v.needsAtcCoordination === true), "[nyc] pads under a 0 ft ceiling are flagged for ATC coordination");
+
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
   assert(bad.status === 422, "same-vertiport route rejected", `status=${bad.status}`);

@@ -871,3 +871,46 @@ describe("the exact input path is held to the same standard as the prose", () =>
     expect(exact.signals.growthPct).toBe(typed.signals.growthPct);
   });
 });
+
+describe("a filing states the size of a move before its rate", () => {
+  /**
+   * "Total revenue decreased by $14.3 million, or 13%, to $99.6 million" is how
+   * an MD&A writes a decline. Both readers that handle direction — the level
+   * connector and the decline detector — allowed only a short, fixed connector
+   * and could not cross the amount, so Moderna's most recent period was invisible
+   * and the flattering prior year was scored instead.
+   *
+   * The span is constrained by SHAPE, not by length: only amount-like tokens and
+   * the words that introduce them. A first attempt used a length-bounded span and
+   * was reverted the same session — it let "gross margin declined to 20% and
+   * churn rose to 7%" read the churn figure as the margin.
+   */
+  test("the decline is read through the amount", () => {
+    const s = parsePlanSignals("Total revenue decreased by $14.3 million, or 13%, to $99.6 million.");
+    expect(s.growthPct).toBe(-13);
+    expect(s.revenueUsd).toBe(99_600_000);
+  });
+
+  test("and the later period wins over the flattering earlier one", () => {
+    const s = parsePlanSignals(
+      "Total revenue of $205.8M in 2017, up 90% from $108.4M in 2016. Total revenue decreased by $14.3 million, or 13%, to $99.6 million for the nine months ended 30 September 2018.",
+    );
+    expect(s.revenueUsd).toBe(99_600_000);
+    expect(s.growthPct).toBe(-13);
+  });
+
+  test("a conjunction still ends the span", () => {
+    // The guard that the reverted length-bounded version failed.
+    const s = parsePlanSignals("Gross margin declined to 20% and churn rose to 7% monthly.");
+    expect(s.grossMarginPct).toBe(20);
+    expect(s.churnPct).toBe(7);
+  });
+
+  test("the plain forms are unchanged", () => {
+    expect(parsePlanSignals("Revenue of $10M, down 20% year over year.").growthPct).toBe(-20);
+    expect(parsePlanSignals("Revenue declined 20% year over year.").growthPct).toBe(-20);
+    expect(parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year.").growthPct).toBe(97);
+    expect(parsePlanSignals("Churn fell to 3% monthly, down from 8%.").churnPct).toBe(3);
+    expect(parsePlanSignals("Customers fell to 900 from 1,200.").customers).toBe(900);
+  });
+});

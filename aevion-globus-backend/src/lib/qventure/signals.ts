@@ -335,7 +335,17 @@ function forwardLooking(text: string, at: number): boolean {
  * "from X to Y" is matched non-capturing, because the current value is Y.
  */
 const DIR_VERB = String.raw`(?:fell|fallen|declin(?:ed|ing)|decreas(?:ed|ing)|dropped|improv(?:ed|ing)|rose|risen|grew|grown|increas(?:ed|ing)|expand(?:ed|ing)|lengthened|shortened|narrowed|widened|climbed|slipped)`;
-const TO_LEVEL = String.raw`(?:${DIR_VERB}\s+(?:from\s+\d[\d,.]*\s*%?\s+)?(?:back\s+)?to)`;
+/**
+ * What may sit between the direction verb and "to". Filings write "decreased by
+ * $14.3 million, or 13%, to $99.6 million", so the span cannot be nothing — but
+ * it must not be a free run of text either. A permissive span was tried and
+ * reverted: it let "gross margin declined to 20% and churn rose to 7%" carry
+ * the margin's reader across the conjunction and read the churn figure.
+ * Amount-shaped tokens only means a conjunction, or another metric's name, ends
+ * the span by construction rather than by a length guess.
+ */
+const AMOUNT_BIT = String.raw`(?:(?:by|or|from|of)\s+)?[$€£₸₽¥]?\d[\d,.]*\s*(?:%|million|billion|bn|m|k)?\s*,?\s*`;
+const TO_LEVEL = String.raw`(?:${DIR_VERB}\s+(?:${AMOUNT_BIT}){0,3}?(?:back\s+)?to)`;
 const UNIT = MONEY_UNIT_PATTERN;
 // Money can be marked with any currency, not just "$" — "€3M ARR" and
 // "₸450 млн GMV" have to reach the same patterns before they can be converted.
@@ -482,7 +492,10 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the worst reading available, and always in the company's favour. Checked
   // first so the decline wins the sentence.
   const DOWN = String.raw`(?:declin(?:ing|ed|e|es)|down|fell|falling|decreas(?:ing|ed|e|es)|contract(?:ing|ed)|shrank|shrunk|dropped)`;
-  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
+  // A filing states the size before the rate — "decreased by $14.3 million, or
+  // 13%, to $99.6 million" — so the same amount-shaped span the level connector
+  // uses lets that through without letting a conjunction through.
+  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:${AMOUNT_BIT}){0,2}?(?:by|at|of|to|or)?\s*(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
 
   // A growth rate is meaningless without knowing WHAT grew, and the parser did
   // not ask. Affirm's S-1 states GMV up 77% and revenue up 93% in consecutive

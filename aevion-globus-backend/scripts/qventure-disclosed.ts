@@ -451,6 +451,35 @@ export const CASES: DisclosedCase[] = [
   // ── Outcome: succeeded ────────────────────────────────────────────────────
   {
     outcome: "succeeded",
+    round: "Form S-1, November 2018",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1682852/000119312518323562/d577473ds1.htm",
+    ],
+    input: {
+      name: "Moderna",
+      sector: "biotech",
+      stage: "growth",
+      geography: "US",
+      askUsd: 600_000_000,
+      description:
+        "Messenger RNA platform: one delivery and manufacturing approach applied across vaccines, therapeutics and oncology, funded by pharmaceutical collaborations and government grants rather than by selling a product.",
+      tractionNotes:
+        "Total revenue of $205.8M in 2017, up 90% from $108.4M in 2016. Total revenue decreased by $14.3 million, or 13%, to $99.6 million for the nine months ended 30 September 2018. A pipeline of 21 development candidates. Activity observed in Phase 1 trials for six out of seven clinical programs.",
+    },
+    // The shape the corpus lacked: a science company with no product revenue,
+    // whose evidence is a pipeline and a trial phase, and whose most recent
+    // disclosed period is a DECLINE against a prior year of 90% growth. The
+    // MD&A phrasing that states it — "decreased by $14.3 million, or 13%, to
+    // $99.6 million" — is what forced the connector between a direction verb
+    // and its figure to be constrained by shape rather than by length.
+    expect: [
+      { label: "the latest period wins over the flattering prior year", read: (s) => s.revenueUsd, ...num(99_600_000) },
+      { label: "the most recent move is read as a decline", read: (s) => s.growthPct, ...num(-13) },
+      { label: "the Phase 1 programme counts as a milestone reached", read: (s) => s.regulatoryMilestones.length > 0, expected: true },
+    ],
+  },
+  {
+    outcome: "succeeded",
     round: "Form F-1, November 2021",
     sources: [
       "https://www.sec.gov/Archives/edgar/data/1691493/000119312521314359/d213207df1.htm",

@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
+import { isAuthenticated } from "@/lib/auth";
 import { launchedModules } from "@/data/pitchModel";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { CouncilConsole } from "./CouncilConsole";
@@ -787,6 +788,7 @@ function ProviderHealthStrip() {
   const [providers, setProviders] = useState<LiveProviderStatus[] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -810,6 +812,17 @@ function ProviderHealthStrip() {
   }, []);
 
   useEffect(() => {
+    // Ручка за платной стеной: гостю она отвечает 402, а глобальный
+    // перехватчик превращает каждый 402 в модалку тарифа. При опросе раз в
+    // 30 секунд это значит, что модалка возвращается поверх бесплатного
+    // демо сразу после того, как её закрыли. Поэтому без входа в сеть не
+    // ходим вообще и показываем честное «после входа».
+    // isAuthenticated() читает localStorage — только внутри эффекта, иначе
+    // разъезжается гидрация.
+    if (!isAuthenticated()) {
+      setGated(true);
+      return;
+    }
     load();
     const t = setInterval(load, 30_000);
     return () => clearInterval(t);
@@ -847,6 +860,7 @@ function ProviderHealthStrip() {
           ◉ Provider Health
         </span>
         <span style={{ flex: 1 }} />
+        {!gated && (
         <button
           type="button"
           onClick={load}
@@ -865,12 +879,17 @@ function ProviderHealthStrip() {
         >
           ↻ Refresh
         </button>
+        )}
         <span style={{ fontSize: 10, color: T.textFaded }}>
-          {updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : "· loading…"}
+          {gated ? "· после входа" : updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : "· loading…"}
         </span>
       </div>
 
-      {err ? (
+      {gated ? (
+        <div style={{ fontSize: 12, color: T.textMute }}>
+          Живой пинг поставщиков — на платном тарифе. Разбор разногласий ниже работает без входа.
+        </div>
+      ) : err ? (
         <div style={{ fontSize: 12, color: T.bad }}>Health check unavailable: {err}</div>
       ) : !providers ? (
         <div style={{ fontSize: 12, color: T.textMute }}>Pinging providers…</div>
@@ -990,8 +1009,15 @@ function MissionPresetGrid() {
   const [err, setErr] = useState<string | null>(null);
   const [launching, setLaunching] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
 
   useEffect(() => {
+    // Как и provider-status: без входа это гарантированный 402, то есть
+    // модалка тарифа поверх бесплатного демо. Не спрашиваем.
+    if (!isAuthenticated()) {
+      setGated(true);
+      return;
+    }
     let alive = true;
     (async () => {
       try {
@@ -1065,7 +1091,9 @@ function MissionPresetGrid() {
     );
   }
 
-  if (!presets) {
+  // Гостю запрос не уходит вовсе, поэтому presets навсегда остался бы null,
+  // а вечное «Loading missions…» — это ложь про состояние. Говорим как есть.
+  if (gated || !presets) {
     return (
       <section
         style={{
@@ -1079,7 +1107,7 @@ function MissionPresetGrid() {
           fontSize: 12,
         }}
       >
-        Loading missions…
+        {gated ? "Готовые сценарии панелей — на платном тарифе. Пример разбора ниже открыт без входа." : "Loading missions…"}
       </section>
     );
   }

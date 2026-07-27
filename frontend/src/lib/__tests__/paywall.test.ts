@@ -9,6 +9,7 @@ import {
   installPaywallInterceptor,
   PAYWALL_EVENT,
   type PaywallPayload,
+  type PaywallEventDetail,
 } from "../paywall";
 
 const VALID_402: PaywallPayload = {
@@ -215,6 +216,57 @@ describe("installPaywallInterceptor", () => {
     expect(handler).toHaveBeenCalledTimes(1);
     const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
     expect(evt.detail.module).toBe("qcoreai");
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+
+  // Регрессия: на /multichat-engine health-полоса опрашивала платную ручку
+  // раз в 30 секунд. Каждый 402 поднимал модалку заново, и гость не мог
+  // пользоваться бесплатным демо. Модалка отличает фон от действия по этому
+  // флагу, поэтому перехватчик обязан его проставлять — и снимать ДО
+  // запроса, иначе медленный ответ на клик выглядел бы фоновым.
+  it("помечает 402 из фонового запроса как userInitiated:false", async () => {
+    Object.defineProperty(navigator, "userActivation", {
+      value: { isActive: false },
+      configurable: true,
+    });
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(402, VALID_402));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api/multichat/provider-status");
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallEventDetail>;
+    expect(evt.detail.userInitiated).toBe(false);
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+    delete (navigator as unknown as Record<string, unknown>).userActivation;
+  });
+
+  it("помечает 402 после жеста пользователя как userInitiated:true", async () => {
+    Object.defineProperty(navigator, "userActivation", {
+      value: { isActive: true },
+      configurable: true,
+    });
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(402, VALID_402));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api/multichat/council");
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallEventDetail>;
+    expect(evt.detail.userInitiated).toBe(true);
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+    delete (navigator as unknown as Record<string, unknown>).userActivation;
+  });
+
+  // Браузер без userActivation (Safari, Firefox) не должен молча проглатывать
+  // платную стену: без сигнала считаем запрос пользовательским.
+  it("без userActivation считает запрос пользовательским", async () => {
+    delete (navigator as unknown as Record<string, unknown>).userActivation;
+    window.fetch = vi.fn().mockResolvedValue(makeResponse(402, VALID_402));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api/qcoreai/chat");
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallEventDetail>;
+    expect(evt.detail.userInitiated).toBe(true);
     window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
   });
 

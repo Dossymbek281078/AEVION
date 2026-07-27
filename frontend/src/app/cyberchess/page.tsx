@@ -3743,40 +3743,33 @@ export default function CyberChessPage(){
       e.preventDefault();
       // Normalize 0 → O for castling (0-0 vs O-O)
       const norm=ch==="0"?"O":ch;
-      sSanBuf(prev=>{
-        const candidate=(prev+norm).slice(0,8);
-        // Try to execute SAN — chess.js понимает любую корректную нотацию
-        const probe=new Chess(game.fen());
-        try{
-          const mv=probe.move(candidate);
-          if(mv){
-            // Execute via main path (handles puzzle/coach/analysis modes too)
-            if(tab==="puzzles"&&pzCurrent){
-              exec(mv.from as Square,mv.to as Square,mv.promotion as any);
-            }else{
-              exec(mv.from as Square,mv.to as Square,mv.promotion as any);
-            }
-            return "";
-          }
-        }catch{}
-        // Не валидный полный ход. Это префикс легального?
-        const sans=game.moves();
-        const lc=candidate.toLowerCase();
-        const isPrefix=sans.some(s=>s.toLowerCase().startsWith(lc));
-        if(!isPrefix){
-          // Возможно юзер начал новый ход — попробуем оставить только последний символ
-          const tail=norm;
-          const tailIsPrefix=sans.some(s=>s.toLowerCase().startsWith(tail.toLowerCase()));
-          if(tailIsPrefix)return tail;
-          // Совсем мимо — флэш ошибки и сбросим
-          sSanFlash("err");
-          if(sanBufClearTimer.current)window.clearTimeout(sanBufClearTimer.current);
-          sanBufClearTimer.current=window.setTimeout(()=>{sSanBuf("");sSanFlash(null);sanBufClearTimer.current=null},900);
-          return candidate;
+      /* Раньше всё это лежало ВНУТРИ sSanBuf(prev=>…) — вместе с exec(), то есть ход
+         исполнялся из апдейтера состояния. React вправе вызвать апдейтер повторно (в dev
+         со StrictMode делает это всегда), и тогда один нажатый символ играл ход ДВАЖДЫ.
+         Значение sanBuf свежее: оно в зависимостях этого эффекта. */
+      const candidate=(sanBuf+norm).slice(0,8);
+      // Полный корректный ход? chess.js понимает любую корректную нотацию
+      const probe=new Chess(game.fen());
+      let played=false;
+      try{
+        const mv=probe.move(candidate);
+        if(mv){
+          exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+          played=true;
         }
-        // Префикс — ждём ещё символов
-        return candidate;
-      });
+      }catch{}
+      if(played){sSanBuf("");return}
+      // Не валидный полный ход. Это префикс легального?
+      const sans=game.moves();
+      const lc=candidate.toLowerCase();
+      if(sans.some(x=>x.toLowerCase().startsWith(lc))){sSanBuf(candidate);return}
+      // Возможно юзер начал новый ход — оставим только последний символ
+      if(sans.some(x=>x.toLowerCase().startsWith(norm.toLowerCase()))){sSanBuf(norm);return}
+      // Совсем мимо — флэш ошибки и сброс
+      sSanBuf(candidate);
+      sSanFlash("err");
+      if(sanBufClearTimer.current)window.clearTimeout(sanBufClearTimer.current);
+      sanBufClearTimer.current=window.setTimeout(()=>{sSanBuf("");sSanFlash(null);sanBufClearTimer.current=null},900);
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Chess } from "chess.js";
 import { readFileSync } from "node:fs";
-import { ECO_PRESETS } from "../openingRepertoireData";
+import { ECO_PRESETS, defaultRepertoire } from "../openingRepertoireData";
 
 /* The repertoire builder offers these as starting points. A typo in one move makes
    the whole line unplayable, and nothing would say so — the UI just shows the string.
@@ -86,5 +86,30 @@ describe("openings.json", () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+/* Стартовый репертуар — то, что человек видит в разделе до того, как заведёт свой.
+   Его линии проверялись не больше, чем всё остальное: те же четыре SAN-массива лежали
+   в другой структуре и мимо проверки пресетов проходили. */
+describe("defaultRepertoire", () => {
+  it("replays every seeded line from the start position", () => {
+    const bad: string[] = [];
+    for (const b of defaultRepertoire()) {
+      const c = new Chess();
+      for (const san of b.moves) {
+        try {
+          c.move(san);
+        } catch {
+          bad.push(`${b.name}: ход ${san} невозможен`);
+          break;
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("seeds something to start from", () => {
+    expect(defaultRepertoire().length).toBeGreaterThan(0);
   });
 });

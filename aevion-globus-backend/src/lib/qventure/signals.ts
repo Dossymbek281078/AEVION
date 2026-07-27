@@ -490,9 +490,24 @@ export function parsePlanSignals(text: string): PlanSignals {
     return best;
   };
 
-  let growth: RegExpMatchArray | null = decline;
+  // A growth band read its HIGH end — "growing 20-40% year over year" scored 40
+  // — which is the flattering end, against the rule every other band here
+  // follows. The plan committed to 20.
+  const growthRange = firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
+  if (growthRange && !decline) {
+    const a = parseLocaleNumber(growthRange[1]);
+    const b = parseLocaleNumber(growthRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0) {
+      s.growthPct = Math.min(a, b);
+      s.growthBasis = "revenue";
+      s.growthPeriod = growthPeriodFromWords((growthRange[3] ?? "").toLowerCase());
+      s.parseNotes.push(`Growth was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
+    }
+  }
+
+  let growth: RegExpMatchArray | null = s.growthPct !== null ? null : decline;
   let growthBasis: GrowthBasis = decline ? basisFor(decline.index ?? 0) : "unspecified";
-  if (!growth) {
+  if (!growth && s.growthPct === null) {
     const found: Array<{ m: RegExpMatchArray; basis: GrowthBasis }> = [];
     for (const pat of GROWTH_PATTERNS) {
       const re = new RegExp(pat, "gi");
@@ -687,7 +702,21 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the same disclosure, and the word "rate" sits between the name and the
   // figure often enough that omitting it dropped the standard S-1 phrasing.
   const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
-  const ret = latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
+  // A band, read at the low end: less retention is the worse reading, the same
+  // rule the revenue and margin bands already follow. Without this the whole
+  // disclosure was dropped, so a plan stating 110–130% scored as if it had said
+  // nothing about retention at all.
+  const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  if (retRange) {
+    const a = parseLocaleNumber(retRange[1]);
+    const b = parseLocaleNumber(retRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 500) {
+      s.retentionPct = Math.min(a, b);
+      s.parseNotes.push(`Retention was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
+    }
+  }
+  const ret = s.retentionPct !== null ? null
+    : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
   if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
@@ -705,7 +734,19 @@ export function parsePlanSignals(text: string): PlanSignals {
   const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
   const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
-  const cust = latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count");
+  // "12,000-15,000 customers" read 15,000 — the flattering end, against the
+  // rule every other band here follows. Fewer customers is the worse reading.
+  const custRange = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
+  if (custRange) {
+    const a = parseMoney(custRange[1], custRange[2]);
+    const b = parseMoney(custRange[3], custRange[4] ?? custRange[2]);
+    if (a && b && Math.min(a, b) >= 1) {
+      s.customers = Math.round(Math.min(a, b));
+      s.parseNotes.push(`The customer count was disclosed as a range (${Math.round(Math.min(a, b)).toLocaleString("en-US")}–${Math.round(Math.max(a, b)).toLocaleString("en-US")}); the score uses the low end.`);
+    }
+  }
+  const cust = s.customers !== null ? null
+    : latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count");
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
@@ -859,11 +900,35 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // prospectus leads with it, and the engine read it as no marketplace
   // disclosure at all.
   const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
-  const gmv = latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+  // A band, before the single-figure pattern: "GMV of $100-150M" used to match
+  // the single pattern on "$100" with the "M" still attached to 150, so the
+  // engine recorded a GMV of one hundred dollars. A magnitude error of six
+  // orders, silent, on the headline number of a marketplace plan.
+  const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (gmvRange) {
+    const ends = moneyRangeEnds(t, gmvRange, s.currency);
+    if (ends) {
+      s.gmvUsd = ends.low;
+      s.parseNotes.push(`GMV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);
+    }
+  }
+  const gmv = s.gmvUsd !== null ? null
+    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
   if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
-  const take = latestMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
+  const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
+  const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  if (takeRange) {
+    const a = parseLocaleNumber(takeRange[1]);
+    const b = parseLocaleNumber(takeRange[2]);
+    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 100) {
+      s.takeRatePct = Math.min(a, b);
+      s.parseNotes.push(`Take rate was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
+    }
+  }
+  const take = s.takeRatePct !== null ? null
+    : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
   if (take) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 
@@ -879,7 +944,18 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // businesses show demand. It is weaker than realised revenue and the engine
   // credits it as such — but reading it as "no traction" was plainly wrong.
   const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
-  const backlog = latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
+  // Same band trap as GMV, and the same six-order consequence: "$20-60M" of
+  // backlog was read as twenty dollars.
+  const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  if (backlogRange && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
+    const ends = moneyRangeEnds(t, backlogRange, s.currency);
+    if (ends) {
+      s.contractedRevenueUsd = ends.low;
+      s.parseNotes.push(`Contracted backlog was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);
+    }
+  }
+  const backlog = s.contractedRevenueUsd !== null ? null
+    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);

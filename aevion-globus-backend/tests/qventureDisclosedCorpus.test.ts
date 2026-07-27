@@ -661,3 +661,58 @@ describe("every metric reads its latest disclosed period, not its first typed", 
     expect(s.parseNotes.some((n) => /latest \(2020\)/i.test(n))).toBe(true);
   });
 });
+
+describe("a stated band is read, and read at the end that is worse for the plan", () => {
+  /**
+   * Seven fields already resolved a band to its conservative end. Six did not,
+   * and two of those were not misses but magnitude errors: "GMV of $100-150M"
+   * matched the single-figure pattern on "$100" while the "M" stayed attached
+   * to 150, so the engine recorded a GMV of one hundred dollars. Backlog did
+   * the same. Growth and the customer count read their FLATTERING end, against
+   * the rule every other band follows; retention and take rate were dropped
+   * entirely.
+   */
+  const cases: Array<[string, string, number]> = [
+    ["GMV of $100-150M in 2024.", "gmvUsd", 100_000_000],
+    ["Contracted backlog of $20-60M.", "contractedRevenueUsd", 20_000_000],
+    ["Net revenue retention of 110-130%.", "retentionPct", 110],
+    ["Take rate of 9-14%.", "takeRatePct", 9],
+    ["12,000-15,000 customers.", "customers", 12_000],
+    ["Growing 20-40% year over year.", "growthPct", 20],
+  ];
+  for (const [text, field, expected] of cases) {
+    test(`${field}: ${text}`, () => {
+      expect((parsePlanSignals(text) as unknown as Record<string, number | null>)[field]).toBe(expected);
+    });
+  }
+
+  test("the multiplier reaches both ends of a money band", () => {
+    // The specific defect: one hundred million, not one hundred.
+    expect(parsePlanSignals("GMV of $100-150M in 2024.").gmvUsd).toBeGreaterThan(1_000_000);
+    expect(parsePlanSignals("Contracted backlog of $20-60M.").contractedRevenueUsd).toBeGreaterThan(1_000_000);
+  });
+
+  test("the bands that already worked still resolve the same way", () => {
+    expect(parsePlanSignals("Revenue of $10-15M in 2024.").revenueUsd).toBe(10_000_000);
+    expect(parsePlanSignals("Gross margin of 70-80%.").grossMarginPct).toBe(70);
+    expect(parsePlanSignals("CAC of $8-12k.").cacUsd).toBe(12_000);
+    expect(parsePlanSignals("LTV of $40-60k.").ltvUsd).toBe(40_000);
+    expect(parsePlanSignals("Payback of 9-12 months.").paybackMonths).toBe(12);
+    expect(parsePlanSignals("Churn of 2-3% monthly.").churnPct).toBe(3);
+    expect(parsePlanSignals("LTV/CAC of 3-5x.").ltvCacRatio).toBe(3);
+  });
+
+  test("single figures are untouched by the new band readers", () => {
+    expect(parsePlanSignals("Net revenue retention 146%.").retentionPct).toBe(146);
+    expect(parsePlanSignals("GMV of $180M annualized with a 14% take rate.").takeRatePct).toBe(14);
+    expect(parsePlanSignals("12,000 customers.").customers).toBe(12_000);
+    expect(parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year.").growthPct).toBe(97);
+    expect(parsePlanSignals("Revenue of $10M, down 20% year over year.").growthPct).toBe(-20);
+  });
+
+  test("every band states its choice to the reader", () => {
+    for (const [text] of cases) {
+      expect(parsePlanSignals(text).parseNotes.some((n) => /range/i.test(n))).toBe(true);
+    }
+  });
+});

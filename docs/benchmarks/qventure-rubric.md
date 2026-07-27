@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 176
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 186
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -219,13 +219,36 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    context for the growth rate, not a competing disclosure. Disabling the rule
    reddens 4 tests.
 
+10. **A band was read by seven fields and mishandled by six.** Same question as
+   the stale period, asked of the other shared rule — and the two worst defects
+   of the whole exercise came out of it.
+
+   | Written as | Was read as | Now |
+   |---|---|---|
+   | `GMV of $100-150M` | **$100** — the multiplier stayed on 150 | $100M |
+   | `Contracted backlog of $20-60M` | **$20** | $20M |
+   | `Growing 20-40% year over year` | 40 — the flattering end | 20 |
+   | `12,000-15,000 customers` | 15,000 — the flattering end | 12,000 |
+   | `Net revenue retention of 110-130%` | nothing | 110 |
+   | `Take rate of 9-14%` | nothing | 9 |
+
+   The first two are magnitude errors of six orders on a marketplace's headline
+   number, and they were silent: the report showed "$100" and scored it. The
+   next two broke the repository's own stated rule — a band resolves to the end
+   that is *worse* for the plan — while the seven fields that already had band
+   readers followed it. Nothing about that split was a decision; it is where
+   band handling had been written and where it had not.
+
+   Currency conversion was checked the same way and came back clean: all seven
+   money fields convert. That one is a verified negative, not an assumption.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 176):
+`tests/qventureDisclosedCorpus.test.ts`, 186):
 
 | Guard | Floor | Measured today |
 |---|---|---|

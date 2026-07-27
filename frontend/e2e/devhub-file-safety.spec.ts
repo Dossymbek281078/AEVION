@@ -32,7 +32,7 @@ type Put = { path: string; content: string };
 /** Mock the whole DevHub API and record every file write. */
 async function mockBackend(
   page: import("@playwright/test").Page,
-  opts: { putStatus?: number; collaboratorDeleteStatus?: number } = {},
+  opts: { putStatus?: number; collaboratorDeleteStatus?: number; collaboratorAddStatus?: number } = {},
 ) {
   const puts: Put[] = [];
   const deletes: string[] = [];
@@ -43,6 +43,11 @@ async function mockBackend(
     const json = (body: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
+    if (url.includes("/collaborators") && req.method() === "POST") {
+      const status = opts.collaboratorAddStatus ?? 200;
+      // A failed add carries no list — the UI used to apply it anyway.
+      return json(status === 200 ? { collaborators: [{ userId: "new@example.com", role: "editor" }] } : { error: "nope" }, status);
+    }
     if (url.includes("/collaborators/")) {
       const status = opts.collaboratorDeleteStatus ?? 200;
       deletes.push(url);
@@ -208,5 +213,22 @@ test.describe("DevHub — writes that must not lose a file", () => {
       page.getByRole("button", { name: /Скачать копию/ }).click(),
     ]);
     expect(download.suggestedFilename()).toBe("App.jsx");
+  });
+
+  test("a failed collaborator add does not wipe the people already on the project", async ({ page }) => {
+    await mockBackend(page, { collaboratorAddStatus: 500 });
+    await page.goto(`/devhub/${PROJECT_ID}`);
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const existing = page.getByTitle("teammate@example.com");
+    await expect(existing).toBeVisible();
+
+    await page.getByPlaceholder("email or user-id").fill("new@example.com");
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+
+    await expect(page.getByText(/Соавтор НЕ добавлен/)).toBeVisible({ timeout: 10_000 });
+    // The list must survive: the failed response carries no collaborators, and
+    // applying it emptied the screen while claiming success.
+    await expect(existing).toBeVisible();
   });
 });

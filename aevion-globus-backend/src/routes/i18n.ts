@@ -12,7 +12,11 @@
  */
 
 import { Router } from "express";
-import { callProvider, type ChatMessage } from "../services/qcoreai/providers";
+import {
+  callProviderResilient,
+  getFreeProviders,
+  type ChatMessage,
+} from "../services/qcoreai/providers";
 
 export const i18nRouter = Router();
 
@@ -126,7 +130,21 @@ async function deeplBatch(texts: string[], deeplTarget: string): Promise<string[
   return out;
 }
 
-async function claudeBatch(texts: string[], langName: string): Promise<string[]> {
+/**
+ * Перевод батча UI-строк моделью.
+ *
+ * Сначала бесплатный флот, потом платный Haiku. Причина: перевод — самая
+ * объёмная и самая простая работа платформы (DOM-перевод гоняет сотни строк
+ * на язык, языков 11), и держать её на платной модели, когда рядом стоит
+ * бесплатный провайдер, — ежедневный расход без причины. Раньше здесь был
+ * жёстко прибит `callProvider("anthropic", …, "claude-haiku-…")`.
+ *
+ * Качество при этом не падает: ответ каждой попытки проверяется на разбор и
+ * на совпадение длины с входом, и если бесплатная модель вернула прозу
+ * вместо JSON или потеряла строку — берётся следующая попытка, последняя из
+ * которых всегда Haiku. То есть бесплатный участвует, только если справился.
+ */
+async function llmBatch(texts: string[], langName: string): Promise<string[]> {
   const sys =
     `You are a precise UI string translator. Translate each input string to ${langName}. ` +
     `Rules: keep placeholders ({x}, %s, :id), numbers, URLs, and brand/product names ` +
@@ -137,28 +155,63 @@ async function claudeBatch(texts: string[], langName: string): Promise<string[]>
     { role: "system", content: sys },
     { role: "user", content: JSON.stringify(texts) },
   ];
-  // Haiku is cheap and fully capable for translation; temperature 0 for determinism.
-  const res = await callProvider("anthropic", messages, "claude-haiku-4-5-20251001", 0);
+  // Порядок попыток: до двух бесплатных провайдеров, затем платный Haiku.
+  // temperature 0 везде — перевод должен быть воспроизводимым.
+  const attempts: Array<{ id: string; model: string; paid: boolean }> = [
+    ...getFreeProviders().slice(0, 2).map((p) => ({ id: p.id, model: p.defaultModel, paid: false })),
+    { id: "anthropic", model: "claude-haiku-4-5-20251001", paid: true },
+  ];
+
+  let lastErr: unknown = new Error("no translation provider configured");
+  for (const attempt of attempts) {
+    try {
+      const res = await callProviderResilient(attempt.id, messages, attempt.model, 0);
+      const parsed = parseStringArray(res.reply, texts.length);
+      if (!parsed) throw new Error("parse/length mismatch");
+      return parsed;
+    } catch (e) {
+      lastErr = e;
+      // Бесплатная попытка не удалась — это ожидаемо (лимит, проза вместо JSON)
+      // и не повод шуметь на каждый батч; платная попытка впереди.
+      if (!attempt.paid) {
+        console.warn(
+          `[i18n] бесплатный провайдер ${attempt.id} не справился с переводом: ` +
+          `${e instanceof Error ? e.message : e}`
+        );
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
+ * Разбор ответа модели в массив строк ожидаемой длины.
+ *
+ * Длина — это и есть проверка качества: переводчик, потерявший строку или
+ * добавивший пояснение, ломает соответствие ключей и текстов на экране.
+ * Возвращает null вместо исключения, чтобы вызывающий мог просто взять
+ * следующего провайдера.
+ */
+export function parseStringArray(reply: string, expectedLength: number): string[] | null {
   let arr: unknown = null;
   try {
-    arr = JSON.parse(res.reply);
+    arr = JSON.parse(reply);
   } catch {
-    const m = res.reply.match(/\[[\s\S]*\]/);
+    const m = reply.match(/\[[\s\S]*\]/);
     if (m) {
       try { arr = JSON.parse(m[0]); } catch { /* fall through */ }
     }
   }
-  if (!Array.isArray(arr) || arr.length !== texts.length) {
-    throw new Error("Claude translation parse/length mismatch");
-  }
+  if (!Array.isArray(arr) || arr.length !== expectedLength) return null;
   return arr.map((x) => String(x));
 }
 
 /**
  * Translate a batch: DeepL when its key is set AND the language is DeepL-backed,
- * otherwise Claude. If a DeepL call throws (quota 456 / invalid key / network),
- * fall back to Claude instead of failing the whole request — a broken or
- * over-quota DeepL key must not take down site-wide translation.
+ * otherwise the model chain (бесплатный флот → платный Haiku). If a DeepL call
+ * throws (quota 456 / invalid key / network), fall back to the model chain
+ * instead of failing the whole request — a broken or over-quota DeepL key must
+ * not take down site-wide translation.
  */
 async function translateBatch(target: string, texts: string[]): Promise<string[]> {
   const deeplReady = !!process.env.DEEPL_API_KEY?.trim();
@@ -172,7 +225,7 @@ async function translateBatch(target: string, texts: string[]): Promise<string[]
       );
     }
   }
-  return claudeBatch(texts, LANG_NAME[target] || target);
+  return llmBatch(texts, LANG_NAME[target] || target);
 }
 
 i18nRouter.post("/translate", async (req, res) => {

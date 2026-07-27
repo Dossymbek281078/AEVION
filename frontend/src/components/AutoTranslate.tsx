@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n, translations, type Lang } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -42,7 +42,6 @@ const dict: Record<string, string> = {
   "Music Awards": "\u041c\u0443\u0437\u044b\u043a\u0430\u043b\u044c\u043d\u044b\u0435 \u043f\u0440\u0435\u043c\u0438\u0438",
   "Film Awards": "\u041a\u0438\u043d\u043e\u043f\u0440\u0435\u043c\u0438\u0438",
   "Full demo \u2192": "\u041f\u043e\u043b\u043d\u0430\u044f \u0434\u0435\u043c\u043e\u043d\u0441\u0442\u0440\u0430\u0446\u0438\u044f \u2192",
-  "37 product nodes": "37 \u043f\u0440\u043e\u0434\u0443\u043a\u0442\u043e\u0432\u044b\u0445 \u0443\u0437\u043b\u043e\u0432",
   // Ключи словаря сверяются по ТОЧНОМУ совпадению строки, поэтому смена
   // счётчика модулей молча выключает перевод этой фразы. Пара ниже обязана
   // соответствовать MODULE_NODES — это проверяет pitchNumbers.guard.test.ts.
@@ -408,8 +407,33 @@ const WS_TRAIL = /\s*$/;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
 
 export function AutoTranslate({ children, observe = true }: { children: React.ReactNode; observe?: boolean }) {
-  const { lang } = useI18n();
+  const { lang, langReady } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
+
+  // `key` на обёртке существует ради одной вещи: вернуть в DOM ИСХОДНЫЙ текст
+  // вместо перевода предыдущего языка (переводим мутацией текстовых узлов, сам
+  // React о ней не знает). Значит он нужен только при СМЕНЕ языка — при первом
+  // определении возвращать нечего, перевода ещё не было.
+  //
+  // Раньше key был просто `lang`, а lang стартует с "en" (первый рендер обязан
+  // совпасть с сервером) и сразу после гидрации становится сохранённым. Для
+  // всех не-английских пользователей это перемонтировало ВСЮ страницу: замерено
+  // на проде 27.07 — `/multichat-engine` при ru делал 2 запроса presets, при en
+  // ровно 1. То есть каждый fetch-на-mount уходил дважды, а локальное состояние
+  // компонентов сбрасывалось.
+  const [resetToken, setResetToken] = useState(0);
+  const settledLang = useRef<Lang | null>(null);
+  useEffect(() => {
+    if (!langReady) return;
+    if (settledLang.current === null) {
+      settledLang.current = lang; // первое определение — без сброса
+      return;
+    }
+    if (settledLang.current !== lang) {
+      settledLang.current = lang;
+      setResetToken((n) => n + 1);
+    }
+  }, [lang, langReady]);
 
   // observe=false → один стартовый проход перевода, БЕЗ live-MutationObserver.
   // Нужно для full-app оболочек (CyberChess и т.п.): там DOM меняется постоянно
@@ -419,6 +443,10 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
+    // Пока язык не определён, "en" — заглушка, а не выбор. Переводить по ней
+    // значит переводить страницу в язык, который пользователь не просил, и
+    // портить исходный DOM до того, как придёт настоящее значение.
+    if (!langReady) return;
 
     // map = instant seed ∪ persisted API results (original -> translation).
     // cache = API results only (what we persist back).
@@ -599,7 +627,12 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       obs?.disconnect();
       obs = null;
     };
-  }, [lang, observe]);
+    // resetToken обязан быть в зависимостях: смена языка сначала запускает этот
+    // эффект на ЕЩЁ НЕ перемонтированном DOM (там текст предыдущего перевода),
+    // и только следующим шагом React заменяет поддерево на исходное. Без
+    // перезапуска перевод так и не ложился на новый DOM — проверено вживую:
+    // RU → EN работал, EN → RU оставлял страницу английской.
+  }, [lang, observe, langReady, resetToken]);
 
-  return <div ref={ref} key={lang} style={{ display: "contents" }}>{children}</div>;
+  return <div ref={ref} key={resetToken} style={{ display: "contents" }}>{children}</div>;
 }

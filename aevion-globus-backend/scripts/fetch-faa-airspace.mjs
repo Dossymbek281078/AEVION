@@ -88,6 +88,11 @@ const airspace = {
   regime: "Part 107 small-UAS LAANC authorization ceilings",
   effective: effectives.length === 1 ? effectives[0] : effectives.join(", "),
   fetched: new Date().toISOString().slice(0, 10),
+  // The exact envelope this snapshot was queried with, so the running service can
+  // re-ask the regulator the identical question and detect drift (see
+  // qskyway.airspace.freshness.ts). Without it a "freshness" check would compare
+  // against a different area and report phantom changes.
+  bbox,
   cells,
 };
 

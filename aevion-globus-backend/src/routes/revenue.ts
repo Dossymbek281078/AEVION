@@ -46,6 +46,24 @@ const GOAL_PRIMARY_USD = () => Number(process.env.REVENUE_GOAL_PRIMARY_USD) || 1
 const GOAL_STRETCH_USD = () => Number(process.env.REVENUE_GOAL_STRETCH_USD) || 20_000_000;
 const GOAL_DEADLINE = () => process.env.REVENUE_GOAL_DEADLINE?.trim() || "2027-01-01";
 
+/** Адреса, покупки с которых — проверка платёжного пути, а не выручка.
+ *  Их две в базе на 27.07.2026, и вместе они дают 89% брутто: своя книга за
+ *  $9.99 и свой DevHub Studio Pro за $149. Пока они считались продажами,
+ *  `/pitch` показывал инвестору $178.97 там, где снаружи пришло $19.98.
+ *  Суммы не выбрасываются, а выносятся в отдельные поля — цифра должна
+ *  становиться честнее, а не тише. */
+const INTERNAL_EMAILS = (): Set<string> =>
+  new Set(
+    (process.env.REVENUE_INTERNAL_EMAILS ?? "yahiin1978@gmail.com,dossymbek@mail.ru")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+export function isInternalPurchase(email: string | undefined | null, internal = INTERNAL_EMAILS()): boolean {
+  return internal.has((email ?? "").trim().toLowerCase());
+}
+
 // ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
@@ -276,6 +294,10 @@ async function twitchChannelStats(login: string): Promise<{
 
 interface GumroadSale {
   id?: string;
+  /** Произвольные query-параметры со страницы оплаты. Сюда приезжает метка
+   *  канала (?channel=instagram), которую ставит /go и /shop — благодаря ей
+   *  видно не только ЧТО купили, но и откуда пришёл покупатель. */
+  url_params?: Record<string, string>;
   email?: string;
   product_name?: string;
   product_permalink?: string;
@@ -396,6 +418,9 @@ async function ensureSnapshotTable(): Promise<void> {
 
 interface LiveTotals {
   grossUsd: number;
+  /** Покупки с внутренних адресов — вынесены из выручки, но показаны отдельно. */
+  internalUsd: number;
+  internalCount: number;
   netUsd: number;
   feesUsd: number;
   saleCount: number;
@@ -412,20 +437,25 @@ interface LiveTotals {
 async function computeLiveTotals(): Promise<LiveTotals> {
   const t: LiveTotals = {
     grossUsd: 0, netUsd: 0, feesUsd: 0, saleCount: 0, refundedCount: 0,
+    internalUsd: 0, internalCount: 0,
     byApp: {}, byChannel: {}, channelsUsed: [],
   };
 
   if (GUMROAD_TOKEN()) {
     const sales = await gumroadSales();
     if (sales) {
-      const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+      const paid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+      const internal = paid.filter((s) => isInternalPurchase(s.email));
+      const valid = paid.filter((s) => !isInternalPurchase(s.email));
+      t.internalUsd += internal.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
+      t.internalCount += internal.length;
       const gross = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
       const fees = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
       t.grossUsd += gross;
       t.feesUsd += fees;
       t.netUsd += gross - fees;
       t.saleCount += valid.length;
-      t.refundedCount += sales.length - valid.length;
+      t.refundedCount += sales.length - paid.length;
       t.byChannel.gumroad = { grossUsd: round2(gross), netUsd: round2(gross - fees), count: valid.length };
       t.channelsUsed.push("gumroad");
       for (const s of valid) {
@@ -440,12 +470,16 @@ async function computeLiveTotals(): Promise<LiveTotals> {
   if (LS_KEY()) {
     const orders = await lsOrders();
     if (orders) {
-      const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
+      const paid = orders.filter((o) => o.status === "paid" && !o.refunded);
+      const internal = paid.filter((o) => isInternalPurchase(o.email));
+      const valid = paid.filter((o) => !isInternalPurchase(o.email));
+      t.internalUsd += internal.reduce((sum, o) => sum + o.total / 100, 0);
+      t.internalCount += internal.length;
       const gross = valid.reduce((sum, o) => sum + o.total / 100, 0);
       t.grossUsd += gross;
       t.netUsd += gross; // LS net (after ~5%+pp) only known at payout time
       t.saleCount += valid.length;
-      t.refundedCount += orders.length - valid.length;
+      t.refundedCount += orders.length - paid.length;
       t.byChannel.lemonsqueezy = { grossUsd: round2(gross), netUsd: round2(gross), count: valid.length };
       t.channelsUsed.push("lemonsqueezy");
       for (const o of valid) {
@@ -645,7 +679,15 @@ revenueRouter.get("/goals", (_req, res) => {
 revenueRouter.get("/summary", async (_req, res) => {
   try {
     const totals = await computeLiveTotals();
-    res.json({ grossUsd: totals.grossUsd, netUsd: totals.netUsd, saleCount: totals.saleCount, channelsUsed: totals.channelsUsed });
+    res.json({
+      grossUsd: totals.grossUsd,
+      netUsd: totals.netUsd,
+      saleCount: totals.saleCount,
+      channelsUsed: totals.channelsUsed,
+      // Свои проверочные покупки не входят в суммы выше, но и не прячутся.
+      internalUsd: totals.internalUsd,
+      internalCount: totals.internalCount,
+    });
   } catch (err: unknown) {
     capture(err, { route: "GET /summary" });
     console.error("[revenue] summary_failed", err instanceof Error ? err.message : err);
@@ -769,18 +811,34 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     amountUsd: s.price ? s.price / 100 : 0,
     currency: s.currency?.toUpperCase() ?? "USD",
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),
+    // null = продажа пришла без метки: либо до введения атрибуции, либо человек
+    // попал на товар не через /go и /shop (прямая ссылка, поиск Gumroad).
+    channel: s.url_params?.channel ?? null,
     date: s.created_at ?? null,
   }));
+
+  // Разрез по ИСТОЧНИКУ ТРАФИКА — ответ на вопрос «что окупается», ради которого
+  // метки и заводились. Имя `bySource`, а не `byChannel`: в этом файле `byChannel`
+  // уже занят и означает ПЛАТЁЖНЫЙ канал (gumroad / lemonsqueezy). Одно имя на два
+  // разных смысла в одном файле — гарантированная будущая путаница.
+  //
+  // Продажи без метки собираются в "unattributed", а не выбрасываются: молча терять
+  // часть выручки из сводки хуже, чем честно показать, сколько её не размечено.
+  const bySource: Record<string, { count: number; totalUsd: number }> = {};
 
   const byApp: Record<string, { count: number; totalUsd: number }> = {};
   for (const s of recent) {
     if (s.refunded) continue;
+    const src = s.channel ?? "unattributed";
+    if (!bySource[src]) bySource[src] = { count: 0, totalUsd: 0 };
+    bySource[src].count++;
+    bySource[src].totalUsd += s.amountUsd;
     if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
     byApp[s.appId].count++;
     byApp[s.appId].totalUsd += s.amountUsd;
   }
 
-  res.json({ sales: recent, byApp });
+  res.json({ sales: recent, byApp, bySource });
 });
 
 /**

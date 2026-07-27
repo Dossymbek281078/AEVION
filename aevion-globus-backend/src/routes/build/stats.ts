@@ -164,30 +164,57 @@ statsRouter.get("/salary", async (req, res) => {
   try {
     const skill = typeof req.query.skill === "string" ? req.query.skill.trim().slice(0, 60) : "";
 
-    let query: string;
-    let params: unknown[];
-    if (skill) {
-      query = `SELECT AVG("salary")::float8 AS "avg", PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "salary") AS "median",
-               MIN("salary") AS "min", MAX("salary") AS "max", COUNT(*)::int AS "count"
-               FROM "BuildVacancy"
-               WHERE "salary" > 0 AND "skillsJson" ILIKE $1`;
-      params = [`%${skill}%`];
-    } else {
-      query = `SELECT AVG("salary")::float8 AS "avg", PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "salary") AS "median",
-               MIN("salary") AS "min", MAX("salary") AS "max", COUNT(*)::int AS "count"
-               FROM "BuildVacancy" WHERE "salary" > 0`;
-      params = [];
-    }
+    // Группируем ПО ВАЛЮТЕ. Раньше AVG/медиана/MIN/MAX считались по колонке
+    // "salary" без учёта "salaryCurrency", то есть рубли, доллары и тенге
+    // складывались в одно число: «средняя 950» из вакансий в RUB и USD не
+    // значит ничего. Ответ при этом кэшируется на час, так что бессмысленная
+    // цифра ещё и живёт долго.
+    //
+    // Дефект скрытый: пока весь корпус в одной валюте, смешивать нечего —
+    // проявится ровно в тот момент, когда часть вакансий переведут в USD.
+    const where = skill
+      ? `"salary" > 0 AND "skillsJson" ILIKE $1`
+      : `"salary" > 0`;
+    const params: unknown[] = skill ? [`%${skill}%`] : [];
 
-    const r = await pool.query(query, params);
-    const row = r.rows[0];
-    return ok(res, {
-      skill: skill || null,
+    const r = await pool.query(
+      `SELECT UPPER(COALESCE("salaryCurrency", 'RUB')) AS "currency",
+              AVG("salary")::float8 AS "avg",
+              PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "salary") AS "median",
+              MIN("salary") AS "min", MAX("salary") AS "max", COUNT(*)::int AS "count"
+       FROM "BuildVacancy"
+       WHERE ${where}
+       GROUP BY UPPER(COALESCE("salaryCurrency", 'RUB'))
+       ORDER BY COUNT(*) DESC, UPPER(COALESCE("salaryCurrency", 'RUB')) ASC`,
+      params,
+    );
+
+    const byCurrency = r.rows.map((row: Record<string, unknown>) => ({
+      // Тот же дефолт, что в COALESCE запроса: строка без валюты не должна
+      // превращаться в «undefined» на клиенте.
+      currency: String(row.currency || "RUB").toUpperCase(),
       avg: Math.round(Number(row.avg ?? 0)),
       median: Math.round(Number(row.median ?? 0)),
       min: Number(row.min ?? 0),
       max: Number(row.max ?? 0),
       count: Number(row.count ?? 0),
+    }));
+
+    // Плоские поля сохранены для существующих клиентов, но теперь описывают
+    // ОДНУ валюту — самую частотную, — а не смесь. Меньше данных честнее, чем
+    // сумма несопоставимых величин. `currency` говорит, какую именно, а
+    // `mixedCurrencies` — что за кадром остались другие.
+    const top = byCurrency[0];
+    return ok(res, {
+      skill: skill || null,
+      currency: top?.currency ?? null,
+      mixedCurrencies: byCurrency.length > 1,
+      byCurrency,
+      avg: top?.avg ?? 0,
+      median: top?.median ?? 0,
+      min: top?.min ?? 0,
+      max: top?.max ?? 0,
+      count: top?.count ?? 0,
     });
   } catch (err: unknown) {
     return fail(res, 500, "salary_stats_failed");

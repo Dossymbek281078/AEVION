@@ -605,6 +605,58 @@ describe("GET /api/build/stats/salary", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.skill).toBeNull();
   });
+
+  // Раньше AVG/медиана/MIN/MAX считались по колонке "salary" без учёта
+  // "salaryCurrency": рубли и доллары складывались в одно число, и «средняя
+  // 950» не значила ничего. Ответ кэшируется на час, так что цифра жила долго.
+  test("смешанные валюты: плоские числа по ОДНОЙ валюте, не по смеси", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { currency: "RUB", avg: 90000, median: 85000, min: 60000, max: 150000, count: 7 },
+        { currency: "USD", avg: 1000, median: 950, min: 800, max: 1200, count: 3 },
+      ],
+      rowCount: 2,
+    });
+    const res = await request(makeApp()).get("/api/build/stats/salary");
+    expect(res.status).toBe(200);
+    const d = res.body.data;
+    // Доминирующая валюта — RUB (7 против 3), её числа и уезжают в плоские поля.
+    expect(d.currency).toBe("RUB");
+    expect(d.median).toBe(85000);
+    expect(d.count).toBe(7);
+    // Флаг обязателен: без него частичный расчёт выглядит как полный.
+    expect(d.mixedCurrencies).toBe(true);
+    expect(d.byCurrency).toHaveLength(2);
+    expect(d.byCurrency[1]).toMatchObject({ currency: "USD", median: 950, count: 3 });
+    // Смеси быть не должно ни в одном поле: 90000 и 1000 нельзя усреднять.
+    expect(d.avg).toBe(90000);
+  });
+
+  test("одна валюта: mixedCurrencies false и валюта названа", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ currency: "USD", avg: 1000, median: 950, min: 800, max: 1200, count: 4 }],
+      rowCount: 1,
+    });
+    const res = await request(makeApp()).get("/api/build/stats/salary?skill=Сварщик");
+    expect(res.body.data.mixedCurrencies).toBe(false);
+    expect(res.body.data.currency).toBe("USD");
+  });
+
+  test("группировка по валюте выполняется в SQL, а не постфактум", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    await request(makeApp()).get("/api/build/stats/salary");
+    const sql = String(mockQuery.mock.calls.at(-1)?.[0] ?? "");
+    expect(sql).toMatch(/GROUP BY/i);
+    expect(sql).toMatch(/salaryCurrency/);
+  });
+
+  test("пустая выборка не выдаёт ложных нулей за реальные данные", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp()).get("/api/build/stats/salary");
+    expect(res.body.data.count).toBe(0);
+    expect(res.body.data.currency).toBeNull();
+    expect(res.body.data.byCurrency).toEqual([]);
+  });
 });
 
 // ── Stats hires ───────────────────────────────────────────────────────────

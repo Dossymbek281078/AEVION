@@ -24,6 +24,10 @@ type Salary = {
   min: number;
   max: number;
   count: number;
+  /** Валюта, к которой относятся числа выше (самая частотная в выборке). */
+  currency?: string | null;
+  /** true — в выборке есть и другие валюты, показанные числа охватывают не всё. */
+  mixedCurrencies?: boolean;
 };
 
 function slugToSkill(slug: string): string {
@@ -124,11 +128,22 @@ export default async function SkillPage({
 
         {salary && salary.count > 0 && (
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Tile label="Median salary" value={formatSalary(salary.median)} tone="emerald" />
-            <Tile label="Avg salary" value={formatSalary(salary.avg)} />
-            <Tile label="Min" value={formatSalary(salary.min)} />
-            <Tile label="Max" value={formatSalary(salary.max)} />
+            <Tile label="Median salary" value={formatSalary(salary.median, salary.currency)} tone="emerald" />
+            <Tile label="Avg salary" value={formatSalary(salary.avg, salary.currency)} />
+            <Tile label="Min" value={formatSalary(salary.min, salary.currency)} />
+            <Tile label="Max" value={formatSalary(salary.max, salary.currency)} />
           </div>
+        )}
+
+        {/* Складывать зарплаты в разных валютах в одно среднее нельзя, поэтому
+            числа выше считаются по самой частотной валюте. Если в выборке есть
+            другие — сказать это прямо, а не выдавать частичный расчёт за полный. */}
+        {salary && salary.count > 0 && salary.mixedCurrencies && (
+          <p className="mb-6 text-xs text-slate-400">
+            Показаны {salary.count} из открытых вакансий — в валюте {salary.currency}. Остальные
+            указаны в других валютах и в этот расчёт не входят: усреднять разные валюты
+            вместе было бы бессмысленно.
+          </p>
         )}
 
         <div className="mb-6 flex flex-wrap items-center gap-3">

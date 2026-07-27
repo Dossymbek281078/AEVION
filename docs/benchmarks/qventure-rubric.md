@@ -1134,11 +1134,20 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    the word revenue is close enough behind it. The precedence rule cannot help
    when the classification itself is wrong.
 
-   That makes the real fix a change to `basisFor` — bound it to the clause, the
-   way `statedAsAchieved`, `clauseYearAt` and the level-metric filter already
-   are — which changes how **every** growth figure is attributed, not just
-   declines. Worth measuring against the whole corpus, not worth doing with
-   seven minutes left.
+   The obvious conclusion was to bound `basisFor` to the clause, the way
+   `statedAsAchieved`, `clauseYearAt` and the level-metric filter already are.
+   **Measured, and it is wrong.** Bounding it reddens two real cases: Affirm's
+   93% revenue growth comes back as 77% — the GMV figure from the sentence
+   before — and Deliveroo's volume label is lost. Real filings routinely name
+   the metric in one sentence and state its rate in the next, so the
+   ninety-character look-back is doing work no clause-bounded version can.
+
+   That is the finding, and it cost one corpus run to get: the diagnosis in this
+   limit was right about the cause and wrong about the cure. Which leaves the
+   fix genuinely open — attribution here needs something better than "nearest
+   noun backwards", not a tighter version of it. Every other clause-bounded rule
+   on this branch was cheap because a clause is the right unit for that
+   question; for attribution it is not.
 
    Third time today the same judgement. Masking dates was reverted, diagnosed,
    and closed an hour later; this is diagnosed and waiting. The diagnosis is the

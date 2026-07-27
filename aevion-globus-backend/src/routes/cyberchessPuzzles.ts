@@ -13,6 +13,7 @@
 import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
 import { getPool } from "../lib/dbPool";
+import { pickDailyPuzzle, dayNumber } from "../lib/cyberchessDailyPuzzle";
 
 const router = Router();
 
@@ -191,6 +192,23 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
   } catch (e) {
     console.warn("[cyberchess-puzzles] query failed:", e instanceof Error ? e.message : e);
     res.json({ ok: true, total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [] });
+  }
+});
+
+/* GET /daily — одна задача на сутки, ОДНА И ТА ЖЕ для всех.
+   Клиент выбирал её как POOL[индекс_от_номера_суток], но пул отдаётся с shuffle=1 —
+   свой порядок на каждый запрос (замер: 0 совпадений из 2000 между двумя запросами),
+   поэтому «пазл дня» менялся при каждой перезагрузке. Здесь пул полный и выбор не
+   зависит от порядка. */
+router.get("/daily", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await ensureLoaded();
+    const day = dayNumber();
+    const puzzle = pickDailyPuzzle(POOL, day);
+    res.json({ ok: true, day, poolSize: POOL.length, puzzle: puzzle ?? null });
+  } catch (e) {
+    console.warn("[cyberchess-puzzles] daily failed:", e instanceof Error ? e.message : e);
+    res.json({ ok: true, day: dayNumber(), poolSize: POOL.length, puzzle: null });
   }
 });
 

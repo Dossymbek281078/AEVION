@@ -175,3 +175,40 @@ describe("FanDiscountPanel — дедлайн окна", () => {
     expect(await screen.findByText(/open until/i)).toBeTruthy();
   });
 });
+
+/**
+ * 🔴 Панель показывает цены со скидкой крупно и с зачёркнутым прайсом — это
+ * суть витрины, убирать их нельзя. Но если канал по умолчанию спишет цену
+ * продукта, покупатель обязан узнать об этом ЗДЕСЬ, а не в счёте.
+ *
+ * Третья поверхность того же класса: чип модуля и стена 402 закрыты раньше,
+ * панель оставалась без проверки — и она самая заметная из трёх.
+ */
+describe("FanDiscountPanel — честность канала", () => {
+  it("канал НЕ применяет скидку — полоса с объяснением есть", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ preview: PREVIEW, me: fanMe({ discount: { honouredByDefault: false, honouredVia: ["paypal"] } }) }),
+    );
+    renderPanel();
+    expect(await screen.findByText(/PayPal/i)).toBeTruthy();
+  });
+
+  it("✅ канал применяет — полосы нет, лишний шум покупателю не нужен", async () => {
+    // Без этой половины проверка выше проходила бы и при «полоса всегда».
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ preview: PREVIEW, me: fanMe({ discount: { honouredByDefault: true, honouredVia: ["lemonsqueezy"] } }) }),
+    );
+    renderPanel();
+    await screen.findByText(/qcontract/i);
+    expect(screen.queryByText(/PayPal/i)).toBeNull();
+  });
+
+  it("сервер поля не прислал — молчим, а не пугаем догадкой", async () => {
+    vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW, me: fanMe() }));
+    renderPanel();
+    await screen.findByText(/qcontract/i);
+    expect(screen.queryByText(/PayPal/i)).toBeNull();
+  });
+});

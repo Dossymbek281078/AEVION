@@ -80,6 +80,13 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
   const [mine, setMine] = useState<FanState | null>(null);
   /** true — база покупок приложений недоступна, список модулей может быть неполным. */
   const [appsUnavailable, setAppsUnavailable] = useState(false);
+  /**
+   * Спишет ли канал по умолчанию нашу сумму. Панель показывает цены со скидкой
+   * крупно и с зачёркнутым прайсом — это суть витрины, убирать их нельзя. Но
+   * если канал применит цену продукта, покупатель обязан узнать об этом ЗДЕСЬ,
+   * а не в счёте. Тот же гейт стоит в чипе модуля и в стене 402.
+   */
+  const [honoured, setHonoured] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -129,6 +136,7 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
         // подберёт вручную, чем смотрит на «скидок нет» из-за нашей ошибки.
         const hasSomething = Array.isArray(j.offers) && (j.ownedPaid?.length ?? 0) > 0;
         if (hasSomething) setMine(j as FanState);
+        if (typeof j?.discount?.honouredByDefault === "boolean") setHonoured(j.discount.honouredByDefault);
       } catch {
         /* сеть — тихо, витрина с ручным выбором остаётся доступной */
       }
@@ -284,6 +292,24 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
               }}
             >
               {tp("fan.appsUnavailable")}
+            </div>
+          )}
+          {/*
+            🔴 Цены ниже показаны со скидкой — покупатель обязан узнать ЗДЕСЬ,
+            если канал по умолчанию спишет цену продукта, а не нашу сумму.
+            Иначе это «показали одно, спишут другое» на самой видной витрине.
+            Полоса появляется только когда сервер прямо сказал `false`: при
+            `null` (поле не пришло) молчим, а не пугаем догадкой.
+          */}
+          {honoured === false && (
+            <div
+              style={{
+                marginBottom: 12, padding: "8px 12px", borderRadius: 8,
+                background: "#fff7ed", border: "1px solid #fdba74",
+                fontSize: 12.5, color: "#7c2d12",
+              }}
+            >
+              {tp("fan.channelNote")}
             </div>
           )}
           <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>

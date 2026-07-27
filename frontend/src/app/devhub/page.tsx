@@ -167,7 +167,16 @@ export default function DevHubPage() {
   const deleteProject = async (id: string) => {
     if (!confirm("Delete this project and all its files?")) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${id}`), { method: "DELETE" });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${id}`), { method: "DELETE" });
+      if (!r.ok) {
+        // The server refuses this on purpose when the project's database or
+        // its Railway service could not be removed — dropping the card here
+        // would hide a schema, a login role and a billable container that are
+        // all still live, with nothing left pointing at them.
+        const d = await r.json().catch(() => null);
+        setError(d?.error || `Проект не удалён — сервер ответил ${r.status}`);
+        return;
+      }
       setProjects((ps) => ps.filter((p) => p.id !== id));
     } catch {
       setError("Delete failed");

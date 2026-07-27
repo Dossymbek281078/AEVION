@@ -157,4 +157,36 @@ test.describe("DevHub — writes that must not lose a file", () => {
     // worse than the error.
     await expect(row).toBeVisible();
   });
+
+  test("a project the server refused to delete stays on the shelf", async ({ page }) => {
+    // The delete endpoint answers 502 on purpose when the project's database
+    // or Railway service could not be removed. Dropping the card anyway hides
+    // a live schema, login role and billable container.
+    await page.route("**/api/devhub/**", async (route) => {
+      const url = route.request().url();
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (route.request().method() === "DELETE" && url.includes("/projects/")) {
+        return json({ error: "project not deleted — its database could not be dropped: connection refused" }, 502);
+      }
+      if (url.includes("/projects")) {
+        return json({
+          projects: [{ id: PROJECT_ID, name: "undeletable", description: "", stack: "react", status: "draft", updatedAt: new Date(0).toISOString(), fileCount: 1 }],
+        });
+      }
+      if (url.includes("/snippets")) return json({ snippets: [] });
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      if (url.includes("/templates")) return json({ templates: [] });
+      return json({ ok: true });
+    });
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/devhub");
+    const card = page.getByText("undeletable", { exact: true });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: "Delete", exact: true }).first().click();
+    await expect(page.getByText(/could not be dropped/)).toBeVisible({ timeout: 10_000 });
+    await expect(card).toBeVisible();
+  });
 });

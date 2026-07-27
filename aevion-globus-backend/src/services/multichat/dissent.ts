@@ -11,6 +11,8 @@
 // воспроизводима. Судья-модель поверх спора стоил бы ещё один вызов на каждый
 // вопрос и добавил бы собственную ошибку — здесь это не нужно.
 
+import { mentionsUnnegated, mentionsOnlyNegated } from "../../lib/textNegation";
+
 export type AgentAnswer = {
   agentId: string;
   role?: string;
@@ -42,6 +44,7 @@ export type AgentAnswer = {
  * связками. Оценочные слова («достаточно», «рано», «выгодно») сюда НЕ входят —
  * в них и живёт разногласие.
  */
+
 const STOP = new Set([
   // англ. — артикли, предлоги, связки, модальные
   "the", "a", "an", "and", "or", "but", "with", "of", "in", "on", "at", "to",
@@ -185,6 +188,93 @@ export function numericClaims(text: string): NumericClaim[] {
   return out;
 }
 
+/* ── Противоположность: спор, который «доля общих слов» не видит ─────────── */
+
+export type Opposition = {
+  /** Слово, вокруг которого агенты расходятся (в исходной форме одного из них). */
+  term: string;
+  /** Кто утверждает и кто отрицает. */
+  affirms: string;
+  denies: string;
+};
+
+/**
+ * Антонимичные пары по теме решения. Нужны там, где отрицания нет вовсе:
+ * «запускать рано» против «запускать пора» — оба утвердительные.
+ *
+ * Список короткий намеренно. Он покрывает решения «делать / не делать», ради
+ * которых консилиум и собирают; растить его до тезауруса значит уйти в
+ * sentiment-анализ, а это уже вызов модели.
+ */
+const ANTONYMS: Array<[RegExp, RegExp]> = [
+  [/(?<!\p{L})рано(?!\p{L})/iu, /(?<!\p{L})(пора|поздно|своевременно)(?!\p{L})/iu],
+  [/(?<!\p{L})стоит(?!\p{L})/iu, /(?<!\p{L})не стоит(?!\p{L})/iu],
+  [/(?<!\p{L})(достаточно|хватает|хватит)(?!\p{L})/iu, /(?<!\p{L})(не хватает|недостаточно|мало)(?!\p{L})/iu],
+  [/(?<!\p{L})(выгодно|окупится|эффективно)(?!\p{L})/iu, /(?<!\p{L})(невыгодно|не окупится|неэффективно)(?!\p{L})/iu],
+  [/(?<!\p{L})(запускать|включать)(?!\p{L})/iu, /(?<!\p{L})(отложить|подождать|остановить)(?!\p{L})/iu],
+  [/(?<!\p{L})(safe|worth it|profitable)(?!\p{L})/iu, /(?<!\p{L})(risky|not worth|unprofitable)(?!\p{L})/iu],
+];
+
+/**
+ * Прямые противоречия между ответами.
+ *
+ * Зачем отдельно от `similarity`: та считает долю общих слов, то есть измеряет
+ * ТЕМУ, а не позицию. Замерено 27.07 — «Запускать рано: продукт не удерживает
+ * пользователей» против «Запускать пора: удержание достаточное» даёт 0.500 и
+ * вердикт `consensus`, потому что агенты отвечают на один вопрос и берут одну
+ * лексику. Ложное согласие опаснее ложного расхождения: человек НЕ идёт
+ * проверять именно то, за чем пришёл.
+ *
+ * Два дешёвых сигнала, оба без вызова модели:
+ *  1) одно и то же слово один утверждает, другой отрицает (через общий
+ *     `lib/textNegation` — он же чинит «no patents» в QVenture);
+ *  2) антонимичная пара из списка выше.
+ */
+export function oppositions(answers: AgentAnswer[]): Opposition[] {
+  const good = (answers || []).filter((a) => a.ok && a.reply && a.reply.trim());
+  const out: Opposition[] = [];
+  const seen = new Set<string>();
+
+  const push = (term: string, affirms: string, denies: string) => {
+    const key = `${stem(term.toLowerCase())}|${affirms}|${denies}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ term, affirms, denies });
+  };
+
+  for (let i = 0; i < good.length; i++) {
+    for (let j = i + 1; j < good.length; j++) {
+      const a = good[i], b = good[j];
+      const textA = a.reply as string, textB = b.reply as string;
+
+      // (1) Общее слово: у одного утверждается, у другого отрицается.
+      const sharedStems = new Map<string, string>();
+      for (const w of tokens(textA)) sharedStems.set(stem(w), w);
+      for (const w of tokens(textB)) {
+        const original = sharedStems.get(stem(w));
+        if (!original) continue;
+        // Ищем по основе, чтобы падежи не мешали: «удержание» ↔ «удержания».
+        const pattern = new RegExp(stem(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\p{L}*", "giu");
+        const aSays = mentionsUnnegated(textA, pattern);
+        const bSays = mentionsUnnegated(textB, pattern);
+        const aDenies = mentionsOnlyNegated(textA, pattern);
+        const bDenies = mentionsOnlyNegated(textB, pattern);
+        if (aSays && bDenies) push(original, a.agentId, b.agentId);
+        else if (bSays && aDenies) push(w, b.agentId, a.agentId);
+      }
+
+      // (2) Антонимичная пара — там, где отрицания нет вовсе.
+      for (const [posRe, negRe] of ANTONYMS) {
+        const aPos = posRe.test(textA), aNeg = negRe.test(textA);
+        const bPos = posRe.test(textB), bNeg = negRe.test(textB);
+        if (aPos && bNeg && !aNeg) push(String(textA.match(posRe)?.[0] ?? "").trim(), a.agentId, b.agentId);
+        else if (bPos && aNeg && !bNeg) push(String(textB.match(posRe)?.[0] ?? "").trim(), b.agentId, a.agentId);
+      }
+    }
+  }
+  return out;
+}
+
 export type NumericConflict = {
   context: string;
   values: Array<{ agentId: string; raw: string; value: number }>;
@@ -298,6 +388,12 @@ export type DissentMap = {
    * Формально согласие, по сути краткий ответ просто НЕ КАСАЛСЯ оговорок.
    */
   lengthSkew: number;
+  /**
+   * Прямые противоречия: один агент утверждает то, что другой отрицает, либо
+   * они используют антонимичную пару. Считается без вызова модели, на общем
+   * `lib/textNegation`.
+   */
+  oppositions: Opposition[];
   /** Куда смотреть человеку в первую очередь. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;
@@ -311,7 +407,7 @@ export type DissentMap = {
  *  пункт проверяем руками, от 1 (нужно суждение) до 3 (можно закрыть за минуту).
  */
 export type Check = {
-  kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+  kind: "number" | "opposition" | "outlier" | "hedge" | "failure" | "consensus";
   text: string;
   agents: string[];
   weight: 1 | 2 | 3;
@@ -366,6 +462,19 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
       text: `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
       agents: [map.outlier.agentId],
       weight: 1,
+    });
+  }
+
+  // Прямое противоречие — самый проверяемый вид спора после чисел: достаточно
+  // прочитать два названных ответа и решить, кто прав. Вес 3, как у чисел.
+  for (const o of map.oppositions.slice(0, 2)) {
+    out.push({
+      kind: "opposition",
+      text:
+        `Агенты прямо расходятся про «${o.term}»: ${o.affirms} утверждает, ${o.denies} отрицает. ` +
+        `Прочитайте эти два ответа рядом — согласия здесь нет, сколько бы общих слов они ни использовали.`,
+      agents: [o.affirms, o.denies],
+      weight: 3,
     });
   }
 
@@ -451,8 +560,19 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
 
   // Меньше двух содержательных ответов — сравнивать не с чем. Отдавать
   // «консенсус» в этом случае значило бы подтвердить непроверенное.
+  // Прямое противоречие снимает согласие так же, как расхождение в числах.
+  // Схожесть по словам измеряет тему, а не позицию: «Запускать рано, продукт не
+  // удерживает» против «Запускать пора, удержание достаточное» давало 0.500 и
+  // вердикт consensus. Если один утверждает то, что другой отрицает, согласия
+  // нет — сколько бы общих слов они ни использовали.
+  const opposed = oppositions(list);
+
   const verdict: DissentMap["verdict"] =
-    good.length < 2 ? "insufficient" : agreement != null && agreement >= AGREEMENT_THRESHOLD && !conflicts.length ? "consensus" : "split";
+    good.length < 2
+      ? "insufficient"
+      : agreement != null && agreement >= AGREEMENT_THRESHOLD && !conflicts.length && !opposed.length
+        ? "consensus"
+        : "split";
 
   const note =
     verdict === "insufficient"
@@ -470,6 +590,7 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     numericConflicts: conflicts,
     hedges: hedged,
     lengthSkew,
+    oppositions: opposed,
     verdict,
     note,
   };

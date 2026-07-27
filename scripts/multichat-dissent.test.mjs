@@ -13,11 +13,26 @@ import path from "node:path";
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const SRC = path.join(HERE, "..", "aevion-globus-backend/src/services/multichat/dissent.ts");
 
-// .mts-копия: бэкенд — CommonJS-пакет, .ts в нём грузится как CJS.
-const tmp = path.join(tmpdir(), `multichat-dissent-${process.pid}.mts`);
-writeFileSync(tmp, readFileSync(SRC, "utf8"), "utf8");
-const m = await import("file:///" + tmp.replace(/\\/g, "/"));
-process.on("exit", () => { try { unlinkSync(tmp); } catch { /* уже убран */ } });
+// .mts-копии РЯДОМ с оригиналами, а не в tmpdir: бэкенд — CommonJS-пакет, .ts в
+// нём грузится как CJS и не отдаёт именованные экспорты, а с 27.07 dissent.ts
+// импортирует ../../lib/textNegation — из tmp такой путь не разрешается.
+// Тот же приём уже используется в multichat-receipt.test.mjs.
+const BE = path.join(HERE, "..", "aevion-globus-backend/src");
+const pid = process.pid;
+const made = [];
+const put = (rel, src) => {
+  const f = path.join(BE, rel);
+  writeFileSync(f, src, "utf8");
+  made.push(f);
+  return f;
+};
+put(`lib/_neg-${pid}.mts`, readFileSync(path.join(BE, "lib/textNegation.ts"), "utf8"));
+const dissentFile = put(
+  `services/multichat/_dissent-${pid}.mts`,
+  readFileSync(SRC, "utf8").replace('from "../../lib/textNegation"', `from "../../lib/_neg-${pid}.mts"`)
+);
+const m = await import("file:///" + dissentFile.split(path.sep).join("/"));
+process.on("exit", () => { for (const f of made) { try { unlinkSync(f); } catch { /* уже убран */ } } });
 
 let failed = 0;
 const ok = (name, cond, extra = "") => {
@@ -413,6 +428,50 @@ ok("дословно совпадающие ответы по-прежнему 1
   m.similarity("Стратегия партнёрских интеграций оптимальна сейчас.",
                "Стратегия партнёрских интеграций оптимальна сейчас.") === 1,
   String(m.similarity("Стратегия партнёрских интеграций оптимальна сейчас.", "Стратегия партнёрских интеграций оптимальна сейчас.")));
+
+// ── Прямое противоречие снимает ложный консенсус ─────────────────────────
+//
+// Замерено 27.07: схожесть по словам измеряет ТЕМУ, а не позицию. Агенты
+// отвечают на один вопрос, берут одну лексику, и три реалистичные пары
+// противоположных ответов из четырёх давали 0.500 и вердикт consensus — карта
+// объявляла согласие там, где идёт спор. Ложное согласие опаснее ложного
+// расхождения: человек НЕ идёт проверять то, за чем пришёл.
+for (const [label, a, b] of [
+  ["антонимы рано/пора",
+   "Запускать платный тариф рано: продукт пока не удерживает пользователей.",
+   "Запускать платный тариф пора: удержание достаточное, оплата отфильтрует несерьёзных."],
+  ["отрицание одного слова",
+   "Если честно, это будет очень неэффективно, потому что канал не проверен, однако решение стоит принять.",
+   "Если честно, это будет очень выгодно, потому что канал проверен, однако решение стоит принять."],
+  ["утверждает/отрицает удержание",
+   "Удержание достаточное, можно включать оплату.",
+   "Удержания нет, оплата только ускорит отток."],
+]) {
+  const map = m.buildDissentMap([A("x", a), A("y", b)]);
+  ok(`противоречие найдено: ${label}`, map.oppositions.length > 0, JSON.stringify(map.oppositions));
+  ok(`вердикт не consensus: ${label}`, map.verdict !== "consensus", `${map.verdict} / agreement ${map.agreement}`);
+  ok(`в списке есть пункт про противоречие: ${label}`,
+    map.checks.some((c) => c.kind === "opposition"), JSON.stringify(map.checks.map((c) => c.kind)));
+}
+
+// Обратная сторона: СОГЛАСНЫЕ ответы противоречием считаться не должны, иначе
+// вердикт consensus стал бы недостижим и карта потеряла бы смысл.
+for (const [label, a, b] of [
+  ["дословно одинаковые",
+   "Стратегия партнёрских интеграций оптимальна сейчас.",
+   "Стратегия партнёрских интеграций оптимальна сейчас."],
+  ["согласны, разными словами",
+   "Запускать стоит: трафика достаточно, экономика сходится.",
+   "Включать оплату можно: трафика достаточно, экономика сходится."],
+]) {
+  const map = m.buildDissentMap([A("x", a), A("y", b)]);
+  ok(`НЕ противоречие: ${label}`, map.oppositions.length === 0, JSON.stringify(map.oppositions));
+}
+ok("согласные дословно по-прежнему дают consensus",
+  m.buildDissentMap([
+    A("x", "Стратегия партнёрских интеграций оптимальна сейчас."),
+    A("y", "Стратегия партнёрских интеграций оптимальна сейчас."),
+  ]).verdict === "consensus");
 
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

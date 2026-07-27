@@ -120,44 +120,8 @@ import { computeInsights, type Insights } from "./insights";
 import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
 import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
+import { ingestPuzzles } from "./puzzleIngest";
 
-/* Тема приводится к одному виду сразу на входе — и с бэкенда, и из запасного
-   puzzles.json. Половина корпуса пришла из дампа Lichess с темами вида "fork" и
-   "attraction", вторая половина несёт русские ("Вилка", "Завлечение"). Без этого для
-   кода это ДВЕ разные темы: в списке фильтра они стояли двумя пунктами, и выбор одного
-   прятал задачи другого, счётчики и статистика по теме делились пополам, а эмодзи с
-   цветом не находились вовсе — THEME_META ключуется по русским названиям. Оба пути
-   загрузки обязаны проходить через нормализацию: бэкенд отдаёт основной пул и выходит
-   раньше, так что фикс только на запасном пути не работал бы почти никогда.
-   themeLabel неизвестную тему возвращает как есть — ничего не проглатывается. */
-function normalizeThemes<T extends { theme?: string }>(list: T[]): T[] {
-  return list.map((p) => (p.theme ? { ...p, theme: themeLabel(p.theme) } : p));
-}
-
-/* Пул на бэкенде собран БЕЗ сдвига на полуход, который требует формат Lichess: там FEN —
-   позиция ДО хода соперника, а решение начинается именно с этого хода. Из-за пропущенного
-   сдвига игроку показывают позицию на полуход раньше и ждут от него ход СОПЕРНИКА как
-   правильный ответ. У матовых задач это видно: игрок доигрывает «решение» и получает мат
-   сам — замер по 20 000 боевых задач дал 6370 матовых, и во ВСЕХ мат ставил соперник.
-   У задач «лучший ход» то же смещение, только молча.
-
-   Признак — чётная длина решения: после верного сдвига игрок ходит первым и последним,
-   то есть полуходов нечётное число. В боевом пуле чётными были все 20 000, в запасном
-   puzzles.json — ни одной. Чиним тем самым сдвигом: играем первый ход, он и есть подводка,
-   остаток становится решением, сторона игрока берётся из новой позиции. */
-function repairUnshiftedPuzzles<T extends { fen: string; sol: string[]; side?: string }>(list: T[]): T[] {
-  return list.map((p) => {
-    if (!Array.isArray(p.sol) || p.sol.length < 2 || p.sol.length % 2 === 1) return p;
-    try {
-      const c = new Chess(p.fen);
-      const uci = p.sol[0];
-      if (!c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })) return p;
-      return { ...p, fen: c.fen(), sol: p.sol.slice(1), side: c.turn() };
-    } catch {
-      return p; // испорченную запись оставляем как есть — её отсеет проверка хода
-    }
-  });
-}
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
 import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
@@ -2604,10 +2568,10 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(repairUnshiftedPuzzles(normalizeThemes(d.puzzles as Puzzle[])));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(repairUnshiftedPuzzles(normalizeThemes(d2 as Puzzle[])));}catch{}
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(ingestPuzzles(d2 as Puzzle[]));}catch{}
     })();
   },[tab]);
 
@@ -2749,7 +2713,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(repairUnshiftedPuzzles(normalizeThemes(d.puzzles as Puzzle[])));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
       // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул

@@ -359,15 +359,33 @@ export function calcMaterialBalance(fen: string): number {
   return white - black;
 }
 
-/** Контроль центра по материалу и пешкам */
+/** Пешки на центральных полях d4/e4/d5/e5.
+ *
+ *  Раньше проверялось `rank4.includes("P")` — то есть ВСЯ горизонталь: одинокая пешка на
+ *  a4 или h4 давала коучу фразу «белые пешки в центре». Проверено прямым прогоном на
+ *  `4k3/8/8/8/P7/8/8/4K3 w`. Теперь горизонталь разворачивается в клетки и смотрятся
+ *  только вертикали d и e — это и есть центр, о котором говорит текст. */
 export function assessCenter(fen: string): string {
-  const board = fen.split(" ")[0].split("/");
-  const rank4 = board[4]; // ряд 4 (индекс от чёрных)
-  const rank5 = board[3]; // ряд 5
+  const rows = fen.split(" ")[0].split("/");
+  // FEN идёт от 8-й горизонтали к 1-й: индекс 3 = ряд 5, индекс 4 = ряд 4
+  const expand = (row: string): string[] => {
+    const cells: string[] = [];
+    for (const ch of row) {
+      if (ch >= "1" && ch <= "8") cells.push(...Array(Number(ch)).fill(""));
+      else cells.push(ch);
+    }
+    return cells;
+  };
+  const centreFiles = [3, 4]; // d, e
+  const onCentre = (row: string | undefined, piece: string) => {
+    if (!row) return false;
+    const cells = expand(row);
+    return centreFiles.some((f) => cells[f] === piece);
+  };
 
   let center = "";
-  if (rank4.includes("P") || rank5.includes("P")) center += "белые пешки в центре; ";
-  if (rank4.includes("p") || rank5.includes("p")) center += "чёрные пешки в центре; ";
+  if (onCentre(rows[4], "P") || onCentre(rows[3], "P")) center += "белые пешки в центре; ";
+  if (onCentre(rows[4], "p") || onCentre(rows[3], "p")) center += "чёрные пешки в центре; ";
   if (!center) return "открытый центр";
   return center.trim();
 }

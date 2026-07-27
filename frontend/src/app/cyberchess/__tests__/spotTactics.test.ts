@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { spotTactics, explainMove } from "../chessCoachEngine";
+import { spotTactics, explainMove, assessCenter } from "../chessCoachEngine";
 
 /* Подсказка про вилку смотрела ходы СОПЕРНИКА: после хода конём очередь уже перешла, и
    условие «есть взятие ферзя или ладьи» означало, что соперник может забрать ТВОЮ
@@ -40,5 +40,25 @@ describe("explainMove", () => {
 
   it("calls a black blunder a blunder, not a brilliancy", () => {
     expect(explainMove(START_B, "g5", 0, 300)).toContain("Блундер");
+  });
+});
+
+/* «Пешки в центре» проверялось по всей горизонтали: одинокая пешка на a4 давала фразу
+   про центр. Центр — это d4/e4/d5/e5, о них текст и говорит. */
+describe("assessCenter", () => {
+  it("does not call a rook-file pawn a pawn in the centre", () => {
+    expect(assessCenter("4k3/8/8/8/P7/8/8/4K3 w - - 0 1")).toBe("открытый центр");
+    expect(assessCenter("4k3/8/8/7p/8/8/8/4K3 w - - 0 1")).toBe("открытый центр");
+  });
+
+  it("sees a pawn that really stands in the centre", () => {
+    expect(assessCenter("4k3/8/8/8/4P3/8/8/4K3 w - - 0 1")).toContain("белые пешки в центре");
+    expect(assessCenter("4k3/8/8/3p4/8/8/8/4K3 w - - 0 1")).toContain("чёрные пешки в центре");
+  });
+
+  it("names both sides when both are there", () => {
+    const s = assessCenter("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1");
+    expect(s).toContain("белые");
+    expect(s).toContain("чёрные");
   });
 });

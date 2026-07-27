@@ -291,11 +291,29 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
 const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to|a|an|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
-function statedAsAchieved(text: string, at: number, len: number): boolean {
+export function statedAsAchieved(text: string, at: number, len: number): boolean {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
   const clause = text.slice(from, ends.length ? Math.min(...ends) : text.length);
   return ACHIEVED_WORD.test(clause) || !INTENDED_WORD.test(clause);
+}
+
+/**
+ * Does the text state this metric as an INTENTION rather than a fact?
+ *
+ * For callers that have a metric's name but no parsed match — notably the deck
+ * extractor, where a model reports figures and the deterministic parser is used
+ * to keep it honest. "We target $10M ARR next year" must not become $10M of ARR
+ * just because a model read the sentence and the regex did not.
+ */
+export function metricStatedAsIntention(text: string, metric: RegExp): boolean {
+  const t = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
+  const re = new RegExp(metric.source, metric.flags.includes("g") ? metric.flags : metric.flags + "g");
+  for (let m = re.exec(t); m; m = re.exec(t)) {
+    if (!statedAsAchieved(t, m.index, m[0].length)) return true;
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  return false;
 }
 
 /** The year a match's own clause is about, or null. Bounded to the clause so a

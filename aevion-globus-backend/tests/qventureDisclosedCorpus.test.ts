@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { CASES } from "../scripts/qventure-disclosed";
 import { analyze } from "../src/lib/qventure/engine";
-import { parsePlanSignals } from "../src/lib/qventure/signals";
+import { parsePlanSignals, metricStatedAsIntention } from "../src/lib/qventure/signals";
 import { PAIRS } from "../scripts/qventure-hardcases";
 import fs from "node:fs";
 import path from "node:path";
@@ -1485,5 +1485,46 @@ describe("a metric expected at scale is not a metric earned", () => {
     // The verb had to be added for "we target 3% churn"; "our target market"
     // must not take the customer count down with it.
     expect(sig("Our target market includes 12,000 clinics; we serve 1,200 customers.").customers).toBe(1_200);
+  });
+});
+
+describe("a model reading a deck goes around the parser, and its guards", () => {
+  /**
+   * The deck extractor asks a model for `financials` — arrUsd, grossMarginPct,
+   * churnPct, customers, growthPct, bottomUpTamUsd — and merges them straight
+   * into the engine's structured input. That path skips every guard the
+   * deterministic reader applies, because the guards live in the parser it went
+   * around. A model told to report "only what the deck states" will read "we
+   * target $10M ARR next year" and report 10000000.
+   *
+   * The file already had the right instinct in one place: where the parser
+   * recognised a RANGE, its conservative reading overrides the model's pick.
+   * This extends the same rule to intentions — where the deck states a metric
+   * as a plan and the parser therefore has nothing, the model's figure is
+   * dropped rather than trusted.
+   */
+  test("the helper recognises a metric stated as an intention", () => {
+    expect(metricStatedAsIntention("We target $10M ARR next year.", /\b(?:arr|mrr|revenues?)\b/i)).toBe(true);
+    expect(metricStatedAsIntention("We expect 80% gross margin at scale.", /\bgross\s*margins?\b/i)).toBe(true);
+    expect(metricStatedAsIntention("We aim for 12,000 customers by 2027.", /\b(?:customers|users|subscribers)\b/i)).toBe(true);
+  });
+
+  test("and leaves a metric stated as fact alone", () => {
+    expect(metricStatedAsIntention("ARR of $10M today.", /\b(?:arr|mrr|revenues?)\b/i)).toBe(false);
+    expect(metricStatedAsIntention("Gross margin 77%.", /\bgross\s*margins?\b/i)).toBe(false);
+    expect(metricStatedAsIntention("12,000 customers.", /\b(?:customers|users|subscribers)\b/i)).toBe(false);
+  });
+
+  test("a fact beside a forecast is still a fact", () => {
+    // "Revenue of $198.1M in 2018; we expect $300M in 2019" states revenue as
+    // fact in its own clause. The veto would not fire here anyway — it only
+    // applies where the parser found nothing — but the helper must not call
+    // this an intention.
+    expect(metricStatedAsIntention("Revenue of $198.1M in 2018; we expect $300M in 2019.", /\b(?:arr|mrr|revenues?)\b/i)).toBe(false);
+    expect(parsePlanSignals("Revenue of $198.1M in 2018; we expect $300M in 2019.").revenueUsd).toBe(198_100_000);
+  });
+
+  test("the parser itself reports nothing for the sentence the model would answer", () => {
+    expect(parsePlanSignals("We target $10M ARR next year.").revenueUsd).toBeNull();
   });
 });

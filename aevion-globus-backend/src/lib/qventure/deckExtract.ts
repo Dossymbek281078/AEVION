@@ -11,7 +11,7 @@
 import { callProvider, pickConfiguredProvider, getProviders, type ChatMessage } from "../../services/qcoreai/providers";
 import { listSectors } from "./sectors";
 import { STAGES } from "./engine";
-import { parsePlanSignals, type ChurnPeriod } from "./signals";
+import { parsePlanSignals, metricStatedAsIntention, type ChurnPeriod } from "./signals";
 import { asRatePeriod, asGrowthPeriod } from "../metrics/periods";
 import { detectCurrencyFirst, toUsd, UNITS_PER_USD, type MoneyCurrency } from "../metrics/currency";
 
@@ -204,6 +204,29 @@ export async function extractDeckFields(text: string): Promise<DeckFields> {
     }
     if (banded.parseNotes.some((n) => /^Bottom-up TAM was disclosed as a range/.test(n)) && banded.bottomUpTamUsd !== null) {
       financials.bottomUpTamUsd = banded.bottomUpTamUsd;
+    }
+
+    // Same rule, one step further. A model asked for "only what the deck states"
+    // will read "we target $10M ARR next year" and report 10000000 — and that
+    // figure enters the engine having skipped every guard the deterministic
+    // reader applies, because those guards live in the parser it went around.
+    //
+    // So where the deck states a metric as an INTENTION and the parser
+    // therefore has nothing, the model's number is dropped rather than trusted.
+    // This does not touch figures the deck states as fact, which is the whole
+    // reason the model is here.
+    const INTENTION_VETO: Array<[keyof DeckFinancials, RegExp, number | null]> = [
+      ["arrUsd", /(?:arr|mrr|revenues?)/i, banded.revenueUsd],
+      ["grossMarginPct", /gross\s*margins?/i, banded.grossMarginPct],
+      ["churnPct", /churn/i, banded.churnPct],
+      ["customers", /(?:customers|users|subscribers)/i, banded.customers],
+      ["growthPct", /grow(?:th|ing)?/i, banded.growthPct],
+      ["bottomUpTamUsd", /(?:tam|addressable market)/i, banded.bottomUpTamUsd],
+    ];
+    for (const [field, metric, parsed] of INTENTION_VETO) {
+      if (parsed === null && financials[field] !== null && metricStatedAsIntention(clean, metric)) {
+        (financials[field] as number | null) = null;
+      }
     }
     // The ask is money too: a "€8M seed" is not an $8M seed.
     const askUsd = money(parsed.askUsd, askRaw);

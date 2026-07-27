@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 238
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 256
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -401,32 +401,31 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    company's order book and flight record, an energy company's installed base —
    has found something.
 
-18. **Open: the milestone reader records intentions as achievements.** The
-   comment above the regulatory list promises that "FDA approval expected in
-   2027 is a plan, not a milestone; the negation layer plus the explicit
-   past-tense wording keep those out". It does not:
+18. **Closed: the milestone reader recorded intentions as achievements.** The
+   comment above the regulatory list had always promised that "FDA approval
+   expected in 2027 is a plan, not a milestone; the negation layer plus the
+   explicit past-tense wording keep those out". It was not true — that exact
+   string recorded a clearance held. The negation layer catches "no FDA
+   approval" and knows nothing about a future tense placed after the phrase, and
+   **every entry in the list inherited the hole**: an applicant who had obtained
+   nothing could be credited with a clearance, a PPA, a defence contracting
+   status or a banking licence.
 
-   ```
-   parsePlanSignals("FDA approval expected in 2027.").regulatoryMilestones
-   → ["FDA clearance/approval"]
-   ```
+   Four of fifteen probe sentences were counted wrongly. The rule now runs
+   inside the milestone's own clause — an explicit achievement word wins
+   outright, otherwise an intention marker in that clause disqualifies it — and
+   clause-bounding is what lets "FDA clearance granted; we expect launch in
+   2027" keep its clearance, because the intention is in the next clause and is
+   about something else.
 
-   The negation layer catches "no FDA approval". It does not catch a future
-   tense placed *after* the phrase, and every entry in that list inherits the
-   hole — so a plan that has applied for nothing can be credited with a
-   clearance, a PPA, a defence contracting status or a banking licence.
+   Two entries written earlier and **deliberately held back** are released with
+   it: emergency use authorization, and ISO 27001 / SOC 2 / HITRUST / FedRAMP —
+   what a security or infrastructure company leads with. They were withheld
+   because they leaked the same way, and adding two more leaks to an open hole
+   makes a report more confidently wrong rather than more complete.
 
-   Found while adding two more entries (emergency use authorization, and
-   ISO 27001 / SOC 2 / FedRAMP). Both work and both leak the same way — "we plan
-   to pursue ISO 27001 certification next year" reads as certified — so they are
-   **held back rather than shipped**: adding two more leaks while the hole is
-   open makes the report more confidently wrong, not more complete.
-
-   The fix is not the `forwardLooking` helper used for revenue, which looks
-   *behind* a figure within its clause. This needs a short look *ahead* as well,
-   and it has to leave "FDA clearance granted; we expect launch in 2027" alone —
-   which is why it is written down rather than attempted at the end of a
-   session.
+   Disabling the filter reddens 7 tests. Nothing else moved: corpus 71/71, hard
+   cases 30/30, calibration identical to the decimal.
 
 ## How this stays true
 
@@ -434,7 +433,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 238):
+`tests/qventureDisclosedCorpus.test.ts`, 256):
 
 | Guard | Floor | Measured today |
 |---|---|---|

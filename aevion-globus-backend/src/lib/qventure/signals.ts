@@ -1131,6 +1131,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const REG: Array<[RegExp, string]> = [
     [/\b510\(k\)\s*(?:clearance|cleared)|fda\s*(?:clearance|cleared|approval|approved)|de novo (?:grant|authorization)|pma approval/i, "FDA clearance/approval"],
     [/\bbreakthrough (?:device|therapy) designation\b/i, "FDA breakthrough designation"],
+    [/\bemergency use authorization\b|\beua\b(?! ?\w)/i, "FDA emergency use authorization"],
+    // What a security or infrastructure company leads with. Held back when it
+    // was written, because the list could not yet tell "certified" from "plans
+    // to pursue certification"; released now that it can.
+    [/\biso[\s-]?27001\b|\bsoc\s?2(?:\s*type\s*(?:i{1,2}|[12]))?\b|\bhitrust\b|\bfedramp\b/i, "Security certification held"],
     [/\bce mark(?:ed|ing)?\b|\bmdr certifi/i, "CE mark"],
     [/\bema approval|\bmhra approval/i, "EMA/MHRA approval"],
     [/\bphase\s*(?:iii|3)\b/i, "Phase 3 clinical"],
@@ -1142,8 +1147,37 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\bitar (?:registered|registration)|\bdefense contract awarded|\bidiq\b|\bota\b (?:award|contract)/i, "Defence contracting status"],
     [/\bgrid interconnection agreement|\bppa\b|\bpower purchase agreement\b/i, "Grid/PPA agreement"],
   ];
+  /**
+   * The comment above this list has always promised that "FDA approval expected
+   * in 2027 is a plan, not a milestone". It was not true: the negation layer
+   * catches "no FDA approval" and nothing about a future tense, so an applicant
+   * who had obtained nothing could be credited with a clearance, a PPA, a
+   * defence contracting status or a banking licence — and every entry in the
+   * list inherited the hole.
+   *
+   * The rule, applied inside the milestone's OWN clause: an explicit
+   * achievement word wins outright; otherwise an intention marker anywhere in
+   * that clause disqualifies it. Clause-bounding is what lets "FDA clearance
+   * granted; we expect launch in 2027" keep its clearance — the intention lives
+   * in the next clause, and it is about something else.
+   */
+  const ACHIEVED = /\b(?:granted|received|obtained|awarded|cleared|clearance held|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|in hand)\b/i;
+  const INTENDED = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply)|to submit|to file|once|upon|plan(?:ned)? for|plan)\b/i;
+  const clauseAround = (at: number, len: number): string => {
+    const from = Math.max(t.lastIndexOf(".", at), t.lastIndexOf(";", at)) + 1;
+    const dot = t.indexOf(".", at + len);
+    const semi = t.indexOf(";", at + len);
+    const ends = [dot, semi].filter((i) => i !== -1);
+    return t.slice(from, ends.length ? Math.min(...ends) : t.length);
+  };
   for (const [re, label] of REG) {
-    if (mentionsUnnegated(t, re) && !s.regulatoryMilestones.includes(label)) s.regulatoryMilestones.push(label);
+    if (!mentionsUnnegated(t, re) || s.regulatoryMilestones.includes(label)) continue;
+    const m = firstMatch(t, new RegExp(re.source, re.flags.replace("g", "")));
+    if (m) {
+      const clause = clauseAround(m.index ?? 0, m[0].length);
+      if (!ACHIEVED.test(clause) && INTENDED.test(clause)) continue;
+    }
+    s.regulatoryMilestones.push(label);
   }
 
   // ── Technical validation ──

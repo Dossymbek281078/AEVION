@@ -1031,3 +1031,49 @@ describe("the hardest sentence in a clinical filing", () => {
     expect(parsePlanSignals("We plan to bring the system into commercial operation next year.").technicalProof.length).toBe(0);
   });
 });
+
+describe("a milestone is something reached, not something intended", () => {
+  /**
+   * The comment above the regulatory list always promised that "FDA approval
+   * expected in 2027 is a plan, not a milestone". It was not true: the negation
+   * layer catches "no FDA approval" and knows nothing about a future tense, so
+   * an applicant who had obtained nothing could be credited with a clearance, a
+   * PPA, a defence contracting status or a banking licence — every entry in the
+   * list inherited the hole.
+   *
+   * The rule now runs inside the milestone's own clause: an explicit
+   * achievement word wins outright, otherwise an intention marker in that
+   * clause disqualifies it.
+   */
+  const reached = (t: string) => parsePlanSignals(t).regulatoryMilestones.length > 0;
+
+  for (const text of [
+    "FDA 510(k) clearance granted and CE marked.",
+    "ISO 27001 certified and SOC 2 Type II audited.",
+    "ITAR registered.",
+    "A 15-year power purchase agreement is signed with the regional utility.",
+    "Phase 2 complete, IND cleared for the follow-on indication.",
+    "Received emergency use authorization from the FDA.",
+    "FedRAMP authorized.",
+  ]) {
+    test(`reached: ${text}`, () => { expect(reached(text)).toBe(true); });
+  }
+
+  for (const text of [
+    "FDA approval expected in 2027.",
+    "We plan to pursue ISO 27001 certification next year.",
+    "The team plans to pursue ITAR registration and expects a first field trial next year.",
+    "The team expects to submit for FDA clearance next year.",
+    "Targeting CE mark in 2027.",
+    "We expect emergency use authorization in 2027.",
+    "Pursuing FedRAMP authorization.",
+  ]) {
+    test(`intended, not counted: ${text}`, () => { expect(reached(text)).toBe(false); });
+  }
+
+  test("an intention in the NEXT clause does not cancel a real milestone", () => {
+    // Clause-bounding is the whole reason this rule can be strict without
+    // suppressing achievements that happen to sit next to plans.
+    expect(reached("FDA clearance granted; we expect launch in 2027.")).toBe(true);
+  });
+});

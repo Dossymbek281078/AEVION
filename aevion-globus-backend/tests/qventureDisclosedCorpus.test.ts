@@ -3060,3 +3060,57 @@ describe("every label the stress test can print is reachable", () => {
     expect(s.note).toMatch(/needs unit economics/i);
   });
 });
+
+describe("naming the metric the plan actually named", () => {
+  const p = (t: string) => parsePlanSignals(t);
+  const rationales = (t: string) =>
+    analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A company.", tractionNotes: `${t} ARR of $2M.`,
+    }).factors.map((f) => f.rationale).join(" ");
+
+  test.each([
+    ["net revenue retention", "Net revenue retention of 140%.", "net", /140% net revenue retention/],
+    ["NRR", "NRR of 125%.", "net", /125% net revenue retention/],
+    ["gross retention", "Gross retention of 88%.", "gross", /88% gross retention/],
+    ["logo retention", "Logo retention of 92%.", "logo", /92% logo retention/],
+    ["unqualified retention", "Retention of 95%.", "unspecified", /95% retention/],
+  ])("%s is read and described as itself", (_l, text, kind, said) => {
+    // Net, gross and logo are three different numbers — net can exceed 100% and
+    // routinely does, gross and logo cannot. All three read into one field and
+    // the report called every one of them "net revenue retention", describing a
+    // disclosure the plan had not made.
+    expect(p(text).retentionKind).toBe(kind);
+    expect(rationales(text)).toMatch(said);
+  });
+
+  test("a gross retention figure is not reported as a net one", () => {
+    expect(rationales("Gross retention of 88%.")).not.toMatch(/88% net revenue retention/);
+  });
+});
+
+describe("an average contract value is not a backlog", () => {
+  // ACV is what one contract is worth; contracted revenue is everything signed
+  // and not yet recognised. "Average contract value of $45,000" was read as
+  // $45,000 of backlog — a category error, and a wrong number rather than a
+  // missing one. The backlog nouns included "contract value".
+  const backlog = (t: string) => parsePlanSignals(t).contractedRevenueUsd;
+
+  test.each([
+    ["average contract value", "Average contract value of $45,000."],
+    ["the abbreviation", "ACV of $45,000."],
+    ["average deal size", "Average deal size of $45,000."],
+  ])("%s is not backlog", (_l, text) => {
+    expect(backlog(text)).toBeNull();
+  });
+
+  test.each([
+    ["total contract value", "Total contract value of $50 million.", 50_000_000],
+    ["sales backlog", "Sales backlog of $1.8B.", 1_800_000_000],
+    ["offtake", "Offtake agreements of $55 billion.", 55_000_000_000],
+    ["TCV of large deal wins", "TCV of large deal wins was $3.6 billion.", 3_600_000_000],
+    ["contracted revenue", "Contracted revenue of $20 million.", 20_000_000],
+  ])("%s still is", (_l, text, want) => {
+    expect(backlog(text)).toBe(want);
+  });
+});

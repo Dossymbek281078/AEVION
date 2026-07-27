@@ -303,7 +303,15 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
   // the reason, which is the same defect as an unexplained deduction.
   if (sig.retentionPct !== null) {
     s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
-    notes.push(`${sig.retentionPct}% net revenue retention`);
+    // Say which retention the plan named. Net, gross and logo are three
+    // different numbers — net can exceed 100% and routinely does, gross and
+    // logo cannot — and this line used to call all three "net revenue
+    // retention", describing a disclosure the plan had not made.
+    const retLabel = sig.retentionKind === "gross" ? "gross retention"
+      : sig.retentionKind === "logo" ? "logo retention"
+      : sig.retentionKind === "net" ? "net revenue retention"
+      : "retention";
+    notes.push(`${sig.retentionPct}% ${retLabel}`);
   }
   // Scored on the monthly-equivalent rate, so "20% annual churn" (1.8%/mo, fine)
   // is not punished like "20% monthly churn" (92%/yr, fatal).

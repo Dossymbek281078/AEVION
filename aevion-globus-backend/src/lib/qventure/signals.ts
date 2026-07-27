@@ -62,6 +62,16 @@ export interface PlanSignals {
   /** Churn normalized to a monthly rate — this is what the engine scores. */
   churnMonthlyPct: number | null;
   retentionPct: number | null;
+  /**
+   * Which retention the plan actually named.
+   *
+   * Net, gross and logo retention are three different numbers. Net can exceed
+   * 100% and routinely does; gross and logo cannot. The parser read all three
+   * into one field and the report then told the reader the plan had disclosed
+   * "net revenue retention" — a sentence about a figure the plan never wrote.
+   * Scoring is unchanged; the description is now true.
+   */
+  retentionKind: "net" | "gross" | "logo" | "unspecified";
   customers: number | null;
   bottomUpTamUsd: number | null;
   /** Plan references revenue/customers but discloses no figure — a soft flag. */
@@ -238,6 +248,7 @@ export function emptySignals(): PlanSignals {
     paybackMonths: null, churnPct: null, churnPeriod: null, churnMonthlyPct: null,
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
+    retentionKind: "unspecified",
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
     pilots: null, reservations: null, capacityDeployedMw: null,
     regulatoryMilestones: [], technicalProof: [], conflicts: [], parseNotes: [],
@@ -1256,11 +1267,19 @@ export function parsePlanSignals(text: string): PlanSignals {
   const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   // 500, not 100: net revenue retention above 100% is the point of the metric.
   const retBand = percentBandLowEnd(retRange, s, "Retention", 500);
-  if (retBand !== null) s.retentionPct = retBand;
+  /** Which of the three retentions the surrounding words name. */
+  const retentionKindAt = (at: number): PlanSignals["retentionKind"] => {
+    const w = t.slice(Math.max(0, at - 40), at + 40);
+    if (/logo\s*(?:retention|churn)/i.test(w)) return "logo";
+    if (/gross\s*(?:revenue\s*)?retention/i.test(w)) return "gross";
+    if (/net\s*(?:revenue\s*|dollar\s*)?(?:retention|expansion)|\bnrr\b|\bndr\b|dollar[- ]based/i.test(w)) return "net";
+    return "unspecified";
+  };
+  if (retBand !== null) { s.retentionPct = retBand; s.retentionKind = retentionKindAt(retRange?.index ?? 0); }
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
-  if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
+  if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) { s.retentionPct = v; s.retentionKind = retentionKindAt(ret.index ?? 0); } }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
   // Not every business calls them customers: a workspace operator discloses
@@ -1531,7 +1550,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // This is how defence, infrastructure, hardware and project-financed
   // businesses show demand. It is weaker than realised revenue and the engine
   // credits it as such — but reading it as "no traction" was plainly wrong.
-  const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|total contract value|tcv(?: of large deal wins| of deal wins| of deals won)?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
+  const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|total contract value|tcv(?: of large deal wins| of deal wins| of deals won)?|(?<!average )(?<!annual )(?<!mean )(?<!avg )(?<!avg. )contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
   // Same band trap as GMV, and the same six-order consequence: "$20-60M" of
   // backlog was read as twenty dollars.
   const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));

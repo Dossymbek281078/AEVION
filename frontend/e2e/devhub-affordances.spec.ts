@@ -127,4 +127,16 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     expect(restores).toHaveLength(1);
     expect(restores[0]).toContain("/checkpoints/c1/restore");
   });
+
+  test("rename is reachable without knowing about right-click", async ({ page }) => {
+    // It used to live only in the context menu — which most people never try
+    // in a web app, and which no keyboard can reach. Delete already had a row
+    // button; rename now does too.
+    await mockBackend(page);
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const row = page.getByText("src/Timer.jsx", { exact: true }).first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await page.getByTitle("Rename file").first().click();
+    await expect(page.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 });
+  });
 });

@@ -719,6 +719,87 @@ function noteChurnConversion(s: PlanSignals, stated: number): void {
   );
 }
 
+/**
+ * The figure of a one-sentence trend that belongs to the LATEST period.
+ *
+ * A filing shows a trend by naming the metric once and listing the years:
+ * "revenue was $186.4 million in 2018, $289.2 million in 2019, and $400.3
+ * million in 2020". One noun means one match, so the latest-period rule has
+ * nothing to choose between, and the first figure wins — the oldest one.
+ * Procore's top line read $186.4M instead of $400.3M, understated 2.1x, and its
+ * net retention read 121% instead of 107%.
+ *
+ * Chooses by YEAR, not by position: taking the last figure assumes ascending
+ * order, which is the US convention and not a rule. Infosys writes "48,211
+ * crore in 2025 and 42,279 crore in 2024", where the positional last is older
+ * and smaller. With no years anywhere, position decides.
+ *
+ * Bounded deliberately, and every bound is here because something failed
+ * without it:
+ *  - a full stop or semicolon ends the walk, so a neighbouring sentence cannot
+ *    be dragged in;
+ *  - at most 40 characters of connective tissue per step, which covers "as of
+ *    December 31, 2019, " and little else;
+ *  - a metric noun in that tissue stops it, so "revenue was $10M and churn was
+ *    5%" cannot walk from one metric onto another;
+ *  - a comparison word stops it, because those introduce the PRIOR period —
+ *    "revenue of $400M, up from $186M" must keep $400M;
+ *  - and a tail figure must be within a factor of ten of the head. The first
+ *    version of this had every bound but that one, passed eighteen traps, and
+ *    still read a fixture's top line as $62 — it had stepped onto a number that
+ *    was not revenue at all. A trend across a few years does not move 100x; a
+ *    figure that does is a different quantity wearing the same punctuation.
+ */
+function lastInSeries(
+  t: string, from: number, shape: "money" | "percent", head: number,
+): RegExpExecArray | null {
+  const figure = shape === "money"
+    ? new RegExp(String.raw`^[^.;]{0,40}?(?:,|\band\b)\s*(?:and\s+)?${CUR}${NUM}\s*${UNIT}`, "i")
+    : new RegExp(String.raw`^[^.;]{0,40}?(?:,|\band\b)\s*(?:and\s+)?${NUM}\s*%`, "i");
+  const STOP = /\b(?:compared (?:to|with)|versus|vs\.?|up from|down from|from|against|rather than)\b/i;
+  const OTHER_METRIC = /\b(?:churn|retention|margin|customers|users|arr|mrr|gmv|cac|ltv|tam|payback|take[- ]rate)\b/i;
+  const YEAR = /(?:19|20)[0-9]{2}/;
+
+  /** The year attached to a figure: the first one after it, inside its clause. */
+  const yearAfter = (at: number): number | null => {
+    const stop = t.slice(at).search(/[.;]/);
+    const m = YEAR.exec(t.slice(at, stop === -1 ? undefined : at + stop));
+    return m ? Number(m[0]) : null;
+  };
+
+  /** Same quantity, or a different one wearing the same punctuation? */
+  const comparable = (m: RegExpExecArray): boolean => {
+    const raw = shape === "money" ? parseMoney(m[1], m[2]) : parseLocaleNumber(m[1]);
+    if (raw === null || !isFinite(raw) || raw <= 0 || head <= 0) return false;
+    const ratio = raw > head ? raw / head : head / raw;
+    return ratio <= 10;
+  };
+
+  const found: Array<{ m: RegExpExecArray; year: number | null }> = [];
+  let cursor = from;
+  for (let step = 0; step < 6; step++) {
+    const m = figure.exec(t.slice(cursor));
+    if (!m) break;
+    const bridge = m[0].slice(0, m[0].search(/[,]|\band\b/i) + 1);
+    if (STOP.test(bridge) || OTHER_METRIC.test(bridge)) break;
+    if (!comparable(m)) break;
+    found.push({ m, year: yearAfter(cursor + m[0].length) });
+    cursor += m[0].length;
+  }
+  if (!found.length) return null;
+
+  const dated = found.filter((f) => f.year !== null);
+  if (dated.length) {
+    const headYear = yearAfter(from);
+    const best = dated.reduce((a, b) => ((b.year as number) > (a.year as number) ? b : a));
+    // The caller's figure heads the series; if its own year is already the
+    // latest, there is nothing to replace it with.
+    if (headYear !== null && headYear >= (best.year as number)) return null;
+    return best.m;
+  }
+  return found[found.length - 1].m;
+}
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
@@ -809,7 +890,13 @@ export function parsePlanSignals(text: string): PlanSignals {
       const monthly = /\bmrr\b/i.test(kindStr)
         || /\bmonthly\s+recurring\b/i.test(around)
         || /\b(?:per|a)\s+month\b|\/\s*mo(?:nth)?\b/i.test(around);
-      s.revenueUsd = monthly ? val * 12 : val;
+      const tail = lastInSeries(t, at + arr[0].length, "money", val);
+      const tailUsd = tail ? moneyUsd(t, tail, tail[1], tail[2], planCurrency, s) : null;
+      const chosen = tailUsd !== null && tailUsd > 0 ? tailUsd : val;
+      if (tailUsd !== null && tailUsd > 0) {
+        s.parseNotes.push(`The top line was stated for several periods in one sentence; the score uses the latest (${fmtUsdShort(tailUsd)}).`);
+      }
+      s.revenueUsd = monthly ? chosen * 12 : chosen;
       s.revenueBasis = monthly ? "MRR" : /arr/i.test(kindStr) ? "ARR" : "revenue";
       if (monthly && !/\bmrr\b/i.test(kindStr)) {
         s.parseNotes.push(`The top line was disclosed monthly (${fmtUsdShort(val)}); the score uses the annualized figure (${fmtUsdShort(val * 12)}).`);
@@ -1279,7 +1366,16 @@ export function parsePlanSignals(text: string): PlanSignals {
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
-  if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) { s.retentionPct = v; s.retentionKind = retentionKindAt(ret.index ?? 0); } }
+  if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) {
+    const headPct = parseLocaleNumber(ret[1]);
+    const tail = lastInSeries(t, (ret.index ?? 0) + ret[0].length, "percent", headPct);
+    const v = tail ? parseLocaleNumber(tail[1]) : headPct;
+    if (isFinite(v) && v > 0 && v <= 500) {
+      s.retentionPct = v;
+      s.retentionKind = retentionKindAt(ret.index ?? 0);
+      if (tail) s.parseNotes.push(`Retention was stated for several periods in one sentence; the score uses the latest (${v}%).`);
+    }
+  }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
   // Not every business calls them customers: a workspace operator discloses

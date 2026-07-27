@@ -1432,7 +1432,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    107% as of 31 December 2020 — which is exactly the case needed to calibrate
    one against the other.
 
-59. **Open, pinned: a trend stated in one sentence reads its oldest figure.**
+59. **Closed on the second attempt: a trend stated in one sentence read its oldest figure.**
    Fetching Procore turned up something worse than the question it was fetched
    to answer.
 
@@ -1466,9 +1466,23 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    caught it, and the doc gate caught the headline claim moving. Three
    independent guards, none of them the one that usually fires.
 
-   Still pinned as assertions of the current wrong behaviour, so it goes red the
-   moment someone fixes it properly — the fourth use of that technique here, and
-   it has reported a closure three times out of three.
+   **The second attempt added that one rule and everything else held.** A tail
+   figure must be within a factor of ten of the head: a trend across a few years
+   does not move 100x, and a figure that does is a different quantity wearing
+   the same punctuation. With it, Procore's revenue reads $400.3M, its net
+   retention 107% and its gross retention 94%; Infosys, which writes its years
+   descending, still gives 2025 rather than the positional last.
+
+   Fourteen traps, all held, and all four guards clean this time — corpus 95/95,
+   hard-cases gap back at **16.5**, calibration range unchanged, verdict bands
+   still reachable. The two pins went red on the fix: fifth use of that
+   technique here, four closures out of four.
+
+   Worth keeping the sequence rather than just the fix. Attempt one passed
+   eighteen traps and still broke the headline claim; the corpus never noticed;
+   three other guards did. Attempt two differs by a single condition, and that
+   condition came from reading what attempt one actually got wrong rather than
+   from thinking harder about the problem.
 
 ## How this stays true
 

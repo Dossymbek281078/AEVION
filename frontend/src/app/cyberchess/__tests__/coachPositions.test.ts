@@ -12,14 +12,20 @@ import { LESSONS } from "../coachLessons";
 
    Nothing about that is visible by reading the file, so it is asserted here. */
 
-type Row = { where: string; fen?: string; bestMove?: string; solution?: string };
+type Row = { where: string; fen?: string; bestMove?: string; solution?: string; text?: string };
 
 const knowledgeRows: Row[] = COACH_KNOWLEDGE.flatMap((cat) =>
-  cat.entries.map((e) => ({ where: `${cat.id}/${e.id}`, fen: e.fen, bestMove: e.bestMove, solution: e.solution })),
+  cat.entries.map((e) => ({
+    where: `${cat.id}/${e.id}`,
+    fen: e.fen,
+    bestMove: e.bestMove,
+    solution: e.solution,
+    text: e.explanation,
+  })),
 );
 
 const lessonRows: Row[] = LESSONS.flatMap((l) =>
-  l.steps.map((s, i) => ({ where: `${l.id}[${i}]`, fen: s.fen, bestMove: s.bestMove })),
+  l.steps.map((s, i) => ({ where: `${l.id}[${i}]`, fen: s.fen, bestMove: s.bestMove, text: s.body })),
 );
 
 const withFen = [...knowledgeRows, ...lessonRows].filter((r) => r.fen);
@@ -53,6 +59,46 @@ describe("coach teaching positions", () => {
       if (!legal.includes(r.bestMove!.replace(/[+#!?]/g, ""))) {
         bad.push(`${r.where}: ${r.bestMove}`);
       }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  /* Текст объяснения — это то, что игрок читает рядом с доской, и цитируемые в нём ходы
+     не проверял никто. Двух не существовало: «1.b5!» в прорыве, где поле b5 занято чужой
+     пешкой, и «1.Ke5!» в оппозиции, где короли встали бы вплотную. Карточка, ведущая
+     рассказ от начала партии («1.e4» в дебютной), — не ошибка, и отличается тем, что
+     такой ход играется из НАЧАЛЬНОЙ позиции, а не из позиции карточки. */
+  it("only quotes moves that exist on the board it shows", () => {
+    const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const RU: [string, string][] = [["Кр", "K"], ["К", "N"], ["Л", "R"], ["С", "B"], ["Ф", "Q"]];
+    const strip = (s: string) => s.replace(/[+#!?;.,)»"]+$/u, "");
+    const toLatin = (t: string) => {
+      for (const [ru, en] of RU) if (t.startsWith(ru)) return en + t.slice(ru.length);
+      return t;
+    };
+    const playable = (fen: string, san: string) => {
+      try {
+        return new Chess(fen).moves().some((x) => strip(x) === strip(san));
+      } catch {
+        return false;
+      }
+    };
+
+    const bad: string[] = [];
+    for (const r of [...knowledgeRows, ...lessonRows].filter((x) => x.fen && x.text)) {
+      const isBlack = /\b1\s*\.\s*\.\s*\./.test(r.text!);
+      const m = isBlack
+        ? /\b1\s*\.\s*\.\s*\.\s*([^\s,!?);]+)/.exec(r.text!)
+        : /\b1\.(?!\.)\s*([^\s,!?);]+)/.exec(r.text!);
+      if (!m) continue;
+      const mover = r.fen!.split(" ")[1];
+      if ((isBlack && mover !== "b") || (!isBlack && mover !== "w")) continue;
+
+      const san = strip(toLatin(m[1]));
+      if (!/^([KQRBN][a-h1-8x]|[a-h][1-8x]|O-O)/.test(san) || san.includes("-")) continue; // проза, не нотация
+      if (playable(r.fen!, san)) continue;
+      if (playable(START, san)) continue; // рассказ от начала партии, а не про эту доску
+      bad.push(`${r.where}: в тексте «1.${m[1]}», но такого хода в позиции нет`);
     }
     expect(bad).toEqual([]);
   });

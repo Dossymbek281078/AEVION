@@ -313,6 +313,21 @@ export type Dissent = {
   numericConflicts: NumericConflict[];
   /** Agents that failed or hedged. A hedge is a weaker claim, not an answer. */
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
+  /**
+   * How many times longer the most verbose answer is than the shortest, by
+   * significant words. `1` means comparable.
+   *
+   * Read it together with `agreement`. Similarity divides shared words by the
+   * length of the SHORTER answer — deliberately, so a brief answer about the
+   * same thing is not counted as divergence. The side effect: a terse "ship it"
+   * inside a long answer full of caveats scores 1.000 and lands as consensus,
+   * even though the short answer never addressed those caveats. A skew of 3 or
+   * more is the signal that such agreement is weaker than it looks; the server
+   * also emits a `consensus` check saying so.
+   *
+   * Optional so the client keeps working against a backend that predates it.
+   */
+  lengthSkew?: number;
   /** `insufficient` when fewer than two agents answered — not a cheerful consensus. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;

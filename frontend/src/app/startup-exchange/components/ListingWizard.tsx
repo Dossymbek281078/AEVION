@@ -234,6 +234,15 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
       {/* ── Tier choice ───────────────────────────────────────────────────── */}
       <div style={card}>
         <Label>Что вы выставляете</Label>
+        {/* Пустой блок с заголовком — тупик: уровни приходят с сервера, и если
+            ответ не пришёл (окно деплоя, сбой сети), человек видел карточку без
+            единой кнопки и не понимал, чего ждать. Живой клик 27.07.2026. */}
+        {tiers.length === 0 && (
+          <p style={{ margin: "10px 0 0", fontSize: 13, color: "#7f1d1d" }}>
+            Уровни не загрузились — обновите страницу. Без них заявку не принять: уровень решает,
+            о какой сделке идёт разговор.
+          </p>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 10 }}>
           {tiers.map((t) => {
             const active = t.id === tier;

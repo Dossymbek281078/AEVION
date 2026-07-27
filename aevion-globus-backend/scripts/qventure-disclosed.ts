@@ -451,6 +451,34 @@ export const CASES: DisclosedCase[] = [
   // ── Outcome: succeeded ────────────────────────────────────────────────────
   {
     outcome: "succeeded",
+    round: "Form F-1, November 2021",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1691493/000119312521314359/d213207df1.htm",
+      "https://techcrunch.com/2021/11/01/nubanks-ipo-filing-gives-us-a-peek-into-neobank-economics/",
+      "https://pitchbook.com/news/articles/nubank-brazil-s1-ipo-breakdown",
+    ],
+    input: {
+      name: "Nubank",
+      sector: "fintech",
+      stage: "growth",
+      geography: "BR",
+      askUsd: 2_600_000_000,
+      description:
+        "Digital bank operating without branches across Brazil, Mexico and Colombia, acquiring customers through a fee-free credit card and cross-selling deposits, lending and investments on the same account.",
+      tractionNotes:
+        "Revenue of $1.06B in the nine months ended 30 September 2021, up 98% year over year from $534M. 48.1 million active customers as of 30 September 2021.",
+    },
+    // A bank's disclosure shape: a customer base an order of magnitude larger
+    // than any SaaS case in the corpus, and a period that is neither a fiscal
+    // year nor a quarter.
+    expect: [
+      { label: "revenue $1.06B (nine months)", read: (s) => s.revenueUsd, ...num(1_060_000_000) },
+      { label: "growth 98% YoY attributed to revenue", read: (s) => s.growthPct, ...num(98) },
+      { label: "48.1 million active customers", read: (s) => s.customers, ...num(48_100_000) },
+    ],
+  },
+  {
+    outcome: "succeeded",
     round: "Form F-1 / 424(b)(4), September 2014",
     sources: [
       "https://www.sec.gov/Archives/edgar/data/1577552/000119312514347620/d709111d424b4.htm",

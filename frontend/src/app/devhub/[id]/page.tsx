@@ -10,6 +10,8 @@ import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
+import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -378,6 +380,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [editorContent, setEditorContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
@@ -494,11 +497,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"video" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
+  const [mediaTab, setMediaTab] = useState<"video" | "3d" | "tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("video");
 
   // Video generation state (Replicate)
   const [videoPrompt, setVideoPrompt] = useState("");
-  const [videoModel, setVideoModel] = useState("minimax/video-01");
+  const [videoModel, setVideoModel] = useState("google/veo-3-fast");
+  // Catalogue comes from the server so the picker cannot drift from what the
+  // backend can actually run — the hard-coded list had gone two model
+  // generations stale.
+  const [videoModels, setVideoModels] = useState<Array<{ id: string; label: string; provider: string; audio: boolean; note: string; default?: boolean }>>([]);
+  const [threeDModels, setThreeDModels] = useState<Array<{ id: string; label: string; provider: string; note: string; default?: boolean }>>([]);
+  const [threeDModel, setThreeDModel] = useState("firtoz/trellis");
+  const [threeDImageUrl, setThreeDImageUrl] = useState("");
+  const [threeDLoading, setThreeDLoading] = useState(false);
+  const [threeDStatus, setThreeDStatus] = useState<string | null>(null);
+  const [threeDUrl, setThreeDUrl] = useState<string | null>(null);
+  const [threeDError, setThreeDError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState("5");
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
@@ -720,6 +734,27 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   }, []);
 
   useEffect(() => {
+    if (activeTab !== "media") return;
+    if (videoModels.length === 0) {
+      fetch(apiUrl("/api/devhub/media/video/models"), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          setVideoModels(d.models || []);
+          const def = (d.models || []).find((m: { default?: boolean }) => m.default);
+          if (def) setVideoModel(def.id);
+        })
+        .catch(() => {});
+    }
+    if (threeDModels.length === 0) {
+      fetch(apiUrl("/api/devhub/media/3d/models"), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setThreeDModels(d.models || []))
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
     // Failure stays silent on purpose: caps === null means "fail open", the
     // buttons behave exactly as they did before this feature existed.
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
@@ -751,18 +786,34 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // A save is only a save if the server said so. This used to await the fetch
+  // and update local state whatever came back: a 404 (project deleted in
+  // another tab, or no edit rights) let the editor keep autosaving into the
+  // void for an hour, showing nothing, and the work was gone on refresh.
+  // A toast disappears — an unsaved file does not — so the failure also stays
+  // on screen next to the file name until a save succeeds.
   const saveCurrentFile = useCallback(async (path: string, content: string, language: string) => {
     if (!project) return;
     setSaving(true);
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, language }),
       });
+      if (!r.ok) {
+        const reason = r.status === 404
+          ? "проект не найден или нет прав на правку"
+          : `сервер ответил ${r.status}`;
+        setSaveError(`${path} НЕ сохранён — ${reason}`);
+        showToast(`Не сохранено: ${reason}`, "error");
+        return;
+      }
+      setSaveError(null);
       setFiles((fs) => fs.map((f) => f.path === path ? { ...f, content, updatedAt: new Date().toISOString() } : f));
     } catch {
-      showToast("Save failed", "error");
+      setSaveError(`${path} НЕ сохранён — нет связи с сервером`);
+      showToast("Не сохранено — нет связи с сервером", "error");
     } finally {
       setSaving(false);
     }
@@ -790,14 +841,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const createNewFile = async () => {
     if (!newFileName.trim() || !project) return;
+    // The endpoint is an upsert and we send content:"" — so an existing path
+    // here does not create a file, it empties one. Refuse instead.
+    const pathError = newFilePathError(newFileName, files.map((f) => f.path));
+    if (pathError) {
+      showToast(pathError, "error");
+      return;
+    }
+    const path = normalizeFilePath(newFileName);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(newFileName.trim())}`), {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "", language: "plaintext" }),
       });
-      const data = await r.json();
-      const newFile = data.file;
+      const data = await r.json().catch(() => null);
+      const newFile = data?.file;
+      if (!r.ok || !newFile?.path) {
+        showToast(`Не удалось создать файл — сервер ответил ${r.status}`, "error");
+        return;
+      }
       setFiles((fs) => [...fs, newFile].sort((a, b) => a.path.localeCompare(b.path)));
       setSelectedFile(newFile);
       setEditorContent("");
@@ -825,30 +888,41 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Rename is copy-then-delete. Two ways that used to lose the file: renaming
+  // onto an existing path overwrote that file (upsert), and the delete ran
+  // even when the copy had failed — leaving nothing at either path.
   const renameFile = async (oldPath: string, newPath: string) => {
-    if (!project || !newPath.trim() || oldPath === newPath.trim()) {
+    if (!project || !newPath.trim() || normalizeFilePath(oldPath) === normalizeFilePath(newPath)) {
       setRenamingFile(null);
       return;
     }
+    const pathError = renamePathError(oldPath, newPath, files.map((f) => f.path));
+    if (pathError) {
+      showToast(pathError, "error");
+      setRenamingFile(null);
+      return;
+    }
+    const target = normalizeFilePath(newPath);
     try {
-      // Get current content
       const file = files.find((f) => f.path === oldPath);
       if (!file) return;
-      // Create new file with new path
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(newPath.trim())}`), {
+      // Copy to the new path first — only delete the original once it landed.
+      const putR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(target)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: file.content, language: file.language }),
       });
-      // Delete old file
+      if (!putR.ok) {
+        showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
+        return;
+      }
       await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
-      // Update state
       setFiles((fs) => {
-        const updated = fs.map((f) => f.path === oldPath ? { ...f, path: newPath.trim() } : f);
+        const updated = fs.map((f) => f.path === oldPath ? { ...f, path: target } : f);
         return updated.sort((a, b) => a.path.localeCompare(b.path));
       });
       if (selectedFile?.path === oldPath) {
-        setSelectedFile((sf) => sf ? { ...sf, path: newPath.trim() } : null);
+        setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
       showToast("File renamed", "success");
     } catch {
@@ -1265,6 +1339,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const [designingDb, setDesigningDb] = useState(false);
   const [provisioningDb, setProvisioningDb] = useState(false);
+  const [dbUsage, setDbUsage] = useState<{ provisioned: boolean; tables?: number; megabytes?: number; connectionLimit?: number; error?: string } | null>(null);
   // One-click follow-through on the design_db hint: runs /database/design with
   // the idea already in hand, renders the result as a normal assistant card
   // (diffs, checkpoint — undo works), and retires the hint.
@@ -1306,6 +1381,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Create the project's real database: schema + login role on the projects
   // instance, schema.sql applied, DATABASE_URL saved into this project's env.
+  // Append a generated asset to the open file instead of replacing it.
+  //
+  // The media buttons used to call setEditorContent(url) and save — which
+  // overwrites the entire file with a single line. Open App.jsx, generate a
+  // video, press the button, and the app is gone. Appending keeps the work and
+  // still puts the asset where the code can reach it. With no file open there
+  // is nothing to append to, so the URL goes to the clipboard and we say so —
+  // silently doing nothing would look like the button was broken.
+  const appendAssetToFile = (url: string, kind: AssetKind) => {
+    if (!selectedFile) {
+      navigator.clipboard?.writeText(url).catch(() => {});
+      showToast("Нет открытого файла — ссылка скопирована в буфер", "info");
+      return;
+    }
+    const next = appendSnippet(editorContent, assetSnippet(selectedFile.path, url, kind));
+    setEditorContent(next);
+    saveCurrentFile(selectedFile.path, next, selectedFile.language);
+    showToast(`Добавлено в ${selectedFile.path}`, "success");
+  };
+
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
@@ -2726,6 +2821,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             {project.status}
           </span>
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
+          {saveError && (
+            <span
+              title={saveError}
+              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            >
+              ⚠ {saveError}
+            </span>
+          )}
           {project.deployUrl && (
             <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
               View live
@@ -3837,7 +3940,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["video", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -3880,11 +3983,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           onChange={(e) => setVideoModel(e.target.value)}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                         >
-                          <option value="minimax/video-01">MiniMax Video-01 (text-to-video)</option>
-                          <option value="tencent/hunyuan-video">Tencent HunyuanVideo (high quality)</option>
-                          <option value="lucataco/animate-diff-v2">AnimateDiff v2 (fast)</option>
-                          <option value="stability-ai/stable-video-diffusion">Stable Video Diffusion</option>
+                          {(videoModels.length ? videoModels : [{ id: videoModel, label: videoModel, provider: "", audio: false, note: "" }]).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}{m.audio ? " · со звуком" : ""}
+                            </option>
+                          ))}
                         </select>
+                        {videoModels.find((m) => m.id === videoModel)?.note && (
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                            {videoModels.find((m) => m.id === videoModel)!.note}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
@@ -3954,7 +4063,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
-                            <button onClick={() => { setEditorContent(videoUrl); if (selectedFile) saveCurrentFile(selectedFile.path, videoUrl, selectedFile.language); showToast("Video URL saved to current file", "success"); }} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save URL to File</button>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Insert into file</button>
                           </div>
                         </div>
                       )}
@@ -3965,6 +4074,101 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   )}
 
                   {/* TTS */}
+                  {/* 3D assets — image → textured GLB */}
+                  {mediaTab === "3d" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+                        Готовая 3D-модель в формате GLB — открывается в three.js, Unity и Blender.
+                        Нужна картинка предмета: сгенерируйте её во вкладке Image и вставьте ссылку сюда.
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Модель</label>
+                        <select
+                          value={threeDModel}
+                          onChange={(e) => setThreeDModel(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                        >
+                          {(threeDModels.length ? threeDModels : [{ id: threeDModel, label: threeDModel, provider: "", note: "" }]).map((m) => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                        {threeDModels.find((m) => m.id === threeDModel)?.note && (
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4, lineHeight: 1.4 }}>
+                            {threeDModels.find((m) => m.id === threeDModel)!.note}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Ссылка на картинку</label>
+                        <input
+                          value={threeDImageUrl}
+                          onChange={(e) => setThreeDImageUrl(e.target.value)}
+                          placeholder="https://... (png или jpg с одним предметом)"
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
+                          if (isCapabilityBlocked(caps, "video")) { setThreeDError(capabilityHint(caps, "video", "3D-генерация")); return; }
+                          setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
+                          try {
+                            const r = await fetch(apiUrl("/api/devhub/media/3d"), {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ imageUrl: threeDImageUrl.trim(), model: threeDModel }),
+                            });
+                            const d = await r.json();
+                            if (!r.ok || !d.ok) {
+                              // 402 means the provider has no balance — say that, not "failed".
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (d.error || "3D generation failed"));
+                              setThreeDLoading(false);
+                              return;
+                            }
+                            setThreeDStatus("generating…");
+                            const poll = async (id: string, attempts = 0) => {
+                              if (attempts > 100) { setThreeDError("Таймаут — попробуйте ещё раз"); setThreeDLoading(false); return; }
+                              const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
+                              const sd = await sr.json();
+                              setThreeDStatus(sd.status);
+                              if (sd.status === "succeeded") {
+                                const url = sd.videoUrl || sd.output?.model_file || (Array.isArray(sd.output) ? sd.output[0] : sd.output);
+                                if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
+                                setThreeDLoading(false);
+                              } else if (sd.status === "failed") {
+                                setThreeDError(sd.error || "Генерация не удалась"); setThreeDLoading(false);
+                              } else {
+                                setTimeout(() => poll(id, attempts + 1), 3000);
+                              }
+                            };
+                            setTimeout(() => poll(d.predictionId), 4000);
+                          } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
+                        }}
+                        disabled={threeDLoading || !threeDImageUrl.trim()}
+                        title={capabilityHint(caps, "video", "Сгенерировать 3D")}
+                        style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
+                      >
+                        {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}
+                      </button>
+                      {threeDError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13, wordBreak: "break-word" }}>{threeDError}</div>}
+                      {threeDUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>
+                            GLB готов — скачайте или вставьте ссылку в открытый файл проекта.
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <a href={threeDUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", borderRadius: 7, fontWeight: 700, fontSize: 13, textAlign: "center", textDecoration: "none" }}>Скачать GLB</a>
+                            <button
+                              onClick={() => appendAssetToFile(threeDUrl, "model")}
+                              title="Дописывает ссылку на модель в файл, открытый в редакторе"
+                              style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                            >Вставить в файл</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {mediaTab === "tts" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
@@ -4113,6 +4317,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
                               </button>
                             )}
+                            <button
+                              onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
+                              title="Appends an <img> tag to the file open in the editor"
+                              style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                            >
+                              Insert into file
+                            </button>
                             {cfImgPermanentUrl && (
                               <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>
                                 ✓ Permanent CDN
@@ -5170,6 +5381,32 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Settings Tab */}
               {activeTab === "settings" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* Database state — the numbers are measured on the instance,
+                      not estimated, so limits can be discussed honestly. */}
+                  {dbUsage && (
+                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>База данных</div>
+                      {dbUsage.provisioned ? (
+                        <div style={{ fontSize: 12.5, color: "#334155", lineHeight: 1.6 }}>
+                          {dbUsage.error ? (
+                            <span style={{ color: "#991b1b" }}>Не удалось измерить: {dbUsage.error}</span>
+                          ) : (
+                            <>
+                              Таблиц: <b>{dbUsage.tables ?? 0}</b> · занято <b>{dbUsage.megabytes ?? 0} МБ</b> ·
+                              одновременных подключений: <b>до {dbUsage.connectionLimit ?? 5}</b>
+                              <div style={{ color: "#64748b", marginTop: 4 }}>
+                                Строка подключения лежит в Env Vars как <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span>.
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                          База ещё не создана. Опишите её в чате — после генерации схемы появится кнопка «Создать базу данных».
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Project Name</label>
                     <input

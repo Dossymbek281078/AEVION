@@ -6,6 +6,7 @@ import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
+import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
@@ -1148,6 +1149,35 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
     }
   }
 
+  // Same reasoning as the database above, with a bill attached: the project's
+  // Railway service keeps running the user's code with the user's env on a
+  // live domain, and once the project row is gone nothing points at it.
+  let serviceDeleted: boolean | undefined;
+  const orphanServiceId = project.envVars?.RAILWAY_SERVICE_ID;
+  if (orphanServiceId && process.env.RAILWAY_API_TOKEN && process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+    let dropError: string | undefined;
+    try {
+      const { deleteProjectService } = await import("../lib/devhubRailwayDeploy");
+      const dropped = await deleteProjectService({ serviceId: orphanServiceId });
+      serviceDeleted = dropped.ok;
+      if (!dropped.ok) dropError = dropped.error;
+    } catch (e) {
+      serviceDeleted = false;
+      dropError = e instanceof Error ? e.message : String(e);
+    }
+    if (serviceDeleted === false) {
+      captureException(new Error(`devhub: railway service delete failed: ${dropError}`), {
+        route: "devhub/projects:delete",
+        projectId: project.id,
+      });
+      return res.status(502).json({
+        error: `project not deleted — its Railway service could not be removed: ${dropError}`,
+        serviceId: orphanServiceId,
+        hint: "retry, or delete that service in the Railway dashboard first — deleting the project now would leave it running and billable with nothing pointing at it",
+      });
+    }
+  }
+
   try {
     await dbDeleteProject(req.params.id);
   } catch (e) {
@@ -1157,7 +1187,11 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
       if (f.projectId === req.params.id) memFiles.delete(fid);
     }
   }
-  res.json({ ok: true, ...(databaseDropped !== undefined ? { databaseDropped } : {}) });
+  res.json({
+    ok: true,
+    ...(databaseDropped !== undefined ? { databaseDropped } : {}),
+    ...(serviceDeleted !== undefined ? { serviceDeleted } : {}),
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1645,6 +1679,32 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
   });
 });
 
+// GET /api/devhub/projects/:id/database — what this project's database is
+// actually using. Measured, so quota talk is never a guess.
+devhubRouter.get("/projects/:id/database", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const provisioned = !!project.envVars?.DATABASE_URL;
+  if (!process.env.DEVHUB_DB_ADMIN_URL || !provisioned) {
+    return res.json({ provisioned: false, connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5 });
+  }
+  const { projectSchemaSizeBytes } = await import("../lib/devhubDbProvision");
+  const size = await projectSchemaSizeBytes({ projectId: project.id });
+  if (!size.ok) return res.status(502).json({ provisioned: true, error: size.error });
+  res.json({
+    provisioned: true,
+    tables: size.tables,
+    bytes: size.bytes,
+    megabytes: Math.round((size.bytes / 1048576) * 100) / 100,
+    connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5,
+  });
+});
+
 // DELETE /api/devhub/projects/:id/database — drop the project's schema, role
 // and stored DATABASE_URL. Destructive and irreversible, hence its own route.
 devhubRouter.delete("/projects/:id/database", async (req, res) => {
@@ -1858,6 +1918,79 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   const railwayToken = process.env.RAILWAY_API_TOKEN;
   const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
   const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
+
+  // Per-project deploys: the project's own Railway service, built from its own
+  // GitHub repo, carrying its own env vars (DATABASE_URL included). Behind a
+  // flag because enabling it makes every user click start a billable container.
+  if (process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+    const { deployProjectToRailway } = await import("../lib/devhubRailwayDeploy");
+    const result = await deployProjectToRailway({
+      projectId: project.id,
+      repoUrl: project.repoUrl,
+      envVars: project.envVars || {},
+      existingServiceId: project.envVars?.RAILWAY_SERVICE_ID || null,
+    });
+    if (!result.ok) {
+      deployment.status = "failed";
+      deployment.buildLog = result.error;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(502).json({ error: result.error, deploymentId: deployment.id });
+    }
+
+    // Remember the service so a redeploy reuses it instead of creating a new
+    // billable container on every click.
+    project.envVars = { ...(project.envVars || {}), RAILWAY_SERVICE_ID: result.serviceId };
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+
+    const url = `https://${result.domain}`;
+    deployment.buildLog = `Railway service ${result.serviceId} ${result.created ? "created" : "reused"} from ${project.repoUrl}`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // Same rule as every other deploy path: live only once the page answers.
+    (async () => {
+      const serves = await verifyDeploymentServes(url);
+      deployment.status = serves ? "live" : "failed";
+      deployment.deployUrl = serves ? url : null;
+      deployment.buildLog = serves
+        ? `${deployment.buildLog}
+Serving at ${url}`
+        : `${deployment.buildLog}
+Built, but ${url} did not answer 2xx in time`;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      if (serves) {
+        project.deployUrl = url;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    })().catch(() => {});
+
+    return res.json({ ok: true, deploymentId: deployment.id, status: "building", url, serviceId: result.serviceId, reusedService: !result.created });
+  }
+  // SAFETY: this route never deployed the user's code. It fired
+  // deploymentCreate at whatever RAILWAY_SERVICE_ID happens to be — and on
+  // production that variable is the AEVION backend's own service id, so every
+  // click of "Deploy" in someone's project restarted our production API. The
+  // returned <slug>.aevion.app URL was invented and never pointed at anything.
+  //
+  // Refusing outright until per-project deploys exist (github push -> new
+  // Railway service -> project env vars). Static projects already have a real,
+  // serve-verified path through Cloudflare Pages.
+  const targetsOurOwnService = !railwayServiceId || railwayServiceId === process.env.RAILWAY_SELF_SERVICE_ID || !process.env.DEVHUB_RAILWAY_PER_PROJECT;
+  if (targetsOurOwnService) {
+    deployment.status = "failed";
+    deployment.buildLog = "Backend deploys are not available yet: the Railway path would have redeployed the AEVION platform service rather than this project.";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(501).json({
+      error: "Backend deploys are not available yet",
+      detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.build subdomain.",
+      deploymentId: deployment.id,
+    });
+  }
 
   if (railwayToken && railwayProjectId && railwayServiceId) {
     // Real Railway API deployment via GraphQL mutation
@@ -3080,17 +3213,34 @@ devhubRouter.post("/media/tts", async (req, res) => {
       },
       body: JSON.stringify({
         text: text.trim(),
-        model_id: "eleven_monolingual_v1",
+        model_id: TTS_MODEL,
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
 
-    if (!elResp.ok) {
-      const errText = await elResp.text();
-      return res.status(elResp.status).json({ error: `ElevenLabs error: ${errText.slice(0, 200)}` });
+    // A retired model id is a provider-side change we cannot prevent, only
+    // survive: retry down the fallback chain before failing the user.
+    let finalResp = elResp;
+    let usedModel = TTS_MODEL;
+    if (!finalResp.ok) {
+      const firstErr = await finalResp.text();
+      if (/unsupported_model|deprecat/i.test(firstErr)) {
+        for (const alt of TTS_MODEL_FALLBACKS) {
+          const retry = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify({ text: text.trim(), model_id: alt }),
+          });
+          if (retry.ok) { finalResp = retry; usedModel = alt; break; }
+        }
+      }
+      if (!finalResp.ok) {
+        return res.status(finalResp.status).json({ error: `ElevenLabs error: ${firstErr.slice(0, 200)}`, triedModels: [TTS_MODEL, ...TTS_MODEL_FALLBACKS] });
+      }
     }
 
-    const audioBuffer = Buffer.from(await elResp.arrayBuffer());
+    const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
+    res.setHeader("X-Tts-Model", usedModel);
     await debitCredit(ttsUserId, "tts", text.trim().length).catch(() => {});
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
@@ -3336,7 +3486,27 @@ devhubRouter.post("/media/image", async (req, res) => {
     if (attempts.length === 1) {
       return res.status(attempts[0].status).json({ error: attempts[0].error, attempts });
     }
-    return res.status(502).json({ error: "All image providers failed", attempts });
+    // Every provider in the chain failed — the shop window must stop calling
+    // this "live" until one of them works again.
+    noteProviderFailure("image", attempts.map((a) => `${a.provider}: ${a.status}`).join("; ") || "all providers failed");
+    // Distinguish "your prompt failed" from "nobody is paying the bill".
+    // Today all three arms are the latter: OpenAI billing hard limit,
+    // Workers AI 401, no Together key — and "All image providers failed"
+    // told the user nothing they could act on.
+    const blob = attempts.map((a) => `${a.provider}:${a.status}:${a.error || ""}`).join(" | ").toLowerCase();
+    const billing = /billing|quota|insufficient|payment|402/.test(blob);
+    const auth = /401|403|authentication|unauthorized/.test(blob);
+    const fixes: string[] = [];
+    if (billing) fixes.push("top up the OpenAI account");
+    if (auth) fixes.push("the Cloudflare token needs the Workers AI permission");
+    if (!process.env.TOGETHER_API_KEY) fixes.push("or set TOGETHER_API_KEY (free tier) as a fallback");
+    return res.status(502).json({
+      error: fixes.length
+        ? `Image generation is unavailable — every provider is blocked, not your prompt. Fix: ${fixes.join("; ")}.`
+        : "All image providers failed",
+      providersBlocked: fixes.length > 0,
+      attempts,
+    });
   }
 
   // Prefer a permanent Cloudflare Images URL: upstream URLs expire within
@@ -3353,6 +3523,9 @@ devhubRouter.post("/media/image", async (req, res) => {
     storage = permanent ? "cloudflare" : "inline";
   }
   if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
+  // A provider in the chain worked — clear any earlier failure so the shop
+  // window goes green again on its own.
+  noteProviderSuccess("image");
   await debitCredit(imgUserId, "image").catch(() => {});
   res.json({
     ok: true, url: imageUrl, storage, provider: result.provider,
@@ -3428,9 +3601,35 @@ devhubRouter.post("/media/music", async (req, res) => {
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
+  const replicateToken = process.env.REPLICATE_API_TOKEN;
+
+  // Music had exactly one provider and no fallback: an ElevenLabs timeout
+  // (repeatedly seen on prod) meant no music at all. MusicGen runs on the
+  // Replicate token already configured.
+  const musicGenFallback = async (reason: string) => {
+    if (!replicateToken) return null;
+    const secs = Number.isFinite(Number(musicLengthMs)) ? Math.round(Number(musicLengthMs) / 1000) : 8;
+    const rr = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${replicateToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+      body: JSON.stringify({
+        version: "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb",
+        input: { prompt: prompt.trim(), duration: Math.min(Math.max(secs || 8, 3), 30), model_version: "stereo-melody-large", output_format: "mp3" },
+      }),
+    });
+    if (!rr.ok) return null;
+    const pred = await rr.json() as { id: string; status: string };
+    await debitCredit(musicUserId, "music").catch(() => {});
+    // Async unlike the ElevenLabs path — say so instead of handing back a
+    // body the caller cannot play.
+    return { ok: true, provider: "replicate/musicgen", async: true, predictionId: pred.id, status: pred.status, fallbackFrom: reason };
+  };
+
   if (!apiKey) {
+    const fb = await musicGenFallback("ELEVENLABS_API_KEY not set");
+    if (fb) return res.json(fb);
     return res.status(503).json({
-      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      error: "Music not configured — set ELEVENLABS_API_KEY or REPLICATE_API_TOKEN",
       setupUrl: "https://elevenlabs.io/api",
     });
   }
@@ -3449,6 +3648,8 @@ devhubRouter.post("/media/music", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      const fb = await musicGenFallback(`ElevenLabs ${r.status}`);
+      if (fb) return res.json(fb);
       return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
@@ -3458,6 +3659,8 @@ devhubRouter.post("/media/music", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
+    const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
+    if (fb) return res.json(fb);
     res.status(500).json({ error: e?.message || "Music compose failed" });
   }
 });
@@ -3626,7 +3829,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
     const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+      body: JSON.stringify({ text, model_id: TTS_MODEL }),
     });
     if (!ttsResp.ok) {
       const errText = await ttsResp.text();
@@ -3969,7 +4172,7 @@ async function executeWorkflowStep(
       const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        body: JSON.stringify({ text, model_id: TTS_MODEL }),
       });
       if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
       const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
@@ -4486,6 +4689,17 @@ devhubRouter.post("/media/translate", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+      // endpoint happily reports 0 of 1,000,000 characters used while every
+      // translate call is refused — the account state is only visible from a
+      // real call (verified against our own key, 2026-07-26).
+      if (r.status === 456) {
+        return res.status(456).json({
+          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+          provider: "deepl",
+          accountUrl: "https://www.deepl.com/account/usage",
+        });
+      }
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
@@ -4535,6 +4749,17 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+      // endpoint happily reports 0 of 1,000,000 characters used while every
+      // translate call is refused — the account state is only visible from a
+      // real call (verified against our own key, 2026-07-26).
+      if (r.status === 456) {
+        return res.status(456).json({
+          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+          provider: "deepl",
+          accountUrl: "https://www.deepl.com/account/usage",
+        });
+      }
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string }> };
@@ -5332,6 +5557,15 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       }
     }, 4000);
 
+    // The CNAME is created, but a record in a zone nobody delegated resolves
+    // nowhere: aevion.build is still `pending` at Cloudflare, so every
+    // *.aevion.build address handed out so far — including ones from July —
+    // fails DNS. pagesUrl is the address that actually answers, so that is
+    // what we call live; the custom domain is reported separately with its
+    // real state instead of being presented as the primary URL.
+    // Second arg is the delay between attempts — 1ms keeps this a fast probe
+    // rather than the 25s wait the deploy path uses.
+    const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
     return res.json({
       ok: true,
       provider: "cloudflare-pages",
@@ -5339,9 +5573,12 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       pagesUrl,
       domain: customDomain,
       domainUrl,
-      liveUrl: domainUrl ?? pagesUrl,
+      domainReady,
+      liveUrl: domainReady ? domainUrl : pagesUrl,
       message: customDomain
-        ? `Deployed to ${domainUrl} (and ${pagesUrl}) — verifying it serves before marking live`
+        ? domainReady
+          ? `Deployed to ${domainUrl} (and ${pagesUrl})`
+          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the aevion.build zone is not delegated to Cloudflare (point the registrar's nameservers at it).`
         : `Deployed to ${pagesUrl} — verifying it serves before marking live (add CLOUDFLARE_ZONE_ID to enable aevion.build domain)`,
     });
   } catch (e: any) {
@@ -5585,6 +5822,20 @@ function parseZipStored(buf: Buffer): Array<{ path: string; content: Buffer }> |
   return entries;
 }
 
+/**
+ * ElevenLabs TTS model.
+ *
+ * eleven_monolingual_v1 was hard-coded in three places and ElevenLabs has
+ * since REMOVED it — every voice call on prod returned
+ * "unsupported_model ... have been deprecated" (confirmed live 2026-07-26),
+ * so voice was silently dead while /studio still reported it live. It was
+ * also English-only, which was wrong for this product: our prompts are
+ * Russian. multilingual_v2 is the quality default; turbo/flash are the
+ * cheaper fallbacks, all three verified against our key.
+ */
+const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || "eleven_multilingual_v2";
+const TTS_MODEL_FALLBACKS = ["eleven_turbo_v2_5", "eleven_flash_v2_5"];
+
 const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
 
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
@@ -5611,6 +5862,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
   const imported: Array<{ path: string; bytes: number; binary: boolean }> = [];
   const skipped: Array<{ path: string; reason: string }> = [];
+  const toWrite: Array<{ file: DevHubFile; bytes: number; binary: boolean }> = [];
 
   for (const entry of parsed) {
     // Skip metadata + directory entries
@@ -5631,17 +5883,44 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
       if (existing) { skipped.push({ path: finalPath, reason: "already exists" }); continue; }
     }
 
-    const f: DevHubFile = {
-      id: crypto.randomUUID(), projectId: project.id, path: finalPath,
-      content, language: detectLanguage(finalPath), updatedAt: now(),
-    };
+    toWrite.push({
+      file: {
+        id: crypto.randomUUID(), projectId: project.id, path: finalPath,
+        content, language: detectLanguage(finalPath), updatedAt: now(),
+      },
+      bytes: entry.content.length,
+      binary: isBinary,
+    });
+  }
+
+  // Checkpoint BEFORE writing, exactly as /github/sync does — a ZIP imported
+  // with overwrite=true replaces whole files, and without this the IDE's undo
+  // and history (which it offers as the safety net for AI writes) simply did
+  // not cover the one bulk write that can wipe a project in one click.
+  let checkpointId: string | null = null;
+  if (toWrite.length > 0) {
+    let existingFiles: Array<{ path: string; content: string }> = [];
+    try { existingFiles = await dbListFiles(project.id); }
+    catch {
+      existingFiles = [...memFiles.values()].filter((f) => f.projectId === project!.id);
+    }
+    checkpointId = await createCheckpoint(
+      project.id,
+      userId,
+      `ZIP import (${toWrite.length} file${toWrite.length === 1 ? "" : "s"})`,
+      toWrite.map((w) => w.file.path),
+      existingFiles,
+    );
+  }
+
+  for (const { file: f, bytes, binary } of toWrite) {
     try { await dbUpsertFile(f); }
     catch {
-      const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === finalPath);
+      const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
       if (ex) { ex.content = f.content; ex.language = f.language; ex.updatedAt = f.updatedAt; }
       else memFiles.set(f.id, f);
     }
-    imported.push({ path: finalPath, bytes: entry.content.length, binary: isBinary });
+    imported.push({ path: f.path, bytes, binary });
   }
 
   res.json({
@@ -5650,6 +5929,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     skippedCount: skipped.length,
     imported,
     skipped,
+    checkpointId,
   });
 });
 
@@ -5662,7 +5942,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 devhubRouter.post("/media/video", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  const { prompt, model = "minimax/video-01", width = 1280, height = 720, duration = 5, imageUrl } = req.body || {};
+  const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt, realism } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
   }
@@ -5684,20 +5964,40 @@ devhubRouter.post("/media/video", async (req, res) => {
     });
   }
 
-  const MODEL_VERSIONS: Record<string, string> = {
-    "minimax/video-01": "minimax/video-01",
-    "stability-ai/stable-video-diffusion": "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3aa966e1e89b5c27be9702aff8",
-    "lucataco/animate-diff-v2": "lucataco/animate-diff-v2:47b39c5b24fab06e5ec0a3aa5e63daf17e92ab3f8edc27f7da7fa9f0be28cad5",
-    "tencent/hunyuan-video": "tencent/hunyuan-video:847dfa8b01e739d5c05b04cc4c64a2a9ef56fba41783ba11c0e24ce1a36cbf30",
-  };
-  const resolvedModel = MODEL_VERSIONS[model] || model;
+  const { findVideoModel, videoModelCatalogue } = await import("../lib/devhubVideoModels");
+  const chosen = findVideoModel(model);
+  if (!chosen) {
+    // An unknown id used to be forwarded to Replicate as-is, which failed with
+    // a provider error the user could not act on.
+    return res.status(400).json({
+      error: `unknown video model "${model}"`,
+      models: videoModelCatalogue().map((m) => m.id),
+    });
+  }
+  const resolvedModel = chosen.id;
+
+  // The realism pass QReal built (services/qreal/directives.ts) is the whole
+  // difference between "looks generated" and "looks filmed": camera body and
+  // shutter, skin subsurface scattering, irregular blinks, handheld
+  // micro-jitter, real room acoustics. Imported, never copied — a second copy
+  // would drift and QReal's benchmark would stop measuring what production
+  // actually sends. Opt out with realism:false for stylised or animated shots,
+  // where describing a physical camera fights the prompt.
+  const { REALISM_DIRECTIVES } = await import("../services/qreal/directives");
+  const wantsRealism = realism !== false;
+  const finalPrompt = wantsRealism ? `${prompt.trim()} ${REALISM_DIRECTIVES}` : prompt.trim();
 
   try {
-    const input: Record<string, any> = { prompt: prompt.trim() };
-    if (imageUrl) input.image = imageUrl;
-    if (width) input.width = width;
-    if (height) input.height = height;
-    if (duration) input.num_frames = Math.round(duration * 24);
+    // Each model has its own input schema — the previous code sent num_frames
+    // and width/height to models that accept neither, so they were dropped.
+    const input: Record<string, any> = chosen.toInput({
+      prompt: finalPrompt,
+      imageUrl,
+      duration,
+      aspectRatio,
+      resolution,
+      negativePrompt,
+    });
 
     const resp = await fetch(`https://api.replicate.com/v1/models/${resolvedModel}/predictions`, {
       method: "POST",
@@ -5719,15 +6019,98 @@ devhubRouter.post("/media/video", async (req, res) => {
 
     if (!resp.ok) {
       const errText = await resp.text();
+      if (resp.status === 402) {
+        noteProviderFailure("video", "Replicate: insufficient credit");
+        // Having the token is not having the money — /studio reported video
+        // "live" while every generation failed on an empty balance.
+        return res.status(402).json({
+          error: "Video provider has no credit — top up the Replicate account to generate",
+          provider: "replicate",
+          topUpUrl: "https://replicate.com/account/billing#billing",
+        });
+      }
+      noteProviderFailure("video", `Replicate ${resp.status}`);
       return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
     }
 
     const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
     await debitCredit(userId, "video").catch(() => {});
-    return res.json({ ok: true, predictionId: prediction.id, status: prediction.status, creditsUsed: 1, creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1 });
+    return res.json({
+      ok: true,
+      predictionId: prediction.id,
+      status: prediction.status,
+      model: chosen.id,
+      modelLabel: chosen.label,
+      audio: chosen.audio,
+      realism: wantsRealism,
+      creditsUsed: 1,
+      creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1,
+    });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Video generation failed" });
   }
+});
+
+// POST /api/devhub/media/3d — image → textured GLB mesh. A media type the
+// platform did not have: it could make pictures, speech, music and video, but
+// nothing a game engine or a three.js scene could load.
+devhubRouter.post("/media/3d", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { imageUrl, model, textureSize, removeBackground } = req.body || {};
+  if (!imageUrl || typeof imageUrl !== "string" || !/^https?:/.test(imageUrl)) {
+    return res.status(400).json({ error: "imageUrl (http/https) is required - generate or upload an image first" });
+  }
+
+  const credit = await checkCredit(userId, "video");
+  if (!credit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generation limit reached",
+      tier: credit.tier, used: credit.used, limit: credit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) {
+    return res.status(503).json({ error: "3D generation not configured - set REPLICATE_API_TOKEN", envVar: "REPLICATE_API_TOKEN" });
+  }
+
+  const { find3dModel, threeDModelCatalogue } = await import("../lib/devhub3dModels");
+  const chosen = find3dModel(model);
+  if (!chosen) {
+    return res.status(400).json({ error: `unknown 3D model "${model}"`, models: threeDModelCatalogue().map((m) => m.id) });
+  }
+
+  try {
+    const r = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+      body: JSON.stringify({ version: chosen.version, input: chosen.toInput({ imageUrl, textureSize, removeBackground }) }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      return res.status(r.status).json({ error: `Replicate error: ${t.slice(0, 300)}` });
+    }
+    const prediction = await r.json() as { id: string; status: string };
+    await debitCredit(userId, "video").catch(() => {});
+    res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "3D generation failed" });
+  }
+});
+
+// GET /api/devhub/media/3d/models - catalogue, same contract as video.
+devhubRouter.get("/media/3d/models", async (_req, res) => {
+  const { threeDModelCatalogue } = await import("../lib/devhub3dModels");
+  res.json({ models: threeDModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
+});
+
+// GET /api/devhub/media/video/models — what the video button can actually run.
+// Exposed so the IDE and the agent pick from real ids instead of guessing.
+devhubRouter.get("/media/video/models", async (_req, res) => {
+  const { videoModelCatalogue } = await import("../lib/devhubVideoModels");
+  res.json({ models: videoModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
 });
 
 devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
@@ -5857,12 +6240,81 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 // GET /api/devhub/studio/capabilities
 // ═════════════════════════════════════════════════════════════════════════════
 
+// GET /api/devhub/providers/health — are the KEYS still valid?
+//
+// Distinct from /studio/capabilities (is a key present?) and from an actual
+// generation (is there money?). The middle question turned out to matter: a
+// Brevo key that answers fine from production is rejected from a laptop by
+// its IP allowlist, and ElevenLabs kept accepting our key while refusing the
+// model we sent. Only free, side-effect-free endpoints are used — nothing
+// here sends a message, spends credit, or creates anything.
+devhubRouter.get("/providers/health", async (_req, res) => {
+  const probe = async (name: string, run: () => Promise<{ ok: boolean; detail: string }>) => {
+    try {
+      const r = await run();
+      return { name, ...r };
+    } catch (e: any) {
+      return { name, ok: false, detail: (e?.message || "request failed").slice(0, 120) };
+    }
+  };
+
+  const checks = await Promise.all([
+    probe("brevo", async () => {
+      if (!process.env.BREVO_API_KEY) return { ok: false, detail: "BREVO_API_KEY not set" };
+      const r = await fetch("https://api.brevo.com/v3/account", {
+        headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("replicate", async () => {
+      if (!process.env.REPLICATE_API_TOKEN) return { ok: false, detail: "REPLICATE_API_TOKEN not set" };
+      const r = await fetch("https://api.replicate.com/v1/account", {
+        headers: { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` },
+      });
+      // Valid key only. Credit is invisible here — an empty balance still
+      // answers 200, which is exactly how "video: live" stayed wrong.
+      return { ok: r.ok, detail: r.ok ? "key valid (balance not visible here)" : `HTTP ${r.status}` };
+    }),
+    probe("cloudflare", async () => {
+      if (!process.env.CLOUDFLARE_API_TOKEN) return { ok: false, detail: "CLOUDFLARE_API_TOKEN not set" };
+      const r = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", {
+        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("cloudflare_zone", async () => {
+      if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
+        return { ok: false, detail: "CLOUDFLARE_ZONE_ID not set" };
+      }
+      const r = await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`, {
+        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+      });
+      const b = await r.json().catch(() => ({} as any));
+      const status = b?.result?.status;
+      // "pending" means the registrar never pointed at Cloudflare, so every
+      // *.aevion.build address we hand out fails DNS.
+      return { ok: status === "active", detail: `zone status: ${status ?? "unknown"}` };
+    }),
+    probe("openai", async () => {
+      if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
+      const r = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      });
+      return { ok: r.ok, detail: r.ok ? "key valid (billing not visible here)" : `HTTP ${r.status}` };
+    }),
+  ]);
+
+  const failing = checks.filter((c) => !c.ok);
+  res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
+});
+
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "translate", name: "Translation", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
     { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
-    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway", status: process.env.RAILWAY_API_TOKEN ? "live" : "needs_token", token: "RAILWAY_API_TOKEN" },
+    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
     { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
     { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
@@ -5876,8 +6328,15 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
   ];
 
-  const live = caps.filter((c) => c.status === "live").length;
-  return res.json({ capabilities: caps, summary: { total: caps.length, live, needsToken: caps.length - live } });
+  // A configured key is not a working capability — fold in what the last real
+  // call to each provider actually did (lib/providerHealth).
+  const withHealth = caps.map(applyHealth);
+  const live = withHealth.filter((c) => c.status === "live").length;
+  const degraded = withHealth.filter((c) => c.status === "degraded").length;
+  return res.json({
+    capabilities: withHealth,
+    summary: { total: withHealth.length, live, degraded, needsToken: withHealth.length - live - degraded },
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

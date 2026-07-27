@@ -80,6 +80,12 @@ export default function DevHubPage() {
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
   const [ideaStarting, setIdeaStarting] = useState(false);
+  // What actually works right now, from the server. The landing used to
+  // advertise every capability unconditionally while several were dead —
+  // video on an empty balance, images with every provider blocked, voice on a
+  // model the vendor had removed. Better to say so on the way in than to let
+  // someone discover it after typing their idea.
+  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; lastError?: string }>>([]);
 
   // Prompt-first entry: one phrase → project created → generation auto-runs
   // in the IDE (the prompt travels via localStorage; the IDE picks it up,
@@ -122,6 +128,13 @@ export default function DevHubPage() {
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCaps(Array.isArray(d.capabilities) ? d.capabilities : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
@@ -313,6 +326,30 @@ export default function DevHubPage() {
               {ideaStarting ? "Создаю…" : "⚡ Построить"}
             </button>
           </div>
+          {/* An empty box is the hardest thing to answer. These are not
+              decoration: each one exercises a different part of the pipeline
+              (plain UI, a real database, media), so the first thing a person
+              builds shows what the tool can do rather than the least of it. */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>Или начните с примера:</span>
+            {[
+              "лендинг кофейни с меню и формой брони",
+              "трекер задач с базой данных и статусами",
+              "портфолио фотографа с галереей и тёмной темой",
+            ].map((example) => (
+              <button
+                key={example}
+                onClick={() => setIdeaPrompt(example)}
+                style={{
+                  padding: "5px 11px", background: "rgba(255,255,255,0.12)", color: "#ccfbf1",
+                  border: "1px solid rgba(255,255,255,0.22)", borderRadius: 999,
+                  fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                {example}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Studio Pro upgrade banner */}
@@ -328,7 +365,7 @@ export default function DevHubPage() {
                 Studio Pro — unlock the full IDE
               </p>
               <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "4px 0 0" }}>
-                50 AI videos · 200 images · unlimited deploys · your own *.aevion.build subdomain · team collaborators
+                50 AI videos · 200 images · unlimited deploys · public *.pages.dev URL · team collaborators
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -383,7 +420,7 @@ export default function DevHubPage() {
         }}>
           <div style={{ maxWidth: 640 }}>
             <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
-              🌐 Deploy → your own <span style={{ fontFamily: "monospace" }}>&lt;project&gt;.aevion.build</span>
+              🌐 Deploy → живой публичный адрес за один клик
             </p>
             <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
               One click deploys a Static project to Cloudflare's edge and provisions a real subdomain.
@@ -394,6 +431,85 @@ export default function DevHubPage() {
           <span style={{ padding: "6px 12px", background: "#7c3aed", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
             In the IDE → Deploy
           </span>
+        </div>
+
+        {/* Live capability strip — honest state on the way in, not after the
+            user has typed an idea and hit a dead button. Only rendered once
+            the server has answered; silence is better than a guess. */}
+        {caps.length > 0 && (() => {
+          const off = caps.filter((c) => c.status !== "live");
+          const live = caps.length - off.length;
+          return (
+            <div style={{
+              border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
+              padding: "12px 16px", marginBottom: 20, fontSize: 13, lineHeight: 1.6,
+            }}>
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>Сейчас работает: {live} из {caps.length}</span>
+              {off.length > 0 ? (
+                <>
+                  <span style={{ color: "#64748b" }}> · временно недоступно: </span>
+                  {off.map((c, i) => (
+                    <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
+                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
+                      {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
+                    </span>
+                  ))}
+                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                    Всё остальное — код, база данных, превью, деплой — работает. Наведите на название, чтобы увидеть причину.
+                  </div>
+                </>
+              ) : (
+                <span style={{ color: "#64748b" }}> · все интеграции отвечают</span>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* One window vs a stack of subscriptions — deliberately honest: the
+            money gap is small and saying otherwise would be a lie. The claim
+            we can defend is the handoffs, not the price. */}
+        <div style={{
+          border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
+          padding: "18px 20px", marginBottom: 20,
+        }}>
+          <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+            Одно окно вместо семи подписок
+          </p>
+          <p style={{ fontSize: 13, color: "#475569", margin: "6px 0 12px", lineHeight: 1.55 }}>
+            Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте,
+            без переноса файлов между сервисами и без семи отдельных логинов.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>
+              <tbody>
+                {[
+                  ["Приложение по описанию", "Lovable Pro", "$25"],
+                  ["Видео", "Runway Pro", "$35"],
+                  ["Картинки", "Midjourney Standard", "$30"],
+                  ["Озвучка", "ElevenLabs Creator", "$22"],
+                  ["Музыка", "Suno", "$10"],
+                  ["3D-модели", "Meshy Pro", "$20"],
+                  ["Хостинг", "Vercel Pro", "$20"],
+                ].map(([what, who, price]) => (
+                  <tr key={what as string}>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#334155" }}>{what}</td>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{who}</td>
+                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{price}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>Итого</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>7 подписок, 7 логинов</td>
+                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "12px 0 0", lineHeight: 1.5 }}>
+            Цены — публичные тарифы сервисов на июль 2026. Мы не обещаем «в разы дешевле»:
+            выигрыш здесь не в цене подписки, а в том, что результат одного шага сразу лежит
+            в том же проекте, что и следующий.
+          </p>
         </div>
 
         {/* Error banner */}

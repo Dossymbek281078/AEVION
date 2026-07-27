@@ -1015,3 +1015,19 @@ describe("a launch company's evidence is an order book and a flight record", () 
     expect(s.technicalProof.length).toBeGreaterThan(0);
   });
 });
+
+describe("the hardest sentence in a clinical filing", () => {
+  // The reader knew every phrasing AROUND a result — trial phase, peer review,
+  // sensitivity and specificity — and not the result itself. Same for a plant
+  // that is already running under the words filings actually use.
+  test("a met primary endpoint is technical proof", () => {
+    expect(parsePlanSignals("The trial met its primary endpoint with statistical significance.").technicalProof.length).toBeGreaterThan(0);
+  });
+  test("a system in commercial operation is a running plant", () => {
+    expect(parsePlanSignals("The system has been in commercial operation for 14 months.").technicalProof.length).toBeGreaterThan(0);
+  });
+  test("neither fires on an intention", () => {
+    expect(parsePlanSignals("We expect the trial to meet its primary endpoint next year.").technicalProof.length).toBe(0);
+    expect(parsePlanSignals("We plan to bring the system into commercial operation next year.").technicalProof.length).toBe(0);
+  });
+});

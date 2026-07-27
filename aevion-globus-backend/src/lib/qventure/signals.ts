@@ -1151,7 +1151,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\bpeer[- ]reviewed\b|\bpublished in (?:nature|science|nejm|the lancet|cell)\b/i, "Peer-reviewed result"],
     [/\bclinical(?:ly)? validat\w+|\bsensitivity\b.*\bspecificity\b|\b\d{2,3}% sensitivity\b/i, "Clinical validation data"],
     [/\bbenchmark(?:ed|s)?\b|\bstate[- ]of[- ]the[- ]art\b|\bsota\b|\boutperform\w*\b/i, "Benchmark result claimed"],
-    [/\bpilot plant\b|\bproduction line\b|\bat scale in production\b|\bfactory (?:running|operational)\b/i, "Plant / production line running"],
+    [/\bpilot plant\b|\bproduction line\b|\bat scale in production\b|\bfactory (?:running|operational)\b|\bin commercial operation\b/i, "Plant / production line running"],
+    // The single most important sentence in a clinical filing, and the reader
+    // knew every phrasing around it — trial phase, peer review, sensitivity —
+    // except the result itself.
+    [/\bmet (?:its |the )?primary endpoint\b|\bprimary endpoint was met\b|\bachieved (?:its )?primary endpoint\b/i, "Primary endpoint met"],
     [/\bflight[- ]tested\b|\bfield[- ]tested\b|\bin operational use\b|\bdeployed (?:with|to) (?:customers|operators|units)\b/i, "Field / flight tested"],
     // A flight record is the hardest evidence a launch company has, and it is
     // stated as a count of missions flown, not as a test result.

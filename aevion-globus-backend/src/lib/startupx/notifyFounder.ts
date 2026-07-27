@@ -19,6 +19,9 @@
  */
 
 import { getMailTransport, MAIL_FROM, FRONTEND_BASE } from "../mailTransport";
+// Формат денег в модуле один — тот же, что на карточке и в разборе. Своя копия
+// уже давала расхождение «$30K» против «$30.0K» между карточкой и заголовком.
+import { fmt } from "./valuation";
 
 export interface OfferNotice {
   founderEmail: string;
@@ -41,16 +44,10 @@ function escapeHtml(s: string): string {
   );
 }
 
-function money(n: number): string {
-  if (n >= 1_000_000) return `$${Number((n / 1_000_000).toFixed(1))}M`;
-  if (n >= 1_000) return `$${Number((n / 1_000).toFixed(1))}K`;
-  return `$${n}`;
-}
-
 /** Одна строка условий отклика — то, ради чего письмо вообще открывают. */
 export function offerTerms(notice: OfferNotice): string {
   const parts: string[] = [];
-  if (notice.ticketUsd) parts.push(money(notice.ticketUsd));
+  if (notice.ticketUsd) parts.push(`$${fmt(notice.ticketUsd)}`);
   if (notice.equityPct) parts.push(`за ${Number(notice.equityPct.toFixed(2))}%`);
   if (notice.intent && INTENT_RU[notice.intent]) parts.push(`— ${INTENT_RU[notice.intent]}`);
   return parts.length ? parts.join(" ") : "условия не указаны";

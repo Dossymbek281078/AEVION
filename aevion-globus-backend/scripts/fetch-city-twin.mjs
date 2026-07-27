@@ -44,7 +44,7 @@ const OVERPASS = [
 
 import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL, M_PER_LAT, M_PER_LON_EQ,
-  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem,
+  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, heightOutliers,
 } from "./lib/city-twin-geometry.mjs";
 import { parsePlateauGml, reconcileWithPlateau } from "./lib/plateau-heights.mjs";
 
@@ -398,6 +398,8 @@ if (compareOnly) {
     return b >= 0 && meta[b].id.startsWith("relation/");
   }).length;
 
+  const outliers = heightOutliers(buildings);
+
   const samples = [];
   const step = Math.max(1, Math.floor(unknownIdx.length / 6));
   for (let k = 0; k < unknownIdx.length && samples.length < 6; k += step) {
@@ -421,6 +423,13 @@ if (compareOnly) {
     `    twin built, OSM empty    ${staleObstacle}  (costs a detour, not a collision)\n` +
     `    both built, OSM taller   ${taller}\n` +
     (samples.length ? `\n  buildings on cells the twin calls empty (verifiable in OSM):\n${samples.join("\n")}\n` : "") +
+    (outliers.length
+      ? `\n  ⚠ heights towering over the rest of the city — check the tag, not the sky:\n` +
+        outliers.slice(0, 5).map((o) =>
+          `    ${o.h} m = ${o.times}x the 99th percentile` +
+          `${o.hs === 0 ? " and TRUSTED as measured, so flown with zero safety clearance" : ""}\n`).join("") +
+        `    A real skyline tapers, a wrong tag does not. Astana 2026-07-27: height=382 on a 75-storey tower.\n`
+      : "") +
     `\n` +
     `Drift is expected — OSM is live. Judge by whether provenance IMPROVED\n` +
     `(more measured heights) before overwriting a committed twin, and treat a\n` +

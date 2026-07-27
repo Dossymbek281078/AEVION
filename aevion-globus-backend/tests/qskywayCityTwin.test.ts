@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M,
+  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers,
   projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
 import { CITY } from "../src/routes/qskyway.city";
@@ -274,5 +274,29 @@ describe("the committed twins are internally consistent", () => {
       expect(v.c).toBeLessThan(city.grid.cols);
       expect(v.r).toBeLessThan(city.grid.rows);
     }
+  });
+});
+
+describe("heightOutliers — one wrong tag is trusted completely", () => {
+  const city = (...hs: number[]) => hs.map((h) => ({ h, hs: 0, r: [] }));
+  const skyline = Array.from({ length: 100 }, (_, i) => ({ h: 20 + i, hs: 1, r: [] }));
+
+  it("flags a height towering over the 99th percentile", () => {
+    // Astana: 382 m tagged on a 75-storey tower, next building 88 m. hs=0 means
+    // SRC_CLEARANCE adds nothing on top — the twin trusts the tag absolutely.
+    const found = heightOutliers([...skyline, ...city(382)]);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ h: 382, hs: 0 });
+  });
+
+  it("leaves a genuine tapering skyline alone", () => {
+    // NYC 443 m over a p99 of 172 m and Tokyo 241 over 130 both stay silent;
+    // a real skyline tapers, so the tallest is a multiple, not an order.
+    expect(heightOutliers(skyline)).toEqual([]);
+    expect(heightOutliers([...skyline, ...city(240)])).toEqual([]);
+  });
+
+  it("says nothing about a city too small to have a distribution", () => {
+    expect(heightOutliers(city(12, 900))).toEqual([]);
   });
 });

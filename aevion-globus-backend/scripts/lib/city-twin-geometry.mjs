@@ -144,6 +144,35 @@ export function inRing(ring, x, y) {
  * clearance must reflect the obstacle actually being cleared, not a shorter
  * neighbour whose height happens to be better known.
  */
+/**
+ * Buildings whose height towers implausibly over the rest of the city.
+ *
+ * A single wrong `height` tag enters the twin as hs=0 — MEASURED — and therefore
+ * gets SRC_CLEARANCE[0] = 0 m of safety margin: the twin trusts it completely.
+ * Found in Astana on 2026-07-27: way/486561786 (the Abu Dhabi Plaza tower) is
+ * tagged height=382 with building:levels=75, i.e. 5.1 m per storey, against a
+ * published 311 m. The city's second-tallest building is 88 m, so the twin's
+ * ceiling was a 4.3x outlier over everything else standing.
+ *
+ * The ratio against the 99th percentile — not against the tallest — is what
+ * makes this discriminate: a genuine skyline tapers (NYC 443 m over a p99 of
+ * 172 m = 2.6x, Tokyo 241 over 130 = 1.9x), a bad tag does not.
+ *
+ * Reports, never rejects. Some cities really do have one dominant structure —
+ * a mast, a spire — and that is an obstacle worth flying over, not a defect.
+ * A human decides which one this is.
+ */
+export function heightOutliers(buildings, { ratio = 3 } = {}) {
+  const sorted = buildings.map((b) => b.h).sort((a, b) => a - b);
+  if (sorted.length < 20) return [];
+  const p99 = sorted[Math.floor(sorted.length * 0.99)];
+  if (!(p99 > 0)) return [];
+  return buildings
+    .map((b, i) => ({ index: i, h: b.h, hs: b.hs, times: Math.round((100 * b.h) / p99) / 100 }))
+    .filter((b) => b.h > p99 * ratio)
+    .sort((a, b) => b.h - a.h);
+}
+
 export function rasterize(buildings, cols, rows) {
   const heights = new Array(cols * rows).fill(0);
   const src = new Array(cols * rows).fill(0);

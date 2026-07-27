@@ -79,7 +79,13 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
-  return s in TIER_VARIANT_ENV;
+  // hasOwnProperty.call, а не `in`: оператор `in` видит ключи прототипа, поэтому
+  // предикат подтверждал бы «это известная ссылка» для "constructor" и
+  // "__proto__". Сегодня последствий нет — дальше стоит `process.env[...]?.trim()`,
+  // и значение схлопывается в null, как у любой неизвестной ссылки. Но предикат
+  // ТИПА при этом лжёт, и первая же правка без optional chaining превратит это
+  // в падение на денежном пути.
+  return Object.prototype.hasOwnProperty.call(TIER_VARIANT_ENV, s);
 }
 
 /**

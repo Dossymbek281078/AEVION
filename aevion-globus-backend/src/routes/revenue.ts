@@ -1033,39 +1033,66 @@ revenueRouter.post("/snapshots/backfill-internal", async (req, res) => {
 
     const [sales, orders] = await Promise.all([gumroadSales(), lsOrders()]);
     const internalDated: { at: number; usd: number }[] = [];
+    const externalDated: { at: number; usd: number }[] = [];
     for (const sale of sales ?? []) {
       if (sale.refunded || sale.disputed || sale.chargedback) continue;
-      if (!isInternalPurchase(sale.email)) continue;
       const at = Date.parse(sale.created_at ?? "");
       if (Number.isNaN(at)) continue;
-      internalDated.push({ at, usd: sale.price ? sale.price / 100 : 0 });
+      const usd = sale.price ? sale.price / 100 : 0;
+      (isInternalPurchase(sale.email) ? internalDated : externalDated).push({ at, usd });
     }
     for (const order of orders ?? []) {
       if (order.status !== "paid" || order.refunded) continue;
-      if (!isInternalPurchase(order.email)) continue;
       const at = Date.parse(order.created_at ?? "");
       if (Number.isNaN(at)) continue;
-      internalDated.push({ at, usd: order.total / 100 });
+      const usd = order.total / 100;
+      (isInternalPurchase(order.email) ? internalDated : externalDated).push({ at, usd });
     }
+    const sumUpTo = (rows: { at: number; usd: number }[], cutoff: number) =>
+      round2(rows.filter((r) => r.at <= cutoff).reduce((sum, r) => sum + r.usd, 0));
 
     const pending = await pool.query(
-      `SELECT "id","capturedAt" FROM "RevenueSnapshot" WHERE "internalUsd" IS NULL ORDER BY "capturedAt" ASC`,
+      `SELECT "id","capturedAt","grossUsd" FROM "RevenueSnapshot"
+        WHERE "internalUsd" IS NULL OR "grossIncludesInternal" IS NULL
+        ORDER BY "capturedAt" ASC`,
     );
     let updated = 0;
-    for (const row of pending.rows as { id: string; capturedAt: string }[]) {
+    let assumedIncluded = 0;
+    for (const row of pending.rows as { id: string; capturedAt: string; grossUsd: string }[]) {
       const cutoff = Date.parse(String(row.capturedAt));
       const before = internalDated.filter((p) => p.at <= cutoff);
-      const usd = round2(before.reduce((sum, p) => sum + p.usd, 0));
+      const internalUsd = round2(before.reduce((sum, p) => sum + p.usd, 0));
+      const externalUsd = sumUpTo(externalDated, cutoff);
+      const gross = Number(row.grossUsd);
+
+      // Признак определяется ЗАМЕРОМ, а не датой: гросс снимка сверяется с двумя
+      // суммами, посчитанными по заказам на тот момент. Совпал с внешней — свои
+      // покупки в нём не сидят; совпал с внешней плюс своей — сидят. Дата тут
+      // ненадёжна: правка выкатывалась между снимками, и граница по времени
+      // промахнулась бы ровно на тот снимок, который и дал −$139.01.
+      let includes: boolean;
+      if (Math.abs(gross - externalUsd) < 0.011) includes = false;
+      else if (Math.abs(gross - (externalUsd + internalUsd)) < 0.011) includes = true;
+      else {
+        includes = true; // не сошлось ни с чем — консервативно считаем завышенным
+        assumedIncluded++;
+      }
+
       await pool.query(
-        `UPDATE "RevenueSnapshot" SET "internalUsd"=$2,"internalCount"=$3,"grossIncludesInternal"=true WHERE "id"=$1`,
-        [row.id, usd, before.length],
+        `UPDATE "RevenueSnapshot"
+            SET "internalUsd"=$2,"internalCount"=$3,"grossIncludesInternal"=$4
+          WHERE "id"=$1`,
+        [row.id, internalUsd, before.length, includes],
       );
       updated++;
     }
     res.json({
       updated,
       internalPurchasesFound: internalDated.length,
-      note: "grossUsd не изменён — досчитаны только internalUsd/internalCount",
+      // Сколько строк не сошлись ни с одной из сумм — если их много, значит
+      // история снимков и заказы разошлись, и цифру надо смотреть руками.
+      unmatchedAssumedIncluded: assumedIncluded,
+      note: "grossUsd не изменён — досчитаны только internalUsd/internalCount/grossIncludesInternal",
     });
   } catch (err: unknown) {
     capture(err, { route: "POST /snapshots/backfill-internal" });

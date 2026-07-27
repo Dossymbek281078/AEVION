@@ -28,6 +28,7 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -53,7 +54,6 @@ const capture = makeServiceCapture("gumroadWebhook");
 
 export const gumroadWebhookRouter = Router();
 
-const SEEN = new Set<string>();
 
 // Tier products are sold via the same GUMROAD_PERMALINK_TIER_* permalinks the
 // checkout layer builds the buy-URL from. Gumroad pings that permalink back, so
@@ -229,8 +229,8 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   // Dedup on sale_id + status
   const dedupKey = `${saleId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
-  SEEN.add(dedupKey);
+  if (hasSeenWebhook("gumroad", dedupKey)) return res.json({ ok: true, deduped: true });
+  markWebhookSeen("gumroad", dedupKey);
 
   const reference = resolveReference(raw);
 
@@ -257,7 +257,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     const verdict = await verifyGumroadSale(saleId);
     if (verdict === "not_found") {
       console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
-      SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом
+      releaseWebhookKey("gumroad", dedupKey); // не занимать ключ отклонённым пингом
       return res.status(401).json({ ok: false, error: "sale_not_found" });
     }
     if (verdict === "unverifiable") {
@@ -368,7 +368,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
-    SEEN.delete(dedupKey);
+    releaseWebhookKey("gumroad", dedupKey);
     capture(err);
     console.error("[gumroad/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });

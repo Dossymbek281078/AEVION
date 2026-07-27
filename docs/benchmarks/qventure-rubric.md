@@ -121,6 +121,30 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    for customers who churned. That is a real design problem, not a regex, and it
    is recorded here unsolved rather than closed with a rule that would do damage.
 
+7. **Open, found and not fixed: the "declined to X" family.** A figure stated
+   after a direction verb is dropped in seven fields out of eight. Reproduce
+   with `parsePlanSignals` on each of these — all return null for the field
+   named:
+
+   | Sentence | Field lost |
+   |---|---|
+   | `Churn fell to 3% monthly, down from 8%.` | churn |
+   | `Churn improved from 8% to 3% monthly.` | churn |
+   | `Net revenue retention declined to 85%.` | retention |
+   | `Gross margin declined to 20%.` | gross margin |
+   | `Take rate declined to 9%.` | take rate |
+   | `Customers fell to 900 from 1,200.` | customers |
+   | `LTV/CAC fell to 0.8.` | LTV/CAC |
+
+   Only revenue survives it (`Revenue of $10M, down from $15M` reads $10M).
+   This is the same family as the ten reader defects above — a level stated in
+   a sentence the pattern does not expect — and it is safe in direction: the
+   figure is dropped, not inverted. It is written down rather than patched
+   because six patterns changed at once, late, is how a mirror-image defect
+   gets introduced; the growth fix above needed three guards of its own
+   (dash-is-not-a-minus, range-is-not-a-minus, decline-is-not-growth) and each
+   was found by testing, not by writing the regex.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

@@ -2775,3 +2775,33 @@ describe("a quarter is not a year, and the reader is told", () => {
     expect(s.parseNotes.join(" ")).toMatch(/disclosed monthly/i);
   });
 });
+
+describe("a parse note nobody sees is worth nothing", () => {
+  // The sub-annual note only matters if it reaches the reader. It travels
+  // parseNotes -> engine assumptions -> the assumptions list the result page
+  // renders. Pinning the middle link, because that is the one a refactor can
+  // quietly drop while every parser test stays green.
+  const assumptionsFor = (notes: string) =>
+    analyze({
+      name: "Probe",
+      sector: "saas",
+      stage: "growth",
+      geography: "US",
+      askUsd: 10_000_000,
+      description: "A software company.",
+      tractionNotes: notes,
+    }).assumptions.join(" ");
+
+  test("the period note reaches the assumptions the reader is shown", () => {
+    expect(assumptionsFor("Revenue of $1.54B in the first half of 2019, up 102% year over year."))
+      .toMatch(/covers first half, not a full year/i);
+  });
+
+  test("so does the monthly annualisation", () => {
+    expect(assumptionsFor("Revenue of $1 million per month.")).toMatch(/disclosed monthly/i);
+  });
+
+  test("and a full-year figure adds no such sentence", () => {
+    expect(assumptionsFor("Revenue of $12 million in fiscal 2025.")).not.toMatch(/not a full year/i);
+  });
+});

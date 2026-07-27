@@ -2619,10 +2619,42 @@ describe("known misses, pinned so they fail when fixed", () => {
   // moment someone fixes it. A TODO never knows it has been done.
   const p = (t: string) => parsePlanSignals(t);
 
-  test("limit 44: a fall written as a noun is not read", () => {
-    // Fixing this needs the decline path to classify what its figure belongs
-    // to; bounding basisFor to the clause was measured and refuted.
-    expect(p("Revenue saw a 12% decline in 2025.").growthPct).toBeNull();
+  // Limit 44 closed. The pin said the fall was not read; it is, and this went
+  // red on the fix. Third assertion of this kind to report a closure today.
+  test.each([
+    ["a fall written as a noun", "Revenue saw a 12% decline in 2025.", -12],
+    ["a decrease", "A 12% decrease in revenue.", -12],
+    ["a drop", "Revenue posted a 12% drop last year.", -12],
+  ])("limit 44 closed: %s", (_l, text, want) => {
+    expect(p(text).growthPct).toBe(want);
+  });
+
+  test.each([
+    ["costs do not steal the growth", "Revenue grew 42% year over year; costs saw a 12% decline.", 42],
+    ["nor expenses", "Revenue grew 42% year over year, while expenses fell 12%.", 42],
+    ["nor in the other order", "Costs saw a 12% decline; revenue grew 42% year over year.", 42],
+    ["nor marketing", "Marketing saw a 30% reduction; revenue grew 10% year over year.", 10],
+  ])("%s", (_l, text, want) => {
+    // The reason two earlier attempts were reverted. A fall belonging to costs
+    // outranked a rise belonging to revenue, purely by being looked at first.
+    expect(p(text).growthPct).toBe(want);
+  });
+
+  test("and the case that refuted the obvious fix still reads correctly", () => {
+    // Affirm's S-1 names GMV in one sentence and revenue in the next. Bounding
+    // the look-back to the clause — the fix this limit originally proposed —
+    // returns 77% here instead of 93%.
+    expect(p("GMV up 77% year over year. Revenue up 93% year over year.").growthPct).toBe(93);
+  });
+
+  test("a real fall in revenue is still a fall", () => {
+    expect(p("Revenue saw a 12% decline; GMV grew 5%.").growthPct).toBe(-12);
+    expect(p("Revenue declined 12% year over year.").growthPct).toBe(-12);
+  });
+
+  test("and a reduction in churn is not company growth", () => {
+    expect(p("Churn saw a 2% reduction.").growthPct).toBeNull();
+    expect(p("Our gross margin increased to 59.9%.").growthPct).toBeNull();
   });
 
   // Limit 46 was pinned as two misses and closed twenty minutes later; both

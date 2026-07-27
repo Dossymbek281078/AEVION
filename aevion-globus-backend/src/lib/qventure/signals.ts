@@ -809,7 +809,12 @@ export function parsePlanSignals(text: string): PlanSignals {
   // A filing states the size before the rate — "decreased by $14.3 million, or
   // 13%, to $99.6 million" — so the same amount-shaped span the level connector
   // uses lets that through without letting a conjunction through.
-  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:${AMOUNT_BIT}){0,2}?(?:by|at|of|to|or)?\s*(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
+  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:${AMOUNT_BIT}){0,2}?(?:by|at|of|to|or)?\s*(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
+    // The mirror of the noun shape the rise patterns gained in limit 43:
+    // "revenue saw a 12% decline" stated a fall that read as nothing at all,
+    // so the factor fell back to a sector prior. Safe to add only now that
+    // NOT_A_BASIS stops a fall in costs being attributed to revenue.
+    ?? firstMatch(t, new RegExp(String.raw`(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?\s*(?:decline|decrease|drop|fall|contraction|reduction)\b${NOT_ANOTHER_METRIC}`, "i"));
 
   // A growth rate is meaningless without knowing WHAT grew, and the parser did
   // not ask. Affirm's S-1 states GMV up 77% and revenue up 93% in consecutive
@@ -838,6 +843,21 @@ export function parsePlanSignals(text: string): PlanSignals {
     ["gmv", /\b(?:gmv|gtv|gross transaction value|gross merchandise (?:value|volume)|processed volume|gross bookings|transaction volume)\b/g],
     ["customers", /\b(?:customers|users|subscribers|members|memberships|merchants|sellers)\b/g],
   ];
+  /**
+   * Nouns that are emphatically NOT one of the growth metrics.
+   *
+   * "Costs" is not the absence of a metric; it is a different one. Without this
+   * list, "revenue grew 42% year over year; costs saw a 12% decline" attributed
+   * the fall in costs to revenue — the nearest basis noun backwards was
+   * "revenue", two clauses away, and nothing closer contradicted it.
+   *
+   * Bounding the search to the clause was tried instead and refuted by
+   * measurement (limit 44): real filings name a metric in one sentence and
+   * state its rate in the next, and Affirm's 93% revenue growth comes back as
+   * 77% if the look-back cannot cross the boundary. The fix is not a shorter
+   * window — it is knowing that something nearer already claimed the figure.
+   */
+  const NOT_A_BASIS = /\b(?:costs?|expenses?|opex|capex|spend(?:ing)?|burn|headcount|staff|employees|salaries|payroll|overheads?|liabilities|debt|inventory|inventories|churn|attrition|marketing|r&d)\b/g;
   /** The metric noun closest in front of `at`, within a clause-sized window. */
   const basisFor = (at: number): GrowthBasis => {
     const from = Math.max(0, at - 90);
@@ -849,6 +869,14 @@ export function parsePlanSignals(text: string): PlanSignals {
         if (m.index >= at) break;
         if (m.index >= from && m.index > bestIdx) { bestIdx = m.index; best = basis; }
       }
+    }
+    // A non-metric noun standing NEARER than the best basis noun wins the
+    // figure away from it: the number belongs to whatever is closest, and if
+    // that is a cost then this is not a growth figure for any of our metrics.
+    NOT_A_BASIS.lastIndex = 0;
+    for (let m = NOT_A_BASIS.exec(t); m; m = NOT_A_BASIS.exec(t)) {
+      if (m.index >= at) break;
+      if (m.index >= from && m.index > bestIdx) return "unspecified";
     }
     return best;
   };
@@ -910,6 +938,15 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   if (!growth && s.growthPct === null && rise) {
+    growth = rise.m; growthBasis = rise.basis; usingDecline = false;
+  }
+  // A classified match beats an unclassified one. The decline path is consulted
+  // first, so a fall belonging to costs used to outrank a rise belonging to
+  // revenue purely by being looked at earlier — "revenue grew 42% year over
+  // year, while expenses fell 12%" reported -12%. NOT_A_BASIS now marks that
+  // fall as belonging to nothing we score, and this gives the classified rise
+  // the precedence its classification earns.
+  if (usingDecline && growthBasis === "unspecified" && rise && rise.basis !== "unspecified") {
     growth = rise.m; growthBasis = rise.basis; usingDecline = false;
   }
   // A level stated with a rise verb is not a growth rate. "Gross margin

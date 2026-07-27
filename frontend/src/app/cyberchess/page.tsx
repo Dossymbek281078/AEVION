@@ -1398,6 +1398,18 @@ export default function CyberChessPage(){
   const RUSH_LIVES=3;
   const[rushLives,sRushLives]=useState(RUSH_LIVES);
   const rushLivesRef=useRef(RUSH_LIVES); // синхронный доступ в обработчике хода
+  /* Каждые 20 решённых подряд в Survival возвращают одну жизнь. Считается ЗДЕСЬ, а не
+     внутри апдейтера серии: эффект на изменившееся значение выполняется один раз на
+     переход, поэтому инкремент ref безопасен. Монтирование отсекается rushStreak>0. */
+  useEffect(()=>{
+    if(rushStreak<=0||rushStreak%20!==0)return;
+    if(rushKind!=="survival"||rushLivesRef.current>=RUSH_LIVES)return;
+    rushLivesRef.current+=1;
+    sRushLives(rushLivesRef.current);
+    showToast("💚 +1 жизнь за 20 подряд","success");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[rushStreak]);
+  useEffect(()=>{sRushBestStreak(b=>Math.max(b,rushStreak))},[rushStreak]);
   const rushEndReasonRef=useRef<"time"|"lives">("time"); // причина завершения раша
   // Адаптивная сложность внутри сессии: цель поднимается при решении, падает при ошибке.
   // loadNextPuzzle берёт пазл рядом с целью. Старт — от твоего ELO (rat).
@@ -3276,10 +3288,13 @@ export default function CyberChessPage(){
                   bumpClock(bonus,rushKind==="survival"?600:rushDuration);
                   sRushScore(s=>s+1);
                   adjustTarget(25); // решил — цель чуть выше
-                  sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));
-                    // 20 подряд восстанавливают жизнь (Survival). Сам факт восстановления очков не даёт.
-                    if(n%20===0&&rushKind==="survival"&&rushLivesRef.current<RUSH_LIVES){rushLivesRef.current+=1;sRushLives(rushLivesRef.current);showToast("💚 +1 жизнь за 20 подряд!","success");}
-                    return n;});
+                  /* Апдейтер только считает. Раньше внутри него стояло
+                     `rushLivesRef.current+=1` — а инкремент ref, в отличие от
+                     остальных действий здесь, НЕ идемпотентен: React вправе вызвать
+                     апдейтер повторно (в dev при StrictMode — всегда), и за одну
+                     двадцатую серию игрок получал +2 жизни вместо +1.
+                     Восстановление переехало в эффект на значение серии (см. выше). */
+                  sRushStreak(st=>st+1);
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
@@ -3725,7 +3740,7 @@ export default function CyberChessPage(){
       // Global shortcuts (but not while typing in input)
       const target=e.target as HTMLElement;
       if(target?.tagName==="INPUT"||target?.tagName==="TEXTAREA"||target?.tagName==="SELECT")return;
-      if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Звук выключен":"Звук включён","info");return nv})}
+      if(e.key==="m"||e.key==="M"){e.preventDefault();{const nv=!muted;sMuted(nv);showToast(nv?"Звук выключен":"Звук включён","info")}}
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
       // Hint (H): show the engine's top move as a 3s ghost arrow on the board.
@@ -4213,17 +4228,16 @@ export default function CyberChessPage(){
     let res:"w"|"l"|"d";
     const vRes=gameResultOf(over);
     res=vRes==="W"?"w":vRes==="L"?"l":"d";
-    sVariantStats(s=>{
-      const next=recordVariantResult(s,variant,res);
-      // Variant achievements: trigger on first / 5 / 25 wins per variant
-      if(res==="w"&&variant!=="standard"){
-        const newWins=next[variant].w;
-        if(newWins===1)setTimeout(()=>unlockAch(variantAchKey(variant,"first"),VARIANT_ACH_REWARDS.firstWin,variantAchLabel(variant,"first")),900);
-        else if(newWins===5)setTimeout(()=>unlockAch(variantAchKey(variant,"five"),VARIANT_ACH_REWARDS.fiveWins,variantAchLabel(variant,"five")),900);
-        else if(newWins===25)setTimeout(()=>unlockAch(variantAchKey(variant,"twentyfive"),VARIANT_ACH_REWARDS.twentyFiveWins,variantAchLabel(variant,"twentyfive")),900);
-      }
-      return next;
-    });
+    /* Достижения считаются СНАРУЖИ апдейтера: React вправе вызвать апдейтер повторно,
+       и тогда из него уходили два setTimeout на одно и то же достижение. */
+    const nextStats=recordVariantResult(variantStats,variant,res);
+    sVariantStats(nextStats);
+    if(res==="w"&&variant!=="standard"){
+      const newWins=nextStats[variant].w;
+      if(newWins===1)setTimeout(()=>unlockAch(variantAchKey(variant,"first"),VARIANT_ACH_REWARDS.firstWin,variantAchLabel(variant,"first")),900);
+      else if(newWins===5)setTimeout(()=>unlockAch(variantAchKey(variant,"five"),VARIANT_ACH_REWARDS.fiveWins,variantAchLabel(variant,"five")),900);
+      else if(newWins===25)setTimeout(()=>unlockAch(variantAchKey(variant,"twentyfive"),VARIANT_ACH_REWARDS.twentyFiveWins,variantAchLabel(variant,"twentyfive")),900);
+    }
     // Daily Variant Challenge: if today's daily matches current variant, award bonus
     const today=getDailyVariantState();
     if(today.variant===variant&&!today.played){
@@ -15112,7 +15126,7 @@ ${question.trim()}`;
 
         // ── BOARD / GAME ──
         {id:"flip",         icon:"⇅", group:"Board", label:"Перевернуть доску",   hotkey:"F", run:()=>sFlip(v=>!v)},
-        {id:"mute",         icon:"🔇",group:"Board", label:"Звук вкл / выкл", hotkey:"M", run:()=>sMuted(v=>{const nv=!v;showToast(nv?"Звук выключен":"Звук включён","info");return nv})},
+        {id:"mute",         icon:"🔇",group:"Board", label:"Звук вкл / выкл", hotkey:"M", run:()=>{const nv=!muted;sMuted(nv);showToast(nv?"Звук выключен":"Звук включён","info")}},
         {id:"repertoire",   icon:"📚",group:"Board", label:"Репертуар дебютов",  hotkey:"R", run:()=>sRepertoireOpen(v=>!v)},
         {id:"hotkeys",      icon:"⌨", group:"Board", label:"Все горячие клавиши",hotkey:"?", run:()=>sShowHelp(v=>!v)},
         {id:"bookmark-save",icon:"⭐",group:"Board", label:"Сохранить позицию (закладка)",hint:"Текущий FEN в закладки",hotkey:"B", run:()=>{

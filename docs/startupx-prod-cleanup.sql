@@ -5,22 +5,55 @@
 -- PR по ветке feat/startupx-tiers смоук снимает свою заявку сам (DELETE
 -- /api/startupx/ideas/:id?token=…), так что заново это не накопится.
 --
--- Запускать в Railway → Postgres → Query. СНАЧАЛА первый запрос (посмотреть,
--- что именно попадёт под уборку), и только потом второй.
+-- Сверено с живой лентой 27.07.2026 (GET /api/startupx/ideas?limit=50, 19 из 19):
+--   18 строк — «Smoke Idea …»;
+--    1 строка — id=3, title 'T', description 'D', контакт '@t', от 15.05.2026.
+-- Прошлая версия этого файла ловила только первые 18: заявка «T» осталась бы в
+-- публичной ленте, причём уже с уровнем и баллом на новой витрине. Поэтому
+-- шаблон дополнен порогом на длину — заявка из одной буквы не описывает ничего.
+--
+-- Запускать в Railway → Postgres → Query, ПОСЛЕ деплоя этой ветки: колонки
+-- removed_reason / removed_at появляются вместе с ней. Порядок: шаг 1 (глазами
+-- посмотреть, что попадёт под уборку), потом шаг 2, потом шаг 3.
+--
+-- Проверено 27.07.2026 целиком на настоящем Postgres 18 (отдельная база с той же
+-- схемой): три строки — смоук, пустышка «T», настоящая заявка. Шаг 1 показал
+-- ровно два «снимаем» и одно «ОСТАЁТСЯ», шаг 2 тронул ровно две, настоящая
+-- осталась публичной.
 
--- 1. Что будет снято:
-SELECT id, title, stage, created_at
+-- ── Шаг 1. Полная публичная лента: что есть и что попадёт под уборку ────────
+SELECT id,
+       title,
+       stage,
+       created_at,
+       CASE
+         WHEN title LIKE 'Smoke Idea %' OR title LIKE 'Smoke listing %' THEN 'снимаем: смоук'
+         WHEN length(trim(title)) < 3 OR length(trim(description)) < 3   THEN 'снимаем: пустышка'
+         ELSE 'ОСТАЁТСЯ'
+       END AS verdict
 FROM startup_ideas
 WHERE visibility = 'public'
-  AND (title LIKE 'Smoke Idea %' OR title LIKE 'Smoke listing %')
 ORDER BY id;
 
--- 2. Уборка. Не DELETE: строки помечаются снятыми — так же, как когда заявку
---    снимает основатель. Отклики и отпечатки авторства остаются на месте.
+-- ── Шаг 2. Уборка ───────────────────────────────────────────────────────────
+-- Не DELETE: строки помечаются снятыми — так же, как когда заявку снимает
+-- основатель. Отклики и отпечатки авторства остаются на месте, номера не
+-- переиспользуются. Причина проставляется, чтобы через месяц было понятно,
+-- почему строка не в ленте.
 -- UPDATE startup_ideas
---    SET visibility = 'withdrawn'
+--    SET visibility = 'withdrawn',
+--        removed_reason = 'тестовая заявка, уборка перед запуском биржи',
+--        removed_at = NOW()
 --  WHERE visibility = 'public'
---    AND (title LIKE 'Smoke Idea %' OR title LIKE 'Smoke listing %');
+--    AND (
+--          title LIKE 'Smoke Idea %'
+--       OR title LIKE 'Smoke listing %'
+--       OR length(trim(title)) < 3
+--       OR length(trim(description)) < 3
+--        );
 
--- 3. Проверка — в публичной ленте должно остаться только настоящее:
--- SELECT COUNT(*) FROM startup_ideas WHERE visibility = 'public';
+-- ── Шаг 3. Проверка ─────────────────────────────────────────────────────────
+-- Ожидание после уборки: 0 публичных, пока не опубликованы первые настоящие
+-- заявки (docs/startupx-seed-listings.json).
+-- SELECT COUNT(*) AS публичных_осталось FROM startup_ideas WHERE visibility = 'public';
+-- SELECT COUNT(*) AS снятых FROM startup_ideas WHERE visibility = 'withdrawn';

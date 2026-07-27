@@ -2490,3 +2490,32 @@ describe("the deck veto knows the nouns the parser knows", () => {
     expect(METRIC_NOUN_RE.gmv.test("gross transaction value")).toBe(true);
   });
 });
+
+describe("the deck path declares its fields once", () => {
+  // The two checks — "is this figure in the deck at all" and "is this metric
+  // stated as an intention" — were two hand-written lists, and they diverged:
+  // seven fields checked, six vetoed, so ltvCacRatio could be a stated goal and
+  // survive. Aligning the contents fixed the instance; one declaration removes
+  // the way it happened.
+  const SRC = fs.readFileSync(path.join(__dirname, "../src/lib/qventure/deckExtract.ts"), "utf8");
+
+  test("both loops read the same table", () => {
+    const rows = (SRC.match(/\{ field: "/g) ?? []).length;
+    const loops = (SRC.match(/for \(const \{ field/g) ?? []).length;
+    expect(rows).toBeGreaterThan(5);
+    expect(loops).toBe(2);
+  });
+
+  test("neither hand-written list came back", () => {
+    expect(SRC).not.toMatch(/RAW_FIGURE_FIELDS|INTENTION_VETO/);
+  });
+
+  test("every numeric field of DeckFinancials is in the table", () => {
+    // The failure this prevents is a field added to the type and to the model
+    // prompt, and to neither check — free to be invented, free to be a goal.
+    const iface = SRC.slice(SRC.indexOf("export interface DeckFinancials"), SRC.indexOf("type GrowthPeriod"));
+    const numeric = [...iface.matchAll(/^\s{2}(\w+): number \| null;/gm)].map((m) => m[1]);
+    expect(numeric.length).toBeGreaterThan(5);
+    for (const f of numeric) expect(SRC).toContain(`{ field: "${f}"`);
+  });
+});

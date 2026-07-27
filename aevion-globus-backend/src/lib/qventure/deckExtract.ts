@@ -221,46 +221,56 @@ export async function extractDeckFields(text: string): Promise<DeckFields> {
     // wrong — and nothing downstream would know. Checked against the figure as
     // the MODEL reported it, before conversion, because a euro deck will not
     // contain the dollar equivalent we derived from it.
-    const RAW_FIGURE_FIELDS: Array<[keyof DeckFinancials, unknown, number | null]> = [
-      ["arrUsd", rawFin.arrUsd, heur.financials.arrUsd],
-      ["grossMarginPct", rawFin.grossMarginPct, heur.financials.grossMarginPct],
-      ["ltvCacRatio", rawFin.ltvCacRatio, heur.financials.ltvCacRatio],
-      ["churnPct", rawFin.churnPct, heur.financials.churnPct],
-      ["customers", rawFin.customers, heur.financials.customers],
-      ["growthPct", rawFin.growthPct, heur.financials.growthPct],
-      ["bottomUpTamUsd", rawFin.bottomUpTamUsd, heur.financials.bottomUpTamUsd],
+    /**
+     * One row per field the model may report, feeding BOTH checks below.
+     *
+     * They used to be two hand-written lists, and they diverged: seven fields
+     * were checked for existing in the deck and six were vetoed for being
+     * intentions, so ltvCacRatio could be a stated goal and survive. Aligning
+     * the contents fixed that instance; declaring them once removes the way it
+     * happened.
+     *
+     *   raw        what the model returned, BEFORE conversion — a euro deck does
+     *              not contain the dollar equivalent we derived from it
+     *   inDeck     what to fall back to when the figure is not in the deck
+     *   metric     which words mean this metric, from the parser's own lists
+     *   parsed     what the deterministic parse found, if anything
+     */
+    const DECK_FIELDS: Array<{
+      field: keyof DeckFinancials;
+      raw: unknown;
+      inDeck: number | null;
+      metric: RegExp;
+      parsed: number | null;
+    }> = [
+      { field: "arrUsd", raw: rawFin.arrUsd, inDeck: heur.financials.arrUsd, metric: METRIC_NOUN_RE.revenue, parsed: banded.revenueUsd },
+      { field: "grossMarginPct", raw: rawFin.grossMarginPct, inDeck: heur.financials.grossMarginPct, metric: METRIC_NOUN_RE.grossMargin, parsed: banded.grossMarginPct },
+      { field: "ltvCacRatio", raw: rawFin.ltvCacRatio, inDeck: heur.financials.ltvCacRatio, metric: METRIC_NOUN_RE.ltvCac, parsed: banded.ltvCacRatio },
+      { field: "churnPct", raw: rawFin.churnPct, inDeck: heur.financials.churnPct, metric: METRIC_NOUN_RE.churn, parsed: banded.churnPct },
+      { field: "customers", raw: rawFin.customers, inDeck: heur.financials.customers, metric: METRIC_NOUN_RE.customers, parsed: banded.customers },
+      { field: "growthPct", raw: rawFin.growthPct, inDeck: heur.financials.growthPct, metric: METRIC_NOUN_RE.growth, parsed: banded.growthPct },
+      { field: "bottomUpTamUsd", raw: rawFin.bottomUpTamUsd, inDeck: heur.financials.bottomUpTamUsd, metric: METRIC_NOUN_RE.tam, parsed: banded.bottomUpTamUsd },
     ];
-    for (const [field, raw, fallback] of RAW_FIGURE_FIELDS) {
+
+    for (const { field, raw, inDeck } of DECK_FIELDS) {
+      // Does the figure appear in the deck at all? A model asked for "only what
+      // the deck states" can still return a number the deck never contains —
+      // computed, remembered, or simply wrong — and nothing downstream knows.
       if (typeof raw === "number" && isFinite(raw) && raw > 0 && !figureAppearsInText(clean, raw)) {
-        (financials[field] as number | null) = fallback;
+        (financials[field] as number | null) = inDeck;
       }
     }
 
-    // The metric regexes come from METRIC_NOUN_RE, built from the same noun
-    // lists the parser matches on. Written out here they were thinner:
-    // /(?:arr|mrr|revenues?)/ against a list that also knows net sales, revenue
-    // from operations and gross written premiums, and
-    // /(?:customers|users|subscribers)/ against nineteen customer nouns. So "we
-    // plan to reach net sales of $10 million" was not seen as a metric stated as
-    // an intention, the veto never fired, and a stated goal survived as a
-    // reported figure.
-    //
-    // ltvCacRatio was absent from this list entirely: checked for existence in
-    // the deck by the loop above and never vetoed. Seven checked, six vetoed.
-    const INTENTION_VETO: Array<[keyof DeckFinancials, RegExp, number | null]> = [
-      ["arrUsd", METRIC_NOUN_RE.revenue, banded.revenueUsd],
-      ["grossMarginPct", METRIC_NOUN_RE.grossMargin, banded.grossMarginPct],
-      ["churnPct", METRIC_NOUN_RE.churn, banded.churnPct],
-      ["customers", METRIC_NOUN_RE.customers, banded.customers],
-      ["growthPct", METRIC_NOUN_RE.growth, banded.growthPct],
-      ["bottomUpTamUsd", METRIC_NOUN_RE.tam, banded.bottomUpTamUsd],
-      ["ltvCacRatio", METRIC_NOUN_RE.ltvCac, banded.ltvCacRatio],
-    ];
-    for (const [field, metric, parsed] of INTENTION_VETO) {
+    for (const { field, metric, parsed } of DECK_FIELDS) {
+      // The deck states the metric as something it intends, and the
+      // deterministic parse therefore has nothing: the model's number is
+      // dropped rather than trusted. Figures the deck states as fact are
+      // untouched, which is the whole reason the model is here.
       if (parsed === null && financials[field] !== null && metricStatedAsIntention(clean, metric)) {
         (financials[field] as number | null) = null;
       }
     }
+
     // The ask is money too: a "€8M seed" is not an $8M seed.
     const askUsd = money(parsed.askUsd, askRaw);
 

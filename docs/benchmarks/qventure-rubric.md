@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 697
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 700
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (697
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (700
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -1022,13 +1022,32 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    reason this was caught before the branch was pushed is that the compiler was
    run deliberately, not because anything failed.
 
+41. **The deck path declares its fields once.** Limit 40 aligned the contents
+   of the two checks — "is this figure in the deck at all" and "is this metric
+   stated as an intention". They were two hand-written lists that had diverged
+   to seven fields and six, which is how `ltvCacRatio` could be a stated goal
+   and survive as a reported figure.
+
+   Aligning contents fixes the instance; one declaration removes the way it
+   happened. Both loops now read the same table, and three assertions hold it:
+   both loops read it, neither old list came back, and **every numeric field of
+   `DeckFinancials` appears in it**. That last one is the guard that matters —
+   the failure it prevents is a field added to the type and to the model prompt
+   and to neither check, free to be invented and free to be a goal. Proven by
+   mutation: removing a row reddens it.
+
+   Seventh duplication of this shape closed today. The tally, because the
+   pattern is more useful than any of the instances: currency tables, money-unit
+   tables, `clauseYear`, twenty-four connector lists, the deck's scale list, the
+   deck's noun regexes, and now the deck's field lists.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 697):
+`tests/qventureDisclosedCorpus.test.ts`, 700):
 
 | Guard | Floor | Measured today |
 |---|---|---|

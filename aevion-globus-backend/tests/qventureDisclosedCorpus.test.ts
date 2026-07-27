@@ -969,3 +969,21 @@ describe("a rate belongs to a period, like every other figure", () => {
     expect(parsePlanSignals("GMV of $4.6B, up 77% year over year. Revenue of $509.5M, up 93% year over year.").growthPct).toBe(93);
   });
 });
+
+describe("the third currency", () => {
+  // Pound (Deliveroo), euro (Adyen), now yen (LINE's 2016 F-1). Each was a real
+  // filing, and the first two each broke something — GBP detected but the noun
+  // unrecognised, EUR lost when the code touched the digits.
+  test("yen written with the symbol and a unit word", () => {
+    const s = parsePlanSignals("Revenues of ¥120,406 million in 2015, up from ¥86,366 million in 2014.");
+    expect(s.currency).toBe("JPY");
+    expect(s.revenueUsd).toBe(toUsd(120_406_000_000, "JPY"));
+  });
+  test("it is converted, not passed through as if it were dollars", () => {
+    const s = parsePlanSignals("Revenues of ¥120,406 million in 2015.");
+    expect(s.revenueUsd).toBeLessThan(120_406_000_000);
+  });
+  test("monthly active users are customers", () => {
+    expect(parsePlanSignals("218 million monthly active users globally in March 2016.").customers).toBe(218_000_000);
+  });
+});

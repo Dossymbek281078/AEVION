@@ -451,6 +451,32 @@ export const CASES: DisclosedCase[] = [
   // ── Outcome: succeeded ────────────────────────────────────────────────────
   {
     outcome: "succeeded",
+    round: "Form F-1, June 2016 (NYSE / Tokyo dual listing)",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1611820/000119312516618753/d728446df1.htm",
+    ],
+    input: {
+      name: "LINE",
+      sector: "consumer",
+      stage: "growth",
+      geography: "JP",
+      askUsd: 1_300_000_000,
+      description:
+        "Mobile messaging platform monetised through stickers, advertising and games rather than subscriptions, with its largest markets in Japan, Taiwan, Thailand and Indonesia.",
+      tractionNotes:
+        "Revenues of ¥120,406 million in 2015, up from ¥86,366 million in 2014. 218 million monthly active users globally in March 2016.",
+    },
+    // The third currency and the first Asian filing: yen figures written with
+    // the ¥ symbol and "million" as the unit word. The conversion is computed
+    // with the engine's own rate, as with the pound and the euro.
+    expect: [
+      { label: "the plan is recognised as quoted in JPY", read: (s) => s.currency === "JPY", expected: true },
+      { label: "revenue ¥120,406M read and converted", read: (s) => s.revenueUsd, ...num(toUsd(120_406_000_000, "JPY")) },
+      { label: "218 million monthly active users read as customers", read: (s) => s.customers, ...num(218_000_000) },
+    ],
+  },
+  {
+    outcome: "succeeded",
     round: "Form S-1, November 2018",
     sources: [
       "https://www.sec.gov/Archives/edgar/data/1682852/000119312518323562/d577473ds1.htm",

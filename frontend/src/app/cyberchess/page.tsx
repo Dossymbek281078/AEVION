@@ -120,6 +120,7 @@ import { computeInsights, type Insights } from "./insights";
 import { themeLabel, puzzleTitle, difficultyLabel } from "./puzzleThemes";
 import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
+import { isPlayerPly, isPlayerIndex } from "./plyOwner";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -3499,7 +3500,7 @@ export default function CyberChessPage(){
       // Opening book hits: count user moves in first 20 plies with small CPL
       // (proxy until openingExplorer integration in F2-phase-2).
       const snap=metricsRef.current.snapshot();
-      const userMovesEarly=snap.filter(m=>m.ply<=20&&(pCol==="w"?m.ply%2===1:m.ply%2===0)).slice(0,10);
+      const userMovesEarly=snap.filter(m=>m.ply<=20&&isPlayerPly(m.ply,pCol)).slice(0,10);
       const openingBookHits=userMovesEarly.filter(m=>m.cpl<40).length;
       const totalTimeMs=tc.ini>0?tc.ini*1000:600000;
       const metrics=metricsRef.current.toGameMetrics(pCol,cpiResult,openingBookHits,totalTimeMs);
@@ -3867,7 +3868,7 @@ export default function CyberChessPage(){
     // Pivotal moments by severity
     const moments:{ply:number;type:string;sev:number}[]=[];
     for(let i=0;i<analysis.length;i++){
-      const a=analysis[i];const isUserMove=userIsWhite?i%2===0:i%2===1;
+      const a=analysis[i];const isUserMove=isPlayerIndex(i,pCol);
       if(a.quality==="blunder")moments.push({ply:i,type:isUserMove?"user_blunder":"ai_blunder",sev:3});
       else if(a.quality==="mistake")moments.push({ply:i,type:isUserMove?"user_mistake":"ai_mistake",sev:2});
       else if(a.quality==="brilliant")moments.push({ply:i,type:isUserMove?"user_brilliant":"ai_brilliant",sev:3});
@@ -6052,15 +6053,20 @@ export default function CyberChessPage(){
             {savedGames.filter(g=>g.analysis&&g.analysis.length>0).length>=3&&(()=>{
               const gms=savedGames.filter(g=>g.analysis&&g.analysis.length>0).slice(0,10).reverse();
               const accs=gms.map(g=>{
-                const myMvs=g.analysis!.filter(m=>g.playerColor==="w"?m.ply%2===0:m.ply%2===1);
-                if(!myMvs.length)return 50;
+                // ply считается с 1, а правило стояло для индекса — график рисовал ходы БОТА
+                const myMvs=g.analysis!.filter(m=>isPlayerPly(m.ply,g.playerColor));
+                if(!myMvs.length)return null;
                 const gr=myMvs.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
                 const go=myMvs.filter(m=>m.quality==="good").length;
                 const ia=myMvs.filter(m=>m.quality==="inacc").length;
                 const mk=myMvs.filter(m=>m.quality==="mistake").length;
                 const bl=myMvs.filter(m=>m.quality==="blunder").length;
                 return Math.round(100*(gr*1+go*0.85+ia*0.6+mk*0.3+bl*0)/myMvs.length);
-              });
+              }).filter((v):v is number=>v!==null);
+              /* Партия без единого разобранного хода игрока раньше давала в график
+                 ровно 50% — выдуманное число, которое ничем не измерено и тянуло
+                 тренд к середине. Теперь такая партия просто не попадает в график. */
+              if(accs.length<3)return null;
               const W2=48,H2=16,pad2=2;
               const mn2=Math.min(...accs),mx2=Math.max(...accs);const rng2=Math.max(mx2-mn2,20);
               const x2=(i:number)=>pad2+(i/(accs.length-1||1))*(W2-pad2*2);
@@ -8193,7 +8199,7 @@ export default function CyberChessPage(){
                 </div>;
               })()}
               {analysis.length>=2&&(()=>{
-                const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
+                const myMoves=analysis.filter((_,i)=>isPlayerIndex(i,pCol));
                 const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
                 if(!myMoves.length)return null;
                 const brilliant=myMoves.filter(m=>m.quality==="brilliant").length;

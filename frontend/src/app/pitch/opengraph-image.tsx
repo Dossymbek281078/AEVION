@@ -58,7 +58,7 @@ export default function PitchOgImage() {
         </div>
 
         <div style={{ display: "flex", gap: 28 }}>
-          <OgStat value="$340B" label="addressable market" />
+          <OgStat value="$340B" label="addressable market (est.)" />
           <OgStat value="≈$9.4M" label="modelled ARR · bottom-up" />
           <OgStat value="$10M" label="returnable advance" />
           <OgStat value="12" label="live MVPs today" />

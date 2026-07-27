@@ -507,7 +507,7 @@ export default function DemoShowcasePage() {
           <span style={{ color: "#475569" }}>·</span>
           <span><strong style={{ color: "#7dd3fc" }}>{MODULE_NODES} modules · {LIVE_MODULES} deployed</strong></span>
           <span style={{ color: "#475569" }}>·</span>
-          <span><strong style={{ color: "#fbbf24" }}>$340B</strong> addressable market</span>
+          <span><strong style={{ color: "#fbbf24" }}>$340B</strong> addressable market (our estimate)</span>
         </div>
 
         <h2

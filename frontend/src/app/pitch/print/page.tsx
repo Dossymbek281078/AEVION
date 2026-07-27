@@ -53,7 +53,7 @@ export default function PitchPrintPage() {
         <p style={{ fontSize: 14, lineHeight: 1.6, color: "#334155", margin: "0 0 14px" }}>{thesis.lead}</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12 }}>
           <Stat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned`} />
-          <Stat value="$340B" unit="addressable market" hint="IP + creators + payments" />
+          <Stat value="$340B" unit="addressable market" hint="our top-down estimate: $180B + $104B + $56B" />
           <Stat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
           <Stat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
         </div>

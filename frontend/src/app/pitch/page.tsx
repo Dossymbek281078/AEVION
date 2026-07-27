@@ -448,7 +448,11 @@ export default function PitchPage() {
               unit="deep MVPs"
               hint={`of ${MODULE_NODES} modules · ${LIVE_MODULES} deployed`}
             />
-            <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
+            <HeroStat
+              value="$340B"
+              unit="addressable market"
+              hint="our top-down estimate: IP $180B + creators $104B + payments $56B"
+            />
             <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
             <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
           </div>

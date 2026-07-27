@@ -80,7 +80,10 @@ type Health = {
 type DilithiumPreview = {
   algo: "ML-DSA-65";
   kid: string;
-  mode: "preview";
+  /** Режим приходит с сервера: "preview" без ключа подписи, "real" — с ним.
+   *  Раньше здесь стоял литерал "preview", и панель проверки печатала это
+   *  слово всегда — то есть врала бы ровно в тот день, когда ключ поставят. */
+  mode: string;
   digest: string;
   valid: boolean | null;
   note: string;
@@ -1446,7 +1449,7 @@ export default function QSignPage() {
                   ) : null}
                   {verifyResult.dilithium ? (
                     <div>
-                      Dilithium-3 (preview):{" "}
+                      Dilithium-3 ({verifyResult.dilithium.mode}):{" "}
                       <strong
                         style={{
                           color:
@@ -1460,8 +1463,8 @@ export default function QSignPage() {
                         {verifyResult.dilithium.valid === null
                           ? "not checked"
                           : verifyResult.dilithium.valid
-                          ? "preview-ok"
-                          : "preview-mismatch"}
+                          ? "ok"
+                          : "mismatch"}
                       </strong>
                     </div>
                   ) : null}

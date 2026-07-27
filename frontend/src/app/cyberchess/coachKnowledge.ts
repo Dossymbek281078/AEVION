@@ -1,3 +1,4 @@
+import { readStored } from "./persist";
 /* ══════════════════════════════════════════════════════════════════════
    AEVION CyberChess — Coach Knowledge Base v1
 
@@ -1702,10 +1703,7 @@ const REMINDER_KEY = "aevion_coach_reminders_v1";
 
 export function ldReminderState(): ReminderState {
   try {
-    const raw = localStorage.getItem(REMINDER_KEY);
-    if (!raw) return { v: 1, entries: {} };
-    const r = JSON.parse(raw);
-    if (r?.v === 1) return r;
+    return readStored(localStorage.getItem(REMINDER_KEY), { v: 1, entries: {} } as ReminderState);
   } catch {}
   return { v: 1, entries: {} };
 }

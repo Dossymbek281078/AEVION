@@ -2,6 +2,8 @@
 // с brilliancy ходом. Игрок должен его найти. Streak + ranking + Chessy.
 // Детерминистично выбирается из daysSinceEpoch — у всех один и тот же daily.
 
+import { readStored } from "./persist";
+
 const HUNT_KEY = "aevion_brilliancy_v1";
 
 export type BrilliancyHunt = {
@@ -171,8 +173,22 @@ export type BrilliancyState = {
   bestStreak: number;
 };
 
+/* База для наложения при чтении. Само по себе не возвращается: отсутствие записи
+   отдаёт null — «сегодняшнего состояния ещё нет», на этом держится todayHunt. */
+const HUNT_DEFAULT: BrilliancyState = {
+  v: 1, date: "", idx: 0, attempts: 0, solved: false,
+  hintShown: false, givenUp: false, history: [], streak: 0, bestStreak: 0,
+};
+
 export function ldHunt(): BrilliancyState | null {
-  try { const s = localStorage.getItem(HUNT_KEY); if (!s) return null; const r = JSON.parse(s); return r?.v === 1 ? r : null } catch { return null }
+  /* Незнакомая версия возвращала null, а null здесь означает «начать заново» —
+     то есть поднятие версии стёрло бы и серию, и РЕКОРД серии. Состояние выглядит
+     дневным, но bestStreak в нём накопительный. */
+  try {
+    const s = localStorage.getItem(HUNT_KEY);
+    if (!s) return null;
+    return readStored(s, HUNT_DEFAULT);
+  } catch { return null }
 }
 export function svHunt(s: BrilliancyState) {
   try { localStorage.setItem(HUNT_KEY, JSON.stringify(s)) } catch {}

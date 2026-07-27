@@ -1,3 +1,4 @@
+import { readStored } from "./persist";
 // AI Rival — персонализированный соперник с памятью.
 // Постоянный профиль в localStorage, обновляется после каждой партии.
 // Адаптируется под стиль игрока: рейтинг растёт за твоим, предпочитает
@@ -32,13 +33,21 @@ const RIVAL_NAMES = [
   "Наталья", "Сергей", "Анна", "Рустам", "Светлана", "Олег",
 ];
 
+/* База для наложения при чтении. Сам по себе НЕ возвращается: отсутствие записи
+   отдаёт null (соперника ещё нет). Нужен, чтобы поле, добавленное в профиль позже,
+   у существующих игроков приходило со значением, а не как undefined. */
+const RIVAL_DEFAULT: RivalProfile = {
+  v: 1, name: "", rating: 800, birthTs: 0,
+  encounters: 0, wins: 0, losses: 0, draws: 0, history: [],
+};
+
 export function ldRival(): RivalProfile | null {
   try {
     const s = typeof window !== "undefined" ? localStorage.getItem(RIVAL_KEY) : null;
+    // «нет записи» остаётся null — это осмысленное состояние (соперника ещё нет).
+    // А вот незнакомая версия больше не выбрасывает уже накопленный профиль.
     if (!s) return null;
-    const r = JSON.parse(s);
-    if (!r || r.v !== 1) return null;
-    return r as RivalProfile;
+    return readStored(s, RIVAL_DEFAULT);
   } catch { return null }
 }
 

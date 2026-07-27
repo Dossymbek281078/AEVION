@@ -1,3 +1,4 @@
+import { readStored } from "./persist";
 // Ghost Duel — дуэль с прошлым собой.
 // Берётся любая сохранённая партия. Призрак автоматически воспроизводит
 // её ходы как противник (или как ты сам, если меняемся ролями).
@@ -58,10 +59,8 @@ const STATS_DEFAULT: GhostDuelStats = {
 export function ldGhostDuelStats(): GhostDuelStats {
   try {
     const s = typeof window !== "undefined" ? localStorage.getItem(GHOST_DUEL_KEY) : null;
-    if (!s) return { ...STATS_DEFAULT };
-    const r = JSON.parse(s);
-    if (!r || r.v !== 1) return { ...STATS_DEFAULT };
-    return { ...STATS_DEFAULT, ...r };
+    // версия больше не обнуляет статистику — см. persist.readStored
+    return readStored(s, STATS_DEFAULT);
   } catch { return { ...STATS_DEFAULT } }
 }
 

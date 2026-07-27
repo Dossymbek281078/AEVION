@@ -3,6 +3,7 @@
    Пользователь может: 1) пройти replay, 2) угадывать ход мастера. */
 
 import { Chess } from "chess.js";
+import { readStored } from "./persist";
 
 export type MasterGame = {
   id: string;
@@ -366,10 +367,9 @@ const DEFAULT_PROGRESS: MasterProgress = { v: 1, byId: {} };
 
 export function loadProgress(): MasterProgress {
   try {
-    const s = localStorage.getItem(PK);
-    if (!s) return { ...DEFAULT_PROGRESS };
-    const r = JSON.parse(s);
-    return r?.v === 1 ? r : { ...DEFAULT_PROGRESS };
+    // было двойное дно: незнакомая версия ОБНУЛЯЛА прогресс, а знакомая
+    // возвращала объект как есть — поле, добавленное позже, приходило undefined
+    return readStored(localStorage.getItem(PK), DEFAULT_PROGRESS);
   } catch {
     return { ...DEFAULT_PROGRESS };
   }

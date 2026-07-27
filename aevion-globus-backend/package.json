@@ -68,7 +68,7 @@
   "type": "commonjs",
   "dependencies": {
     "@noble/post-quantum": "^0.6.1",
-    "@prisma/client": "^7.2.0",
+    "@prisma/client": "^7.9.0",
     "@sentry/node": "^10.67.0",
     "@types/bcrypt": "^6.0.0",
     "@types/geoip-lite": "^1.4.4",

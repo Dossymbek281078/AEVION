@@ -139,4 +139,21 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     await page.getByTitle("Rename file").first().click();
     await expect(page.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 });
   });
+
+  test("a file can be opened from the keyboard", async ({ page }) => {
+    // The rows were plain divs: nothing on the page could be reached by Tab,
+    // so opening a file — the first thing anyone does in the IDE — was
+    // mouse-only.
+    await mockBackend(page);
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const row = page.getByRole("button", { name: "Открыть src/Timer.jsx" });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+
+    await row.focus();
+    await expect(row).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    // Opening a file marks its row as the pressed one.
+    await expect(row).toHaveAttribute("aria-pressed", "true", { timeout: 10_000 });
+  });
 });

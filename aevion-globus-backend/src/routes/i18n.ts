@@ -168,6 +168,13 @@ async function llmBatch(texts: string[], langName: string): Promise<string[]> {
       const res = await callProviderResilient(attempt.id, messages, attempt.model, 0);
       const parsed = parseStringArray(res.reply, texts.length);
       if (!parsed) throw new Error("parse/length mismatch");
+      // Слабая модель нередко «переводит», просто вернув массив как есть —
+      // и проверка длины это пропускает. Поймано вживую 27.07.2026: провайдер
+      // отдал ровно тот же массив, что получил, и в интерфейс поехал бы
+      // непереведённый текст с видом успешного перевода. Отдельные строки
+      // совпадать МОГУТ и должны (бренды, числа, «OK»), поэтому отказ только
+      // когда совпало ВСЁ и строк больше одной.
+      if (isVerbatimEcho(parsed, texts)) throw new Error("echoed input verbatim");
       return parsed;
     } catch (e) {
       lastErr = e;
@@ -192,6 +199,21 @@ async function llmBatch(texts: string[], langName: string): Promise<string[]> {
  * Возвращает null вместо исключения, чтобы вызывающий мог просто взять
  * следующего провайдера.
  */
+/**
+ * Провайдер вернул ровно то, что получил.
+ *
+ * Слабая модель нередко «переводит», просто повторив массив, и проверка длины
+ * это пропускает — в интерфейс поехал бы непереведённый текст с видом успешного
+ * перевода. Поймано вживую 27.07.2026 на stub-провайдере.
+ *
+ * Отдельные строки совпадать МОГУТ и должны: бренды, числа, «OK». Поэтому отказ
+ * только когда совпало всё и строк больше одной — на батче из одной строки
+ * «AEVION» правило молчит.
+ */
+export function isVerbatimEcho(parsed: string[], input: string[]): boolean {
+  return input.length > 1 && parsed.every((v, i) => v === input[i]);
+}
+
 export function parseStringArray(reply: string, expectedLength: number): string[] | null {
   let arr: unknown = null;
   try {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStringArray } from "../src/routes/i18n";
+import { isVerbatimEcho, parseStringArray } from "../src/routes/i18n";
 
 /**
  * Перевод UI-строк теперь идёт сначала бесплатным флотом и только потом платным
@@ -39,5 +39,23 @@ describe("parseStringArray — фильтр качества перевода", 
 
   it("объект вместо массива — отказ", () => {
     expect(parseStringArray('{"0":"Home","1":"Pricing"}', 2)).toBeNull();
+  });
+});
+
+describe("isVerbatimEcho — «перевод», который ничего не перевёл", () => {
+  it("вернули вход целиком — это не перевод", () => {
+    expect(isVerbatimEcho(["Главная", "Цены"], ["Главная", "Цены"])).toBe(true);
+  });
+
+  it("настоящий перевод проходит", () => {
+    expect(isVerbatimEcho(["Home", "Pricing"], ["Главная", "Цены"])).toBe(false);
+  });
+
+  it("часть строк совпадает — это нормально: бренды и числа не переводятся", () => {
+    expect(isVerbatimEcho(["AEVION", "Pricing"], ["AEVION", "Цены"])).toBe(false);
+  });
+
+  it("на одной строке правило молчит — «AEVION» в переводе и должен остаться собой", () => {
+    expect(isVerbatimEcho(["AEVION"], ["AEVION"])).toBe(false);
   });
 });

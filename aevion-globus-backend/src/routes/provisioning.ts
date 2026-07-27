@@ -51,7 +51,15 @@ export interface Subscription {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  /** Платёжный канал: gumroad / lemonsqueezy / … — КТО списал деньги. */
   source?: string;
+  /**
+   * Источник трафика: instagram / facebook / … — ОТКУДА пришёл человек.
+   * Отдельно от source: покупка через LemonSqueezy из Instagram имеет
+   * source="lemonsqueezy" и channel="instagram", и путать их нельзя —
+   * первый отвечает «через кого деньги», второй «за что платить рекламой».
+   */
+  channel?: string;
 }
 
 function ensureDir() {
@@ -303,6 +311,8 @@ export async function provisionSubscription(input: {
   stripeSessionId?: string;
   paddleTransactionId?: string;
   source?: string;
+  /** Источник трафика (instagram / facebook / …), если метка доехала до оплаты. */
+  channel?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
@@ -322,6 +332,7 @@ export async function provisionSubscription(input: {
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
     source: input.source,
+    channel: input.channel,
   };
 
   writeSubscription(subscription);

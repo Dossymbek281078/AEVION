@@ -35,6 +35,9 @@ interface GumroadSale {
 interface GumroadRecent {
   sales: GumroadSale[];
   byApp: Record<string, { count: number; totalUsd: number }>;
+  /** Разрез по ИСТОЧНИКУ ТРАФИКА (метка ?c= со страницы /go), не по платёжке.
+   *  Продажи без метки приходят под ключом "unattributed". */
+  bySource?: Record<string, { count: number; totalUsd: number }>;
   stub?: boolean;
   message?: string;
 }
@@ -233,6 +236,21 @@ export default function RevenuePage() {
   for (const s of (lsRecent?.sales ?? []).filter((sale) => !sale.refunded)) {
     addByApp(s.appId, 1, s.amountUsd);
   }
+
+  // Источники: размеченные вперёд и по убыванию суммы, «без метки» всегда последним —
+  // он почти всегда крупнейший и, стоя первым, оттеснял бы то, ради чего блок нужен.
+  const sourceEntries = Object.entries(recent?.bySource ?? {});
+  const sourceRows = [
+    ...sourceEntries.filter(([k]) => k !== "unattributed").sort((a, b) => b[1].totalUsd - a[1].totalUsd),
+    ...sourceEntries.filter(([k]) => k === "unattributed"),
+  ];
+  const attributed = sourceEntries.filter(([k]) => k !== "unattributed");
+  const attributedUsd = attributed.reduce((sum, [, d]) => sum + d.totalUsd, 0);
+  // Видимость блока — по ЧИСЛУ размеченных продаж, а не по сумме: бесплатный лид-магнит
+  // с меткой даёт totalUsd = 0, и условие «есть выручка» спрятало бы факт, что канал
+  // вообще приводит людей. Сумма нужна только для долей ниже.
+  const attributedCount = attributed.reduce((sum, [, d]) => sum + d.count, 0);
+  const unattributedUsd = recent?.bySource?.unattributed?.totalUsd ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -443,6 +461,42 @@ export default function RevenuePage() {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Источники трафика — ради этого и заводились метки ?c= на /go.
+            Показываем ТОЛЬКО когда есть хоть одна РАЗМЕЧЕННАЯ продажа: пока весь оборот
+            без метки, блок сообщал бы одно «источник неизвестен» и занимал место.
+            Он появится сам, когда первая продажа придёт с /go?c=. Долю считаем от
+            размеченных, а не от всех — иначе доля канала падала бы просто потому,
+            что много старых продаж пришло без метки. */}
+        {attributedCount > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+              Источники трафика
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {sourceRows.map(([source, data]) => (
+                <div key={source} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="text-xs text-gray-400 mb-1">
+                    {source === "unattributed" ? "без метки" : source}
+                  </div>
+                  <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
+                  <div className="text-xs text-gray-500">
+                    {data.count} продаж
+                    {source !== "unattributed" && attributedUsd > 0 && (
+                      <> · {Math.round((data.totalUsd / attributedUsd) * 100)}% размеченных</>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {unattributedUsd > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                Без метки — продажи до введения атрибуции и прямые заходы мимо /go.
+                Доли считаются от размеченных, поэтому эта сумма их не размывает.
+              </p>
+            )}
           </section>
         )}
 

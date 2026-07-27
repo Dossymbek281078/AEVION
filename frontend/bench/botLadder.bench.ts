@@ -114,7 +114,13 @@ describe("bot ladder", () => {
   it("does the advertised Elo gap show up in actual play?", async () => {
     const NAMES = ["Beginner 400", "Casual 800", "Club 1200"];
     const CLAIMED = [400, 800, 1200];
-    const GAMES = 10;
+    /* Число партий на пару. Десять — это смоук: замер 2026-07-27 дал разрыв 191 Эло с
+       интервалом −9..1200, то есть выборка не отличает уровни друг от друга (bench сам об
+       этом пишет ниже). Чтобы получить настоящий ответ, запускать осознанно и надолго:
+         BENCH_GAMES=200 npx vitest run --config vitest.bench.config.ts
+       Ориентир по времени: на этой машине 10 партий одной пары заняли ~30 минут, так что
+       200 — это ночной прогон, не «пара минут». */
+    const GAMES = Math.max(2, Number(process.env.BENCH_GAMES) || 10);
     writeFileSync(OUT, "");
     process.stdout.write(`\n[bot-ladder] writing report to ${OUT}\n`);
     say(`${GAMES} games per pairing, max ${MAX_PLY} plies, adjudicated at ${ADJUDICATE_CP}cp.`);
@@ -136,5 +142,6 @@ describe("bot ladder", () => {
     }
     say(`A ${GAMES}-game match is mostly noise: at a 85% score the 95% range spans`);
     say(`roughly 100..1200 Elo. Treat a run as a smoke test, not as a rating.`);
+    say(`Raise the sample deliberately when you need an answer: BENCH_GAMES=200 (hours, not minutes).`);
   }, 3_000_000);
 });

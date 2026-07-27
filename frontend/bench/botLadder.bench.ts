@@ -125,7 +125,16 @@ describe("bot ladder", () => {
     process.stdout.write(`\n[bot-ladder] writing report to ${OUT}\n`);
     say(`${GAMES} games per pairing, max ${MAX_PLY} plies, adjudicated at ${ADJUDICATE_CP}cp.`);
     say(`Internal spacing only — not calibration to human Elo.\n`);
-    for (const [a, b] of [[1, 0], [2, 1], [2, 0]] as [number, number][]) {
+    /* Какие пары гонять. Полный набор — три пары, но когда проверяешь конкретную
+       ступень, остальные только жгут время: замер 2026-07-27 показал разрыв 191 Эло у
+       пары Casual/Beginner при заявленных 400 (у Club/Casual — 382, то есть в цель).
+       Прогнать только подозрительную: BENCH_PAIRS=1-0 BENCH_GAMES=40 */
+    const ALL_PAIRS: [number, number][] = [[1, 0], [2, 1], [2, 0]];
+    const wanted = (process.env.BENCH_PAIRS || "").trim();
+    const PAIRS = wanted
+      ? wanted.split(",").map((t) => t.split("-").map(Number) as [number, number])
+      : ALL_PAIRS;
+    for (const [a, b] of PAIRS) {
       const r = await match(a, b, GAMES);
       const score = r.pts / GAMES;
       const gap = CLAIMED[a] - CLAIMED[b];

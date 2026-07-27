@@ -38,12 +38,30 @@ function firstQuantity(raw) {
     if (unit === "ft") return Math.round(n * 0.3048 * 10) / 10;
     return null;
   }
-  const plain = /^\s*([\d.,]+)\s*m\b/.exec(raw);
+  // ｍ is the FULL-WIDTH letter (U+FF4D), and Japanese articles use it freely:
+  // 新宿三井ビルディング publishes `高さ = 223.6ｍ`. Matching only ASCII `m`
+  // silently reads no height at all — the article looks empty rather than
+  // unparsed, which is the failure this module is supposed to make loud.
+  const plain = /^\s*([\d.,]+)\s*[mｍ]/.exec(raw);
   if (plain) {
     const n = Number(plain[1].replace(/,/g, ""));
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+/**
+ * A Japanese height field often states two figures in words rather than putting
+ * a number first: `高さ = 軒高 146.55 m、最高部 150.75 m` (eave / highest point).
+ * 最高部 is what an aircraft clears; 軒高 is the roof deck.
+ */
+const JA_PEAK = /最高部[^\d]{0,4}([\d.,]+)\s*[mｍ]/;
+const JA_EAVE = /軒高[^\d]{0,4}([\d.,]+)\s*[mｍ]/;
+function labelledQuantity(raw, re) {
+  const m = re.exec(raw);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 const FIELD = {
@@ -83,8 +101,15 @@ export function parseInfoboxHeights(wikitext) {
   for (const [key, re] of Object.entries(FIELD)) {
     const m = re.exec(wikitext);
     if (!m) continue;
-    const v = firstQuantity(m[1]);
+    // A Japanese 高さ line may carry both figures in words instead of leading
+    // with a number: prefer 最高部 for the height, and let 軒高 fill the roof.
+    const peak = key === "height" ? labelledQuantity(m[1], JA_PEAK) : null;
+    const v = peak ?? firstQuantity(m[1]);
     if (v !== null && v > 0) out[key] = v;
+    if (key === "height" && out.roof === undefined) {
+      const eave = labelledQuantity(m[1], JA_EAVE);
+      if (eave !== null) out.roof = eave;
+    }
   }
   if (out.roof === undefined) {
     const eave = EAVE.exec(wikitext);

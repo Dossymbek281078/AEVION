@@ -170,3 +170,24 @@ describe("японская карточка — иначе аудит Токио
     expect(compareTagToArticle(133, parseInfoboxHeights(TOCHO_JA)).verdict).toBe("under");
   });
 });
+
+describe("японские записи высоты, на которых парсер молчал", () => {
+  it("reads a full-width ｍ — 新宿三井ビルディング publishes 223.6ｍ", () => {
+    // U+FF4D, not ASCII m. Matching only ASCII made the article look empty
+    // rather than unparsed, which is exactly the silence this module fights.
+    expect(parseInfoboxHeights("|高さ = 223.6ｍ<ref name=\"m\" />").height).toBeCloseTo(223.6, 1);
+  });
+
+  it("reads figures stated in WORDS, not leading with a number", () => {
+    // 小田急サザンタワー: `|高さ = 軒高 146.55 m、最高部 150.75 m`.
+    // 最高部 is what an aircraft clears; 軒高 is the roof deck.
+    const box = parseInfoboxHeights("|高さ = 軒高 146.55 m、最高部 150.75 m");
+    expect(box.height).toBeCloseTo(150.75, 2);
+    expect(box.roof).toBeCloseTo(146.55, 2);
+  });
+
+  it("flags Odakyu Southern Tower, tagged 84 m in OSM, as understated", () => {
+    const box = parseInfoboxHeights("|高さ = 軒高 146.55 m、最高部 150.75 m");
+    expect(compareTagToArticle(84, box).verdict).toBe("under");
+  });
+});

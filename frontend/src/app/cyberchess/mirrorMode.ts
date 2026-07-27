@@ -3,6 +3,8 @@
  * Pure TypeScript, no React dependencies.
  */
 
+import { gameResultOf } from "./gameResult";
+
 export type PlayerProfile = {
   avgCpl: number;           // average centipawn loss
   estimatedElo: number;     // ~800-2400
@@ -25,14 +27,17 @@ export type SavedGameForMirror = {
 export function buildPlayerProfile(games: SavedGameForMirror[]): PlayerProfile {
   const recent = games.slice(0, 20);
 
-  // 1. Win rate → estimated ELO
+  /* 1. Доля побед → оценка ELO.
+     Раньше здесь стоял ТРЕТИЙ независимый разбор результата со своим набором подстрок —
+     и он не знал ни одной реальной строки приложения. Проверено прямым прогоном:
+     «Checkmate! You win! 🏆» не проходил (`r === "you win"` — точное равенство),
+     «AI timed out — you win!» тоже. Значит wins всегда 0, winRate 0, оценка ELO всегда
+     минимальные 800, глубина 4 — зеркальный режим у ВСЕХ был прижат к слабейшей
+     настройке, хотя он ровно про повторение силы игрока.
+     Классификатор один на проект — тот же, что в insights.ts. */
   let wins = 0;
   for (const g of recent) {
-    const r = (g.result || "").toLowerCase();
-    const isWhiteWin = r.includes("1-0") || r === "win" || r === "you win" || r.includes("white wins");
-    const isBlackWin = r.includes("0-1") || r.includes("black wins");
-    if (g.playerColor === "w" && isWhiteWin) wins++;
-    else if (g.playerColor === "b" && isBlackWin) wins++;
+    if (gameResultOf(g.result || "") === "W") wins++;
   }
   const winRate = recent.length > 0 ? wins / recent.length : 0.3;
   const estimatedElo = Math.round(Math.min(2400, Math.max(800, 800 + winRate * 1200)));

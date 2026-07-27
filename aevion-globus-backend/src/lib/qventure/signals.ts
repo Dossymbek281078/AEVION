@@ -248,6 +248,33 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
 const NUM = NUMBER_PATTERN;
 /**
+ * Every name a plan gives the top line. Module-scoped on purpose: the revenue
+ * parser and the contradiction check below must read the SAME set, and they
+ * had already drifted — the check knew only "$5M ARR" and never the
+ * "Revenue of $5M" form the parser has supported all along, so a plan stating
+ * two different revenue figures in the ordinary phrasing raised nothing.
+ */
+const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
+/**
+ * Forward-looking INTENT, not a noun. A plan that says it TARGETS $20M ARR
+ * next year has not earned $20M, and the revenue parser read it as if it had —
+ * an aspiration scored as achieved traction, always in the plan's favour. The
+ * contradiction check below already knew this test; the parser never asked it.
+ */
+const FORWARD = /\b(target|targets|targeting|goal|expects?|expected|expecting|forecasts?|forecasting|projected|projection|projections|planned|planning|plans to|plan to|aims? to|intends? to|will (?:reach|hit|grow|be)|by (?:year[- ]end|the end of|20\d\d)|next year|run[- ]rate exit|ambition)\b/;
+
+/**
+ * Is the figure at `at` sitting behind forward-looking intent — in ITS OWN
+ * clause? The window must stop at the previous sentence, or "we target $20M
+ * next year. Revenue of $5M today." suppresses the $5M as well, which trades
+ * one wrong reading for another.
+ */
+function forwardLooking(text: string, at: number): boolean {
+  const before = text.slice(Math.max(0, at - 90), at);
+  const clause = before.slice(Math.max(before.lastIndexOf("."), before.lastIndexOf(";")) + 1);
+  return FORWARD.test(clause);
+}
+/**
  * A level stated after a direction verb: "churn fell to 3%", "retention
  * declined to 85%", "margin improved to 62%", "churn improved from 8% to 3%".
  *
@@ -308,9 +335,23 @@ export function parsePlanSignals(text: string): PlanSignals {
   // singular-only pattern matched "revenue" inside "revenues" and then failed on
   // the trailing "s", so the figure was dropped entirely. "Net sales" is the
   // same disclosure again under the name consumer-goods filings use.
-  const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues?|net sales|sales`;
-  const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  // Skip any figure sitting behind forward-looking intent: "we target $20M ARR
+  // next year" is a plan, not a disclosure, and reading it as current revenue
+  // hands the deck credit for money it has not made.
+  const notForward = (m: RegExpMatchArray | null): RegExpMatchArray | null => {
+    if (!m) return null;
+    const at = m.index ?? 0;
+    return forwardLooking(t, at) ? null : m;
+  };
+  const firstStated = (pattern: string): RegExpMatchArray | null => {
+    for (const m of t.matchAll(new RegExp(pattern, "gi"))) {
+      const kept = notForward(m as RegExpMatchArray);
+      if (kept) return kept;
+    }
+    return null;
+  };
+  const arr = firstStated(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`)
+    || firstStated(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`);
   if (arr) {
     // group order differs between the two alternatives; detect which matched
     const hasLeadingNum = startsWithFigure(arr[0]);
@@ -597,7 +638,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // carries a currency symbol.
   const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
-  const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|sellers|tenants`;
+  const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
   const cust = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
@@ -713,16 +754,17 @@ function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCur
   // Forward INTENT, not the noun. "in this plan:" must not silence the check —
   // the smoke run caught exactly that: a bare "plan" swallowed a real
   // contradiction because the sentence happened to use the word.
-  const FORWARD = /\b(target|targets|targeting|goal|expects?|expected|expecting|forecasts?|forecasting|projected|projection|projections|planned|planning|plans to|plan to|aims? to|intends? to|will (?:reach|hit|grow|be)|by (?:year[- ]end|the end of|20\d\d)|next year|run[- ]rate exit|ambition)\b/;
-  const re = new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(arr|mrr|in revenue|revenue|recurring revenue)`, "gi");
+  const figureFirst = new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`, "gi");
+  const nameFirst = new RegExp(String.raw`(?:net\s*|total\s*)?(?:${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "gi");
   const seen = new Set<number>();
   const stated: number[] = [];
-  for (const m of t.matchAll(re)) {
+  for (const m of [...t.matchAll(figureFirst), ...t.matchAll(nameFirst)]) {
     const at = m.index ?? 0;
-    if (FORWARD.test(t.slice(Math.max(0, at - 60), at))) continue;
+    if (forwardLooking(t, at)) continue;
     const val = moneyUsd(t, m as RegExpMatchArray, m[1], m[2], planCurrency);
     if (!val || val <= 0) continue;
-    const annual = /mrr/i.test(m[3] || "") ? val * 12 : val;
+    const noun = [m[3], m[1]].find((x) => typeof x === "string" && !/^[\d.,]/.test(x)) ?? "";
+    const annual = /mrr/i.test(noun) ? val * 12 : val;
     const key = Math.round(annual);
     if (seen.has(key)) continue;
     seen.add(key);

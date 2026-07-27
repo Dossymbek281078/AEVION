@@ -417,7 +417,68 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form S-1, June 2020",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1691421/000104746920003846/a2241899zs-1a.htm",
+      "https://medium.com/thomvest-ventures/unpacking-lemonades-s-1-filing-7510d7826eae",
+      "https://iansbnr.com/the-definitive-break-down-of-the-lemonade-s1/",
+    ],
+    input: {
+      name: "Lemonade",
+      sector: "fintech",
+      stage: "growth",
+      geography: "US",
+      askUsd: 300_000_000,
+      description:
+        "Renters and homeowners insurance sold entirely through an app, underwriting and claims handled by the company's own models with reinsurance carrying most of the risk.",
+      tractionNotes:
+        "In-force premium of $116M in 2019, up from $47M in 2018 and $9M in 2017. In-force premium of $133M as of 31 March 2020. 730,000 policyholders as of 31 March 2020.",
+    },
+    // An insurer's headline number is not revenue and its customers are not
+    // called customers. Neither vocabulary existed in the parser.
+    expect: [
+      // The filing states two in-force premium figures — $116M for 2019 and
+      // $133M as of Q1 2020. The engine takes the first stated, and the gap
+      // (14.7%) falls under the 20% threshold that treats a difference as
+      // rounding rather than a contradiction, so nothing is flagged. Whether a
+      // screen should prefer the MOST RECENT disclosure is a real open question,
+      // recorded in the rubric doc rather than settled here by fixture.
+      { label: "in-force premium read as revenue (first stated)", read: (s) => s.revenueUsd, ...num(116_000_000) },
+      { label: "730,000 policyholders read as customers", read: (s) => s.customers, ...num(730_000) },
+    ],
+  },
+
   // ── Outcome: succeeded ────────────────────────────────────────────────────
+  {
+    outcome: "succeeded",
+    round: "Form F-1 / 424(b)(4), September 2014",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1577552/000119312514347620/d709111d424b4.htm",
+    ],
+    input: {
+      name: "Alibaba Group",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "CN",
+      askUsd: 21_800_000_000,
+      description:
+        "Online marketplaces connecting Chinese consumers, merchants and wholesalers, monetised through advertising and commission rather than by taking inventory.",
+      tractionNotes:
+        "Revenue of RMB52,504 million in the fiscal year ended 31 March 2014, up 52.1% from RMB34,517 million. GMV of RMB1,833 billion across the China retail marketplaces in the twelve months ended 30 June 2014, from 279 million active buyers and 8.5 million active sellers.",
+    },
+    // The third non-USD filing and the first in yuan. As with Deliveroo and
+    // Adyen the conversion is computed with the engine's own rate, so the
+    // corpus does not redden when the FX table is refreshed.
+    expect: [
+      { label: "the plan is recognised as quoted in CNY", read: (s) => s.currency === "CNY", expected: true },
+      { label: "revenue RMB52,504M read and converted", read: (s) => s.revenueUsd, ...num(toUsd(52_504_000_000, "CNY")) },
+      { label: "growth 52.1% YoY, attributed to revenue", read: (s) => s.growthPct, ...num(52.1) },
+      { label: "GMV RMB1,833bn read and converted", read: (s) => s.gmvUsd, ...num(toUsd(1_833_000_000_000, "CNY")) },
+      { label: "279 million active buyers read as customers", read: (s) => s.customers, ...num(279_000_000) },
+    ],
+  },
   {
     outcome: "succeeded",
     round: "IPO prospectus, Euronext Amsterdam, June 2018",

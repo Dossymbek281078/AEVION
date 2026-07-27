@@ -51,24 +51,24 @@ export const RATES_SOURCE = "open.er-api.com";
  * the first entry whose pattern is present in the window wins.
  */
 const MARKERS: Array<[MoneyCurrency, RegExp]> = [
-  ["CAD", /\bcad\b|c\$|\bcanadian dollars?\b/i],
-  ["AUD", /\baud\b|a\$|\baustralian dollars?\b/i],
-  ["SGD", /\bsgd\b|s\$|\bsingapore dollars?\b/i],
-  ["EUR", /€|\beur\b|\beuros?\b|\bевро\b/i],
-  ["GBP", /£|\bgbp\b|\bpounds? sterling\b|\bquid\b/i],
-  ["KZT", /₸|\bkzt\b|\btenge\b|\bтенге\b|\bтг\b/i],
-  ["RUB", /₽|\brub\b|\broubles?\b|\brubles?\b|\bрубл|\bруб\b/i],
-  ["JPY", /¥|\bjpy\b|\byen\b/i],
-  ["CNY", /\bcny\b|\brmb\b|\byuan\b/i],
-  ["INR", /₹|\binr\b|\brupees?\b/i],
-  ["CHF", /\bchf\b|\bswiss francs?\b/i],
-  ["SEK", /\bsek\b|\bswedish krona\b/i],
-  ["AED", /\baed\b|\bdirhams?\b/i],
-  ["BRL", /\bbrl\b|r\$|\breais\b|\breal\b/i],
-  ["TRY", /\btry\b|\blira\b|₺/i],
-  ["ILS", /₪|\bils\b|\bshekels?\b/i],
-  ["PLN", /\bpln\b|\bzloty\b|\bzł/i],
-  ["USD", /\$|\busd\b|\bdollars?\b/i],
+  ["CAD", /\bcad(?![a-z])|c\$|\bcanadian dollars?\b/i],
+  ["AUD", /\baud(?![a-z])|a\$|\baustralian dollars?\b/i],
+  ["SGD", /\bsgd(?![a-z])|s\$|\bsingapore dollars?\b/i],
+  ["EUR", /€|\beur(?![a-z])|\beuros?\b|\bевро\b/i],
+  ["GBP", /£|\bgbp(?![a-z])|\bpounds? sterling\b|\bquid\b/i],
+  ["KZT", /₸|\bkzt(?![a-z])|\btenge\b|\bтенге\b|\bтг\b/i],
+  ["RUB", /₽|\brub(?![a-z])|\broubles?\b|\brubles?\b|\bрубл|\bруб\b/i],
+  ["JPY", /¥|\bjpy(?![a-z])|\byen\b/i],
+  ["CNY", /\bcny(?![a-z])|\brmb(?![a-z])|\byuan\b/i],
+  ["INR", /₹|\binr(?![a-z])|\brupees?\b/i],
+  ["CHF", /\bchf(?![a-z])|\bswiss francs?\b/i],
+  ["SEK", /\bsek(?![a-z])|\bswedish krona\b/i],
+  ["AED", /\baed(?![a-z])|\bdirhams?\b/i],
+  ["BRL", /\bbrl(?![a-z])|r\$|\breais\b|\breal\b/i],
+  ["TRY", /\btry(?![a-z])|\blira\b|₺/i],
+  ["ILS", /₪|\bils(?![a-z])|\bshekels?\b/i],
+  ["PLN", /\bpln(?![a-z])|\bzloty\b|\bzł/i],
+  ["USD", /\$|\busd(?![a-z])|\bdollars?\b/i],
 ];
 
 /**
@@ -76,7 +76,7 @@ const MARKERS: Array<[MoneyCurrency, RegExp]> = [
  * so "€3M ARR" and "KZT 450 млн" match the same money patterns "$3M" does.
  */
 export const CURRENCY_PREFIX_PATTERN =
-  String.raw`(?:[$€£₸₽¥₹₪₺]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln)\b)?\s*`;
+  String.raw`(?:[$€£₸₽¥₹₪₺]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|rmb|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln)(?![a-z]))?\s*`;
 
 /**
  * Find the currency a figure is quoted in, given a small text window around it.

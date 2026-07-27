@@ -525,3 +525,57 @@ describe("a growth rate knows what grew", () => {
     expect(parsePlanSignals("Processed volume of $108B in 2017.").gmvUsd).toBe(108_000_000_000);
   });
 });
+
+describe("filings that are not American, not software, and not yet true", () => {
+  // Three families found by adding an insurer, a Chinese marketplace and a
+  // European payments company to the corpus.
+
+  test("a currency code written against the digits still marks the currency", () => {
+    // "RMB52,504 million" — the code patterns required a word boundary AFTER
+    // themselves, which a digit does not provide, so the marker vanished and
+    // the figure was read as dollars or not at all. Same for USD8,463, EUR218.
+    const rmb = parsePlanSignals("Revenue of RMB52,504 million in the fiscal year ended 31 March 2014.");
+    expect(rmb.currency).toBe("CNY");
+    expect(rmb.revenueUsd).toBe(toUsd(52_504_000_000, "CNY"));
+    expect(parsePlanSignals("Revenue of USD8,463 million in fiscal 2014.").revenueUsd).toBe(8_463_000_000);
+    expect(parsePlanSignals("Revenue of EUR218 million in 2017.").revenueUsd).toBe(toUsd(218_000_000, "EUR"));
+  });
+
+  test("an insurer's top line and its customers have their own names", () => {
+    const s = parsePlanSignals("In-force premium of $116M in 2019. 730,000 policyholders as of 31 March 2020.");
+    expect(s.revenueUsd).toBe(116_000_000);
+    expect(s.customers).toBe(730_000);
+  });
+
+  test("the larger side of a two-sided marketplace is not swapped for the smaller", () => {
+    // Alibaba disclosed 279M active buyers and 8.5M active sellers. "buyers"
+    // was not a customer noun, so the parser skipped to "sellers" and reported
+    // 8.5M as the customer count — a wrong number, not a missing one.
+    const s = parsePlanSignals("279 million active buyers and 8.5 million active sellers.");
+    expect(s.customers).toBe(279_000_000);
+  });
+
+  test("a target is not traction", () => {
+    // "We target $20M ARR next year" was read as $20M of current revenue.
+    expect(parsePlanSignals("Projected revenue of $100M in 2030.").revenueUsd).toBeNull();
+    expect(parsePlanSignals("The company expects $50M in revenue by 2027.").revenueUsd).toBeNull();
+  });
+
+  test("but the real figure in the next sentence survives the target", () => {
+    // The forward test is clause-bounded; a 60-character lookback crossed the
+    // sentence and suppressed the actual disclosure too, trading one wrong
+    // reading for another.
+    expect(parsePlanSignals("We target $20M ARR next year. Revenue of $5M today.").revenueUsd).toBe(5_000_000);
+    expect(parsePlanSignals("The company expects $50M in revenue by 2027. Revenue of $8M in 2026.").revenueUsd).toBe(8_000_000);
+  });
+
+  test("two contradictory revenue figures are flagged in the ordinary phrasing too", () => {
+    // The contradiction check knew only "$5M ARR" and never "ARR of $5M" — the
+    // form the parser itself has always supported — so a plan stating two
+    // different figures the normal way raised nothing.
+    expect(parsePlanSignals("ARR of $5M. ARR of $8M.").conflicts.length).toBe(1);
+    expect(parsePlanSignals("$5M ARR. $8M ARR.").conflicts.length).toBe(1);
+    // A prior-year comparison is not a contradiction.
+    expect(parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year from $100.8M in 2017.").conflicts.length).toBe(0);
+  });
+});

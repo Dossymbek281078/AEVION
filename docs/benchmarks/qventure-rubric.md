@@ -71,15 +71,15 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 147
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 153
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (19 real companies, rubric v6):**
-   parse coverage **53/53**, mean success **71.0** vs mean failure **60.3**, gap
-   **10.7 points**. Seven of the nineteen are labelled `open` — Rivian, Peloton,
+5. **Measured on the disclosed-figures corpus (21 real companies, rubric v6):**
+   parse coverage **60/60**, mean success **71.8** vs mean failure **60.3**, gap
+   **11.5 points**. Eight of the twenty-one are labelled `open` — Rivian, Peloton,
    Beyond Meat, Deliveroo, Affirm, Groupon and, by a different route, the
    disclosure-free control. `open` is
    not a hedge: those companies are still trading, and forcing them into
@@ -169,13 +169,47 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    success, scores 66.6.** The engine reads disclosure; it does not know what
    happens next, and this pair is the cheapest way to see that.
 
+9. **Non-American, non-software, not-yet-true.** An insurer, a Chinese
+   marketplace and a European payments company added six more reader defects and
+   one wrong number:
+
+   - **A currency code written against the digits lost the currency.** The code
+     patterns required a word boundary *after* themselves, which a digit does not
+     provide, so `RMB52,504 million`, `USD8,463 million` and `EUR218 million` —
+     ordinary filing style — dropped their marker. Only the symbol forms (`€218M`)
+     ever worked, and those are what the fixtures had used.
+   - **An insurer's top line is not called revenue** (`in-force premium`) and its
+     customers are not called customers (`policyholders`).
+   - **The larger side of a two-sided marketplace was swapped for the smaller.**
+     Alibaba disclosed 279M active buyers and 8.5M active sellers; `buyers` was
+     not a customer noun, so the parser skipped to `sellers` and reported **8.5M**
+     as the customer count. A wrong number, not a missing one — the third of that
+     class.
+   - **A target was read as traction.** "We target $20M ARR next year" set
+     revenue to $20M. The contradiction check already had a forward-looking
+     test; the revenue parser never asked it. Now it does, bounded to the
+     figure's own clause — a 60-character lookback crossed the sentence and
+     suppressed the real disclosure in "…next year. Revenue of $5M today.",
+     which trades one wrong reading for another.
+   - **The contradiction check only knew one of the two shapes it guards.** It
+     matched `$5M ARR` but never `ARR of $5M` — the form the parser itself has
+     always supported — so a plan stating two different revenue figures in the
+     ordinary phrasing raised nothing. Both readers now share one module-level
+     noun list, because they had already drifted.
+
+   **Open, not settled:** Lemonade's filing states in-force premium of $116M for
+   2019 and $133M as of Q1 2020. The engine takes the first stated, and the 14.7%
+   gap falls under the 20% threshold that treats a difference as rounding. Whether
+   a screen should prefer the most recent disclosure is a real question and is
+   left here rather than decided by fixture.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 147):
+`tests/qventureDisclosedCorpus.test.ts`, 153):
 
 | Guard | Floor | Measured today |
 |---|---|---|
@@ -184,8 +218,8 @@ months. The invariants now run on every push
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |
-| Every figure real filings state is recovered | 53/53 | 53/53 |
-| Separation on disclosed figures | ≥ 6 pts | 10.7 |
+| Every figure real filings state is recovered | 60/60 | 60/60 |
+| Separation on disclosed figures | ≥ 6 pts | 11.5 |
 | A large ask with no disclosure cannot reach `watch` | — | Fast, 43.9, `pass` |
 
 The visibility gate derives its own field list from what the parser actually
@@ -194,7 +228,7 @@ update would have missed `reservations` in exactly the way the renderers did.
 Adding a numeric field to the parser and to nothing else reddens it by name.
 
 One of those guards is not a floor but an equality: parse coverage must stay at
-53/53. A silent reader failure is the defect class this corpus exists to catch,
+60/60. A silent reader failure is the defect class this corpus exists to catch,
 and "most figures parsed" is the state it was already in.
 
 They are floors, not targets — set well under the measured values so ordinary

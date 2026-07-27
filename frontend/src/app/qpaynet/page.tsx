@@ -82,7 +82,7 @@ export default function QPayNetDashboard() {
   }
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     fetch(apiUrl("/api/qpaynet/stats")).then(r => r.json()).then(setStats).catch(() => {});
     if (!saved) { setLoading(false); return; }

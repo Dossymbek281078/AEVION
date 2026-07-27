@@ -122,7 +122,7 @@ export default function QMaskCardChargeDetailPage({ params }: { params: Promise<
   // Hydrate: read token from localStorage
   useEffect(() => {
     try {
-      const t = window.localStorage.getItem("aevion_token");
+      const t = (window.localStorage.getItem("aevion_auth_token_v1") ?? window.localStorage.getItem("aevion_token"));
       if (!t) {
         setPhase("unauth");
         return;

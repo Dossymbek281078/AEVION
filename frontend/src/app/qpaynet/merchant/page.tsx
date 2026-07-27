@@ -34,7 +34,7 @@ export default function MerchantPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     Promise.all([

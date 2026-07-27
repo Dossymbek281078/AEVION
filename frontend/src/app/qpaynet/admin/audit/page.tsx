@@ -61,7 +61,7 @@ export default function AdminAuditPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);

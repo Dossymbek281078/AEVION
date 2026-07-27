@@ -30,7 +30,7 @@ export default function NotificationPrefsPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/notifications/preferences"), { headers: { Authorization: `Bearer ${saved}` } })

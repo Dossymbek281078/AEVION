@@ -41,7 +41,7 @@ export default function PayRequestPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem("aevion_token"));
+    setIsLoggedIn(!!(localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")));
     fetch(`/api/qpaynet/requests/${token}`)
       .then((r) => r.json())
       .then((d) => {
@@ -56,7 +56,7 @@ export default function PayRequestPage() {
 
   useEffect(() => {
     if (stage !== "ready") return;
-    const auth = localStorage.getItem("aevion_token") ?? "";
+    const auth = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     if (!auth) return;
     fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${auth}` } })
       .then((r) => r.json())
@@ -69,7 +69,7 @@ export default function PayRequestPage() {
   }, [stage, meta?.currency]);
 
   async function handlePay() {
-    const auth = localStorage.getItem("aevion_token") ?? "";
+    const auth = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     if (!auth) { setError(t("qpaynet.pay.err.auth")); return; }
     if (!fromWalletId) { setError(t("qpaynet.pay.err.noWallet")); return; }
     setSubmitting(true); setError("");

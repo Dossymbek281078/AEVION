@@ -45,7 +45,7 @@ export default function NewProposalPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ id: string; options: string[] } | null>(null);
 
-  useEffect(() => { setToken(localStorage.getItem("aevion_token")); setHydrated(true); }, []);
+  useEffect(() => { setToken((localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token"))); setHydrated(true); }, []);
 
   const optionWarnings = useMemo(() => {
     const t = options.map(o => o.trim());

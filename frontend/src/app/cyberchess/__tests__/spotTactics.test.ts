@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { spotTactics } from "../chessCoachEngine";
+import { spotTactics, explainMove } from "../chessCoachEngine";
 
 /* Подсказка про вилку смотрела ходы СОПЕРНИКА: после хода конём очередь уже перешла, и
    условие «есть взятие ферзя или ладьи» означало, что соперник может забрать ТВОЮ
@@ -21,5 +21,24 @@ describe("spotTactics", () => {
   it("puts mate in one first, above everything else", () => {
     const hints = spotTactics("6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1");
     expect(hints[0]).toContain("МАТ В 1");
+  });
+});
+
+/* explainMove нигде не вызывается, но оценки в модуле бело-относительные: без поправки
+   на сторону отличный ход чёрных получал вердикт «блундер», а зевок — «отличный ход». */
+describe("explainMove", () => {
+  const START_W = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const START_B = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+
+  it("praises a white move that raises the white-relative score", () => {
+    expect(explainMove(START_W, "Nf3", 0, 200)).toContain("Отличный ход");
+  });
+
+  it("praises a black move that lowers it — same thing from Black's side", () => {
+    expect(explainMove(START_B, "Nf6", 0, -200)).toContain("Отличный ход");
+  });
+
+  it("calls a black blunder a blunder, not a brilliancy", () => {
+    expect(explainMove(START_B, "g5", 0, 300)).toContain("Блундер");
   });
 });

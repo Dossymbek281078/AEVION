@@ -458,7 +458,15 @@ export function explainMove(
   evalBefore: number,
   evalAfter: number,
 ): string {
-  const delta = evalAfter - evalBefore;
+  /* Оценки движка в этом модуле БЕЛО-ОТНОСИТЕЛЬНЫЕ (см. комментарий у
+     generatePositionExplanation). Значит для хода ЧЁРНЫХ улучшение позиции даёт
+     ОТРИЦАТЕЛЬНУЮ разницу, и без поправки на сторону вердикты переворачивались:
+     отличный ход чёрных объявлялся блундером, а зевок — отличным ходом. Функция пока
+     нигде не вызывается, но это ловушка для того, кто её подключит. Приводим разницу к
+     точке зрения того, кто ходит. */
+  let mover: "w" | "b" = "w";
+  try { mover = new Chess(fenBefore).turn(); } catch { /* битый FEN — считаем как за белых */ }
+  const delta = (evalAfter - evalBefore) * (mover === "w" ? 1 : -1);
   const isCapture = san.includes("x");
   const isCheck = san.includes("+");
   const isMate = san.includes("#");

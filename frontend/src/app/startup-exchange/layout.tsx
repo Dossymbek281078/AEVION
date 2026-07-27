@@ -11,7 +11,11 @@ export const metadata: Metadata = {
   title: "Биржа стартапов — идея, MVP или готовый продукт · AEVION",
   description:
     "Три уровня заявок: только идея (доля за вложение в разработку), идея + MVP (доля за вложение в доработку), готовый продукт (выкуп целиком или доли). У каждой заявки — названные условия сделки, бесплатный разбор с рыночным диапазоном цены и SHA-256 отпечаток авторства.",
-  alternates: { canonical: `${SITE}/startup-exchange` },
+  alternates: {
+    canonical: `${SITE}/startup-exchange`,
+    // Читалки ищут ленту здесь: без этой строки RSS существует, но его не находят.
+    types: { "application/rss+xml": `${SITE}/api-backend/api/startupx/rss.xml` },
+  },
   openGraph: {
     type: "website",
     url: `${SITE}/startup-exchange`,

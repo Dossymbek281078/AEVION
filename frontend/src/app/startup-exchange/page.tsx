@@ -9,6 +9,7 @@ import { ListingWizard } from "./components/ListingWizard";
 import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
 import { ExampleListing } from "./components/ExampleListing";
+import { apiUrl } from "@/lib/apiBase";
 import { TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
 const PAGE_SIZE = 10;
@@ -92,6 +93,17 @@ export default function StartupExchangePage() {
     fetchListings("", 0, sort, "", "");
     fetchStats();
   }
+
+  // Подписка повторяет то, что человек уже отфильтровал: если он смотрит идеи в
+  // логистике, лента должна приходить такая же, а не «всё подряд».
+  const rssHref = (() => {
+    const q = new URLSearchParams();
+    if (tierFilter) q.set("tier", tierFilter);
+    if (sectorFilter) q.set("sector", sectorFilter);
+    if (searchApplied) q.set("q", searchApplied);
+    const qs = q.toString();
+    return apiUrl(`/api/startupx/rss.xml${qs ? `?${qs}` : ""}`);
+  })();
 
   const tabs: Array<{ id: TierFilter; label: string; count?: number }> = [
     { id: "", label: "Все", count: stats?.total },
@@ -296,6 +308,13 @@ export default function StartupExchangePage() {
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
+              <a
+                href={rssHref}
+                title="Подписаться на этот срез заявок в читалке — без аккаунта и без писем"
+                style={{ fontSize: 12.5, fontWeight: 600, color: "#7c3aed", textDecoration: "none" }}
+              >
+                RSS этого среза
+              </a>
               <span style={{ fontSize: 12, color: "#64748b" }}>Сортировка:</span>
               <button
                 type="button"

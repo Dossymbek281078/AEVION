@@ -32,6 +32,13 @@ import {
  */
 export type ChurnPeriod = RatePeriod;
 
+/**
+ * What a disclosed growth rate applies to. A rate is meaningless without it:
+ * "up 77%" next to GMV and "up 93%" next to revenue are different facts, and
+ * reporting one under the other's name is a wrong number, not a missing one.
+ */
+export type GrowthBasis = "revenue" | "gmv" | "customers" | "unspecified";
+
 /** Churn quoted over `period`, expressed as a monthly rate. */
 export const monthlyChurnFrom = monthlyRateFrom;
 
@@ -41,6 +48,8 @@ export interface PlanSignals {
   revenueBasis: "ARR" | "MRR" | "revenue" | null;
   growthPct: number | null;
   growthPeriod: "MoM" | "YoY" | "WoW" | "unspecified" | null;
+  /** Which metric the growth rate describes — see GrowthBasis. */
+  growthBasis: GrowthBasis;
   grossMarginPct: number | null;
   cacUsd: number | null;
   ltvUsd: number | null;
@@ -191,6 +200,7 @@ function countFields(s: PlanSignals): number {
 export function emptySignals(): PlanSignals {
   return {
     revenueUsd: null, revenueBasis: null, growthPct: null, growthPeriod: null,
+    growthBasis: "unspecified",
     grossMarginPct: null, cacUsd: null, ltvUsd: null, ltvCacRatio: null,
     paybackMonths: null, churnPct: null, churnPeriod: null, churnMonthlyPct: null,
     retentionPct: null, customers: null,
@@ -339,16 +349,62 @@ export function parsePlanSignals(text: string): PlanSignals {
   // first so the decline wins the sentence.
   const DOWN = String.raw`(?:declin(?:ing|ed|e|es)|down|fell|falling|decreas(?:ing|ed|e|es)|contract(?:ing|ed)|shrank|shrunk|dropped)`;
   const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
-  const growth = decline
-    || firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`, "i"));
+
+  // A growth rate is meaningless without knowing WHAT grew, and the parser did
+  // not ask. Affirm's S-1 states GMV up 77% and revenue up 93% in consecutive
+  // sentences; taking the first match reported 77% as the company's revenue
+  // growth — one metric's number under another metric's name, which is a wrong
+  // figure rather than a missing one. Every match is now classified by the
+  // nearest metric noun in front of it, a revenue-attached rate wins when
+  // several are disclosed, and whatever is used carries its basis so the report
+  // can say "GMV growth" when that is what it is.
+  const GROWTH_PATTERNS = [
+    String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
+    String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`,
+    String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`,
+  ];
+  const BASIS_NOUNS: Array<[GrowthBasis, RegExp]> = [
+    ["revenue", /\b(?:revenues?|arr|mrr|net sales|sales)\b/g],
+    ["gmv", /\b(?:gmv|gtv|gross transaction value|gross merchandise (?:value|volume)|processed volume|gross bookings|transaction volume)\b/g],
+    ["customers", /\b(?:customers|users|subscribers|members|memberships|merchants|sellers)\b/g],
+  ];
+  /** The metric noun closest in front of `at`, within a clause-sized window. */
+  const basisFor = (at: number): GrowthBasis => {
+    const from = Math.max(0, at - 90);
+    let best: GrowthBasis = "unspecified";
+    let bestIdx = -1;
+    for (const [basis, re] of BASIS_NOUNS) {
+      re.lastIndex = 0;
+      for (let m = re.exec(t); m; m = re.exec(t)) {
+        if (m.index >= at) break;
+        if (m.index >= from && m.index > bestIdx) { bestIdx = m.index; best = basis; }
+      }
+    }
+    return best;
+  };
+
+  let growth: RegExpMatchArray | null = decline;
+  let growthBasis: GrowthBasis = decline ? basisFor(decline.index ?? 0) : "unspecified";
+  if (!growth) {
+    const found: Array<{ m: RegExpMatchArray; basis: GrowthBasis }> = [];
+    for (const pat of GROWTH_PATTERNS) {
+      const re = new RegExp(pat, "gi");
+      for (let m = re.exec(t); m; m = re.exec(t)) {
+        found.push({ m: m as unknown as RegExpMatchArray, basis: basisFor(m.index) });
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+      if (found.length) break; // patterns stay ordered by confidence, as before
+    }
+    const preferred = found.find((f) => f.basis === "revenue") ?? found[0];
+    if (preferred) { growth = preferred.m; growthBasis = preferred.basis; }
+  }
   if (growth) {
     const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
     const g = value !== undefined ? parseLocaleNumber(value) : NaN;
     if (isFinite(g)) {
       s.growthPct = decline ? -g : g;
+      s.growthBasis = growthBasis;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
       s.growthPeriod = growthPeriodFromWords(p);
     }
@@ -694,7 +750,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // marketplace calls the same number outside US filings — Deliveroo's
   // prospectus leads with it, and the engine read it as no marketplace
   // disclosure at all.
-  const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
+  const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
   const gmv = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"));
   if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }

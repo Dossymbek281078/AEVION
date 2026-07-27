@@ -71,16 +71,17 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 131
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 147
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (16 real companies, rubric v6):**
-   parse coverage **43/43**, mean success **71.9** vs mean failure **60.3**, gap
-   **11.6 points**. Five of the sixteen are labelled `open` — Rivian, Peloton,
-   Beyond Meat, Deliveroo and, by a different route, the disclosure-free control. `open` is
+5. **Measured on the disclosed-figures corpus (19 real companies, rubric v6):**
+   parse coverage **53/53**, mean success **71.0** vs mean failure **60.3**, gap
+   **10.7 points**. Seven of the nineteen are labelled `open` — Rivian, Peloton,
+   Beyond Meat, Deliveroo, Affirm, Groupon and, by a different route, the
+   disclosure-free control. `open` is
    not a hedge: those companies are still trading, and forcing them into
    failed/succeeded to pad the separation statistic would be choosing the outcome
    that suits the number. They count toward parse coverage, which needs no
@@ -149,13 +150,32 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    people` and `headcount fell to 900` still read nothing, and every plain form
    is untouched. Neutering the connector reddens 18 tests.
 
+8. **The second inversion, and the sharpest reminder of what this is not.**
+   Affirm's S-1 states GMV up 77% and revenue up 93% in consecutive sentences.
+   The parser took the first match, so **77% was reported as the company's
+   revenue growth** — one metric's number under another metric's name. Like the
+   decline, that is a wrong figure rather than a missing one.
+
+   Every growth match is now classified by the nearest metric noun in front of
+   it, a revenue-attached rate wins when several are disclosed, and the rate
+   carries a `growthBasis` so the report prints "64.3% YoY GMV growth" when that
+   is what Deliveroo disclosed, instead of quietly filing volume growth under
+   revenue.
+
+   And the corpus produced its own best warning label. **Groupon scores 74.5 and
+   reaches `invest`** — the highest of any open case, above Datadog — on
+   revenue of $1.5B growing more than tenfold and 115.7 million subscribers.
+   Every one of those figures is true and was disclosed. **Adyen, a durable
+   success, scores 66.6.** The engine reads disclosure; it does not know what
+   happens next, and this pair is the cheapest way to see that.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 131):
+`tests/qventureDisclosedCorpus.test.ts`, 147):
 
 | Guard | Floor | Measured today |
 |---|---|---|
@@ -164,12 +184,12 @@ months. The invariants now run on every push
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |
-| Every figure real filings state is recovered | 43/43 | 43/43 |
-| Separation on disclosed figures | ≥ 6 pts | 11.6 |
+| Every figure real filings state is recovered | 53/53 | 53/53 |
+| Separation on disclosed figures | ≥ 6 pts | 10.7 |
 | A large ask with no disclosure cannot reach `watch` | — | Fast, 43.9, `pass` |
 
 One of those guards is not a floor but an equality: parse coverage must stay at
-43/43. A silent reader failure is the defect class this corpus exists to catch,
+53/53. A silent reader failure is the defect class this corpus exists to catch,
 and "most figures parsed" is the state it was already in.
 
 They are floors, not targets — set well under the measured values so ordinary

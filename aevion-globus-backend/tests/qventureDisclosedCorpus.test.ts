@@ -470,3 +470,52 @@ describe("a level stated after a direction verb", () => {
     expect(parsePlanSignals("No churn figure is disclosed.").churnPct).toBeNull();
   });
 });
+
+describe("a growth rate knows what grew", () => {
+  /**
+   * Affirm's S-1 states GMV up 77% and revenue up 93% in consecutive sentences.
+   * Taking the first match reported 77% as the company's revenue growth — one
+   * metric's number under another metric's name. That is a wrong figure, not a
+   * missing one, and it is the second inversion-class defect the corpus found.
+   */
+  const affirm = parsePlanSignals(
+    "GMV of $4.6B in the fiscal year ended 30 June 2020, up 77% year over year. Revenue of $509.5M, up 93% year over year.",
+  );
+
+  test("the revenue-attached rate wins when several are disclosed", () => {
+    expect(affirm.growthPct).toBe(93);
+    expect(affirm.growthBasis).toBe("revenue");
+  });
+
+  test("a rate attached to volume keeps its own name instead of borrowing revenue's", () => {
+    const s = parsePlanSignals("Gross transaction value of £4.1bn in 2020, up 64.3% from £2.5bn in 2019.");
+    expect(s.growthPct).toBe(64.3);
+    expect(s.growthBasis).toBe("gmv");
+  });
+
+  test("the report says which metric grew", () => {
+    // Printing only "64.3% growth" would hide that it is volume, not revenue.
+    const r = analyze({
+      name: "Basis probe", sector: "marketplace", stage: "growth", geography: "UK",
+      description: "Three-sided food delivery marketplace.",
+      tractionNotes: "Gross transaction value of £4.1bn in 2020, up 64.3% from £2.5bn in 2019.",
+    });
+    expect(r.factors.map((f) => f.rationale).join(" ")).toMatch(/64\.3%.*GMV growth/i);
+  });
+
+  test("an ordinary single disclosure is unchanged and attributed to revenue", () => {
+    const s = parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year.");
+    expect(s.growthPct).toBe(97);
+    expect(s.growthBasis).toBe("revenue");
+  });
+
+  test("a decline keeps both its sign and its basis", () => {
+    const s = parsePlanSignals("Revenue of $10M, down 20% year over year.");
+    expect(s.growthPct).toBe(-20);
+    expect(s.growthBasis).toBe("revenue");
+  });
+
+  test("processed volume is GMV under the name a European payments filing uses", () => {
+    expect(parsePlanSignals("Processed volume of $108B in 2017.").gmvUsd).toBe(108_000_000_000);
+  });
+});

@@ -316,6 +316,7 @@ export const CASES: DisclosedCase[] = [
       { label: "the plan is recognised as quoted in GBP", read: (s) => s.currency === "GBP", expected: true },
       { label: "GTV £4.1bn read and converted to USD", read: (s) => s.gmvUsd, ...num(toUsd(4_100_000_000, "GBP")) },
       { label: "growth 64.3% YoY", read: (s) => s.growthPct, ...num(64.3) },
+      { label: "the rate is labelled as volume growth, not revenue growth", read: (s) => s.growthBasis === "gmv", expected: true },
     ],
   },
   {
@@ -367,7 +368,84 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form S-1, November 2020",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1820953/000110465920126927/tm2026663-4_s1.htm",
+      "https://www.meritechcapital.com/blog/affirm-ipo-s-1-breakdown",
+      "https://www.pymnts.com/buy-now-pay-later/2020/affirm-ipo-filing-shows-narrowing-losses-surging-gmv/",
+    ],
+    input: {
+      name: "Affirm",
+      sector: "fintech",
+      stage: "growth",
+      geography: "US",
+      askUsd: 1_200_000_000,
+      description:
+        "Point-of-sale instalment lending integrated into a merchant's checkout, underwriting each transaction individually and funding the loans through bank partners and securitisation.",
+      tractionNotes:
+        "GMV of $4.6B in the fiscal year ended 30 June 2020, up 77% year over year. Revenue of $509.5M, up 93% year over year. Net loss of $112.6M. One merchant accounted for 28% of revenue.",
+    },
+    expect: [
+      { label: "GMV $4.6B", read: (s) => s.gmvUsd, ...num(4_600_000_000) },
+      { label: "revenue $509.5M", read: (s) => s.revenueUsd, ...num(509_500_000) },
+      { label: "growth 93% YoY", read: (s) => s.growthPct, ...num(93) },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "Form S-1, June 2011",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/0001490281/000104746911005613/a2203913zs-1.htm",
+      "https://money.cnn.com/2011/08/10/technology/groupon_accounting/index.htm",
+    ],
+    input: {
+      name: "Groupon",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "US",
+      askUsd: 750_000_000,
+      description:
+        "Daily-deal marketplace selling discounted local vouchers to an email subscriber list, with a direct sales force signing merchants city by city.",
+      tractionNotes:
+        "Revenue of $1.5B in the first half of 2011, up from $131.5M in the first half of 2010. 115.7 million subscribers as of 30 June 2011, up from 10.4 million a year earlier.",
+    },
+    expect: [
+      { label: "revenue $1.5B", read: (s) => s.revenueUsd, ...num(1_500_000_000) },
+      { label: "115.7 million subscribers", read: (s) => s.customers, ...num(115_700_000) },
+    ],
+  },
+
   // ── Outcome: succeeded ────────────────────────────────────────────────────
+  {
+    outcome: "succeeded",
+    round: "IPO prospectus, Euronext Amsterdam, June 2018",
+    sources: [
+      "https://www.adyen.com/press-and-media/prospectus-price-range-release",
+      "https://www.adyen.com/press-and-media/adyen-announces-intention-to-launch-an-offering-and-listing-of-its-shares-on-euronext-amsterdam",
+    ],
+    input: {
+      name: "Adyen",
+      sector: "fintech",
+      stage: "growth",
+      geography: "NL",
+      askUsd: 1_000_000_000,
+      description:
+        "Single-platform payment processing for large merchants, with acquiring, gateway and risk on one stack rather than stitched from separate providers.",
+      tractionNotes:
+        "Net revenue of €218M in 2017, up 38% year over year. Processed volume of €108bn in 2017, up from €66bn in 2016.",
+    },
+    // The second non-USD filing, and the first in euros. Same reason as
+    // Deliveroo: the conversion is computed with the engine's own rate so an FX
+    // refresh cannot redden the corpus without a real defect.
+    expect: [
+      { label: "the plan is recognised as quoted in EUR", read: (s) => s.currency === "EUR", expected: true },
+      { label: "net revenue €218M read and converted", read: (s) => s.revenueUsd, ...num(toUsd(218_000_000, "EUR")) },
+      { label: "growth 38% YoY", read: (s) => s.growthPct, ...num(38) },
+      { label: "processed volume €108bn read as GMV", read: (s) => s.gmvUsd, ...num(toUsd(108_000_000_000, "EUR")) },
+    ],
+  },
   {
     outcome: "succeeded",
     round: "Form S-1, August 2019",

@@ -286,7 +286,11 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
       notes.push(`revenue declining ${Math.abs(g)}% ${sig.growthPeriod ?? ""}`.replace(/\s+/g, " ").trim());
     } else {
     s += add;
-    notes.push(`${g}% ${sig.growthPeriod ?? ""} growth`.replace(/\s+/g, " ").trim());
+    // Name the metric when the disclosed rate is not revenue growth: "up 64.3%"
+    // on gross transaction value is a different fact from revenue up 64.3%, and
+    // a report that prints only "64.3% growth" hides which one it scored.
+    const basisLabel = sig.growthBasis === "gmv" ? " GMV" : sig.growthBasis === "customers" ? " customer" : "";
+    notes.push(`${g}% ${sig.growthPeriod ?? ""}${basisLabel} growth`.replace(/\s+/g, " ").trim());
     }
   }
   if (sig.customers !== null) {

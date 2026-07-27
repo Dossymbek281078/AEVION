@@ -41,7 +41,7 @@ const OVERPASS = [
 
 import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL,
-  projection, parseMetres, heightOf, ringsOf, inRing, rasterize,
+  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem,
 } from "./lib/city-twin-geometry.mjs";
 
 // The height model, the projection and the rasterizer live in
@@ -161,7 +161,10 @@ async function overpass() {
         if (res.status === 429 || res.status === 504) throw new Error(`Overpass HTTP ${res.status} (busy)`);
         if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`);
         const json = await res.json();
-        if (!json.elements) throw new Error("Overpass returned no elements array");
+        // A truncated answer arrives as HTTP 200 with fewer buildings and a
+        // remark — never as an error. Treat it as a failure, not as data.
+        const problem = overpassProblem(json);
+        if (problem) throw new Error(problem);
         return json.elements;
       } catch (e) {
         lastErr = e;

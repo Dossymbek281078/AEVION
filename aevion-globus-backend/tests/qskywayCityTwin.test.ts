@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M,
-  projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize,
+  projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
 import { CITY } from "../src/routes/qskyway.city";
+import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
+import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 
 // The twin is the module's most load-bearing data: every route, every ceiling
 // check and every signed justification is computed over the obstacle grid these
@@ -190,10 +192,17 @@ describe("rasterize — the tallest obstacle owns the cell, with its own provena
 });
 
 describe("projection — must reproduce the committed twin, or routes miss the buildings", () => {
-  it("derives the shipped Astana grid from the shipped bbox", () => {
-    const { cols, rows, w, h } = projection(CITY.bbox);
-    expect({ cols, rows }).toEqual({ cols: CITY.grid.cols, rows: CITY.grid.rows });
-    expect({ w, h }).toEqual(CITY.meters);
+  // Every city, not just the one being worked on: a twin whose grid no longer
+  // follows from its own bbox means the routes are planned against a frame that
+  // has drifted from the buildings, and nothing else in the suite would notice.
+  it.each([
+    ["astana", CITY],
+    ["nyc", CITY_NYC],
+    ["tokyo", CITY_TOKYO],
+  ])("derives the shipped %s grid from the shipped bbox", (_name, city) => {
+    const { cols, rows, w, h } = projection(city.bbox);
+    expect({ cols, rows }).toEqual({ cols: city.grid.cols, rows: city.grid.rows });
+    expect({ w, h }).toEqual(city.meters);
   });
 
   it("places the bbox corner at the origin and grows south-east", () => {
@@ -207,31 +216,63 @@ describe("projection — must reproduce the committed twin, or routes miss the b
   });
 });
 
-describe("the committed Astana twin is internally consistent", () => {
-  it("dataQuality counts match its own buildings array", () => {
-    const q = CITY.dataQuality;
-    const count = (hs: number) => CITY.buildings.filter((b) => b.hs === hs).length;
-    expect(q.total).toBe(CITY.buildings.length);
+describe("overpassProblem — a truncated answer must not be mistaken for data", () => {
+  const ok = { elements: [{ type: "way", id: 1 }] };
+
+  it("accepts a normal payload", () => {
+    expect(overpassProblem(ok)).toBeNull();
+    expect(overpassProblem({ ...ok, remark: "some harmless note" })).toBeNull();
+  });
+
+  it("rejects the remarks Overpass uses for an incomplete result", () => {
+    // These arrive with HTTP 200 and a valid body — the ONLY signal that blocks
+    // of the city are missing is this string.
+    for (const remark of [
+      'runtime error: Query timed out in "query" at line 3 after 180 seconds.',
+      'runtime error: Query run out of memory in "query" at line 2 using about 2048 MB of RAM.',
+      "Query timed out",
+    ]) {
+      expect(overpassProblem({ ...ok, remark })).toMatch(/incomplete/i);
+    }
+  });
+
+  it("rejects empty and malformed payloads instead of building an empty city", () => {
+    expect(overpassProblem({ elements: [] })).toMatch(/zero elements/);
+    expect(overpassProblem({})).toMatch(/no elements array/);
+    expect(overpassProblem(null)).toMatch(/non-object/);
+    expect(overpassProblem("[]" as unknown as object)).toMatch(/non-object/);
+  });
+});
+
+describe("the committed twins are internally consistent", () => {
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+    "%s: dataQuality counts match its own buildings array", (_n, city) => {
+    const q = city.dataQuality;
+    const count = (hs: number) => city.buildings.filter((b) => b.hs === hs).length;
+    expect(q.total).toBe(city.buildings.length);
     expect([q.measured, q.derived, q.guessed]).toEqual([count(0), count(1), count(2)]);
     expect(q.measured + q.derived + q.guessed).toBe(q.total);
     expect(q.measuredPct).toBeCloseTo((100 * q.measured) / q.total, 1);
     expect(q.realPct).toBeCloseTo((100 * (q.measured + q.derived)) / q.total, 1);
   });
 
-  it("the grids are the declared size and carry no NaN", () => {
-    const cells = CITY.grid.cols * CITY.grid.rows;
-    expect(CITY.grid.heights).toHaveLength(cells);
-    expect(CITY.grid.src).toHaveLength(cells);
-    expect(CITY.grid.heights.every((h) => Number.isFinite(h) && h >= 0)).toBe(true);
-    expect(CITY.grid.src.every((s) => s === 0 || s === 1 || s === 2)).toBe(true);
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+    "%s: the grids are the declared size and carry no NaN", (_n, city) => {
+    const cells = city.grid.cols * city.grid.rows;
+    expect(city.grid.heights).toHaveLength(cells);
+    expect(city.grid.src).toHaveLength(cells);
+    expect(city.grid.heights.every((h) => Number.isFinite(h) && h >= 0)).toBe(true);
+    expect(city.grid.src.every((s) => s === 0 || s === 1 || s === 2)).toBe(true);
   });
 
-  it("every vertiport sits inside the grid", () => {
-    for (const v of CITY.vertiports) {
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+    "%s: every vertiport sits inside the grid", (_n, city) => {
+    expect(city.vertiports.length).toBeGreaterThan(0);
+    for (const v of city.vertiports) {
       expect(v.c).toBeGreaterThanOrEqual(0);
       expect(v.r).toBeGreaterThanOrEqual(0);
-      expect(v.c).toBeLessThan(CITY.grid.cols);
-      expect(v.r).toBeLessThan(CITY.grid.rows);
+      expect(v.c).toBeLessThan(city.grid.cols);
+      expect(v.r).toBeLessThan(city.grid.rows);
     }
   });
 });

@@ -27,6 +27,30 @@ export const M_PER_LAT = 110540;
 export const M_PER_LON_EQ = 111320;
 
 /**
+ * Overpass answers HTTP 200 with a PARTIAL element list when a query runs out
+ * of time or memory, reporting it only in a top-level `remark`. Nothing about
+ * the response shape says "incomplete" — you get a valid JSON body with fewer
+ * buildings, which rasterizes into a city that is quietly missing blocks.
+ *
+ * That is exactly the shape of the defect found in the committed NYC twin on
+ * 2026-07-27: 1930 grid cells (21.8%) held buildings the twin did not know
+ * about, including Penn Station, and only 10.6% were explicable as multipolygon
+ * handling. A silent truncation of the original query fits the evidence.
+ *
+ * Returns a reason string when the payload must not be trusted, else null.
+ */
+export function overpassProblem(json) {
+  if (!json || typeof json !== "object") return "Overpass returned a non-object payload";
+  if (!Array.isArray(json.elements)) return "Overpass returned no elements array";
+  const remark = typeof json.remark === "string" ? json.remark : "";
+  if (/runtime error|out of memory|timed out/i.test(remark)) {
+    return `Overpass reported an incomplete result: ${remark.trim()}`;
+  }
+  if (json.elements.length === 0) return "Overpass returned zero elements for this bbox";
+  return null;
+}
+
+/**
  * Local metric frame for a bbox. Must stay identical to projector() in
  * src/routes/qskyway.ts: routes are planned on this grid, so a divergence here
  * would offset every corridor from the buildings it is meant to avoid.
@@ -36,8 +60,15 @@ export function projection(bbox) {
   const lat0 = (minLat + maxLat) / 2;
   const mPerLon = M_PER_LON_EQ * Math.cos((lat0 * Math.PI) / 180);
   const proj = (lon, lat) => [(lon - minLon) * mPerLon, (maxLat - lat) * M_PER_LAT];
-  const w = Math.floor((maxLon - minLon) * mPerLon);
-  const h = Math.floor((maxLat - minLat) * M_PER_LAT);
+  // ROUND, not floor. All three committed twins round (Astana 2290.99 → 2291,
+  // NYC 1715.67 → 1716, Tokyo 1578.81 → 1579); flooring matches none of them and
+  // systematically under-reports the extent. The first version of this file
+  // floored, and because cols/rows come through Math.ceil the grid was identical
+  // either way — so the regenerated twins shipped a `meters` that was quietly
+  // 1 m short while every test still passed. Caught only by asserting that each
+  // committed twin still follows from its own bbox.
+  const w = Math.round((maxLon - minLon) * mPerLon);
+  const h = Math.round((maxLat - minLat) * M_PER_LAT);
   return { proj, w, h, cols: Math.ceil(w / CELL), rows: Math.ceil(h / CELL) };
 }
 

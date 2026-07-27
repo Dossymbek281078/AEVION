@@ -478,8 +478,14 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const signals = mergeStructuredSignals(parsedSignals, rawInput.financials);
   const sectorTamUsd = sector.tamUsdBn * 1e9;
 
-  // ── Market: sector-anchored; a credible bottom-up TAM earns a small rigor
-  //    credit, an inflated one earns none (and a red flag). ─────────────────
+  // ── Market: sector-anchored. Disclosing a bottom-up TAM earns a small rigor
+  //    credit for having done the exercise; an inflated one earns none (and a
+  //    red flag). The credit is deliberately independent of the FIGURE — $10M
+  //    and $900B both earn +3 — because what is being credited is the working,
+  //    not the market. The rationale used to call the figure "credible", which
+  //    claimed an assessment that never happened; it now states the disclosure
+  //    and nothing more. A TAM too small to carry the round is called out
+  //    separately below, where it belongs. ─────────────────────────────────
   const sectorMarketScore = clamp(35 + Math.log10(Math.max(1, sector.tamUsdBn)) * 12);
   let marketScore = sectorMarketScore;
   let marketCompany = false;
@@ -497,7 +503,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
 
   // ── Unit economics: actual gross margin & LTV/CAC when disclosed. ────────
   let econScoreRaw = sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30;
-  let econCompany = false;
+  let econCompany = false; // set below, or by an adverse disclosure charging "economics"
   const econNotes: string[] = [];
   if (signals.grossMarginPct !== null) {
     econScoreRaw = signals.grossMarginPct * 0.7 + (1 - sector.capitalIntensity) * 30;
@@ -555,7 +561,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     { key: "market", label: "Market size & growth", weight: 0.14, score: round(marketScore),
       basis: marketCompany ? "company-evidence" : "sector-prior",
       rationale: marketCompany
-        ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
+        ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
         : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
     { key: "timing", label: "Timing / tailwinds", weight: 0.05, score: round(timing),
       basis: "sector-prior",
@@ -582,7 +588,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
         ? `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}%, partly discharged — plan holds: ${heldApprovals.join("; ")}.`
         : `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
     { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
-      basis: "sector-prior",
+      basis: "sector-prior", // may be corrected below once adverse disclosures are known
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
 
@@ -640,6 +646,18 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       (backing ? "." : " — and no revenue or signed backlog is disclosed behind them."),
     );
   }
+  // A market smaller than a plausible outcome for the round. A $10M bottom-up
+  // TAM against a $5M ask means the entire market is twice the money going in,
+  // so even total dominance cannot return the fund. The engine used to score
+  // that identically to a $900B TAM and describe it as "credible".
+  //
+  // Text, not score: the ratio a fund needs is a mandate question, not
+  // something this rubric should decide, and nothing here is recalibrated.
+  if (signals.bottomUpTamUsd !== null && rawInput.askUsd && signals.bottomUpTamUsd < rawInput.askUsd * 10) {
+    textOnlyFlags.push(
+      `Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} is less than 10x the ${fmtMoney(rawInput.askUsd)} raise — the whole market may be too small to return this round.`,
+    );
+  }
   if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
     textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
   }
@@ -653,6 +671,19 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       ? ` (stated as ${signals.churnPct}% ${signals.churnPeriod})`
       : "";
     textOnlyFlags.push(`${churnMonthlyPct}% monthly churn${asStated} is high — retention is a material risk to the model.`);
+  }
+
+  // A factor an adverse disclosure charged was moved by the PLAN'S OWN WORDS,
+  // and was still labelled "sector-prior" — telling a reader the number is an
+  // industry average when the company's own sentence changed it by twenty
+  // points, and leaving it out of the coverage figure entirely. The label and
+  // the code disagreed, which is the defect this whole branch exists to catch.
+  //
+  // Applied here rather than at the factor list because the factors are built
+  // before the disclosures are read.
+  for (const a of adverse) {
+    const f = factors.find((x) => x.key === a.factor);
+    if (f && f.basis === "sector-prior") f.basis = "company-evidence";
   }
 
   const redFlags: string[] = [...adverse.map((a) => a.flag), ...metricFlags.map((f) => f.flag), ...textOnlyFlags];

@@ -2886,3 +2886,74 @@ describe("a red flag that could never fire", () => {
     }
   });
 });
+
+describe("the basis label has to match what moved the number", () => {
+  // Five of eight factors are sector constants, and the engine says so per
+  // factor and in the coverage figure. Competition said "sector-prior" while an
+  // adverse disclosure in the plan's own words had moved it twenty points — the
+  // reader was told an industry average produced a number the company produced.
+  const factor = (notes: string, key: string) =>
+    analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A software company.", tractionNotes: notes,
+    }).factors.find((f) => f.key === key)!;
+
+  const INCUMBENT = "Microsoft offers equivalent functionality free as part of its bundle.";
+
+  test("an adverse disclosure moves competition", () => {
+    expect(factor(INCUMBENT, "competition").score).toBeLessThan(factor("", "competition").score);
+  });
+
+  test("and the factor is then labelled company evidence, not a sector prior", () => {
+    expect(factor("", "competition").basis).toBe("sector-prior");
+    expect(factor(INCUMBENT, "competition").basis).toBe("company-evidence");
+  });
+
+  test("timing stays a sector prior, because nothing in a plan can move it", () => {
+    // A pure function of the sector CAGR. Labelled honestly, and this asserts
+    // it keeps being labelled honestly rather than gaining a false promotion.
+    expect(factor("", "timing").basis).toBe("sector-prior");
+    expect(factor(INCUMBENT, "timing").basis).toBe("sector-prior");
+    expect(factor("ARR of $12M growing 120% year over year.", "timing").basis).toBe("sector-prior");
+  });
+
+  test("the correction moves no score", () => {
+    // It relabels; it does not rescore. Both composites are unchanged from
+    // before the fix.
+    const before = analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A software company.", tractionNotes: INCUMBENT,
+    });
+    expect(before.factors.find((f) => f.key === "competition")!.score).toBe(24);
+  });
+});
+
+describe("a market too small to carry the round", () => {
+  // The rationale used to call a $10M bottom-up TAM "credible" and score it
+  // exactly as it scored $900B. The credit is for having done the bottom-up
+  // work at all, which is defensible — the word was not.
+  const flags = (askUsd: number, tam: string) =>
+    analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd,
+      description: "A software company.", tractionNotes: `Bottom-up TAM of ${tam}.`,
+    }).redFlags;
+
+  test("a TAM under ten times the raise is called out", () => {
+    expect(flags(5_000_000, "$10 million").some((f) => /too small to return this round/i.test(f))).toBe(true);
+    expect(flags(50_000_000, "$100 million").some((f) => /too small to return this round/i.test(f))).toBe(true);
+  });
+
+  test("a market that can carry it is not", () => {
+    expect(flags(5_000_000, "$1 billion").some((f) => /too small to return/i.test(f))).toBe(false);
+  });
+
+  test("the rationale no longer claims a credibility it never assessed", () => {
+    const r = analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A software company.", tractionNotes: "Bottom-up TAM of $10 million.",
+    });
+    const market = r.factors.find((f) => f.key === "market")!;
+    expect(market.rationale).toContain("discloses a bottom-up TAM");
+    expect(market.rationale).not.toContain("credible");
+  });
+});

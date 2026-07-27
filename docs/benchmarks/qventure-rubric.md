@@ -1308,6 +1308,36 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Recorded rather than quietly corrected, because a number stated confidently
    and derived from a flaky source is the thing this whole document is against.
 
+52. **Auditing the factors — the score itself.** Firing each of the eight
+   factors deliberately, the way the notes and flags were audited, showed the
+   design is more honest than a first reading suggested: every factor carries a
+   basis label, six of eight become company-evidence on a rich plan, and the
+   coverage figure already excludes the two that cannot. Worth stating, because
+   my first pass read 27% of the score as inert and that was wrong — market
+   does move on the plan.
+
+   Two things were not honest.
+
+   **Competition said "sector-prior" while the plan had moved it twenty points.**
+   An adverse disclosure — "the incumbent offers equivalent functionality free"
+   — charges the competition factor 20, and its basis was hardcoded, so the
+   reader was told an industry average produced a number the company produced,
+   and the coverage figure left it out. Now corrected after the disclosures are
+   read, which is the only place both are known. It relabels and does not
+   rescore: corpus, hard cases and calibration are all unchanged.
+
+   Timing stays a sector prior and a test now says so — it is a pure function of
+   the sector CAGR, nothing in a plan can move it, and the label should not gain
+   a false promotion later.
+
+   **The market rationale called a $10M bottom-up TAM "credible"** and scored it
+   exactly as it scored $900B. The +3 credit is for having done the bottom-up
+   work at all, which is defensible and now says so; the word was not, and is
+   gone. A TAM under ten times the raise now raises a flag instead — a $10M
+   market against a $5M round means the whole market is twice the money going
+   in. Text, not score: what multiple a fund needs is a mandate question, not
+   one this rubric should decide.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

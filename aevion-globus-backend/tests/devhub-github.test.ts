@@ -459,3 +459,50 @@ describe("A GitHub push that lost files does not report a clean push", () => {
     delete process.env.GITHUB_TOKEN;
   });
 });
+
+
+describe("the GitHub capability separates an outage from one bad file", () => {
+  test("a rejected token marks the capability degraded", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.GITHUB_TOKEN = "gh-bad";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "AuthFail" });
+    await request(app).put(`/api/devhub/projects/${cr.body.project.id}/file?path=a.txt`).send({ content: "x" });
+    fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => "Bad credentials" } as any);
+
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/github/push`).send({});
+    expect(r.body.ok).toBe(false);
+    expect(getProviderHealth("github")?.ok).toBe(false);
+    delete process.env.GITHUB_TOKEN;
+    __resetProviderHealth();
+  });
+
+  test("one refused file does not put the integration in the red", async () => {
+    // Somebody's oversized asset is not an outage; treating it as one is how a
+    // status strip becomes noise people stop reading.
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.GITHUB_TOKEN = "gh-ok";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "PartialPush" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=ok.txt`).send({ content: "fine" });
+    await request(app).put(`/api/devhub/projects/${id}/file?path=huge.bin.b64`).send({ content: "AAAA" });
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/user")) return jsonResp(200, { login: "octo" });
+      if (u.endsWith("/user/repos")) return jsonResp(201, { html_url: "https://github.com/octo/partial" });
+      if (u.includes("/contents/huge.bin.b64")) return jsonResp(422, { message: "too large" });
+      return jsonResp(201, { content: {} });
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).send({});
+    expect(r.body.pushedFiles).toBe(1);
+    expect(r.body.degraded).toBe(true);
+    // The push says degraded; the capability does not.
+    expect(getProviderHealth("github")?.ok).not.toBe(false);
+    delete process.env.GITHUB_TOKEN;
+    __resetProviderHealth();
+  });
+});

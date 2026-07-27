@@ -833,6 +833,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   }, [project]);
 
+  /** Save the editor's current text to the user's disk. The escape hatch for a
+   *  refused save: at that point the only copy of their work is this tab. */
+  const downloadEditorBuffer = () => {
+    if (!selectedFile) return;
+    const blob = new Blob([editorContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = selectedFile.path.split("/").pop() || "file.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast(`Копия ${a.download} скачана`, "success");
+  };
+
   const handleEditorChange = (value: string) => {
     setEditorContent(value);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -2865,9 +2881,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           {saveError && (
             <span
               title={saveError}
-              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: 480 }}
             >
-              ⚠ {saveError}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {saveError}</span>
+              {/* The text only exists in this browser tab now. Telling someone
+                  their work is unsaved without a way to keep it just makes the
+                  loss visible — this gets it onto their disk in one click. */}
+              <button
+                onClick={downloadEditorBuffer}
+                title="Скачать то, что сейчас в редакторе — до того, как вкладка закроется"
+                style={{ background: "#991b1b", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}
+              >
+                ⬇ Скачать копию
+              </button>
             </span>
           )}
           {project.deployUrl && (

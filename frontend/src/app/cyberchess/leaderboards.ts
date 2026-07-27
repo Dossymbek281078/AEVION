@@ -123,30 +123,26 @@ export function findMyRank(category: LbCategory, myRating: number): number {
 export function getTopWithMe(category: LbCategory, myRating: number, myName: string, topN = 3): LbEntry[] {
   const lb = getLeaderboard(category);
   const myRank = findMyRank(category, myRating);
-  const top = lb.slice(0, topN).map(e => ({ ...e }));
-  if (myRank <= topN) {
-    // Юзер в топе — заменяем соответствующую позицию.
-    const idx = myRank - 1;
-    top[idx] = { rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true };
-  } else {
-    // Добавляем строку «...я» снизу.
-    top.push({ rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true });
-  }
-  return top;
+  const me: LbEntry = { rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true };
+  if (myRank > topN) return [...lb.slice(0, topN).map(e => ({ ...e })), me];
+  /* Игрок ВСТАВЛЯЕТСЯ, а не затирает чужую строку. Раньше здесь стояло
+     `top[myRank-1] = me`: соперник с этой позиции просто исчезал из таблицы, а те, кто
+     ниже, сохраняли прежние номера — то есть два игрока с одним рангом. */
+  const rows = lb.slice(0, topN).map(e => ({ ...e }));
+  rows.splice(myRank - 1, 0, me);
+  return rows.slice(0, topN).map((e, i) => ({ ...e, rank: i + 1 }));
 }
 
 // Полный список вокруг моей позиции — для разворота «весь топ».
 export function getFullBoardAroundMe(category: LbCategory, myRating: number, myName: string): LbEntry[] {
   const lb = getLeaderboard(category);
   const myRank = findMyRank(category, myRating);
+  const me: LbEntry = { rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true };
   const out: LbEntry[] = lb.map(e => ({ ...e }));
-  // Insert me at correct position. Если в пределах LB_SIZE — заменяем.
-  if (myRank <= LB_SIZE) {
-    out[myRank - 1] = { rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true };
-  } else {
-    out.push({ rank: myRank, name: myName, country: "🎯", rating: myRating, isMe: true });
-  }
-  return out;
+  if (myRank > LB_SIZE) { out.push(me); return out; }
+  // Та же правка, что в getTopWithMe: вставляем и перенумеровываем, а не затираем.
+  out.splice(myRank - 1, 0, me);
+  return out.map((e, i) => ({ ...e, rank: i + 1 }));
 }
 
 export const CATEGORY_LABEL: Record<LbCategory, string> = {

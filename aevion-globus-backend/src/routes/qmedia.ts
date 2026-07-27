@@ -517,6 +517,23 @@ qmediaRouter.get("/tracks/:id/similar", async (req, res) => {
 /* ── Health ── */
 
 qmediaRouter.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "qmedia", tables: ["QMediaTrack", "QMediaPlaylist", "QMediaVideo", "QMediaLike"] });
+  // Здесь стоял список таблиц Postgres — и он вводил в заблуждение: таблицы
+  // действительно СОЗДАЮТСЯ (ensureQMediaTables выше), но ни одна строка этого
+  // модуля к ним не обращается. Все данные живут в Map в памяти процесса
+  // (40 обращений против нуля запросов к пулу), то есть каждый передеплой
+  // молча стирает треки, плейлисты, видео и лайки пользователей.
+  //
+  // Проверяющий, увидев имена таблиц, делает ровно неверный вывод — что данные
+  // сохраняются. Пока модуль не переведён на Postgres, health обязан говорить
+  // правду о том, где данные лежат на самом деле.
+  res.json({
+    ok: true,
+    service: "qmedia",
+    storage: "in-memory",
+    persistent: false,
+    note: "Data is kept in process memory and is lost on every restart. The QMedia* tables exist but are not used yet.",
+    tablesCreatedButUnused: ["QMediaTrack", "QMediaPlaylist", "QMediaVideo", "QMediaLike"],
+    counts: { tracks: memTracks.size, playlists: memPlaylists.size, videos: memVideos.size },
+  });
 });
 

@@ -10,7 +10,7 @@ import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
 import { ExampleListing } from "./components/ExampleListing";
 import { apiUrl } from "@/lib/apiBase";
-import { TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
+import { ApiError, TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
 const PAGE_SIZE = 10;
 
@@ -40,6 +40,7 @@ export default function StartupExchangePage() {
   const [interestFor, setInterestFor] = useState<Listing | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string, q: string) => {
     setLoading(true);
@@ -47,8 +48,13 @@ export default function StartupExchangePage() {
       const data = await startupxApi.list({ tier, sector: sector || undefined, q: q || undefined, limit: PAGE_SIZE, offset: off, sort: s });
       setListings(data.listings ?? []);
       setTotal(data.total ?? 0);
-    } catch {
+      setLoadError(null);
+    } catch (e) {
+      // Сорванная загрузка и пустая лента — это два разных сообщения. Раньше
+      // оба показывали «в этой категории пока пусто»: при недоступном бэкенде
+      // биржа выглядела мёртвой, а посетитель уходил, считая, что заявок нет.
       setListings([]);
+      setLoadError(e instanceof ApiError ? e.message : "Не удалось загрузить ленту. Проверьте связь.");
     } finally {
       setLoading(false);
     }
@@ -331,7 +337,21 @@ export default function StartupExchangePage() {
 
           {loading && <p style={{ color: "#64748b", textAlign: "center", padding: 36 }}>Загружаю заявки…</p>}
 
-          {!loading && listings.length === 0 && (
+          {!loading && loadError && (
+            <div style={{ background: "#fff", border: "1px solid #fecaca", borderRadius: 14, padding: 28, textAlign: "center", color: "#7f1d1d" }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Лента не загрузилась</div>
+              <div style={{ fontSize: 13.5, color: "#334155" }}>{loadError}</div>
+              <button
+                type="button"
+                onClick={() => fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied)}
+                style={{ marginTop: 14, padding: "9px 18px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Попробовать снова
+              </button>
+            </div>
+          )}
+
+          {!loading && !loadError && listings.length === 0 && (
             <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 36, textAlign: "center", color: "#64748b" }}>
               <div style={{ fontSize: 26, marginBottom: 8 }}>○</div>
               <div>В этой категории пока пусто.</div>
@@ -347,7 +367,7 @@ export default function StartupExchangePage() {
 
           {/* An empty feed used to be a dead end. One worked example — scored
               live by the same engine — shows what the exchange actually does. */}
-          {!loading && listings.length === 0 && !showWizard && <ExampleListing />}
+          {!loading && !loadError && listings.length === 0 && !showWizard && <ExampleListing />}
 
           {listings.map((l) => (
             <ListingCard key={l.id} listing={l} onInterest={setInterestFor} />

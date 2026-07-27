@@ -78,6 +78,9 @@ interface GumroadBalance {
   currency?: string;
   saleCount?: number;
   refundedCount?: number;
+  /** Покупки с внутренних адресов: входят в gross канала, но не в выручку. */
+  internalUsd?: number;
+  internalCount?: number;
   stub?: boolean;
   error?: string;
   message?: string;
@@ -210,6 +213,14 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
+  // Свои проверочные покупки входят в gross канала (он обязан сходиться с
+  // кабинетом провайдера), но выручкой не являются. 27.07.2026 их было две
+  // на $158.99 — 89% валовой суммы, и без этого разделения дашборд говорил
+  // «$178.97 выручки» там, где снаружи пришло $19.98.
+  const totalInternal = (balance?.internalUsd ?? 0) + (lsBalance?.internalUsd ?? 0);
+  const totalInternalCount = (balance?.internalCount ?? 0) + (lsBalance?.internalCount ?? 0);
+  const externalGross = totalGross - totalInternal;
+  const externalCount = totalCount - totalInternalCount;
   const daysLeft = daysUntil(goals.deadline);
 
   // Merge both channels' recent sales — the backend now attributes LS
@@ -293,17 +304,17 @@ export default function RevenuePage() {
               <GoalBar
                 label="$1M — первая цель"
                 target={goals.primaryUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
-                eta={etaLabel(goals.primaryUsd, totalGross, pace, numLang)}
+                eta={etaLabel(goals.primaryUsd, externalGross, pace, numLang)}
                 lang={numLang}
               />
               <GoalBar
                 label="$20M — стретч-цель"
                 target={goals.stretchUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                eta={etaLabel(goals.stretchUsd, totalGross, pace, numLang)}
+                eta={etaLabel(goals.stretchUsd, externalGross, pace, numLang)}
                 lang={numLang}
               />
             </div>
@@ -330,14 +341,24 @@ export default function RevenuePage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+                <div className="text-xs text-gray-400 mb-2">Выручка снаружи · все каналы</div>
                 <div className="text-3xl font-semibold text-white">
-                  ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+                  ${externalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
                 </div>
+                {totalInternal > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + ${totalInternal.toFixed(2)} свои проверочные покупки (не в выручке)
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
-                <div className="text-3xl font-semibold text-white">{totalCount}</div>
+                <div className="text-xs text-gray-400 mb-2">Продаж снаружи</div>
+                <div className="text-3xl font-semibold text-white">{externalCount}</div>
+                {totalInternalCount > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + {totalInternalCount} своих
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>

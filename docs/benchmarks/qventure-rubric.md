@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 223
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 227
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -362,12 +362,14 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    guess. Both the lazy quantifier and a lookbehind were needed to stop the span
    splitting `13%` into `1` and `3%`.
 
-   Moderna is now in the corpus (66 figures, all recovered). One caveat stands:
-   when a plan discloses both a growth and a decline, the decline wins
-   regardless of which period is later. That is right for this filing and for
-   every case here, and it would be wrong for a plan that shrank and then grew.
-   No such case exists in the corpus yet, so the rule is left as it is and
-   written down rather than guessed at.
+   Moderna is now in the corpus (66 figures, all recovered). The caveat noted
+   when this landed — that a decline won regardless of which period it described
+   — is closed: when both a rise and a fall are stated **and both are dated**,
+   the later date decides, so "fell 30% in 2023, grew 40% in 2024" reports the
+   growth while Moderna still reports its decline. Undated pairs keep the old
+   rule. It was the one field left inconsistent after every other reader learned
+   to prefer the later disclosure, and "the rule covers all fields except this
+   one" is the shape of every defect found today.
 
 ## How this stays true
 
@@ -375,7 +377,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 223):
+`tests/qventureDisclosedCorpus.test.ts`, 227):
 
 | Guard | Floor | Measured today |
 |---|---|---|

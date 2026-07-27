@@ -545,9 +545,8 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
 
-  let growth: RegExpMatchArray | null = s.growthPct !== null ? null : decline;
-  let growthBasis: GrowthBasis = decline ? basisFor(decline.index ?? 0) : "unspecified";
-  if (!growth && s.growthPct === null) {
+  /** The best rise the text states, with what it is attached to. */
+  const risePreferred = (): { m: RegExpMatchArray; basis: GrowthBasis } | undefined => {
     const found: Array<{ m: RegExpMatchArray; basis: GrowthBasis }> = [];
     for (const pat of GROWTH_PATTERNS) {
       const re = new RegExp(pat, "gi");
@@ -557,15 +556,41 @@ export function parsePlanSignals(text: string): PlanSignals {
       }
       if (found.length) break; // patterns stay ordered by confidence, as before
     }
-    const preferred = found.find((f) => f.basis === "revenue") ?? found[0];
-    if (preferred) { growth = preferred.m; growthBasis = preferred.basis; }
+    return found.find((f) => f.basis === "revenue") ?? found[0];
+  };
+
+  let growth: RegExpMatchArray | null = s.growthPct !== null ? null : decline;
+  let growthBasis: GrowthBasis = decline ? basisFor(decline.index ?? 0) : "unspecified";
+  // A decline wins by default, because a plan that mentions one is usually
+  // describing itself now. But a rate belongs to a period like every other
+  // figure here, and every other field already prefers the later one. When both
+  // a rise and a fall are stated AND both are dated, the later date decides —
+  // so "fell in 2023, grew 40% in 2024" reports the growth, and Moderna's "up
+  // 90% in 2017, down 13% in the nine months to September 2018" still reports
+  // the decline.
+  const rise = s.growthPct === null ? risePreferred() : undefined;
+  let usingDecline = growth === decline && decline !== null;
+  if (decline && rise && rise.m !== decline) {
+    const declineYear = clauseYearAt(t, decline.index ?? 0, decline[0].length);
+    const riseYear = clauseYearAt(t, rise.m.index ?? 0, rise.m[0].length);
+    if (declineYear !== null && riseYear !== null && riseYear > declineYear) {
+      growth = rise.m;
+      growthBasis = rise.basis;
+      usingDecline = false;
+      s.parseNotes.push(`Growth was disclosed for more than one period; the score uses the latest (${riseYear}).`);
+    }
+  }
+  if (!growth && s.growthPct === null && rise) {
+    growth = rise.m; growthBasis = rise.basis; usingDecline = false;
   }
   if (growth) {
     const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
     const g = value !== undefined ? parseLocaleNumber(value) : NaN;
     if (isFinite(g)) {
-      s.growthPct = decline ? -g : g;
+      // The sign follows the SELECTED match, not the mere presence of a decline
+      // elsewhere in the text.
+      s.growthPct = usingDecline ? -g : g;
       s.growthBasis = growthBasis;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
       s.growthPeriod = growthPeriodFromWords(p);

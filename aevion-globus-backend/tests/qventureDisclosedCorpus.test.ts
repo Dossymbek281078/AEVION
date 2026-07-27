@@ -939,3 +939,33 @@ describe("a per-customer figure is not the company's revenue", () => {
     expect(s.growthPct).toBe(98);
   });
 });
+
+describe("a rate belongs to a period, like every other figure", () => {
+  /**
+   * A decline won by default regardless of which period it described — the one
+   * field left inconsistent after every other reader learned to prefer the
+   * later disclosure. Left narrow yesterday because no case needed it; closed
+   * now because "the rule covers all fields except this one" is the shape of
+   * every defect found today.
+   */
+  test("when both are dated, the later period decides", () => {
+    expect(parsePlanSignals("Revenue fell 30% in 2023. Revenue grew 40% year over year in 2024.").growthPct).toBe(40);
+  });
+
+  test("Moderna's decline is the later period, so it still wins", () => {
+    const s = parsePlanSignals(
+      "Total revenue of $205.8M in 2017, up 90% from $108.4M in 2016. Total revenue decreased by $14.3 million, or 13%, to $99.6 million for the nine months ended 30 September 2018.",
+    );
+    expect(s.growthPct).toBe(-13);
+  });
+
+  test("undated figures keep the previous rule — a decline wins", () => {
+    expect(parsePlanSignals("Revenue grew 40% year over year. Revenue fell 30%.").growthPct).toBe(-30);
+  });
+
+  test("single disclosures are untouched in both directions", () => {
+    expect(parsePlanSignals("Revenue of $10M, down 20% year over year.").growthPct).toBe(-20);
+    expect(parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year.").growthPct).toBe(97);
+    expect(parsePlanSignals("GMV of $4.6B, up 77% year over year. Revenue of $509.5M, up 93% year over year.").growthPct).toBe(93);
+  });
+});

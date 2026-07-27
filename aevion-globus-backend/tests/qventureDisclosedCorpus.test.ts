@@ -1636,3 +1636,33 @@ describe("whose figure is this", () => {
     expect(sig("Unlike our competitor, we reached $10M ARR.").revenueUsd).toBeNull();
   });
 });
+
+describe("the deck path inherits the ownership test without new code", () => {
+  /**
+   * "States about itself versus merely mentions" was written down as the
+   * remaining half of the deck problem. It closed by construction: the deck
+   * veto asks `metricStatedAsIntention`, which asks the shared gate, which now
+   * carries the third-party check.
+   *
+   * So a model reading a slide that says "our competitor reached $10M ARR" and
+   * reporting arrUsd: 10000000 is vetoed — the parser has nothing for that
+   * metric and the metric is not stated as the plan's own.
+   *
+   * Pinned rather than assumed: inheritance is exactly the kind of thing that
+   * looks true and stops being true when someone adds a second gate.
+   */
+  const REVENUE = /\b(?:arr|mrr|revenues?)\b/i;
+  const CUSTOMERS = /\b(?:customers|users|subscribers)\b/i;
+
+  test("a rival's figure is vetoed on the deck path too", () => {
+    expect(metricStatedAsIntention("Our competitor reached $10M ARR last year.", REVENUE)).toBe(true);
+    expect(metricStatedAsIntention("The market leader has 500,000 customers.", CUSTOMERS)).toBe(true);
+    // and the parser it falls back to has nothing to offer instead
+    expect(parsePlanSignals("Our competitor reached $10M ARR last year.").revenueUsd).toBeNull();
+  });
+
+  test("the plan's own figure is not vetoed", () => {
+    expect(metricStatedAsIntention("We reached $10M ARR last year.", REVENUE)).toBe(false);
+    expect(metricStatedAsIntention("12,000 customers.", CUSTOMERS)).toBe(false);
+  });
+});

@@ -15,6 +15,7 @@
  */
 
 import { Router } from "express";
+import { aggregateSubscriptionSources, readSubscriptions } from "../lib/subscriptionSources";
 import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { REVENUE_APPS, getLiveRevenueApps, getRevenueApp } from "../data/revenueApps";
@@ -1162,6 +1163,29 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
 /**
  * GET /api/revenue/env-guide
  */
+/**
+ * GET /api/revenue/subscription-sources
+ *
+ * Разрез подписок по источнику трафика — вторая половина ответа на вопрос
+ * «какой канал окупается». Первая половина, разовые покупки Gumroad, живёт в
+ * /gumroad/recent: там метка приходит в url_params заказа. Подписки продаются
+ * через LemonSqueezy, где метка доезжает только через вебхук и лежит в записи
+ * подписки.
+ *
+ * Отдаём количество, а не деньги: вебхук LemonSqueezy не сохраняет сумму, а
+ * домножать тариф на каталожную цену значит выдать оценку за факт — на чекауте
+ * цена отличается при скидке, промокоде и годовом периоде.
+ */
+revenueRouter.get("/subscription-sources", (_req, res) => {
+  const { subs, malformed } = readSubscriptions();
+  const agg = aggregateSubscriptionSources(subs);
+  res.json({
+    ...agg,
+    skipped: { ...agg.skipped, malformed: agg.skipped.malformed + malformed },
+    note: "Количество подписок, не выручка: сумма не сохраняется в записи подписки.",
+  });
+});
+
 revenueRouter.get("/env-guide", (_req, res) => {
   res.json({
     global: [

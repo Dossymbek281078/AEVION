@@ -93,7 +93,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Расчётная единица + платёжная рельса + банковский UI для эпохи, когда «банк» = API.",
     modules: ["AEV", "QPayNet", "AEVION Bank", "Payments Rail", "QTrade", "QTradeOffline"],
-    proof: "AEV cap 21M · /api/aev/* 6 endpoints · smoke 10/10 · QPayNet ~99.5% prod",
+    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (27 Jul) · QPayNet ~99.5% prod",
     tamAnchor: "Digital payments flow → $20T к 2030",
     accent: "#10b981",
   },
@@ -103,7 +103,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Подпись, секреты, патенты и governance — встроены в один контур, FIPS 204 post-quantum.",
     modules: ["QSign v2", "QShield", "QRight", "QContract", "QChainGov", "QMaskCard", "VeilNetX", "Z-Tide"],
-    proof: "ML-DSA-65 (FIPS 204), key-activated · prod smoke 20/20 · QShield Lagrange-reconstruct · QRight IP-registry live",
+    proof: "ML-DSA-65 (FIPS 204), key-activated · prod smoke 24/24 (27 Jul) · QShield Lagrange-reconstruct · QRight IP-registry live",
     tamAnchor: "IP economy + cybersec ≈ $400B → $700B",
     accent: "#3b82f6",
   },

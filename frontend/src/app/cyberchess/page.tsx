@@ -2486,6 +2486,27 @@ export default function CyberChessPage(){
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("Time out");sOn(false);snd("x");if(!p2pMode&&!hotseat)applyResult(false)});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0&&clockActive,()=>{sOver("AI timed out — you win!");sOn(false);snd("x");if(!p2pMode&&!hotseat)applyResult(true)});
 
+  /* Награда за победу — на ЛЮБОМ пути завершения. Раньше расчёт стоял в ветке мата,
+     поэтому выигрыш по флагу («AI timed out — you win!») не приносил ни одного Chessy:
+     applyResult считал рейтинг и статистику, а платить было некому. Здесь эффект следит
+     за самим фактом победы. Буст chessy_double списывается ровно один раз — ref не даёт
+     эффекту сработать дважды на одной партии, а из ветки мата расчёт убран. */
+  const winRewardRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over||!over.toLowerCase().includes("you win"))return;
+    const key=`${matchmakingId||"local"}-${bk}-${hist.length}`;
+    if(winRewardRef.current===key)return;
+    winRewardRef.current=key;
+    const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
+    const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
+    const baseReward=Math.max(5,Math.round(10*aiMul*timeMul));
+    const doubleActive=((chessy.ach as Record<string,number>).chessy_double||0)>0;
+    const reward=doubleActive?baseReward*2:baseReward;
+    if(doubleActive)sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
+    const lvName=ALS[aiI]?.name||"AI";
+    setTimeout(()=>{addChessy(reward,`победа над ${lvName}${doubleActive?" 💰x2":""}`)},400);
+  },[over,matchmakingId,bk,hist.length,aiI,tc.ini,chessy.ach,addChessy]);
+
   // Shop v2: consume time_boost on game start — applies +Ns to user's clock
   // once per purchase. Triggered at game start when ach.time_boost > 0.
   useEffect(()=>{
@@ -3356,21 +3377,9 @@ export default function CyberChessPage(){
           const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
           if(w){
             applyResult(true);
-            // Chessy reward: scale by AI difficulty × time category × shop bonus
-            const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
-            const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
-            const baseReward=Math.max(5,Math.round(10*aiMul*timeMul));
-            // Apply Chessy×2 boost (shop v2 item, consumed once)
-            const doubleActive=(chessy.ach as Record<string,number>).chessy_double>0;
-            const reward=doubleActive?baseReward*2:baseReward;
-            if(doubleActive){
-              sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
-            }
-            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`)},400);
-            // Achievements
-            // Достижения за победу выдаются НЕ здесь: ветка мата — лишь один из путей
-            // завершения, и выигрыш по флагу её минует. См. эффекты рядом с
-            // lastWinTrackedRef: они следят за счётчиком побед и за самим фактом победы.
+            // Награда и достижения за победу выдаются НЕ здесь: ветка мата — лишь один
+            // из путей завершения, и выигрыш по флагу её минует. См. эффект winRewardRef
+            // ниже (Chessy) и эффекты рядом с lastWinTrackedRef (достижения).
           }
           else{applyResult(false)}
         }

@@ -256,4 +256,35 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await page.getByRole("button", { name: "Env Vars", exact: true }).click();
     await expect(page.getByText(/не загрузился/)).toBeVisible({ timeout: 10_000 });
   });
+
+  test("a refused env var save does not report the value as stored", async ({ page }) => {
+    await page.route("**/api/devhub/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/env") && req.method() === "PUT") return json({ error: "nope" }, 500);
+      if (url.includes("/env")) return json({ env: [] });
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: { id: PROJECT_ID, name: "env", description: "", stack: "react", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: FILES,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      return json({ ok: true });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("button", { name: "Env Vars", exact: true }).click();
+    const key = page.getByPlaceholder(/KEY|ключ/i).first();
+    await expect(key).toBeVisible({ timeout: 15_000 });
+    await key.fill("DATABASE_URL");
+    await page.getByRole("button", { name: /^(Add|Save|Добав)/i }).first().click();
+
+    // Green "Env var saved" here is how a value that never reached the server
+    // looked stored — a deploy would then run without it.
+    await expect(page.getByText(/Переменная НЕ сохранена/)).toBeVisible({ timeout: 10_000 });
+  });
 });

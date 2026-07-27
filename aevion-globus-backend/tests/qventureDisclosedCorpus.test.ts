@@ -6458,3 +6458,27 @@ describe("KNOWN MISS: collapsing whitespace erases table structure", () => {
   // one change to the normalisation, upstream of every pattern. Not attempted
   // with twenty minutes left: it touches what every rule on this branch reads.
 });
+
+describe("the last three connector lists join the shared constant", () => {
+  // Growth's own list was found by accident an hour ago. Swept mechanically,
+  // three more were still written longhand: decline, the growth RANGE, and
+  // reservations. Each read "X of 12%" and not "X: 12%".
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["a decline with a colon", "Revenue decline: 12%.", (x: Sig) => x.growthPct, -12],
+    ["a decline with a word", "Revenue declined by 12%.", (x: Sig) => x.growthPct, -12],
+    ["reservations with a colon", "Reservations: 14,000.", (x: Sig) => x.reservations, 14_000],
+    ["reservations with a word", "Reservations of 14,000.", (x: Sig) => x.reservations, 14_000],
+  ])("%s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("a growth range with a colon reads its low end, not its high one", () => {
+    // The worst of the three, and a wrong number rather than a miss: with the
+    // range pattern unable to match, the single-figure pattern picked up 40 —
+    // the flattering end of a band the plan never committed to.
+    expect(p("Growth: 20-40% year over year.").growthPct).toBe(20);
+    expect(p("Growing 20-40% year over year.").growthPct).toBe(20);
+  });
+});

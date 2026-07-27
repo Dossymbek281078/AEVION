@@ -1042,7 +1042,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // A filing states the size before the rate — "decreased by $14.3 million, or
   // 13%, to $99.6 million" — so the same amount-shaped span the level connector
   // uses lets that through without letting a conjunction through.
-  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:${AMOUNT_BIT}){0,2}?(?:by|at|of|to|or)?\s*(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
+  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:${AMOUNT_BIT}){0,2}?(?:by|to|or|${LINK})?\s*(?<![0-9.])${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
     // The mirror of the noun shape the rise patterns gained in limit 43:
     // "revenue saw a 12% decline" stated a fall that read as nothing at all,
     // so the factor fell back to a sector prior. Safe to add only now that
@@ -1117,7 +1117,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // A growth band read its HIGH end — "growing 20-40% year over year" scored 40
   // — which is the flattering end, against the rule every other band here
   // follows. The plan committed to 20.
-  const growthRange = firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
+  const growthRange = firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|between|${LINK})?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
   if (growthRange && !decline) {
     const a = parseLocaleNumber(growthRange[1]);
     const b = parseLocaleNumber(growthRange[2]);
@@ -1846,7 +1846,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
 
   // ── Reservations / pre-orders — read, but kept apart from committed demand ──
   const resv = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:reservations?|pre[- ]?orders?|orders? reserved|non[- ]binding orders?)`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:reservations?|pre[- ]?orders?)\s*(?:for|of|totalling|totaling)?\s*(?:approximately\s*)?${NUM}\s*${UNIT}`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(?:reservations?|pre[- ]?orders?)\s*(?:for|totalling|totaling|${LINK})?\s*(?:approximately\s*)?${NUM}\s*${UNIT}`, "i"));
   if (resv) {
     const v = parseMoney(resv[1], resv[2]);
     if (v && v >= 1 && v < 1e9 && statedAsAchieved(t, resv.index ?? 0, resv[0].length)) s.reservations = Math.round(v);

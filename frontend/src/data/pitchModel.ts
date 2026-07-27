@@ -250,7 +250,7 @@ export const networkForces = [
     title: "Switching costs (financial network effect)",
     body:
       "Bank ties balance, savings goals, recurring payments, achievements and tier perks to the same identity. " +
-      "Average user accumulates 6+ scheduled flows after 90 days — leaving means rebuilding all of them.",
+      "Flows scheduled across modules have to be rebuilt elsewhere if you leave — that is the design. No usage data behind this yet.",
     flywheel: "Time in product → automation → switching cost → retention.",
   },
   {
@@ -889,7 +889,7 @@ export const risks = {
 export const ask = {
   title: "The ask",
   body:
-    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.",
+    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 20 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.",
   termsHref: "/acquire",
   termsLabel: "See the full deal ladder (1% → 95%)",
   ctaPrimary: { label: "Book an investor demo", href: "mailto:yahiin1978@gmail.com?subject=AEVION investor demo" },

@@ -22,7 +22,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "What is the round size and use of proceeds?",
-    a: "Raising for an 18-month sprint: harden the 12 launched MVPs, ship 4 of the 15 emerging nodes, lock 2 enterprise compliance pilots, and open 3 international IP-bureau partnerships. Capital allocation: ~50% engineering, ~30% GTM in three creator verticals, ~20% regulatory and partnerships.",
+    a: "Raising for an 18-month sprint: harden the 12 launched MVPs, ship 4 of the 20 emerging nodes, lock 2 enterprise compliance pilots, and open 3 international IP-bureau partnerships. Capital allocation: ~50% engineering, ~30% GTM in three creator verticals, ~20% regulatory and partnerships.",
   },
   {
     q: "What is the revenue model?",
@@ -34,7 +34,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "What is your moat?",
-    a: "Four compounding network effects: data (Trust Graph edges accumulate), economic (creators ↔ fans through Bank), switching cost (the average user has 6+ scheduled flows after 90 days), and scope (every new module makes the existing modules more valuable at zero marginal cost). The graph is non-replicable after ~10K active users.",
+    a: "Four compounding network effects: data (Trust Graph edges accumulate), economic (creators ↔ fans through Bank), switching cost (flows scheduled across modules have to be rebuilt elsewhere — this is how it is designed; we do not have usage data to quote yet), and scope (every new module makes the existing modules more valuable at zero marginal cost). The graph is non-replicable after ~10K active users.",
   },
   {
     q: "What about regulation?",

@@ -495,6 +495,37 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    requirement. The first two were not enough on their own — a definition
    states no intention and a contract clause denies nothing.
 
+21. **Open, and the largest one left: a competitor's numbers are read as the
+   applicant's.** The intention work went into the deck path, and the same
+   question asked of the main parser found three defects there:
+
+   | Sentence | Credited to the applicant |
+   |---|---|
+   | `Our competitor reached $10M ARR last year.` | $10M revenue |
+   | `The market leader has 500,000 customers.` | 500,000 customers |
+   | `Incumbents charge a 25% take rate.` | a 25% take rate |
+
+   Two neighbouring sentences — "industry gross margins are typically 70%" and
+   "typical churn in this category is 5% monthly" — are *not* credited, but only
+   because the intervening words happen to break the pattern. Luck, the same
+   luck the PPA and peer-review entries were living on, and it will not hold for
+   the next phrasing.
+
+   This matters more than anything else on this list. A comparison is the most
+   common sentence in a pitch deck and it names the **largest numbers in the
+   document**: the incumbent's revenue, the leader's user base, the category's
+   margins. Reading those as the applicant's own is a wrong figure of the worst
+   available kind.
+
+   A filter was written and reverted the same session — it did not fire, and
+   diagnosing why was heading past the end of the session with a green tree to
+   protect. The shape is clear enough to start from: a third-party subject in
+   the figure's own clause before it (competitor, incumbent, market leader,
+   peers, industry, typical, average), applied in the same shared gate every
+   reader already consults. It should be deliberately conservative — declining
+   "unlike our competitor, we reached $10M ARR" is a cheaper mistake than
+   scoring a rival's revenue as the plan's.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

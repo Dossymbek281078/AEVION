@@ -1274,6 +1274,40 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    engine assumptions → the list the result page renders, and the middle link
    is the one a refactor can drop while every parser test stays green.
 
+50. **A red flag that could never fire.** The red flags were audited the same
+   way the parse notes were, by firing each one deliberately. Five of six
+   behaved. The sixth could not behave: the rule was "twenty-five points above
+   the sector norm", and B2B SaaS carries a 78% norm, so the threshold was 103%
+   — a gross margin no company can report. Biotech, at 85%, needed 110%.
+
+   Dead for the two sectors this tool sees most, in exactly the way the
+   intention gate was dead this morning: it reads like a protection and cannot
+   act as one. A 98% claimed gross margin in SaaS passed without comment.
+
+   A 90% absolute ceiling now sits on top of the relative rule. The best gross
+   margins in software are mid-to-high eighties, so a claim above ninety is
+   worth checking in any sector; sectors whose norm is below 65% keep their
+   relative threshold, since the ceiling is above it anyway. A test iterates
+   **every** sector and requires the flag to be reachable, so a new sector with
+   a high prior cannot arrive dead.
+
+   Corpus, hard cases and calibration all unchanged.
+
+51. **A correction to the test counts reported on this branch.** The full
+   backend suite is **not** deterministic: run repeatedly on an unmodified
+   tree it produced 6, then 1, then 2 failures, in different tests each time,
+   all in  — another module's zone, and green when that
+   file is run alone.
+
+   Which means the "N backend tests green" figures quoted in commit messages
+   here were runs that happened to miss the flaky ones, not a baseline. The
+   QVenture numbers are unaffected and were measured directly: 
+   returns 1,000 passing three times out of three, and the three harnesses are
+   run separately every time.
+
+   Recorded rather than quietly corrected, because a number stated confidently
+   and derived from a flaky source is the thing this whole document is against.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

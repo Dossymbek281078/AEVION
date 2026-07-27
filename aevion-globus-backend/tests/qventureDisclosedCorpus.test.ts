@@ -2841,3 +2841,48 @@ describe("the one conversion that did not announce itself", () => {
     expect(parsePlanSignals("Churn of 3% monthly.").churnMonthlyPct).toBe(3);
   });
 });
+
+describe("a red flag that could never fire", () => {
+  // The rule was "twenty-five points above the sector norm". For B2B SaaS,
+  // whose norm is 78%, that is a threshold of 103% — a margin no company can
+  // report. The flag was dead for SaaS and biotech, two of the sectors this
+  // tool sees most, in the same way the intention gate was dead this morning:
+  // it read like a protection and could not act as one.
+  const flagged = (sector: string, gm: number) =>
+    analyze({
+      name: "P", sector: sector as never, stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A company.", tractionNotes: `Gross margin of ${gm}%. ARR of $1M.`,
+    }).redFlags.some((f) => /gross margin/i.test(f));
+
+  test.each([
+    ["SaaS at 98%", "saas", 98],
+    ["SaaS at 91%", "saas", 91],
+    ["biotech at 95%", "biotech", 95],
+    ["marketplace at 91%", "marketplace", 91],
+  ])("%s is flagged", (_l, sector, gm) => {
+    expect(flagged(sector, gm)).toBe(true);
+  });
+
+  test.each([
+    ["SaaS at 90%, on the ceiling", "saas", 90],
+    ["SaaS at 85%, a real best-in-class figure", "saas", 85],
+    ["marketplace at 85%", "marketplace", 85],
+  ])("%s is not", (_l, sector, gm) => {
+    expect(flagged(sector, gm)).toBe(false);
+  });
+
+  test("a below-average sector keeps its relative threshold", () => {
+    // Logistics norms are 35%, so its threshold stays at 60 — the 90% ceiling
+    // is above that and changes nothing.
+    expect(flagged("logistics", 70)).toBe(true);
+    expect(flagged("logistics", 55)).toBe(false);
+  });
+
+  test("every sector can reach the flag at all", () => {
+    // The property the old rule failed. Iterating the sectors rather than
+    // listing them, so a new sector with a high prior cannot arrive dead.
+    for (const sector of ["saas", "marketplace", "fintech", "hardware", "biotech", "climate", "consumer", "ai", "healthtech", "edtech", "deeptech", "logistics", "other"]) {
+      expect(flagged(sector, 99)).toBe(true);
+    }
+  });
+});

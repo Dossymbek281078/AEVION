@@ -597,7 +597,18 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // below, so a disclosure is never charged twice.
   const metricFlags: AdverseSignal[] = [];
   const sectorGmPct = round(sector.grossMargin * 100);
-  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
+  // The rule was "twenty-five points above the sector norm", which for a sector
+  // whose norm is already 76% means a threshold of 101% — a margin no company
+  // can report. This flag could therefore never fire for B2B SaaS or biotech,
+  // two of the sectors this tool sees most. Dead in the same way the intention
+  // gate was dead: it reads like a protection and could not act as one.
+  //
+  // 90% is an absolute ceiling on top of the relative rule. The best gross
+  // margins in software are mid-to-high eighties, so a claim above ninety is
+  // worth checking in ANY sector; below-average sectors keep their relative
+  // threshold unchanged, since 90 is above it anyway.
+  const gmFlagAt = Math.min(sectorGmPct + 25, 90);
+  if (signals.grossMarginPct !== null && signals.grossMarginPct > gmFlagAt) {
     metricFlags.push({ factor: "economics", penalty: 10,
       flag: `Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.` });
   }

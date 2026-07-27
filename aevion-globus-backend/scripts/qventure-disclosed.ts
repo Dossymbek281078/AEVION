@@ -889,6 +889,39 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form 20-F, year ended 31 December 2025",
+    sources: ["https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/tsm-20251231.htm"],
+    input: {
+      name: "TSMC",
+      sector: "hardware",
+      stage: "growth",
+      geography: "TW",
+      askUsd: 2_000_000_000,
+      description:
+        "Contract manufacture of integrated circuits for fabless chip designers, on leading-edge process nodes built in the R.O.C. and increasingly overseas.",
+      tractionNotes:
+        "Net revenue was NT$3,809,054 million in 2025, a 31.6% increase over 2024. In 2025, our gross margin increased to 59.9% of net revenue from 56.1% in 2024.",
+    },
+    expect: [
+      {
+        label: "net revenue NT$3,809,054M read and converted",
+        read: (s) => s.revenueUsd,
+        ...num(toUsd(3_809_054_000_000, "TWD"), 0.02),
+      },
+      { label: "gross margin 59.9%", read: (s) => s.grossMarginPct, ...num(59.9) },
+      // The filing writes growth as a NOUN — "a 31.6% increase over 2024" — and
+      // the growth patterns were all built from the verb. Recorded as limit 43
+      // rather than claimed here: the corpus states what the engine reads.
+      { label: "growth stated as a noun is not read (limit 43)", read: (s) => s.growthPct === null, expected: true },
+      // The margin rose 3.8 points from 56.1% to 59.9%. Neither number is a
+      // growth rate, and both used to be read as one.
+      { label: "the margin is not also counted as growth", read: (s) => s.growthPct === 59.9 || s.growthPct === 56.1, expected: false },
+      { label: "the prior-year margin does not win over the current one", read: (s) => s.grossMarginPct === 56.1, expected: false },
+    ],
+  },
+
 ];
 
 // ── Reporting ───────────────────────────────────────────────────────────────

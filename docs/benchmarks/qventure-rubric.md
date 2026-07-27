@@ -78,7 +78,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    cancel, so it is shown to the reader rather than credited.
 
 5. **Measured on the disclosed-figures corpus (30 entries, 29 real companies,
-   rubric v6):** parse coverage **89/89**, mean success **71.2** vs mean failure
+   rubric v6):** parse coverage **94/94**, mean success **71.2** vs mean failure
    **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 13
    `open`**. Infosys appears twice on purpose — once as the dollar release and
    once as the rupee release of the same quarter — because the pair is the only
@@ -1064,6 +1064,27 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
 
    Eight new companies this session, eight new defects, and this one was in the
    first sentence read from the eighth. The corpus is nowhere near exhausted.
+
+43. **Open, with reproduction: growth written as a noun.** Every growth pattern
+   in the parser is built from a verb — `increased 31.6% year over year` reads,
+   and these do not:
+
+   | Sentence | Growth read |
+   |---|---|
+   | `Net revenue was NT$3,809,054 million in 2025, a 31.6% increase over 2024.` | nothing |
+   | `A 31.6% increase in revenue.` | nothing |
+   | `Revenue grew 31.6% over 2024.` | nothing |
+
+   The first is TSMC's own wording. This is the verb-versus-noun rule from limit
+   19 arriving from the other direction: those pattern lists were rebuilt around
+   verbs precisely because noun-anchored ones matched too much, and the growth
+   patterns now match too little.
+
+   Not fixed here rather than fixed badly: adding a noun form to the growth
+   patterns needs the same trap testing every other widening on this branch got,
+   and there were nine minutes left in the session. The TSMC case asserts the
+   figure is **not** read, so the corpus states what the engine does and this
+   turns red the moment someone fixes it.
 
 ## How this stays true
 

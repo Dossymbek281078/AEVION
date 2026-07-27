@@ -197,8 +197,21 @@ pricingRouter.post("/quote", (req, res) => {
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
   const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
+  // hasOwnProperty.call, а НЕ `body.currency in CURRENCY_RATES`: оператор `in`
+  // видит ключи прототипа, поэтому валюта "constructor" проходила проверку, а
+  // дальше `CURRENCY_RATES[currency].rate` брал `.rate` у функции Object →
+  // undefined → все цены считались NaN.
+  //
+  // Проверено на живом проде 27.07.2026:
+  //   POST /api/pricing/quote {"tierId":"lite","currency":"constructor"}
+  //   → {"currency":"constructor","subtotal":null,"total":null,
+  //      "lines":[{"unitPrice":null,"total":null}]}
+  // при том что обычная неизвестная валюта ("ZZZ") корректно откатывалась на USD
+  // и давала total 24. То есть отсекалось всё, кроме ровно тех строк, которые
+  // `in` пропускает.
   const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
+    typeof body.currency === "string" &&
+    Object.prototype.hasOwnProperty.call(CURRENCY_RATES, body.currency)
       ? (body.currency as CurrencyCode)
       : "USD";
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];

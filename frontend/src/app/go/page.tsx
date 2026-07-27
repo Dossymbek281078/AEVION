@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GoSubscribe } from "@/components/GoSubscribe";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -158,6 +159,15 @@ export default async function GoPage({
             </a>
             .
           </div>
+        </section>
+
+        {/* Сбор почты стоит ПОСЛЕ здоровья и книги, но ПЕРЕД «всей платформой»:
+            человек уже увидел, ради чего пришёл, но ещё не дошёл до конца
+            страницы, где внимание кончается. Форма — единственный на странице
+            исход, который не требует от него платить прямо сейчас и при этом
+            не теряет его навсегда. */}
+        <section style={styles.section}>
+          <GoSubscribe channel={channel} />
         </section>
 
         <section style={styles.section}>

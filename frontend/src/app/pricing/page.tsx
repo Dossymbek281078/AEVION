@@ -10,7 +10,7 @@ import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
-import { useABVariant } from "@/lib/abVariant";
+import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
@@ -316,18 +316,33 @@ export default function PricingPage() {
         if (!cancelled && j && j.runs > 0) setAiSavings(j);
       })
       .catch(() => {});
-    track({
-      type: "page_view",
-      source: "pricing",
-      meta: { variant_hero: heroVariant, variant_tierCards: tierCardsVariant },
-    });
-    track({ type: "ab_assigned", source: "pricing", meta: { key: "hero", value: heroVariant } });
-    track({ type: "ab_assigned", source: "pricing", meta: { key: "tierCards", value: tierCardsVariant } });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroVariant, tierCardsVariant]);
+    // Зависимостей нет намеренно: ни один из этих запросов не зависит от
+    // A/B-варианта. Раньше здесь стояло [heroVariant, tierCardsVariant], а
+    // useABVariant отдаёт заглушку "A" на первом рендере и настоящее значение
+    // из куки после mount — то есть у каждого, кому выпал НЕ дефолтный
+    // вариант, весь блок выполнялся дважды (замерено на проде: pricing×2,
+    // promo×2, testimonials×2, trust×2 — issue #1016).
+  }, []);
+
+  // Аналитика отдельным эффектом и ровно один раз за загрузку.
+  //
+  // Она единственная тут действительно зависит от варианта — но брать его надо
+  // не из состояния, а синхронно из куки: состояние приходит вторым рендером и
+  // вместе с ним раньше уезжала ВТОРАЯ копия всех трёх событий. Воронка
+  // /pricing показывала вдвое больше просмотров, чем было на самом деле.
+  useEffect(() => {
+    const v = getAllVariants();
+    track({
+      type: "page_view",
+      source: "pricing",
+      meta: { variant_hero: v.hero, variant_tierCards: v.tierCards },
+    });
+    track({ type: "ab_assigned", source: "pricing", meta: { key: "hero", value: v.hero } });
+    track({ type: "ab_assigned", source: "pricing", meta: { key: "tierCards", value: v.tierCards } });
+  }, []);
 
   // Deep-link c модульной страницы: /pricing?module=<id> предвыбирает продукт
   // для тарифа Lite (последняя миля — посетитель приходит с /cyberchess,

@@ -390,7 +390,7 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
   if (/\b(founders?|co-?founders?|cto|ceo)\b[^.]{0,60}\b(left|departed|quit|resigned|exited)\b|\b(lost|losing)\b[^.]{0,20}\bfounders?\b/.test(t)) {
     add("execution", 15, "Plan discloses founder or key-executive departure — a material team-continuity risk at this stage.");
   }
-  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\bout of (cash|money|runway)\b/.test(t)) {
+  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\b([0-5]\s*months?)\b[^.]{0,20}\bof (?:runway|cash)\b|\bout of (cash|money|runway)\b/.test(t)) {
     add("execution", 14, "Plan discloses six months or less of runway — the round is a rescue, which changes the terms materially.");
   }
 
@@ -425,12 +425,16 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
   // not the stage benchmark — cleared trials, validation data, working hardware
   // and signed offtake are. Charging only "no revenue" left those plans looking
   // merely early when what they had disclosed was no evidence of any kind.
-  const SCIENCE_GATED = new Set(["biotech", "healthtech", "space", "climate", "ai_infra", "agtech"]);
+  // There is no "hardware" or "deeptech" sector — both resolve to "other", and
+  // "other" was not gated. So "we have no working prototype" and "yields are
+  // below plan" — the two disclosures that matter most for a company that has
+  // to build something — never fired for the sector such a company lands in.
+  const SCIENCE_GATED = new Set(["biotech", "healthtech", "space", "climate", "ai_infra", "agtech", "other"]);
   if (SCIENCE_GATED.has(sector.id) && (stage === "series-a" || stage === "growth")) {
     if (/\bno (?:clinical|trial|efficacy|safety|validation) data\b|\bno clinical (?:evidence|results?)\b/.test(t)) {
       add("execution", 14, "Plan states it has no clinical or validation data at a stage where that evidence is the benchmark — the core technical risk is entirely unretired.");
     }
-    if (/\bno (?:ind|510\(k\)|ce mark|clearances?|regulatory (?:approvals?|clearances?))\b|\bno approvals?\b/.test(t)) {
+    if (/\bno (?:ind\b|510\(k\)|ce mark\b|clearances?\b|regulatory (?:approvals?|clearances?)\b)|\bno approvals?\b/.test(t)) {
       add("legal", 12, "Plan states no regulatory clearance has been obtained — the approval path remains a gating, unpriced risk.");
     }
     if (/\bno (?:publications?|peer[- ]reviewed (?:results?|data))\b|\bnot (?:yet )?peer[- ]reviewed\b/.test(t)) {

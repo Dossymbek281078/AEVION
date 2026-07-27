@@ -1338,6 +1338,35 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    in. Text, not score: what multiple a fund needs is a mandate question, not
    one this rubric should decide.
 
+53. **Three adverse disclosures that could not act.** The margin flag was dead
+   because its threshold was unreachable. Asking the same question of all
+   nineteen adverse disclosures, by firing each one deliberately, found three
+   more:
+
+   | Disclosure | Why it could not fire |
+   |---|---|
+   | `no 510(k) or CE mark` | the alternative ended in a word boundary, and a closing parenthesis is not a word character — that branch could never match |
+   | `3 months of runway remaining` | the pattern wanted the noun before the number, and a plan writes it either way round |
+   | `no working prototype`, `yields below plan` | gated to sectors that build things, and there is no "hardware" sector — such a plan resolves to `other`, which was not in the gate |
+
+   All sixteen now charge. Corpus, hard cases and calibration unchanged, so
+   nothing was recalibrated — these were charges that should always have been
+   made and never were.
+
+   The third is worth its own note: I first added "hardware" and "deeptech" to
+   the gate, and both resolve to `other`, so the fix did nothing. Checking what
+   a sector name actually resolves to took one probe and would have saved a
+   wrong commit.
+
+54. **The control-character guard now covers the test file too.** The same 0x08
+   artefact that killed three branches of the intention gate appeared inside an
+   assertion *in the test file* while writing limit 53 — a regex reading
+   `no (?:510(k))` that held a backspace where a word boundary belonged, which
+   asserts something weaker than it appears to and can pass for the wrong
+   reason. The guard over the parser source could not see it.
+
+   It now guards itself, and it caught its own comment on the first run.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

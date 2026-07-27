@@ -109,6 +109,26 @@ function live(balance) {
       points.every((p) => "internalUsd" in p),
       `первая точка: ${JSON.stringify(points[0])}`,
     );
+
+    // Двойное вычитание своих покупок (гросс уже очищен, а их вычитают снова)
+    // даёт отрицательную выручку — 27.07.2026 на графике вышло −$139.01. Логика
+    // вычитания живёт во фронте, и API-смок её не видит; здесь проверяется то,
+    // что видно снаружи: последняя точка обязана совпасть с текущей выручкой.
+    // Если признак «свои покупки в гроссе» разъедется с реальностью, разойдутся
+    // и эти два числа.
+    const last = points[points.length - 1];
+    const lastExternal = last.includesInternal ? last.grossUsd - (last.internalUsd ?? 0) : last.grossUsd;
+    check(
+      "последняя точка тренда совпадает с текущей выручкой",
+      Math.abs(lastExternal - (summary.grossUsd ?? 0)) < CENT,
+      `точка ${lastExternal.toFixed(2)}, summary ${(summary.grossUsd ?? 0).toFixed(2)}`,
+    );
+    const external = points.map((p) => (p.includesInternal ? p.grossUsd - (p.internalUsd ?? 0) : p.grossUsd));
+    check(
+      "ни одна точка тренда не даёт отрицательную выручку",
+      external.every((v) => v >= -0.001),
+      `минимум ${Math.min(...external).toFixed(2)}`,
+    );
   }
 
   console.log(

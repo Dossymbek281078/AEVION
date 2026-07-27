@@ -15,6 +15,7 @@
 
 import { apiUrl } from "@/lib/apiBase";
 import type { Account, Me, Operation } from "./types";
+import { sharedFetchMe, sharedPingBackend } from "./shared";
 
 export type Transfer = {
   id: string;
@@ -101,18 +102,10 @@ async function request<T>(
 }
 
 export async function fetchMe(): Promise<Me | null> {
-  const token = readToken();
-  if (!token) return null;
-  try {
-    const res = await fetch(apiUrl("/api/auth/me"), {
-      headers: authHeaders(),
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return (data && typeof data === "object" && "user" in data ? (data as { user: Me }).user : null) ?? null;
-  } catch {
-    return null;
-  }
+  // Через общий загрузчик: ту же ручку просит usePreflight на этой же
+  // странице (issue #1035). Кэш привязан к токену.
+  const { user } = await sharedFetchMe(readToken());
+  return user;
 }
 
 export async function listAccounts(): Promise<Account[]> {
@@ -277,15 +270,8 @@ export async function lookupAccountByEmail(query: string): Promise<string | null
 // Lightweight liveness check. Used by the BackendStatus banner — fires on mount
 // and every 60s. Returns true if the backend responds at all (any HTTP status).
 export async function pingBackend(): Promise<boolean> {
-  try {
-    const res = await fetch(apiUrl("/api/health"), {
-      method: "GET",
-      cache: "no-store",
-    });
-    return res.ok || res.status === 404; // 404 = endpoint missing but server alive
-  } catch {
-    return false;
-  }
+  // Общий загрузчик — тот же liveness запрашивает usePreflight (issue #1035).
+  return sharedPingBackend();
 }
 
 export { ApiError };

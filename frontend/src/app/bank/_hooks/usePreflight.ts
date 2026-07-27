@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { apiUrl } from "@/lib/apiBase";
+import { sharedFetchMe, sharedPingBackend } from "../_lib/shared";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -50,14 +50,15 @@ export function usePreflight(): PreflightState {
       /* ignore */
     }
 
-    const healthP = fetch(apiUrl("/api/health"), { cache: "no-store" })
-      .then((r) => r.ok || r.status === 404)
-      .catch(() => false);
+    // Через общий загрузчик: те же две ручки просит _lib/api.ts на этой же
+    // странице (issue #1035). `recheck()` (tick > 0) — явное действие
+    // пользователя, ему кэш обходим: иначе кнопка «проверить снова» врала бы,
+    // показывая прошлый ответ.
+    const force = tick > 0;
+    const healthP = sharedPingBackend(Date.now(), force);
 
     const meP: Promise<boolean | null> = token
-      ? fetch(apiUrl("/api/auth/me"), { headers: { Authorization: `Bearer ${token}` } })
-          .then((r) => r.ok)
-          .catch(() => false)
+      ? sharedFetchMe(token, Date.now(), force).then((r) => r.ok)
       : Promise.resolve(null);
 
     void Promise.all([healthP, meP]).then(([h, m]) => {

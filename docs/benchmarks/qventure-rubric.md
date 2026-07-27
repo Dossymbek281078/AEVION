@@ -340,6 +340,30 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Recorded so the idea is not implemented later by someone who has not run
    the numbers.
 
+16. **Open, with the source already in hand: `decreased 13% to $99.6M`.**
+   Moderna's S-1 was pulled from EDGAR directly — SEC refuses anonymous fetches
+   but serves the filing to a request that declares who is asking, which is how
+   the "unsourceable" shapes should have been chased in the first place.
+
+   It states total revenue of $205.8M in 2017, up 90% from $108.4M, and revenue
+   *decreased by $14.3 million, or 13%, to $99.6 million* for the nine months
+   ended 30 September 2018 — a science company whose most recent period is a
+   decline against a prior year of 90% growth. Both readers added today meet in
+   one filing.
+
+   The engine reads the decline (−13%) but scores the 2017 revenue, because
+   `TO_LEVEL` allows only a short connector between the direction verb and
+   "to", and this phrasing puts an amount in between. Widening it was attempted
+   and **reverted the same session**: the wider span let "gross margin declined
+   to 20% *and churn rose to 7%*" read the churn figure as the margin. The span
+   needs to exclude conjunctions and other metrics' names, which is worth doing
+   carefully rather than at the end of a session.
+
+   The Moderna case is therefore **not in the corpus yet**. A case whose figures
+   the engine cannot recover would break the 100% parse-coverage gate, and
+   lowering that gate to accommodate a known defect is exactly what it exists to
+   prevent.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

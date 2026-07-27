@@ -328,6 +328,16 @@ export interface FanState {
   windowDays: number;
   /** ISO — до какого момента веер действует (null, если статус не active). */
   validUntil: string | null;
+  /**
+   * Полных суток до закрытия окна (null, если веер не активен).
+   *
+   * Считается НА СЕРВЕРЕ намеренно. Клиент, вычисляющий разницу дат сам,
+   * неизбежно разойдётся с сервером на границе суток и в других часовых
+   * поясах — а это счётчик, по которому человек решает, покупать ли сегодня.
+   * Округляем ВНИЗ: «остался 1 день» при 1.9 суток честнее, чем «2 дня» при
+   * 1.1 — ошибка должна быть в пользу покупателя, а не продавца.
+   */
+  daysLeft: number | null;
   ringRatios: Record<FanRing, number>;
   /**
    * ВСЕ доступные к докупке модули, включая ring 3 с discountPercent = 0.
@@ -477,6 +487,7 @@ export function computeFan(input: FanInput = {}): FanState {
   // Окно веера
   let status: FanStatus = "active";
   let validUntil: string | null = null;
+  let daysLeft: number | null = null;
   if (ownedPaid.length === 0) {
     status = "inactive";
     notes.push("Веер включается после первой покупки платного модуля");
@@ -494,6 +505,8 @@ export function computeFan(input: FanInput = {}): FanState {
       );
     } else {
       validUntil = new Date(until).toISOString();
+      // Вниз, а не к ближайшему: при 1.9 суток честнее сказать «1 день».
+      daysLeft = Math.floor((until - now.getTime()) / 86_400_000);
     }
   }
 
@@ -540,6 +553,7 @@ export function computeFan(input: FanInput = {}): FanState {
     coveredByTier,
     windowDays: FAN_WINDOW_DAYS,
     validUntil,
+    daysLeft,
     ringRatios,
     offers,
     summary: {

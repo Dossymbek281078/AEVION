@@ -21,6 +21,8 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.mine.price": "ваша цена {price}/мес вместо {list} (−{pct}%)",
     "fan.mine.pending": "вам доступно −{pct}% — скидка применяется при оплате через PayPal или Paybox",
     "fan.mine.tooltip": "Ваш веер открыт до {until}",
+    "fan.closesIn": "закрывается через {n} дн. — до {date}",
+    "fan.closesToday": "закрывается сегодня",
     "fan.pick.note":
       "Это предварительный расчёт. Скидка применится к счёту после входа — покупки мы сверяем у себя, а не по отметкам на этой странице.",
     "fan.loading": "Загружаем веер…",
@@ -66,6 +68,8 @@ export const fanDict: { ru: Record<string, string>; en: Record<string, string> }
     "fan.mine.price": "your price {price}/mo instead of {list} (−{pct}%)",
     "fan.mine.pending": "you have −{pct}% available — the discount applies when paying via PayPal or Paybox",
     "fan.mine.tooltip": "Your fan is open until {until}",
+    "fan.closesIn": "closes in {n} days — on {date}",
+    "fan.closesToday": "closes today",
     "fan.pick.note":
       "This is a preview. The discount is applied to your invoice after you sign in — we verify purchases on our side, not from the marks on this page.",
     "fan.loading": "Loading the fan…",

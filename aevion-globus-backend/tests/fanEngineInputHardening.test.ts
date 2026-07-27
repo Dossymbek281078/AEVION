@@ -120,3 +120,70 @@ describe("веер и всеобъемлющие тарифы", () => {
     expect(free.offers.length).toBeGreaterThan(medium.offers.length);
   });
 });
+
+/**
+ * Обратный отсчёт окна — механика, а не украшение.
+ *
+ * У Higgsfield держит именно видимый дедлайн. До 2026-07-27 сервер отдавал
+ * только `validUntil`, а витрина рисовала серую дату: «до 10.08» за одиннадцать
+ * дней выглядело ровно так же, как за один. `daysLeft` считает СЕРВЕР — клиент,
+ * вычисляющий разницу дат сам, разойдётся с ним на границе суток и в других
+ * часовых поясах, а это счётчик, по которому человек решает покупать сегодня.
+ */
+describe("окно веера: обратный отсчёт", () => {
+  const anchor = "2026-07-01T12:00:00.000Z";
+
+  test("считается вниз и от anchor, а не от «сейчас»", () => {
+    // Окно 14 дней от 01.07 → закрытие 15.07. На 10.07 остаётся 5 суток.
+    const fan = computeFan({
+      owned: ["qsign"],
+      lastPurchaseAt: anchor,
+      now: new Date("2026-07-10T12:00:00.000Z"),
+    });
+    expect(fan.status).toBe("active");
+    expect(fan.daysLeft).toBe(5);
+  });
+
+  test("округление ВНИЗ — 1.9 суток это «1 день», а не «2»", () => {
+    // Ошибка в счётчике должна быть в пользу покупателя, а не продавца.
+    const fan = computeFan({
+      owned: ["qsign"],
+      lastPurchaseAt: anchor,
+      now: new Date("2026-07-13T14:00:00.000Z"), // до закрытия 1 день 22 часа
+    });
+    expect(fan.daysLeft).toBe(1);
+  });
+
+  test("последние часы — 0, а не отрицательное и не null", () => {
+    const fan = computeFan({
+      owned: ["qsign"],
+      lastPurchaseAt: anchor,
+      now: new Date("2026-07-15T06:00:00.000Z"), // 6 часов до закрытия
+    });
+    expect(fan.status).toBe("active");
+    expect(fan.daysLeft).toBe(0);
+  });
+
+  test("окно закрыто и веер не начат → null, а не 0", () => {
+    // 0 и null различаются намеренно: «сегодня последний день» и «окна нет» —
+    // разные сообщения, и витрина обязана их различать.
+    const expired = computeFan({
+      owned: ["qsign"],
+      lastPurchaseAt: anchor,
+      now: new Date("2026-08-01T00:00:00.000Z"),
+    });
+    expect(expired.status).toBe("expired");
+    expect(expired.daysLeft).toBeNull();
+
+    const never = computeFan({ owned: [] });
+    expect(never.status).toBe("inactive");
+    expect(never.daysLeft).toBeNull();
+  });
+
+  test("daysLeft согласован с validUntil — два поля не расходятся", () => {
+    const now = new Date("2026-07-05T00:00:00.000Z");
+    const fan = computeFan({ owned: ["qsign"], lastPurchaseAt: anchor, now });
+    const fromUntil = Math.floor((Date.parse(fan.validUntil!) - now.getTime()) / 86_400_000);
+    expect(fan.daysLeft).toBe(fromUntil);
+  });
+});

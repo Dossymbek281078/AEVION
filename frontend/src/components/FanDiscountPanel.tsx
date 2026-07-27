@@ -46,6 +46,8 @@ interface FanState {
   ownedPaid: string[];
   windowDays: number;
   validUntil: string | null;
+  /** Полных суток до закрытия окна. Считает СЕРВЕР — см. computeFan. */
+  daysLeft?: number | null;
   ringRatios: Record<"1" | "2" | "3", number>;
   offers: FanOffer[];
   summary: { ring1: number; ring2: number; ring3: number; discounted: number; maxSavingMonthly: number };
@@ -288,8 +290,29 @@ export function FanDiscountPanel({ currency = "USD" }: { currency?: CurrencyCode
             {tp("fan.level", { n: shown.level })} · {tp("fan.discountedCount", { n: shown.summary.discounted })} ·{" "}
             {tp("fan.maxSaving", { cur: sym, sum: shown.summary.maxSavingMonthly })}
             {shown.validUntil && (
-              <span style={{ fontWeight: 500, color: "#64748b" }}>
-                {" "}· {tp("fan.openUntil", { date: new Date(shown.validUntil).toLocaleDateString(locale) })}
+              /*
+                Дедлайн — не украшение, а сама механика: у Higgsfield держит
+                именно видимый обратный отсчёт, а не дата. До 2026-07-27 здесь
+                стояла только серая дата, и «до 10.08» за одиннадцать дней
+                выглядело ровно так же, как за один. Считает сервер (daysLeft),
+                иначе клиент разойдётся с ним на границе суток.
+              */
+              <span
+                style={
+                  typeof shown.daysLeft === "number" && shown.daysLeft <= 3
+                    ? { fontWeight: 800, color: "#b45309" }
+                    : { fontWeight: 500, color: "#64748b" }
+                }
+              >
+                {" "}·{" "}
+                {typeof shown.daysLeft === "number"
+                  ? shown.daysLeft <= 0
+                    ? tp("fan.closesToday")
+                    : tp("fan.closesIn", {
+                        n: shown.daysLeft,
+                        date: new Date(shown.validUntil).toLocaleDateString(locale),
+                      })
+                  : tp("fan.openUntil", { date: new Date(shown.validUntil).toLocaleDateString(locale) })}
               </span>
             )}
           </div>

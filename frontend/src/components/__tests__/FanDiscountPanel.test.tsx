@@ -131,3 +131,47 @@ describe("FanDiscountPanel", () => {
     expect(screen.getByText(/qcontract/)).toBeTruthy();
   });
 });
+
+/**
+ * Обратный отсчёт окна — механика удержания, а не украшение.
+ *
+ * До 2026-07-27 панель рисовала только серую дату закрытия: «до 09.08» за
+ * одиннадцать дней и за один выглядели одинаково. У Higgsfield, с которого
+ * механика снята, держит именно видимый дедлайн.
+ *
+ * Число берётся из серверного `daysLeft` — клиент дат не вычитает, иначе
+ * разойдётся с сервером на границе суток.
+ */
+describe("FanDiscountPanel — дедлайн окна", () => {
+  it("🔴 последние дни выделены, а не растворены в серой строке", async () => {
+    vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW, me: fanMe({ daysLeft: 2 }) }));
+    renderPanel();
+    const el = await screen.findByText(/closes in 2 days/i);
+    // Именно выделение: тревожный цвет и жирность, иначе смысла в счётчике нет.
+    const style = (el.closest("span") as HTMLElement).style;
+    expect(style.fontWeight).toBe("800");
+    expect(style.color).toBe("rgb(180, 83, 9)");
+  });
+
+  it("✅ когда времени много — обычная строка, без ложной срочности", async () => {
+    // Без этой половины проверка выше проходила бы и при «всегда тревожно».
+    vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW, me: fanMe({ daysLeft: 11 }) }));
+    renderPanel();
+    const el = await screen.findByText(/closes in 11 days/i);
+    const style = (el.closest("span") as HTMLElement).style;
+    expect(style.fontWeight).toBe("500");
+    expect(style.color).not.toBe("rgb(180, 83, 9)");
+  });
+
+  it("последний день назван словами, а не «через 0 дн.»", async () => {
+    vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW, me: fanMe({ daysLeft: 0 }) }));
+    renderPanel();
+    expect(await screen.findByText(/closes today/i)).toBeTruthy();
+  });
+
+  it("сервер не прислал daysLeft — откатываемся на дату, а не показываем NaN", async () => {
+    vi.stubGlobal("fetch", mockFetch({ preview: PREVIEW, me: fanMe() }));
+    renderPanel();
+    expect(await screen.findByText(/open until/i)).toBeTruthy();
+  });
+});

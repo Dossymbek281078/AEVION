@@ -93,7 +93,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Расчётная единица + платёжная рельса + банковский UI для эпохи, когда «банк» = API.",
     modules: ["AEV", "QPayNet", "AEVION Bank", "Payments Rail", "QTrade", "QTradeOffline"],
-    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (27 Jul) · QPayNet ~99.5% prod",
+    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (27 Jul) · QPayNet SLA 99.5%",
     tamAnchor: "Digital payments flow → $20T к 2030",
     accent: "#10b981",
   },

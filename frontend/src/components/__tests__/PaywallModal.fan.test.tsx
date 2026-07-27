@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { PAYWALL_EVENT } from "@/lib/paywall";
+import { I18nProvider } from "@/lib/i18n";
+import { PaywallModal } from "@/components/PaywallModal";
 
 /**
  * 🔴 Стена 402 не обещает цену, которой не будет в счёте.
@@ -45,19 +47,22 @@ function mockFanMe(honouredByDefault: boolean) {
   });
 }
 
+/**
+ * Токен подменяем ИЗМЕНЯЕМОЙ переменной, а не `resetModules` + динамическим
+ * импортом. Первая версия делала именно так и стала флакующей: перезагрузка
+ * графа компонентов под общей нагрузкой не укладывалась в бюджет `waitFor`
+ * (падение по таймауту 5 с, в одиночку — зелено). Причина устранена, а не
+ * замаскирована увеличением таймаута.
+ */
+let token: string | null = "token-abc";
+vi.mock("@/lib/aevionCatalog", () => ({ getAuthToken: () => token }));
+
 async function openWall(honoured: boolean) {
-  vi.resetModules();
   vi.stubGlobal("fetch", mockFanMe(honoured));
-  vi.doMock("@/lib/aevionCatalog", () => ({ getAuthToken: () => "token-abc" }));
-  const { PaywallModal } = await import("@/components/PaywallModal");
-  // Провайдер — из СВЕЖЕГО графа: после resetModules старый I18nProvider держит
-  // другой объект контекста, и компонент его не видит («useI18n must be used
-  // within I18nProvider»). Грабля уже документирована в ModulePricingChip.fan.
-  const { I18nProvider: P } = await import("@/lib/i18n");
   render(
-    <P>
+    <I18nProvider>
       <PaywallModal />
-    </P>,
+    </I18nProvider>,
   );
   await act(async () => {
     window.dispatchEvent(new CustomEvent(PAYWALL_EVENT, { detail: PAYLOAD }));
@@ -66,7 +71,7 @@ async function openWall(honoured: boolean) {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.doUnmock("@/lib/aevionCatalog");
+  token = "token-abc";
 });
 
 describe("стена 402 — веерное предложение", () => {

@@ -1911,3 +1911,38 @@ describe("every metric noun the parser lists reaches a field", () => {
     expect(parsePlanSignals(`We processed $10 million in ${noun}.`).gmvUsd).toBe(10_000_000);
   });
 });
+
+describe("a stated target is not a stated result", () => {
+  // INTENDED_WORD shipped with three of its branches dead. The lookahead reads
+  // (?=\s+(?:to|a|an|[0-9$£€])) in the source but held literal 0x08
+  // backspace characters where each  should have been — a generation
+  // artefact that is invisible in an editor, invisible in grep output, and
+  // silently makes those alternatives unmatchable. "target" therefore only
+  // fired in front of a digit or a currency symbol.
+  //
+  // Live consequence: "We target a 30% gross margin" was scored as an ACHIEVED
+  // 30% margin. A goal counted as a result, on the factor a screening tool is
+  // asked about most.
+  const margin = (t: string) => parsePlanSignals(t).grossMarginPct;
+
+  test.each([
+    "We target a 30% gross margin.",
+    "The company targets a 25% gross margin.",
+    "We targeted a 30% gross margin.",
+    "We target 30% gross margin.",
+    "We are targeting a 30% gross margin.",
+  ])("a target is refused: %s", (text) => {
+    expect(margin(text)).toBeNull();
+  });
+
+  test("a stated result is still credited", () => {
+    expect(margin("Our gross margin is 30%.")).toBe(30);
+  });
+
+  test("the parser source carries no control characters", () => {
+    // The defect class, not the instance: a control character anywhere in this
+    // file means a regex says something other than what it appears to say.
+    const src = fs.readFileSync(path.join(__dirname, "../src/lib/qventure/signals.ts"), "utf8");
+    expect(src).not.toMatch(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/);
+  });
+});

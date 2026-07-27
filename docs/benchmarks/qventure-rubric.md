@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 483
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 490
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (483
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (490
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -644,13 +644,60 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    list entry that never worked. Calling them all the same thing would overstate
    what is protected.
 
+24. **Closed: a stated target was scored as a stated result.** Found by running
+   sentences taken verbatim from live SEC filings through the parser, which is
+   the only reason it surfaced — every test in this file passed with it present.
+
+   `INTENDED_WORD` shipped with three of its branches dead. The lookahead reads
+   `(?=\s+(?:to|a|an|[0-9$£€]))` in the source, but held literal 0x08
+   backspace characters where each `` should have been. The character is
+   invisible in an editor, invisible in grep output, and makes the alternative
+   unmatchable, so `target` only fired in front of a digit or currency symbol.
+
+   | Sentence | Was scored as | Should be |
+   |---|---|---|
+   | `We target a 30% gross margin.` | achieved 30% | refused |
+   | `The company targets a 25% gross margin.` | achieved 25% | refused |
+   | `We targeted a 30% gross margin.` | achieved 30% | refused |
+
+   A goal counted as a result, on the factor a screening tool is asked about
+   most. Pinned, together with a test asserting the parser source contains **no
+   control characters at all** — the class, not the instance.
+
+25. **Open, with reproduction: a date's year is read as a metric value.** Also
+   found by the same live-filing probe, and not yet fixed.
+
+   | Sentence | Reads as |
+   |---|---|
+   | `For the year ended December 31, 2025, revenue grew sharply.` | revenue $2,025 |
+   | `As of March 31, 2024, ARR continued to compound.` | ARR $2,024 |
+   | `For the year ended December 31, 2025, customers grew.` | 2,025 customers |
+   | `In the quarter ended June 30, 2026, TPV expanded.` | TPV $2,026 |
+
+   Kaspi.kz's real marketplace GMV — tenge 9,053 billion, about $19bn — came
+   back as **$4**, because the year matched first and then converted at the
+   tenge rate. Five metrics, one cause: a bare four-digit number immediately
+   before the metric noun.
+
+   The fix attempted was to mask month-anchored dates once before any pattern
+   sees the text, rather than guard five patterns and then the sixth. It works
+   on all five, and it broke period selection: `latestMatch` reads those same
+   years to choose the later of two disclosed periods, and two corpus cases
+   (Lemonade, Moderna) went to the earlier one. Passing the unmasked twin to
+   the date reader did not restore them within the session, so the change was
+   reverted rather than shipped half-diagnosed. The probe cases above are the
+   starting point for the next attempt.
+
+   Recorded as open because a documented wrong number is worth more than an
+   undocumented one, and because the reproduction is three lines long.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 483):
+`tests/qventureDisclosedCorpus.test.ts`, 490):
 
 | Guard | Floor | Measured today |
 |---|---|---|

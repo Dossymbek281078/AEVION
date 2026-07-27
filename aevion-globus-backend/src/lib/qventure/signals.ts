@@ -290,7 +290,7 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  * drift apart.
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
-const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to|a|an|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to\b|a\b|an\b|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
 /**
  * A third-party subject: whose figure this is.
  *

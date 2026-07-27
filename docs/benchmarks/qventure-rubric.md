@@ -79,13 +79,15 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
 
 5. **Measured on the disclosed-figures corpus (26 real companies, rubric v6):**
    parse coverage **73/73**, mean success **71.2** vs mean failure **60.3**, gap
-   **10.9 points**. Ten of the twenty-six are labelled `open` — Rivian, Peloton,
-   Beyond Meat, Deliveroo, Affirm, Groupon, Lemonade and, by a different route,
-   the disclosure-free control. `open` is
-   not a hedge: those companies are still trading, and forcing them into
-   failed/succeeded to pad the separation statistic would be choosing the outcome
-   that suits the number. They count toward parse coverage, which needs no
-   outcome, and are excluded from the gap.
+   **10.9 points**. The split is **7 failed, 10 succeeded, 9 `open`** — Rivian,
+   Deliveroo, Peloton, Beyond Meat, Affirm, Groupon, Lemonade, Rocket Lab and
+   Sunrun (the disclosure-free control, Fast, is labelled `failed` and excluded
+   from parse coverage by a different route: it states no figures at all).
+
+   `open` is not a hedge: those companies are still trading, and forcing them
+   into failed/succeeded to pad the separation statistic would be choosing the
+   outcome that suits the number. They count toward parse coverage, which needs
+   no outcome, and are excluded from the gap.
 
    Extending the corpus from 11 companies to 16 surfaced **four more silent
    reader failures**, which is the argument for extending it again: `net

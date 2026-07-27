@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 708
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 894
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (708
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (894
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -1540,13 +1540,32 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    An empty sweep is a result. Recording it means the next person does not spend
    the afternoon rediscovering that these three are fine.
 
+63. **A number in this document was stale for hours, and my own edits were why.**
+   The doc quoted 708 assertions while the test file held 894. Several rounds of
+   edits meant to update it searched for a number the file did not contain and
+   silently did nothing — an edit that looks applied and is not, which is the
+   class this whole document is about, committed by the person writing it.
+
+   Caught by comparing every number in the doc against a fresh run by hand, not
+   by any guard. The doc gate checks the headline claim and nothing else.
+
+   A guard for it was written and removed: a test file cannot count its own
+   assertions, because  turns one  into many, so the file
+   holds 574 calls and the runner reports 894. A guard that cannot measure what
+   it claims to measure is worse than none — the same reason the structural
+   duplicate guard was removed earlier today.
+
+   What actually protects this: the headline claim, the parse coverage and the
+   mean gap are all checked against fresh runs. The assertion count is prose,
+   and prose is now marked as approximate rather than pinned.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 708):
+`tests/qventureDisclosedCorpus.test.ts`, 894):
 
 | Guard | Floor | Measured today |
 |---|---|---|

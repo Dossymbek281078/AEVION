@@ -298,3 +298,74 @@ describe("a figure that moves the score is named in the report", () => {
     expect(withRetention.composite).toBeGreaterThan(without.composite);
   });
 });
+
+describe("no parsed figure is invisible to the reader", () => {
+  /**
+   * Two defects in one window had the same shape: a figure the engine read and
+   * scored, that no human could see. Reservations were missing from both the
+   * on-screen evidence list and the exported memo; retention added up to six
+   * points and was named nowhere. Both were found by hand, and a third would
+   * have been found by hand too — after shipping.
+   *
+   * This is that sweep as a gate. Every quantitative field the parser fills
+   * must be accounted for: either named in the prose a reader sees (factor
+   * rationales, assumptions, red flags, stress and TAM panels), or listed below
+   * as rendered by the evidence panel, which both surfaces build field by
+   * field. A field added to the parser and to nothing else fails here with the
+   * name of the field, which is the message that was missing.
+   */
+
+  // Rendered by EvidencePanel (frontend/src/app/qventure/_result.tsx) and by the
+  // matching block in the PDF export (src/routes/qventure.ts). Adding a field
+  // here without adding it to BOTH of those is the bug this list exists to make
+  // visible, so keep them in step.
+  const RENDERED_BY_EVIDENCE_PANEL = new Set([
+    "revenueUsd", "gmvUsd", "takeRatePct", "contractedRevenueUsd",
+    "nonDilutiveUsd", "pilots", "reservations", "churnPct",
+  ]);
+  // Shown through a figure derived from them: LTV/CAC and payback are both
+  // rendered, and each is a stated function of these two.
+  const SHOWN_VIA_DERIVED = new Set(["cacUsd", "ltvUsd"]);
+
+  const probe = analyze({
+    name: "Full disclosure probe", sector: "saas", stage: "growth", geography: "US",
+    askUsd: 50_000_000,
+    description: "Observability platform sold bottom-up to engineering teams.",
+    tractionNotes:
+      "Revenue of $198.1M in 2018, up 97% year over year. Gross margin 77%. " +
+      "Net revenue retention 146%. 12,000 customers. CAC of $9,000. LTV of $45,000. " +
+      "Payback of 14 months. 3% annual churn. Bottom-up TAM of $12B. GMV of $400M at a 9% take rate. " +
+      "Contracted backlog of $60M. $4M non-dilutive. 11 deployments. 14,000 reservations.",
+  });
+
+  const visible = [
+    ...probe.factors.map((f) => `${f.label} ${f.rationale}`),
+    ...probe.assumptions,
+    ...probe.redFlags,
+    JSON.stringify(probe.stress),
+    JSON.stringify(probe.tam),
+    JSON.stringify(probe.strategy),
+  ].join(" | ").toLowerCase();
+
+  const QUANT_FIELDS = [
+    "revenueUsd", "growthPct", "grossMarginPct", "retentionPct", "customers",
+    "cacUsd", "ltvUsd", "ltvCacRatio", "paybackMonths", "churnPct",
+    "bottomUpTamUsd", "gmvUsd", "takeRatePct", "contractedRevenueUsd",
+    "nonDilutiveUsd", "pilots", "reservations",
+  ] as const;
+
+  test("the probe actually discloses every field, or this gate proves nothing", () => {
+    const missing = QUANT_FIELDS.filter((k) => (probe.signals as Record<string, unknown>)[k] == null);
+    expect(missing).toEqual([]);
+  });
+
+  for (const key of QUANT_FIELDS) {
+    test(`${key} is visible somewhere`, () => {
+      const v = (probe.signals as unknown as Record<string, number | null>)[key];
+      if (v === null) return;
+      if (RENDERED_BY_EVIDENCE_PANEL.has(key) || SHOWN_VIA_DERIVED.has(key)) return;
+      const named = visible.includes(String(v)) || visible.includes(String(Math.round(Math.abs(v))));
+      expect(named, `${key} = ${v} is parsed and scored but appears in nothing a reader sees. Name it in a factor rationale, or render it and add it to RENDERED_BY_EVIDENCE_PANEL.`).toBe(true);
+    });
+  }
+});

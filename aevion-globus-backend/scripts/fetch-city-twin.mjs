@@ -24,12 +24,15 @@
  *  - OSM is a live database. Re-running this will NOT reproduce the 2026-07-13
  *    files byte-for-byte: buildings get added, heights get tagged. Use
  *    --compare to see the drift as a number before overwriting a twin.
- *  - Tokyo's committed twin carries MEASURED heights from MLIT Project PLATEAU
- *    (CityGML LOD2), which this script does NOT fetch — PLATEAU ships as per-ward
- *    GML archives, not a queryable API. Regenerating tokyo from OSM alone would
- *    silently DOWNGRADE it from measured heights to guessed ones while every
- *    number in the UI kept looking the same. The registry therefore marks tokyo
- *    `osmOnly: false` and the script refuses to emit it.
+ *  - Tokyo is built from TWO sources: OSM footprints reconciled with MLIT
+ *    Project PLATEAU LOD2 roof outlines (~420 MB of CityGML per run; use
+ *    --plateau-cache to keep it off the wire while iterating). Until 2026-07-27
+ *    this script refused to emit tokyo at all, because rebuilding it from OSM
+ *    alone would have downgraded measured heights to guesses while every number
+ *    in the UI kept looking the same. The cost of that refusal was that Tokyo's
+ *    FOOTPRINTS could never be refreshed either, and they had drifted 565 grid
+ *    cells behind reality. A city whose heights come from elsewhere needs that
+ *    source wired in, not an exemption.
  */
 
 import fs from "node:fs";
@@ -40,9 +43,10 @@ const OVERPASS = [
 ];
 
 import {
-  METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL,
+  METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL, M_PER_LAT, M_PER_LON_EQ,
   projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem,
 } from "./lib/city-twin-geometry.mjs";
+import { parsePlateauGml, reconcileWithPlateau } from "./lib/plateau-heights.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -55,7 +59,6 @@ const CITIES = {
     bbox: { minLat: 51.1183717, maxLat: 51.1356973, minLon: 71.4104119, maxLon: 71.4432041 },
     exportName: "CITY",
     committed: "qskyway.city.ts",
-    osmOnly: true,
     // Vertiports are a PRODUCT placement decision (where an operator would put
     // pads), not an OSM fact — so they are config here, never re-derived.
     vertiports: [
@@ -89,7 +92,6 @@ const CITIES = {
     bbox: { minLat: 40.7474728, maxLat: 40.7629936, minLon: -74.0002478, maxLon: -73.9758674 },
     exportName: "CITY_NYC",
     committed: "qskyway.city.nyc.ts",
-    osmOnly: true,
     vertiports: null, // read from the committed twin (see loadCommitted)
     header: [
       "// QSkyway city digital-twin — NYC Midtown (Manhattan), real OpenStreetMap buildings",
@@ -105,11 +107,39 @@ const CITIES = {
     bbox: { minLat: 35.683592, maxLat: 35.6978747, minLon: 139.6879457, maxLon: 139.7037075 },
     exportName: "CITY_TOKYO",
     committed: "qskyway.city.tokyo.ts",
-    // NOT regenerable from OSM alone: the committed twin uses PLATEAU LOD2
-    // measured heights. See HONEST SCOPE above.
-    osmOnly: false,
     vertiports: null,
-    header: "",
+    // Tokyo's heights come from a second regulator-published source, so the twin
+    // is OSM footprints reconciled with PLATEAU roof outlines. Until 2026-07-27
+    // this city could not be regenerated at all and its footprints were frozen
+    // at 2026-07-13 — see plateau-heights.mjs for what that cost.
+    measured: {
+      label: "PLATEAU LOD2 measuredHeight (MLIT Project PLATEAU, Shinjuku-ku 2025, CityGML spec 5.0)",
+      // Per-3rd-mesh CityGML for Shinjuku-ku. These are the four meshes covering
+      // the Nishi-Shinjuku bbox. The asset id in the path is issued by the
+      // PLATEAU CMS per release: when a new year ships, the old URLs keep
+      // working but stop being current — refresh them from the CMS manifest
+      // rather than editing the year in place, and re-run --compare first.
+      assets: [
+        "https://assets.cms.plateau.reearth.io/assets/84/48ebed-93d8-4196-bdda-e1db9590d3d1/13104_shinjuku-ku_pref_2025_citygml_1_op/udx/bldg/53394525_bldg_6697_op.gml",
+        "https://assets.cms.plateau.reearth.io/assets/84/48ebed-93d8-4196-bdda-e1db9590d3d1/13104_shinjuku-ku_pref_2025_citygml_1_op/udx/bldg/53394526_bldg_6697_op.gml",
+        "https://assets.cms.plateau.reearth.io/assets/84/48ebed-93d8-4196-bdda-e1db9590d3d1/13104_shinjuku-ku_pref_2025_citygml_1_op/udx/bldg/53394535_bldg_6697_op.gml",
+        "https://assets.cms.plateau.reearth.io/assets/84/48ebed-93d8-4196-bdda-e1db9590d3d1/13104_shinjuku-ku_pref_2025_citygml_1_op/udx/bldg/53394536_bldg_6697_op.gml",
+      ],
+      // A building just outside the city still stands over footprints inside it.
+      // Cropping PLATEAU to the exact bbox lost the measured height of 112
+      // buildings, a 199 m tower among them.
+      marginM: 300,
+      nearRadiusM: 20,
+    },
+    header: [
+      "// QSkyway city digital-twin — Токио, Ниси-Синдзюку. OpenStreetMap footprints",
+      "// (Overpass, ODbL) reconciled with MLIT Project PLATEAU LOD2 roof outlines and",
+      "// measuredHeight (CityGML, Shinjuku-ku 2025). Neither source is a subset of the",
+      "// other, so the twin carries both. Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs tokyo --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
   },
 };
 
@@ -120,14 +150,11 @@ if (!city) {
   console.error(`unknown city "${cityId}" — known: ${Object.keys(CITIES).join(", ")}`);
   process.exit(1);
 }
-if (!city.osmOnly && !compareOnly) {
-  console.error(
-    `refusing to emit "${cityId}": its committed twin carries measured heights this script cannot fetch.\n` +
-    `Emitting an OSM-only rebuild would silently downgrade height provenance while the UI kept looking identical.\n` +
-    `Use --compare to measure the OSM-only gap without overwriting anything.`,
-  );
-  process.exit(2);
-}
+// Optional on-disk cache for the CityGML archives. Only ever a speed-up for
+// repeated local runs: the files are content-addressed by their URL basename and
+// the script re-downloads whatever is missing.
+const cacheFlag = process.argv.indexOf("--plateau-cache");
+const plateauCache = cacheFlag > 0 ? process.argv[cacheFlag + 1] : null;
 
 // ── projection ────────────────────────────────────────────────────────────────
 const { minLat, maxLat, minLon, maxLon } = city.bbox;
@@ -201,6 +228,119 @@ for (const el of elements) {
   }
 }
 if (!buildings.length) throw new Error("Overpass returned no usable building footprints for this bbox");
+
+// ── measured heights from a second source (PLATEAU) ───────────────────────────
+let sourceLabel = "OpenStreetMap (Overpass, ODbL)";
+let provenanceNote =
+  "hs 0=измерено(height tag) 1=выведено(levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
+  "Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.";
+
+if (city.measured) {
+  const { assets, marginM, nearRadiusM, label } = city.measured;
+  const mPerLon = M_PER_LON_EQ * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
+  const wide = {
+    minLat: minLat - marginM / M_PER_LAT, maxLat: maxLat + marginM / M_PER_LAT,
+    minLon: minLon - marginM / mPerLon, maxLon: maxLon + marginM / mPerLon,
+  };
+
+  const outlines = [];
+  for (const url of assets) {
+    const name = url.slice(url.lastIndexOf("/") + 1);
+    const cached = plateauCache ? `${plateauCache}/${name}` : null;
+    let gml;
+    if (cached && fs.existsSync(cached)) {
+      gml = fs.readFileSync(cached, "utf8");
+      process.stderr.write(`  PLATEAU ${name}: cached\n`);
+    } else {
+      process.stderr.write(`  PLATEAU ${name}: downloading…\n`);
+      const res = await fetch(url, {
+        headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
+        signal: AbortSignal.timeout(600_000),
+      });
+      if (!res.ok) throw new Error(`PLATEAU ${name}: HTTP ${res.status}`);
+      gml = await res.text();
+      if (cached) fs.writeFileSync(cached, gml);
+    }
+    const got = parsePlateauGml(gml, wide);
+    process.stderr.write(`  PLATEAU ${name}: ${got.length} roof outlines\n`);
+    outlines.push(...got);
+  }
+  // An empty answer is the failure mode that must never reach --write: the twin
+  // would keep its shape, lose every measured height, and read as a successful
+  // regeneration. Louder than a downgraded file.
+  if (!outlines.length) {
+    throw new Error(
+      `${cityId}: PLATEAU returned no roof outlines inside the bbox. Refusing to emit a twin ` +
+      `that would silently downgrade measured heights to OSM guesses.`,
+    );
+  }
+
+  const projected = outlines.map((p) => ({ h: p.h, ring: p.ring.map(([lat, lon]) => proj(lon, lat)) }));
+  const { heights: measuredAt, unmatched } = reconcileWithPlateau(
+    buildings.map((b) => b.r), projected, { nearRadiusM },
+  );
+
+  // THE RULE, and each branch is a different claim about what we know:
+  //  contained + OSM also measured → the TALLER of two measurements. PLATEAU
+  //    measures to the roof deck, OSM tags often include the mast; neither is
+  //    uniformly higher (measured in Nishi-Shinjuku: PLATEAU wins 170 times,
+  //    OSM 365). For an obstacle grid the taller measurement is the one to fly
+  //    over, and both being measurements keeps hs=0 honest.
+  //  contained only → PLATEAU, measured.
+  //  near → weak identity. Never overrules a height OSM states, and is marked
+  //    DERIVED (hs=1), not measured: the value is surveyed, the identification
+  //    is ours, and hs=1 is exactly the class SRC_CLEARANCE gives extra room.
+  let contained = 0, near = 0, plateauTaller = 0, osmTaller = 0;
+  buildings.forEach((b, i) => {
+    const p = measuredAt[i];
+    if (p.how === "contained") {
+      contained++;
+      if (b.hs === 0) {
+        if (p.h > b.h) plateauTaller++; else if (b.h > p.h) osmTaller++;
+        b.h = Math.round(Math.max(p.h, b.h));
+      } else {
+        b.h = Math.round(p.h);
+      }
+      b.hs = 0;
+    } else if (p.how === "near" && b.hs !== 0 && p.h > b.h) {
+      near++;
+      b.h = Math.round(p.h);
+      b.hs = 1;
+    }
+  });
+
+  // Outlines PLATEAU surveyed that OSM has no footprint for at all. Only those
+  // standing inside the city are added — the rest sit in the margin ring, which
+  // exists to match edge buildings and was never queried from OSM, so "no OSM
+  // counterpart" there means nothing.
+  let added = 0;
+  for (const i of unmatched) {
+    const ring = projected[i].ring;
+    let sx = 0, sy = 0;
+    for (const [x, y] of ring) { sx += x; sy += y; }
+    const cx = sx / ring.length, cy = sy / ring.length;
+    if (cx < 0 || cy < 0 || cx > COLS * CELL || cy > ROWS * CELL) continue;
+    buildings.push({
+      h: Math.round(projected[i].h), hs: 0,
+      r: ring.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
+    });
+    meta.push({ id: `plateau/${i}`, name: null });
+    added++;
+  }
+
+  process.stderr.write(
+    `  PLATEAU: ${contained} footprints identified by containment (${plateauTaller} raised, ` +
+    `${osmTaller} kept OSM's taller measurement), ${near} by proximity, ${added} outlines added ` +
+    `that OSM has no footprint for\n`,
+  );
+
+  sourceLabel = `OSM footprints (ODbL) + ${label}`;
+  provenanceNote =
+    "hs 0=измерено(PLATEAU measuredHeight и/или OSM height tag — при расхождении берётся большая, " +
+    "это высота, которую надо облететь) 1=выведено(здесь: контур PLATEAU опознан по близости, " +
+    "а не по вложенности, либо levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
+    "Просвет SRC_CLEARANCE растёт по мере падения уверенности.";
+}
 
 const { heights, src } = rasterize(buildings, COLS, ROWS);
 
@@ -300,8 +440,8 @@ const data = {
     total, measured, derived, guessed,
     measuredPct: round1((100 * measured) / total),
     realPct: round1((100 * (measured + derived)) / total),
-    source: "OpenStreetMap (Overpass, ODbL)",
-    note: "hs 0=измерено(height tag) 1=выведено(levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.",
+    source: sourceLabel,
+    note: provenanceNote,
   },
 };
 

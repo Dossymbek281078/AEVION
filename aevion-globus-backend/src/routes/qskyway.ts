@@ -81,10 +81,17 @@ const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
 // Phase 5: extra safety clearance by height-data confidence (metres), indexed by
-// height source: 0=measured (explicit height tag), 1=derived (levels×3.2 plus a
-// 1.6 m parapet allowance — verified against the committed Astana twin, 159/159
-// buildings, see scripts/fetch-city-twin.mjs; this comment said plain levels×3.2
-// until 2026-07-27, and so did the note shipped to users),
+// height source: 0=measured (a survey states this building's height — an OSM
+// height tag, a PLATEAU measuredHeight, or both, in which case the twin carries
+// the TALLER of the two: that is the height an aircraft has to clear, and both
+// being measurements keeps the class honest),
+// 1=derived (levels×3.2 plus a 1.6 m parapet allowance — verified against the
+// committed Astana twin, 159/159 buildings, see scripts/fetch-city-twin.mjs;
+// this comment said plain levels×3.2 until 2026-07-27, and so did the note
+// shipped to users — OR, in Tokyo, a surveyed PLATEAU height whose building we
+// identified by proximity rather than containment: the number is measured, the
+// identification is inferred, and inference belongs in the class that gets
+// extra room),
 // 2=guessed (blind 12m default). A guessed height can badly understate the real
 // building, so the corridor is flown higher until better data (LiDAR / CityGML
 // LOD2 / Google 3D Tiles) raises confidence and lets it descend.

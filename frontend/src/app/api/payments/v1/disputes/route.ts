@@ -9,7 +9,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvSet } from "../_persist";
+import { kvList, kvSet, withKeyLock } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -207,9 +207,14 @@ export async function POST(req: NextRequest) {
     updated: now,
   };
 
-  const all = await loadAll();
-  all.unshift(dispute);
-  await persistAll(all);
+  // Под замком: `loadAll → изменить → persistAll` — чтение-изменение-запись, а
+  // не атомарная операция. Два одновременных спора иначе пишут по своему
+  // снимку, и один просто пропадает.
+  await withKeyLock(DISPUTES_KEY, async () => {
+    const all = await loadAll();
+    all.unshift(dispute);
+    await persistAll(all);
+  });
 
   void logAudit(req, "dispute.created", dispute.id, {
     link_id: dispute.link_id,

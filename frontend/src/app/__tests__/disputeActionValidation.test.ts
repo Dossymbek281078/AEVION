@@ -94,4 +94,26 @@ describe("действие по спору: опечатка не должна �
     expect(res.status).toBe(400);
     expect(await statusOf("dp_proto")).toBe("warning_needs_response");
   });
+
+  /**
+   * Та же связка «прочитал → проверил → записал», что была в возвратах. Без
+   * замка два одновременных запроса читают ОДИН И ТОТ ЖЕ статус, оба проходят
+   * проверку допустимых переходов, побеждает записавший последним — а в журнал
+   * попадают ОБА исхода, и спор числится и выигранным, и проигранным.
+   */
+  it("два одновременных решения по спору дают ровно один исход", async () => {
+    await seedDispute("dp_race");
+
+    const [a, b] = await Promise.all([
+      POST(actionReq("dp_race", { action: "resolve_won" }), ctx("dp_race")),
+      POST(actionReq("dp_race", { action: "resolve_lost" }), ctx("dp_race")),
+    ]);
+
+    const codes = [a.status, b.status].sort((x, y) => x - y);
+    expect(codes[0]).toBe(200); // один решил
+    expect([409]).toContain(codes[1]); // второй отбит: переход уже сделан
+
+    const status = await statusOf("dp_race");
+    expect(["won", "lost"]).toContain(status); // исход ОДИН, а не последний из двух
+  });
 });

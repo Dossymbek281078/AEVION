@@ -6079,9 +6079,27 @@ qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
 // Cache results for 60s to avoid hammering provider APIs
 const providerHealthCache = new Map<string, { result: any; cachedAt: number }>();
 
+/**
+ * Как часто можно тревожить провайдера пробой здоровья.
+ *
+ * Проба — это настоящий запрос к КАЖДОМУ настроенному провайдеру. У платных её
+ * цена копеечная (модель отвечает «OK», два токена), и минутной свежести там не
+ * жалко. У бесплатных платят не деньгами, а тарифом, который считается в
+ * запросах в минуту: у Mistral на бесплатном — 2 запроса в минуту, у Gemini —
+ * порядка 10. Проба раз в минуту съедала бы от десятой части до ПОЛОВИНЫ
+ * дневной пропускной способности ради строчки в админке, причём именно у тех
+ * провайдеров, которых мы подключаем, чтобы экономить.
+ *
+ * Поэтому у бесплатных проба редкая. Свежесть теряется, но «бесплатный
+ * провайдер отвечал десять минут назад» — достаточная точность для панели, а
+ * реальную работу всё равно страхует авто-фолбэк при 429.
+ */
+export function probeCacheTtlMs(isFree: boolean): number {
+  return isFree ? 10 * 60_000 : 60_000;
+}
+
 qcoreaiRouter.get("/providers/health", async (_req, res) => {
   const now = Date.now();
-  const CACHE_TTL = 60_000;
 
   const providers = getProviders().filter((p) => p.configured);
   if (providers.length === 0) {
@@ -6091,7 +6109,7 @@ qcoreaiRouter.get("/providers/health", async (_req, res) => {
   const results = await Promise.all(
     providers.map(async (p) => {
       const cached = providerHealthCache.get(p.id);
-      if (cached && now - cached.cachedAt < CACHE_TTL) {
+      if (cached && now - cached.cachedAt < probeCacheTtlMs(p.free)) {
         return cached.result;
       }
       const start = Date.now();

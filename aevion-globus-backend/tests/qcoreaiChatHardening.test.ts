@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { clampTemperature, publicErrorCategory } from "../src/routes/qcoreai";
+import { clampTemperature, probeCacheTtlMs, publicErrorCategory } from "../src/routes/qcoreai";
 
 // QCoreAI Tier 3 hardening — 2026-05-09.
 //
@@ -116,5 +116,24 @@ describe("publicErrorCategory — upstream message stripping", () => {
     expect(cat).not.toContain("api_key=");
     // category itself is short and stable
     expect(cat.length).toBeLessThan(50);
+  });
+});
+
+describe("probeCacheTtlMs — как часто тревожим провайдера пробой", () => {
+  // Проба здоровья — настоящий запрос к каждому настроенному провайдеру.
+  // У бесплатных тариф считается в запросах в минуту (Mistral — 2/мин,
+  // Gemini — порядка 10), поэтому минутная проба съедала бы от десятой части
+  // до половины пропускной способности ради строчки в админке.
+  test("бесплатных тревожим редко, платных — как раньше", () => {
+    expect(probeCacheTtlMs(true)).toBe(600_000);
+    expect(probeCacheTtlMs(false)).toBe(60_000);
+    expect(probeCacheTtlMs(true)).toBeGreaterThan(probeCacheTtlMs(false));
+  });
+
+  test("бесплатного не трогаем чаще, чем раз в 5 минут", () => {
+    // Нижняя граница: при 2 запросах в минуту у Mistral даже раз в минуту —
+    // это четверть тарифа. Если кто-то соберётся снизить паузу, пусть сначала
+    // объяснит эту строку.
+    expect(probeCacheTtlMs(true)).toBeGreaterThanOrEqual(5 * 60_000);
   });
 });

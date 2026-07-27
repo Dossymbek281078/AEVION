@@ -60,7 +60,7 @@ const CARDS = [
     href: "/api-explorer/openapi",
     title: "OpenAPI inspector",
     blurb:
-      "Aggregate API index across 19 modules and 30 services. Browse endpoints grouped by tag, inspect operations, copy paths into your client of choice.",
+      "Aggregate API index across every module and service. Browse endpoints grouped by tag, inspect operations, copy paths into your client of choice.",
     cta: "Open OpenAPI inspector",
     accent: "#f59e0b",
   },

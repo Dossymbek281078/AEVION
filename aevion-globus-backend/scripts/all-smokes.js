@@ -73,6 +73,18 @@ const SMOKES = [
   // утверждают ML-DSA-65/FIPS 204, а это включается ключом — и самый коварный
   // случай, когда ключ задан, но битый, снаружи неотличим от рабочего.
   { name: "qsign-mode", script: "qsign-mode-smoke.js", readOnly: true, offline: true },
+  // Offline: и сам real-путь обязан работать, а не только честно называться.
+  // qsign-mode выше проверяет РАПОРТ о режиме; эта — что при заданном ключе
+  // выходит настоящая ML-DSA-65 (6618 hex), которая ОТВЕРГАЕТ подмену тела,
+  // подмену подписи и нулевую подпись нужной длины. Без этих трёх случаев
+  // проверку прошла бы и заглушка `return true`.
+  { name: "qsign-real-signature", script: "qsign-real-signature-smoke.js", readOnly: true, offline: true },
+  // Сверяет ПУБЛИЧНЫЕ УТВЕРЖДЕНИЯ на страницах с живым health. 26.07 нашлось,
+  // что /acquire, /partner и /investor обещают «ML-DSA-65 in prod / GA /
+  // Completed», пока health отвечал preview/seed_unset — и это прожило
+  // незамеченным, потому что сторож консистентности смотрит только письма,
+  // а страницы не смотрел никто. Не offline: нужен живой BASE.
+  { name: "claims-vs-runtime", script: "claims-vs-runtime-smoke.js", readOnly: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.

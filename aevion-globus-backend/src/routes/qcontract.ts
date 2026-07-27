@@ -68,6 +68,61 @@ function hashPassword(pw: string): string {
   return createHash("sha256").update(pw).digest("hex");
 }
 
+// ── Ограничение попыток пароля ────────────────────────────────────────────────
+//
+// Проверка пароля документа не ограничивалась ничем: ни здесь, ни глобальным
+// лимитером (в index.ts его нет — там только trust proxy с комментарием про
+// express-rate-limit). Хеш при этом голый sha256 без соли, то есть онлайн-подбор
+// был единственным барьером и барьером не был. Документы продаются за $19/мес.
+//
+// Два ключа сразу, потому что каждый по отдельности плох: по (token+IP) —
+// обходится сменой адреса; по одному token — посторонний запирает чужой документ
+// пятью неверными вводами. Поэтому по IP порог низкий, а по документу целиком —
+// высокий: он ловит распределённый перебор, но не даёт устроить блокировку.
+//
+// Состояние в памяти процесса: правка обратима и не требует миграции. Цена —
+// рестарт обнуляет счётчики, инстансы считают раздельно. Для порога «5 за
+// 15 минут» это приемлемо: подбор перестаёт быть дешёвым. Соль и медленный хеш —
+// отдельный шаг, он требует миграции существующих хешей.
+const PW_FAILS_PER_IP = 5;
+const PW_WINDOW_IP_MS = 15 * 60_000;
+const PW_FAILS_PER_DOC = 50;
+const PW_WINDOW_DOC_MS = 60 * 60_000;
+
+const pwFailures = new Map<string, { count: number; firstAt: number }>();
+
+/** Секунды до разблокировки, если ключ заблокирован, иначе null. */
+function pwLockedFor(key: string, limit: number, windowMs: number, now: number): number | null {
+  const rec = pwFailures.get(key);
+  if (!rec) return null;
+  if (now - rec.firstAt >= windowMs) {
+    pwFailures.delete(key);
+    return null;
+  }
+  if (rec.count < limit) return null;
+  return Math.ceil((rec.firstAt + windowMs - now) / 1000);
+}
+
+function pwRegisterFailure(key: string, windowMs: number, now: number): void {
+  const rec = pwFailures.get(key);
+  if (!rec || now - rec.firstAt >= windowMs) {
+    pwFailures.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  rec.count++;
+}
+
+// Карта не должна расти бесконечно на долгоживущем процессе: раз в 10 минут
+// выбрасываем записи, чьё окно давно закрыто. Берём самое длинное из двух окон.
+// unref(), чтобы таймер не держал процесс живым (иначе тесты и graceful shutdown
+// зависают — этот класс ошибок уже стоил сессии).
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, rec] of pwFailures) {
+    if (now - rec.firstAt >= PW_WINDOW_DOC_MS) pwFailures.delete(k);
+  }
+}, 10 * 60_000).unref();
+
 function isExpired(row: {
   expires_at?: Date | null;
   max_views?: number | null;
@@ -556,7 +611,40 @@ qcontractRouter.post("/view/:token", async (req, res) => {
 
   if (doc.password_hash) {
     if (!password) return res.status(401).json({ error: "password_required", title: doc.title });
-    if (hashPassword(password) !== doc.password_hash) return res.status(403).json({ error: "wrong_password" });
+
+    const now = Date.now();
+    // req.ip, а НЕ сырой x-forwarded-for: заголовок пишет сам клиент, и на нём
+    // защита от подбора обходилась бы одной лишней строкой в запросе. При
+    // `trust proxy = 1` (стоит в index.ts) Express берёт адрес, добавленный нашим
+    // прокси, и игнорирует то, что клиент приписал слева. Строкой ниже, в записи
+    // просмотра, заголовок читается напрямую — там это журнал, а не барьер.
+    // Полностью подмену это не исключает: у кого есть пул адресов, тот размажет
+    // попытки по ним — ровно для этого и существует второй, документный порог.
+    const clientIp = req.ip ?? req.socket.remoteAddress ?? "unknown";
+    const ipKey = `ip:${req.params.token}:${clientIp}`;
+    const docKey = `doc:${req.params.token}`;
+
+    const lockedFor =
+      pwLockedFor(ipKey, PW_FAILS_PER_IP, PW_WINDOW_IP_MS, now) ??
+      pwLockedFor(docKey, PW_FAILS_PER_DOC, PW_WINDOW_DOC_MS, now);
+    if (lockedFor !== null) {
+      res.setHeader("Retry-After", String(lockedFor));
+      return res.status(429).json({
+        error: "too_many_password_attempts",
+        retryAfterSeconds: lockedFor,
+        title: doc.title,
+      });
+    }
+
+    if (hashPassword(password) !== doc.password_hash) {
+      pwRegisterFailure(ipKey, PW_WINDOW_IP_MS, now);
+      pwRegisterFailure(docKey, PW_WINDOW_DOC_MS, now);
+      return res.status(403).json({ error: "wrong_password" });
+    }
+
+    // Верный пароль снимает накопленные неудачи по этому адресу: иначе человек,
+    // вспомнивший пароль с шестой попытки, остался бы заперт на 15 минут.
+    pwFailures.delete(ipKey);
   }
 
   if (doc.require_signature && !viewerEmail?.trim()) {

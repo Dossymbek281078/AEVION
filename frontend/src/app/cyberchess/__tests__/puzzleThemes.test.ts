@@ -123,4 +123,21 @@ describe("puzzles.json corpus", () => {
     const even = puzzles.filter((p) => Array.isArray(p.sol) && p.sol.length % 2 === 0);
     expect(even).toHaveLength(0);
   });
+
+  /* «Мат в N» — это N ходов ИГРОКА, то есть 2N-1 полуходов. Три задачи обещали мат в
+     пять, а вели к мату в шесть: подпись, тема и счётчик расходились с самим решением.
+     Игрок в таких считает не ту глубину и бросает верную идею как «слишком длинную». */
+  it("promises exactly the number of moves its solution takes", () => {
+    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{
+      name?: string;
+      goal?: string;
+      mateIn?: number;
+      sol: string[];
+    }>;
+    const wrong = puzzles
+      .filter((p) => p.goal === "Mate" && p.mateIn)
+      .filter((p) => Math.ceil(p.sol.length / 2) !== p.mateIn)
+      .map((p) => `${p.name}: mateIn=${p.mateIn}, а ходов игрока ${Math.ceil(p.sol.length / 2)}`);
+    expect(wrong).toEqual([]);
+  });
 });

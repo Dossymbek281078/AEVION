@@ -100,7 +100,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await page.goto(`/devhub/${PROJECT_ID}`);
 
     await page.getByRole("tab", { name: "Media", exact: true }).click();
-    await page.getByRole("button", { name: "DALL-E", exact: true }).click();
+    await page.getByRole("tab", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
 
@@ -136,7 +136,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await page.goto(`/devhub/${PROJECT_ID}`);
 
     await page.getByRole("tab", { name: "Media", exact: true }).click();
-    await page.getByRole("button", { name: "DALL-E", exact: true }).click();
+    await page.getByRole("tab", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
     await page.getByRole("button", { name: "Insert into file" }).click({ timeout: 15_000 });
@@ -200,7 +200,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await page.goto(`/devhub/${PROJECT_ID}`);
 
     await page.getByRole("tab", { name: "Media", exact: true }).click();
-    await page.getByRole("button", { name: "DALL-E", exact: true }).click();
+    await page.getByRole("tab", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
     await page.getByRole("button", { name: "Insert into file" }).click({ timeout: 15_000 });

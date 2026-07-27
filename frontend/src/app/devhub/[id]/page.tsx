@@ -4106,11 +4106,34 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* ElevenLabs / Media Tab */}
               {activeTab === "media" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {/* Sub-tabs */}
-                  <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                  {/* Sub-tabs — same treatment as the main panel strip: these
+                      were seventeen plain buttons in a row, so a screen reader
+                      announced seventeen unrelated controls, arrow keys did
+                      nothing, and Tab stopped on every single one of them. */}
+                  <div role="tablist" aria-label="Медиа-инструменты" style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
+                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub, subIdx, allSubs) => (
                       <button
                         key={sub}
+                        role="tab"
+                        id={`devhub-mediatab-${sub}`}
+                        aria-selected={mediaTab === sub}
+                        // No aria-controls: each sub-panel renders as its own
+                        // sibling, so there is no single element to point at.
+                        // An id that resolves to nothing is worse than the
+                        // attribute being absent.
+                        tabIndex={mediaTab === sub ? 0 : -1}
+                        onKeyDown={(e) => {
+                          const next =
+                            e.key === "ArrowRight" ? allSubs[(subIdx + 1) % allSubs.length]
+                            : e.key === "ArrowLeft" ? allSubs[(subIdx - 1 + allSubs.length) % allSubs.length]
+                            : e.key === "Home" ? allSubs[0]
+                            : e.key === "End" ? allSubs[allSubs.length - 1]
+                            : null;
+                          if (!next) return;
+                          e.preventDefault();
+                          setMediaTab(next);
+                          document.getElementById(`devhub-mediatab-${next}`)?.focus();
+                        }}
                         onClick={() => setMediaTab(sub)}
                         style={{
                           flex: "1 1 auto", padding: "6px 8px", border: "none",
@@ -4122,6 +4145,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                       >
                         {sub === "video" ? "Video AI"
+                        // "3d" had no branch of its own, so it fell through to
+                        // the final default and the 3D tab was labelled "Pay".
+                        : sub === "3d" ? "3D"
                         : sub === "tts" ? "TTS"
                         : sub === "image" ? "DALL-E"
                         : sub === "sfx" ? "SFX"

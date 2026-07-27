@@ -191,4 +191,22 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     // And the panel says which tab it belongs to.
     await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "devhub-tab-visual");
   });
+
+  test("the media sub-tabs are tabs too, arrow keys included", async ({ page }) => {
+    // Seventeen plain buttons in a row before this: Tab stopped on each one,
+    // arrows did nothing, and a screen reader heard no relationship between
+    // them.
+    await mockBackend(page);
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("tab", { name: "Media", exact: true }).click({ timeout: 30_000 });
+
+    const video = page.getByRole("tab", { name: "Video AI", exact: true });
+    await expect(video).toHaveAttribute("aria-selected", "true");
+    await video.focus();
+    await page.keyboard.press("ArrowRight");
+
+    const threeD = page.getByRole("tab", { name: "3D", exact: true });
+    await expect(threeD).toHaveAttribute("aria-selected", "true");
+    await expect(threeD).toBeFocused();
+  });
 });

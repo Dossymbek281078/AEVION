@@ -1921,8 +1921,10 @@ export default function CyberChessPage(){
   //   - we have a daily variant info today
   //   - PiP is currently closed
   //   - user hasn't dismissed the suggestion today
-  const todayIso=new Date().toISOString().slice(0,10);
-  const pipDismissKey=`aevion_cyberchess_pip_suggest_dismissed_${todayIso}`;
+  /* Ключ по МЕСТНЫМ суткам — теми же, по которым крутится вариант дня, о котором
+     эта подсказка. По UTC-ключу «скрыто на сегодня» сбрасывалось в полночь, а сам
+     вариант не менялся ещё пять часов, и баннер всплывал заново над тем же вариантом. */
+  const pipDismissKey=`aevion_cyberchess_pip_suggest_dismissed_${todayKey()}`;
   useEffect(()=>{
     if(typeof window==="undefined")return;
     try{if(localStorage.getItem(pipDismissKey)==="1")sPipSuggestDismissed(true)}catch{}

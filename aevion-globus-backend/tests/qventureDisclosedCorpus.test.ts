@@ -2271,3 +2271,30 @@ describe("the notations a deck actually uses", () => {
 });
 
 type Sig = ReturnType<typeof parsePlanSignals>;
+
+describe("one place to say what links a metric to its figure", () => {
+  // Twenty-four hand-written connector lists is why the pipe and the em dash
+  // were readable at none of them. They now start from LINK (or LINK_NO_DASH
+  // for gross margin) and append only the words each genuinely needs.
+  const SRC = fs.readFileSync(path.join(__dirname, "../src/lib/qventure/signals.ts"), "utf8");
+
+  test("no connector list is written out longhand any more", () => {
+    // The exact prefix every one of the twenty-four used to open with.
+    const longhand = SRC.split("(?:of|=|:|at").length - 1;
+    expect(longhand).toBe(0);
+  });
+
+  test("and the constants are actually used, not merely declared", () => {
+    const uses = SRC.split("${LINK}").length - 1 + (SRC.split("${LINK_NO_DASH}").length - 1);
+    // Declaration lines account for two of the matches; the rest are call sites.
+    expect(uses).toBeGreaterThan(18);
+  });
+
+  test("gross margin is the only metric on the dashless constant", () => {
+    // If a second metric is ever moved onto LINK_NO_DASH it should be a
+    // decision, not a copy-paste, so this pins the count.
+    const lines = SRC.split(String.fromCharCode(10)).filter((l) => l.includes("${LINK_NO_DASH}"));
+    const callSites = lines.filter((l) => !l.includes("const LINK"));
+    expect(callSites.every((l) => /gross/i.test(l))).toBe(true);
+  });
+});

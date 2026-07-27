@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 636
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 639
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (636
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (639
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -892,13 +892,35 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    minus sign in this corpus already; an arrow usually means "will become",
    which is an intention, not a result.
 
+35. **Twenty-four connector lists become one constant.** Limit 34 added the
+   pipe and the em dash by mechanical search-and-replace across twenty-four
+   hand-written lists. It worked, and it worked by luck: one list was written in
+   a different order and the replace missed it, which only surfaced because a
+   probe checked customers separately.
+
+   They now read from `LINK` — or `LINK_NO_DASH`, which exists for gross margin
+   alone — and append only the words each genuinely needs (`between` for a band,
+   `were|was` for a past-tense filing line). Proven by mutation: removing the
+   pipe from the single constant reddens revenue, GMV, customers and gross
+   margin together, which is exactly what could not happen before.
+
+   Three assertions keep it that way: no list is written longhand, the constants
+   are used rather than merely declared, and gross margin is the only metric on
+   the dashless one — so moving a second metric there has to be a decision
+   rather than a copy-paste.
+
+   That is the fourth duplication of this shape closed today, after the currency
+   tables, the money-unit tables and `clauseYear`. The pattern in all four: a
+   concept written out per-site, correct everywhere, until one site needed
+   changing.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 636):
+`tests/qventureDisclosedCorpus.test.ts`, 639):
 
 | Guard | Floor | Measured today |
 |---|---|---|

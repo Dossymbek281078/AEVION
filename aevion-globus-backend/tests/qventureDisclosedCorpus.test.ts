@@ -834,3 +834,40 @@ describe("a plan that disagrees with itself says so on every metric, not just re
     expect(parsePlanSignals("12,000 customers.").conflicts.length).toBe(0);
   });
 });
+
+describe("the exact input path is held to the same standard as the prose", () => {
+  const base = {
+    name: "Structured bounds", sector: "saas", stage: "growth" as const, geography: "US",
+    description: "B2B platform.",
+  };
+  const sig = (financials: Record<string, number>) => analyze({ ...base, financials: financials as never }).signals;
+
+  test("impossible figures are rejected, as the text path already rejected them", () => {
+    // 250% monthly churn and 900% retention were accepted as "exact" numbers
+    // and scored as facts. The precise path is meant to be MORE trustworthy
+    // than a regex, not less.
+    expect(sig({ churnPct: 250 }).churnPct).toBeNull();
+    expect(sig({ retentionPct: 900 }).retentionPct).toBeNull();
+    expect(sig({ paybackMonths: 600 }).paybackMonths).toBeNull();
+  });
+
+  test("ordinary figures still pass", () => {
+    expect(sig({ churnPct: 8 }).churnPct).toBe(8);
+    expect(sig({ retentionPct: 146 }).retentionPct).toBe(146);
+    expect(sig({ paybackMonths: 14 }).paybackMonths).toBe(14);
+  });
+
+  test("a decline can be stated exactly, not only in prose", () => {
+    // The prose path reads "revenue declined 20%"; the structured path dropped
+    // -20 outright — the same asymmetry that made a below-cost margin
+    // unstateable in exact form, one field over.
+    expect(sig({ growthPct: -20 }).growthPct).toBe(-20);
+    expect(sig({ growthPct: 97 }).growthPct).toBe(97);
+  });
+
+  test("the two paths agree on a decline", () => {
+    const typed = analyze({ ...base, tractionNotes: "Revenue of $10M, down 20% year over year." });
+    const exact = analyze({ ...base, tractionNotes: "Revenue of $10M.", financials: { growthPct: -20, growthPeriod: "YoY" } as never });
+    expect(exact.signals.growthPct).toBe(typed.signals.growthPct);
+  });
+});

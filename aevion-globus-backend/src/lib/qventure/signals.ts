@@ -158,20 +158,34 @@ export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinanci
   if (arr !== null) { s.revenueUsd = arr; s.revenueBasis = f.arrUsd != null ? "ARR" : "revenue"; }
   else if (mrr !== null) { s.revenueUsd = mrr * 12; s.revenueBasis = "MRR"; }
 
+  /**
+   * The text path rejects impossible figures — churn above 100%, retention
+   * above 500% — and the structured path did not, so 250% monthly churn or 900%
+   * retention supplied as "exact" numbers were scored as facts. The precise
+   * input is meant to be MORE trustworthy than a regex, not less, so it gets
+   * the same bounds.
+   */
+  const bounded = (v: unknown, min: number, max: number): number | null =>
+    typeof v === "number" && isFinite(v) && v >= min && v <= max ? v : null;
+
+  // Growth is legitimately negative — a plan that is shrinking. The prose path
+  // reads "revenue declined 20%" and the structured path dropped -20 entirely,
+  // the same asymmetry that made a below-cost margin unstateable in exact form.
   const set = <K extends keyof PlanSignals>(key: K, v: number | null) => { if (v !== null) (s[key] as number | null) = v; };
-  set("growthPct", numOrNull(f.growthPct));
+  set("growthPct", bounded(f.growthPct, -100, 100_000));
   if (f.growthPct != null && f.growthPeriod) s.growthPeriod = f.growthPeriod;
   set("grossMarginPct", marginOrNull(f.grossMarginPct));
   set("cacUsd", numOrNull(f.cacUsd));
   set("ltvUsd", numOrNull(f.ltvUsd));
   set("ltvCacRatio", numOrNull(f.ltvCacRatio));
-  set("paybackMonths", numOrNull(f.paybackMonths));
-  if (numOrNull(f.churnPct) !== null) {
-    s.churnPct = f.churnPct as number;
+  set("paybackMonths", bounded(f.paybackMonths, 0, 240));
+  const churnIn = bounded(f.churnPct, 0, 100);
+  if (churnIn !== null) {
+    s.churnPct = churnIn;
     s.churnPeriod = f.churnPeriod ?? "unspecified";
-    s.churnMonthlyPct = monthlyChurnFrom(f.churnPct as number, s.churnPeriod);
+    s.churnMonthlyPct = monthlyChurnFrom(churnIn, s.churnPeriod);
   }
-  set("retentionPct", numOrNull(f.retentionPct));
+  set("retentionPct", bounded(f.retentionPct, 0, 500));
   set("customers", numOrNull(f.customers) !== null ? Math.round(f.customers as number) : null);
   set("bottomUpTamUsd", numOrNull(f.bottomUpTamUsd));
 

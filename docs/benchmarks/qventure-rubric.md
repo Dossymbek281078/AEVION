@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 207
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 211
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -276,10 +276,27 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
      resolves those, and flagging them would turn every ordinary year-on-year
      disclosure into a warning.
 
-   That is five shared rules examined this way and three defects found, plus two
-   verified negatives (currency conversion, negation). The question is cheap and
-   keeps paying, which is itself the finding: rules get written where they were
-   needed and nobody goes back to check the other fields.
+13. **The exact input path was held to a lower standard than the prose.** Two
+   more, from the seventh and eighth applications of the same question.
+
+   - The text path rejects impossible figures — churn above 100%, retention
+     above 500%, a payback longer than twenty years. The structured path did
+     not, so **250% monthly churn and 900% retention supplied as "exact" numbers
+     were scored as facts.** The precise input is meant to be more trustworthy
+     than a regex, not less.
+   - **A decline could be written in prose and not stated exactly.** The parser
+     reads "revenue declined 20%"; `growthPct: -20` was dropped by a
+     non-negative guard — the same asymmetry that made a below-cost margin
+     unstateable in exact form, one field over.
+
+   The stress test was checked in the same pass and came back clean: a plan
+   whose LTV/CAC is already below 1 reads `underwater` in every scenario, and a
+   healthy one reads healthy in all of them. Verified negative.
+
+   That is eight shared rules examined this way: **five defects found, three
+   verified negatives** (currency conversion, negation, stress test). The
+   question is cheap and keeps paying, which is itself the finding — rules get
+   written where they were needed and nobody goes back to the other fields.
 
 ## How this stays true
 
@@ -287,7 +304,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 207):
+`tests/qventureDisclosedCorpus.test.ts`, 211):
 
 | Guard | Floor | Measured today |
 |---|---|---|

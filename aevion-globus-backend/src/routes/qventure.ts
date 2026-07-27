@@ -261,11 +261,11 @@ function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
   // silently dropped the most adverse figure a plan can state while the prose
   // path reads it, making structured input strictly worse than typing it in a
   // sentence. Money and counts keep the non-negative guard.
-  const signedPct = (v: unknown): number | undefined =>
-    typeof v === "number" && isFinite(v) && v >= -100 && v <= 100 ? v : undefined;
+  const signedPct = (v: unknown, min = -100, max = 100): number | undefined =>
+    typeof v === "number" && isFinite(v) && v >= min && v <= max ? v : undefined;
   const f: StructuredFinancials = {
     revenueUsd: num(r.revenueUsd), mrrUsd: num(r.mrrUsd), arrUsd: num(r.arrUsd),
-    growthPct: num(r.growthPct), grossMarginPct: signedPct(r.grossMarginPct),
+    growthPct: signedPct(r.growthPct, -100, 100_000), grossMarginPct: signedPct(r.grossMarginPct),
     cacUsd: num(r.cacUsd), ltvUsd: num(r.ltvUsd), ltvCacRatio: num(r.ltvCacRatio),
     paybackMonths: num(r.paybackMonths), churnPct: num(r.churnPct),
     retentionPct: num(r.retentionPct), customers: num(r.customers), bottomUpTamUsd: num(r.bottomUpTamUsd),

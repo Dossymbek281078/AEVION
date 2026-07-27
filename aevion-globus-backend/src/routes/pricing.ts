@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
+// Правило «доедет ли скидка до счёта» — одно на весь репозиторий, из чекаута.
+import { channelHonoursAmount } from "./checkout";
+import { isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { createHmac, timingSafeEqual } from "crypto";
 import {
   TIERS,
@@ -370,9 +374,39 @@ pricingRouter.get("/fan/me", async (req, res) => {
     // "unavailable" — база с покупками приложений недоступна, список модулей
     // может быть НЕПОЛНЫМ. Клиент обязан видеть это, а не считать веер полным.
     appsSource: owned.appsSource,
+    /**
+     * Доедет ли веерная скидка до СЧЁТА — по тем же правилам, что у чекаута.
+     *
+     * Без этого поля витрина не может честно показать личную цену: канал по
+     * умолчанию (LemonSqueezy) применяет нашу сумму только при
+     * `LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1`, а Gumroad не может в принципе.
+     * Показать «твоя цена −30%» там, где спишут полную, — ровно тот дефект,
+     * которым открывалась эта ветка. Правило берётся из
+     * `checkout.channelHonoursAmount`, а не переписывается здесь.
+     */
+    discount: fanDiscountDelivery(),
     generatedAt: new Date().toISOString(),
   });
 });
+
+/** Где веерная скидка реально применяется к счёту прямо сейчас. */
+function fanDiscountDelivery(): { honouredByDefault: boolean; honouredVia: string[]; note: string } {
+  const via: string[] = [];
+  if (isPayboxConfigured() && channelHonoursAmount("paybox")) via.push("paybox");
+  if (isPaypalConfigured() && channelHonoursAmount("paypal")) via.push("paypal");
+  if (channelHonoursAmount("lemonsqueezy")) via.push("lemonsqueezy");
+  // Канал по умолчанию для кнопки «Купить» на страницах модулей — LemonSqueezy.
+  const honouredByDefault = channelHonoursAmount("lemonsqueezy");
+  return {
+    honouredByDefault,
+    honouredVia: via,
+    note: honouredByDefault
+      ? "Скидка применяется к счёту на канале по умолчанию."
+      : via.length
+        ? `Канал по умолчанию (LemonSqueezy) списывает цену продукта; скидка доедет через: ${via.join(", ")}.`
+        : "Ни один настроенный канал сейчас не применяет нашу сумму к счёту — скидка показывается, но списана будет цена продукта.",
+  };
+}
 
 /**
  * POST /api/pricing/promo/validate

@@ -157,7 +157,13 @@ interface CheckoutBody {
  * тогда скидка на LS становится настоящей (цена фиксируется на весь срок
  * подписки, это осознанная семантика «зафиксируй цену, пока веер открыт»).
  */
-function channelHonoursAmount(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub"): boolean {
+/**
+ * Экспортируется, чтобы витрина спрашивала ТУ ЖЕ функцию, а не заводила своё
+ * представление о том, доедет ли скидка до счёта. Второе представление здесь
+ * означало бы ровно тот дефект, ради которого сделана вся ветка: страница
+ * обещает одно, канал списывает другое.
+ */
+export function channelHonoursAmount(provider: "paybox" | "paypal" | "lemonsqueezy" | "gumroad" | "stub"): boolean {
   switch (provider) {
     case "paybox":
     case "paypal":

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { usePricingT } from "@/lib/pricingI18n";
 import { track } from "@/lib/track";
+import { getAuthToken } from "@/lib/aevionCatalog";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -97,8 +98,44 @@ function cachedFetch<T>(
   return p;
 }
 
+/**
+ * ЛИЧНЫЙ веер вошедшего покупателя (в отличие от витрины `fan/preview` выше).
+ *
+ * Зачем: до 2026-07-27 покупатель с уже открытым веером, зайдя на страницу
+ * модуля, не видел СВОЮ скидку — чип показывал только общее «купи этот,
+ * подешевеют те». То есть человек, который вероятнее всего купит, на странице
+ * решения не получал никакого сигнала.
+ *
+ * `discount.honouredByDefault` приходит из того же правила, что у чекаута
+ * (`channelHonoursAmount`): если канал по умолчанию спишет цену продукта, а не
+ * нашу сумму, личную цену показывать НЕЛЬЗЯ — вместо неё говорим, где скидка
+ * реально применится. Обещание, которое не выполнит счёт, — тот самый дефект,
+ * с которого началась эта ветка.
+ */
+interface FanMeOffer {
+  module: string;
+  discountPercent: number;
+  priceMonthly: number;
+  listMonthly: number;
+}
+interface FanMe {
+  status: string;
+  validUntil: string | null;
+  offers?: FanMeOffer[];
+  discount?: { honouredByDefault: boolean; honouredVia: string[] };
+}
+
 const fanPromises = new Map<string, Promise<FanPreviewRow[] | null>>();
 const pricingPromises = new Map<string, Promise<PricingResponse | null>>();
+const fanMePromises = new Map<string, Promise<FanMe | null>>();
+
+function loadFanMe(token: string): Promise<FanMe | null> {
+  return cachedFetch(fanMePromises, token.slice(0, 24), () =>
+    fetch(apiUrl("/api/pricing/fan/me"), { headers: { Authorization: `Bearer ${token}` } }).then((r) =>
+      r.ok ? (r.json() as Promise<FanMe>) : null,
+    ),
+  );
+}
 
 function loadFanPreview(currency: CurrencyCode): Promise<FanPreviewRow[] | null> {
   return cachedFetch(fanPromises, currency, () =>
@@ -134,6 +171,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   const tp = usePricingT();
   const [data, setData] = useState<PricingResponse | null>(null);
   const [fanRow, setFanRow] = useState<FanPreviewRow | null>(null);
+  const [mine, setMine] = useState<{ offer: FanMeOffer; honoured: boolean; validUntil: string | null } | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState(false);
 
@@ -146,6 +184,27 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       cancelled = true;
     };
   }, []);
+
+  // Личный веер — только для вошедшего. Без токена молчим: придумывать скидку
+  // «наверное, есть» нельзя, это обещание, которое чекаут не выполнит.
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+    let cancelled = false;
+    loadFanMe(token).then((me) => {
+      if (cancelled || !me || me.status !== "active") return;
+      const offer = me.offers?.find((o) => o.module === moduleId && o.discountPercent > 0);
+      if (!offer) return;
+      setMine({
+        offer,
+        honoured: me.discount?.honouredByDefault === true,
+        validUntil: me.validUntil ?? null,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [moduleId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,7 +325,31 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           {tp("fan.quote.cta")}
         </Link>
       )}
-      {!quoteOnRequest && fanRow && fanRow.ring1.length > 0 && (
+      {/*
+        Личный веер вытесняет общую витрину: покупателю с открытым окном важнее
+        своя цена, чем «что откроется, если купишь». Два состояния и оба честные:
+        скидку списывают — называем цену; не списывают — называем скидку и
+        канал, где она применится, но НЕ пишем цену, которой не будет в счёте.
+      */}
+      {!quoteOnRequest && mine && (
+        <span
+          style={{ color: palette.accent, fontWeight: 800, whiteSpace: "nowrap" }}
+          title={
+            mine.validUntil
+              ? tp("fan.mine.tooltip", { until: new Date(mine.validUntil).toLocaleDateString("ru-RU") })
+              : undefined
+          }
+        >
+          {mine.honoured
+            ? tp("fan.mine.price", {
+                pct: mine.offer.discountPercent,
+                price: fmt(mine.offer.priceMonthly, currency, data.currencies),
+                list: fmt(mine.offer.listMonthly, currency, data.currencies),
+              })
+            : tp("fan.mine.pending", { pct: mine.offer.discountPercent })}
+        </span>
+      )}
+      {!quoteOnRequest && !mine && fanRow && fanRow.ring1.length > 0 && (
         <span
           style={{ color: palette.accent, fontWeight: 700, whiteSpace: "nowrap" }}
           title={tp("fan.module.tooltip", { module: moduleId, list: fanRow.ring1.join(", ") })}

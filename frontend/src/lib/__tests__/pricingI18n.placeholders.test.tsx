@@ -38,6 +38,9 @@ describe("usePricingT — подстановка плейсхолдеров", ()
     const vars = {
       module: "qsign", cur: "$", price: 6.3, list: 9, n: 3,
       days: 14, sum: 26.4, date: "09.08.2026", percent: 35, reason: "тест",
+      // Добавлено 2026-07-27 вместе с личным веером в чипе. Тест поймал
+      // недостающие параметры сразу — ровно то, ради чего он написан.
+      pct: 30, until: "10.08.2026",
     };
     const leftovers: string[] = [];
     for (const key of Object.keys(fanDict.en)) {

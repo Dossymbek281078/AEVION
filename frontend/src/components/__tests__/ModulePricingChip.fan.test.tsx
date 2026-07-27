@@ -147,3 +147,87 @@ describe("кэш чипа не запоминает сбой навсегда", 
     await waitFor(() => expect(screen.getByText(/fan: 3 modules cheaper/i)).toBeTruthy());
   });
 });
+
+/**
+ * Личный веер вошедшего покупателя на странице модуля.
+ *
+ * Зачем фича: до 2026-07-27 покупатель с уже открытым веером видел здесь только
+ * общую витрину «купи этот — подешевеют те». Человек, который вероятнее всего
+ * купит, на странице решения не получал сигнала о СВОЕЙ скидке.
+ *
+ * Зачем два состояния: канал по умолчанию (LemonSqueezy) применяет нашу сумму
+ * только при LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1. Если не применяет — назвать
+ * личную цену значит пообещать то, чего не будет в счёте. Тогда называем
+ * скидку и канал, где она сработает.
+ */
+const FAN_ME_HONOURED = {
+  status: "active",
+  validUntil: "2026-08-10T00:00:00.000Z",
+  offers: [{ module: "qcontract", discountPercent: 30, priceMonthly: 13.3, listMonthly: 19 }],
+  discount: { honouredByDefault: true, honouredVia: ["lemonsqueezy"] },
+};
+const FAN_ME_NOT_HONOURED = {
+  ...FAN_ME_HONOURED,
+  discount: { honouredByDefault: false, honouredVia: ["paypal"] },
+};
+
+function mockFetchWithMe(me: unknown) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("/fan/me") ? me : url.includes("/fan/preview") ? FAN_PREVIEW : PRICING;
+    return { ok: true, status: 200, json: async () => body } as Response;
+  });
+}
+
+describe("личный веер в чипе", () => {
+  it("✅ скидку списывают — показываем ЦЕНУ покупателя", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", mockFetchWithMe(FAN_ME_HONOURED));
+    vi.doMock("@/lib/aevionCatalog", () => ({ getAuthToken: () => "token-abc" }));
+    const Fresh = (await import("@/components/ModulePricingChip")).default;
+    const { I18nProvider: P } = await import("@/lib/i18n");
+    render(
+      <P>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </P>,
+    );
+    await waitFor(() => expect(screen.getByText(/your price/i)).toBeTruthy());
+    expect(screen.getByText(/13\.3/)).toBeTruthy();
+    vi.doUnmock("@/lib/aevionCatalog");
+  });
+
+  it("🔴 скидку НЕ списывают — цену не обещаем, называем канал", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", mockFetchWithMe(FAN_ME_NOT_HONOURED));
+    vi.doMock("@/lib/aevionCatalog", () => ({ getAuthToken: () => "token-abc" }));
+    const Fresh = (await import("@/components/ModulePricingChip")).default;
+    const { I18nProvider: P } = await import("@/lib/i18n");
+    render(
+      <P>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </P>,
+    );
+    await waitFor(() => expect(screen.getByText(/−30%|-30%/)).toBeTruthy());
+    // Цена, которой не будет в счёте, названа быть НЕ должна.
+    expect(screen.queryByText(/13\.3/)).toBeNull();
+    expect(screen.getByText(/PayPal/i)).toBeTruthy();
+    vi.doUnmock("@/lib/aevionCatalog");
+  });
+
+  it("гость личного веера не видит — придумывать скидку нельзя", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", mockFetchWithMe(FAN_ME_HONOURED));
+    vi.doMock("@/lib/aevionCatalog", () => ({ getAuthToken: () => null }));
+    const Fresh = (await import("@/components/ModulePricingChip")).default;
+    const { I18nProvider: P } = await import("@/lib/i18n");
+    render(
+      <P>
+        <Fresh moduleId="qcontract" currency="USD" />
+      </P>,
+    );
+    // Общая витрина есть, личной цены нет.
+    await waitFor(() => expect(screen.getByText(/fan: 3 modules cheaper/i)).toBeTruthy());
+    expect(screen.queryByText(/your price/i)).toBeNull();
+    vi.doUnmock("@/lib/aevionCatalog");
+  });
+});

@@ -291,8 +291,26 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
 const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to|a|an|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+/**
+ * A third-party subject: whose figure this is.
+ *
+ * Decks compare constantly, and a comparison names the largest numbers in the
+ * document — the incumbent's revenue, the leader's user base, the category's
+ * margins. "Our competitor reached $10M ARR", "the market leader has 500,000
+ * customers" and "incumbents charge a 25% take rate" were all being scored as
+ * the applicant's own.
+ *
+ * Deliberately conservative: any third-party subject standing in the figure's
+ * own clause BEFORE it disqualifies the figure. That also declines "unlike our
+ * competitor, we reached $10M ARR", which is a real sentence and a rarer one.
+ * Losing a figure is recoverable; a rival's revenue scored as the plan's is the
+ * worst kind of wrong number this parser can produce.
+ */
+const THIRD_PARTY_SUBJECT = /\b(?:competitors?|competing (?:products?|companies)|rivals?|incumbents?|market leaders?|peers?|the industry|industry (?:average|averages|margins?|norms?|standard)|the market|comparable companies|typically|on average|others in the (?:space|category))\b/i;
+
 export function statedAsAchieved(text: string, at: number, len: number): boolean {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
+  if (THIRD_PARTY_SUBJECT.test(text.slice(from, at))) return false;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
   const clause = text.slice(from, ends.length ? Math.min(...ends) : text.length);
   return ACHIEVED_WORD.test(clause) || !INTENDED_WORD.test(clause);
@@ -489,10 +507,15 @@ export function parsePlanSignals(text: string): PlanSignals {
   // Skip any figure sitting behind forward-looking intent: "we target $20M ARR
   // next year" is a plan, not a disclosure, and reading it as current revenue
   // hands the deck credit for money it has not made.
+  // Revenue keeps its own filter because it also has to survive "we target $20M
+  // ARR next year. Revenue of $5M today." — but it needs the ownership test as
+  // much as any other field, and more: "our competitor reached $10M ARR" names
+  // the biggest number a comparison ever carries.
   const notForward = (m: RegExpMatchArray | null): RegExpMatchArray | null => {
     if (!m) return null;
     const at = m.index ?? 0;
-    return forwardLooking(t, at) ? null : m;
+    if (forwardLooking(t, at)) return null;
+    return statedAsAchieved(t, at, m[0].length) ? m : null;
   };
   /**
    * The year a figure's own clause is about. Bounded to the clause so a date

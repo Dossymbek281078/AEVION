@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 311
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 315
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -495,9 +495,9 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    requirement. The first two were not enough on their own — a definition
    states no intention and a contract clause denies nothing.
 
-21. **Open, and the largest one left: a competitor's numbers are read as the
-   applicant's.** The intention work went into the deck path, and the same
-   question asked of the main parser found three defects there:
+21. **Closed: a competitor's numbers were read as the applicant's.** The
+   intention work went into the deck path, and the same question asked of the
+   main parser found three defects in the reader itself:
 
    | Sentence | Credited to the applicant |
    |---|---|
@@ -517,14 +517,24 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    margins. Reading those as the applicant's own is a wrong figure of the worst
    available kind.
 
-   A filter was written and reverted the same session — it did not fire, and
-   diagnosing why was heading past the end of the session with a green tree to
-   protect. The shape is clear enough to start from: a third-party subject in
-   the figure's own clause before it (competitor, incumbent, market leader,
-   peers, industry, typical, average), applied in the same shared gate every
-   reader already consults. It should be deliberately conservative — declining
-   "unlike our competitor, we reached $10M ARR" is a cheaper mistake than
-   scoring a rival's revenue as the plan's.
+   A third-party subject standing in the figure's own clause before it now
+   disqualifies the figure — competitor, incumbent, market leader, peers,
+   industry, typically, on average — inside the same shared gate every reader
+   consults. Revenue keeps its own forward-looking filter and asks this one too.
+
+   The first attempt at this was written and reverted an hour earlier: it did
+   not fire and diagnosing why was heading past the end of a session with a
+   green tree to protect. The second put the check directly in the gate instead
+   of behind an exported helper, and verified it through the parser's behaviour
+   rather than the helper's.
+
+   **The cost, measured rather than argued:** it also declines "unlike our
+   competitor, we reached $10M ARR". That is a real sentence and a rarer one
+   than "the competitor has X", and losing a figure is recoverable where scoring
+   a rival's revenue as the plan's is not. Clause-bounding keeps the trade
+   affordable — "we reached $10M ARR; our competitor is at $4M" still reads
+   $10M — and the corpus is unchanged at 73/73, so no figure in any real filing
+   was lost to it.
 
 ## How this stays true
 
@@ -532,7 +542,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 311):
+`tests/qventureDisclosedCorpus.test.ts`, 315):
 
 | Guard | Floor | Measured today |
 |---|---|---|

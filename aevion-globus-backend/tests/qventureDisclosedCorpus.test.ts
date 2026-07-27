@@ -1593,3 +1593,46 @@ describe("the cost of the figure check, measured rather than assumed", () => {
     expect(figureAppearsInText("Traction: $6M ARR.", 6_000_000)).toBe(true);
   });
 });
+
+describe("whose figure is this", () => {
+  /**
+   * A comparison is the most common sentence in a pitch, and it names the
+   * largest numbers in the document — the incumbent's revenue, the leader's
+   * user base, the category's margins. All of these were scored as the
+   * applicant's own.
+   *
+   * Two of the five were not credited even before the fix, but only because the
+   * intervening words happened to break the pattern. That is the same luck the
+   * PPA and peer-review entries were living on, and it is now a check.
+   */
+  const sig = (t: string) => parsePlanSignals(t) as unknown as Record<string, number | null>;
+
+  test("someone else's figures are not the plan's", () => {
+    expect(sig("Our competitor reached $10M ARR last year.").revenueUsd).toBeNull();
+    expect(sig("The market leader has 500,000 customers.").customers).toBeNull();
+    expect(sig("Incumbents charge a 25% take rate.").takeRatePct).toBeNull();
+    expect(sig("Industry gross margins are typically 70%.").grossMarginPct).toBeNull();
+    expect(sig("Typical churn in this category is 5% monthly.").churnPct).toBeNull();
+  });
+
+  test("the plan's own figures are untouched", () => {
+    expect(sig("We reached $10M ARR last year.").revenueUsd).toBe(10_000_000);
+    expect(sig("12,000 customers.").customers).toBe(12_000);
+    expect(sig("Gross margin 77%.").grossMarginPct).toBe(77);
+    expect(sig("3% annual churn.").churnPct).toBe(3);
+    expect(sig("GMV of $180M annualized with a 14% take rate.").takeRatePct).toBe(14);
+  });
+
+  test("a claim in its own clause survives a comparison in the next", () => {
+    // Clause-bounding is what makes the conservative rule affordable.
+    expect(sig("We reached $10M ARR; our competitor is at $4M.").revenueUsd).toBe(10_000_000);
+  });
+
+  test("the cost of being conservative, measured", () => {
+    // "Unlike our competitor, we reached $10M ARR" is a real sentence and this
+    // declines it. Deliberate: losing a figure is recoverable, scoring a
+    // rival's revenue as the plan's is not. Recorded so the trade is visible
+    // rather than discovered later.
+    expect(sig("Unlike our competitor, we reached $10M ARR.").revenueUsd).toBeNull();
+  });
+});

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Chess } from "chess.js";
+import { readFileSync } from "node:fs";
 import { ECO_PRESETS } from "../openingRepertoireData";
 
 /* The repertoire builder offers these as starting points. A typo in one move makes
@@ -49,5 +50,41 @@ describe("ECO_PRESETS", () => {
     for (const p of ECO_PRESETS) {
       for (const san of p.moves) expect(san).not.toMatch(/0-0/);
     }
+  });
+});
+
+/* Тот же вопрос, но к большому файлу: public/openings.json — 3807 линий, которые
+   подставляются в проводник дебютов. Проверка та же: линия должна проигрываться от
+   начальной позиции. Одна не проигрывалась — «Ruy Lopez: Morphy 5.O-O» отступал слоном
+   ходом f1a4, хотя слон уже стоял на b5; в поле отправления была опечатка, и линия
+   обрывалась на пятом ходу. Прогон занимает около двух секунд на 36 803 хода. */
+describe("openings.json", () => {
+  const openings = JSON.parse(
+    readFileSync("public/openings.json", "utf8"),
+  ) as Array<{ eco: string; name: string; moves: string }>;
+
+  it("ships a large book", () => {
+    expect(openings.length).toBeGreaterThan(3000);
+  });
+
+  it("replays every line from the start position", () => {
+    const bad: string[] = [];
+    for (const o of openings) {
+      const moves = String(o.moves || "").trim().split(/\s+/).filter(Boolean);
+      if (!moves.length) {
+        bad.push(`${o.eco} ${o.name}: пустая линия`);
+        continue;
+      }
+      const c = new Chess();
+      for (const u of moves) {
+        try {
+          if (!c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] })) throw new Error();
+        } catch {
+          bad.push(`${o.eco} ${o.name}: ход ${u} невозможен`);
+          break;
+        }
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });

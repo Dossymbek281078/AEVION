@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers, MIN_STOREY_M, CONTRADICTION_MIN_LEVELS,
+  LEVELS_MEANINGLESS_FOR,
   projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
 import { CITY } from "../src/routes/qskyway.city";
@@ -375,6 +376,25 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
     // exactly 2 m per storey is allowed; below it is not
     expect(heightOf({ height: "20", "building:levels": "10" })).toMatchObject({ hs: 0 });
     expect(heightOf({ height: "19", "building:levels": "10" })).toMatchObject({ hs: 1 });
+  });
+
+  it("leaves a CANOPY alone, where a floor count describes something else entirely", () => {
+    // way/572495079: building=roof, height=7, building:levels=47. The 7 m is
+    // correct — PLATEAU surveyed the same footprint at 7 m — and the floor count
+    // belongs to whatever the canopy is attached to. Without this exclusion the
+    // rule turns an awning into a 152 m obstacle, and in Tokyo only a second
+    // source stood in the way. Astana has no second source.
+    expect(heightOf({ building: "roof", height: "7", "building:levels": "47" }))
+      .toMatchObject({ h: 7, hs: 0 });
+    for (const kind of LEVELS_MEANINGLESS_FOR) {
+      expect(heightOf({ building: kind, height: "7", "building:levels": "47" }).hs).toBe(0);
+    }
+  });
+
+  it("still applies to an ordinary building, which is where the rule earns its keep", () => {
+    // 高倉第一ビル: building=yes, height=14 over 8 storeys. A real contradiction.
+    expect(heightOf({ building: "yes", height: "14", "building:levels": "8" }))
+      .toMatchObject({ hs: 1, contradicted: 14 });
   });
 
   it("still needs BOTH tags — one alone says nothing about the other", () => {

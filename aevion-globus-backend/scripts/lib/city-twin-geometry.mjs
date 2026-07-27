@@ -93,6 +93,19 @@ export const MIN_STOREY_M = 2;
 // canopy tagged `building:levels=1, height=1` is a modelling convention, not a
 // hidden tower, and "correcting" it would inflate every awning in the city.
 export const CONTRADICTION_MIN_LEVELS = 3;
+/**
+ * Structures where `building:levels` does not describe the structure at all.
+ *
+ * A `building=roof` is a canopy: an awning over a forecourt, a station platform
+ * cover, a fuel-station shelter. Mappers routinely give it the floor count of
+ * whatever it is attached to. way/572495079 in Nishi-Shinjuku is exactly that —
+ * height=7 with building:levels=47 — and the 7 m is RIGHT: PLATEAU surveyed the
+ * same footprint at 7 m. Treating that as a contradiction would have inflated a
+ * canopy into a 152 m obstacle, and only a second source stood between the rule
+ * and that outcome. Astana has no second source, so this exclusion is what keeps
+ * the rule from inventing towers there. Tokyo alone carries 49 such structures.
+ */
+export const LEVELS_MEANINGLESS_FOR = new Set(["roof", "canopy", "carport"]);
 
 export function heightOf(tags = {}) {
   const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
@@ -100,18 +113,23 @@ export function heightOf(tags = {}) {
 
   // A measured tag that its OWN source contradicts is not a measurement.
   //
-  // Found in the shipped Tokyo twin on 2026-07-27: way/572495079 carries
-  // height=7 alongside building:levels=47 — 0.15 m per storey. It entered the
-  // obstacle grid as hs=0, MEASURED, which buys zero safety clearance, so the
-  // router planned corridors through a 47-storey building at seven metres.
-  // PLATEAU did not cover that footprint, so nothing downstream caught it.
+  // In the shipped Tokyo twin: way/144093559 (高倉第一ビル) carries height=14
+  // alongside building:levels=8, i.e. 1.75 m per storey. It entered the obstacle
+  // grid as hs=0, MEASURED, which buys zero safety clearance — so an eight-floor
+  // building was published at fourteen metres and flown over with none.
   //
   // Understating an obstacle is the expensive direction of this failure, and no
   // outside source is needed to see it: the source disagrees with itself, so we
   // fall back to its other claim and mark the result DERIVED — which is both
   // honest and buys back the clearance a guess deserves.
+  //
+  // The exclusion below is not a footnote. The first version of this rule had no
+  // exclusion and would have raised a 7 m canopy to 152 m; only PLATEAU, which
+  // had surveyed the same footprint, stood in the way. A rule that needs a
+  // second source to stay safe is not safe in the city that has none.
   if (explicit !== null && levels !== null && levels >= CONTRADICTION_MIN_LEVELS
-      && explicit / levels < MIN_STOREY_M) {
+      && explicit / levels < MIN_STOREY_M
+      && !LEVELS_MEANINGLESS_FOR.has(tags.building)) {
     return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1, contradicted: Math.round(explicit) };
   }
 

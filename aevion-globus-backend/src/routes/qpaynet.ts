@@ -48,6 +48,7 @@ import { captureException } from "../lib/sentry";
 import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 export const qpaynetRouter = Router();
 
@@ -1235,7 +1236,8 @@ qpaynetRouter.get("/transactions.csv", csvLimiter, async (req, res) => {
   );
 
   const escape = (v: unknown) => {
-    const s = String(v ?? "");
+    // description заполняет пользователь; гашение формул — из общего lib/csv.
+    const s = csvNeutralizeFormula(String(v ?? ""));
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = "id,wallet_id,type,amount,fee,currency,description,status,created_at";
@@ -1973,7 +1975,8 @@ qpaynetRouter.get("/requests.csv", async (req, res) => {
     [ownerId],
   );
   const escape = (v: unknown) => {
-    const s = String(v ?? "");
+    // description заполняет пользователь; гашение формул — из общего lib/csv.
+    const s = csvNeutralizeFormula(String(v ?? ""));
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = "id,token,to_wallet_id,amount,currency,description,status,paid_by,paid_tx_id,paid_at,expires_at,created_at,notify_url,notify_attempts,delivered_at";

@@ -231,7 +231,13 @@ adminRouter.get("/leads.csv", async (req, res) => {
 
     const escape = (v: unknown): string => {
       if (v == null) return "";
-      const s = String(v);
+      let s = String(v);
+      // Экранирование кавычек защищает структуру CSV, но не защищает того, кто
+      // откроет файл. Поля здесь заполняет посетитель (email, город, referrer,
+      // utm), а значение, начинающееся с = + - @ или управляющего символа, Excel
+      // и Google Sheets трактуют как ФОРМУЛУ и исполняют при открытии. Гасим
+      // ведущей одинарной кавычкой — стандартная мера против formula injection.
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       if (s.includes(",") || s.includes("\n") || s.includes('"')) {
         return `"${s.replace(/"/g, '""')}"`;
       }

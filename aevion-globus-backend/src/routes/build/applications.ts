@@ -303,7 +303,15 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
     );
 
     const header = ["id", "status", "label", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "skills", "aiScore", "matchScore", "message", "rejectReason"].join(",");
-    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // Кавычки защищают структуру CSV, но не того, кто откроет файл. Имя, город,
+    // сообщение и причина отказа приходят от соискателя, а значение с ведущим
+    // = + - @ Excel и Google Sheets исполняют как формулу при открытии. Гасим
+    // ведущей одинарной кавычкой (formula injection).
+    const escape = (v: unknown) => {
+      let s = String(v ?? "");
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
     const skillsList = (j: unknown) => {
       if (typeof j !== "string") return "";
       try { return (JSON.parse(j) as string[]).join("; "); } catch { return ""; }

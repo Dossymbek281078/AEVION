@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { csvNeutralizeFormula } from "../lib/csv";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const capture = makeServiceCapture("qcontract");
@@ -518,8 +519,12 @@ qcontractRouter.get("/documents/:id/log.csv", async (req, res) => {
     [req.params.id],
   );
 
+  // Локальная копия экранирования закрывала структуру файла, но не читателя:
+  // viewer_ua задаёт ЛЮБОЙ HTTP-клиент, а поле уезжает в CSV, который открывает
+  // владелец документа. Гашение формул берём из общего lib/csv, чтобы защита была
+  // одна на весь бэкенд, а не очередная копия.
   const escape = (v: unknown) => {
-    const s = String(v ?? "");
+    const s = csvNeutralizeFormula(String(v ?? ""));
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = "view_id,viewer_ip,viewer_email,signed,viewed_at,user_agent";

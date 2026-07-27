@@ -161,3 +161,46 @@ export const gumroadPaymentProvider: PaymentProvider = {
     };
   },
 };
+
+/**
+ * Подтверждение продажи через Gumroad API.
+ *
+ * ЗАЧЕМ. Ping-вебхук Gumroad по умолчанию НЕ подписан: проверка HMAC в
+ * parseWebhook включается только при заданном GUMROAD_WEBHOOK_SECRET. На проде
+ * 2026-07-26 секрет не задан (`/api/gumroad/webhook` отвечает `signed:false`),
+ * а Ping-адрес публично известен — значит, любой POST с чужим email выдавал бы
+ * платный тариф без единого платежа. Докстринг этого файла с самого начала
+ * предполагал «own validation via GUMROAD_ACCESS_TOKEN API lookup», но она не
+ * была написана; вот она.
+ *
+ * ПОЛИТИКА ОТКАЗА — намеренно консервативная. Отклоняем только когда Gumroad
+ * ОПРЕДЕЛЁННО отвечает, что такой продажи нет. Если подтвердить не удалось
+ * (нет токена, сеть, 5xx) — возвращаем "unverifiable", и вызывающий код ведёт
+ * себя ровно как раньше. Так подделка отсекается детерминированно, а реальный
+ * покупатель не теряет доступ из-за сбоя стороннего API.
+ */
+export type SaleVerdict = "confirmed" | "not_found" | "unverifiable";
+
+export async function verifyGumroadSale(saleId: string): Promise<SaleVerdict> {
+  if (!saleId) return "unverifiable";
+  const token = process.env.GUMROAD_ACCESS_TOKEN;
+  if (!token) return "unverifiable";
+
+  try {
+    const url = `${GUMROAD_BASE}/sales/${encodeURIComponent(saleId)}?access_token=${encodeURIComponent(token)}`;
+    const r = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
+
+    // 404 — продажи с таким id у нас нет. Единственный случай, когда мы уверены,
+    // что пинг поддельный или адресован не нам.
+    if (r.status === 404) return "not_found";
+    if (!r.ok) return "unverifiable";
+
+    const body = (await r.json()) as { success?: boolean; sale?: unknown };
+    if (body?.success === true && body.sale) return "confirmed";
+    // success:false с кодом 200 Gumroad отдаёт на несуществующий id.
+    if (body?.success === false) return "not_found";
+    return "unverifiable";
+  } catch {
+    return "unverifiable";
+  }
+}

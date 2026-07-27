@@ -30,6 +30,7 @@ import { fetchComparables } from "../lib/qventure/comparables";
 import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
 import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX } from "../lib/qventure/examples";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 const captureQVentureError = makeServiceCapture("qventure");
 
@@ -372,7 +373,8 @@ qventureRouter.get("/examples.csv", async (_req: Request, res: Response) => {
   try {
     const rows = await listExamples();
     const esc = (v: unknown) => {
-      const s = String(v ?? "");
+      // name / sector / geography заполняет пользователь; гашение формул из lib/csv.
+      const s = csvNeutralizeFormula(String(v ?? ""));
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = ["name", "sector", "stage", "geography", "score", "verdict", "report_url"];

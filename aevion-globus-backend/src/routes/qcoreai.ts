@@ -252,6 +252,7 @@ import {
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 export const qcoreaiRouter = Router();
 
@@ -2095,7 +2096,10 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     }
 
     if (fmt === "csv") {
-      const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      // content — текст запросов и ответов, его пишет пользователь. Гашение формул
+      // из общего lib/csv, чтобы выгрузка не исполнялась при открытии в Excel.
+      const escape = (v: unknown) =>
+        `"${csvNeutralizeFormula(String(v ?? "")).replace(/"/g, '""')}"`;
       const rows = [
         ["role", "stage", "instance", "provider", "model", "content", "tokensIn", "tokensOut", "costUsd", "durationMs"].join(","),
         ...messages.map((m) => [m.role, m.stage, m.instance, m.provider, m.model, m.content, m.tokensIn, m.tokensOut, m.costUsd, m.durationMs].map(escape).join(",")),

@@ -276,6 +276,10 @@ async function twitchChannelStats(login: string): Promise<{
 
 interface GumroadSale {
   id?: string;
+  /** Произвольные query-параметры со страницы оплаты. Сюда приезжает метка
+   *  канала (?channel=instagram), которую ставит /go и /shop — благодаря ей
+   *  видно не только ЧТО купили, но и откуда пришёл покупатель. */
+  url_params?: Record<string, string>;
   email?: string;
   product_name?: string;
   product_permalink?: string;
@@ -769,18 +773,34 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     amountUsd: s.price ? s.price / 100 : 0,
     currency: s.currency?.toUpperCase() ?? "USD",
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),
+    // null = продажа пришла без метки: либо до введения атрибуции, либо человек
+    // попал на товар не через /go и /shop (прямая ссылка, поиск Gumroad).
+    channel: s.url_params?.channel ?? null,
     date: s.created_at ?? null,
   }));
+
+  // Разрез по ИСТОЧНИКУ ТРАФИКА — ответ на вопрос «что окупается», ради которого
+  // метки и заводились. Имя `bySource`, а не `byChannel`: в этом файле `byChannel`
+  // уже занят и означает ПЛАТЁЖНЫЙ канал (gumroad / lemonsqueezy). Одно имя на два
+  // разных смысла в одном файле — гарантированная будущая путаница.
+  //
+  // Продажи без метки собираются в "unattributed", а не выбрасываются: молча терять
+  // часть выручки из сводки хуже, чем честно показать, сколько её не размечено.
+  const bySource: Record<string, { count: number; totalUsd: number }> = {};
 
   const byApp: Record<string, { count: number; totalUsd: number }> = {};
   for (const s of recent) {
     if (s.refunded) continue;
+    const src = s.channel ?? "unattributed";
+    if (!bySource[src]) bySource[src] = { count: 0, totalUsd: 0 };
+    bySource[src].count++;
+    bySource[src].totalUsd += s.amountUsd;
     if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
     byApp[s.appId].count++;
     byApp[s.appId].totalUsd += s.amountUsd;
   }
 
-  res.json({ sales: recent, byApp });
+  res.json({ sales: recent, byApp, bySource });
 });
 
 /**

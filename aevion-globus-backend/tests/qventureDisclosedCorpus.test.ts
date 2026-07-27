@@ -2586,3 +2586,29 @@ describe("how growth is written outside a US filing", () => {
     expect(p(text).growthPct).toBe(want);
   });
 });
+
+describe("Japanese filing forms that already worked", () => {
+  // The tenth probe of the session came back empty, which is worth pinning
+  // rather than discarding: both forms are correct today and neither is
+  // obviously safe.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("the currency word can follow the unit", () => {
+    // "3,492,356 million yen", not "¥3,492,356 million" — how a Japanese
+    // filing writes it, with the currency after the scale word.
+    const a = p("Revenue was 3,492,356 million yen.").revenueUsd;
+    const b = p("Revenue was ¥3,492,356 million.").revenueUsd;
+    expect(a).not.toBeNull();
+    expect(a).toBe(b);
+  });
+
+  test.each([
+    ["a point change is not a rate", "A 0.6 percentage point increase compared to the previous fiscal year."],
+    ["nor on a margin", "Gross margin saw a 3.8 percentage point increase."],
+  ])("%s", (_l, text) => {
+    // A margin moving from 56.1% to 59.9% rose 3.8 POINTS. Reading that as
+    // 3.8% growth would be a different number about a different thing, and
+    // limit 43 widened the growth patterns towards exactly this shape.
+    expect(p(text).growthPct).toBeNull();
+  });
+});

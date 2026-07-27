@@ -351,5 +351,36 @@ ok("при split базового пункта о согласии нет",
   !splitCase.checks.some((c) => /общую посылку/.test(c.text)),
   JSON.stringify(splitCase.checks.map((c) => c.kind)));
 
+// ── Все четыре сюжета сразу: фиксы не должны конфликтовать ────────────────
+//
+// Каждый фикс 27.07 проверен отдельно, но вместе они раньше не гонялись — а
+// именно на связке в этот день дважды вылезали дефекты (ложный хедж у
+// уверенного агента; вытеснение базового тезиса о согласии). Этот набор держит
+// все четыре сюжета одновременно: числовое расхождение РАЗНЫМИ словами, хедж из
+// дополненного словаря, «может быть» в утверждении и отказ агента.
+const combined = m.buildDissentMap([
+  A("analyst", "Рекомендую отложить. По воронке видно: на текущем трафике это примерно 40 регистраций в месяц, и при конверсии около двух процентов оплат почти не будет."),
+  A("skeptic", "Включать пора. Судя по логам, трафика около 300 регистраций в месяц. Цена может быть любой — важнее сам факт оплаты."),
+  A("practic", "Затрудняюсь дать однозначную рекомендацию: многое зависит от источника трафика."),
+  { agentId: "finance", ok: false, error: "timeout" },
+]);
+ok("связка: числовое расхождение найдено", combined.numericConflicts.length === 1,
+  JSON.stringify(combined.numericConflicts.map((c) => c.values.map((v) => v.raw))));
+ok("связка: у уверенного агента хеджа НЕТ",
+  !combined.hedges.some((h) => h.agentId === "skeptic"), JSON.stringify(combined.hedges));
+ok("связка: осторожность practic отмечена",
+  combined.hedges.some((h) => h.agentId === "practic" && h.kind === "hedged"));
+ok("связка: отказ finance отмечен",
+  combined.hedges.some((h) => h.agentId === "finance" && h.kind === "failed"));
+ok("связка: при разногласии пункта о согласии нет",
+  !combined.checks.some((c) => c.kind === "consensus"),
+  JSON.stringify(combined.checks.map((c) => c.kind)));
+ok("связка: порядок по весу не нарушен",
+  combined.checks.every((c, idx) => idx === 0 || combined.checks[idx - 1].weight >= c.weight),
+  JSON.stringify(combined.checks.map((c) => c.kind + ":" + c.weight)));
+ok("связка: пункты не дублируются по виду и агентам",
+  new Set(combined.checks.map((c) => c.kind + JSON.stringify(c.agents))).size === combined.checks.length,
+  JSON.stringify(combined.checks.map((c) => c.kind + JSON.stringify(c.agents))));
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

@@ -223,6 +223,27 @@ export function parseAmountMinor(value: unknown): number | string {
   return value;
 }
 
+/**
+ * `?limit=` из строки запроса: целое от 1 до `max`, иначе — причина отказа.
+ *
+ * Было `Math.min(100, Number(searchParams.get("limit") ?? 25))`. На `?limit=abc`
+ * это даёт **NaN**, а `array.slice(0, NaN)` возвращает пустой массив: ответ
+ * приходил `{count: 0, has_more: false}` — то есть «у вас нет данных» вместо
+ * «вы прислали мусор». Разработчик, интегрирующий API, читает это как пустой
+ * аккаунт. `?limit=-5` был не лучше: `slice(0, -5)` молча отрезает С КОНЦА.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+export function parseLimit(raw: string | null, def: number, max: number): number | string {
+  if (raw === null || raw === "") return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    return "limit must be a whole number.";
+  }
+  if (n < 1) return "limit must be at least 1.";
+  return Math.min(max, n);
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },

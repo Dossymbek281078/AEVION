@@ -3,6 +3,7 @@ import {
   attachRateHeaders,
   badRequest,
   parseAmountMinor,
+  parseLimit,
   checkIdempotency,
   gateRequest,
   genId,
@@ -21,7 +22,10 @@ export async function GET(req: NextRequest) {
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(100, Number(searchParams.get("limit") ?? 25));
+  const limit = parseLimit(searchParams.get("limit"), 25, 100);
+  if (typeof limit === "string") {
+    return attachRateHeaders(withCors(badRequest(limit)), gate.rateHeaders);
+  }
   const data = Array.from(store.links.values())
     .sort((a, b) => b.created - a.created)
     .slice(0, limit);

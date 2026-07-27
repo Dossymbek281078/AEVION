@@ -789,10 +789,20 @@ function lastInSeries(
   const YEAR = /(?:19|20)[0-9]{2}/;
   const NAMES_ITSELF = /^\s*(?:premium |paying |active |monthly |daily )*(?:subscribers|customers|users|maus?|daus?|members|merchants|clients|revenues?|arr|mrr|gmv|margins?|retention)\b/i;
 
-  /** The year attached to a figure: the first one after it, inside its clause. */
+  /**
+   * The year attached to a figure: the first one after it, inside its clause.
+   *
+   * Read from the UNMASKED twin. Dates are blanked out of the parse text so a
+   * year cannot be read as a metric value, which also blanks the years this
+   * choice depends on: "121% as of December 31, 2018, and 107% as of December
+   * 31, 2025" leaves no year at all, position decides, and a filing writing its
+   * years descending gets the older figure. Third reader of years on this file
+   * and the second to have been reading the wrong string.
+   */
+  const dateSrc = RAW_FOR_DATES.length === t.length ? RAW_FOR_DATES : t;
   const yearAfter = (at: number): number | null => {
-    const stop = t.slice(at).search(/[.;]/);
-    const m = YEAR.exec(t.slice(at, stop === -1 ? undefined : at + stop));
+    const stop = dateSrc.slice(at).search(/[.;]/);
+    const m = YEAR.exec(dateSrc.slice(at, stop === -1 ? undefined : at + stop));
     return m ? Number(m[0]) : null;
   };
 

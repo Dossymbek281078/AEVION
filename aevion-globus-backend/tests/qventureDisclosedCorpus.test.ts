@@ -6372,3 +6372,38 @@ describe("Spotify: two metrics in one sentence, and years stated first", () => {
     expect(parsePlanSignals("We had 290 million and 263 million Premium Subscribers.").customers).toBe(263_000_000);
   });
 });
+
+describe("every reader of years reads the unmasked text", () => {
+  // Date masking removed years twice today as a side effect: once in
+  // clauseYearAt, once in the respectively rule. A sweep found a third reader
+  // doing the same — the series walker's own year lookup — and it was passing
+  // only because the corpus happens to state its years ascending, where the
+  // positional fallback agrees with the right answer.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("a descending year list with month-anchored dates", () => {
+    // Every year here is inside a "December 31, YYYY" and therefore masked, so
+    // the walk saw no years at all and took the last figure — the older one.
+    expect(p("Our net retention rate was 107% as of December 31, 2025, and 121% as of December 31, 2018.").retentionPct)
+      .toBe(107);
+  });
+
+  test("and the ascending case that was passing by luck still passes", () => {
+    expect(p("Our net retention rate was 121% as of December 31, 2018, and 107% as of December 31, 2025.").retentionPct)
+      .toBe(107);
+  });
+
+  test("bare years, unmasked, were never affected", () => {
+    expect(p("Revenue was $400.3 million in 2020 and $186.4 million in 2018.").revenueUsd).toBe(400_300_000);
+  });
+
+  test("the source has no year reader left on the masked text", () => {
+    // Three readers of a four-digit year exist; each must take its text from
+    // the unmasked twin, because masking is what removed the information.
+    const src = fs.readFileSync(path.join(__dirname, "../src/lib/qventure/signals.ts"), "utf8");
+    const readers = src.split("(?:19|20)[0-9]{2}").length - 1;
+    expect(readers).toBeGreaterThanOrEqual(3);
+    const twinUses = src.split("RAW_FOR_DATES.length ===").length - 1;
+    expect(twinUses).toBeGreaterThanOrEqual(3);
+  });
+});

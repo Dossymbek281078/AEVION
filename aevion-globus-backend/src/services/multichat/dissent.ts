@@ -251,6 +251,19 @@ export type DissentMap = {
   outlier: { agentId: string; distance: number } | null;
   numericConflicts: NumericConflict[];
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
+  /**
+   * Во сколько раз самый развёрнутый содержательный ответ длиннее самого
+   * краткого (по значимым словам). 1 — сопоставимы.
+   *
+   * Нужно, чтобы не выдавать перекос за согласие. `similarity` делит общие
+   * слова на длину БОЛЕЕ КОРОТКОГО ответа — сознательно, иначе краткий ответ
+   * о том же считался бы расхождением. Побочный эффект замерен 27.07:
+   * «Запускать платный тариф стоит.» против развёрнутого разбора с оговорками
+   * («отдельно проверьте готовность поддержки и текст оферты») даёт
+   * agreement 1.000 и вердикт consensus — все слова краткого входят в длинный.
+   * Формально согласие, по сути краткий ответ просто НЕ КАСАЛСЯ оговорок.
+   */
+  lengthSkew: number;
   /** Куда смотреть человеку в первую очередь. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;
@@ -322,6 +335,22 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
     });
   }
 
+  // Согласие при сильно разных объёмах — ненадёжный сигнал: `similarity` делит
+  // на длину более короткого ответа, поэтому краткое «Запускать стоит» внутри
+  // развёрнутого разбора даёт 1.000. Краткий ответ не спорил с оговорками — он
+  // их просто не касался, и человеку надо об этом сказать.
+  if (map.verdict === "consensus" && map.lengthSkew >= 3) {
+    out.push({
+      kind: "consensus",
+      text:
+        `Ответы сильно разной длины (разница ${map.lengthSkew}×). Краткий не спорил с оговорками ` +
+        `развёрнутого — он их не касался, поэтому «согласие» здесь слабее, чем выглядит. ` +
+        `Прочитайте детали длинного ответа отдельно.`,
+      agents: [],
+      weight: 2,
+    });
+  }
+
   // При согласии список не пустой: согласие само по себе ничего не доказывает,
   // и молчаливый пустой блок читался бы как «всё в порядке».
   if (!out.length && map.verdict === "consensus") {
@@ -369,6 +398,14 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     outlier = { agentId: worst.agentId, distance: Number((1 - worst.mean).toFixed(3)) };
   }
 
+  // Разброс объёмов: во сколько раз самый развёрнутый ответ длиннее самого
+  // краткого. Считаем по значимым словам, а не по символам — тогда вежливые
+  // обрамления не искажают картину.
+  const wordCounts = good.map((a) => tokens(a.reply as string).length).filter((n) => n > 0);
+  const lengthSkew = wordCounts.length >= 2
+    ? Number((Math.max(...wordCounts) / Math.min(...wordCounts)).toFixed(2))
+    : 1;
+
   const conflicts = numericConflicts(list);
   const hedged = hedges(list);
 
@@ -392,6 +429,7 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     outlier,
     numericConflicts: conflicts,
     hedges: hedged,
+    lengthSkew,
     verdict,
     note,
   };

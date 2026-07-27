@@ -11,6 +11,7 @@ import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } fro
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
+import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -379,6 +380,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [editorContent, setEditorContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
@@ -784,18 +786,34 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // A save is only a save if the server said so. This used to await the fetch
+  // and update local state whatever came back: a 404 (project deleted in
+  // another tab, or no edit rights) let the editor keep autosaving into the
+  // void for an hour, showing nothing, and the work was gone on refresh.
+  // A toast disappears — an unsaved file does not — so the failure also stays
+  // on screen next to the file name until a save succeeds.
   const saveCurrentFile = useCallback(async (path: string, content: string, language: string) => {
     if (!project) return;
     setSaving(true);
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, language }),
       });
+      if (!r.ok) {
+        const reason = r.status === 404
+          ? "проект не найден или нет прав на правку"
+          : `сервер ответил ${r.status}`;
+        setSaveError(`${path} НЕ сохранён — ${reason}`);
+        showToast(`Не сохранено: ${reason}`, "error");
+        return;
+      }
+      setSaveError(null);
       setFiles((fs) => fs.map((f) => f.path === path ? { ...f, content, updatedAt: new Date().toISOString() } : f));
     } catch {
-      showToast("Save failed", "error");
+      setSaveError(`${path} НЕ сохранён — нет связи с сервером`);
+      showToast("Не сохранено — нет связи с сервером", "error");
     } finally {
       setSaving(false);
     }
@@ -823,14 +841,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const createNewFile = async () => {
     if (!newFileName.trim() || !project) return;
+    // The endpoint is an upsert and we send content:"" — so an existing path
+    // here does not create a file, it empties one. Refuse instead.
+    const pathError = newFilePathError(newFileName, files.map((f) => f.path));
+    if (pathError) {
+      showToast(pathError, "error");
+      return;
+    }
+    const path = normalizeFilePath(newFileName);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(newFileName.trim())}`), {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "", language: "plaintext" }),
       });
-      const data = await r.json();
-      const newFile = data.file;
+      const data = await r.json().catch(() => null);
+      const newFile = data?.file;
+      if (!r.ok || !newFile?.path) {
+        showToast(`Не удалось создать файл — сервер ответил ${r.status}`, "error");
+        return;
+      }
       setFiles((fs) => [...fs, newFile].sort((a, b) => a.path.localeCompare(b.path)));
       setSelectedFile(newFile);
       setEditorContent("");
@@ -858,30 +888,41 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Rename is copy-then-delete. Two ways that used to lose the file: renaming
+  // onto an existing path overwrote that file (upsert), and the delete ran
+  // even when the copy had failed — leaving nothing at either path.
   const renameFile = async (oldPath: string, newPath: string) => {
-    if (!project || !newPath.trim() || oldPath === newPath.trim()) {
+    if (!project || !newPath.trim() || normalizeFilePath(oldPath) === normalizeFilePath(newPath)) {
       setRenamingFile(null);
       return;
     }
+    const pathError = renamePathError(oldPath, newPath, files.map((f) => f.path));
+    if (pathError) {
+      showToast(pathError, "error");
+      setRenamingFile(null);
+      return;
+    }
+    const target = normalizeFilePath(newPath);
     try {
-      // Get current content
       const file = files.find((f) => f.path === oldPath);
       if (!file) return;
-      // Create new file with new path
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(newPath.trim())}`), {
+      // Copy to the new path first — only delete the original once it landed.
+      const putR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(target)}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: file.content, language: file.language }),
       });
-      // Delete old file
+      if (!putR.ok) {
+        showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
+        return;
+      }
       await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
-      // Update state
       setFiles((fs) => {
-        const updated = fs.map((f) => f.path === oldPath ? { ...f, path: newPath.trim() } : f);
+        const updated = fs.map((f) => f.path === oldPath ? { ...f, path: target } : f);
         return updated.sort((a, b) => a.path.localeCompare(b.path));
       });
       if (selectedFile?.path === oldPath) {
-        setSelectedFile((sf) => sf ? { ...sf, path: newPath.trim() } : null);
+        setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
       showToast("File renamed", "success");
     } catch {
@@ -2780,6 +2821,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             {project.status}
           </span>
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
+          {saveError && (
+            <span
+              title={saveError}
+              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            >
+              ⚠ {saveError}
+            </span>
+          )}
           {project.deployUrl && (
             <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
               View live

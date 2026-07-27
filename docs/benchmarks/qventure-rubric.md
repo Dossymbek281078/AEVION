@@ -1122,12 +1122,28 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Growth got that treatment; decline never did.
 
    Reverted rather than shipped: turning a missing figure into a wrong one is
-   the wrong direction, and the real fix is to give the decline path the same
-   basis classification the rise path has. That is a change worth measuring, not
-   a change worth making with eight minutes left.
+   the wrong direction.
 
-   Second time today the same judgement was made — the first was masking dates,
-   which was reverted, diagnosed properly, and closed an hour later.
+   **A second attempt found the actual cause, and was also reverted.** Giving
+   the decline path the rise path's rule — a classified match beats an
+   unclassified one — fixed eleven cases of twelve and left that one. The
+   reason is a level deeper than the decline path: `basisFor` scans backwards
+   about ninety characters for a metric noun and **does not stop at the clause
+   boundary**. So in "revenue grew 42% year over year; costs saw a 12%
+   decline", the fall in costs is classified as belonging to revenue, because
+   the word revenue is close enough behind it. The precedence rule cannot help
+   when the classification itself is wrong.
+
+   That makes the real fix a change to `basisFor` — bound it to the clause, the
+   way `statedAsAchieved`, `clauseYearAt` and the level-metric filter already
+   are — which changes how **every** growth figure is attributed, not just
+   declines. Worth measuring against the whole corpus, not worth doing with
+   seven minutes left.
+
+   Third time today the same judgement. Masking dates was reverted, diagnosed,
+   and closed an hour later; this is diagnosed and waiting. The diagnosis is the
+   deliverable — the next attempt starts from "bound basisFor to the clause"
+   rather than from the symptom.
 
 ## How this stays true
 

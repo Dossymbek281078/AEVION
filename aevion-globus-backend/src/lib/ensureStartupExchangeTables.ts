@@ -2,9 +2,18 @@ import type pg from "pg";
 
 type PgPoolInstance = InstanceType<typeof pg.Pool>;
 
-let ensured = false;
+/** Латчится ТОЛЬКО на успехе: неудача — повод попробовать ещё раз, а не приговор. */
+let ensuredOk = false;
+let lastAttemptAt = 0;
 let dbReady: boolean | null = null;
 let dbError: string | null = null;
+let failedAttempts = 0;
+
+/**
+ * Пауза между попытками. Без неё каждый запрос в минуту недоступности базы
+ * добавлял бы свой таймаут подключения к времени ответа.
+ */
+const RETRY_COOLDOWN_MS = 10_000;
 
 export function isStartupExchangeDbReady(): boolean {
   return dbReady === true;
@@ -14,23 +23,50 @@ export function getStartupExchangeDbError(): string | null {
   return dbError;
 }
 
+/** Только для тестов: вернуть модуль в состояние «ещё не пробовали». */
+export function __resetStartupExchangeDbState(): void {
+  ensuredOk = false;
+  lastAttemptAt = 0;
+  dbReady = null;
+  dbError = null;
+  failedAttempts = 0;
+}
+
 /**
- * Create the StartupX tables (and indexes) on first call.
+ * Create the StartupX tables (and indexes).
  *
  * Defensive: if Postgres is unavailable or table creation fails, we flip
  * `dbReady=false` and let the route fall back to its in-memory Map. This
  * keeps `/startup-exchange` functional in local dev / preview deploys
  * without a database — same pattern as ensureQNewsTables / ensureQJobsTables.
+ *
+ * ВАЖНО (замер 27.07.2026 на живом Postgres 18): раньше функция латчилась после
+ * ПЕРВОЙ попытки, а вызывалась она один раз при старте процесса. На загруженной
+ * машине первое подключение отвалилось по таймауту в 5 секунд — и модуль ушёл в
+ * память НАВСЕГДА при полностью живой базе. В проде это выглядит так: API
+ * поднялся раньше, чем проснулся Postgres, заявки пишутся в оперативку и
+ * исчезают на ближайшем рестарте, а `/health` — единственное место, где это
+ * видно. Теперь латчится только успех, а неудача разрешает повтор не чаще раза
+ * в `RETRY_COOLDOWN_MS`; роутер зовёт функцию заново, пока база не поднимется.
  */
 export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise<void> {
-  if (ensured) return;
+  if (ensuredOk) return;
+  const now = Date.now();
+  if (lastAttemptAt !== 0 && now - lastAttemptAt < RETRY_COOLDOWN_MS) return;
+  lastAttemptAt = now;
   try {
     await pool.query("SELECT 1");
   } catch (e: unknown) {
     dbReady = false;
-    ensured = true;
+    failedAttempts += 1;
     dbError = e instanceof Error ? e.message : "database unavailable";
-    console.warn(`[StartupX] Database unavailable — falling back to in-memory store: ${dbError}`);
+    // Кричим только на первой неудаче и дальше редко: иначе лог забьётся тем же
+    // сообщением раз в десять секунд и в нём утонет всё остальное.
+    if (failedAttempts === 1 || failedAttempts % 30 === 0) {
+      console.warn(
+        `[StartupX] Database unavailable (попытка ${failedAttempts}) — пока работаем из памяти: ${dbError}`,
+      );
+    }
     return;
   }
   try {
@@ -133,12 +169,23 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_startup_reports_once ON startup_reports(idea_id, reporter_hash);`);
 
     dbReady = true;
+    ensuredOk = true;
+    dbError = null;
+    if (failedAttempts > 0) {
+      // Переключение на середине жизни процесса: то, что успели написать в
+      // память, в ленте из базы не появится. Молча это переживать нельзя —
+      // основатель увидит, что его заявка пропала.
+      console.warn(
+        `[StartupX] База поднялась после ${failedAttempts} неудачных попыток — дальше пишем в Postgres. ` +
+        `Всё, что попало в память за это время, в ленте из базы не появится.`,
+      );
+      failedAttempts = 0;
+    }
     console.log("[StartupX] Tables ready");
   } catch (e: unknown) {
     dbReady = false;
+    failedAttempts += 1;
     dbError = e instanceof Error ? e.message : "table creation failed";
     console.warn(`[StartupX] Could not create tables — falling back to in-memory: ${dbError}`);
-  } finally {
-    ensured = true;
   }
 }

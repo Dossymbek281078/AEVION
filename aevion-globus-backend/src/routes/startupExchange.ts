@@ -95,6 +95,40 @@ function requestIp(req: Request): string {
 }
 
 /**
+ * База ожидалась и отказала посреди работы.
+ *
+ * Раньше любой сбой запроса проваливался в in-memory ветку, и это давало две лжи
+ * сразу: чтение отвечало «заявка не найдена» (для основателя это «моя заявка
+ * пропала», хотя строка цела), а запись молча уходила в оперативку и исчезала на
+ * ближайшем рестарте. Замерено 27.07 на живом Postgres: при исчерпании
+ * подключений `GET /ideas/:id` отдавал 404 на существующую заявку.
+ *
+ * Память остаётся законным режимом только там, где базы и не предполагалось
+ * (`DATABASE_URL` не задан) — превью-деплои и локальная разработка.
+ */
+function dbOutage(res: Response, e: unknown, where: string): Response {
+  captureStartupXError(e);
+  console.error(`[StartupX] ${where} — база недоступна`, e);
+  res.setHeader("Retry-After", "30");
+  return fail(res, "database_unavailable", 503);
+}
+
+/**
+ * Экранирование пользовательского запроса для ILIKE.
+ *
+ * Здесь было два дефекта, которые видно только на настоящем Postgres: in-memory
+ * ветка ищет обычным `includes` и оба переживала.
+ *   1. `\${m}` в шаблонной строке — это литерал «${m}», а не «\%».
+ *      Запрос «5%» превращался в «5${m}» и не находил ничего.
+ *   2. ESCAPE '\' в шаблонной строке даёт SQL ESCAPE '', то есть
+ *      экранирующего символа нет вовсе.
+ * Итог: любой запрос с процентом или подчёркиванием молча отдавал пустую ленту.
+ */
+function escapeLikePattern(raw: string): string {
+  return raw.replace(/[%_\\]/g, (m) => "\\" + m);
+}
+
+/**
  * Ворота суточного потолка. Стоят ПЕРЕД минутным лимитом намеренно: когда
  * исчерпаны оба, человеку надо сказать «сегодня всё», а не «подождите минуту» —
  * минута ему не поможет. Здесь только проверка; списывается квота в обработчике,
@@ -114,6 +148,22 @@ function publishGate(req: Request, res: Response, next: NextFunction) {
 
 export const startupExchangeRouter = Router();
 startupExchangeRouter.use(generalLimiter);
+
+/**
+ * Пока база не поднялась — пробуем на каждом запросе (не чаще раза в 10 секунд,
+ * пауза внутри `ensureStartupExchangeTables`). Одной попытки при старте
+ * недостаточно: замерено на живом Postgres 18 — первое подключение отвалилось
+ * по таймауту, и модуль остался в памяти при полностью рабочей базе.
+ * Когда `DATABASE_URL` не задан, база не предполагается и дёргать нечего.
+ */
+startupExchangeRouter.use((_req: Request, _res: Response, next: NextFunction) => {
+  if (!process.env.DATABASE_URL || isStartupExchangeDbReady()) return next();
+  // Не ждём результата: текущий запрос честно отработает на памяти, а
+  // следующий уже увидит поднявшуюся базу. Ждать здесь — значит добавить
+  // таймаут подключения ко времени ответа.
+  void ensureStartupExchangeTables(pool).catch(() => { /* уже залогировано внутри */ });
+  next();
+});
 
 const MAX_EMAIL = 200;
 const MAX_MESSAGE = 2000;
@@ -374,6 +424,7 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
       });
     }
   } catch (e) {
+    if (isStartupExchangeDbReady()) return dbOutage(res, e, "GET /stats");
     console.error("[StartupX] /stats DB error", e);
   }
 
@@ -418,7 +469,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   // по тому, что написано в заявке, а не по нашим категориям. ILIKE по названию
   // и описанию; экранируем % и _, иначе запрос «100%» превратится в маску.
   const qRaw = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
-  const query = qRaw ? qRaw.replace(/[\%_]/g, (m) => `\${m}`) : "";
+  const query = qRaw ? escapeLikePattern(qRaw) : "";
   const minScore = Number(req.query.minScore);
   const hasMinScore = Number.isFinite(minScore) && minScore > 0;
   // "score" ranks by the free assessment; anything else falls back to recency.
@@ -444,7 +495,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       }
       if (query) {
         args.push(`%${query}%`);
-        where += ` AND (title ILIKE $${args.length} ESCAPE '\' OR description ILIKE $${args.length} ESCAPE '\')`;
+        where += ` AND (title ILIKE $${args.length} ESCAPE '\\' OR description ILIKE $${args.length} ESCAPE '\\')`;
       }
       if (hasMinScore) {
         args.push(minScore);
@@ -468,6 +519,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       });
     }
   } catch (e) {
+    if (isStartupExchangeDbReady()) return dbOutage(res, e, "GET /ideas");
     console.error("[StartupX] GET /ideas DB error", e);
   }
 
@@ -549,8 +601,8 @@ startupExchangeRouter.get("/rss.xml", async (req: Request, res: Response) => {
         where += ` AND assessment->'sector'->>'id' = $${args.length}`;
       }
       if (qRaw) {
-        args.push(`%${qRaw.replace(/[\%_]/g, (m) => `\${m}`)}%`);
-        where += ` AND (title ILIKE $${args.length} ESCAPE '\' OR description ILIKE $${args.length} ESCAPE '\')`;
+        args.push(`%${escapeLikePattern(qRaw)}%`);
+        where += ` AND (title ILIKE $${args.length} ESCAPE '\\' OR description ILIKE $${args.length} ESCAPE '\\')`;
       }
       const r = await pool.query(
         `SELECT * FROM startup_ideas ${where} ORDER BY created_at DESC LIMIT 50`,
@@ -651,6 +703,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
       return ok(res, publicView(row, (cnt as Array<{ n: number }>)[0]?.n ?? 0));
     }
   } catch (e) {
+    if (isStartupExchangeDbReady()) return dbOutage(res, e, "GET /ideas/:id");
     console.error("[StartupX] GET /ideas/:id DB error", e);
   }
 
@@ -743,6 +796,7 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
       return created((rows as ListingRow[])[0]);
     }
   } catch (e) {
+    if (isStartupExchangeDbReady()) return dbOutage(res, e, "POST /ideas");
     captureStartupXError(e);
     console.error("[StartupX] POST /ideas DB error", e);
   }
@@ -893,6 +947,7 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
       return ok(res, { id: row.id, ideaId: row.idea_id, intent: row.intent, createdAt: row.created_at }, 201);
     }
   } catch (e) {
+    if (isStartupExchangeDbReady()) return dbOutage(res, e, "POST /ideas/:id/interest");
     captureStartupXError(e);
     console.error("[StartupX] POST /ideas/:id/interest DB error", e);
   }

@@ -146,9 +146,9 @@ export const LESSONS: Lesson[] = [
       {
         kind: "exercise",
         title: "Найди связку",
-        body: "Белые ходят. Какой ход создаёт связку и выигрывает материал?",
-        fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3",
-        bestMove: "Bxf7+",
+        body: "Белые ходят. Найди ход, после которого чёрный конь c6 окажется связан абсолютно — у него не останется ни одного хода.",
+        fen: "r1bqkbnr/ppp2ppp/2np4/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1",
+        bestMove: "Bb5",
       },
       {
         kind: "theory",
@@ -159,8 +159,8 @@ export const LESSONS: Lesson[] = [
         kind: "exercise",
         title: "Найди вилку",
         body: "Белые ходят. Найди ход коня, дающий вилку короля и ферзя.",
-        fen: "r3k2r/pp1n1ppp/2pq4/3p4/3P4/2N2N2/PPP2PPP/R2QR1K1 w kq - 0 1",
-        bestMove: "Nb5",
+        fen: "r3k3/5ppp/8/1q6/4N3/8/5PPP/4K2R w - - 0 1",
+        bestMove: "Nd6+",
       },
     ],
     closing: "Связка + вилка = 60% всех тактик до 1800 ELO. Решай 20 пазлов в день — за месяц увидишь скачок рейтинга.",

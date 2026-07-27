@@ -74,6 +74,25 @@ describe("coach teaching positions", () => {
     expect(bad).toEqual([]);
   });
 
+  /* chess.js грузит позицию, где сторона БЕЗ хода стоит под шахом — в партии такая
+     возникнуть не может, короля просто взяли бы. Три карточки такими и были: ладья или
+     пешка держали чужого короля под боем не в свой ход. Ловится переворотом очереди
+     хода: если после переворота шах — позиция невозможна. */
+  it("никогда не ставит под шах сторону, которая не ходит", () => {
+    const bad: string[] = [];
+    for (const r of withFen) {
+      const flipped = r.fen!.replace(/ (w|b) /, (_m, t) => ` ${t === "w" ? "b" : "w"} `);
+      let c: Chess;
+      try {
+        c = new Chess(flipped);
+      } catch {
+        continue;
+      }
+      if (c.inCheck()) bad.push(`${r.where}: под шахом сторона, которая не ходит`);
+    }
+    expect(bad).toEqual([]);
+  });
+
   it("gives every knowledge entry a unique id inside its category", () => {
     for (const cat of COACH_KNOWLEDGE) {
       const ids = cat.entries.map((e) => e.id);

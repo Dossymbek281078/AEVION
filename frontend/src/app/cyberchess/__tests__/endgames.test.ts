@@ -55,6 +55,26 @@ describe("endgame drills", () => {
     expect(bad).toEqual([]);
   });
 
+  /* chess.js loads a position where the side NOT to move is already in check — the
+     opponent's king could simply be captured, so no such position can arise in a game.
+     Four of the twelve drills shipped exactly that: a queen or rook lined up on the
+     enemy king with the wrong side to move. The tablebase refuses them outright; the
+     board just draws them. Detected by flipping the side to move and asking. */
+  it("never starts with the idle side already in check", () => {
+    const bad: string[] = [];
+    for (const e of ENDGAMES) {
+      const flipped = e.fen.replace(/ (w|b) /, (_m, t) => ` ${t === "w" ? "b" : "w"} `);
+      let c: Chess;
+      try {
+        c = new Chess(flipped);
+      } catch {
+        continue; // такой FEN уже поймает соседний тест
+      }
+      if (c.inCheck()) bad.push(`${e.name}: под шахом сторона, которая не ходит`);
+    }
+    expect(bad).toEqual([]);
+  });
+
   /* Both kings are always on the board; a FEN missing one is the failure that hid in the
      coach data, and it silently prevents the position from loading at all. */
   it("has both kings", () => {

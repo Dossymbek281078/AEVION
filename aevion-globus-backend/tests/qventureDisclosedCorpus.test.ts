@@ -243,3 +243,28 @@ describe("the corpus as a whole", () => {
     expect(control!.r.strategy.verdict).toBe("pass");
   });
 });
+
+describe("structured input is not worse than typing it in a sentence", () => {
+  const base = {
+    name: "Structured probe", sector: "climate", stage: "growth" as const, geography: "US",
+    askUsd: 300_000_000,
+    description: "Thin-film solar panels manufactured in a company-owned plant.",
+    tractionNotes: "Revenue of $100M in 2009.",
+  };
+
+  test("a below-cost margin supplied as an exact figure survives to the score", () => {
+    // Two guards in series both rejected negatives (`sanitizeFinancials` in the
+    // route and `numOrNull` in the merge), so a client sending the precise
+    // number -45 lost it while a client writing "-45%" in prose kept it.
+    const structured = analyze({ ...base, financials: { grossMarginPct: -45 } });
+    expect(structured.signals.grossMarginPct).toBe(-45);
+    const positive = analyze({ ...base, financials: { grossMarginPct: 45 } });
+    expect(structured.composite).toBeLessThan(positive.composite);
+  });
+
+  test("the prose path and the exact path agree", () => {
+    const typed = analyze({ ...base, tractionNotes: "Revenue of $100M in 2009. Gross margin of -45%." });
+    const exact = analyze({ ...base, financials: { grossMarginPct: -45 } });
+    expect(exact.composite).toBe(typed.composite);
+  });
+});

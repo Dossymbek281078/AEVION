@@ -79,6 +79,7 @@ export interface AnalysisResult {
       contractedRevenueUsd?: number | null;
       nonDilutiveUsd?: number | null;
       pilots?: number | null;
+      reservations?: number | null;
       churnPct?: number | null;
       churnPeriod?: string | null;
       churnMonthlyPct?: number | null;
@@ -755,6 +756,10 @@ function EvidencePanel({ s }: { s: NonNullable<AnalysisResult["result"]["signals
   if (s.contractedRevenueUsd) items.push(["Contracted / backlog", money(s.contractedRevenueUsd)]);
   if (s.nonDilutiveUsd) items.push(["Non-dilutive awarded", money(s.nonDilutiveUsd)]);
   if (s.pilots) items.push(["Pilots / design wins", String(s.pilots)]);
+  // Labelled as demand, not as an order book. The engine deliberately scores
+  // nothing for it; showing it unlabelled here would put the credit back in the
+  // reader's head, which is the same mistake one layer up.
+  if (s.reservations) items.push(["Reservations / pre-orders", `${s.reservations.toLocaleString("en-US")} (uncommitted demand, not backlog)`]);
   if (s.churnPct != null) {
     const period = s.churnPeriod && s.churnPeriod !== "unspecified" ? s.churnPeriod : "monthly (period not stated)";
     const monthly = s.churnMonthlyPct != null && s.churnMonthlyPct !== s.churnPct ? ` → ${s.churnMonthlyPct}%/mo` : "";

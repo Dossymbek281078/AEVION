@@ -134,6 +134,10 @@ export interface StructuredFinancials {
 const numOrNull = (v: unknown): number | null =>
   typeof v === "number" && isFinite(v) && v >= 0 ? v : null;
 
+/** Same, for the one field that is legitimately negative: a below-cost margin. */
+const marginOrNull = (v: unknown): number | null =>
+  typeof v === "number" && isFinite(v) && v >= -100 && v <= 100 ? v : null;
+
 /** Merge exact structured financials over parsed text signals (structured wins). */
 export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinancials | undefined): PlanSignals {
   if (!f) return parsed;
@@ -148,7 +152,7 @@ export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinanci
   const set = <K extends keyof PlanSignals>(key: K, v: number | null) => { if (v !== null) (s[key] as number | null) = v; };
   set("growthPct", numOrNull(f.growthPct));
   if (f.growthPct != null && f.growthPeriod) s.growthPeriod = f.growthPeriod;
-  set("grossMarginPct", numOrNull(f.grossMarginPct));
+  set("grossMarginPct", marginOrNull(f.grossMarginPct));
   set("cacUsd", numOrNull(f.cacUsd));
   set("ltvUsd", numOrNull(f.ltvUsd));
   set("ltvCacRatio", numOrNull(f.ltvCacRatio));

@@ -255,9 +255,16 @@ function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
   const r = raw as Record<string, unknown>;
   const num = (v: unknown): number | undefined =>
     typeof v === "number" && isFinite(v) && v >= 0 ? Math.min(v, 1e15) : undefined;
+  // A margin is the one field here that is legitimately negative — a company
+  // selling below cost. `num` rejects negatives, so the precise input path
+  // silently dropped the most adverse figure a plan can state while the prose
+  // path reads it, making structured input strictly worse than typing it in a
+  // sentence. Money and counts keep the non-negative guard.
+  const signedPct = (v: unknown): number | undefined =>
+    typeof v === "number" && isFinite(v) && v >= -100 && v <= 100 ? v : undefined;
   const f: StructuredFinancials = {
     revenueUsd: num(r.revenueUsd), mrrUsd: num(r.mrrUsd), arrUsd: num(r.arrUsd),
-    growthPct: num(r.growthPct), grossMarginPct: num(r.grossMarginPct),
+    growthPct: num(r.growthPct), grossMarginPct: signedPct(r.grossMarginPct),
     cacUsd: num(r.cacUsd), ltvUsd: num(r.ltvUsd), ltvCacRatio: num(r.ltvCacRatio),
     paybackMonths: num(r.paybackMonths), churnPct: num(r.churnPct),
     retentionPct: num(r.retentionPct), customers: num(r.customers), bottomUpTamUsd: num(r.bottomUpTamUsd),
@@ -696,6 +703,9 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
       const grant = m(sig.nonDilutiveUsd);
       if (grant) lines.push(`Non-dilutive awarded: ${grant}`);
       if (typeof sig.pilots === "number") lines.push(`Pilots / design wins: ${sig.pilots}`);
+      if (typeof sig.reservations === "number") {
+        lines.push(`Reservations / pre-orders: ${sig.reservations.toLocaleString("en-US")} (uncommitted demand, not backlog)`);
+      }
       if (typeof sig.churnPct === "number") {
         const period = typeof sig.churnPeriod === "string" && sig.churnPeriod !== "unspecified" ? sig.churnPeriod : "monthly (period not stated)";
         const monthly = typeof sig.churnMonthlyPct === "number" && sig.churnMonthlyPct !== sig.churnPct ? ` -> ${sig.churnMonthlyPct}%/mo` : "";

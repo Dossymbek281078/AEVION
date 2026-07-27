@@ -716,3 +716,60 @@ describe("a stated band is read, and read at the end that is worse for the plan"
     }
   });
 });
+
+describe("a rate's period and a duration's unit are read, not assumed", () => {
+  /**
+   * The repository already has machinery for this on churn — "4% annual" is
+   * excellent and "4% monthly" is a company bleeding out. It covered the period
+   * word BEFORE the figure and the "per year" form after it, and missed the
+   * bare adverb that is the most natural phrasing of all.
+   */
+  test("a period adverb after the figure is read", () => {
+    for (const [text, monthly] of [
+      ["Churn of 24% annually.", 2.26],
+      ["Churn of 24% yearly.", 2.26],
+      ["Churn rate of 24% annualised.", 2.26],
+      ["Churn of 24% a year.", 2.26],
+    ] as const) {
+      const s = parsePlanSignals(text);
+      expect(s.churnPeriod).toBe("annual");
+      expect(s.churnMonthlyPct).toBeCloseTo(monthly, 1);
+    }
+  });
+
+  test("24% a year is not scored as 24% a month", () => {
+    // The whole point: a normal annual churn was being charged as catastrophic.
+    const annual = parsePlanSignals("Churn of 24% annually.").churnMonthlyPct as number;
+    const monthly = parsePlanSignals("Churn of 24% monthly.").churnMonthlyPct as number;
+    expect(annual).toBeLessThan(monthly / 5);
+  });
+
+  test("the existing phrasings are unchanged", () => {
+    expect(parsePlanSignals("3% annual churn.").churnPeriod).toBe("annual");
+    expect(parsePlanSignals("Churn of 2% monthly.").churnMonthlyPct).toBe(2);
+    expect(parsePlanSignals("2-3% monthly churn.").churnPct).toBe(3);
+    expect(parsePlanSignals("Churn of 5%.").churnPeriod).toBe("unspecified");
+  });
+
+  test("payback stated in years is converted, not dropped", () => {
+    expect(parsePlanSignals("Payback of 2 years.").paybackMonths).toBe(24);
+    expect(parsePlanSignals("Payback period of 1.5 years.").paybackMonths).toBe(18);
+    expect(parsePlanSignals("Payback of 2 years.").parseNotes.some((n) => /2 years.*24 months/i.test(n))).toBe(true);
+  });
+
+  test("payback in months is unchanged, bands included", () => {
+    expect(parsePlanSignals("Payback of 18 months.").paybackMonths).toBe(18);
+    expect(parsePlanSignals("14-month payback.").paybackMonths).toBe(14);
+    expect(parsePlanSignals("9-12 months payback.").paybackMonths).toBe(12);
+  });
+
+  test("a denial is never adopted as a figure", () => {
+    // Checked across the fields at the same time; recorded because it came back
+    // clean, which is worth knowing rather than assuming.
+    expect(parsePlanSignals("We do not disclose gross margin; the industry average is 70%.").grossMarginPct).toBeNull();
+    expect(parsePlanSignals("No revenue yet. The market is $12B.").revenueUsd).toBeNull();
+    expect(parsePlanSignals("No customers yet.").customers).toBeNull();
+    expect(parsePlanSignals("No signed backlog. Pipeline discussions only.").contractedRevenueUsd).toBeNull();
+    expect(parsePlanSignals("We have not disclosed churn.").churnPct).toBeNull();
+  });
+});

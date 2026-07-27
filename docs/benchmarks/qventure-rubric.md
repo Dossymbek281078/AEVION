@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 186
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 192
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -242,13 +242,30 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    Currency conversion was checked the same way and came back clean: all seven
    money fields convert. That one is a verified negative, not an assumption.
 
+11. **Periods and units, asked the same way.** The churn-period machinery — the
+   thing that stops "4% churn" being scored as 4% a month when the plan meant a
+   year — covered the period word BEFORE the figure and the "per year" form
+   after it, and missed the bare adverb, which is the most natural phrasing
+   there is. `Churn of 24% annually` was read as **24% a month** and charged as
+   a company bleeding out; the correct reading is 2.26%. The cause was small and
+   exact: the connector accepted a bare `a` ("a year"), which ate the first
+   letter of "annually".
+
+   `Payback of 2 years` disclosed nothing — only the word "months" was accepted.
+   The unit is now captured and converted rather than assumed, because assuming
+   months would have turned two years into an excellent two-month payback.
+
+   Negation was checked at the same time and came back clean: a denial is never
+   adopted as a figure, including "we do not disclose gross margin; the industry
+   average is 70%". Recorded as a verified negative.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 186):
+`tests/qventureDisclosedCorpus.test.ts`, 192):
 
 | Guard | Floor | Measured today |
 |---|---|---|

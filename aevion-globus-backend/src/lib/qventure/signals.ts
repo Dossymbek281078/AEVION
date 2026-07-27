@@ -654,10 +654,23 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.parseNotes.push(`Payback was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)} months); the score uses the longer, conservative end.`);
     }
   }
+  // Payback is stored in months, and only the word "months" was accepted — so a
+  // plan stating "payback of 2 years" disclosed nothing at all. The unit is
+  // captured and converted rather than assumed, because assuming months on a
+  // figure written in years would turn 2 years into an excellent 2-month
+  // payback: the same class of error the churn period exists to prevent.
   const pb = s.paybackMonths !== null ? null
-    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?months?`, "i"), s, "payback")
-    || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"), s, "payback");
-  if (pb) { const v = parseLocaleNumber(pb[1]); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
+    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
+    || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?(months?|years?)\s*payback`, "i"), s, "payback");
+  if (pb) {
+    const v = parseLocaleNumber(pb[1]);
+    const inYears = /year/i.test(pb[2] ?? "");
+    const months = inYears ? v * 12 : v;
+    if (isFinite(months) && months > 0 && months < 240) {
+      s.paybackMonths = Math.round(months * 10) / 10;
+      if (inYears) s.parseNotes.push(`Payback was disclosed as ${v} year${v === 1 ? "" : "s"}; scored as ${s.paybackMonths} months.`);
+    }
+  }
 
   // ── Churn / retention / NRR ──
   // The period matters as much as the number: "4% annual churn" is excellent,
@@ -685,7 +698,13 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
   const churn = s.churnPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"), s, "churn")
-    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"), s, "churn");
+    // The period may also follow the figure as a bare adverb — "churn of 24%
+    // annually". Only the "per year" / "a year" / "/year" forms were accepted,
+    // so the adverb was lost and the rate defaulted to MONTHLY: 24% a year, an
+    // ordinary number, was scored as 24% a month and charged as a company
+    // bleeding out. Exactly the confusion the churn-period machinery exists to
+    // prevent, left open on the most natural phrasing of all.
+    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
   if (churn) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));

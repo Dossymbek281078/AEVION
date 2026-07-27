@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Chess } from "chess.js";
 import { readFileSync } from "node:fs";
 import { ECO_PRESETS, defaultRepertoire } from "../openingRepertoireData";
+import { OPENING_THEORY } from "../chessCoachEngine";
 
 /* The repertoire builder offers these as starting points. A typo in one move makes
    the whole line unplayable, and nothing would say so — the UI just shows the string.
@@ -113,5 +114,31 @@ describe("defaultRepertoire", () => {
 
   it("seeds something to start from", () => {
     expect(defaultRepertoire().length).toBeGreaterThan(0);
+  });
+});
+
+/* Восемь дебютных линий в движке коуча — третья база ходов в модуле, помимо
+   openings.json и пресетов репертуара. Их тоже никто не проигрывал на доске: линия в
+   PGN-виде выглядит правдоподобно ровно до момента, когда её пытаешься сыграть. */
+describe("OPENING_THEORY", () => {
+  it("replays every theory line from the start position", () => {
+    const bad: string[] = [];
+    for (const t of OPENING_THEORY) {
+      const sans = t.moves.replace(/\d+\./g, " ").trim().split(/\s+/).filter(Boolean);
+      const c = new Chess();
+      for (const san of sans) {
+        try {
+          c.move(san);
+        } catch {
+          bad.push(`${t.eco} ${t.name}: ход ${san} невозможен в «${t.moves}»`);
+          break;
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("keeps a line for every entry", () => {
+    expect(OPENING_THEORY.filter((t) => !t.moves?.trim())).toEqual([]);
   });
 });

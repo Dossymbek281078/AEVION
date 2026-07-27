@@ -3018,3 +3018,45 @@ describe("every adverse disclosure can actually fire", () => {
     expect(charges("ARR of $2M, 500 customers, gross margin 75%.")).toBe(false);
   });
 });
+
+describe("every label the stress test can print is reachable", () => {
+  // The same question that found a dead red flag and three dead adverse
+  // disclosures, asked of the last two surfaces. Both came back clean, which is
+  // worth pinning rather than discarding: a label that becomes unreachable
+  // later fails silently, and nothing else in the suite would notice.
+  const stressFor = (notes: string) =>
+    analyze({
+      name: "P", sector: "saas", stage: "seed", geography: "US", askUsd: 5_000_000,
+      description: "A company.", tractionNotes: notes,
+    }).stress as unknown as { resilience: string; scenarios: Array<{ health: string }>; note?: string };
+
+  const INPUTS = [
+    "",
+    "CAC of $500, LTV of $2,000, gross margin 75%, churn 3% monthly, payback 12 months.",
+    "CAC of $100, LTV of $10,000, gross margin 90%, churn 0.5% monthly, payback 3 months.",
+    "CAC of $2,000, LTV of $1,000, gross margin 30%, churn 10% monthly.",
+    "LTV/CAC of 8x, gross margin 85%, churn 1% monthly.",
+    "LTV/CAC of 1.2x, gross margin 40%, churn 8% monthly.",
+  ];
+
+  test("resilience reaches every value it can print", () => {
+    const seen = new Set(INPUTS.map((n) => stressFor(n).resilience));
+    for (const label of ["insufficient-data", "robust", "fragile", "underwater"]) {
+      expect(seen.has(label)).toBe(true);
+    }
+  });
+
+  test("scenario health reaches every value it can print", () => {
+    const seen = new Set(INPUTS.flatMap((n) => stressFor(n).scenarios.map((s) => s.health)));
+    for (const label of ["healthy", "tight", "underwater"]) {
+      expect(seen.has(label)).toBe(true);
+    }
+  });
+
+  test("and with nothing to model it says so instead of inventing a verdict", () => {
+    const s = stressFor("");
+    expect(s.resilience).toBe("insufficient-data");
+    expect(s.scenarios).toHaveLength(0);
+    expect(s.note).toMatch(/needs unit economics/i);
+  });
+});

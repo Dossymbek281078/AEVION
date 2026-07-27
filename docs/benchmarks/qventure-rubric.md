@@ -1367,6 +1367,27 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
 
    It now guards itself, and it caught its own comment on the first run.
 
+55. **The last two surfaces, audited and clean.** Strategy and stress were the
+   only parts not yet put through the reachability question. Both came back
+   clean, and saying so is part of the audit.
+
+   **Strategy.** All three verdicts reach. `high` conviction does not — and that
+   is already known, tested and documented in ,
+   which records it rather than asserting it away. A "pass" verdict returning
+   ticket figures looked wrong until read end to end: the tranches say 0% at
+   entry, the reasoning says "no ticket recommended — the figures below are the
+   terms this deal would have to earn on a re-score, not an offer", and the
+   result page labels the field "Ticket (indicative)" instead of "Lead ticket".
+   Coherent from engine to screen.
+
+   **Stress.** Every label it can print is reachable — four resilience values,
+   three scenario health values — and with nothing to model it says
+   `insufficient-data` and names what it needs, rather than inventing a verdict.
+
+   Both are now pinned, because a label that becomes unreachable later fails
+   silently and nothing else in the suite would notice. That is precisely how
+   the gross-margin flag spent months unable to fire.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

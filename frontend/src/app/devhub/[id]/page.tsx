@@ -1464,6 +1464,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     showToast(`Добавлено в ${selectedFile.path}`, "success");
   };
 
+  // Say "aevion.build" only when the server reports that capability working.
+  // It reports `degraded` as soon as a deploy observes the domain not
+  // resolving, which is the state it has been in since the zone was created.
+  const domainCapabilityWorks = !isCapabilityBlocked(caps, "domain");
+
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
@@ -3372,7 +3377,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ) : msg.kind === "deploy" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
-                                🚀 Ready to go live? One click deploys this to Cloudflare with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL — marked live only after the page actually serves.
+                                {/* The aevion.build promise is only made when the
+                                    server says that domain actually works. The
+                                    zone was never delegated, so for months this
+                                    card promised an address that failed DNS. */}
+                                🚀 Ready to go live? One click deploys this to Cloudflare{domainCapabilityWorks
+                                  ? <> with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL</>
+                                  : <> — you get a public <span style={{ fontFamily: "monospace" }}>*.pages.dev</span> address</>} — marked live only after the page actually serves.
                               </div>
                               <button
                                 onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
@@ -3896,7 +3907,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <span style={{ fontSize: 18 }}>☁️</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
-                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN · aevion.build domain included</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN{domainCapabilityWorks ? " · aevion.build domain included" : " · публичный адрес *.pages.dev"}</div>
                       </div>
                     </div>
 
@@ -3934,11 +3945,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Deploy to Cloudflare Pages + get aevion.build domain"}
+                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : domainCapabilityWorks ? "🚀 Deploy to Cloudflare Pages + get aevion.build domain" : "🚀 Deploy to Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       Requires <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ACCOUNT_ID</code> + <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_API_TOKEN</code> in Railway.
-                      Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.
+                      {domainCapabilityWorks
+                        ? <>Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.</>
+                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — зона не делегирована на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
                     </div>
                   </div>
 

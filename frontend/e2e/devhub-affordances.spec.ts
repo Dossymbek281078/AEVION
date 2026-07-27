@@ -209,4 +209,41 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     await expect(threeD).toHaveAttribute("aria-selected", "true");
     await expect(threeD).toBeFocused();
   });
+
+  test("the aevion.build domain is only promised when the server says it works", async ({ page }) => {
+    // The zone was never delegated, so the IDE promised an address that failed
+    // DNS — in four places, months after the shop window stopped doing it.
+    await page.route("**/api/devhub/**", async (route) => {
+      const url = route.request().url();
+      const json = (body: unknown) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/studio/capabilities")) {
+        return json({
+          capabilities: [
+            { id: "domain", name: "Domain (aevion.build)", status: "degraded", lastError: "zone is not delegated" },
+            { id: "pages", name: "Cloudflare Pages", status: "live" },
+          ],
+        });
+      }
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: { id: PROJECT_ID, name: "dom", description: "", stack: "static", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: FILES,
+        });
+      }
+      if (url.includes("/deployments")) return json({ deployments: [] });
+      return json({ ok: true });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("tab", { name: "Deployments", exact: true }).click({ timeout: 30_000 });
+
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toContainText("Cloudflare Pages");
+    await expect(panel).toContainText("pages.dev");
+    // The promise itself must be gone while the capability is degraded.
+    await expect(panel).not.toContainText("aevion.build domain included");
+    await expect(page.getByRole("button", { name: /get aevion\.build domain/ })).toHaveCount(0);
+  });
 });

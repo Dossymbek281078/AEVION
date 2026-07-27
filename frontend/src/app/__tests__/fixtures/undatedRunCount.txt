@@ -1,0 +1,9 @@
+Fixture for runCountClaims.guard.test.ts — do not "fix" these lines.
+The first line is the exact wording that shipped on /acquire while the
+real smoke had grown to 24 steps; the rest are the shapes the rule must
+keep catching. The dated line below must NOT be reported.
+
+proof: "ML-DSA-65 (FIPS 204) · prod smoke 20/20 · QShield Lagrange-reconstruct"
+proof: "AEV cap 21M · /api/aev/* 6 endpoints · smoke 10/10 · QPayNet ~99.5% prod"
+note: "ночной прогон 13/13, всё зелёное"
+ok: "prod smoke 24/24 (27 Jul) — this one is dated and must pass"

@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import { dilithiumStatus } from "./lib/qsignV2/dilithium";
+import { eventsStoreStatus } from "./routes/events";
 dotenv.config();
 
 import express from "express";
@@ -190,7 +192,36 @@ function healthPayload() {
     commit: BUILD_COMMIT,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
+    // Аналитика пишется в файл. Если её самое старое событие всегда моложе
+    // bootedAt выше — значит хранилище не переживает перезапуск, и метки
+    // utm из рассылки теряются на каждом деплое. Раньше это было видно
+    // только из переменных окружения; теперь видно отсюда. Счётчики и одна
+    // метка времени, без единого поля самих событий.
+    eventsStore: safeEventsStoreStatus(),
+    // Какой режим подписи реально активен. Письма партнёрам утверждают
+    // «post-quantum signatures (ML-DSA-65, FIPS 204)», а это включается ключом:
+    // без него прод отдаёт SHA-512, который наше же описание API называет
+    // «NOT a cryptographic signature». Теперь проверяется одним запросом.
+    qsign: safeDilithiumStatus(),
   };
+}
+
+/** health не должен падать из-за диагностики. */
+function safeDilithiumStatus() {
+  try {
+    return dilithiumStatus();
+  } catch {
+    return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEventsStoreStatus() {
+  try {
+    return eventsStoreStatus();
+  } catch {
+    return { persistedByEnv: null, exists: null, count: null, oldest: null };
+  }
 }
 app.get("/health", (_req, res) => res.json(healthPayload()));
 app.get("/api/health", (_req, res) => res.json(healthPayload()));
@@ -641,6 +672,14 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/multichat/receipt/verify": {
         post: { summary: "PUBLIC — recompute a receipt's RFC8785/sha256 hash and check its ed25519 signature", security: [] },
+      },
+      "/api/multichat/dissent/preview": {
+        post: {
+          summary:
+            "PUBLIC — dissent map for answers you already have (max 8). Free because it makes no model call: " +
+            "similarity, outlier, numeric conflicts and hedges are derived from the answer text alone",
+          security: [],
+        },
       },
       "/api/multichat/rooms": {
         get: { summary: "List user chat rooms (Bearer required)" },

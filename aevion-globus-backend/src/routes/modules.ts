@@ -27,6 +27,7 @@ import {
   type TrendingWindow,
 } from "../lib/modules/hits";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 const captureModulesError = makeServiceCapture("modules");
 
@@ -346,7 +347,7 @@ modulesRouter.get("/registry.csv", modulesEmbedRateLimit, async (req, res) => {
 
     function csvCell(v: unknown): string {
       if (v === null || v === undefined) return "";
-      const s = Array.isArray(v) ? v.join("|") : String(v);
+      const s = csvNeutralizeFormula(Array.isArray(v) ? v.join("|") : String(v));
       return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     }
     const header = [

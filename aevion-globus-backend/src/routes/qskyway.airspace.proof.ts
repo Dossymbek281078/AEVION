@@ -1,0 +1,45 @@
+// QSkyway — the shipped OpenTimestamps proof for the committed airspace edition.
+//
+// The anchor design is stateless on purpose: the `.ots` proof IS the artifact,
+// and /airspace/anchor hands it to the caller rather than storing it. That is
+// right for a caller who wants their own timestamp — and wrong for the edition
+// this service actually routes against, because a proof nobody keeps is a proof
+// that does not exist. Anchoring it once and letting the bytes evaporate would
+// have demonstrated the mechanism and shipped nothing.
+//
+// So the confirmed proof for the current edition travels with the code, next to
+// the data it attests. Anyone can check it without trusting us and without
+// re-anchoring: the hash below is the same one the Ed25519 signature covers,
+// and the proof puts it in a Bitcoin block.
+//
+// When the regulator reissues and qskyway.airspace.<city>.ts is regenerated,
+// this proof stops matching the current snapshot. That is not a failure to fix
+// by deleting it — it becomes the record of *when the previous edition was in
+// use*, which is exactly the question an audit asks. Add the new edition's proof
+// alongside; `verifyAnchoredAirspace` already reports "anchored" and "matches
+// what we serve today" as two separate facts for this reason.
+
+export interface ShippedProof {
+  city: string;
+  /** identical to airspaceContentHash(AIRSPACE[city]) at the time of anchoring */
+  contentHash: string;
+  /** the regulator's edition marker this proof is about */
+  effective: string;
+  otsProofB64: string;
+  /** Bitcoin block that includes the hash, once the calendars confirmed it */
+  bitcoinBlockHeight: number | null;
+  anchoredAt: string;
+  confirmedAt: string | null;
+}
+
+export const AIRSPACE_PROOFS: Record<string, ShippedProof> = {
+  nyc: {
+    city: "nyc",
+    contentHash: "c4ed794e7435844342a38058c836abc1752f8cae9946464d4e3abd05584b0530",
+    effective: "7/9/2026",
+    otsProofB64: "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",
+    bitcoinBlockHeight: 959707,
+    anchoredAt: "2026-07-26",
+    confirmedAt: "2026-07-26",
+  },
+};

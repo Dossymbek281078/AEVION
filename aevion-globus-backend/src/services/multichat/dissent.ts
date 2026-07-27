@@ -55,6 +55,43 @@ export function similarity(a: string, b: string): number {
 
 export type NumericClaim = { value: number; raw: string; context: string };
 
+const MAX_CONTEXT = 180;
+
+/** Предложение, внутри которого стоит число.
+ *
+ *  Раньше бралось окно ±40 символов — оно начиналось с середины слова и им же
+ *  заканчивалось («…пришёл. На текущем трафике 40 посетителей — выборки не
+ *  хвати»). Контекст должен отвечать на вопрос «о чём вообще это число», а
+ *  обрывок на него не отвечает; человек видит его первым, когда открывает
+ *  расхождение. Заодно предложение — более честная единица для группировки:
+ *  два агента, говорящие об одном, чаще совпадают предложением, чем случайно
+ *  выровненным окном.
+ *
+ *  Точка считается концом предложения, только если за ней пробел или конец
+ *  строки — иначе «1.5» и «v2.0» разрывались бы посередине. */
+function sentenceAround(src: string, at: number, len: number): string {
+  const isEnd = (i: number) =>
+    /[.!?…\n]/.test(src[i]) && (i + 1 >= src.length || /[\s]/.test(src[i + 1]));
+
+  let from = 0;
+  for (let i = at - 1; i >= 0; i--) {
+    if (isEnd(i)) { from = i + 1; break; }
+  }
+  let to = src.length;
+  for (let i = at + len; i < src.length; i++) {
+    if (isEnd(i)) { to = i + 1; break; }
+  }
+
+  let out = src.slice(from, to).replace(/\s+/g, " ").trim();
+  if (out.length > MAX_CONTEXT) {
+    // Обрезаем по границе слова, а не по букве: усечённое слово читается как опечатка.
+    const cut = out.slice(0, MAX_CONTEXT);
+    const lastSpace = cut.lastIndexOf(" ");
+    out = (lastSpace > MAX_CONTEXT / 2 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+  }
+  return out;
+}
+
 /** Числа с их окружением. Если один агент говорит «$36», а другой «$50» про то
  *  же — это конкретное расхождение, которое человек проверит за минуту, в
  *  отличие от расхождения в тоне или формулировке. */
@@ -70,9 +107,7 @@ export function numericClaims(text: string): NumericClaim[] {
     if (!Number.isFinite(num)) continue;
     // Годы и порядковые номера шумят и почти никогда не являются предметом спора.
     if (num >= 1900 && num <= 2100 && !/[$€₸%]/.test(raw)) continue;
-    const from = Math.max(0, m.index - 40);
-    const context = src.slice(from, Math.min(src.length, m.index + raw.length + 40)).replace(/\s+/g, " ").trim();
-    out.push({ value: num, raw, context });
+    out.push({ value: num, raw, context: sentenceAround(src, m.index, raw.length) });
   }
   return out;
 }
@@ -151,7 +186,87 @@ export type DissentMap = {
   /** Куда смотреть человеку в первую очередь. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;
+  /** Что именно пойти проверить. См. buildChecklist. */
+  checks: Check[];
 };
+
+/** Один пункт «пойти и проверить».
+ *
+ *  kind — источник пункта, чтобы UI мог расставить акценты; weight — насколько
+ *  пункт проверяем руками, от 1 (нужно суждение) до 3 (можно закрыть за минуту).
+ */
+export type Check = {
+  kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+  text: string;
+  agents: string[];
+  weight: 1 | 2 | 3;
+};
+
+const MAX_CHECKS = 5;
+
+/** Карта разногласий отвечает «где агенты разошлись». Сама по себе это диагноз,
+ *  а человеку нужен следующий шаг — «что пойти проверить».
+ *
+ *  Порядок не по важности, а по ПРОВЕРЯЕМОСТИ: сначала числа (расхождение
+ *  закрывается одним запросом к источнику), потом отказы и неуверенность, и лишь
+ *  затем расхождение по существу, где нужно читать и думать. Совет, который
+ *  нельзя выполнить за минуту, на практике не выполняют вовсе.
+ *
+ *  Считается из уже готовой карты, без единого вызова модели — то есть остаётся
+ *  бесплатным и воспроизводимым, как и она сама. */
+export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
+  const out: Check[] = [];
+
+  for (const c of map.numericConflicts) {
+    const spread = c.values.map((v) => `${v.agentId}: ${v.raw}`).join(" против ");
+    out.push({
+      kind: "number",
+      text: `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
+      agents: c.values.map((v) => v.agentId),
+      weight: 3,
+    });
+  }
+
+  for (const h of map.hedges) {
+    out.push(
+      h.kind === "failed"
+        ? {
+            kind: "failure",
+            text: `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
+            agents: [h.agentId],
+            weight: 3,
+          }
+        : {
+            kind: "hedge",
+            text: `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
+            agents: [h.agentId],
+            weight: 2,
+          }
+    );
+  }
+
+  if (map.outlier) {
+    out.push({
+      kind: "outlier",
+      text: `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
+      agents: [map.outlier.agentId],
+      weight: 1,
+    });
+  }
+
+  // При согласии список не пустой: согласие само по себе ничего не доказывает,
+  // и молчаливый пустой блок читался бы как «всё в порядке».
+  if (!out.length && map.verdict === "consensus") {
+    out.push({
+      kind: "consensus",
+      text: "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
+      agents: [],
+      weight: 1,
+    });
+  }
+
+  return out.sort((a, b) => b.weight - a.weight).slice(0, MAX_CHECKS);
+}
 
 /** Порог, ниже которого ответы считаем разошедшимися. 0.45 по доле общих слов:
  *  выше — агенты пересказывают одно и то же, ниже — говорят о разном. */
@@ -201,7 +316,7 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
         ? `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`
         : `Расхождение${conflicts.length ? `, включая ${conflicts.length} числовых` : ""}. Смотреть в первую очередь сюда.`;
 
-  return {
+  const base = {
     agents: list.length,
     answered: good.length,
     agreement,
@@ -212,4 +327,6 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     verdict,
     note,
   };
+
+  return { ...base, checks: buildChecklist(base) };
 }

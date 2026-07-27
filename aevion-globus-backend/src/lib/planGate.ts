@@ -138,7 +138,15 @@ export interface ResolvedPlan {
  * subscription (data/subscriptions.jsonl) → free.
  */
 export function resolveUserPlan(req: Request): ResolvedPlan {
-  const payload = verifyBearerOptional(req) as Record<string, unknown> | null;
+  return resolvePlanFromPayload(verifyBearerOptional(req) as Record<string, unknown> | null);
+}
+
+/**
+ * Same resolution as resolveUserPlan, but from an already-verified JWT payload
+ * — for callers that don't hold an Express Request (e.g. the QCoreAI
+ * WebSocket server, which authenticates via a `?token=` query param).
+ */
+export function resolvePlanFromPayload(payload: Record<string, unknown> | null): ResolvedPlan {
   const email = payload && typeof payload.email === "string" ? payload.email.toLowerCase() : null;
 
   if (email && ALLOWLIST.includes(email)) {

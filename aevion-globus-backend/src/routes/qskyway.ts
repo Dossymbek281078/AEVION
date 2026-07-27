@@ -5,7 +5,13 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
+import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
+import { airspaceFreshness } from "./qskyway.airspace.freshness";
+import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
+import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
+import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
+import { rateLimit } from "../lib/rateLimit";
 
 /**
  * AEVION QSkyway — навигационный слой городского неба для аэротакси.
@@ -24,30 +30,43 @@ import { getPool } from "../lib/dbPool";
  * данных → ниже коридор. Фаза 6 (уже реализована): наземный ветер — реальный
  * METAR ближайшего аэропорта (aviationweather.gov, без ключа, см.
  * qskyway.metar.ts), не иллюстрация; graceful fallback на демо-модель при
- * недоступности фида. Следующая фаза — боевые фиды запретных зон регулятора
- * (FAA UAS Facility Maps / NOTAM, EASA U-space, CAAC) вместо иллюстративных
- * зон, см. дисклеймер ниже.
+ * недоступности фида. Фаза 7 (уже реализована): регуляторные потолки высоты из
+ * официального фида — FAA UAS Facility Map для NYC (qskyway.airspace.ts).
+ * Фаза 8 (уже реализована): режимы разрешений регулятора (qskyway.permission.ts)
+ * — второй вид опубликованного правила. Токио: MLIT/JCAB, полёт над плотно
+ * населённым районом (DID) требует разрешения министра; 100% твина под режимом.
+ * Потолки и режимы НЕ смешиваются: первое ограничивает геометрию маршрута,
+ * второе — саму операцию. Астана: сетки потолков нет, но AIP Казахстана публикует
+ * запретную зону UAP28, накрывающую 100% твина. Ни один город больше не заявляет
+ * «источника нет» — «нет API» и «нет правила» это разные вещи, и их смешение
+ * несколько недель прятало UAP28 за выдуманным кружком радиусом 320 м.
  *
  * Честно: движок/PoC, не сертифицированное авиационное ПО. Данные зданий —
- * OpenStreetMap (ODbL, открытые). Запретные зоны здесь ИЛЛЮСТРАТИВНЫ; в проде
- * подключаются к официальным фидам регулятора (FAA/EASA/CAAC). Наземный ветер
- * — реальный METAR с graceful fallback; послойный рост с высотой — иллюстративная
- * экстраполяция (METAR не содержит данных о ветре на высоте).
+ * OpenStreetMap (ODbL, открытые). Точечные запретные зоны (qskyway.zones.ts)
+ * по-прежнему ИЛЛЮСТРАТИВНЫ. Регуляторный потолок NYC — реальный (FAA UASFM),
+ * но это сетка допусков для малых БВС Part 107, НЕ сертификация аэротакси.
+ * Наземный ветер — реальный METAR с graceful fallback; послойный рост с высотой
+ * — иллюстративная экстраполяция (METAR не содержит данных о ветре на высоте).
  *
  * Endpoints:
  *   GET  /health          — статус + список городов
  *   GET  /cities          — города (счётчики, bbox, подпись, площадки)
- *   GET  /city?city=id    — двойник + запретные зоны + ветер + подпись
+ *   GET  /city?city=id    — двойник + запретные зоны + ветер + потолки + подпись
  *   GET  /vertiports?city=id — площадки со скорингом пригодности
- *   POST /route           — {from,to,city?} → 4D-маршрут (обход зон + ветер в ETA)
- *   GET  /verify?city=id  — проверка подписи Ed25519 двойника
+ *   POST /route           — {from,to,city?,respectCeiling?} → 4D-маршрут
+ *                           (обход зон + ветер в ETA + регуляторный потолок)
+ *   POST /route/justification — один подписанный документ «почему рейс обоснован»
+ *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
+ *   GET  /airspace/impact — сколько пар площадок реально укладывается в потолок
+ *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
+ *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
  */
 
 export const qskywayRouter = Router();
 
 const DISCLAIMER =
-  "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Запретные зоны и ветер иллюстративны; в проде — официальные фиды регулятора и METAR. Полёты требуют допуска (U-space/UTM/CAAC).";
+  "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Наземный ветер — реальный METAR. Потолки высоты NYC — реальный фид FAA UASFM (сетка допусков Part 107 для малых БВС, НЕ сертификация аэротакси). Токио — реальный режим разрешений MLIT/JCAB (полёт над плотно населённым районом требует разрешения министра); значение снято выборкой по растровым тайлам регулятора, а не загружено вектором. Астана — реальная ЗАПРЕТНАЯ зона UAP28 из AIP Казахстана (круг R=4.5 км, GND–4800 ft, круглосуточно): полёты над твином запрещены, а не разрешены по согласованию; маршрутизация в демо оставлена как расчёт. Точечные запретные зоны и рост ветра с высотой остаются иллюстративными. Полёты требуют допуска (U-space/UTM/CAAC).";
 
 // ── city registry ──────────────────────────────────────────────────────────
 const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO };
@@ -62,7 +81,17 @@ const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
 // Phase 5: extra safety clearance by height-data confidence (metres), indexed by
-// height source: 0=measured (explicit height tag), 1=derived (levels×3.2),
+// height source: 0=measured (a survey states this building's height — an OSM
+// height tag, a PLATEAU measuredHeight, or both, in which case the twin carries
+// the TALLER of the two: that is the height an aircraft has to clear, and both
+// being measurements keeps the class honest),
+// 1=derived (levels×3.2 plus a 1.6 m parapet allowance — verified against the
+// committed Astana twin, 159/159 buildings, see scripts/fetch-city-twin.mjs;
+// this comment said plain levels×3.2 until 2026-07-27, and so did the note
+// shipped to users — OR, in Tokyo, a surveyed PLATEAU height whose building we
+// identified by proximity rather than containment: the number is measured, the
+// identification is inferred, and inference belongs in the class that gets
+// extra room),
 // 2=guessed (blind 12m default). A guessed height can badly understate the real
 // building, so the corridor is flown higher until better data (LiDAR / CityGML
 // LOD2 / Google 3D Tiles) raises confidence and lets it descend.
@@ -84,6 +113,15 @@ interface ZoneXY extends NoFlyZone { x: number; y: number; }
 function zonesMeters(cityId: string, city: CityData): ZoneXY[] {
   const proj = projector(city);
   return (NOFLY[cityId] ?? []).map((z) => { const [x, y] = proj(z.center[0], z.center[1]); return { ...z, x, y }; });
+}
+
+// Russian pluralisation for the served strings. A figure this module computes
+// and then renders as "1 площадок" undermines the care taken to compute it.
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ${few}`;
+  return `${n} ${many}`;
 }
 
 const obstOf = (g: CityData["grid"]) => (c: number, r: number): number =>
@@ -166,7 +204,19 @@ class MinHeap {
 }
 interface Cell { c: number; r: number; }
 
-function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r: number) => boolean): Cell[] | null {
+/**
+ * @param blocked     cell-level ban (no-fly zones)
+ * @param edgeBlocked optional edge-level ban that also sees the flight altitude —
+ *                    used by strict airspace mode, where an edge is illegal only
+ *                    because the corridor it requires is above the published ceiling.
+ */
+function astar(
+  g: CityData["grid"],
+  s: Cell,
+  goal: Cell,
+  blocked: (c: number, r: number) => boolean,
+  edgeBlocked?: (fc: number, fr: number, tc: number, tr: number, alt: number) => boolean,
+): Cell[] | null {
   const cols = g.cols, rows = g.rows;
   const edgeAlt = edgeAltOf(g);
   const idx = (c: number, r: number): number => r * cols + c;
@@ -188,6 +238,9 @@ function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r:
       if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
       if (blocked(nc, nr) && !isGoal(nc, nr) && !isStart(nc, nr)) continue; // обход запретной зоны
       const alt = edgeAlt(cur.c, cur.r, nc, nr);
+      // Unlike no-fly cells, a ceiling violation has no start/goal exemption:
+      // a pad you cannot legally lift off from is not a usable pad.
+      if (edgeBlocked?.(cur.c, cur.r, nc, nr, alt)) continue;
       const step = 1 + (alt - FLOOR) / 90;
       const t = gsc[ci] + step, ni = idx(nc, nr);
       if (t < gsc[ni]) { gsc[ni] = t; came[ni] = ci; open.push({ c: nc, r: nr, f: t + h(nc, nr) }); }
@@ -200,21 +253,85 @@ function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r:
   return path.length > 1 ? path : null;
 }
 
+/**
+ * Per-route verdict against the regulator's published ceiling.
+ *
+ * `compliant` answers one narrow question: does every segment of this corridor
+ * stay at or below the altitude the authority publishes as automatically
+ * authorizable for that cell? Non-compliant is not "illegal" — it means the
+ * flight needs ATC/LAANC coordination, which is exactly what an operator has to
+ * know before filing. Cities with no published feed report available:false and
+ * no verdict, rather than a green tick that means nothing.
+ */
+interface AirspaceCompliance {
+  available: boolean;
+  compliant: boolean | null;
+  coveragePct: number;
+  exceedingSegments: number;
+  zeroCeilingSegments: number;
+  maxExceedanceM: number;
+  lowestCeilingM: number | null;
+  note: string;
+}
+
+function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[]): AirspaceCompliance {
+  if (!field) {
+    return {
+      available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
+      zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
+      note: "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
+    };
+  }
+  let covered = 0, exceeding = 0, zeroSegs = 0, maxExc = 0;
+  let lowest: number | null = null;
+  for (let k = 0; k < alts.length; k++) {
+    // A segment is bound by the stricter of the two cells it touches.
+    const ceil = Math.min(ceilingAt(field, path[k].c, path[k].r), ceilingAt(field, path[k + 1].c, path[k + 1].r));
+    if (ceil === NO_CEILING) continue;
+    covered++;
+    lowest = lowest === null ? ceil : Math.min(lowest, ceil);
+    if (ceil === 0) zeroSegs++;
+    if (alts[k] > ceil) { exceeding++; maxExc = Math.max(maxExc, alts[k] - ceil); }
+  }
+  const compliant = exceeding === 0;
+  return {
+    available: true,
+    compliant,
+    coveragePct: Math.round((100 * covered) / Math.max(1, alts.length)),
+    exceedingSegments: exceeding,
+    zeroCeilingSegments: zeroSegs,
+    maxExceedanceM: Math.round(maxExc),
+    lowestCeilingM: lowest,
+    note: compliant
+      ? "Коридор укладывается в опубликованный потолок — автоматический допуск (LAANC) применим на всём протяжении."
+      : `${exceeding} из ${alts.length} участков выше опубликованного потолка (макс. превышение ${Math.round(maxExc)} м) — нужна координация с УВД, автоматического допуска недостаточно.`,
+  };
+}
+
 interface RouteResult {
   city: string; from: number; to: number; path: Cell[]; alts: number[]; obstacles: number[];
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
   avoidsNoFly: boolean;
   avgConfClearM: number; heightConfidencePct: number;
+  respectCeiling: boolean;
+  airspace: AirspaceCompliance;
 }
 
-function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number): RouteResult | null {
+function buildRoute(
+  cityId: string, city: CityData, fromVp: number, toVp: number, respectCeiling = false,
+): RouteResult | null {
   const vps = city.vertiports;
   if (fromVp < 0 || toVp < 0 || fromVp >= vps.length || toVp >= vps.length || fromVp === toVp) return null;
   const zones = zonesMeters(cityId, city);
   const blocked = noFlyTest(city, zones);
+  const field = ceilingField(cityId, city);
   const a = vps[fromVp], b = vps[toVp];
-  const path = astar(city.grid, { c: a.c, r: a.r }, { c: b.c, r: b.r }, blocked);
+  const ceilingGate = respectCeiling && field
+    ? (fc: number, fr: number, tc: number, tr: number, alt: number): boolean =>
+        alt > Math.min(ceilingAt(field, fc, fr), ceilingAt(field, tc, tr))
+    : undefined;
+  const path = astar(city.grid, { c: a.c, r: a.r }, { c: b.c, r: b.r }, blocked, ceilingGate);
   if (!path) return null;
   const edgeAlt = edgeAltOf(city.grid);
   const obst = obstOf(city.grid);
@@ -250,6 +367,8 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
     avoidsNoFly: zones.length > 0,
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
+    respectCeiling,
+    airspace: assessCeiling(field, path, alts),
   };
 }
 
@@ -257,12 +376,17 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
 interface VertiportScore {
   id: string; c: number; r: number; x: number; y: number;
   openRadiusM: number; clearanceM: number; distNoFlyM: number;
+  /** published regulatory ceiling over the pad, metres AGL; null where no feed */
+  ceilingM: number | null;
+  /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
+  needsAtcCoordination: boolean;
   suitability: number; class: "candidate-pad" | "needs-infrastructure" | "unsuitable";
 }
 function suitability(cityId: string, city: CityData): VertiportScore[] {
   const g = city.grid;
   const obst = obstOf(g);
   const zones = zonesMeters(cityId, city);
+  const field = ceilingField(cityId, city);
   return city.vertiports.map((v, i) => {
     // open radius: expand until an obstacle > 15 m appears
     let openR = 0;
@@ -283,7 +407,18 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
     const clearScore = clearance < 8 ? 1 : clearance < 15 ? 0.6 : 0.2;
     const score = Math.round(100 * (0.5 * openScore + 0.35 * noflyScore + 0.15 * clearScore));
     const cls: VertiportScore["class"] = score >= 65 ? "candidate-pad" : score >= 35 ? "needs-infrastructure" : "unsuitable";
-    return { id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y, openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly), suitability: score, class: cls };
+    // Deliberately NOT folded into `suitability`: that score measures physical
+    // siting (openness, clearance, distance to zones). Regulatory status is a
+    // separate axis — a perfectly sited pad can still need ATC coordination —
+    // and merging them would make one number mean two different things.
+    const ceil = field ? ceilingAt(field, v.c, v.r) : NO_CEILING;
+    const ceilingM = ceil === NO_CEILING ? null : ceil;
+    return {
+      id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y,
+      openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly),
+      ceilingM, needsAtcCoordination: ceilingM === 0,
+      suitability: score, class: cls,
+    };
   });
 }
 
@@ -317,6 +452,54 @@ function signCity(cityId: string, city: CityData): Signature {
   sigCache.set(cityId, sig);
   return sig;
 }
+/**
+ * Attest the ceiling layer too, not just the twin.
+ *
+ * A route is only as trustworthy as the two things it obeys: the city geometry
+ * (already signed) and the published airspace constraint (until now unsigned).
+ * With both attested under the same key, "this corridor was computed against FAA
+ * edition 7/9/2026 over this exact cell set" is checkable by a third party
+ * rather than a claim on a slide.
+ */
+const airspaceSigCache = new Map<string, Signature>();
+function signAirspace(cityId: string): Signature | null {
+  const src = AIRSPACE[cityId];
+  if (!src) return null;
+  const cached = airspaceSigCache.get(cityId);
+  if (cached) return cached;
+  const contentHash = airspaceContentHash(src);
+  const sig: Signature = {
+    alg: "Ed25519",
+    contentHash,
+    signature: crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64"),
+    publicKey: SIGN_PK_B64,
+    note: SIGN_EPHEMERAL
+      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Подпись покрывает ячейки и потолки, не пояснительный текст."
+      : "Аттестация опубликованного слоя ограничений (QSign). Подпись покрывает ячейки, потолки, класс пространства и дату публикации — не пояснительный текст.",
+  };
+  airspaceSigCache.set(cityId, sig);
+  return sig;
+}
+function verifyAirspace(cityId: string, sig: Signature): boolean {
+  const src = AIRSPACE[cityId];
+  if (!src) return false;
+  if (airspaceContentHash(src) !== sig.contentHash) return false;
+  try { return crypto.verify(null, Buffer.from(sig.contentHash, "hex"), SIGN_PK, Buffer.from(sig.signature, "base64")); }
+  catch { return false; }
+}
+
+/** Everything a caller needs to trust the ceiling layer: what it is, whether it
+ *  still matches the regulator, and its attestation. */
+function airspaceBlock(cityId: string, city: CityData) {
+  const summary = airspaceSummary(cityId, city);
+  // A city can have no ceiling grid and still be under a published permission
+  // regime (Tokyo). Reporting only ceilings would call that city "no source"
+  // when a regulator does in fact govern every flight over it.
+  const permission = permissionSummary(cityId);
+  if (!summary.available) return { ...summary, permission };
+  return { ...summary, permission, freshness: airspaceFreshness(cityId), _signature: signAirspace(cityId) };
+}
+
 function verifyCity(city: CityData, sig: Signature): boolean {
   const hash = crypto.createHash("sha256").update(JSON.stringify(city)).digest("hex");
   if (hash !== sig.contentHash) return false;
@@ -439,14 +622,15 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     module: "qskyway",
-    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct })),
+    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct, airspaceFeed: AIRSPACE[id]?.authority ?? null })),
     city: CITY.city,
     buildings: CITY.buildings.length,
     vertiports: CITY.vertiports.length,
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
-    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance"],
+    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings"],
+    airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     wind: metarStatus(),
@@ -462,8 +646,22 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       bbox: c.bbox, meters: c.meters, maxHeightM: c.grid.heights.reduce((m, v) => Math.max(m, v), 0),
       noFlyZones: (NOFLY[id] ?? []).length,
       dataQuality: c.dataQuality,
+      airspaceFeed: AIRSPACE[id]?.authority ?? null,
       signature: { alg: "Ed25519", contentHash: signCity(id, c).contentHash },
     })),
+    // Not a shortfall to apologise for — a map of where low-altitude airspace is
+    // machine-readable at all, counting ANY published rule: a ceiling grid (US)
+    // or a permission regime (Japan). Counting only ceilings would misdescribe
+    // Tokyo, where a regulator governs every flight but publishes no altitudes.
+    // Kazakhstan publishes neither, so no provider can obey anything there yet.
+    airspaceCoverage: {
+      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id] || PERMISSION[id]).length,
+      withCeilings: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
+      withPermissionRegime: Object.keys(CITIES).filter((id) => PERMISSION[id]).length,
+      total: Object.keys(CITIES).length,
+      missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id] && !PERMISSION[id]),
+      note: "Регуляторный слой есть там, где регулятор вообще публикует ограничения — сеткой потолков, режимом разрешений или запретной зоной в AIP. Форма публикации разная: фид, растровый слой, нормативный документ. «Нет API» не равно «нет правила» — правило читается из того, в чём оно опубликовано.",
+    },
   });
 });
 
@@ -474,7 +672,7 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
   const zones = zonesMeters(id, city);
   res.json({
     ...city,
-    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null })),
+    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
     wind: {
       fromDeg: windAt(id, FLOOR).fromDeg,
       groundMs: windAt(id, FLOOR).speedMs,
@@ -484,9 +682,82 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
         : "иллюстративная послойная модель (METAR временно недоступен)",
     },
+    airspace: airspaceBlock(id, city),
     vertiportScores: suitability(id, city),
     _signature: signCity(id, city),
   });
+});
+
+/**
+ * What the published ceiling actually costs, across every pair of pads.
+ *
+ * The single most useful thing this module can say about a city is not that it
+ * ingested a feed — it is how much of the network the feed rules out. That
+ * number has been sitting one loop away from the data since the ceilings
+ * landed, computed nowhere and therefore quotable nowhere; a figure typed into
+ * a slide by hand is exactly what this platform is not supposed to do.
+ *
+ * Deterministic and cheap (n² routes over a cached grid), so it is computed on
+ * request rather than stored — nothing to go stale, and the page can show a
+ * live figure instead of a hardcoded one.
+ */
+// Deterministic over compile-time data, so a city's answer cannot change while
+// the process lives — the same reason ceilingField() is cached. Worth caching
+// rather than not: measured 0.4-0.55 s against 0.025 s for /city, and this one
+// sits on the first screen.
+const impactCache = new Map<string, unknown>();
+
+qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const cached = impactCache.get(resolved.id);
+  if (cached) return res.json(cached);
+  const { id, city } = resolved;
+  const field = ceilingField(id, city);
+  if (!field) {
+    const none = {
+      city: id, available: false,
+      note: "Сетки потолков для этого города регулятор не публикует — измерять нечего.",
+    };
+    impactCache.set(id, none);
+    return res.json(none);
+  }
+  const n = city.vertiports.length;
+  let pairs = 0, routable = 0, compliant = 0, strictRoutable = 0;
+  let worstExceedanceM = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j) continue;
+    pairs++;
+    const r = buildRoute(id, city, i, j, false);
+    if (!r) continue;
+    routable++;
+    if (r.airspace.compliant) compliant++;
+    worstExceedanceM = Math.max(worstExceedanceM, r.airspace.maxExceedanceM);
+    if (buildRoute(id, city, i, j, true)) strictRoutable++;
+  }
+  // Pads the regulator authorizes nothing over: they cannot launch at all, which
+  // is a different and harsher fact than a corridor merely flying too high.
+  const padsNeedingAtc = suitability(id, city).filter((v) => v.needsAtcCoordination).length;
+  const payload = {
+    city: id,
+    available: true,
+    authority: AIRSPACE[id].authority,
+    effective: AIRSPACE[id].effective,
+    pairs,
+    routable,
+    /** pairs whose corridor stays within the published ceiling end to end */
+    compliant,
+    compliantPct: Math.round((100 * compliant) / Math.max(1, pairs)),
+    /** pairs still flyable when the ceiling is enforced as a hard constraint */
+    strictRoutable,
+    worstExceedanceM,
+    padsNeedingAtc,
+    zeroCeilingCells: field.zeroCeilingCells,
+    gridCells: field.cols * field.rows,
+    note: `${compliant} из ${pairs} пар площадок укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
+  };
+  impactCache.set(id, payload);
+  res.json(payload);
 });
 
 qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
@@ -500,21 +771,364 @@ qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
 });
 
 qskywayRouter.post("/route", (req: Request, res: Response) => {
-  const { from, to, city } = req.body ?? {};
+  const { from, to, city, respectCeiling } = req.body ?? {};
   if (typeof from !== "number" || typeof to !== "number")
     return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
   const resolved = resolveCity(city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
-  const route = buildRoute(resolved.id, resolved.city, from, to);
-  if (!route) return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+  const strict = respectCeiling === true;
+  const route = buildRoute(resolved.id, resolved.city, from, to, strict);
+  if (!route) {
+    // In strict mode the usual "no corridor" answer is misleading: the corridor
+    // exists physically and is only barred by the published ceiling. Say which.
+    if (strict) {
+      const relaxed = buildRoute(resolved.id, resolved.city, from, to, false);
+      if (relaxed) {
+        return res.status(422).json({
+          error: "нет коридора в пределах опубликованного потолка регулятора",
+          reason: "airspace-ceiling",
+          respectCeiling: true,
+          airspaceIfUnrestricted: relaxed.airspace,
+          cruiseAltMIfUnrestricted: relaxed.cruiseAltM,
+          note: "Физически маршрут существует, но требует высоты выше автоматически разрешённой. Полёт возможен только по координации с УВД (вне LAANC).",
+        });
+      }
+    }
+    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+  }
   res.json(route);
+});
+
+/**
+ * One document that answers "why is this flight defensible?".
+ *
+ * Everything in it already existed — twin hash, airspace hash, published
+ * edition, ceiling verdict, wind source — but scattered across three responses,
+ * so anyone who actually had to justify a flight was left stitching them
+ * together by hand and hoping they matched. Filing paperwork is where a
+ * navigation layer either earns its place or stays a demo, so the assembly is
+ * ours to do, not the operator's.
+ *
+ * The whole document is signed as one unit: it is the *combination* — this
+ * corridor, over this twin, against this edition — that is being attested, and
+ * signing the parts separately would let a correct-looking set of pieces be
+ * recombined into a claim we never made.
+ *
+ * Honest by construction: it states the verdict, including a non-compliant one.
+ * A justification that can only come out green is not a justification.
+ */
+qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
+  const { from, to, city, respectCeiling } = req.body ?? {};
+  if (typeof from !== "number" || typeof to !== "number")
+    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  const resolved = resolveCity(city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const route = buildRoute(resolved.id, resolved.city, from, to, respectCeiling === true);
+  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего" });
+
+  const src = AIRSPACE[resolved.id];
+  const twinSig = signCity(resolved.id, resolved.city);
+  const asSig = signAirspace(resolved.id);
+
+  // ASCII-only and explicitly ordered: this is the byte sequence the signature
+  // covers, so it must not depend on locale, key order, or JSON escaping
+  // (the transport bug in #712).
+  const document = {
+    kind: "qskyway.route.justification/1",
+    city: resolved.id,
+    from,
+    to,
+    respectCeiling: route.respectCeiling,
+    distanceKm: route.distanceKm,
+    cruiseAltM: route.cruiseAltM,
+    etaMinWind: route.etaMinWind,
+    twinContentHash: twinSig.contentHash,
+    airspace: src
+      ? {
+          authority: src.authority,
+          source: src.source,
+          regime: src.regime,
+          effective: src.effective,
+          contentHash: asSig?.contentHash ?? null,
+          compliant: route.airspace.compliant,
+          exceedingSegments: route.airspace.exceedingSegments,
+          maxExceedanceM: route.airspace.maxExceedanceM,
+          lowestCeilingM: route.airspace.lowestCeilingM,
+        }
+      : null,
+    windSource: windSourceOf(resolved.id),
+    heightConfidencePct: route.heightConfidencePct,
+    // A permission regime belongs on the paperwork even though it never touched
+    // the routing — "this corridor is legal geometry" and "this flight may take
+    // place at all" are both things the filing has to answer.
+    permission: PERMISSION[resolved.id]
+      ? {
+          authority: PERMISSION[resolved.id].authority,
+          regime: PERMISSION[resolved.id].regime,
+          // Part of the SIGNED payload: a filing that says "permission regime"
+          // where the rule is a ban is the worst possible place to lose this.
+          kind: PERMISSION[resolved.id].kind,
+          basis: PERMISSION[resolved.id].basis,
+          coveragePct: PERMISSION[resolved.id].coveragePct,
+        }
+      : null,
+    issuedAt: new Date().toISOString(),
+  };
+  const canonical = JSON.stringify(document);
+  const contentHash = crypto.createHash("sha256").update(canonical).digest("hex");
+  const signature = crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64");
+
+  res.json({
+    document,
+    attestation: { alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64, ephemeral: SIGN_EPHEMERAL },
+    // The scope limit travels WITH the document. A justification that gets
+    // forwarded without it is exactly how "routed against FAA data" turns into
+    // "FAA approved".
+    // Must cover all three cases. A city can have a permission regime without a
+    // ceiling grid, and saying "no regulatory verdict" while the document itself
+    // carries the regime would make the signed artifact contradict its own
+    // disclaimer — in the one document meant to be handed to a regulator.
+    scope: src
+      ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
+      : PERMISSION[resolved.id]
+        ? PERMISSION[resolved.id].kind === "prohibition"
+          ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${PERMISSION[resolved.id].authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`
+          : `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
+        : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
+    verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
+  });
+});
+
+qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) => {
+  const { document, attestation } = req.body ?? {};
+  if (!document || !attestation?.signature || !attestation?.contentHash)
+    return res.status(400).json({ error: "нужны document и attestation {contentHash, signature}" });
+  const contentHash = crypto.createHash("sha256").update(JSON.stringify(document)).digest("hex");
+  const hashValid = contentHash === attestation.contentHash;
+  let signatureValid = false;
+  try {
+    signatureValid = crypto.verify(null, Buffer.from(attestation.contentHash, "hex"), SIGN_PK, Buffer.from(attestation.signature, "base64"));
+  } catch { signatureValid = false; }
+  // Reported separately on purpose: a tampered value and a forged signature are
+  // different failures, and one verdict would hide which happened.
+  res.json({
+    valid: hashValid && signatureValid,
+    hashValid,
+    signatureValid,
+    isPlatformKey: signatureValid,
+    note: hashValid
+      ? signatureValid ? "Документ подписан ключом платформы и не изменён." : "Содержимое цело, но подпись не принадлежит ключу платформы."
+      : "Содержимое документа изменено — хэш не совпадает.",
+  });
 });
 
 qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
   const sig = signCity(resolved.id, resolved.city);
-  res.json({ city: resolved.id, valid: verifyCity(resolved.city, sig), alg: "Ed25519", contentHash: sig.contentHash, publicKey: sig.publicKey });
+  const twinValid = verifyCity(resolved.city, sig);
+  const asSig = signAirspace(resolved.id);
+  const airspace = asSig
+    ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
+    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего." };
+  res.json({
+    city: resolved.id,
+    // `valid` stays the twin verdict so existing callers (the UI badge) don't shift meaning.
+    valid: twinValid,
+    alg: "Ed25519",
+    contentHash: sig.contentHash,
+    publicKey: sig.publicKey,
+    twin: { valid: twinValid, contentHash: sig.contentHash },
+    airspace,
+  });
+});
+
+// Bitcoin-anchor the ceiling layer: Ed25519 says who signed it, OpenTimestamps
+// says it existed by block N — the edition date stops resting on our clock.
+qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.body?.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  // A public POST that submits to the OpenTimestamps calendars is an open tap
+  // into someone else's infrastructure: spam it and we flood them. It is also
+  // pointless work — a second timestamp over an identical hash proves nothing
+  // the first one did not. When this edition already ships a confirmed proof,
+  // hand that one back instead of stamping again.
+  const shipped = AIRSPACE_PROOFS[resolved.id];
+  const src = AIRSPACE[resolved.id];
+  if (shipped && src && shipped.contentHash === airspaceContentHash(src)) {
+    return res.json({
+      status: "bitcoin-confirmed",
+      city: resolved.id,
+      authority: src.authority,
+      effective: src.effective,
+      contentHash: shipped.contentHash,
+      otsProofB64: shipped.otsProofB64,
+      bitcoinBlockHeight: shipped.bitcoinBlockHeight,
+      calendars: [],
+      error: null,
+      reused: true,
+      note: "Эта редакция уже привязана и подтверждена Bitcoin — возвращён существующий пруф, повторный штамп не создавался: над тем же хэшем он не доказал бы ничего нового.",
+    });
+  }
+  const anchor = await anchorAirspace(resolved.id);
+  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", city: resolved.id });
+  res.json(anchor);
+});
+
+// The one endpoint whose outbound traffic is driven by user input: it verifies a
+// proof the caller supplies, which means calling the OpenTimestamps calendars
+// with a payload we did not choose. Everything else added today could be made
+// self-sufficient by caching; this one legitimately needs the network, so it
+// gets a limit instead. Reuses the repo's own limiter rather than inventing a
+// second one.
+const anchorVerifyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-anchor-verify",
+  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту.",
+});
+
+// A serialized .ots proof for one hash is well under a kilobyte (ours is 3.7 KB
+// with the Bitcoin attestation). Anything far larger is not a proof we could
+// verify, and parsing it before finding that out is work an attacker chooses.
+const MAX_OTS_PROOF_B64 = 64 * 1024;
+
+qskywayRouter.post("/airspace/anchor/verify", anchorVerifyLimiter, async (req: Request, res: Response) => {
+  const proofB64 = req.body?.otsProofB64;
+  if (typeof proofB64 === "string" && proofB64.length > MAX_OTS_PROOF_B64) {
+    return res.status(413).json({
+      error: "пруф слишком большой",
+      maxBytesB64: MAX_OTS_PROOF_B64,
+      note: "Сериализованный .ots-пруф на один хэш — единицы килобайт; всё, что заметно больше, проверить всё равно не удастся.",
+    });
+  }
+  res.json(await verifyAnchoredAirspace(req.body));
+});
+
+// The proof we ship for the edition actually in use, checkable by anyone with
+// no arguments and no re-anchoring. A stateless anchor is right for a caller
+// timestamping their own data, but the edition THIS service routes against
+// needs a proof that outlives the request that created it.
+// Verifying an OTS proof means talking to the calendar servers. On a public GET
+// that is two problems: ~1.5 s per request, and every visitor (or crawler)
+// making us hammer third-party infrastructure for an answer that is already
+// settled. Cached ONLY once Bitcoin-confirmed — a confirmed proof cannot become
+// unconfirmed, while a still-pending one legitimately needs re-asking, so
+// caching that would freeze it as pending forever.
+const proofVerdictCache = new Map<string, unknown>();
+
+qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const proof = AIRSPACE_PROOFS[resolved.id];
+  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", city: resolved.id });
+  const settled = proofVerdictCache.get(resolved.id);
+  if (settled) return res.json(settled);
+  const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
+  const verdict = await verifyAnchoredAirspace({ city: resolved.id, contentHash: proof.contentHash, otsProofB64: proof.otsProofB64 });
+  const payload = {
+    ...proof,
+    currentContentHash: current,
+    // Reported separately, because after a reissue the proof stays valid for the
+    // edition it covers while no longer describing what we serve — a historical
+    // record, not a broken proof.
+    coversCurrentEdition: current === proof.contentHash,
+    verification: verdict,
+  };
+  if (verdict.ots.status === "bitcoin-confirmed") proofVerdictCache.set(resolved.id, payload);
+  res.json(payload);
+});
+
+/**
+ * Register the signed ceiling layer in QRight — the platform's own registry.
+ *
+ * Until now "we routed against FAA edition 7/9/2026" lived inside QSkyway's own
+ * response. Putting it in QRight makes it a dated entry in the registry every
+ * other module already reads, which is the entire point of having one. Same
+ * bridge QReal opened for film provenance.
+ *
+ * Idempotent on contentHash rather than on a stored flag: the hash IS the
+ * identity of an edition, so re-registering the same rule set must find the
+ * existing object instead of minting a duplicate — including after a restart,
+ * a redeploy, or a call from a second instance.
+ */
+// Unauthenticated and it writes, so the same two questions as the anchor: what
+// can a stranger make us do repeatedly, and what work is avoidable. The row is
+// idempotent on content hash, so at most one exists per edition — but every call
+// still reached the database. Once this process has seen the edition registered,
+// answer from memory and touch nothing.
+const registerLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-airspace-register",
+  message: "Слишком много обращений к реестру — попробуйте через минуту.",
+});
+const registeredCache = new Map<string, { qrightObjectId: string; contentHash: string }>();
+
+qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, res: Response) => {
+  const resolved = resolveCity(req.body?.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const src = AIRSPACE[resolved.id];
+  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", city: resolved.id });
+  const known = registeredCache.get(resolved.id);
+  if (known && known.contentHash === airspaceContentHash(src)) {
+    return res.json({
+      ok: true, alreadyRegistered: true, qrightObjectId: known.qrightObjectId,
+      contentHash: known.contentHash, link: "/qright",
+      note: "Эта редакция уже зарегистрирована — ответ из памяти процесса, база не запрашивалась.",
+    });
+  }
+
+  const contentHash = airspaceContentHash(src);
+  const title = `${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
+  const description =
+    `Опубликованный слой ограничений высоты, использованный QSkyway для маршрутизации. ` +
+    `Орган: ${src.authority}. Режим: ${src.regime}. Ячеек: ${src.cells.length}. ` +
+    `Подписано Ed25519 платформой AEVION. Это регистрация ИСПОЛЬЗОВАННЫХ данных, не претензия на права регулятора.`;
+
+  try {
+    const pool = getPool();
+    await pool.query(`CREATE TABLE IF NOT EXISTS "QRightObject" (
+      "id" TEXT PRIMARY KEY, "title" TEXT NOT NULL, "description" TEXT NOT NULL,
+      "kind" TEXT NOT NULL, "contentHash" TEXT NOT NULL,
+      "ownerName" TEXT, "ownerEmail" TEXT, "ownerUserId" TEXT,
+      "country" TEXT, "city" TEXT, "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );`);
+    const existing = await pool.query(
+      `SELECT "id", "createdAt" FROM "QRightObject" WHERE "contentHash" = $1 AND "kind" = 'airspace-edition' LIMIT 1`,
+      [contentHash],
+    );
+    if (existing.rows.length) {
+      const row = existing.rows[0] as { id: string; createdAt: string };
+      registeredCache.set(resolved.id, { qrightObjectId: row.id, contentHash });
+      return res.json({
+        ok: true, alreadyRegistered: true, qrightObjectId: row.id, contentHash,
+        registeredAt: row.createdAt, link: "/qright",
+        note: "Эта редакция уже зарегистрирована — хэш совпадает, дубликат не создан.",
+      });
+    }
+    const objectId = "qs-" + crypto.randomUUID().slice(0, 12);
+    await pool.query(
+      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","country","city")
+       VALUES ($1,$2,$3,'airspace-edition',$4,$5,$6)`,
+      [objectId, title.slice(0, 200), description, contentHash, src.authority === "FAA" ? "US" : null, resolved.city.city.slice(0, 120)],
+    );
+    registeredCache.set(resolved.id, { qrightObjectId: objectId, contentHash });
+    res.status(201).json({
+      ok: true, alreadyRegistered: false, qrightObjectId: objectId, contentHash,
+      authority: src.authority, effective: src.effective, link: "/qright",
+      note: "Редакция ограничений внесена в реестр QRight как датированный объект.",
+    });
+  } catch (err) {
+    // QSkyway is deliberately DB-optional (see the slot market). The registry is
+    // not, so say so plainly instead of pretending the registration happened.
+    console.warn("[qskyway] airspace register failed:", err instanceof Error ? err.message : err);
+    res.status(503).json({
+      error: "реестр QRight недоступен — регистрация не выполнена",
+      contentHash,
+      note: "Подпись и якорь слоя не затронуты; повторите регистрацию, когда база доступна.",
+    });
+  }
 });
 
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {

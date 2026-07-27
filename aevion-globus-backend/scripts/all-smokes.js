@@ -49,6 +49,11 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
+  // document. Prod-safe — the slot-booking and QRight-registry write legs
+  // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
+  // surface without leaving smoke rows in a live registry.
+  { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).
@@ -64,6 +69,33 @@ const SMOKES = [
   { name: "qcore-fleet", script: "qcore-fleet-smoke.js", readOnly: true, offline: true },
   // Offline: exercises the QCoreAI "auto" router (classify → council vs single) via the stub.
   { name: "qcore-autoroute", script: "qcore-autoroute-smoke.js", readOnly: true, offline: true },
+  // Offline: проверяет, что health честно сообщает состояние хранилища событий
+  // (см. issue #960 — аналитика на файловой системе контейнера стирается
+  // каждым деплоем, и снаружи это неотличимо от «событий ещё не было»).
+  // Работает против dist/, а не против BASE, поэтому offline.
+  { name: "events-store", script: "events-store-status-smoke.js", readOnly: true, offline: true },
+  // Offline: health обязан честно называть режим подписи. Письма партнёрам
+  // утверждают ML-DSA-65/FIPS 204, а это включается ключом — и самый коварный
+  // случай, когда ключ задан, но битый, снаружи неотличим от рабочего.
+  { name: "qsign-mode", script: "qsign-mode-smoke.js", readOnly: true, offline: true },
+  // Offline: и сам real-путь обязан работать, а не только честно называться.
+  // qsign-mode выше проверяет РАПОРТ о режиме; эта — что при заданном ключе
+  // выходит настоящая ML-DSA-65 (6618 hex), которая ОТВЕРГАЕТ подмену тела,
+  // подмену подписи и нулевую подпись нужной длины. Без этих трёх случаев
+  // проверку прошла бы и заглушка `return true`.
+  { name: "qsign-real-signature", script: "qsign-real-signature-smoke.js", readOnly: true, offline: true },
+  // Сверяет ИНВАРИАНТ между ручками денег: выручка на витрине обязана равняться
+  // сумме балансов каналов минус свои проверочные покупки. 27.07 своих было две
+  // на $158.99 — 89% брутто, и /pitch показывал их инвестору как выручку.
+  // Фильтр в computeLiveTotals чинит это только для тех каналов, что были в коде
+  // в тот день; новый канал мимо фильтра сломает именно равенство, а не функцию.
+  { name: "revenue-internal", script: "revenue-internal-consistency-smoke.js", readOnly: true },
+  // Сверяет ПУБЛИЧНЫЕ УТВЕРЖДЕНИЯ на страницах с живым health. 26.07 нашлось,
+  // что /acquire, /partner и /investor обещают «ML-DSA-65 in prod / GA /
+  // Completed», пока health отвечал preview/seed_unset — и это прожило
+  // незамеченным, потому что сторож консистентности смотрит только письма,
+  // а страницы не смотрел никто. Не offline: нужен живой BASE.
+  { name: "claims-vs-runtime", script: "claims-vs-runtime-smoke.js", readOnly: true },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.

@@ -107,7 +107,36 @@ export type OrchestratorInput = {
    * crossed. When omitted or non-positive, no cap applies.
    */
   maxCostUsd?: number;
+  /**
+   * Optional premium-model quota gate (lib/qcoreQuota.ts, QCOREAI_PREMIUM_QUOTA).
+   * Called before EVERY agent dispatch with the resolved provider/model; a
+   * non-null result means the caller's monthly premium sub-cap is exhausted
+   * for that model. The orchestrator then yields a `premium_quota_exceeded`
+   * event and aborts that one call with a PremiumQuotaError — each strategy's
+   * existing failure fallback keeps whatever partial output earlier stages
+   * produced (same graceful-degradation philosophy as `budget_exceeded`).
+   * A gate that itself throws fails open (the call proceeds), mirroring
+   * qcoreQuota's metering-failure policy. When omitted, no check runs.
+   */
+  premiumGate?: (
+    provider: string,
+    model: string
+  ) => Promise<{ usedTokens: number; limitTokens: number } | null>;
 };
+
+/**
+ * Thrown by streamAgent() when `premiumGate` blocks a dispatch, AFTER the
+ * typed `premium_quota_exceeded` event has been yielded. The message is
+ * user-facing: strategies embed it into their normal `error` events.
+ */
+export class PremiumQuotaError extends Error {
+  constructor(provider: string, model: string) {
+    super(
+      `premium-model monthly quota exhausted — ${provider}/${model} is unavailable on this account until the quota resets or the plan is upgraded`
+    );
+    this.name = "PremiumQuotaError";
+  }
+}
 
 export type OrchestratorEvent =
   /**
@@ -186,19 +215,52 @@ export type OrchestratorEvent =
   /** Emitted exactly once when the running cost crosses `maxCostUsd`.
       Followed by a graceful `final` (last writer output) + `done`. */
   | { type: "budget_exceeded"; spentUsd: number; budgetUsd: number }
+  /** Emitted when `premiumGate` blocks a dispatch to a premium model. The
+      blocked call is aborted (PremiumQuotaError); the strategy's normal
+      failure fallback keeps any partial output from earlier stages. */
+  | {
+      type: "premium_quota_exceeded";
+      provider: string;
+      model: string;
+      usedTokens: number;
+      limitTokens: number;
+    }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number };
 
 /* ═══════════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════════ */
 
-/** Yield chunks for a single agent call and return the full accumulated text. */
+/**
+ * Yield chunks for a single agent call and return the full accumulated text.
+ * The single choke point every strategy dispatches through — which is why the
+ * premium-quota gate lives here and not in each strategy function.
+ */
 async function* streamAgent(
+  input: OrchestratorInput,
   agent: AgentConfig,
   stage: AgentStage,
   messages: ChatMessage[],
   instance?: string
 ): AsyncGenerator<OrchestratorEvent, string, unknown> {
+  if (input.premiumGate) {
+    let hit: { usedTokens: number; limitTokens: number } | null = null;
+    try {
+      hit = await input.premiumGate(agent.provider, agent.model);
+    } catch {
+      hit = null; // gate failure fails open — never blocks a run on a metering hiccup
+    }
+    if (hit) {
+      yield {
+        type: "premium_quota_exceeded",
+        provider: agent.provider,
+        model: agent.model,
+        usedTokens: hit.usedTokens,
+        limitTokens: hit.limitTokens,
+      };
+      throw new PremiumQuotaError(agent.provider, agent.model);
+    }
+  }
   const t0 = Date.now();
   yield {
     type: "agent_start",
@@ -370,7 +432,7 @@ async function* runSequential(
   ];
   let analystContent: string;
   try {
-    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
+    analystContent = yield* forwardTally(streamAgent(input, analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
@@ -396,7 +458,7 @@ async function* runSequential(
   ];
   let writerDraft: string;
   try {
-    writerDraft = yield* forwardTally(streamAgent(writer, "draft", writerMessages), tally);
+    writerDraft = yield* forwardTally(streamAgent(input, writer, "draft", writerMessages), tally);
   } catch (e) {
     yield { type: "error", role: "writer", message: `Writer failed: ${errMsg(e)}` };
     return;
@@ -415,7 +477,7 @@ async function* runSequential(
   ];
   let criticContent: string;
   try {
-    criticContent = yield* forwardTally(streamAgent(critic, "draft", criticMessages), tally);
+    criticContent = yield* forwardTally(streamAgent(input, critic, "draft", criticMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Critic failed: ${errMsg(e)}` };
     yield { type: "final", content: writerDraft };
@@ -448,7 +510,7 @@ async function* runSequential(
       { role: "user", content: reviseUser },
     ];
     try {
-      finalContent = yield* forwardTally(streamAgent(writer, "revision", reviseMessages), tally);
+      finalContent = yield* forwardTally(streamAgent(input, writer, "revision", reviseMessages), tally);
     } catch (e) {
       yield { type: "error", role: "writer", message: `Writer revision failed: ${errMsg(e)}` };
       finalContent = writerDraft;
@@ -494,7 +556,7 @@ async function* runParallel(
   ];
   let analystContent: string;
   try {
-    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
+    analystContent = yield* forwardTally(streamAgent(input, analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
@@ -524,8 +586,8 @@ async function* runParallel(
     { role: "user", content: writerUserPrompt },
   ];
 
-  const streamA = streamAgent(writerA, "draft", writerAMessages, "a");
-  const streamB = streamAgent(writerB, "draft", writerBMessages, "b");
+  const streamA = streamAgent(input, writerA, "draft", writerAMessages, "a");
+  const streamB = streamAgent(input, writerB, "draft", writerBMessages, "b");
 
   let draftA = "";
   let draftB = "";
@@ -552,7 +614,7 @@ async function* runParallel(
   ];
   let finalContent: string;
   try {
-    finalContent = yield* forwardTally(streamAgent(judge, "judge", judgeMessages), tally);
+    finalContent = yield* forwardTally(streamAgent(input, judge, "judge", judgeMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Judge failed: ${errMsg(e)}` };
     finalContent = draftA.length >= draftB.length ? draftA : draftB;
@@ -597,7 +659,7 @@ async function* runDebate(
   ];
   let analystContent: string;
   try {
-    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
+    analystContent = yield* forwardTally(streamAgent(input, analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
@@ -626,8 +688,8 @@ async function* runDebate(
     { role: "user", content: debateUser },
   ];
 
-  const streamPro = streamAgent(pro, "draft", proMessages, "pro");
-  const streamCon = streamAgent(con, "draft", conMessages, "con");
+  const streamPro = streamAgent(input, pro, "draft", proMessages, "pro");
+  const streamCon = streamAgent(input, con, "draft", conMessages, "con");
 
   let proArg = "";
   let conArg = "";
@@ -654,7 +716,7 @@ async function* runDebate(
   ];
   let finalContent: string;
   try {
-    finalContent = yield* forwardTally(streamAgent(moderator, "judge", modMessages), tally);
+    finalContent = yield* forwardTally(streamAgent(input, moderator, "judge", modMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Moderator failed: ${errMsg(e)}` };
     // Defensive: concat the arguments so the user at least sees both sides.
@@ -743,6 +805,7 @@ async function* runCouncil(
     const streams = members.map((m) =>
       safeMemberStream(
         streamAgent(
+          input,
           m,
           "draft",
           [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
@@ -778,6 +841,7 @@ async function* runCouncil(
     const streams = members.map((m) =>
       safeMemberStream(
         streamAgent(
+          input,
           m,
           "draft",
           [{ role: "system", content: AGGREGATOR_PROMPT }, ...history, { role: "user", content: aggUser }],
@@ -819,7 +883,7 @@ async function* runCouncil(
   ];
   let finalContent: string;
   try {
-    finalContent = yield* forwardTally(streamAgent(synthesizer, "judge", synthMessages), tally);
+    finalContent = yield* forwardTally(streamAgent(input, synthesizer, "judge", synthMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Synthesizer failed: ${errMsg(e)}` };
     // Fallback: hand back the longest crowd draft so the user isn't empty-handed.
@@ -1046,7 +1110,7 @@ async function* runSingle(
   ];
   let finalContent: string;
   try {
-    finalContent = yield* forwardTally(streamAgent(answerer, "draft", messages), tally);
+    finalContent = yield* forwardTally(streamAgent(input, answerer, "draft", messages), tally);
   } catch (e) {
     yield { type: "error", role: "writer", message: `Single-model answer failed: ${errMsg(e)}` };
     return;

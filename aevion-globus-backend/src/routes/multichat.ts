@@ -26,6 +26,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 import { buildDissentMap } from "../services/multichat/dissent";
 import { buildReceipt, signReceipt, verifyReceipt } from "../services/multichat/receipt";
 
@@ -543,9 +544,12 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
     const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    // Выгружается content — текст сообщений, который пишет пользователь. Гашение
+    // формул берём из общего lib/csv: значение с ведущим = + - @ Excel исполняет
+    // при открытии файла.
     const esc = (v: unknown): string => {
       if (v == null) return "";
-      const s = String(v);
+      const s = csvNeutralizeFormula(String(v));
       if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
         return `"${s.replace(/"/g, '""')}"`;
       }
@@ -880,6 +884,46 @@ multichatRouter.post("/presets/:id/launch", async (req, res) => {
 // to keep cost data private). Mounted as a separate sub-route to bypass the
 // router-wide requireAuth.
 export const multichatPublicRouter = Router();
+// POST /api/multichat/dissent/preview — ПУБЛИЧНЫЙ разбор готовых ответов.
+//
+// Карта разногласий считается из уже полученных ответов и не делает ни одного
+// вызова модели — значит её можно отдать бесплатно и без аккаунта. Это снимает
+// главное трение витрины: гость упирался в sign-in и не понимал, в чём суть
+// модуля. Теперь демо работает на НАСТОЯЩЕМ коде карты, а не на нарисованных
+// числах, которые разошлись бы с алгоритмом при первой же правке.
+//
+// Побочно это самостоятельная польза: чужие ответы можно принести свои и
+// получить разбор, ничего у нас не запуская.
+const dissentPreviewLimiter = rateLimit({
+  capacity: 30,
+  refillPerSec: 0.5,
+  keyFn: (req) => `mc-dissent:${req.ip || "anon"}`,
+});
+
+multichatPublicRouter.post("/dissent/preview", dissentPreviewLimiter, (req, res) => {
+  try {
+    const answers = Array.isArray(req.body?.answers) ? req.body.answers : null;
+    if (!answers || answers.length === 0) {
+      return res.status(400).json({ error: "answers_required", message: "Ожидается { answers: [{ agentId, ok, reply }] }." });
+    }
+    if (answers.length > 8) {
+      return res.status(400).json({ error: "too_many", message: "Не больше 8 ответов за раз." });
+    }
+    // Обрезаем вход: разбор бесплатный, но не должен превращаться в способ
+    // заставить сервер жевать мегабайты.
+    const trimmed = answers.slice(0, 8).map((a: any, i: number) => ({
+      agentId: typeof a?.agentId === "string" ? a.agentId.slice(0, 60) : `agent_${i + 1}`,
+      ok: a?.ok !== false,
+      reply: typeof a?.reply === "string" ? a.reply.slice(0, 20_000) : undefined,
+      error: typeof a?.error === "string" ? a.error.slice(0, 200) : undefined,
+    }));
+    res.json({ dissent: buildDissentMap(trimmed as never) });
+  } catch (err) {
+    captureMultichatError(err, { route: "dissent-preview" });
+    res.status(500).json({ error: "preview failed" });
+  }
+});
+
 // POST /api/multichat/receipt/verify — ПУБЛИЧНАЯ проверка чека.
 //
 // Живёт именно здесь, а не в основном роутере: тот монтируется через

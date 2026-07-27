@@ -44,6 +44,13 @@ export type Receipt = {
     numericConflicts: number;
     outlier: string | null;
     hedged: string[];
+    /** Список «что проверить» — вид, вес и ХЕШ текста, в том же порядке.
+     *
+     *  Это самая полезная часть ответа: по ней человек действует. Не покрыть её
+     *  чеком значило бы оставить единственное место, где совет можно подменить
+     *  незаметно. Хеш, а не текст, — по тому же правилу, что и ответы агентов:
+     *  чек подтверждает содержимое, но не тащит в себя переписку. */
+    checks: Array<{ kind: string; weight: number; textHash: string }>;
   };
   cost: { calls: number; answered: number; failed: number };
   canonicalization: string;
@@ -102,6 +109,11 @@ export function buildReceipt(input: {
       numericConflicts: input.dissent.numericConflicts.length,
       outlier: input.dissent.outlier?.agentId ?? null,
       hedged: input.dissent.hedges.map((h) => h.agentId),
+      checks: (input.dissent.checks || []).map((c) => ({
+        kind: c.kind,
+        weight: c.weight,
+        textHash: sha(c.text),
+      })),
     },
     cost: {
       calls: input.answers.length,

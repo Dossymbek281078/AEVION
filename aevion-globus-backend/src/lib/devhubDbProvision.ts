@@ -14,6 +14,13 @@
  * Set DEVHUB_DB_ADMIN_URL to enable. Until it is set, the capability reports
  * needs_token and the route refuses honestly — no pretending, per the
  * "deploy = uploaded + serves" convention in CLAUDE.md §10.
+ *
+ * ⚠️ БЭКАПОВ У ЭТОГО ИНСТАНСА НЕТ (issue #957). Пользовательские данные,
+ * созданные через provision, живут только на его томе: потеря тома = потеря
+ * всего. Поэтому UI после провижининга прямо говорит об этом человеку —
+ * см. приписку в frontend/src/app/devhub/[id]/page.tsx. Убрать её можно в тот
+ * день, когда бэкап заработает И восстановление будет отрепетировано:
+ * непроверенный бэкап — это вера, а не бэкап.
  */
 
 import crypto from "crypto";

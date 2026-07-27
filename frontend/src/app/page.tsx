@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
+import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import Globus3D from "./components/Globus3D";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
@@ -99,16 +100,17 @@ export default function HomePage() {
       setQrightError(null);
 
       try {
+        // Planet-данные идут через общий загрузчик: те же две ручки просит
+        // PlanetPulse, смонтированный на этой же странице (issue #1028).
         const [pr, qr, ps] = await Promise.all([
           fetch(apiUrl("/api/globus/projects")),
           fetch(apiUrl("/api/qright/objects")),
-          fetch(apiUrl("/api/planet/stats")).catch(() => null),
+          fetchPlanetStats(),
         ]);
 
         // Non-blocking: fetch recent artifacts
-        fetch(apiUrl("/api/planet/artifacts/recent?limit=5"))
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => { if (Array.isArray(j?.items)) setRecentArtifacts(j.items); })
+        fetchRecentArtifacts(5)
+          .then((items) => { if (items) setRecentArtifacts(items); })
           .catch(() => null);
 
         if (pr.ok) {
@@ -125,16 +127,13 @@ export default function HomePage() {
           setQRightObjects([]);
         }
 
-        if (ps && ps.ok) {
-          const pj = await ps.json().catch(() => null);
-          if (pj) {
-            setPlanetStats({
-              eligibleParticipants: pj.eligibleParticipants ?? 0,
-              distinctVotersAllTime: pj.distinctVotersAllTime ?? 0,
-              certifiedArtifactVersions: pj.certifiedArtifactVersions ?? 0,
-              submissions: pj.submissions ?? 0,
-            });
-          }
+        if (ps) {
+          setPlanetStats({
+            eligibleParticipants: (ps.eligibleParticipants as number) ?? 0,
+            distinctVotersAllTime: (ps.distinctVotersAllTime as number) ?? 0,
+            certifiedArtifactVersions: (ps.certifiedArtifactVersions as number) ?? 0,
+            submissions: (ps.submissions as number) ?? 0,
+          });
         }
       } catch {
         // Backend unavailable — show demo data for investor presentation

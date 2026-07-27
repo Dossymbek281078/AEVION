@@ -5,7 +5,7 @@ import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText } from "
 import { PAIRS } from "../scripts/qventure-hardcases";
 import fs from "node:fs";
 import path from "node:path";
-import { toUsd } from "../src/lib/metrics/currency";
+import { toUsd, UNITS_PER_USD, detectCurrency, type MoneyCurrency } from "../src/lib/metrics/currency";
 
 /**
  * The gate for the disclosed-figures corpus.
@@ -1772,5 +1772,49 @@ describe("the same currency reads the same in every sentence shape", () => {
 
   test("the dollar sign inside a foreign symbol does not win", () => {
     expect(rev("We reported revenue of R$ 100 million.")).not.toBe(100_000_000);
+  });
+});
+
+describe("every supported currency is wired into both tables", () => {
+  // Recognition is split across two tables — MARKERS says *what* a currency is,
+  // CURRENCY_PREFIX_PATTERN says *where* it may stand in front of a number. A
+  // currency present in one and missing from the other does not half-work: it
+  // gets worse than missing. "Rs." added to the prefix but not the detector let
+  // Zomato's Rs. 2,604.7 crore parse and then fall through to the plan currency
+  // — $26bn instead of ~$270M. A confident wrong number replaced an honest miss.
+  //
+  // The list is derived from the rate table rather than typed here, so adding a
+  // currency to UNITS_PER_USD without wiring both patterns turns this red on its
+  // own. That is the point: the last divergence was caught by a control case in
+  // an ad-hoc probe, which is luck, not a process.
+  const CODES = Object.keys(UNITS_PER_USD) as MoneyCurrency[];
+
+  test("the rate table is not empty and USD is in it", () => {
+    expect(CODES.length).toBeGreaterThan(5);
+    expect(CODES).toContain("USD" as MoneyCurrency);
+  });
+
+  test.each(CODES)("%s: the detector knows it", (code) => {
+    expect(detectCurrency(`${code} 100 million`)).toBe(code);
+  });
+
+  test.each(CODES)("%s: the prefix pattern lets its figure through", (code) => {
+    const v = parsePlanSignals(`We reported revenue of ${code} 100 million.`).revenueUsd;
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(0);
+  });
+
+  test.each(CODES)("%s: both sentence shapes give the same number", (code) => {
+    const prefixForm = parsePlanSignals(`We reported revenue of ${code} 100 million.`).revenueUsd;
+    const suffixForm = parsePlanSignals(`We recorded ${code} 100 million in revenue.`).revenueUsd;
+    expect(prefixForm).toBe(suffixForm);
+  });
+
+  test.each(CODES)("%s: the figure is converted, not passed through as dollars", (code) => {
+    const v = parsePlanSignals(`We reported revenue of ${code} 100 million.`).revenueUsd;
+    const expected = toUsd(100_000_000, code);
+    // Within a rounding step of the checked-in rate — this is the assertion that
+    // would have caught Rs. reading as dollars.
+    expect(Math.abs(v! - expected)).toBeLessThan(Math.max(1, expected * 1e-6));
   });
 });

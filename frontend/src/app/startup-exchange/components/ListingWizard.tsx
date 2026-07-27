@@ -312,7 +312,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
               disabled={description.trim().length > 0}
               title={description.trim().length > 0 ? "Поле не пустое — каркас не подставляется поверх текста" : "Пять строк, по которым читает и человек, и разбор"}
               style={{
-                background: "none", border: "none", padding: 0, fontSize: 11,
+                background: "none", border: "none", padding: "9px 2px", minHeight: 34, fontSize: 11,
                 // Неактивная кнопка всё равно должна читаться: #cbd5e1 на белом
                 // это 1.6:1, то есть надпись, которой на экране почти нет.
                 color: description.trim().length > 0 ? "#94a3b8" : "#0f172a",

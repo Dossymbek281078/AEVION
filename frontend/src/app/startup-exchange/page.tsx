@@ -207,7 +207,7 @@ export default function StartupExchangePage() {
               <button
                 type="button"
                 onClick={() => setShowWizard(false)}
-                style={{ background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+                style={{ background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer", fontWeight: 600, minHeight: 36, padding: "8px 6px" }}
               >
                 Свернуть
               </button>
@@ -330,7 +330,7 @@ export default function StartupExchangePage() {
               <a
                 href={rssHref}
                 title="Подписаться на этот срез заявок в читалке — без аккаунта и без писем"
-                style={{ fontSize: 12.5, fontWeight: 600, color: "#7c3aed", textDecoration: "none" }}
+                style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "6px 4px", fontSize: 12.5, fontWeight: 600, color: "#7c3aed", textDecoration: "none" }}
               >
                 RSS этого среза
               </a>

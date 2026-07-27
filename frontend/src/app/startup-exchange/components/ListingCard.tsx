@@ -67,7 +67,12 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
             {listing.metrics?.users ? <span>{listing.metrics.users} польз.</span> : null}
             {listing.metrics?.growthMomPct ? <span>рост {listing.metrics.growthMomPct}%/мес</span> : null}
             {listing.demo_url && (
-              <a href={listing.demo_url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}>
+              <a
+                href={listing.demo_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "6px 2px", color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
+              >
                 демо ↗
               </a>
             )}
@@ -116,7 +121,7 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
           </button>
           <Link
             href={`/startup-exchange/${listing.id}`}
-            style={{ display: "block", textAlign: "center", marginTop: 6, fontSize: 12, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 34, marginTop: 4, fontSize: 12, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
           >
             Разбор целиком
           </Link>

@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 410
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 448
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (410
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (448
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -609,13 +609,37 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    assumed: dropping `sgd` from the prefix pattern reddens exactly three tests,
    each naming the currency and which property broke.
 
+23. **The two-table shape is the defect, not the currency.** Limit 22 ends with
+   a guard over the currency pair. Looking for the same shape elsewhere found it
+   immediately, one file over: `MONEY_UNIT_PATTERN` says which tokens count as a
+   scale word, `MONEY_MULTIPLIER` says what each multiplies by, and a missing key
+   falls through to **1**. A unit in the pattern but not the table does not fail
+   — it silently scales by one. That is exactly how `crore` would have behaved
+   if only half of the fix in limit 22 had landed: the word consumed, the
+   magnitude dropped, the figure returned looking read.
+
+   Guarded the same way and for the same reason: both lists are read out of the
+   source rather than restated in the test, so a scale word added to either side
+   has to be added to both. Includes an assertion that the alternation is still
+   where the test looks for it — a guard that silently iterates an empty list
+   passes forever.
+
+   Proven by mutation: removing `crore` from the multiplier table reddens five
+   tests, each naming the token. The lookup is also guarded with
+   `hasOwnProperty`, because `MONEY_MULTIPLIER` is a plain object and a key like
+   `constructor` would multiply a number by a function.
+
+   Still unguarded, and worth a future pass: the metric noun lists
+   (`REV_NOUN`, `CUST_NOUN`, `GMV_NOUN`) pair with the fields they fill, and
+   nothing checks that a noun added to a list reaches a field.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 410):
+`tests/qventureDisclosedCorpus.test.ts`, 448):
 
 | Guard | Floor | Measured today |
 |---|---|---|

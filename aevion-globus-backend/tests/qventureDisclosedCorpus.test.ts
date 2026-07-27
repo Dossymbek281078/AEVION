@@ -6,6 +6,7 @@ import { PAIRS } from "../scripts/qventure-hardcases";
 import fs from "node:fs";
 import path from "node:path";
 import { toUsd, UNITS_PER_USD, detectCurrency, type MoneyCurrency } from "../src/lib/metrics/currency";
+import { MONEY_MULTIPLIER, MONEY_UNIT_PATTERN, parseMoney } from "../src/lib/metrics/periods";
 
 /**
  * The gate for the disclosed-figures corpus.
@@ -1816,5 +1817,47 @@ describe("every supported currency is wired into both tables", () => {
     // Within a rounding step of the checked-in rate — this is the assertion that
     // would have caught Rs. reading as dollars.
     expect(Math.abs(v! - expected)).toBeLessThan(Math.max(1, expected * 1e-6));
+  });
+});
+
+describe("every money unit the pattern accepts has a multiplier", () => {
+  // The same two-table shape as the currency defect, one file over.
+  // MONEY_UNIT_PATTERN says which tokens count as a scale word;
+  // MONEY_MULTIPLIER says what each multiplies by, and an absent key falls
+  // through to 1. A unit in the pattern but not the table therefore does not
+  // fail — it silently scales by one, which is how "crore" would have behaved
+  // if only half of today's fix had landed: the word consumed, the magnitude
+  // dropped, the figure returned looking read.
+  //
+  // Both lists are read out of the source rather than restated here, so the
+  // next scale word added to either side has to be added to both.
+  const alternation = MONEY_UNIT_PATTERN.match(/\(\?:\(([^)]*)\)/)?.[1];
+
+  test("the alternation is still where this test thinks it is", () => {
+    // If the pattern is refactored, this must fail loudly rather than pass by
+    // finding nothing and iterating an empty list.
+    expect(alternation).toBeTruthy();
+    expect(alternation!.split("|").length).toBeGreaterThan(8);
+  });
+
+  const tokens = (alternation ?? "").split("|").flatMap((t) =>
+    // "crores?" covers both "crore" and "crores"; both need a multiplier key.
+    t.endsWith("s?") ? [t.slice(0, -2), t.slice(0, -2) + "s"] : [t],
+  );
+
+  test.each(tokens)("%s multiplies by something other than one", (token) => {
+    expect(Object.prototype.hasOwnProperty.call(MONEY_MULTIPLIER, token)).toBe(true);
+    expect(MONEY_MULTIPLIER[token]).toBeGreaterThan(1);
+  });
+
+  test.each(Object.keys(MONEY_MULTIPLIER))("%s is reachable from the pattern", (key) => {
+    expect(tokens).toContain(key);
+  });
+
+  test("an unknown unit scales by one rather than throwing or returning a function", () => {
+    // MONEY_MULTIPLIER is a plain object; "constructor" would otherwise
+    // multiply a number by a function and yield NaN.
+    expect(parseMoney("5", "constructor")).toBe(5);
+    expect(parseMoney("5", "__proto__")).toBe(5);
   });
 });

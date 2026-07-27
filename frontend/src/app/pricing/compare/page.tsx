@@ -165,7 +165,11 @@ export default function PricingComparePage() {
             marginBottom: 16,
           }}
         >
-          {tp("compareFull.badge")}
+          {/* Числа берутся из того же /api/pricing, что и таблица ниже.
+              Раньше тут стояло «27 МОДУЛЕЙ × 4 ТАРИФА» строкой, при том что
+              фильтр рядом честно показывал живое data.modules.length —
+              два разных числа на одном экране. */}
+          {tp("compareFull.badge")} · {data.modules.length} × {tiers.length}
         </div>
         <h1
           style={{

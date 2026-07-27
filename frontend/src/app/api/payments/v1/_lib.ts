@@ -244,6 +244,47 @@ export function parseLimit(raw: string | null, def: number, max: number): number
   return Math.min(max, n);
 }
 
+/**
+ * Адрес вебхука, по которому СЕРВЕР потом сам пойдёт запросом
+ * (`_webhook_queue.ts` делает `fetch(att.webhook_url)`).
+ *
+ * Проверки `/^https?:\/\//` мало: она пропускает `http://127.0.0.1:4001/…`,
+ * `http://10.0.0.5/…`, `http://169.254.169.254/…` (метаданные облака) и
+ * `http://[::1]/…`. Это классический SSRF — чужой человек с тестовым ключом
+ * заставляет наш сервер стучаться во внутреннюю сеть и приносить ему ответ.
+ *
+ * @returns null, если адрес допустим; строку с причиной — если нет.
+ */
+export function webhookUrlError(value: unknown): string | null {
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) {
+    return "url must be an absolute http(s) URL.";
+  }
+  let host: string;
+  try {
+    host = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return "url must be a valid absolute http(s) URL.";
+  }
+  const isPrivate =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".local") ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^(fc|fd)[0-9a-f]{2}:/.test(host) ||
+    /^fe80:/.test(host);
+  if (isPrivate) {
+    return "url must point to a public host (private, loopback and link-local addresses are not allowed).";
+  }
+  return null;
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },

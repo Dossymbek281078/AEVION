@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
+  webhookUrlError,
   checkIdempotency,
   gateRequest,
   genId,
@@ -45,9 +46,8 @@ export async function POST(req: NextRequest) {
   const body = await readJson<{ url?: unknown; events?: unknown }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  if (typeof body.url !== "string" || !/^https?:\/\//i.test(body.url)) {
-    return withCors(badRequest("url must be an absolute http(s) URL."));
-  }
+  const urlError = webhookUrlError(body.url);
+  if (urlError) return withCors(badRequest(urlError));
   if (!Array.isArray(body.events) || body.events.length === 0) {
     return withCors(badRequest("events must be a non-empty array of event names."));
   }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   const id = genId("we");
   const wh: ApiWebhook = {
     id,
-    url: body.url,
+    url: body.url as string,
     events,
     secret: genSecret(),
     enabled: true,

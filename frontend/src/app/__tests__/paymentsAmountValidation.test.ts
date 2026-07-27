@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_AMOUNT_MINOR, parseAmountMinor, parseLimit } from "../api/payments/v1/_lib";
+import { MAX_AMOUNT_MINOR, parseAmountMinor, parseLimit, webhookUrlError } from "../api/payments/v1/_lib";
 
 /**
  * Публичный финтех-API AEVION принимал сумму по проверке
@@ -81,5 +81,44 @@ describe("limit из строки запроса: мусор — это ошиб
   it("дробное и бесконечность отбиваются", () => {
     expect(parseLimit("2.5", 25, 100)).toBe("limit must be a whole number.");
     expect(parseLimit("1e400", 25, 100)).toBe("limit must be a whole number.");
+  });
+});
+
+/**
+ * По адресу вебхука СЕРВЕР потом сам идёт запросом (`fetch(att.webhook_url)`),
+ * поэтому проверки «начинается на http(s)» мало: она пропускала `127.0.0.1`,
+ * `10.x`, `169.254.169.254` (метаданные облака) и `[::1]` — классический SSRF.
+ */
+describe("адрес вебхука: только публичный хост", () => {
+  it("нормальный внешний адрес проходит", () => {
+    expect(webhookUrlError("https://example.com/hook")).toBeNull();
+    expect(webhookUrlError("http://api.partner.io:8080/aevion")).toBeNull();
+  });
+
+  it("петля и приватные сети отбиваются", () => {
+    for (const u of [
+      "http://127.0.0.1:4001/x",
+      "http://localhost/x",
+      "http://10.0.0.5/x",
+      "http://192.168.1.1/x",
+      "http://172.16.0.9/x",
+      "http://169.254.169.254/latest/meta-data/",
+      "http://[::1]/x",
+      "http://svc.internal/x",
+    ]) {
+      expect(webhookUrlError(u), u).toBeTruthy();
+    }
+  });
+
+  it("похожий публичный адрес приватным НЕ считается", () => {
+    // 172.32.x вне диапазона 172.16–172.31, 10.x только как первый октет
+    expect(webhookUrlError("http://172.32.0.1/x")).toBeNull();
+    expect(webhookUrlError("http://110.0.0.5/x")).toBeNull();
+  });
+
+  it("не-строка и относительный адрес отбиваются", () => {
+    expect(webhookUrlError(null)).toBeTruthy();
+    expect(webhookUrlError("/hook")).toBeTruthy();
+    expect(webhookUrlError("ftp://example.com/x")).toBeTruthy();
   });
 });

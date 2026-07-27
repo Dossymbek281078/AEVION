@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 192
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 207
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -259,13 +259,35 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    adopted as a figure, including "we do not disclose gross margin; the industry
    average is 70%". Recorded as a verified negative.
 
+12. **Two more, from the same question.** Normalisation and the contradiction
+   check were the fourth and fifth shared rules put through it.
+
+   - **The top line stated monthly was annualized only when abbreviated.** "MRR
+     of $500k" became $6M; "monthly recurring revenue of $500k" and "revenue of
+     $500k per month" stayed $500k and were scored as ANNUAL revenue — the same
+     figure understated twelvefold, on the phrasing an early-stage plan is most
+     likely to use.
+   - **`detectRevenueConflict` guarded exactly one field.** A plan stating
+     "gross margin of 70%" and "gross margin of 40%", or two different churn
+     rates or customer counts, scored one of them and said nothing at all.
+     Revenue was never special; it was the field someone got to. The check now
+     covers margin, churn and the customer count, and deliberately does NOT fire
+     on figures the plan dates to different periods — the latest-period rule
+     resolves those, and flagging them would turn every ordinary year-on-year
+     disclosure into a warning.
+
+   That is five shared rules examined this way and three defects found, plus two
+   verified negatives (currency conversion, negation). The question is cheap and
+   keeps paying, which is itself the finding: rules get written where they were
+   needed and nobody goes back to check the other fields.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 192):
+`tests/qventureDisclosedCorpus.test.ts`, 207):
 
 | Guard | Floor | Measured today |
 |---|---|---|

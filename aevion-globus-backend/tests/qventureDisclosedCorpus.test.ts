@@ -773,3 +773,64 @@ describe("a rate's period and a duration's unit are read, not assumed", () => {
     expect(parsePlanSignals("We have not disclosed churn.").churnPct).toBeNull();
   });
 });
+
+describe("the top line stated monthly is annualized, however it is written", () => {
+  // "MRR of $500k" was recognised; "monthly recurring revenue of $500k" and
+  // "revenue of $500k per month" were not, and both parsed as $500k of ANNUAL
+  // revenue — the same figure understated twelvefold, on the phrasing an
+  // early-stage plan is most likely to use.
+  for (const text of [
+    "MRR of $500k.",
+    "$500k MRR.",
+    "Monthly recurring revenue of $500k.",
+    "Revenue of $500k per month.",
+    "Revenue of $500k/mo.",
+  ]) {
+    test(text, () => {
+      const s = parsePlanSignals(text);
+      expect(s.revenueUsd).toBe(6_000_000);
+      expect(s.revenueBasis).toBe("MRR");
+    });
+  }
+
+  test("annual phrasings are not multiplied", () => {
+    expect(parsePlanSignals("ARR of $6M.").revenueUsd).toBe(6_000_000);
+    expect(parsePlanSignals("Revenue of $6M.").revenueUsd).toBe(6_000_000);
+    expect(parsePlanSignals("Annual recurring revenue of $6M.").revenueUsd).toBe(6_000_000);
+  });
+
+  test("the annualization is stated to the reader", () => {
+    expect(parsePlanSignals("Monthly recurring revenue of $500k.").parseNotes.some((n) => /annualized/i.test(n))).toBe(true);
+  });
+});
+
+describe("a plan that disagrees with itself says so on every metric, not just revenue", () => {
+  // `detectRevenueConflict` guarded one field. Two different margins, churns or
+  // customer counts scored one of them and said nothing.
+  for (const [text, label] of [
+    ["Gross margin of 70%. Gross margin of 40%.", "gross margin"],
+    ["Churn of 2% monthly. Churn of 9% monthly.", "churn rate"],
+    ["12,000 customers. 4,000 customers.", "customer count"],
+    ["Revenue of $5M. Revenue of $12M.", "revenue"],
+  ] as const) {
+    test(label, () => {
+      expect(parsePlanSignals(text).conflicts.length).toBeGreaterThanOrEqual(1);
+    });
+  }
+
+  test("figures the plan dates to different periods are not a disagreement", () => {
+    // The latest-period rule already resolves those; flagging them would turn
+    // every ordinary year-on-year disclosure into a warning.
+    expect(parsePlanSignals("Gross margin of 70% in 2019. Gross margin of 74% in 2020.").conflicts.length).toBe(0);
+  });
+  test("the same figure rounded twice is not a disagreement", () => {
+    expect(parsePlanSignals("Gross margin of 70%. Gross margin of 72%.").conflicts.length).toBe(0);
+  });
+  test("a target is not a competing disclosure", () => {
+    expect(parsePlanSignals("We target 80% gross margin. Gross margin of 40% today.").conflicts.length).toBe(0);
+  });
+  test("a single figure raises nothing", () => {
+    expect(parsePlanSignals("Gross margin of 77%.").conflicts.length).toBe(0);
+    expect(parsePlanSignals("12,000 customers.").conflicts.length).toBe(0);
+  });
+});

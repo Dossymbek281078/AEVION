@@ -181,6 +181,7 @@ export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinanci
   }
   if (s.revenueUsd !== null) s.mentionsRevenueNoNumber = false;
 
+
   s.fieldsFound = countFields(s);
   return s;
 }
@@ -428,9 +429,21 @@ export function parsePlanSignals(text: string): PlanSignals {
     // A range already resolved this (at its low end) — the single-figure pattern
     // would otherwise overwrite it with whichever end of the range it matched.
     if (val && val > 0 && s.revenueUsd === null) {
-      const isMrr = /mrr/i.test(kindStr);
-      s.revenueUsd = isMrr ? val * 12 : val;
-      s.revenueBasis = isMrr ? "MRR" : /arr/i.test(kindStr) ? "ARR" : "revenue";
+      // The abbreviation was recognised and the words were not: "monthly
+      // recurring revenue of $500k" and "revenue of $500k per month" both
+      // parsed as $500k of ANNUAL revenue — the same figure understated
+      // twelvefold, on the phrasing an early-stage plan is most likely to use.
+      // The clause around the match decides, not the captured noun alone.
+      const at = arr.index ?? 0;
+      const around = t.slice(Math.max(0, at - 30), at + arr[0].length + 20);
+      const monthly = /\bmrr\b/i.test(kindStr)
+        || /\bmonthly\s+recurring\b/i.test(around)
+        || /\b(?:per|a)\s+month\b|\/\s*mo(?:nth)?\b/i.test(around);
+      s.revenueUsd = monthly ? val * 12 : val;
+      s.revenueBasis = monthly ? "MRR" : /arr/i.test(kindStr) ? "ARR" : "revenue";
+      if (monthly && !/\bmrr\b/i.test(kindStr)) {
+        s.parseNotes.push(`The top line was disclosed monthly (${fmtUsdShort(val)}); the score uses the annualized figure (${fmtUsdShort(val * 12)}).`);
+      }
     }
   }
   // A plan that says it has no revenue is not 'revenue mentioned without a
@@ -825,6 +838,11 @@ export function parsePlanSignals(text: string): PlanSignals {
 
   parseNonSaasEvidence(t, s);
 
+  // Contradictions on the metrics that never had the check revenue has had.
+  detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "customer count", String.raw`(?<![$€£₽₸¥])(\d[\d.,]*)\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:${"customers|users|subscribers|members|memberships|merchants|policyholders"})`, (m) => parseMoney(m[1], m[2]));
+
   s.fieldsFound = countFields(s);
 
   return s;
@@ -875,6 +893,41 @@ function detectRevenueRange(t: string, s: PlanSignals, planCurrency: MoneyCurren
  * nothing had been disclosed at all. Read at the low end (the diligence
  * convention) with the choice stated in the assumptions.
  */
+/**
+ * The same check, for the metrics that never had one.
+ *
+ * `detectRevenueConflict` has existed for a while and guards exactly one field.
+ * A plan stating "gross margin of 70%" and "gross margin of 40%", or two
+ * different customer counts, scored one of them and said nothing — the reader
+ * had no way to know the document disagreed with itself. Revenue was not
+ * special; it was just the field someone got to.
+ *
+ * Figures the plan dates to different years are NOT a contradiction: the
+ * latest-period rule already resolves those, and flagging them would turn every
+ * ordinary year-on-year disclosure into a warning.
+ */
+function detectMetricConflict(
+  t: string, s: PlanSignals, label: string, pattern: string,
+  read: (m: RegExpMatchArray) => number | null,
+): void {
+  const seen = new Map<number, number | null>(); // value → year
+  for (const m of t.matchAll(new RegExp(pattern, "gi"))) {
+    const at = m.index ?? 0;
+    if (forwardLooking(t, at)) continue;
+    const v = read(m as RegExpMatchArray);
+    if (v === null || !isFinite(v) || v <= 0) continue;
+    const rounded = Math.round(v * 100) / 100;
+    if (!seen.has(rounded)) seen.set(rounded, clauseYearAt(t, at, m[0].length));
+  }
+  if (seen.size < 2) return;
+  const years = [...seen.values()];
+  if (new Set(years.filter((y) => y !== null)).size > 1) return; // different periods, already resolved
+  const vals = [...seen.keys()].sort((a, b) => a - b);
+  const lo = vals[0], hi = vals[vals.length - 1];
+  if (hi / lo < 1.2) return; // the same figure rounded twice is not a disagreement
+  s.conflicts.push(`Plan states more than one ${label} (${vals.slice(0, 3).join(" and ")}) for the same period — reconcile before relying on either.`);
+}
+
 function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCurrency | null): void {
   if (s.revenueUsd === null) return;
   // Forward INTENT, not the noun. "in this plan:" must not silence the check —

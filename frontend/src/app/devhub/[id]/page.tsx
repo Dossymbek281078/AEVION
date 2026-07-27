@@ -1723,7 +1723,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/push`), { method: "POST" });
       const d = await r.json();
-      if (d.ok) {
+      if (d.ok && d.degraded) {
+        // Some files never reached the repo. Saying "pushed" here is how an
+        // incomplete repo passed for a complete one — and it is the repo a
+        // deploy would build from.
+        setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
+        showToast("Часть файлов не попала в репозиторий", "warning");
+        setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
+        await fetchGithubStatus();
+        await fetchGithubBranches();
+      } else if (d.ok) {
         setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();

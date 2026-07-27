@@ -39,6 +39,14 @@ const OVERPASS = [
 //   hs 1 = derived   — building:levels × METRES_PER_LEVEL
 //   hs 2 = guessed   — blind default, deliberately the WORST confidence class
 const METRES_PER_LEVEL = 3.2;
+// Parapet/roof allowance on top of the storey stack. NOT a guess: the committed
+// twins were built with it, and every source that describes them said they were
+// not. Matching each committed building to its OSM element by footprint centroid
+// and testing candidate formulas against all 159 pairs that carry
+// `building:levels` gives levels*3.2 + 1.6 → 159/159, levels*3.2 → 0/159,
+// levels*3.5 → 65/159. Dropping it would silently lower every derived obstacle
+// by ~1.6 m the moment a twin was regenerated.
+const PARAPET_M = 1.6;
 const DEFAULT_HEIGHT_M = 12;
 
 // Projection must match projector() in src/routes/qskyway.ts exactly, or routes
@@ -194,7 +202,7 @@ function heightOf(tags = {}) {
   const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
   if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
   const levels = parseMetres(tags["building:levels"]);
-  if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL), hs: 1 };
+  if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1 };
   return { h: DEFAULT_HEIGHT_M, hs: 2 };
 }
 
@@ -389,7 +397,7 @@ const data = {
     measuredPct: round1((100 * measured) / total),
     realPct: round1((100 * (measured + derived)) / total),
     source: "OpenStreetMap (Overpass, ODbL)",
-    note: "hs 0=измерено(height tag) 1=выведено(levels×3.2) 2=угадано(дефолт 12м). Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.",
+    note: "hs 0=измерено(height tag) 1=выведено(levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.",
   },
 };
 

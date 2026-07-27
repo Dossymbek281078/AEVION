@@ -81,7 +81,10 @@ const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
 // Phase 5: extra safety clearance by height-data confidence (metres), indexed by
-// height source: 0=measured (explicit height tag), 1=derived (levels×3.2),
+// height source: 0=measured (explicit height tag), 1=derived (levels×3.2 plus a
+// 1.6 m parapet allowance — verified against the committed Astana twin, 159/159
+// buildings, see scripts/fetch-city-twin.mjs; this comment said plain levels×3.2
+// until 2026-07-27, and so did the note shipped to users),
 // 2=guessed (blind 12m default). A guessed height can badly understate the real
 // building, so the corridor is flown higher until better data (LiDAR / CityGML
 // LOD2 / Google 3D Tiles) raises confidence and lets it descend.

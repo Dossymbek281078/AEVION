@@ -383,10 +383,17 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
 
    Not added to the corpus as a case, because a case whose stated figures the
    engine cannot recover would break the 100% coverage gate, and the fix is a
-   new signal rather than a wider regex — capacity deployed, with its unit
-   (MW/GWh), scored as delivered infrastructure rather than as a promise. That
-   is a design decision about what counts as evidence, and it belongs in
-   daylight rather than at the end of a session.
+   new signal rather than a wider regex — capacity deployed, scored as delivered
+   infrastructure rather than as a promise.
+
+   **A prototype was written and reverted, and it earned its keep:** a naive
+   unit list reads "16 GWh of installed capacity" as 16,000 MW. GWh is energy
+   and GW is power — Northvolt's own fixture in this corpus states its factory
+   in GWh — so the obvious pattern would have introduced a fresh silent
+   thousand-fold error while fixing a miss. The reader must reject energy units
+   explicitly, and the field must be rendered on both surfaces before the
+   visibility gate will accept it. Both are small; neither is a last-ten-minutes
+   change.
 
    Worth noting where this came from: two companies in a row had found nothing,
    which read as the readers catching up. Both were ordinary consumer and

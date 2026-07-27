@@ -369,3 +369,38 @@ describe("no parsed figure is invisible to the reader", () => {
     });
   }
 });
+
+describe("a disclosed decline is not growth", () => {
+  // The worst reading found in this window: "revenue declined 20% year over
+  // year" parsed as +20 and scored identically to 20% growth, because the bare
+  // "<n>% year-over-year" pattern never looked at the verb in front of it. Not
+  // a dropped figure — an inverted one, always in the company's favour.
+  for (const text of [
+    "Revenue declined 20% year over year.",
+    "Revenue of $10M, down 20% year over year.",
+    "Revenue decreased 20% year over year.",
+  ]) {
+    test(text, () => {
+      expect(parsePlanSignals(text).growthPct).toBe(-20);
+    });
+  }
+  test("growth still reads positive", () => {
+    expect(parsePlanSignals("Revenue of $10M, up 20% year over year.").growthPct).toBe(20);
+    expect(parsePlanSignals("Growing 97% year over year.").growthPct).toBe(97);
+  });
+
+  test("declining scores below saying nothing, which scores below growing", () => {
+    const base = { name: "g", sector: "saas", stage: "growth" as const, geography: "US", description: "Observability platform." };
+    const silent = analyze({ ...base, tractionNotes: "Revenue of $10M." });
+    const down = analyze({ ...base, tractionNotes: "Revenue of $10M, down 20% year over year." });
+    const up = analyze({ ...base, tractionNotes: "Revenue of $10M, up 20% year over year." });
+    expect(down.composite).toBeLessThan(silent.composite);
+    expect(silent.composite).toBeLessThan(up.composite);
+  });
+
+  test("the decline is named, not just charged", () => {
+    const base = { name: "g", sector: "saas", stage: "growth" as const, geography: "US", description: "Observability platform." };
+    const down = analyze({ ...base, tractionNotes: "Revenue of $10M, down 20% year over year." });
+    expect(down.factors.some((f) => /declining 20%/i.test(f.rationale))).toBe(true);
+  });
+});

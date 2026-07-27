@@ -319,7 +319,16 @@ export function parsePlanSignals(text: string): PlanSignals {
   // growth verb, the word "growth", or a growth-specific token (MoM/YoY/WoW).
   const PERIOD_WORD = String.raw`(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week|monthly|annually|annual|yearly|per month|per year|per week)`;
   const NOT_ANOTHER_METRIC = String.raw`(?!\s*(?:churn|attrition|retention|margin|discount|fee|interest|refund|conversion))`;
-  const growth = firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
+  // A stated DECLINE was read as growth of the same size: "revenue declined 20%
+  // year over year" set +20 and scored exactly like +20% growth, because the
+  // bare "<n>% year-over-year" alternative below matches without looking at the
+  // verb in front of it. That is not a dropped figure, it is an inverted one —
+  // the worst reading available, and always in the company's favour. Checked
+  // first so the decline wins the sentence.
+  const DOWN = String.raw`(?:declin(?:ing|ed|e|es)|down|fell|falling|decreas(?:ing|ed|e|es)|contract(?:ing|ed)|shrank|shrunk|dropped)`;
+  const decline = firstMatch(t, new RegExp(String.raw`${DOWN}\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"));
+  const growth = decline
+    || firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`, "i"));
   if (growth) {
@@ -327,7 +336,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     const value = groups.find((g) => /^\d/.test(g));
     const g = value !== undefined ? parseLocaleNumber(value) : NaN;
     if (isFinite(g)) {
-      s.growthPct = g;
+      s.growthPct = decline ? -g : g;
       const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
       s.growthPeriod = growthPeriodFromWords(p);
     }

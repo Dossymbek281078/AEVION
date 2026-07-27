@@ -277,8 +277,17 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
       : sig.growthPeriod === "YoY"
         ? (g >= 100 ? 12 : g >= 50 ? 8 : g >= 20 ? 3 : 1)
         : (g >= 50 ? 8 : g >= 20 ? 4 : 1);
+    // A disclosed DECLINE fell into the trailing `: 1` and earned a point, so a
+    // shrinking company scored above one that disclosed no growth figure at all.
+    // Charged like high churn instead, and named, because it is the plan's own
+    // statement about itself.
+    if (g < 0) {
+      s -= 6;
+      notes.push(`revenue declining ${Math.abs(g)}% ${sig.growthPeriod ?? ""}`.replace(/\s+/g, " ").trim());
+    } else {
     s += add;
     notes.push(`${g}% ${sig.growthPeriod ?? ""} growth`.replace(/\s+/g, " ").trim());
+    }
   }
   if (sig.customers !== null) {
     s += sig.customers >= 1000 ? 8 : sig.customers >= 100 ? 5 : sig.customers >= 10 ? 2 : 1;

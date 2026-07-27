@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { fideConfidenceInterval, nearestAnchor, RATING_ANCHORS } from "./ratingCalibration";
 import { useCcI18n } from "./i18n";
+import { gameResultOf } from "./gameResult";
 
 /**
  * Player Stats Dashboard — visual summary накопленной статистики игрока.
@@ -51,15 +52,13 @@ type Props = {
   brand: string;
 };
 
-function isWin(g: SavedGame): boolean {
-  // SavedGame.result строки типа "Checkmate! You win!", "AI wins", "You win", etc.
-  const r = g.result.toLowerCase();
-  return r.includes("you win") || r.includes("ai timed out") || r.includes("resigned!");
-}
-function isLoss(g: SavedGame): boolean {
-  const r = g.result.toLowerCase();
-  return r.includes("ai win") || r.includes("time out") && !r.includes("ai timed");
-}
+/* Пятая копия разбора исхода в модуле — сведена к общему классификатору. Прежняя
+   работала случайно: условие `includes("resigned!")` не совпадало ни с одной реальной
+   строкой, а isLoss держался на том, что "time out" не является подстрокой "timed out".
+   Из четырёх прежних копий три отвечали неверно (в mirrorMode — вообще ни на одной
+   строке), поэтому вопрос задаётся в одном месте. */
+function isWin(g: SavedGame): boolean { return gameResultOf(g.result || "") === "W"; }
+function isLoss(g: SavedGame): boolean { return gameResultOf(g.result || "") === "L"; }
 
 export default function PlayerStatsDashboard({
   open, onClose,

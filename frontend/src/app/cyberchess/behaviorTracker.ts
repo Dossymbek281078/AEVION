@@ -67,6 +67,10 @@ function looksLikeFen(text: string): boolean {
 
 type ListenerEntry = { target: Document | Window; event: string; fn: EventListener };
 
+/** Сколько после markSelfCopy() игнорировать события copy. Хватает на запись в
+ *  буфер и на ручное копирование из тоста, когда clipboard API недоступен. */
+const SELF_COPY_WINDOW_MS = 3000;
+
 export class BehaviorTracker {
   private events: BehaviorEvent[] = [];
   private moveIndex: number = 0;
@@ -77,6 +81,8 @@ export class BehaviorTracker {
   private baseInnerWidth: number = 0;
   private active: boolean = false;
   private listeners: ListenerEntry[] = [];
+  /** Момент, когда приложение само положило что-то в буфер обмена. */
+  private selfCopyAt: number = 0;
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -112,6 +118,10 @@ export class BehaviorTracker {
 
     const onCopy = (e: Event) => {
       if (!this.active) return;
+      // Копирование, которое инициировало само приложение (кнопка «поделиться
+      // позицией», клавиша S), приходит сюда таким же событием copy с FEN
+      // внутри — и до этой проверки засчитывалось как признак читерства.
+      if (Date.now() - this.selfCopyAt < SELF_COPY_WINDOW_MS) return;
       const text = (e as ClipboardEvent).clipboardData?.getData("text/plain") ?? "";
       if (looksLikeFen(text)) {
         this.push({ type: "fen_copy", moveIndex: this.moveIndex, timestamp: Date.now() });
@@ -153,6 +163,13 @@ export class BehaviorTracker {
   // ── Move lifecycle hooks (called from page.tsx) ────────────────────────
 
   /** Call when it becomes the player's turn (opponent just moved / game started). */
+  /** Вызывать перед тем, как приложение само пишет в буфер обмена (кнопка
+   *  «поделиться позицией», клавиша S). Событие copy в ближайшее окно после
+   *  этого не считается признаком: FEN туда положил продукт, не игрок. */
+  markSelfCopy(): void {
+    this.selfCopyAt = Date.now();
+  }
+
   onTurnStart(moveIndex: number): void {
     this.moveIndex = moveIndex;
     this.isPlayerTurn = true;

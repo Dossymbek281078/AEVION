@@ -260,7 +260,17 @@ export function estimateFideFromCPIWithFit(
 
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));
 
-  const stddev = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));
+  /* Ширина интервала складывается из двух независимых источников ошибки:
+     выборки (мало партий — мало данных о самом игроке) и самой модели.
+     Второй источник раньше игнорировался: интервал сужался до ±50 после ста
+     партий, тогда как замеренная на 3000 позициях ошибка подгонки —
+     rmseElo ≈ 328. Панель обещала точность в шесть раз выше, чем у модели,
+     и при этом сама же печатала настоящий ±RMSE строкой ниже.
+     Складываем в квадратуре: независимые погрешности так и складываются, и
+     ни одна из них не может сделать интервал уже другой. */
+  const samplingErr = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));
+  const modelErr = weights.fitStats?.rmseElo ?? 0;
+  const stddev = Math.round(Math.sqrt(samplingErr * samplingErr + modelErr * modelErr));
 
   const status = (val: number, mid: number, good: number, inverted = false): "good" | "mid" | "bad" => {
     if (inverted) {

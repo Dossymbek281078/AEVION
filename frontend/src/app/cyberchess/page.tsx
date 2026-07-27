@@ -7,10 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
-import AiCoach from "./AiCoach";
-import CoachKnowledge from "./CoachKnowledgeModal";
 import { COACH_KNOWLEDGE } from "./coachKnowledge";
-import CoachLessonsModal from "./CoachLessonsModal";
 import { LESSONS, loadLessons, isLessonComplete, type Lesson } from "./coachLessons";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
@@ -61,7 +58,6 @@ import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import StreamMenu from "./StreamMenu";
-import StreamSourceModal from "./StreamSourceModal";
 import PresenceIndicator from "./PresenceIndicator";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
@@ -75,26 +71,38 @@ import { createTierPaymentRequest, pollPaymentRequest, type ChessyTier } from ".
 import MultiPanel from "./MultiPanel";
 import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
-import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
-import MusicPlayer from "./MusicPlayer";
 import AevionMiniHub from "./AevionMiniHub";
+import dynamic from "next/dynamic";
 import LocaleSwitcher from "./LocaleSwitcher";
+
+/* Панели, которые открываются по действию игрока, а не при загрузке доски.
+   Статические импорты тянули их в чанк страницы: 4.0 МБ JS на первый заход,
+   из них большая часть — экраны, которые игрок может не открыть ни разу.
+   `ssr:false` здесь безопасен: всё это рисуется внутри модалок и на сервере
+   всё равно не рендерится. */
+const AiCoach = dynamic(() => import("./AiCoach"), { ssr: false });
+const CoachKnowledge = dynamic(() => import("./CoachKnowledgeModal"), { ssr: false });
+const CoachLessonsModal = dynamic(() => import("./CoachLessonsModal"), { ssr: false });
+const PlayerStatsDashboard = dynamic(() => import("./PlayerStatsDashboard"), { ssr: false });
+const AntiCheatPanel = dynamic(() => import("./AntiCheatPanel"), { ssr: false });
+const FideCalibrationPanel = dynamic(() => import("./FideCalibrationPanel"), { ssr: false });
+const ClockPressureDrill = dynamic(() => import("./ClockPressureDrill"), { ssr: false });
+const AchievementPanel = dynamic(() => import("./AchievementPanel"), { ssr: false });
+const AvatarPicker = dynamic(() => import("./AvatarPicker"), { ssr: false });
+const SpectatorChat = dynamic(() => import("./SpectatorChat"), { ssr: false });
+const VoiceCoach = dynamic(() => import("./VoiceCoach"), { ssr: false });
+const AiPersonalityPicker = dynamic(() => import("./AiPersonalityPicker"), { ssr: false });
+const StreamSourceModal = dynamic(() => import("./StreamSourceModal"), { ssr: false });
+const MusicPlayer = dynamic(() => import("./MusicPlayer"), { ssr: false });
+const WorkspaceMediaPane = dynamic(() => import("./WorkspaceMediaPane"), { ssr: false });
+
 import { ENDGAMES, type Endgame } from "./endgames";
-import VoiceCoach from "./VoiceCoach";
 import TurnClock from "./TurnClock";
-import AchievementPanel from "./AchievementPanel";
 import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
-import PlayerStatsDashboard from "./PlayerStatsDashboard";
-import AvatarPicker from "./AvatarPicker";
-import FideCalibrationPanel from "./FideCalibrationPanel";
-import ClockPressureDrill from "./ClockPressureDrill";
 import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage, type SavedGameForCPI } from "./ratingCalibration";
-import AntiCheatPanel from "./AntiCheatPanel";
 import { analyzeGameForCheating, buildReport, updateSessionBaseline, type AntiCheatResult } from "./anticheat";
 import { BehaviorTracker } from "./behaviorTracker";
-import AiPersonalityPicker from "./AiPersonalityPicker";
-import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import QRCode from "qrcode";
@@ -3609,6 +3617,9 @@ export default function CyberChessPage(){
         e.preventDefault();
         try{
           const fen=game.fen();
+          // Позицию в буфер кладёт продукт, а не игрок — иначе детектор
+          // поведения засчитает это себе как признак работы с движком.
+          behaviorRef.current.markSelfCopy();
           if(bookmarks.some(b=>b.fen===fen)){
             showToast("⭐ Эта позиция уже в закладках","info");
           }else{
@@ -13732,6 +13743,7 @@ ${question.trim()}`;
               <textarea readOnly value={fenPreview} rows={3}
                 style={{width:"100%",padding:6,borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontFamily:"ui-monospace, monospace",fontSize:11,resize:"none",background:CC.surface2,color:CC.text}}/>
               <Btn size="sm" variant="secondary" full onClick={()=>{
+                behaviorRef.current.markSelfCopy();
                 navigator.clipboard?.writeText(fenPreview);
                 showToast("FEN скопирован","success");
               }}>📋 Копировать FEN</Btn>

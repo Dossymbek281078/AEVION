@@ -523,8 +523,12 @@ export function analyzeGameForCheating(
 
   let verdict: AntiCheatResult["verdict"] = "clean";
   if (fenCopyDetected) {
-    // FEN clipboard copy is near-definitive; flag immediately
-    verdict = "flagged";
+    /* Копирование FEN — сильный признак, но одного его мало, пока о партиях
+       игрока почти ничего не известно: приложение само показывает FEN и просит
+       скопировать его руками, когда clipboard API недоступен. Пока выборки не
+       хватает, ставим «suspicious» — сигнал сохраняется, обвинение с первой
+       партии не выносится. */
+    verdict = confidence === "insufficient" ? "suspicious" : "flagged";
   } else if (confidence !== "insufficient") {
     if (suspicionScore >= 65 && flaggedSignals >= 3) verdict = "flagged";
     else if (suspicionScore >= 50 && flaggedSignals >= 2) verdict = "suspicious";

@@ -86,21 +86,30 @@ describe("analyzeGameForCheating", () => {
     expect(r.confidence).toBe("insufficient");
   });
 
-  /* The one bypass in the module: a FEN copy flags immediately, with no sample-size
-     gate and no second signal — unlike every other route to a verdict. Pinned here
-     because it is a deliberate policy choice, and a surprising one: the app itself
-     displays FENs, and on a clipboard failure it asks the player to copy one by hand. */
-  it("flags a FEN copy on its own, bypassing every other guard", () => {
+  /* A FEN copy is the one signal strong enough to reach a verdict on its own. It used
+     to reach "flagged" with no sample-size gate at all — which the app then earned on
+     its own behalf: it offers a «Копировать FEN» button and, when the clipboard API
+     fails, prints the FEN and asks the player to copy it by hand. On a three-move game
+     the signal is kept but held at "suspicious" until there is something to judge. */
+  it("holds a lone FEN copy at suspicion while the game is too short to judge", () => {
     const r = analyzeGameForCheating(
       playerMoves(3, 4, 120), // too short to judge, and played badly
       "w", 1500,
       { ...calmBehaviour, fenCopyCount: 1, fenCopyDetected: true },
     );
-    expect(r.verdict).toBe("flagged");
-    expect(r.fenCopyDetected).toBe(true);
-    // Still honest about how little it had to go on — this is what stops the
-    // report being POSTed to the backend for such a game.
     expect(r.confidence).toBe("insufficient");
+    expect(r.verdict).toBe("suspicious");
+    expect(r.fenCopyDetected).toBe(true);
+  });
+
+  it("flags a FEN copy once the game gives enough to judge", () => {
+    const r = analyzeGameForCheating(
+      playerMoves(40, 1, 20),
+      "w", 1500,
+      { ...calmBehaviour, fenCopyCount: 1, fenCopyDetected: true },
+    );
+    expect(r.confidence).not.toBe("insufficient");
+    expect(r.verdict).toBe("flagged");
   });
 
   it("survives an empty game without throwing", () => {

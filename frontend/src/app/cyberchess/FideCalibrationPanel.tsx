@@ -334,7 +334,9 @@ export default function FideCalibrationPanel({
             </div>
             {!dirty && (
               <div style={{ fontSize: 11, color: textDim, marginTop: 8 }}>
-                Интервал сузится после ~100 партий до ±50
+                {weights?.fitStats
+                  ? `Интервал сужается с числом партий, но не уже ±${Math.round(weights.fitStats.rmseElo)} — это собственная ошибка модели`
+                  : "Интервал сужается по мере накопления партий"}
               </div>
             )}
           </div>

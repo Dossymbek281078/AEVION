@@ -2637,10 +2637,27 @@ export default function CyberChessPage(){
     if(PUZZLES.length===0)return;
     const tk=todayKey();const saved=ldDaily();
     if(saved&&saved.date===tk){sDailyState(saved);return}
-    const pz=PUZZLES[pickDailyIdx(PUZZLES.length)];
-    if(!pz)return;
-    const next:DailyState={v:2,date:tk,pz,solved:false};
-    svDaily(next);sDailyState(next);
+    let cancelled=false;
+    (async()=>{
+      /* Сначала спрашиваем бэкенд: у него пул целиком, и он выбирает задачу, не зависящую
+         от порядка, — одну и ту же для всех. Локальный выбор остаётся запасным: он берёт
+         задачу из СВОЕЙ выборки, поэтому у разных игроков она разная, но хотя бы
+         постоянна в течение суток (пазл сохраняется целиком). */
+      let pz:Puzzle|null=null;
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles/daily");
+        if(r.ok){const d=await r.json();if(d&&d.ok&&d.puzzle?.fen)pz=ingestPuzzles([d.puzzle as Puzzle])[0];}
+      }catch{}
+      if(cancelled)return;
+      if(!pz)pz=PUZZLES[pickDailyIdx(PUZZLES.length)]||null;
+      if(!pz)return;
+      // пока ходили в сеть, состояние могло появиться в другом эффекте — не перетираем
+      const again=ldDaily();
+      if(again&&again.date===tk){sDailyState(again);return}
+      const next:DailyState={v:2,date:tk,pz,solved:false};
+      svDaily(next);sDailyState(next);
+    })();
+    return()=>{cancelled=true};
   },[PUZZLES.length]);
 
   // Watch-URL: on mount, if ?pgn=... is present, load the PGN into Analysis tab read-only.

@@ -2049,3 +2049,38 @@ describe("phrasings taken from live filings, not invented", () => {
     expect(p("Kaspi Pay Super App had approximately 764,000 Active Merchants.").customers).toBe(764_000);
   });
 });
+
+describe("one reader for a percentage band", () => {
+  // Gross margin, retention and take rate each had their own copy of "read the
+  // band, validate it, take the low end, say so". Three copies of one decision
+  // is how the other defects on this branch started. Now one function, with the
+  // ceiling as a parameter because that difference is real.
+  const notes = (t: string) => parsePlanSignals(t).parseNotes.join(" ");
+
+  test("each metric still reads its own band at the low end", () => {
+    expect(parsePlanSignals("Gross margin of 60-70%.").grossMarginPct).toBe(60);
+    expect(parsePlanSignals("Net revenue retention of 110-140%.").retentionPct).toBe(110);
+    expect(parsePlanSignals("Take rate of 12-18%.").takeRatePct).toBe(12);
+  });
+
+  test("and still says which end it used", () => {
+    expect(notes("Gross margin of 60-70%.")).toMatch(/gross margin was disclosed as a range/i);
+    expect(notes("Take rate of 12-18%.")).toMatch(/take rate was disclosed as a range/i);
+  });
+
+  test("the retention ceiling is not the gross-margin ceiling", () => {
+    // Net revenue retention above 100% is the point of the metric; a gross
+    // margin above 100% is a parse error. Sharing the reader must not share
+    // the bound.
+    expect(parsePlanSignals("Net revenue retention of 110-140%.").retentionPct).toBe(110);
+    expect(parsePlanSignals("Gross margin of 110-140%.").grossMarginPct).toBeNull();
+  });
+
+  test("a band starting at zero is refused", () => {
+    // Found by mutating the guard from `low <= 0` to `low < 0` and watching
+    // nothing go red. A band whose floor is zero states no floor at all, and
+    // scoring it as a disclosed 0% would credit a number the plan did not give.
+    expect(parsePlanSignals("Gross margin of 0-70%.").grossMarginPct).toBeNull();
+    expect(parsePlanSignals("Take rate of 0-18%.").takeRatePct).toBeNull();
+  });
+});

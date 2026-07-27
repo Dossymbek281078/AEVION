@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 510
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 524
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (510
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (524
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -737,7 +737,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    number no plan means, so a plausibility flag on unmarked figures of that
    magnitude is a candidate, not a fix made in passing.
 
-27. **Open: hunting the duplicates instead of stumbling on them.** Three defects
+27. **Closed: hunting the duplicates instead of stumbling on them.** Three defects
    today came from one concept living in two places. All three were found by
    accident, so the obvious next step was to search rather than wait.
 
@@ -754,12 +754,23 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    protection it does not provide is worse than no test: it is the defect this
    whole branch is about, one level up.
 
-   What the scan did establish, run by hand: the parser has exactly **one**
-   structural repeat left — "read a percentage range at its low end, validate
-   it, set the field, state the choice", written once for gross margin and again
-   for take rate. Both copies are correct today, which is the state the other
-   three were in before one of them changed. Extracting a shared helper is the
-   fix; it is a refactor with 1,954 tests behind it, not a five-minute change.
+   What the scan established, run by hand: exactly one structural repeat was
+   left — "read a percentage range at its low end, validate it, set the field,
+   state the choice". Reading the surrounding code showed the scan had
+   understated it: the same idea appears at **fourteen** sites, and only two
+   were textually identical enough for a line scan to pair them. Three of the
+   fourteen shared both policy and validation (gross margin, retention, take
+   rate) and are now one function, `percentBandLowEnd`, with the ceiling as a
+   parameter because that difference is real — net revenue retention above 100%
+   is the point of the metric, a gross margin above 100% is a parse error. The
+   scan now reports zero. The other eleven differ in policy (conservative end
+   rather than low end, money rather than percent) and were left alone.
+
+   Extracting it paid immediately, in a way worth recording: mutating the guard
+   from `low <= 0` to `low < 0` reddened **nothing**, so a band stating a floor
+   of zero — which states no floor at all — would have been scored as a
+   disclosed 0%. One reader meant one place to notice that, and one test to
+   close it.
 
    The honest version of the guard needs a real parser rather than a regex over
    lines — that, or a keyword set that does not collide with ordinary variable
@@ -789,7 +800,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 510):
+`tests/qventureDisclosedCorpus.test.ts`, 524):
 
 | Guard | Floor | Measured today |
 |---|---|---|

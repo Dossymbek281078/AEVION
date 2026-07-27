@@ -551,6 +551,35 @@ export function maskDates(t: string): string {
   return t.replace(DATE_FORMS, (d) => " ".repeat(d.length));
 }
 
+/**
+ * A percentage stated as a band, read at its low end.
+ *
+ * Written out three times before this — gross margin, retention, take rate —
+ * differing only in the ceiling each accepts and the name it goes under. Three
+ * copies of one decision is how this parser's other defects started: change the
+ * validation in one and the other two keep the old behaviour, silently.
+ *
+ * The ceiling stays a parameter because it is a real difference, not an
+ * accident: net revenue retention legitimately exceeds 100%, a gross margin
+ * does not.
+ */
+function percentBandLowEnd(
+  m: RegExpMatchArray | null,
+  s: PlanSignals,
+  label: string,
+  max: number,
+): number | null {
+  if (!m) return null;
+  const a = parseLocaleNumber(m[1]);
+  const b = parseLocaleNumber(m[2]);
+  if (!isFinite(a) || !isFinite(b)) return null;
+  const low = Math.min(a, b);
+  const high = Math.max(a, b);
+  if (low <= 0 || high > max) return null;
+  s.parseNotes.push(`${label} was disclosed as a range (${low}–${high}%); the score uses the low end.`);
+  return low;
+}
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
@@ -781,14 +810,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   // committed to. The choice is stated in the assumptions, not assumed.
   const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*gross\s*margin`, "i"));
-  if (gmRange) {
-    const a = parseLocaleNumber(gmRange[1]);
-    const b = parseLocaleNumber(gmRange[2]);
-    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 100) {
-      s.grossMarginPct = Math.min(a, b);
-      s.parseNotes.push(`Gross margin was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
-    }
-  }
+  const gmBand = percentBandLowEnd(gmRange, s, "Gross margin", 100);
+  if (gmBand !== null) s.grossMarginPct = gmBand;
   // A NEGATIVE gross margin is the strongest thing a plan can disclose against
   // itself — it says every unit sold loses money. Until this read the sign, all
   // four ways of writing it ("-45%", "(45)%", "negative 45%", "minus 45%") were
@@ -972,14 +995,9 @@ export function parsePlanSignals(text: string): PlanSignals {
   // disclosure was dropped, so a plan stating 110–130% scored as if it had said
   // nothing about retention at all.
   const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
-  if (retRange) {
-    const a = parseLocaleNumber(retRange[1]);
-    const b = parseLocaleNumber(retRange[2]);
-    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 500) {
-      s.retentionPct = Math.min(a, b);
-      s.parseNotes.push(`Retention was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
-    }
-  }
+  // 500, not 100: net revenue retention above 100% is the point of the metric.
+  const retBand = percentBandLowEnd(retRange, s, "Retention", 500);
+  if (retBand !== null) s.retentionPct = retBand;
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
@@ -1230,14 +1248,8 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
 
   const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
   const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
-  if (takeRange) {
-    const a = parseLocaleNumber(takeRange[1]);
-    const b = parseLocaleNumber(takeRange[2]);
-    if (isFinite(a) && isFinite(b) && Math.min(a, b) > 0 && Math.max(a, b) <= 100) {
-      s.takeRatePct = Math.min(a, b);
-      s.parseNotes.push(`Take rate was disclosed as a range (${Math.min(a, b)}–${Math.max(a, b)}%); the score uses the low end.`);
-    }
-  }
+  const takeBand = percentBandLowEnd(takeRange, s, "Take rate", 100);
+  if (takeBand !== null) s.takeRatePct = takeBand;
   const take = s.takeRatePct !== null ? null
     : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));

@@ -10,10 +10,19 @@
    is the point of a puzzle trainer. It just does not pay twice, which is how
    lichess and chess.com treat it too.
 
-   Puzzle records carry no id — `fen` is the stable key. Storing ~10,800 full
-   FENs would be ~650KB of localStorage; a 32-bit hash brings that to ~90KB.
-   Collisions cost a player one duplicate reward, which is the harmless
-   direction to fail in. */
+   Puzzle records carry no id — `fen` is the stable key. Storing full FENs would
+   be ~650KB of localStorage; a 32-bit hash brings that to ~90KB.
+
+   Направление отказа при коллизии — НЕ лишняя награда, как утверждалось здесь
+   раньше, а пропущенная: claimReward возвращает false для ключа, который уже в
+   наборе, поэтому чужой пазл с тем же хешем будет сочтён решённым и не оплачен.
+
+   Насколько это вероятно, считается по числу записей У ИГРОКА, а не по размеру
+   корпуса: набор ограничен MAX_ENTRIES. Для 20 000 записей ожидаемое число
+   коллизий 20000² / (2·2³²) ≈ 0.05, то есть примерно 5% шансов на ОДНУ за всю
+   историю игрока — цена в один невыплаченный пазл. Пул при этом может расти
+   сколько угодно (в проде он уже 500 000): на вероятность влияет только то,
+   сколько игрок реально решил. */
 
 const KEY = "aevion_pz_solved_v1";
 /** Keep the store bounded even if the corpus grows well past today's 10,818. */

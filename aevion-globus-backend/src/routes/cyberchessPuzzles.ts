@@ -39,6 +39,12 @@ const POOL_URL =
   "https://aevion.vercel.app/puzzles.json";
 
 let POOL: Puzzle[] = [];
+/** Откуда пул взят НА САМОМ ДЕЛЕ. Раньше /meta печатал `POOL_PATH || POOL_URL`
+ *  независимо от фактического источника, и ответ выглядел противоречиво:
+ *  `poolSize: 500000` при `source` = публичный puzzles.json, в котором 10 818
+ *  записей. На этом легко сделать неверный вывод в любую сторону — «врёт
+ *  счётчик» или «врёт файл», — хотя врал именно ярлык источника. */
+let POOL_SOURCE = "not loaded";
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
 let loadPromise: Promise<void> | null = null;
@@ -48,6 +54,7 @@ function ingest(arr: unknown, source: string): void {
     console.warn(`[cyberchess-puzzles] ${source}: unexpected shape — serving empty`);
     return;
   }
+  POOL_SOURCE = source;
   POOL = (arr as Puzzle[]).filter(
     (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
   );
@@ -206,7 +213,7 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
 // GET /meta — pool health/size (cheap smoke).
 router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
   await ensureLoaded();
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH || POOL_URL });
+  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_SOURCE });
 });
 
 /**

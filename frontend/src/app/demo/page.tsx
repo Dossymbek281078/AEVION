@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MODULE_NODES } from "@/data/pitchFacts";
+import { LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -10,7 +10,7 @@ import {
   moduleBenefits,
   planetLayer,
 } from "@/data/demoNarrative";
-import { ecosystemNodes, launchedModules, networkForces } from "@/data/pitchModel";
+import { launchedModules, networkForces } from "@/data/pitchModel";
 import { apiUrl } from "@/lib/apiBase";
 
 type ApiProject = {
@@ -206,7 +206,6 @@ export default function DemoShowcasePage() {
   }, []);
 
   const liveMvpCount = launchedModules.filter((m) => m.stage === "live").length;
-  const emergingCount = ecosystemNodes.length;
 
   const flywheelCards = useMemo(
     () => FLYWHEEL_PICKS.map((code) => networkForces.find((f) => f.code === code)).filter((x): x is (typeof networkForces)[number] => Boolean(x)),
@@ -504,9 +503,9 @@ export default function DemoShowcasePage() {
             fontWeight: 700,
           }}
         >
-          <span><strong style={{ color: "#34d399" }}>{liveMvpCount} live MVPs</strong></span>
+          <span><strong style={{ color: "#34d399" }}>{liveMvpCount} deep MVPs</strong></span>
           <span style={{ color: "#475569" }}>·</span>
-          <span><strong style={{ color: "#7dd3fc" }}>{emergingCount} emerging nodes</strong></span>
+          <span><strong style={{ color: "#7dd3fc" }}>{MODULE_NODES} modules · {LIVE_MODULES} deployed</strong></span>
           <span style={{ color: "#475569" }}>·</span>
           <span><strong style={{ color: "#fbbf24" }}>$340B</strong> addressable market</span>
         </div>

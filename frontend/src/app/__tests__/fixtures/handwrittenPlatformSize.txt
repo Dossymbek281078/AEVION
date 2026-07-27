@@ -1,0 +1,12 @@
+Fixture for platformSizeSource.guard.test.ts — do not "fix" these lines.
+The first two are the exact code that shipped on /pitch and /demo while the
+registry held 41 modules and 36 live. The lines below them must NOT be
+reported: they use the registry constants, or they talk about our own depth
+assessment rather than the size of the platform.
+
+<HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
+<span><strong>{ecosystemNodes.length} emerging nodes</strong></span>
+
+<HeroStat value={`${liveCount}`} unit="deep MVPs" hint={`of ${MODULE_NODES} modules · ${LIVE_MODULES} deployed`} />
+const liveCount = launchedModules.filter((m) => m.stage === "live").length;
+eyebrow={`${ecosystemNodes.length} more nodes on the roadmap`}

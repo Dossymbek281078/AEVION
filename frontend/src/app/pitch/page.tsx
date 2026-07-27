@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { MODULE_NODES } from "@/data/pitchFacts";
+import { LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
 import {
   ask,
   billionDefense,
@@ -212,8 +212,12 @@ export default function PitchPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // liveCount — сколько модулей мы сами считаем ГЛУБОКИМИ: есть рабочий
+  // сценарий, а не витрина. Это НЕ размер платформы: её размер живёт в реестре
+  // (MODULE_NODES / LIVE_MODULES, сверяются сторожем с projects.ts). Раньше
+  // страница подавала длину этого списка как «of 33 planned nodes» и занижала
+  // продукт втрое, споря с собственным абзацем про 41 узел.
   const liveCount = launchedModules.filter((m) => m.stage === "live").length;
-  const totalNodes = launchedModules.length + ecosystemNodes.length;
 
   const groupedLaunched = useMemo(() => {
     const buckets: Record<ValueBucket, typeof launchedModules> = {
@@ -439,7 +443,11 @@ export default function PitchPage() {
               marginBottom: 16,
             }}
           >
-            <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
+            <HeroStat
+              value={`${liveCount}`}
+              unit="deep MVPs"
+              hint={`of ${MODULE_NODES} modules · ${LIVE_MODULES} deployed`}
+            />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
             <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
             <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
@@ -1067,7 +1075,7 @@ export default function PitchPage() {
       {/* ───────── LAUNCHED MODULES ───────── */}
       <Section
         anchor="modules"
-        eyebrow={`${liveCount} live MVPs · ${totalNodes - liveCount} more on roadmap`}
+        eyebrow={`${liveCount} deep MVPs · ${MODULE_NODES} modules in the registry, ${LIVE_MODULES} deployed`}
         title="Every module sells separately. The bundle sells the company."
       >
         {(Object.keys(groupedLaunched) as ValueBucket[]).map((bucket) => {

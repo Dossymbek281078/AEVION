@@ -8,7 +8,6 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { isAuthenticated } from "@/lib/auth";
-import { launchedModules } from "@/data/pitchModel";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { CouncilConsole } from "./CouncilConsole";
 import { T } from "./theme";

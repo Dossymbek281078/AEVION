@@ -2625,17 +2625,37 @@ describe("known misses, pinned so they fail when fixed", () => {
     expect(p("Revenue saw a 12% decline in 2025.").growthPct).toBeNull();
   });
 
-  test("limit 46: the Japanese negative triangle is not read", () => {
-    // ▲ and △ mean in a Japanese statement what parentheses mean in a US one.
-    expect(p("Gross margin of ▲45%.").grossMarginPct).toBeNull();
+  // Limit 46 was pinned as two misses and closed twenty minutes later; both
+  // assertions went red on the fix, which is what they were for. They now
+  // assert the corrected reading.
+  test.each([
+    ["the Japanese negative triangle", "Gross margin of ▲45%.", -45],
+    ["and its variant", "Gross margin of △45%.", -45],
+    ["was, with an article", "Gross margin was a negative 45%.", -45],
+    ["was, without one", "Gross margin was negative 45%.", -45],
+    ["were, on a positive figure", "Gross margins were 45%.", 45],
+  ])("limit 46 closed: %s", (_l, text, want) => {
+    expect(p(text).grossMarginPct).toBe(want);
   });
 
-  test("limit 46: gross margin has no 'was' connector", () => {
-    // Not about the sign: the gross-margin connector list is the only one not
-    // on the shared LINK constant, because a dash there is a minus.
-    expect(p("Gross margin was a negative 45%.").grossMarginPct).toBeNull();
-    // And the forms that DO work must keep working while that is true.
+  test("and every negative form that already worked still does", () => {
     expect(p("Gross margin of negative 45%.").grossMarginPct).toBe(-45);
     expect(p("Gross margin of (45)%.").grossMarginPct).toBe(-45);
+    expect(p("Gross margin of -45%.").grossMarginPct).toBe(-45);
+    expect(p("Gross margin of −45%.").grossMarginPct).toBe(-45);
+  });
+
+  test("the dash is still refused, which is the whole reason this list is separate", () => {
+    // Widening the gross-margin connector is the one place with a wrong-number
+    // failure mode. "was" and the triangle are words and symbols, not dashes.
+    expect(p("Gross margin — 45%.").grossMarginPct).toBeNull();
+    expect(p("Gross margin – 45%.").grossMarginPct).toBeNull();
+  });
+
+  test("and the widening reached no other metric", () => {
+    expect(p("Revenue of $10 million.").revenueUsd).toBe(10_000_000);
+    expect(p("Net revenue retention of 120%.").retentionPct).toBe(120);
+    expect(p("Churn of 3% monthly.").churnPct).toBe(3);
+    expect(p("Take rate of 15%.").takeRatePct).toBe(15);
   });
 });

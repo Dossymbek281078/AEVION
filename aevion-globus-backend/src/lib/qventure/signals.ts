@@ -941,7 +941,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // finding: Solyndra's -45% was the headline of its case, and a rule that
   // turns a dash into a separator would read a negative margin as positive.
   // Refusing the ambiguous form is the conservative reading and stays.
-  const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
+  const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*gross\s*margin`, "i"));
   const gmBand = percentBandLowEnd(gmRange, s, "Gross margin", 100);
   if (gmBand !== null) s.grossMarginPct = gmBand;
@@ -958,11 +958,16 @@ export function parsePlanSignals(text: string): PlanSignals {
   // is a range separator ("70-80%"), not a minus. Getting this wrong would flip
   // a healthy margin negative, which is the same class of silent corruption in
   // the opposite direction.
-  const NEG = String.raw`(-|−|minus\s+|negative\s+)?`;
+  // ▲ and △ are the Japanese convention for a negative figure — they mean in
+  // a statement filed in Tokyo what parentheses mean in one filed in
+  // Washington. Sony's own statements use them. Note these are the only
+  // additions that are NOT dashes: a dash before a margin figure stays
+  // ambiguous with a label separator and stays excluded (limit 34).
+  const NEG = String.raw`(-|−|▲|△|minus\s+|negative\s+)?`;
   const NOT_RANGE = String.raw`(?<![\d.,])`;
   const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".
@@ -1243,7 +1248,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   parseNonSaasEvidence(t, s);
 
   // Contradictions on the metrics that never had the check revenue has had.
-  detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
   detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:${LINK}|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
   detectMetricConflict(t, s, "customer count", String.raw`(?<![$€£₽₸¥])(\d[\d.,]*)\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:${"customers|users|subscribers|members|memberships|merchants|policyholders"})`, (m) => parseMoney(m[1], m[2]));
 

@@ -1165,7 +1165,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Nine companies, nine defects, and the last one was found with twelve minutes
    left in a session by reading one sentence.
 
-46. **Open, with reproduction: two ways of writing a negative.** A sweep of
+46. **Closed: two ways of writing a negative.** A sweep of
    negative-figure notations — the class this corpus cares most about, since
    Solyndra's −45% margin was its headline finding — came back four for six.
    Parentheses, the word "negative", the hyphen-minus and the Unicode minus all
@@ -1184,10 +1184,20 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    the shared LINK constant, because a dash there is a minus rather than
    punctuation (limit 34).
 
-   Both are misses rather than wrong numbers, and both were found with four
-   minutes left. Recorded rather than patched: the margin connector is the one
-   place where widening has a wrong-number failure mode, and that deserves the
-   trap testing every other widening on this branch received.
+   Both were recorded rather than patched with four minutes left, and closed
+   with the trap testing they deserved once there was time. ▲ and △ join the
+   negative markers; `was`, `were` and `was a` join the gross-margin connectors.
+
+   Eighteen traps, all held: the em and en dash are still refused — the whole
+   reason that connector list is separate — a range still reads its low end, a
+   target is still refused, a competitor's margin is still not the plan's, an
+   *operating* margin is still not a gross margin, and the pipe still works. A
+   further eight checks confirm the triangle reached no other metric.
+
+   Note what was added and what was not. `was` and the triangle are a word and a
+   symbol; neither is a dash. The dash stays out because before a margin figure
+   it is ambiguous between a label separator and a minus sign, and that is the
+   one ambiguity here with a wrong-number failure mode.
 
 ## How this stays true
 

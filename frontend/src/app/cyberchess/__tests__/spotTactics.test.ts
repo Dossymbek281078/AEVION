@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { spotTactics, explainMove, assessCenter } from "../chessCoachEngine";
+import { spotTactics, explainMove, assessCenter, identifyOpening } from "../chessCoachEngine";
 
 /* Подсказка про вилку смотрела ходы СОПЕРНИКА: после хода конём очередь уже перешла, и
    условие «есть взятие ферзя или ладьи» означало, что соперник может забрать ТВОЮ
@@ -60,5 +60,22 @@ describe("assessCenter", () => {
     const s = assessCenter("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1");
     expect(s).toContain("белые");
     expect(s).toContain("чёрные");
+  });
+});
+
+/* Опознание дебюта сравнивало первые 15 символов строки: у Итальянской и Испанской они
+   совпадают до буквы, и Испанка выдавалась за Итальянскую вместе с её планами. */
+describe("identifyOpening", () => {
+  it("tells the Ruy Lopez from the Italian", () => {
+    expect(identifyOpening("1.e4 e5 2.Nf3 Nc6 3.Bb5")?.eco).toBe("C65");
+    expect(identifyOpening("1.e4 e5 2.Nf3 Nc6 3.Bc4")?.eco).toBe("C20");
+  });
+
+  it("keeps matching once the game runs past the theory line", () => {
+    expect(identifyOpening("1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6")?.eco).toBe("C65");
+  });
+
+  it("returns nothing for a line it does not know", () => {
+    expect(identifyOpening("1.a4 h5 2.b4")).toBeNull();
   });
 });

@@ -569,14 +569,25 @@ export function spotTactics(fen: string): string[] {
 
 /** Найти дебют по начальным ходам */
 export function identifyOpening(pgn: string): OpeningTheory | null {
-  const movePrefixes = pgn.replace(/\d+\.\s*/g, "").trim().split(" ").slice(0, 6).join(" ");
+  /* Сравниваются ХОДЫ, а не первые 15 символов строки, как было раньше. У Итальянской
+     («e4 e5 Nf3 Nc6 Bc4») и Испанской («e4 e5 Nf3 Nc6 Bb5») первые 15 символов совпадают
+     до буквы — «e4 e5 Nf3 Nc6 B», — поэтому Испанка опознавалась как Итальянская, и коуч
+     выдавал к ней итальянские планы. Побеждает САМАЯ ДЛИННАЯ совпавшая линия, а не первая
+     в массиве: иначе более общий дебют перехватывает более конкретный. */
+  const toks = (src: string): string[] =>
+    src.replace(/\d+\.(\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean);
+  const played = toks(pgn);
+  let best: OpeningTheory | null = null;
+  let bestLen = 0;
   for (const op of OPENING_THEORY) {
-    const opMoves = op.moves.replace(/\d+\.\s*/g, "").trim();
-    if (movePrefixes.startsWith(opMoves.substring(0, Math.min(opMoves.length, 15)))) {
-      return op;
+    const line = toks(op.moves);
+    if (!line.length || line.length > played.length) continue;
+    if (line.every((m, i) => m === played[i]) && line.length > bestLen) {
+      best = op;
+      bestLen = line.length;
     }
   }
-  return null;
+  return best;
 }
 
 // ══════════════════════════════════════════════════

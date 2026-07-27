@@ -25,6 +25,14 @@
  */
 
 import { Pool } from "pg";
+
+/**
+ * `Pool` из "pg" экспортируется как namespace, поэтому в позиции ТИПА он не
+ * годится — `tsc` ругался `TS2709`, но `scripts/` не входила в его область
+ * (`include: ["src/**"]`), и ошибка лежала незамеченной. В `src/lib/dbPool.ts`
+ * для этого уже есть готовая форма — повторяем её, а не заводим свою.
+ */
+type PgPoolInstance = InstanceType<typeof Pool>;
 import crypto from "crypto";
 
 const SEED_LEGAL_BASIS = {
@@ -65,7 +73,7 @@ function daysAgo(n: number): string {
   return d.toISOString();
 }
 
-async function ensureSchema(pool: Pool): Promise<void> {
+async function ensureSchema(pool: PgPoolInstance): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QRightObject" (
       "id" TEXT PRIMARY KEY,
@@ -124,7 +132,7 @@ async function ensureSchema(pool: Pool): Promise<void> {
   `);
 }
 
-async function maybeReset(pool: Pool): Promise<void> {
+async function maybeReset(pool: PgPoolInstance): Promise<void> {
   if (!process.argv.includes("--reset")) return;
   console.log("[seed] --reset: deleting existing rows in IPCertificate / QuantumShield / QRightObject");
   await pool.query(`DELETE FROM "IPCertificate"`);

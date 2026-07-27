@@ -73,6 +73,20 @@ function html(daysLeft: number, top: Array<{ module: string; discountPercent: nu
 </div>`;
 }
 
+/** Текстовая версия письма — обязательная часть EmailPayload. */
+function text(daysLeft: number, top: Array<{ module: string; discountPercent: number }>): string {
+  const when = daysLeft <= 0 ? "сегодня" : `через ${daysLeft} дн.`;
+  return [
+    `Ваш веер скидок AEVION закрывается ${when}.`,
+    "",
+    "Пока он открыт, эти модули стоят дешевле:",
+    ...top.map((o) => `  - ${o.module} — минус ${o.discountPercent}%`),
+    "",
+    "Любая новая покупка открывает окно заново на 14 дней.",
+    `${FRONTEND}/pricing`,
+  ].join("\n");
+}
+
 /**
  * Кому напоминать — правило отбора отдельно от рассылки.
  *
@@ -136,14 +150,22 @@ async function main(): Promise<void> {
       .map((o) => ({ module: o.module, discountPercent: o.discountPercent }));
 
     matched++;
-    const subject = `Веер скидок закрывается ${fan.daysLeft <= 0 ? "сегодня" : `через ${fan.daysLeft} дн.`}`;
+    // `shouldRemind` уже гарантировал, что срок есть, но через хелпер компилятор
+    // этого не видит. Сужаем явно, а не через `!`: молчаливый non-null дал бы
+    // «через 0 дн.» в теме письма, если инвариант когда-нибудь изменится.
+    const daysLeft = fan.daysLeft ?? 0;
+    const when = daysLeft <= 0 ? "сегодня" : `через ${daysLeft} дн.`;
+    const subject = `Веер скидок закрывается ${when}`;
     console.log(
-      `  ${SEND ? "→" : "(сухой)"} ${email} · осталось ${fan.daysLeft} дн. · до ${fan.validUntil} · ` +
+      `  ${SEND ? "→" : "(сухой)"} ${email} · осталось ${daysLeft} дн. · до ${fan.validUntil} · ` +
         `модулей со скидкой: ${top.length} (${top.map((t) => `${t.module} −${t.discountPercent}%`).join(", ")})`,
     );
 
     if (!SEND) continue;
-    const res = await sendEmail({ to: email, subject, html: html(fan.daysLeft, top) });
+    // `text` обязателен в EmailPayload. Без него письмо ушло бы без текстовой
+    // части — почтовики понижают такие в спам, часть клиентов покажет пустоту.
+    // Компилятор это ловил, но `scripts/` им не покрывалась.
+    const res = await sendEmail({ to: email, subject, html: html(daysLeft, top), text: text(daysLeft, top) });
     if (res.ok) {
       sent++;
       remember({ email, validUntil: fan.validUntil!, ts: new Date().toISOString() });

@@ -2519,3 +2519,39 @@ describe("the deck path declares its fields once", () => {
     for (const f of numeric) expect(SRC).toContain(`{ field: "${f}"`);
   });
 });
+
+describe("a level stated with a rise verb is not a growth rate", () => {
+  // Found by running TSMC's own 20-F sentence: "our gross margin increased to
+  // 59.9% of net revenue from 56.1% in 2024" recorded 59.9% GROWTH. The margin
+  // went up 3.8 percentage points. Retention was worse — "retention increased
+  // to 120%" scored 120% growth, which would rank a flat company as tripling.
+  const g = (t: string) => parsePlanSignals(t).growthPct;
+
+  test.each([
+    ["gross margin", "Our gross margin increased to 59.9%."],
+    ["retention", "Net revenue retention increased to 120%."],
+    ["take rate", "Take rate increased to 15%."],
+    ["churn", "Churn declined to 3% monthly."],
+  ])("%s is not growth", (_l, text) => {
+    expect(g(text)).toBeNull();
+  });
+
+  test("each metric still reads its own figure", () => {
+    expect(parsePlanSignals("Our gross margin increased to 59.9%.").grossMarginPct).toBe(59.9);
+    expect(parsePlanSignals("Net revenue retention increased to 120%.").retentionPct).toBe(120);
+    expect(parsePlanSignals("Take rate increased to 15%.").takeRatePct).toBe(15);
+  });
+
+  test.each([
+    ["a stated growth rate", "Revenue grew 42% year over year.", 42],
+    ["a customer growth rate", "Customers grew 30% year over year.", 30],
+  ])("%s is untouched", (_l, text, want) => {
+    expect(g(text)).toBe(want);
+  });
+
+  test("the guard is bounded to its clause", () => {
+    // Two metrics in one sentence: the growth belongs to revenue, and naming a
+    // margin afterwards must not erase it.
+    expect(g("Revenue grew 42% year over year; margin rose to 60%.")).toBe(42);
+  });
+});

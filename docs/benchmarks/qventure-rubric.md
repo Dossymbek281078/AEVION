@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 700
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 708
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (700
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (708
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -1041,13 +1041,37 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    tables, `clauseYear`, twenty-four connector lists, the deck's scale list, the
    deck's noun regexes, and now the deck's field lists.
 
+42. **A level stated with a rise verb was read as a growth rate.** Found on the
+   first sentence of the eighth new company. TSMC's 20-F says "our gross margin
+   increased to 59.9% of net revenue from 56.1% in 2024" — the margin rose 3.8
+   percentage points, and the engine recorded **59.9% growth**.
+
+   | Sentence | Growth recorded |
+   |---|---|
+   | `Our gross margin increased to 59.9%.` | 59.9% |
+   | `Net revenue retention increased to 120%.` | 120% |
+   | `Take rate increased to 15%.` | 15% |
+   | `Churn declined to 3% monthly.` | −3% |
+
+   Retention is the one to look at: a company with flat revenue and healthy
+   retention was scored as growing 120%, on top of scoring the retention itself.
+   The same figure counted twice, once under a name it does not belong to.
+
+   A percentage attached to a level metric in its own clause is now excluded
+   from the growth read — each of those four already reads the figure correctly
+   under its own name. Bounded to the clause, so "revenue grew 42%; margin rose
+   to 60%" still records 42%.
+
+   Eight new companies this session, eight new defects, and this one was in the
+   first sentence read from the eighth. The corpus is nowhere near exhausted.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 700):
+`tests/qventureDisclosedCorpus.test.ts`, 708):
 
 | Guard | Floor | Measured today |
 |---|---|---|

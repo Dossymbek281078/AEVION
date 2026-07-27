@@ -670,6 +670,23 @@ function percentBandLowEnd(
   return low;
 }
 
+/**
+ * Is the percentage at this position attached to a metric that is a LEVEL
+ * rather than a change — gross margin, retention, take rate, churn?
+ *
+ * Those four each read "increased to X%" correctly as their own value. The
+ * growth parser was reading the same X as a growth rate, so a plan stating
+ * "retention increased to 120%" scored 120% growth on top of 120% retention.
+ * Bounded to the clause, so "revenue grew 42%; margin rose to 60%" still
+ * records 42% growth.
+ */
+const LEVEL_METRIC_NEAR = (text: string, at: number, len: number): boolean => {
+  const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
+  const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
+  const clause = text.slice(from, ends.length ? Math.min(...ends) : text.length);
+  return /gross\s*margins?|retention|expansion|\bnrr\b|\bndr\b|take[- ]rate|commission|churn/i.test(clause);
+};
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
@@ -880,6 +897,12 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (!growth && s.growthPct === null && rise) {
     growth = rise.m; growthBasis = rise.basis; usingDecline = false;
   }
+  // A level stated with a rise verb is not a growth rate. "Gross margin
+  // increased to 59.9%" recorded 59.9% growth; "retention increased to 120%"
+  // recorded 120% growth, which would score a flat company as tripling. The
+  // figure belongs to the metric named in its own clause — and that metric has
+  // already read it correctly.
+  if (growth && LEVEL_METRIC_NEAR(t, growth.index ?? 0, growth[0].length)) growth = null;
   if (growth) {
     const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));

@@ -627,7 +627,12 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       obs?.disconnect();
       obs = null;
     };
-  }, [lang, observe, langReady]);
+    // resetToken обязан быть в зависимостях: смена языка сначала запускает этот
+    // эффект на ЕЩЁ НЕ перемонтированном DOM (там текст предыдущего перевода),
+    // и только следующим шагом React заменяет поддерево на исходное. Без
+    // перезапуска перевод так и не ложился на новый DOM — проверено вживую:
+    // RU → EN работал, EN → RU оставлял страницу английской.
+  }, [lang, observe, langReady, resetToken]);
 
   return <div ref={ref} key={resetToken} style={{ display: "contents" }}>{children}</div>;
 }

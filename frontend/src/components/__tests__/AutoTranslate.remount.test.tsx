@@ -94,6 +94,37 @@ describe("AutoTranslate — перемонтирование поддерева"
     await waitFor(() => expect(onMount).toHaveBeenCalledTimes(2));
   });
 
+  // Пойман на preview, тестами НЕ ловился: считать монтирования мало.
+  // Перемонтирование происходит ПОСЛЕ того, как эффект перевода уже отработал
+  // на старом DOM, — если не перезапустить его на новом, перевод не ляжет.
+  // Вживую это выглядело так: RU → EN работал, EN → RU оставлял страницу
+  // английской.
+  it("после смены языка перевод ложится на перемонтированный DOM", async () => {
+    localStorage.setItem("aevion_lang_v1", "en");
+    localStorage.setItem(
+      "aevion_tr_v1_ru",
+      JSON.stringify({ "Open project": "Открыть проект" })
+    );
+    const { container, getByText } = await act(async () =>
+      render(
+        <I18nProvider>
+          <LangSwitch />
+          <AutoTranslate observe={false}>
+            <span data-testid="phrase">Open project</span>
+          </AutoTranslate>
+        </I18nProvider>
+      )
+    );
+    expect(container.querySelector('[data-testid="phrase"]')?.textContent).toBe("Open project");
+
+    await act(async () => {
+      getByText("RU").click();
+    });
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="phrase"]')?.textContent).toBe("Открыть проект")
+    );
+  });
+
   it("не переводит, пока язык не определён: ни одного запроса с ?to=en у ru-пользователя", async () => {
     localStorage.setItem("aevion_lang_v1", "ru");
     await act(async () =>

@@ -6351,25 +6351,24 @@ describe("Spotify: two metrics in one sentence, and years stated first", () => {
     expect(p("We had 3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020.").customers).toBe(8000);
   });
 
-  test("KNOWN MISS: years stated before the figures, with 'respectively'", () => {
-    // "As of December 31, 2025 and 2024, we had 290 million and 263 million
-    // Premium Subscribers, respectively" gives 263 million — the older. Nothing
-    // follows a figure to date it, so position decides and takes the last.
+  test.each([
+    ["latest year first", "As of December 31, 2025 and 2024, we had 290 million and 263 million Premium Subscribers, respectively.", 290_000_000],
+    ["oldest year first", "As of December 31, 2024 and 2025, we had 263 million and 290 million Premium Subscribers, respectively.", 290_000_000],
+  ])("a shared noun with 'respectively' takes the current figure: %s", (_l, text, want) => {
+    // The noun follows BOTH figures, so the pattern binds to the nearer one -
+    // 263 million, which belongs to 2024. The leading year list says which is
+    // current, and the figures mirror it in order.
     //
-    // Diagnosed further, so the next attempt starts from the right place. The
-    // series walker is not involved: the noun follows BOTH figures, so the
-    // figure-then-noun pattern binds to the nearer one and there is a single
-    // match on the wrong figure. A helper keyed off the leading year list was
-    // written, and appeared never to fire. Traced further: it IS called, and
-    // returns at one of its two early exits — the debug print sat after them,
-    // which is why it looked dead. Of the three assignment sites, this sentence
-    // reaches the second, the one the helper was wired into, so the wiring was
-    // right and the guard conditions are what reject it.
-    //
-    // Next attempt starts by printing at the TOP of the helper rather than
-    // after its guards. Recorded because two sessions have now been spent
-    // establishing where the problem is not.
-    expect(p("As of December 31, 2025 and 2024, we had 290 million and 263 million Premium Subscribers, respectively.").customers)
-      .toBe(263_000_000);
+    // Three passes to find the cause and it was none of the things suspected:
+    // not the series walker, not the wiring, not the assignment site. Dates are
+    // blanked out of the parse text so a year cannot be read as a metric value,
+    // which removed exactly the years this rule needs - "December 31, 2025"
+    // gone, bare "2024" surviving, one year where the sentence states two. The
+    // unmasked twin exists for this and was not being read.
+    expect(parsePlanSignals(text).customers).toBe(want);
+  });
+
+  test("and without 'respectively' the nearer figure still wins", () => {
+    expect(parsePlanSignals("We had 290 million and 263 million Premium Subscribers.").customers).toBe(263_000_000);
   });
 });

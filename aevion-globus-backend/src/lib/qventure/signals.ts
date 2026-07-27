@@ -836,6 +836,43 @@ function lastInSeries(
   return found[found.length - 1].m;
 }
 
+/**
+ * The figure a shared noun belongs to when the plan lists two and says
+ * "respectively".
+ *
+ * "As of December 31, 2025 and 2024, we had 290 million and 263 million
+ * Premium Subscribers, respectively" is Spotify's own sentence. The noun sits
+ * after BOTH figures, so a figure-then-noun pattern binds to the nearer one —
+ * 263 million, which belongs to 2024. The series walker never sees this,
+ * because there is no series to walk: there is one match, on the wrong figure.
+ *
+ * The years lead the sentence and the figures mirror them in order, so when the
+ * year list opens with its latest year the FIRST figure is the current one.
+ * Returns that figure's text, or null when the shape does not apply — no
+ * "respectively", fewer than two leading years, or a list that opens with its
+ * oldest year, in which case the nearer figure is already right.
+ */
+function respectivelyHead(t: string, at: number): { value: string; unit?: string } | null {
+  const clauseStart = Math.max(t.lastIndexOf(".", at), t.lastIndexOf(";", at)) + 1;
+  const after = t.slice(at, at + 200);
+  if (!/\brespectively\b/i.test(after)) return null;
+
+  // Years must come from the UNMASKED twin. Dates are blanked out of `t` so a
+  // year cannot be read as a metric value (limit 25), which is exactly the
+  // information this rule needs: "December 31, 2025" is gone and only the bare
+  // "2024" survives, leaving one year where the sentence states two. Offsets
+  // are identical between the two strings by construction.
+  const dateSrc = RAW_FOR_DATES.length === t.length ? RAW_FOR_DATES : t;
+  const lead = dateSrc.slice(clauseStart, at);
+  const years = [...lead.matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
+  if (years.length < 2 || years[0] !== Math.max(...years)) return null;
+
+  // The figure immediately before this one, joined by "and" or a comma.
+  const prior = new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:,\s*)?(?:and\s+)$`, "i").exec(t.slice(clauseStart, at));
+  if (!prior) return null;
+  return { value: prior[1], unit: prior[2] };
+}
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
@@ -1467,7 +1504,8 @@ export function parsePlanSignals(text: string): PlanSignals {
     // that happens to put a number after the noun.
     || latestMatch(t, new RegExp(String.raw`(?:paying\s+|active\s+)?(?:${CUST_NOUN})\s*(?:${LINK}|reached|totall?ed|stood at|were|was|number(?:ed)?)\s*${NOT_MONEY}${NUM}\s*${UNIT}`, "i"), s, "the customer count");
   if (cust && statedAsAchieved(t, cust.index ?? 0, cust[0].length)) {
-    const head = parseMoney(cust[1], cust[2]);
+    const shared = respectivelyHead(t, cust.index ?? 0);
+    const head = shared ? parseMoney(shared.value, shared.unit) : parseMoney(cust[1], cust[2]);
     // "3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020" names the
     // noun once, so the oldest count would win. Same shape as the top line.
     const tail = head ? lastInSeries(t, (cust.index ?? 0) + cust[0].length, "money", head) : null;

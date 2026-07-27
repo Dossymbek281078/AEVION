@@ -5636,6 +5636,16 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // Second arg is the delay between attempts — 1ms keeps this a fast probe
     // rather than the 25s wait the deploy path uses.
     const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
+    // The `domain` capability still decides "live" from token presence alone —
+    // the very "a key is not a working capability" lie the health layer exists
+    // to kill. Tokens are all set and the zone is still undelegated, so every
+    // *.aevion.build address fails DNS while the shop window says live. Record
+    // what the deploy actually observed; /studio/capabilities merges it and
+    // reports `degraded` with this reason.
+    if (customDomain) {
+      if (domainReady) noteProviderSuccess("domain");
+      else noteProviderFailure("domain", `${customDomain} does not resolve — the aevion.build zone is not delegated to Cloudflare`);
+    }
     return res.json({
       ok: true,
       provider: "cloudflare-pages",

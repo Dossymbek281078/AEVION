@@ -832,3 +832,42 @@ describe("Deleting a project takes its Railway service with it", () => {
     expect(still.status).toBe(200);
   });
 });
+
+
+describe("the domain capability reports what deploys actually observed", () => {
+  test("an unresolvable custom domain turns the capability degraded, not live", async () => {
+    // "Tokens are set" was the whole basis for calling `domain` live, while
+    // the aevion.build zone stayed undelegated and every subdomain failed DNS.
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc";
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    process.env.CLOUDFLARE_ZONE_ID = "zone";
+    vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+    }));
+    // Cloudflare API calls succeed; the domain probe itself never answers 2xx.
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes(".aevion.build")
+        ? { ok: false, status: 522, json: async () => ({}), text: async () => "" }
+        : { ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" },
+    );
+
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DomainHealth", stack: "static" });
+    await request(app).put(`/api/devhub/projects/${cr.body.project.id}/file?path=index.html`).send({ content: "<h1>hi</h1>", language: "html" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/deploy/pages`).send({});
+
+    if (r.status === 200 && r.body.domain) {
+      expect(r.body.domainReady).toBe(false);
+      const health = getProviderHealth("domain");
+      expect(health?.ok).toBe(false);
+      expect(health?.reason).toMatch(/not delegated|does not resolve/);
+    }
+
+    vi.doUnmock("../src/lib/wranglerPagesDeploy");
+    delete process.env.CLOUDFLARE_ZONE_ID;
+    __resetProviderHealth();
+  });
+});

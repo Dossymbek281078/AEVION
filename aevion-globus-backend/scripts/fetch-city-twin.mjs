@@ -46,7 +46,9 @@ import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL, M_PER_LAT, M_PER_LON_EQ,
   projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, heightOutliers,
 } from "./lib/city-twin-geometry.mjs";
-import { parsePlateauGml, reconcileWithPlateau } from "./lib/plateau-heights.mjs";
+import { parsePlateauGml } from "./lib/plateau-heights.mjs";
+import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
+import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -93,6 +95,16 @@ const CITIES = {
     exportName: "CITY_NYC",
     committed: "qskyway.city.nyc.ts",
     vertiports: null, // read from the committed twin (see loadCommitted)
+    // New York surveys its own buildings and publishes the result as an API.
+    // Before this was wired in, 205 Midtown buildings sat in the obstacle grid
+    // at the blind 12 m default while the city had a measured height for them.
+    measured: {
+      kind: "socrata",
+      label: "NYC Open Data height_roof (photogrammetric survey, dataset 5zhs-2jue)",
+      // height_roof is in FEET and stops at the roof — see nyc-open-data.mjs.
+      marginM: 300,
+      nearRadiusM: 20,
+    },
     header: [
       "// QSkyway city digital-twin — NYC Midtown (Manhattan), real OpenStreetMap buildings",
       "// (Overpass, ODbL), 20m height field. v2: height provenance + dataQuality.",
@@ -113,6 +125,7 @@ const CITIES = {
     // this city could not be regenerated at all and its footprints were frozen
     // at 2026-07-13 — see plateau-heights.mjs for what that cost.
     measured: {
+      kind: "citygml",
       label: "PLATEAU LOD2 measuredHeight (MLIT Project PLATEAU, Shinjuku-ku 2025, CityGML spec 5.0)",
       // Per-3rd-mesh CityGML for Shinjuku-ku. These are the four meshes covering
       // the Nishi-Shinjuku bbox. The asset id in the path is issued by the
@@ -236,47 +249,70 @@ let provenanceNote =
   "Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.";
 
 if (city.measured) {
-  const { assets, marginM, nearRadiusM, label } = city.measured;
+  const { kind, assets, marginM, nearRadiusM, label } = city.measured;
   const mPerLon = M_PER_LON_EQ * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
   const wide = {
     minLat: minLat - marginM / M_PER_LAT, maxLat: maxLat + marginM / M_PER_LAT,
     minLon: minLon - marginM / mPerLon, maxLon: maxLon + marginM / mPerLon,
   };
 
+  // Every source hands back the same shape: { h in METRES, ring as [lon, lat] }.
+  // Normalising here and not at the reconciler is deliberate — a source's axis
+  // order and unit are facts about that source, and the further they travel
+  // un-normalised the more places can read them the wrong way round.
   const outlines = [];
-  for (const url of assets) {
-    const name = url.slice(url.lastIndexOf("/") + 1);
-    const cached = plateauCache ? `${plateauCache}/${name}` : null;
-    let gml;
-    if (cached && fs.existsSync(cached)) {
-      gml = fs.readFileSync(cached, "utf8");
-      process.stderr.write(`  PLATEAU ${name}: cached\n`);
-    } else {
-      process.stderr.write(`  PLATEAU ${name}: downloading…\n`);
-      const res = await fetch(url, {
-        headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
-        signal: AbortSignal.timeout(600_000),
-      });
-      if (!res.ok) throw new Error(`PLATEAU ${name}: HTTP ${res.status}`);
-      gml = await res.text();
-      if (cached) fs.writeFileSync(cached, gml);
+  if (kind === "citygml") {
+    for (const url of assets) {
+      const name = url.slice(url.lastIndexOf("/") + 1);
+      const cached = plateauCache ? `${plateauCache}/${name}` : null;
+      let gml;
+      if (cached && fs.existsSync(cached)) {
+        gml = fs.readFileSync(cached, "utf8");
+        process.stderr.write(`  PLATEAU ${name}: cached\n`);
+      } else {
+        process.stderr.write(`  PLATEAU ${name}: downloading…\n`);
+        const res = await fetch(url, {
+          headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
+          signal: AbortSignal.timeout(600_000),
+        });
+        if (!res.ok) throw new Error(`PLATEAU ${name}: HTTP ${res.status}`);
+        gml = await res.text();
+        if (cached) fs.writeFileSync(cached, gml);
+      }
+      const got = parsePlateauGml(gml, wide);
+      process.stderr.write(`  PLATEAU ${name}: ${got.length} roof outlines\n`);
+      // CityGML is EPSG:6697, latitude first.
+      for (const g of got) outlines.push({ h: g.h, ring: g.ring.map(([lat, lon]) => [lon, lat]) });
     }
-    const got = parsePlateauGml(gml, wide);
-    process.stderr.write(`  PLATEAU ${name}: ${got.length} roof outlines\n`);
+  } else if (kind === "socrata") {
+    const url = nycBuildingsQuery(wide);
+    process.stderr.write(`  NYC Open Data: querying…\n`);
+    const res = await fetch(url, {
+      headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) throw new Error(`NYC Open Data: HTTP ${res.status}`);
+    const rows = await res.json();
+    const got = parseNycBuildings(rows);
+    process.stderr.write(`  NYC Open Data: ${rows.length} rows, ${got.length} outlines with a height\n`);
+    // Socrata geometry is GeoJSON, longitude first — already the shape we want.
     outlines.push(...got);
+  } else {
+    throw new Error(`${cityId}: unknown measured-height source kind "${kind}"`);
   }
+
   // An empty answer is the failure mode that must never reach --write: the twin
   // would keep its shape, lose every measured height, and read as a successful
   // regeneration. Louder than a downgraded file.
   if (!outlines.length) {
     throw new Error(
-      `${cityId}: PLATEAU returned no roof outlines inside the bbox. Refusing to emit a twin ` +
-      `that would silently downgrade measured heights to OSM guesses.`,
+      `${cityId}: the measured-height source returned no outlines inside the bbox. Refusing to ` +
+      `emit a twin that would silently downgrade measured heights to OSM guesses.`,
     );
   }
 
-  const projected = outlines.map((p) => ({ h: p.h, ring: p.ring.map(([lat, lon]) => proj(lon, lat)) }));
-  const { heights: measuredAt, unmatched } = reconcileWithPlateau(
+  const projected = outlines.map((p) => ({ h: p.h, ring: p.ring.map(([lon, lat]) => proj(lon, lat)) }));
+  const { heights: measuredAt, unmatched } = reconcileMeasuredOutlines(
     buildings.map((b) => b.r), projected, { nearRadiusM },
   );
 
@@ -324,20 +360,20 @@ if (city.measured) {
       h: Math.round(projected[i].h), hs: 0,
       r: ring.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
     });
-    meta.push({ id: `plateau/${i}`, name: null });
+    meta.push({ id: `${kind}/${i}`, name: null });
     added++;
   }
 
   process.stderr.write(
-    `  PLATEAU: ${contained} footprints identified by containment (${plateauTaller} raised, ` +
+    `  ${kind}: ${contained} footprints identified by containment (${plateauTaller} raised, ` +
     `${osmTaller} kept OSM's taller measurement), ${near} by proximity, ${added} outlines added ` +
     `that OSM has no footprint for\n`,
   );
 
   sourceLabel = `OSM footprints (ODbL) + ${label}`;
   provenanceNote =
-    "hs 0=измерено(PLATEAU measuredHeight и/или OSM height tag — при расхождении берётся большая, " +
-    "это высота, которую надо облететь) 1=выведено(здесь: контур PLATEAU опознан по близости, " +
+    `hs 0=измерено(${label} и/или OSM height tag — при расхождении берётся большая, ` +
+    "это высота, которую надо облететь) 1=выведено(здесь: контур обмера опознан по близости, " +
     "а не по вложенности, либо levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
     "Просвет SRC_CLEARANCE растёт по мере падения уверенности.";
 }

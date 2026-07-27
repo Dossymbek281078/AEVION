@@ -1259,3 +1259,33 @@ describe("what a clinical filing calls a cleared application", () => {
     expect(held("Granted breakthrough therapy designation.", label)).toBe(true);
   });
 });
+
+describe("an aviation authorisation, and the regulator that merely regulates", () => {
+  /**
+   * Rocket Lab's S-1: "we implemented corrective actions and received
+   * authorization from the FAA to resume launches" — a real authorisation the
+   * pattern missed, because it expected the authority's name to come first.
+   *
+   * AeroVironment's 10-K supplies the other side twice: "the Federal Aviation
+   * Administration (FAA), which regulates airspace for all air vehicles" and
+   * "the FAA issued a clarification of its existing policies" are regulatory
+   * context, not a certificate held, and both correctly stay out.
+   */
+  const held = (t: string) => parsePlanSignals(t).regulatoryMilestones.includes("Aviation authority certification");
+
+  test("an authorisation received counts, in either word order", () => {
+    expect(held("We implemented corrective actions and received authorization from the FAA to resume launches.")).toBe(true);
+    expect(held("EASA type certificate granted.")).toBe(true);
+    expect(held("FAA certification obtained for the Mk2 vehicle.")).toBe(true);
+  });
+  test("a regulator doing regulator things does not", () => {
+    expect(held("Government authorities, including the Federal Aviation Administration (FAA), regulate airspace.")).toBe(false);
+    expect(held("The FAA issued a clarification of its existing policies.")).toBe(false);
+    expect(held("We expect to receive authorization from the FAA next year.")).toBe(false);
+  });
+  test("a compensation-section peer review is not a peer-reviewed result", () => {
+    // Sunrun's S-1 uses "peer reviews" for employee performance criteria.
+    expect(parsePlanSignals("Individual objectives such as peer reviews or other subjective criteria.").technicalProof).toEqual([]);
+    expect(parsePlanSignals("Results were published in a peer-reviewed journal.").technicalProof.length).toBeGreaterThan(0);
+  });
+});

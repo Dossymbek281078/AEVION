@@ -1205,7 +1205,14 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     // two neighbouring phrasings in the same S-1 that are NOT a cleared IND:
     // "IND-enabling toxicology studies" and "included in the IND filing".
     [/\bind (?:cleared|filed|accepted)\b|\b(?:open|active)\s+ind\b|\bind\s+is\s+(?:open|active|cleared)\b/i, "IND cleared"],
-    [/\b(?:faa|easa) (?:certifi\w+|type certificate|approval)\b/i, "Aviation authority certification"],
+    // Rocket Lab's S-1: "implemented corrective actions and received
+    // authorization from the FAA to resume launches" — a real authorization the
+    // pattern missed, because it expected the authority's name to come first.
+    // The reverse order stays out where it should: AeroVironment's "the FAA,
+    // which regulates airspace for all air vehicles" and "the FAA issued a
+    // clarification of its existing policies" are regulatory context, not a
+    // certificate held.
+    [/\b(?:faa|easa) (?:certifi\w+|type certificate|approval|authoriz\w+)\b|\b(?:received|granted|obtained|holds?|issued)\b[^.;]{0,40}?\b(?:certification|authorization|type certificate|licence|license)\b[^.;]{0,20}?\bfrom the (?:faa|easa)\b/i, "Aviation authority certification"],
     [/\b(?:banking|e-?money|emi|money transmitter|payment institution|broker[- ]dealer|lending) licen[cs]e\b/i, "Financial licence held"],
     // A bare "IDIQ" matched any mention of the words, including AeroVironment's
     // 10-K explaining what an IDIQ contract IS ("we do not include unfunded

@@ -4195,3 +4195,78 @@ describe("Railway repo attachment is verified, not assumed", () => {
     }
   });
 });
+
+
+describe("A ZIP import is undoable, like every other bulk write", () => {
+  // /github/sync has taken a checkpoint before writing since it was built —
+  // import-zip, the other bulk write, did not. With overwrite=true it replaces
+  // whole files, so a mis-picked archive destroyed work that the IDE's Undo
+  // and History advertise as recoverable.
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ZipUndo", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("undo after an overwriting import puts the original content back", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent("README.md")}`)
+      .send({ content: "ORIGINAL", language: "markdown" });
+
+    const zip = buildSimpleZip([
+      { name: "README.md", data: Buffer.from("FROM ZIP", "utf8") },
+      { name: "src/new.txt", data: Buffer.from("brand new", "utf8") },
+    ]);
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64"), overwrite: true });
+    expect(imp.status).toBe(200);
+    expect(imp.body.importedCount).toBe(2);
+    expect(imp.body.checkpointId).toBeTruthy();
+
+    const afterImport = await request(app).get(`/api/devhub/projects/${id}/files`);
+    expect(afterImport.body.files.find((f: any) => f.path === "README.md").content).toBe("FROM ZIP");
+
+    const undo = await request(app).post(`/api/devhub/projects/${id}/generate/undo`).send({});
+    expect(undo.status).toBe(200);
+
+    const after = await request(app).get(`/api/devhub/projects/${id}/files`);
+    const paths = after.body.files.map((f: any) => f.path);
+    // The file that existed comes back with its own content...
+    expect(after.body.files.find((f: any) => f.path === "README.md").content).toBe("ORIGINAL");
+    // ...and the one the archive introduced is removed, not left behind empty.
+    expect(paths).not.toContain("src/new.txt");
+  });
+
+  test("the import shows up in history with a label a human can recognise", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const zip = buildSimpleZip([{ name: "a.txt", data: Buffer.from("a", "utf8") }]);
+    await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    const hist = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);
+    expect(hist.status).toBe(200);
+    expect(hist.body.checkpoints[0].label).toMatch(/ZIP import/i);
+  });
+
+  test("an import that writes nothing does not leave an empty checkpoint to undo", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent("keep.txt")}`)
+      .send({ content: "KEEP", language: "plaintext" });
+
+    const zip = buildSimpleZip([{ name: "keep.txt", data: Buffer.from("nope", "utf8") }]);
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64"), overwrite: false });
+    expect(imp.body.importedCount).toBe(0);
+    expect(imp.body.checkpointId).toBeNull();
+
+    const hist = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);
+    expect(hist.body.checkpoints || []).toHaveLength(0);
+  });
+});

@@ -5829,6 +5829,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
   const imported: Array<{ path: string; bytes: number; binary: boolean }> = [];
   const skipped: Array<{ path: string; reason: string }> = [];
+  const toWrite: Array<{ file: DevHubFile; bytes: number; binary: boolean }> = [];
 
   for (const entry of parsed) {
     // Skip metadata + directory entries
@@ -5849,17 +5850,44 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
       if (existing) { skipped.push({ path: finalPath, reason: "already exists" }); continue; }
     }
 
-    const f: DevHubFile = {
-      id: crypto.randomUUID(), projectId: project.id, path: finalPath,
-      content, language: detectLanguage(finalPath), updatedAt: now(),
-    };
+    toWrite.push({
+      file: {
+        id: crypto.randomUUID(), projectId: project.id, path: finalPath,
+        content, language: detectLanguage(finalPath), updatedAt: now(),
+      },
+      bytes: entry.content.length,
+      binary: isBinary,
+    });
+  }
+
+  // Checkpoint BEFORE writing, exactly as /github/sync does — a ZIP imported
+  // with overwrite=true replaces whole files, and without this the IDE's undo
+  // and history (which it offers as the safety net for AI writes) simply did
+  // not cover the one bulk write that can wipe a project in one click.
+  let checkpointId: string | null = null;
+  if (toWrite.length > 0) {
+    let existingFiles: Array<{ path: string; content: string }> = [];
+    try { existingFiles = await dbListFiles(project.id); }
+    catch {
+      existingFiles = [...memFiles.values()].filter((f) => f.projectId === project!.id);
+    }
+    checkpointId = await createCheckpoint(
+      project.id,
+      userId,
+      `ZIP import (${toWrite.length} file${toWrite.length === 1 ? "" : "s"})`,
+      toWrite.map((w) => w.file.path),
+      existingFiles,
+    );
+  }
+
+  for (const { file: f, bytes, binary } of toWrite) {
     try { await dbUpsertFile(f); }
     catch {
-      const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === finalPath);
+      const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
       if (ex) { ex.content = f.content; ex.language = f.language; ex.updatedAt = f.updatedAt; }
       else memFiles.set(f.id, f);
     }
-    imported.push({ path: finalPath, bytes: entry.content.length, binary: isBinary });
+    imported.push({ path: f.path, bytes, binary });
   }
 
   res.json({
@@ -5868,6 +5896,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     skippedCount: skipped.length,
     imported,
     skipped,
+    checkpointId,
   });
 });
 

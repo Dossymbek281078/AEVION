@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     "Walk through every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics. From idea to court-grade certificate in 90 seconds.",
   openGraph: {
     title: "AEVION ecosystem — live product demo",
-    description: "37 modules deployed (~a dozen feature-complete) across IP, signatures, bureau, compliance, AI, banking. Walk the full trust pipeline.",
+    description: "41 modules deployed (~a dozen feature-complete) across IP, signatures, bureau, compliance, AI, banking. Walk the full trust pipeline.",
     type: "website",
     siteName: "AEVION",
   },

@@ -499,6 +499,36 @@ interface NewsletterEntry {
  *
  * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
  */
+
+/**
+ * Письмо новому подписчику. Обещает ровно то, что мы делаем: разборы с оценкой
+ * доказательности, не чаще раза в неделю, без рекламы чужих продуктов — те же
+ * слова, что стоят в форме на /go. Обещание в письме, отличающееся от обещания
+ * на кнопке, — самый дешёвый способ потерять доверие в первый же день.
+ */
+function newsletterWelcomeText(): string {
+  return [
+    "Спасибо — адрес записан.",
+    "",
+    "Что будет приходить: разборы материалов о долголетии и привычках, где у каждого пункта проставлена оценка доказательности — включая то, что переоценено.",
+    "",
+    "Не чаще раза в неделю. Без рекламы чужих продуктов.",
+    "",
+    "Отписаться можно из любого письма — ссылка внизу.",
+    "",
+    "AEVION · https://aevion.app",
+  ].join("\n");
+}
+
+function newsletterWelcomeHtml(): string {
+  return `<div style="font-family:Georgia,serif;max-width:520px;color:#16161a;line-height:1.6">
+  <p style="font-size:18px;font-weight:700;margin:0 0 12px">Спасибо — адрес записан.</p>
+  <p style="margin:0 0 12px">Что будет приходить: разборы материалов о долголетии и привычках, где у каждого пункта проставлена оценка доказательности — включая то, что переоценено.</p>
+  <p style="margin:0 0 12px">Не чаще раза в неделю. Без рекламы чужих продуктов.</p>
+  <p style="color:#5d5f66;font-size:13px;margin:16px 0 0">Отписаться можно из любого письма.<br/>AEVION · <a href="https://aevion.app" style="color:#a9781a">aevion.app</a></p>
+</div>`;
+}
+
 pricingRouter.post("/newsletter", (req, res) => {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
   if (newsletterRateLimited(ip)) {
@@ -527,6 +557,17 @@ pricingRouter.post("/newsletter", (req, res) => {
     console.error("[newsletter] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
+
+  // Письмо-подтверждение. Без него человек оставил адрес и не узнал, дошёл ли
+  // он: тишина после действия читается как «не сработало», и второй раз он уже
+  // не попробует. Отправка не блокирует ответ — подписка записана в файл, и
+  // сбой почтового провайдера не должен превращаться в ошибку для посетителя.
+  sendEmail({
+    to: email,
+    subject: "[AEVION] Подписка оформлена",
+    html: newsletterWelcomeHtml(),
+    text: newsletterWelcomeText(),
+  }).catch((e) => console.error("[newsletter] welcome email failed", e));
 
   res.status(201).json({ ok: true, id: entry.id });
 });

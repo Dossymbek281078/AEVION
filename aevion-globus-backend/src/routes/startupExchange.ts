@@ -47,6 +47,7 @@ import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
 import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
+import { escapeLikePattern } from "../lib/startupx/likePattern";
 import { sendOfferNotice } from "../lib/startupx/notifyFounder";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -113,20 +114,6 @@ function dbOutage(res: Response, e: unknown, where: string): Response {
   return fail(res, "database_unavailable", 503);
 }
 
-/**
- * Экранирование пользовательского запроса для ILIKE.
- *
- * Здесь было два дефекта, которые видно только на настоящем Postgres: in-memory
- * ветка ищет обычным `includes` и оба переживала.
- *   1. `\${m}` в шаблонной строке — это литерал «${m}», а не «\%».
- *      Запрос «5%» превращался в «5${m}» и не находил ничего.
- *   2. ESCAPE '\' в шаблонной строке даёт SQL ESCAPE '', то есть
- *      экранирующего символа нет вовсе.
- * Итог: любой запрос с процентом или подчёркиванием молча отдавал пустую ленту.
- */
-function escapeLikePattern(raw: string): string {
-  return raw.replace(/[%_\\]/g, (m) => "\\" + m);
-}
 
 /**
  * Ворота суточного потолка. Стоят ПЕРЕД минутным лимитом намеренно: когда

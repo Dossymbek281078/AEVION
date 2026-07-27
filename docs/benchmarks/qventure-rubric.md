@@ -1103,6 +1103,32 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Parse coverage 95/95. A guard placed one step too late is not a guard; it is
    a way of losing data quietly.
 
+44. **Open, with reproduction: a fall written as a noun — and why the obvious
+   fix was reverted.** The mirror of limit 43. `Revenue saw a 12% decline in
+   2025` reads as nothing, so a stated fall is a missing figure rather than a
+   negative one and the factor falls back to a sector prior.
+
+   Adding the noun shape to the decline pattern works on every case in
+   isolation, and creates a **wrong number** on the eleventh:
+
+   | Sentence | With the fix |
+   |---|---|
+   | `Revenue grew 42% year over year; costs saw a 12% decline.` | **−12% growth** |
+
+   The decline path is consulted before the rise path and, unlike the growth
+   patterns, does not classify what the figure belongs to. So a fall in costs
+   became a fall in revenue — one metric's number under another metric's name,
+   which is the exact defect limit 5's basis classification was built to stop.
+   Growth got that treatment; decline never did.
+
+   Reverted rather than shipped: turning a missing figure into a wrong one is
+   the wrong direction, and the real fix is to give the decline path the same
+   basis classification the rise path has. That is a change worth measuring, not
+   a change worth making with eight minutes left.
+
+   Second time today the same judgement was made — the first was masking dates,
+   which was reverted, diagnosed properly, and closed an hour later.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

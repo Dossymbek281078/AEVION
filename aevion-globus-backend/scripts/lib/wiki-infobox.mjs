@@ -47,10 +47,18 @@ function firstQuantity(raw) {
 }
 
 const FIELD = {
+  // `tip` is the height TO the top of the mast — the number an obstacle grid has
+  // to clear. It is NOT `antenna_spire`, which in Infobox building is the mast's
+  // OWN length: the Empire State Building publishes roof 1250 ft, tip 1454 ft
+  // and antenna_spire 204 ft. Reading the spire as an elevation would call the
+  // tallest thing in Midtown 62 metres. Found by running this audit against the
+  // real article — the fixture written from memory had encoded the mistake.
+  tip: /\|[ \t]*tip[ \t]*=([^\n]*)/,
   roof: /\|[ \t]*roof[ \t]*=([^\n]*)/,
   architectural: /\|[ \t]*architectural[ \t]*=([^\n]*)/,
-  antennaSpire: /\|[ \t]*antenna_spire[ \t]*=([^\n]*)/,
   height: /\|[ \t]*height[ \t]*=([^\n]*)/,
+  // Parsed for reporting only, and deliberately not a candidate for `tallest`.
+  antennaSpire: /\|[ \t]*antenna_spire[ \t]*=([^\n]*)/,
 };
 const FLOORS = /\|[ \t]*floor_count[ \t]*=[ \t]*([\d]+)/;
 
@@ -83,7 +91,7 @@ export function parseInfoboxHeights(wikitext) {
  * Empire State Building at 377.6 m and OSM at 443 m, and neither is wrong.
  */
 export function publishedHeights(box) {
-  const tallest = [box.antennaSpire, box.architectural, box.height, box.roof]
+  const tallest = [box.tip, box.architectural, box.height, box.roof]
     .filter((v) => typeof v === "number");
   const roofish = [box.roof, box.architectural, box.height]
     .filter((v) => typeof v === "number");

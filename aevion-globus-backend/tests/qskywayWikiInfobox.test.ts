@@ -30,10 +30,9 @@ describe("parseInfoboxHeights", () => {
   });
 
   it("converts a template stated in FEET instead of reading it as metres", () => {
-    // {{convert|1454|ft|m}} is the Empire State Building's antenna height.
-    // Reading 1454 as metres would put it above the troposphere.
-    const box = parseInfoboxHeights("| antenna_spire = {{convert|1,454|ft|m}}");
-    expect(box.antennaSpire).toBeCloseTo(443.2, 1);
+    // Reading 1454 as metres would put the building above the troposphere.
+    const box = parseInfoboxHeights("| tip = {{convert|1,454|ft|m}}");
+    expect(box.tip).toBeCloseTo(443.2, 1);
   });
 
   it("reads a plain '310.8 m' as well as a template", () => {
@@ -52,9 +51,35 @@ describe("parseInfoboxHeights", () => {
   });
 });
 
-describe("publishedHeights — the antenna and the roof are different questions", () => {
+// Verbatim field shape from en:Empire State Building. `antenna_spire` is the
+// mast's OWN length, not the elevation of its top — the height to the top lives
+// in `tip`. The first version of this module treated the spire as an elevation,
+// which would have published the tallest thing in Midtown as 62 m.
+const EMPIRE_STATE = `{{Infobox building
+| roof             = {{cvt|1250|ft|m|1}}<ref name=skyscrapercenter />
+| tip              = {{cvt|1454|ft|m|1}}<ref name=skyscrapercenter/>
+| antenna_spire    = {{cvt|204|ft|m|1}}<ref name=skyscrapercenter/>
+| floor_count      = 102<ref name=skyscrapercenter />
+}}`;
+
+describe("publishedHeights — the mast and the roof are different questions", () => {
+  it("reads the real Empire State infobox without mistaking the spire for the top", () => {
+    const box = parseInfoboxHeights(EMPIRE_STATE);
+    expect(box.roof).toBeCloseTo(381, 0);
+    expect(box.tip).toBeCloseTo(443.2, 1);
+    expect(box.antennaSpire).toBeCloseTo(62.2, 1); // the mast itself, 204 ft
+    expect(publishedHeights(box)).toMatchObject({ tallest: box.tip, roof: box.roof });
+  });
+
+  it("does NOT flag OSM's 443 m against this article", () => {
+    // OSM tags the Empire State Building at 443 m, which is the tip and is what
+    // an aircraft must clear. An audit that cried wolf on the most famous
+    // building in the bbox would be ignored on the next one.
+    expect(compareTagToArticle(443, parseInfoboxHeights(EMPIRE_STATE)).verdict).toBe("agrees");
+  });
+
   it("separates the tallest published figure from the roof figure", () => {
-    const box = { roof: 381, antennaSpire: 443.2, floors: 102 };
+    const box = { roof: 381, tip: 443.2, floors: 102 };
     expect(publishedHeights(box)).toMatchObject({ tallest: 443.2, roof: 381 });
   });
 
@@ -80,10 +105,9 @@ describe("compareTagToArticle", () => {
     expect(v.verdict).toBe("under");
   });
 
-  it("does NOT flag an antenna height against a roof figure", () => {
-    // The Empire State Building: OSM says 443 m (antenna), the roof is 381 m.
+  it("does NOT flag a mast-top height against a roof figure", () => {
     // Comparing against the roof alone would manufacture a disagreement.
-    expect(compareTagToArticle(443, { roof: 381, antennaSpire: 443.2 }).verdict).toBe("agrees");
+    expect(compareTagToArticle(443, { roof: 381, tip: 443.2 }).verdict).toBe("agrees");
   });
 
   it("says unknown rather than inventing a verdict without data", () => {

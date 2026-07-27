@@ -782,6 +782,22 @@ export function parsePlanSignals(text: string): PlanSignals {
       if (monthly && !/\bmrr\b/i.test(kindStr)) {
         s.parseNotes.push(`The top line was disclosed monthly (${fmtUsdShort(val)}); the score uses the annualized figure (${fmtUsdShort(val * 12)}).`);
       }
+      // A quarter or a half-year scored beside somebody else's full year is a
+      // comparison between different things, and nothing said so. WeWork's case
+      // in this corpus states $1.54B for the first half of 2019 — a business
+      // running at roughly twice that annually — and it sat in the same field
+      // as another company's twelve-month figure.
+      //
+      // Deliberately NOT annualized. Doubling a half-year assumes no
+      // seasonality, and inventing a figure the plan never stated is worse than
+      // scoring the one it did. The assumption is named instead, which is this
+      // rubric's rule everywhere else.
+      const subAnnual = /\b(quarter(?:ly)?|three months|nine months|first half|six months|half[- ]year|h1|h2|q[1-4])\b/i.exec(around);
+      if (!monthly && subAnnual) {
+        s.parseNotes.push(
+          `The top line covers ${subAnnual[0].toLowerCase()}, not a full year; it is scored as stated and not annualized.`,
+        );
+      }
     }
   }
   // A plan that says it has no revenue is not 'revenue mentioned without a

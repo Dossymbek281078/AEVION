@@ -2736,3 +2736,42 @@ describe("growth stated as a multiple", () => {
     expect(s.growthPeriod).toBe("YoY");
   });
 });
+
+describe("a quarter is not a year, and the reader is told", () => {
+  // WeWork's case in this corpus states $1.54B for the first half of 2019 — a
+  // business running at roughly twice that annually — and it sat in the same
+  // field as another company's twelve-month figure, with nothing saying so.
+  const notes = (t: string) => parsePlanSignals(t).parseNotes.join(" ");
+
+  test.each([
+    ["a quarter", "Revenue of $3 million in the quarter."],
+    ["a filing's quarter", "Revenue from operations was ₹48,211 crore for the quarter ended June 30, 2026."],
+    ["a half year", "Revenue of $6 million in the first half of 2025."],
+    ["WeWork's own wording", "Revenue of $1.54B in the first half of 2019."],
+  ])("%s is named", (_l, text) => {
+    expect(notes(text)).toMatch(/covers .*not a full year/i);
+  });
+
+  test.each([
+    ["a fiscal year", "Revenue of $12 million in fiscal 2025."],
+    ["an undated figure", "Revenue of $12 million."],
+    ["ARR, annual by construction", "ARR of $12 million."],
+  ])("%s is not", (_l, text) => {
+    expect(notes(text)).not.toMatch(/not a full year/i);
+  });
+
+  test("the figure itself is unchanged — this names an assumption, it does not make one", () => {
+    // Doubling a half-year assumes no seasonality, and inventing a figure the
+    // plan never stated is worse than scoring the one it did.
+    expect(parsePlanSignals("Revenue of $6 million in the first half of 2025.").revenueUsd).toBe(6_000_000);
+    expect(parsePlanSignals("Revenue of $3 million in the quarter.").revenueUsd).toBe(3_000_000);
+  });
+
+  test("and the monthly annualisation still happens and still says so", () => {
+    // The one period the engine DOES convert, because a month has no
+    // seasonality argument against it and MRR means a run rate by definition.
+    const s = parsePlanSignals("Revenue of $1 million per month.");
+    expect(s.revenueUsd).toBe(12_000_000);
+    expect(s.parseNotes.join(" ")).toMatch(/disclosed monthly/i);
+  });
+});

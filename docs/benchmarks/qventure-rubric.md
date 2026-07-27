@@ -1231,6 +1231,28 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    figure arrived as a multiple, because 3x scored as 200% is an interpretation
    and not a disclosure.
 
+48. **A quarter scored beside somebody else'''s year, and nothing said so.** A
+   sweep of how a period attaches to the top line found the arithmetic already
+   right — ARR, MRR, run-rate, annualised, LTM, TTM and "per month" all read
+   correctly, and "$1 million per month" annualises with a note. One thing was
+   missing, and it was not arithmetic.
+
+   A figure covering a quarter or a half-year is scored as stated, in the same
+   field as another company'''s full year, with no indication of the difference.
+   WeWork'''s case in this corpus states $1.54B for the first half of 2019 — a
+   business running at roughly twice that annually — and Infosys states a
+   quarter. Comparing them to an annual figure is comparing different things.
+
+   **Not annualised, named.** Doubling a half-year assumes no seasonality, and
+   inventing a figure the plan never stated is worse than scoring the one it
+   did. A parse note now says which period the top line covers and that it was
+   not annualised. Every score is unchanged — corpus 95/95, gap 10.9 — because
+   this adds a sentence to the reader, not a number to the model.
+
+   The month is the one period still converted, and that is deliberate: MRR
+   means a run rate by definition, and a month carries no seasonality argument.
+   That conversion has always announced itself and still does.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

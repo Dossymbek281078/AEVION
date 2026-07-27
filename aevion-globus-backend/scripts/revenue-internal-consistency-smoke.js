@@ -89,6 +89,21 @@ function live(balance) {
       `${liveChannels.reduce((sum, [, b]) => sum + (b.saleCount ?? 0), 0)}`,
   );
 
+  // Точки тренда обязаны нести флаг: /trend отдаёт СВОЮ, урезанную форму точки,
+  // и один раз она уже потеряла includesInternal — фронт рисовал предупреждение
+  // о ступеньке, которое не могло появиться никогда.
+  const trend = await get("/api/revenue/trend?windowDays=90");
+  const points = trend.series ?? [];
+  if (points.length === 0) {
+    console.log("  SKIP  снапшотов в окне нет — точки тренда проверять не на чем");
+  } else {
+    check(
+      "точки тренда несут флаг includesInternal",
+      points.every((p) => typeof p.includesInternal === "boolean"),
+      `первая точка: ${JSON.stringify(points[0])}`,
+    );
+  }
+
   console.log(
     failures === 0
       ? `\nPASS — выручка снаружи ${(summary.grossUsd ?? 0).toFixed(2)} USD, свои покупки ${internalGross.toFixed(2)} USD не в ней`

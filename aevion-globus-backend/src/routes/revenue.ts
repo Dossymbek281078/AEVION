@@ -1036,7 +1036,16 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
         netGrowthPct: growth(first.netUsd, last.netUsd),
         saleGrowthPct: growth(first.saleCount, last.saleCount),
       },
-      series: series.map((s) => ({ capturedAt: s.capturedAt, netUsd: s.netUsd, grossUsd: s.grossUsd, saleCount: s.saleCount })),
+      // includesInternal обязан доезжать до графика: без него дашборд не
+      // отличит снимок, где свои покупки лежали в выручке, от снимка без них,
+      // и ступенька 27.07.2026 прочитается как обвал выручки.
+      series: series.map((s) => ({
+        capturedAt: s.capturedAt,
+        netUsd: s.netUsd,
+        grossUsd: s.grossUsd,
+        saleCount: s.saleCount,
+        includesInternal: s.includesInternal,
+      })),
     });
   } catch (err: unknown) {
     capture(err, { route: "GET /trend" });

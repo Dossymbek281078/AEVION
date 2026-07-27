@@ -325,6 +325,11 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   // so a query for sector=constructor would otherwise resolve to an object that
   // is not a sector and put `undefined` into the SQL parameter.
   const sector = sectorRaw ? safeResolveSector(sectorRaw) : null;
+  // Поиск по словам: инвестор ищет «логистика», «юристы», «подписка» — то есть
+  // по тому, что написано в заявке, а не по нашим категориям. ILIKE по названию
+  // и описанию; экранируем % и _, иначе запрос «100%» превратится в маску.
+  const qRaw = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
+  const query = qRaw ? qRaw.replace(/[\%_]/g, (m) => `\${m}`) : "";
   const minScore = Number(req.query.minScore);
   const hasMinScore = Number.isFinite(minScore) && minScore > 0;
   // "score" ranks by the free assessment; anything else falls back to recency.
@@ -347,6 +352,10 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
         // assessment always records the sector the score was actually computed
         // against, so that is what the filter reads.
         where += ` AND assessment->'sector'->>'id' = $${args.length}`;
+      }
+      if (query) {
+        args.push(`%${query}%`);
+        where += ` AND (title ILIKE $${args.length} ESCAPE '\' OR description ILIKE $${args.length} ESCAPE '\')`;
       }
       if (hasMinScore) {
         args.push(minScore);
@@ -376,6 +385,12 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   let all = Array.from(memListings.values()).filter((r) => r.visibility === "public");
   if (tier) all = all.filter((r) => (isTier(r.tier) ? r.tier : tierFromLegacyStage(r.stage)) === tier);
   if (sector) all = all.filter((r) => r.assessment?.sector?.id === sector.id);
+  if (qRaw) {
+    const needle = qRaw.toLowerCase();
+    all = all.filter(
+      (r) => r.title.toLowerCase().includes(needle) || r.description.toLowerCase().includes(needle),
+    );
+  }
   if (hasMinScore) all = all.filter((r) => (r.assessment_score ?? -1) >= minScore);
   all.sort((a, b) =>
     sort === "score"

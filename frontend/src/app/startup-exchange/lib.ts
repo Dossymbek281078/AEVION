@@ -198,12 +198,13 @@ export const startupxApi = {
       avgScore: number;
     }>("/stats"),
 
-  list: (params: { tier?: Tier | ""; sector?: string; limit: number; offset: number; sort?: "recent" | "score" }) => {
+  list: (params: { tier?: Tier | ""; sector?: string; q?: string; limit: number; offset: number; sort?: "recent" | "score" }) => {
     const q = new URLSearchParams();
     q.set("limit", String(params.limit));
     q.set("offset", String(params.offset));
     if (params.tier) q.set("tier", params.tier);
     if (params.sector) q.set("sector", params.sector);
+    if (params.q) q.set("q", params.q);
     if (params.sort) q.set("sort", params.sort);
     return call<{ listings: Listing[]; total: number }>(`/ideas?${q.toString()}`);
   },

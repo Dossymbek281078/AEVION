@@ -124,6 +124,23 @@ async function run() {
   assert("listings array present", Array.isArray(list.body?.data?.listings));
   assert("tier filter honoured", (list.body?.data?.listings ?? []).every((l) => l.tier === "idea"));
 
+  // Поиск словами из заявки: инвестор ищет «перевозчики», а не наши категории.
+  const found = await req("GET", "/api/startupx/ideas?q=" + encodeURIComponent("перевозчики"));
+  assert("поиск находит заявку по слову из описания", (found.body?.data?.total ?? 0) >= 1,
+    String(found.body?.data?.total));
+  const missing = await req("GET", "/api/startupx/ideas?q=" + encodeURIComponent("зубоврачебные кресла"));
+  assert("поиск не выдаёт лишнего", (missing.body?.data?.total ?? -1) === 0, String(missing.body?.data?.total));
+  // Экранирование маски. Строка «%рейса» буквально в заявке не встречается, но
+  // без ESCAPE она превратилась бы в шаблон «любое начало + рейса» и нашла бы
+  // заявку со словами «5% с рейса». Один и тот же запрос различает эти два мира.
+  const wildcard = await req("GET", "/api/startupx/ideas?q=" + encodeURIComponent("%рейса"));
+  assert("процент ищется как символ, а не как маска", (wildcard.body?.data?.total ?? -1) === 0,
+    String(wildcard.body?.data?.total));
+  // А как обычный символ он по-прежнему находится: в описании есть «5% с рейса».
+  const literal = await req("GET", "/api/startupx/ideas?q=" + encodeURIComponent("5%"));
+  assert("процент как обычный символ находится", (literal.body?.data?.total ?? 0) >= 1,
+    String(literal.body?.data?.total));
+
   console.log("\n6. Single listing");
   if (listingId) {
     const single = await req("GET", `/api/startupx/ideas/${listingId}`);

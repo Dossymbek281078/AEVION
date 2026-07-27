@@ -32,16 +32,18 @@ export default function StartupExchangePage() {
   const [tierFilter, setTierFilter] = useState<TierFilter>("");
   const [sort, setSort] = useState<"recent" | "score">("recent");
   const [sectorFilter, setSectorFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchApplied, setSearchApplied] = useState("");
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [interestFor, setInterestFor] = useState<Listing | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
 
-  const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string) => {
+  const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string, q: string) => {
     setLoading(true);
     try {
-      const data = await startupxApi.list({ tier, sector: sector || undefined, limit: PAGE_SIZE, offset: off, sort: s });
+      const data = await startupxApi.list({ tier, sector: sector || undefined, q: q || undefined, limit: PAGE_SIZE, offset: off, sort: s });
       setListings(data.listings ?? []);
       setTotal(data.total ?? 0);
     } catch {
@@ -70,8 +72,8 @@ export default function StartupExchangePage() {
   }, []);
 
   useEffect(() => {
-    fetchListings(tierFilter, offset, sort, sectorFilter);
-  }, [tierFilter, offset, sort, sectorFilter, fetchListings]);
+    fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied);
+  }, [tierFilter, offset, sort, sectorFilter, searchApplied, fetchListings]);
 
   useEffect(() => {
     fetchStats();
@@ -85,7 +87,9 @@ export default function StartupExchangePage() {
     setOffset(0);
     setTierFilter("");
     setSectorFilter("");
-    fetchListings("", 0, sort, "");
+    setSearch("");
+    setSearchApplied("");
+    fetchListings("", 0, sort, "", "");
     fetchStats();
   }
 
@@ -202,6 +206,54 @@ export default function StartupExchangePage() {
           >
             Заявки на бирже
           </h2>
+
+          {/* Инвестор ищет словами из заявки — «логистика», «юристы», «подписка», —
+              а не нашими категориями. Применяется по Enter и по кнопке: поиск на
+              каждую букву гонял бы запрос на сервер без пользы. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearchApplied(search.trim());
+              setOffset(0);
+            }}
+            style={{ display: "flex", gap: 8, marginBottom: 12 }}
+          >
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Поиск по заявкам"
+              placeholder="Поиск по словам из заявки: логистика, юристы, подписка…"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "9px 12px",
+                borderRadius: 9,
+                border: "1px solid #e2e8f0",
+                fontSize: 13.5,
+                fontFamily: "inherit",
+                color: "#0f172a",
+              }}
+            />
+            <button
+              type="submit"
+              style={{ padding: "9px 16px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              Найти
+            </button>
+            {searchApplied && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSearchApplied("");
+                  setOffset(0);
+                }}
+                style={{ padding: "9px 14px", borderRadius: 9, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Сбросить
+              </button>
+            )}
+          </form>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
             {tabs.map((tab) => {
               const active = tierFilter === tab.id;
@@ -336,7 +388,7 @@ export default function StartupExchangePage() {
           onSubmitted={(id) => {
             setInterestFor(null);
             setToast(`Предложение отправлено основателю заявки №${id}`);
-            fetchListings(tierFilter, offset, sort, sectorFilter);
+            fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied);
           }}
         />
       )}

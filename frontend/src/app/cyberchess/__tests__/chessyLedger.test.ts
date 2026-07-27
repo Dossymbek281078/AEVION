@@ -61,3 +61,50 @@ describe("кошелёк Chessy", () => {
     expect(canSpend(before, -1)).toBe(false);
   });
 });
+
+import { migrateWallet, type WalletState } from "../chessyLedger";
+
+const EMPTY: WalletState = { v: 1, balance: 0, lifetime: 0, streak: 0, welcome: false, owned: {}, ach: {} };
+
+describe("чтение кошелька с диска", () => {
+  it("незнакомая версия НЕ стирает кошелёк", () => {
+    // именно это и делал прежний загрузчик: v!==1 → пустой кошелёк
+    const stored = { v: 7, balance: 340, lifetime: 900, streak: 4, welcome: true, owned: { streak_shield: true }, ach: { first_win: 123 } };
+    const w = migrateWallet(stored, EMPTY);
+    expect(w.balance).toBe(340);
+    expect(w.lifetime).toBe(900);
+    expect(w.owned.streak_shield).toBe(true);
+    expect(w.ach.first_win).toBe(123);
+  });
+
+  it("версия приводится к текущей, чтобы запись не осталась в старом формате", () => {
+    expect(migrateWallet({ v: 7, balance: 10 }, EMPTY).v).toBe(1);
+  });
+
+  it("испорченный баланс не пролезает, но достижения сохраняются", () => {
+    const w = migrateWallet({ v: 1, balance: "много", ach: { first_win: 5 } }, EMPTY);
+    expect(w.balance).toBe(0);
+    expect(w.ach.first_win).toBe(5);
+  });
+
+  it("отрицательный баланс отвергается", () => {
+    expect(migrateWallet({ v: 1, balance: -50 }, EMPTY).balance).toBe(0);
+  });
+
+  it("пожизненный счёт не может быть меньше баланса", () => {
+    expect(migrateWallet({ v: 1, balance: 100, lifetime: 3 }, EMPTY).lifetime).toBe(100);
+  });
+
+  it("мусор вместо объекта даёт пустой кошелёк, а не падение", () => {
+    for (const junk of [null, undefined, 42, "строка", [1, 2, 3]]) {
+      expect(migrateWallet(junk, EMPTY).balance).toBe(0);
+    }
+  });
+
+  it("owned/ach не массивы: массив вместо словаря отбрасывается", () => {
+    const w = migrateWallet({ v: 1, balance: 5, owned: ["a"], ach: 7 }, EMPTY);
+    expect(w.owned).toEqual({});
+    expect(w.ach).toEqual({});
+    expect(w.balance).toBe(5);
+  });
+});

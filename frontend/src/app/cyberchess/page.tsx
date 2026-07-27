@@ -122,7 +122,7 @@ import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { isPlayerPly, isPlayerIndex } from "./plyOwner";
 import { accuracyOf } from "./accuracy";
-import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock } from "./chessyLedger";
+import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock, migrateWallet } from "./chessyLedger";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -457,7 +457,10 @@ function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.l
 type ChessyState={v:1;balance:number;lifetime:number;lastDaily?:string;streak:number;welcome:boolean;owned:Record<string,boolean>;ach:Record<string,number>};
 const CK="aevion_chessy_v1";
 const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:false,owned:{},ach:{}};
-function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
+/* Незнакомая версия больше НЕ обнуляет кошелёк — см. migrateWallet: прежний код
+   на `r.v!==1` возвращал пустое состояние, то есть первое же поднятие версии
+   стёрло бы всем баланс, достижения и покупки. */
+function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};return migrateWallet(JSON.parse(s),CHESSY_DEFAULT)}catch{return {...CHESSY_DEFAULT}}}
 function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
 // Chessy transaction log (last 50 events) for shop "History" section
 type ChessyLogEntry={ts:number;amount:number;reason:string;sign:1|-1};

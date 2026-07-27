@@ -1738,3 +1738,39 @@ describe("a currency we cannot convert refuses the figure", () => {
     }
   });
 });
+
+describe("the same currency reads the same in every sentence shape", () => {
+  // The asymmetry this closes: R$, S$, C$, A$ and "Rs." were in the detector
+  // but not in the number-prefix pattern, so "we recorded R$ 1,697.6 million
+  // in revenue" converted correctly while "revenue of R$ 1,697.6 million"
+  // returned nothing. A reader that depends on which way round the sentence is
+  // built has coverage nobody can reason about.
+  const rev = (t: string) => parsePlanSignals(t).revenueUsd;
+
+  test.each([
+    ["Brazilian real", "R$ 1,697.6 million"],
+    ["Singapore dollar", "S$ 1.5 billion"],
+    ["Canadian dollar", "C$ 300 million"],
+    ["Australian dollar", "A$ 300 million"],
+    ["Indian rupee, Rs. abbreviation", "Rs. 2,604.7 crore"],
+  ])("%s reads identically either way round", (_c, amount) => {
+    const suffixForm = rev(`We recorded ${amount} in revenue.`);
+    const prefixForm = rev(`We reported revenue of ${amount}.`);
+    expect(suffixForm).not.toBeNull();
+    expect(prefixForm).toBe(suffixForm);
+  });
+
+  test("Rs. is the rupee in the detector, not only in the prefix", () => {
+    // Recognised in the prefix but not the detector, the figure parses and
+    // then takes the plan currency: Rs. 2,604.7 crore read as $26bn instead of
+    // ~$270M. Wrong number, introduced by fixing the miss beside it.
+    const v = rev("We reported revenue of Rs. 2,604.7 crore.");
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(2e8);
+    expect(v!).toBeLessThan(4e8);
+  });
+
+  test("the dollar sign inside a foreign symbol does not win", () => {
+    expect(rev("We reported revenue of R$ 100 million.")).not.toBe(100_000_000);
+  });
+});

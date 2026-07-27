@@ -60,7 +60,7 @@ const MARKERS: Array<[MoneyCurrency, RegExp]> = [
   ["RUB", /₽|\brub(?![a-z])|\broubles?\b|\brubles?\b|\bрубл|\bруб\b/i],
   ["JPY", /¥|\bjpy(?![a-z])|\byen\b/i],
   ["CNY", /\bcny(?![a-z])|\brmb(?![a-z])|\byuan\b/i],
-  ["INR", /₹|\binr(?![a-z])|\brupees?\b/i],
+  ["INR", /₹|\binr(?![a-z])|\brupees?\b|\brs\.?(?=[ 0-9])/i],
   ["CHF", /\bchf(?![a-z])|\bswiss francs?\b/i],
   ["SEK", /\bsek(?![a-z])|\bswedish krona\b/i],
   ["AED", /\baed(?![a-z])|\bdirhams?\b/i],
@@ -100,7 +100,7 @@ export const UNSUPPORTED_CURRENCY_BEFORE_NUMBER =
  * so "€3M ARR" and "KZT 450 млн" match the same money patterns "$3M" does.
  */
 export const CURRENCY_PREFIX_PATTERN =
-  String.raw`(?:[$€£₸₽¥₹₪₺]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|rmb|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln)(?![a-z]))?\s*`;
+  String.raw`(?:r\$|s\$|c\$|a\$|\brs\.?(?=[ 0-9])|[$€£₸₽¥₹₪₺]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|rmb|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln)(?![a-z]))?\s*`;
 
 /**
  * Find the currency a figure is quoted in, given a small text window around it.

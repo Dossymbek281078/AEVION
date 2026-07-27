@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 317
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 337
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (330
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (337
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -582,12 +582,23 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    unchanged at 10.9, hard cases 30/30, full backend suite green. No figure in
    any real filing in the corpus was refused by it.
 
-   The misses are safe by comparison — `R$`, `S$` and `Rs.` are detected as
-   currencies but are absent from the number-prefix pattern, so the figure is
-   not read at all rather than read wrongly. Note the asymmetry that makes this
-   worth its own limit: the same currency parses correctly in one sentence
-   shape and not the other. `R$` after "we recorded" converts fine; `R$` after
-   "revenue of" returns nothing.
+   **The asymmetry underneath both is also closed, and it was the real lesson.**
+   `R$`, `S$`, `C$`, `A$` and `Rs.` were in the currency detector but not in the
+   number-prefix pattern, so the same currency parsed in one sentence shape and
+   not the other: "we recorded R$ 1,697.6 million in revenue" converted, while
+   "revenue of R$ 1,697.6 million" returned nothing. A reader whose coverage
+   depends on which way round the sentence is built has coverage nobody can
+   reason about. All five are now in both, with a test that reads each amount
+   twice — once each way round — and requires the same answer.
+
+   Fixing it introduced a defect of the very class this file is about, which is
+   worth recording rather than quietly repairing. Adding `Rs.` to the prefix
+   pattern let the figure parse, but `Rs.` was still not in the *detector*, so
+   the figure took the plan currency: Zomato's Rs. 2,604.7 crore read as **$26
+   billion** instead of ~$270M. Recognised in one table and not the other is
+   exactly how a miss becomes a wrong number. It was caught by the control case
+   sitting in the same probe, not by the tests, which had no reason to cover a
+   currency the engine had never claimed to read.
 
 ## How this stays true
 
@@ -595,7 +606,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 317):
+`tests/qventureDisclosedCorpus.test.ts`, 337):
 
 | Guard | Floor | Measured today |
 |---|---|---|

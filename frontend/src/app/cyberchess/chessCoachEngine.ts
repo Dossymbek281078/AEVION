@@ -491,16 +491,32 @@ export function spotTactics(fen: string): string[] {
     const turn = chess.turn();
     const moves = chess.moves({ verbose: true });
 
-    // Проверяем вилки конём
+    /* Вилка конём. Раньше здесь после хода конём перебирались `afterKnight.moves()` —
+       а это ходы СОПЕРНИКА, потому что очередь уже перешла. Условие «есть взятие ферзя
+       или ладьи» выполнялось, когда соперник может забрать ТВОЮ тяжёлую фигуру, и коуч
+       советовал ход, после которого у игрока снимают ферзя. Проверено на позиции
+       3r2k1/8/8/8/8/5N2/6PP/3Q2K1 w: ладья d8 бьёт ферзя d1 после любого хода конём,
+       и подсказка предлагала Ne5.
+
+       Считаем то, что и означает вилка: сколько ценных фигур соперника стоит под боем
+       коня с поля назначения. Две и больше — вилка. */
+    const OFFS: [number, number][] = [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
     const knightMoves = moves.filter(m => m.piece === "n");
     for (const km of knightMoves) {
       const afterKnight = new Chess(fen);
       afterKnight.move(km);
-      // Если после хода коня атакован ферзь или ладья соперника — намёк на вилку
-      const afterMoves = afterKnight.moves({ verbose: true });
-      const attacks = afterMoves.filter(m => m.captured === "q" || m.captured === "r");
-      if (attacks.length >= 1) {
-        hints.push(`🐴 Посмотри на ход ${km.san} — конь может создать давление`);
+      const file = km.to.charCodeAt(0) - 97;
+      const rank = Number(km.to[1]) - 1;
+      let targets = 0;
+      for (const [df, dr] of OFFS) {
+        const f = file + df, r = rank + dr;
+        if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+        const sq = (String.fromCharCode(97 + f) + (r + 1)) as Square;
+        const piece = afterKnight.get(sq);
+        if (piece && piece.color !== turn && (piece.type === "q" || piece.type === "r" || piece.type === "k")) targets++;
+      }
+      if (targets >= 2) {
+        hints.push(`🐴 Посмотри на ход ${km.san} — конь бьёт сразу две тяжёлые цели`);
         break;
       }
     }

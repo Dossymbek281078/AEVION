@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetPulse";
 
 type RecentRow = {
   id: string;
@@ -22,21 +23,22 @@ export function PlanetPulse() {
     let cancelled = false;
     (async () => {
       try {
-        const [r1, r2] = await Promise.all([
-          fetch(apiUrl("/api/planet/stats")),
-          fetch(`${apiUrl("/api/planet/artifacts/recent")}?limit=4`),
+        // Через общий источник: главная страница запрашивает те же две ручки,
+        // и два независимых обращения за одними данными давали дубль в сети
+        // (issue #1016).
+        const [j1, j2] = await Promise.all([
+          fetchPlanetStats(),
+          fetchRecentArtifacts(4),
         ]);
-        const j1 = await r1.json().catch(() => null);
-        const j2 = await r2.json().catch(() => null);
         if (cancelled) return;
-        if (!r1.ok) {
+        if (!j1) {
           setErr(true);
           return;
         }
         setY(j1.eligibleParticipants ?? 0);
         setVoters(j1.distinctVotersAllTime ?? 0);
         setCertified(j1.certifiedArtifactVersions ?? 0);
-        if (r2.ok && Array.isArray(j2?.items)) setRecent(j2.items);
+        if (j2) setRecent(j2 as RecentRow[]);
       } catch {
         if (!cancelled) setErr(true);
       }

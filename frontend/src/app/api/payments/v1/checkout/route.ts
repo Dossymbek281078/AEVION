@@ -6,7 +6,7 @@ import {
   gateRequest,
   genId,
   getOrigin,
-  parseAmountMinor,
+  parseAmount,
   readJson,
   store,
   withCors,
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  const amount = parseAmountMinor(body.amount);
+  const amount = parseAmount(body.amount);
   if (typeof amount === "string") return withCors(badRequest(amount));
   if (
     typeof body.currency !== "string" ||

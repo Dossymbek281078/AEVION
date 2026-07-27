@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  parseAmountMinor,
+  parseAmount,
   checkIdempotency,
   gateRequest,
   genId,
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (typeof body.plan_name !== "string" || !body.plan_name.trim()) {
     return withCors(badRequest("plan_name is required."));
   }
-  const amount = parseAmountMinor(body.amount);
+  const amount = parseAmount(body.amount);
   if (typeof amount === "string") return withCors(badRequest(amount));
   if (
     typeof body.currency !== "string" ||

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  parseAmountMinor,
+  parseAmount,
   parseLimit,
   checkIdempotency,
   gateRequest,
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   if (!body) return withCors(badRequest("Body must be JSON."));
 
   const { currency, title } = body;
-  const amount = parseAmountMinor(body.amount);
+  const amount = parseAmount(body.amount);
   if (typeof amount === "string") return withCors(badRequest(amount));
   if (typeof currency !== "string" || !ALLOWED_CURRENCIES.includes(currency as Currency)) {
     return withCors(

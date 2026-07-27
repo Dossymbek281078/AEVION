@@ -192,33 +192,38 @@ export function signHmac(secret: string, body: string) {
 }
 
 /**
- * Верхняя граница суммы — 1 000 000 000 минорных единиц (10 млн в валюте).
- * Не «сколько бывает», а «дальше начинается мусор»: у Stripe похожий предел.
+ * Верхняя граница суммы — миллиард в валюте счёта. Не «сколько бывает», а
+ * «дальше начинается мусор».
  */
-export const MAX_AMOUNT_MINOR = 1_000_000_000;
+export const MAX_AMOUNT = 1_000_000_000;
 
 /**
- * Сумма в минорных единицах: целое, положительное, конечное, в пределах границы.
+ * Сумма в КРУПНЫХ единицах валюты (99.00 — это девяносто девять долларов).
  *
- * Проверки `typeof x === "number" && x > 0` мало, и это не теория:
- * `JSON.parse('{"amount":1e400}')` даёт **Infinity**, а `Infinity > 0` — истина,
- * то есть тело запроса без единого нечислового символа проходило старую проверку
- * и создавало ссылку на оплату с бесконечной суммой (после чего возврат «в
- * пределах остатка» разрешал любую сумму). Дробное `0.5` в минорных единицах
- * тоже проходило, хотя половины цента не существует.
+ * Единицы выяснены по факту, а не по спеке: форма создания ссылки шлёт
+ * `parseFloat` от поля со значением по умолчанию «99.00», страница оплаты и
+ * письмо-чек печатают число как есть, а пересчёт в дашборде делит тенге на 470.
+ * То есть весь продукт считает в крупных единицах. Опубликованная схема
+ * `/api/openapi.json` при этом писала «Minor units» и пример 9900 — врала она,
+ * и приведена в соответствие тем же коммитом.
+ *
+ * Отбиваем то, что суммой быть не может: `JSON.parse('{"amount":1e400}')` даёт
+ * **Infinity**, а `Infinity > 0` — истина, то есть тело без единого нечислового
+ * символа проходило старую проверку и создавало ссылку на оплату с бесконечной
+ * суммой (после чего возврат «в пределах остатка» разрешал любую сумму).
+ * Больше двух знаков после запятой — тоже мусор: трети цента не существует.
  *
  * @returns число, если валидно; строку с причиной — если нет.
  */
-export function parseAmountMinor(value: unknown): number | string {
+export function parseAmount(value: unknown): number | string {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "amount must be a finite number (minor units).";
+    return "amount must be a finite number.";
   }
-  if (!Number.isInteger(value)) {
-    return "amount must be a whole number of minor units (no fractions).";
-  }
-  if (value <= 0) return "amount must be a positive number (minor units).";
-  if (value > MAX_AMOUNT_MINOR) {
-    return `amount must not exceed ${MAX_AMOUNT_MINOR} minor units.`;
+  if (value <= 0) return "amount must be a positive number.";
+  if (value > MAX_AMOUNT) return `amount must not exceed ${MAX_AMOUNT}.`;
+  // Math.round против плавающей точки: 49.5 * 100 может дать 4949.999999999999
+  if (Math.abs(Math.round(value * 100) - value * 100) > 1e-6) {
+    return "amount must have at most 2 decimal places.";
   }
   return value;
 }

@@ -1,35 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { MAX_AMOUNT_MINOR, parseAmountMinor, parseLimit, webhookUrlError } from "../api/payments/v1/_lib";
+import type { NextRequest } from "next/server";
+import { POST as createLink } from "../api/payments/v1/links/route";
+import { MAX_AMOUNT, parseAmount, parseLimit, webhookUrlError } from "../api/payments/v1/_lib";
 
 /**
- * Публичный финтех-API AEVION принимал сумму по проверке
- * `typeof amount === "number" && amount > 0`. Этого мало, и не в теории:
- * `JSON.parse('{"amount":1e400}')` возвращает **Infinity** — тело без единого
- * нечислового символа проходило проверку и создавало ссылку на оплату с
- * бесконечной суммой. Дальше возврат «в пределах остатка» разрешал любую сумму,
- * потому что остаток тоже был бесконечным.
+ * Сумма в этом API — КРУПНЫЕ единицы валюты (99.00 = девяносто девять долларов).
+ * Выяснено по факту: форма создания ссылки шлёт `parseFloat` от поля со значением
+ * по умолчанию «99.00», страница оплаты и письмо печатают число как есть,
+ * пересчёт в дашборде делит тенге на 470. Схема `/api/openapi.json` писала
+ * «Minor units» и пример 9900 — врала она, исправлена.
  *
- * Проверка на реальном разборе JSON, а не на заранее собранных числах:
- * иначе тест доказывал бы только то, что функция умеет сравнивать.
+ * Проверка была `typeof amount === "number" && amount > 0`. Этого мало, и не в
+ * теории: `JSON.parse('{"amount":1e400}')` возвращает **Infinity** — тело без
+ * единого нечислового символа проходило проверку и создавало ссылку на оплату с
+ * бесконечной суммой. Дальше возврат «в пределах остатка» разрешал любую сумму.
+ *
+ * Проверка на реальном разборе JSON, а не на заранее собранных числах: иначе
+ * тест доказывал бы только то, что функция умеет сравнивать.
  */
-describe("сумма в минорных единицах: только целое, положительное, конечное", () => {
-  const amountFromJson = (raw: string) => parseAmountMinor(JSON.parse(raw).amount);
+describe("сумма: положительная, конечная, не больше двух знаков после запятой", () => {
+  const amountFromJson = (raw: string) => parseAmount(JSON.parse(raw).amount);
 
-  it("нормальная сумма проходит", () => {
-    expect(amountFromJson('{"amount":4900}')).toBe(4900);
+  it("целая сумма проходит", () => {
+    expect(amountFromJson('{"amount":99}')).toBe(99);
+  });
+
+  it("копейки проходят — это обычная цена, а не мусор", () => {
+    // Именно этот случай ломала прежняя редакция проверки («только целое»):
+    // форма шлёт 49.5 за $49.50, ручка отвечала 400, и ссылка молча не
+    // синхронизировалась с сервером — `if (!r.ok) return;` в дашборде.
+    expect(amountFromJson('{"amount":49.5}')).toBe(49.5);
+    expect(amountFromJson('{"amount":0.99}')).toBe(0.99);
+    expect(amountFromJson('{"amount":1234.56}')).toBe(1234.56);
+  });
+
+  it("больше двух знаков после запятой отбивается", () => {
+    expect(amountFromJson('{"amount":1.005}')).toBe(
+      "amount must have at most 2 decimal places.",
+    );
   });
 
   it("переполнение в JSON превращается в Infinity и отбивается", () => {
     expect(JSON.parse('{"amount":1e400}').amount).toBe(Infinity); // контроль предпосылки
-    expect(amountFromJson('{"amount":1e400}')).toBe(
-      "amount must be a finite number (minor units).",
-    );
-  });
-
-  it("дробные минорные единицы отбиваются", () => {
-    expect(amountFromJson('{"amount":0.5}')).toBe(
-      "amount must be a whole number of minor units (no fractions).",
-    );
+    expect(amountFromJson('{"amount":1e400}')).toBe("amount must be a finite number.");
   });
 
   it("ноль и отрицательное отбиваются", () => {
@@ -38,12 +51,12 @@ describe("сумма в минорных единицах: только цело
   });
 
   it("выше верхней границы отбивается, ровно граница проходит", () => {
-    expect(parseAmountMinor(MAX_AMOUNT_MINOR)).toBe(MAX_AMOUNT_MINOR);
-    expect(typeof parseAmountMinor(MAX_AMOUNT_MINOR + 1)).toBe("string");
+    expect(parseAmount(MAX_AMOUNT)).toBe(MAX_AMOUNT);
+    expect(typeof parseAmount(MAX_AMOUNT + 1)).toBe("string");
   });
 
   it("строка, null и отсутствие поля отбиваются", () => {
-    expect(typeof amountFromJson('{"amount":"4900"}')).toBe("string");
+    expect(typeof amountFromJson('{"amount":"99"}')).toBe("string");
     expect(typeof amountFromJson('{"amount":null}')).toBe("string");
     expect(typeof amountFromJson("{}")).toBe("string");
   });
@@ -120,5 +133,35 @@ describe("адрес вебхука: только публичный хост", 
     expect(webhookUrlError(null)).toBeTruthy();
     expect(webhookUrlError("/hook")).toBeTruthy();
     expect(webhookUrlError("ftp://example.com/x")).toBeTruthy();
+  });
+});
+
+/**
+ * Проверка через НАСТОЯЩИЙ обработчик, а не только через разборщик: ровно здесь
+ * прежняя редакция ломала продукт — форма шлёт 49.5 за $49.50, ручка отвечала
+ * 400, а дашборд на `!r.ok` молча оставлял ссылку только у себя в браузере.
+ */
+describe("создание ссылки: цена с копейками доходит до сервера", () => {
+  const req = (body: unknown): NextRequest =>
+    new Request("https://aevion.app/api/payments/v1/links", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer sk_test_abcdefgh1234",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }) as unknown as NextRequest;
+
+  it("49.50 создаёт ссылку, а не 400", async () => {
+    const res = await createLink(req({ amount: 49.5, currency: "USD", title: "Консультация" }));
+    expect(res.status).toBe(201);
+    expect((await res.json()).amount).toBe(49.5);
+  });
+
+  it("бесконечная сумма по-прежнему отбивается", async () => {
+    const res = await createLink(
+      req({ amount: JSON.parse('{"a":1e400}').a, currency: "USD", title: "x" }),
+    );
+    expect(res.status).toBe(400);
   });
 });

@@ -69,13 +69,19 @@ export const HUMAN_PROFILES: Record<number, HumanProfile> = {
      95 выбрано как монотонное продолжение ряда (слабее -> горячее: 95 / 75 / 65) и много
      ниже прежних 260, на которых Beginner вешал материал на 37% ходов и играл 1.h4.
 
+     blunderChance 0.30 -> 0.24 (тот же день, после замера зевков): на горячей температуре
+     прежние 0.30 давали 27.7% зевков при цели полосы ~22%. Замеры по blunderChance:
+     0.22 -> 20.4%, 0.23 -> 20.1%, 0.25 -> 24.2%. Между 0.22 и 0.23 порядок нарушается —
+     это разброс от набора позиций (~±2 пункта), поэтому точное попадание в 22% было бы
+     ложной точностью; взята середина работающего диапазона.
+
      ПЕРЕМЕРЕНО той же командой (40 партий, BENCH_PAIRS=1-0):
        было  75% -> разрыв 191 Эло, интервал 88..340, «отличается сверх шума»
        стало 91% -> разрыв 407 Эло, интервал 292..692, «согласуется с заявленным»
      Ожидаемый счёт для разрыва 400 — ровно 91%, попали в него. Менять это число снова
      только вместе с новым замером: правка без перемера здесь уже приводила к обратному
      от задуманного. */
-  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 95, blunderChance: 0.30 },
+  0: { bookPlies: 6,  bookChance: 0.80, bookSharpness: 0.4, bestChance: 0.20, temperature: 95, blunderChance: 0.24 },
   // Casual ~800: plays the first few book moves, blunders a few times a game.
   1: { bookPlies: 10, bookChance: 0.85, bookSharpness: 0.8, bestChance: 0.38, temperature: 75, blunderChance: 0.15 },
   // Club ~1200: solid opening, occasional tactical oversight.

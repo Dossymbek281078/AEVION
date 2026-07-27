@@ -86,7 +86,12 @@ export default async function GoPage({
   // Метка канала из адреса: /go?c=ig в шапке Instagram, ?c=tt в TikTok и т.д.
   // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
   // «какой канал принёс деньги» остаётся без ответа.
-  const channel = channelFrom((await searchParams).c);
+  const rawChannel = (await searchParams).c;
+  const channel = channelFrom(rawChannel);
+  // Внутренние переходы тоже несут метку: человек с /go часто уходит сначала в
+  // /shop или /longevity и покупает уже оттуда. Без проброса канал терялся бы
+  // ровно на том переходе, ради которого страница и сделана.
+  const keep = (path: string) => (channel ? `${path}?c=${encodeURIComponent(String(Array.isArray(rawChannel) ? rawChannel[0] : rawChannel))}` : path);
   const protocol = productById("oijxmq");
   const antiGreyRu = productById("tmuyxw");
   const bookFull = productById("ghvzq");
@@ -107,7 +112,7 @@ export default async function GoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>Здоровье и долголетие</h2>
           <LinkCard
-            href="/longevity"
+            href={keep("/longevity")}
             kicker="Бесплатно · инструмент"
             title="Протокол долголетия"
             note="Отметьте свои анализы — получите персональный 12-недельный стек и повторный замер."
@@ -148,7 +153,7 @@ export default async function GoPage({
           )}
           <div style={styles.aside}>
             Есть версии дешевле — только текст или текст с аудио:{" "}
-            <a href="/shop" style={styles.link}>
+            <a href={keep("/shop")} style={styles.link}>
               в магазине
             </a>
             .
@@ -158,7 +163,7 @@ export default async function GoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>Вся платформа</h2>
           <LinkCard
-            href="/explore"
+            href={keep("/explore")}
             kicker="Бесплатно · обзор"
             title="29 живых модулей AEVION"
             note="Шахматы с ИИ-коучем, сметный тренажёр, венчурный аналитик, IP-бюро и другие."

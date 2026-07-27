@@ -4,6 +4,8 @@ import {
   GUIDES,
   MODULES,
   MODULES_TOTAL_USD,
+  channelFrom,
+  withChannel,
   type Product,
 } from "@/lib/products";
 
@@ -30,13 +32,13 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-function Card({ p }: { p: Product }) {
+function Card({ p, channel }: { p: Product; channel: string | null }) {
   // Ориентируемся на СПОСОБ СПИСАНИЯ, а не на тип товара: модули формально не
   // «подписки», но списываются ежемесячно — и покупатель обязан видеть это
   // до нажатия кнопки, а не в письме от LemonSqueezy.
   const isSub = p.billing === "monthly";
   return (
-    <a href={p.href} target="_blank" rel="noopener noreferrer" style={styles.card}>
+    <a href={withChannel(p.href, channel)} target="_blank" rel="noopener noreferrer" style={styles.card}>
       <div style={styles.cardTop}>
         {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
         <span style={styles.format}>{p.format}</span>
@@ -72,7 +74,17 @@ function Card({ p }: { p: Product }) {
   );
 }
 
-function Section({ title, note, items }: { title: string; note?: string; items: Product[] }) {
+function Section({
+  title,
+  note,
+  items,
+  channel,
+}: {
+  title: string;
+  note?: string;
+  items: Product[];
+  channel: string | null;
+}) {
   return (
     <section style={styles.section}>
       <div style={styles.sectionHead}>
@@ -81,14 +93,22 @@ function Section({ title, note, items }: { title: string; note?: string; items: 
       </div>
       <div style={styles.grid}>
         {items.map((p) => (
-          <Card key={p.id} p={p} />
+          <Card key={p.id} p={p} channel={channel} />
         ))}
       </div>
     </section>
   );
 }
 
-export default function ShopPage() {
+export default async function ShopPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  // Метка канала приезжает с /go (?c=ig и т.д.) — витрина обязана донести её до
+  // чекаута, иначе переход «страница профиля → магазин → покупка» теряет источник
+  // ровно там, где человек и решает платить.
+  const channel = channelFrom((await searchParams).c);
   return (
     <main style={styles.page}>
       <div style={styles.wrap}>
@@ -105,18 +125,21 @@ export default function ShopPage() {
             MODULES_TOTAL_USD,
           )} в месяц.`}
           items={SUBSCRIPTIONS}
+          channel={channel}
         />
 
         <Section
           title="Гайды и книги"
           note="Разовая покупка, файл приходит сразу после оплаты."
           items={GUIDES}
+          channel={channel}
         />
 
         <Section
           title="Модули по подписке"
           note="Отдельный продукт помесячно — если нужен один инструмент, а не вся экосистема. Списание ежемесячное, отменить можно в любой момент."
           items={MODULES}
+          channel={channel}
         />
 
         <p style={styles.foot}>

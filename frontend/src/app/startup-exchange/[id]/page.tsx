@@ -29,6 +29,7 @@ export default function ListingDetailPage() {
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
   const [showInterest, setShowInterest] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!Number.isInteger(id) || id <= 0) {
@@ -194,6 +195,43 @@ export default function ListingDetailPage() {
                 </p>
               </div>
             )}
+
+            {/* Пожаловаться можно с самой заявки: жалоба, до которой надо
+                догадаться, не поступит никогда. Ничего не скрывает — только
+                показывает оператору, куда смотреть. */}
+            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+              {reporting ? (
+                <div style={{ fontSize: 12.5, color: "#166534", fontWeight: 700 }}>
+                  Жалоба принята — оператор посмотрит заявку.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 8, lineHeight: 1.5 }}>
+                    Заявка выглядит мусором, обманом или чужой работой?
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {([
+                      ["spam", "Спам"],
+                      ["scam", "Обман"],
+                      ["stolen", "Чужая работа"],
+                      ["illegal", "Незаконное"],
+                    ] as const).map(([reason, label]) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => {
+                          startupxApi.report(listing.id, { reason }).catch(() => {});
+                          setReporting(true);
+                        }}
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             {listing.qright_protected && listing.content_hash && (
               <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>

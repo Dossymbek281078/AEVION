@@ -244,6 +244,10 @@ export const startupxApi = {
       body: JSON.stringify(patch),
     }),
 
+  /** Жалоба посетителя. Ничего не скрывает — показывает оператору, куда смотреть. */
+  report: (id: number, payload: { reason: string; note?: string }) =>
+    call<{ received: boolean }>(`/ideas/${id}/report`, { method: "POST", body: JSON.stringify(payload) }),
+
   /** Take the listing off the public feed. The row and its offers are kept. */
   withdraw: (id: number, token: string) =>
     call<{ id: number; visibility: string }>(`/ideas/${id}?token=${encodeURIComponent(token)}`, {

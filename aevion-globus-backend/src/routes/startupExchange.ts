@@ -63,6 +63,8 @@ const assessLimiter = rateLimit({ windowMs: 60_000, max: 12, keyPrefix: "startup
 // Reading offers takes a 256-bit token, so guessing is hopeless — but a tight
 // limit keeps a guesser from turning the endpoint into a load generator.
 const offersLimiter = rateLimit({ windowMs: 60_000, max: 20, keyPrefix: "startupx:offers", message: "rate_limited" });
+// Жалоба — дешёвое действие с дорогими последствиями, поэтому лимит жёсткий.
+const reportLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "startupx:report", message: "rate_limited" });
 
 export const startupExchangeRouter = Router();
 startupExchangeRouter.use(generalLimiter);
@@ -116,6 +118,7 @@ interface InterestRow {
 
 const memListings = new Map<number, ListingRow>();
 const memInterests = new Map<number, InterestRow>();
+const memReports = new Map<string, { idea_id: number; reason: string; note: string | null; at: string }>();
 let memListingSeq = 1;
 let memInterestSeq = 1;
 
@@ -1058,6 +1061,99 @@ startupExchangeRouter.delete("/ideas/:id", offersLimiter, async (req: Request, r
     if (existing) existing.visibility = "withdrawn";
   }
   return ok(res, { id, visibility: "withdrawn" });
+});
+
+// ─── POST /api/startupx/ideas/:id/report ─────────────────────────────────────
+//
+// Жалоба посетителя. Без неё модерация слепа: оператор снимает только то, что
+// случайно увидел сам, а видит он ничтожную долю ленты. Жалоба ничего не
+// скрывает автоматически — она лишь показывает оператору, куда смотреть.
+const REPORT_REASONS = ["spam", "scam", "stolen", "illegal", "other"] as const;
+
+startupExchangeRouter.post("/ideas/:id/report", reportLimiter, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const reasonRaw = req.body?.reason;
+  const reason = typeof reasonRaw === "string" && (REPORT_REASONS as readonly string[]).includes(reasonRaw)
+    ? reasonRaw
+    : null;
+  if (!reason) {
+    return fail(res, "reason_invalid", 400, {
+      issues: [{ field: "reason", message: `Причина: ${REPORT_REASONS.join(", ")}` }],
+    });
+  }
+  const note = clampStr(req.body?.note, 1000);
+  // Хэш адреса, не сам адрес: для «одна жалоба с адреса» этого достаточно, а
+  // хранить IP жалующегося незачем.
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    || req.socket.remoteAddress || "unknown";
+  const reporterHash = crypto.createHash("sha256").update(`startupx:${ip}`).digest("hex").slice(0, 32);
+
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows: exists } = await pool.query(`SELECT id FROM startup_ideas WHERE id=$1`, [id]);
+      if (!(exists as Array<{ id: number }>)[0]) return fail(res, "not_found", 404);
+      await pool.query(
+        `INSERT INTO startup_reports (idea_id, reason, note, reporter_hash)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (idea_id, reporter_hash) DO NOTHING`,
+        [id, reason, note, reporterHash],
+      );
+    } catch (e) {
+      captureStartupXError(e);
+      return fail(res, "report_failed", 500);
+    }
+  } else {
+    if (!memListings.has(id)) return fail(res, "not_found", 404);
+    const key = `${id}:${reporterHash}`;
+    if (!memReports.has(key)) memReports.set(key, { idea_id: id, reason, note, at: new Date().toISOString() });
+  }
+  // Ответ одинаковый и для новой жалобы, и для повторной: сообщать «вы уже
+  // жаловались» незачем, а подтверждать приём — нужно.
+  return ok(res, { received: true });
+});
+
+// ─── GET /api/startupx/reports ───────────────────────────────────────────────
+// Очередь модерации: что смотреть в первую очередь. Только для оператора.
+startupExchangeRouter.get("/reports", offersLimiter, async (req: Request, res: Response) => {
+  if (!isStartupXAdmin(verifyBearer(req))) return fail(res, "forbidden", 403);
+
+  if (isStartupExchangeDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT r.idea_id, i.title, i.visibility, COUNT(*)::int AS reports,
+                MAX(r.created_at) AS last_at,
+                ARRAY_AGG(DISTINCT r.reason) AS reasons
+           FROM startup_reports r
+           JOIN startup_ideas i ON i.id = r.idea_id
+          GROUP BY r.idea_id, i.title, i.visibility
+          ORDER BY reports DESC, last_at DESC
+          LIMIT 100`,
+      );
+      return ok(res, { queue: rows });
+    } catch (e) {
+      captureStartupXError(e);
+      return fail(res, "reports_failed", 500);
+    }
+  }
+  const byIdea = new Map<number, { idea_id: number; reasons: Set<string>; reports: number }>();
+  for (const r of memReports.values()) {
+    const cur = byIdea.get(r.idea_id) ?? { idea_id: r.idea_id, reasons: new Set<string>(), reports: 0 };
+    cur.reports += 1;
+    cur.reasons.add(r.reason);
+    byIdea.set(r.idea_id, cur);
+  }
+  return ok(res, {
+    queue: Array.from(byIdea.values())
+      .map((r) => ({
+        idea_id: r.idea_id,
+        title: memListings.get(r.idea_id)?.title ?? "",
+        visibility: memListings.get(r.idea_id)?.visibility ?? "",
+        reports: r.reports,
+        reasons: Array.from(r.reasons),
+      }))
+      .sort((a, b) => b.reports - a.reports),
+  });
 });
 
 // ─── POST /api/startupx/ideas/:id/takedown ───────────────────────────────────

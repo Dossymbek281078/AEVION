@@ -115,6 +115,23 @@ export async function ensureStartupExchangeTables(pool: PgPoolInstance): Promise
     await pool.query(`ALTER TABLE startup_interests ADD COLUMN IF NOT EXISTS ticket_usd BIGINT;`);
     await pool.query(`ALTER TABLE startup_interests ADD COLUMN IF NOT EXISTS equity_pct NUMERIC;`);
 
+    // Жалобы посетителей. Без них модерация слепа: оператор снимает только то,
+    // что случайно увидел сам, а видит он ничтожную долю ленты.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS startup_reports (
+        id SERIAL PRIMARY KEY,
+        idea_id INTEGER NOT NULL REFERENCES startup_ideas(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL,
+        note TEXT,
+        reporter_hash TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_startup_reports_idea ON startup_reports(idea_id);`);
+    // Один адрес — одна жалоба на заявку: иначе счётчик жалоб превращается в
+    // кнопку «утопить конкурента», нажатую двадцать раз подряд.
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_startup_reports_once ON startup_reports(idea_id, reporter_hash);`);
+
     dbReady = true;
     console.log("[StartupX] Tables ready");
   } catch (e: unknown) {

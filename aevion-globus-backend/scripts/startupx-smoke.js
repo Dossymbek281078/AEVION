@@ -287,6 +287,20 @@ async function run() {
     await req("DELETE", `/api/startupx/ideas/${listingId}?token=${created.manageToken}`);
   }
 
+  console.log("\n10a. Жалобы: модерация не должна быть слепой");
+  if (listingId) {
+    const bad = await req("POST", `/api/startupx/ideas/${listingId}/report`, { reason: "нипочему" });
+    assert("причина из списка обязательна → 400", bad.status === 400, String(bad.status));
+    const okRep = await req("POST", `/api/startupx/ideas/${listingId}/report`, { reason: "spam", note: "тест" });
+    assert("жалоба принята", okRep.status === 200 && okRep.body?.data?.received === true, String(okRep.status));
+    // Повтор с того же адреса не должен накручивать счётчик — иначе это кнопка
+    // «утопить конкурента», нажатая двадцать раз.
+    const dup = await req("POST", `/api/startupx/ideas/${listingId}/report`, { reason: "spam" });
+    assert("повторная жалоба с того же адреса не ошибка", dup.status === 200, String(dup.status));
+    const queue = await req("GET", "/api/startupx/reports");
+    assert("очередь модерации закрыта от посторонних → 403", queue.status === 403, String(queue.status));
+  }
+
   console.log("\n10b. Снятие оператором");
   {
     // Публиковать может кто угодно, а снять чужое до этого не мог никто — для

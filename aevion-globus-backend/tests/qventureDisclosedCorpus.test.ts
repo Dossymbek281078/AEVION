@@ -6356,9 +6356,13 @@ describe("Spotify: two metrics in one sentence, and years stated first", () => {
     // Premium Subscribers, respectively" gives 263 million — the older. Nothing
     // follows a figure to date it, so position decides and takes the last.
     //
-    // A rule for it was written and reverted unverified with minutes left: when
-    // the leading year list opens with its latest year, the head is already the
-    // answer. Pinned here so a proper fix reports itself.
+    // Diagnosed further, so the next attempt starts from the right place. The
+    // series walker is not involved: the noun follows BOTH figures, so the
+    // figure-then-noun pattern binds to the nearer one and there is a single
+    // match on the wrong figure. A helper keyed off the leading year list was
+    // written, and never fired — the customer count reaches this sentence
+    // through a different assignment site than the one it was wired into.
+    // There are three. That is where a proper fix begins.
     expect(p("As of December 31, 2025 and 2024, we had 290 million and 263 million Premium Subscribers, respectively.").customers)
       .toBe(263_000_000);
   });

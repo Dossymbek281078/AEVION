@@ -188,6 +188,11 @@ months. The invariants now run on every push
 | Separation on disclosed figures | ≥ 6 pts | 10.7 |
 | A large ask with no disclosure cannot reach `watch` | — | Fast, 43.9, `pass` |
 
+The visibility gate derives its own field list from what the parser actually
+filled, rather than a hand-maintained list — a list someone has to remember to
+update would have missed `reservations` in exactly the way the renderers did.
+Adding a numeric field to the parser and to nothing else reddens it by name.
+
 One of those guards is not a floor but an equality: parse coverage must stay at
 53/53. A silent reader failure is the defect class this corpus exists to catch,
 and "most figures parsed" is the state it was already in.

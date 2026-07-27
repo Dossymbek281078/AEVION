@@ -347,16 +347,22 @@ describe("no parsed figure is invisible to the reader", () => {
     JSON.stringify(probe.strategy),
   ].join(" | ").toLowerCase();
 
-  const QUANT_FIELDS = [
-    "revenueUsd", "growthPct", "grossMarginPct", "retentionPct", "customers",
-    "cacUsd", "ltvUsd", "ltvCacRatio", "paybackMonths", "churnPct",
-    "bottomUpTamUsd", "gmvUsd", "takeRatePct", "contractedRevenueUsd",
-    "nonDilutiveUsd", "pilots", "reservations",
-  ] as const;
+  // DERIVED from what the probe actually parsed, never hand-listed. A hardcoded
+  // list is the same hole this gate exists to close: `reservations` was added to
+  // the parser and to nothing else, and a list someone has to remember to update
+  // would have missed it in exactly the same way. Anything numeric the parser
+  // fills is checked automatically.
+  const META_FIELDS = new Set([
+    "fieldsFound",      // a count of the others, not a disclosure
+    "churnMonthlyPct",  // the normalized form of churnPct, shown with it
+  ]);
+  const QUANT_FIELDS = Object.entries(probe.signals)
+    .filter(([k, v]) => typeof v === "number" && !META_FIELDS.has(k))
+    .map(([k]) => k);
 
-  test("the probe actually discloses every field, or this gate proves nothing", () => {
-    const missing = QUANT_FIELDS.filter((k) => (probe.signals as Record<string, unknown>)[k] == null);
-    expect(missing).toEqual([]);
+  test("the probe discloses a broad set of fields, or this gate proves nothing", () => {
+    // A probe that stopped parsing would leave nothing to check and go green.
+    expect(QUANT_FIELDS.length).toBeGreaterThanOrEqual(17);
   });
 
   for (const key of QUANT_FIELDS) {

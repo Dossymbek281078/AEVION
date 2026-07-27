@@ -4,6 +4,11 @@ import { useEffect, useRef } from "react";
 import { I18nProvider, LangSwitch } from "@/lib/i18n";
 import { AutoTranslate } from "../AutoTranslate";
 
+// Рендер React в jsdom при полном параллельном прогоне выходил за дефолтные
+// 5с (замер: 5614 мс) и ронял файл ложной краснотой. Тяжёлому тесту — свой
+// явный таймаут; на скорость одиночного прогона это не влияет.
+vi.setConfig({ testTimeout: 20_000 });
+
 /**
  * Регрессия, замеренная на живом проде 27.07.2026.
  *

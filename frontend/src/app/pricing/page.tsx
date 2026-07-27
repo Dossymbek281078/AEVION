@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
@@ -308,10 +309,11 @@ export default function PricingPage() {
         if (!cancelled && j) setTrust(j);
       })
       .catch(() => {});
-    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
-      .then((r) => r.json())
+    // Тот же счётчик уже просит виджет в шапке (PlatformAiSavings). Через
+    // общий загрузчик оба получают одно значение за один запрос — issue #1016.
+    fetchAiSavings()
       .then((j) => {
-        if (!cancelled && j && typeof j.runs === "number" && j.runs > 0) setAiSavings(j);
+        if (!cancelled && j && j.runs > 0) setAiSavings(j);
       })
       .catch(() => {});
     track({

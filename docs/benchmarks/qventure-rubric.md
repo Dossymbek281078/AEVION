@@ -1253,6 +1253,27 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    means a run rate by definition, and a month carries no seasonality argument.
    That conversion has always announced itself and still does.
 
+49. **Auditing the notes themselves.** The parse notes are the only place the
+   engine tells a reader it changed their number, so they were audited as a
+   set: twenty-one classes, every one naming what was disclosed and what was
+   scored, and the six that promise arithmetic were checked against the
+   arithmetic. Payback years to months, monthly revenue annualised, gigawatts
+   to megawatts and a multiple to a percentage all matched exactly.
+
+   One did not announce itself at all. Churn quoted annually is converted to a
+   monthly rate — 20% a year becomes 1.84% a month, compounding properly — and
+   the reader saw a monthly figure they never wrote, with nothing saying where
+   it came from. Same class as the retention factor fixed earlier on this
+   branch, which silently awarded up to six points.
+
+   It now says so, and says it in English: the period values are adjectives
+   ("annual", "weekly") and the sentence wanted an adverb. That text is shown to
+   a person.
+
+   Also pinned: the note has to reach that person. It travels parseNotes →
+   engine assumptions → the list the result page renders, and the middle link
+   is the one a refactor can drop while every parser test stays green.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

@@ -687,6 +687,27 @@ const LEVEL_METRIC_NEAR = (text: string, at: number, len: number): boolean => {
   return /gross\s*margins?|retention|expansion|\bnrr\b|\bndr\b|take[- ]rate|commission|churn/i.test(clause);
 };
 
+/**
+ * Say so when a churn rate was converted.
+ *
+ * Twenty of the twenty-one parse notes announce a transformation the reader
+ * did not ask for; this one did not. 20% churn quoted annually becomes 1.84%
+ * monthly — correct, compounding properly, and a number the plan never wrote.
+ * A conversion the reader cannot see is indistinguishable from a measurement,
+ * which is the rule stated in the metrics module header and followed
+ * everywhere else here.
+ */
+function noteChurnConversion(s: PlanSignals, stated: number): void {
+  if (s.churnMonthlyPct === null || !s.churnPeriod || s.churnPeriod === "monthly") return;
+  if (Math.abs(s.churnMonthlyPct - stated) < 0.005) return;
+  // The period values are adjectives ("annual", "weekly"); the sentence wants
+  // an adverb. This text is read by a person, not a log.
+  const adverb: Record<string, string> = { annual: "annually", quarterly: "quarterly", weekly: "weekly", monthly: "monthly" };
+  s.parseNotes.push(
+    `Churn was disclosed ${adverb[s.churnPeriod] ?? s.churnPeriod} (${stated}%); it is compared at ${s.churnMonthlyPct}% monthly.`,
+  );
+}
+
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
   if (!text || !text.trim()) return s;
@@ -1199,6 +1220,7 @@ export function parsePlanSignals(text: string): PlanSignals {
         ? ratePeriodFromWords(words)
         : ratePeriodFromWords(t.slice(at, at + 18));
       s.churnMonthlyPct = monthlyChurnFrom(s.churnPct, s.churnPeriod);
+      noteChurnConversion(s, s.churnPct);
       s.parseNotes.push(`Churn was disclosed as a range (${Math.min(...nums)}–${Math.max(...nums)}%); the score uses the higher, conservative end.`);
     }
   }
@@ -1220,6 +1242,7 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.churnPct = v;
       s.churnPeriod = ratePeriodFromWords(words);
       s.churnMonthlyPct = monthlyChurnFrom(v, s.churnPeriod);
+      noteChurnConversion(s, v);
     }
   }
   // Filings do not agree on a name for this number. "Net revenue retention",

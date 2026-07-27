@@ -2805,3 +2805,39 @@ describe("a parse note nobody sees is worth nothing", () => {
     expect(assumptionsFor("Revenue of $12 million in fiscal 2025.")).not.toMatch(/not a full year/i);
   });
 });
+
+describe("the one conversion that did not announce itself", () => {
+  // Twenty of twenty-one parse notes announce a transformation the reader did
+  // not ask for. Churn's period conversion did not: 20% quoted annually becomes
+  // 1.84% monthly — correct, compounding properly, and a number the plan never
+  // wrote. Same class as the retention factor fixed earlier on this branch,
+  // which silently awarded up to six points.
+  const note = (t: string) => parsePlanSignals(t).parseNotes.find((n) => /churn/i.test(n)) ?? "";
+
+  test.each([
+    ["annually", "Churn of 20% annually.", /disclosed annually \(20%\).*1\.84% monthly/i],
+    ["quarterly", "Churn of 6% quarterly.", /disclosed quarterly \(6%\).*2\.04% monthly/i],
+    ["weekly", "Churn of 1% per week.", /disclosed weekly \(1%\).*4\.26% monthly/i],
+  ])("a churn quoted %s says what it was compared at", (_l, text, want) => {
+    expect(note(text)).toMatch(want);
+  });
+
+  test.each([
+    ["already monthly", "Churn of 3% monthly."],
+    ["no period at all", "Churn of 3%."],
+  ])("no note when nothing was converted: %s", (_l, text) => {
+    expect(note(text)).toBe("");
+  });
+
+  test("the sentence reads as English, not as a field dump", () => {
+    // The period values are adjectives; the sentence wants an adverb. This
+    // text is shown to a person.
+    expect(note("Churn of 20% annually.")).toContain("disclosed annually");
+    expect(note("Churn of 20% annually.")).not.toContain("disclosed annual (");
+  });
+
+  test("and the conversion itself is unchanged", () => {
+    expect(parsePlanSignals("Churn of 20% annually.").churnMonthlyPct).toBeCloseTo(1.84, 2);
+    expect(parsePlanSignals("Churn of 3% monthly.").churnMonthlyPct).toBe(3);
+  });
+});

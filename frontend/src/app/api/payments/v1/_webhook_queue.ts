@@ -88,6 +88,13 @@ async function fireOnce(att: QueuedAttempt): Promise<{
         "x-aevion-timestamp": String(ts),
         "x-aevion-event": att.event,
         "x-aevion-webhook": att.webhook_id,
+        // Один и тот же идентификатор на ВСЕХ повторах одной доставки — чтобы
+        // получатель мог отбросить дубль. Повторы здесь не исключение, а норма:
+        // шесть попыток с нарастающей паузой, плюс возврат зависшей попытки в
+        // работу. Без такого заголовка получатель обязан считать каждый вызов
+        // новым событием, то есть повторно провести оплату у себя.
+        "x-aevion-delivery": att.id,
+        "x-aevion-attempt": String(att.attempts + 1),
         "user-agent": `AEVION-Payments/1.4 attempt=${att.attempts + 1}`,
       },
       body: att.payload,

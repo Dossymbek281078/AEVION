@@ -97,4 +97,38 @@ describe("очередь вебхуков: без дублей и без пот�
     expect(after.delivered).toBe(1);
     expect(after.pending).toBe(0);
   });
+
+  /**
+   * Повторы здесь не исключение, а норма: шесть попыток с нарастающей паузой
+   * плюс возврат зависшей попытки в работу. Без стабильного идентификатора
+   * доставки получатель обязан считать каждый вызов новым событием — то есть
+   * повторно провести оплату у себя. Заголовок должен быть ОДИН И ТОТ ЖЕ на
+   * всех повторах одной доставки, а номер попытки — расти.
+   */
+  it("повтор несёт тот же идентификатор доставки и растущий номер попытки", async () => {
+    await enqueueAttempt(attempt("payment.succeeded"));
+
+    const seen: { delivery: string; attempt: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const h = init.headers as Record<string, string>;
+        seen.push({ delivery: h["x-aevion-delivery"], attempt: h["x-aevion-attempt"] });
+        return new Response("no", { status: 500 });
+      }),
+    );
+
+    await processDue();
+    // вторая попытка станет доступной только после паузы — двигаем срок вручную
+    const q = await readQueue();
+    q[0].next_retry_at = Date.now() - 1;
+    await kvSet(QUEUE_KEY, q);
+    await processDue();
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0].delivery).toBeTruthy();
+    expect(seen[1].delivery).toBe(seen[0].delivery); // тот же идентификатор
+    expect(seen[0].attempt).toBe("1");
+    expect(seen[1].attempt).toBe("2");
+  });
 });

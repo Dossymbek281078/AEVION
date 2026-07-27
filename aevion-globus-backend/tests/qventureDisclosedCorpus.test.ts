@@ -1961,12 +1961,24 @@ describe("a date is not a metric", () => {
     ["ARR", "As of March 31, 2024, ARR continued to compound."],
     ["customers", "For the year ended December 31, 2025, customers grew."],
     ["TPV", "In the quarter ended June 30, 2026, TPV expanded."],
-    ["the Kaspi sentence", "For the year ended December 31, 2025, GMV of our Marketplace segment including Turkiye was 9,053 billion, which is an increase of 52%."],
   ])("%s: the year is not the value", (_l, text) => {
     const s = g(text);
     expect(s.gmvUsd).toBeNull();
     expect(s.revenueUsd).toBeNull();
     expect(s.customers).toBeNull();
+  });
+
+  test("the Kaspi sentence reads its real GMV, not the year", () => {
+    // The sentence that started this: verbatim from the Kaspi.kz 20-F, tenge
+    // symbol and all. It used to return $4 — the year 2025 matched first and
+    // converted at the tenge rate. It must now return the disclosed figure,
+    // tenge 9,053 billion, which is tens of billions of dollars.
+    const v = parsePlanSignals(
+      "For the year ended December 31, 2025, GMV of our Marketplace segment including Türkiye was ₸9,053 billion, which is an increase of 52%.",
+    ).gmvUsd;
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(1e10);
+    expect(v!).toBeLessThan(3e10);
   });
 
   test("a four-digit figure with no month beside it is still read", () => {
@@ -1989,5 +2001,51 @@ describe("a date is not a metric", () => {
     const s = g("In-force premium of $116M in 2019. In-force premium of $133M as of 31 March 2020.");
     expect(s.revenueUsd).toBe(133_000_000);
     expect(s.parseNotes.some((n) => /latest \(2020\)/i.test(n))).toBe(true);
+  });
+});
+
+describe("phrasings taken from live filings, not invented", () => {
+  // Every sentence here was copied out of a document filed with the SEC in the
+  // last two years. None was adjusted to suit the parser. All three failed on
+  // first contact, and none of the ~1,900 tests then passing had a reason to
+  // cover them, because each was written against a phrasing someone had
+  // already thought of.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("revenue from operations — the standard line outside a US filing", () => {
+    // Infosys 6-K, quarter ended 30 June 2026. "revenues?" matched "revenue"
+    // and then needed a figure, but got "from operations was", so the single
+    // most standard top-line wording in Indian and IFRS filings read as nothing.
+    const q = p("Revenue from operations was ₹48,211 crore for the quarter.").revenueUsd;
+    expect(q).not.toBeNull();
+    expect(q!).toBeGreaterThan(4e9);
+    expect(q!).toBeLessThan(6e9);
+  });
+
+  test("a segment named between the metric and its figure", () => {
+    // Kaspi.kz 20-F. The connector list had no "was", and nothing allowed the
+    // segment name to sit in between.
+    const v = p("GMV of our Marketplace segment including Türkiye was ₸9,053 billion.").gmvUsd;
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(1e10);
+  });
+
+  test("the qualifier span cannot reach another metric's number", () => {
+    // The reason the span forbids digits and clause breaks: an earlier
+    // widening of a different pattern let "margin declined to 20% and churn
+    // rose to 7%" read churn as margin.
+    expect(p("GMV of our segment. Revenue was $10 million.").gmvUsd).toBeNull();
+    expect(p("GMV of our segment that did $3 million was $10 million.").gmvUsd).not.toBe(3_000_000);
+  });
+
+  test("MAU is what a marketplace calls its customers", () => {
+    expect(p("Kaspi.kz Super App had 10.7 million Average MAU.").customers).toBe(10_700_000);
+    expect(p("We had 2.4 million DAU last quarter.").customers).toBe(2_400_000);
+  });
+
+  test("and the older customer wordings still read", () => {
+    expect(p("We have 5,000 customers.").customers).toBe(5000);
+    expect(p("We had 10.7 million monthly active users.").customers).toBe(10_700_000);
+    expect(p("Kaspi Pay Super App had approximately 764,000 Active Merchants.").customers).toBe(764_000);
   });
 });

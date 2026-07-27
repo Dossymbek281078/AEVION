@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 500
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 510
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (500
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (510
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -702,13 +702,44 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    masking. It was that the codebase had two implementations of the same
    question, and only one of them was in view.
 
+26. **Closed: three phrasings that only a real filing would have shown.** The
+   same live-document probe that found limits 24 and 25 left three misses
+   behind. They were misses rather than wrong numbers, so they were recorded and
+   deferred; they are now fixed, and each is pinned to the sentence it came
+   from.
+
+   | Phrasing | Source | Was |
+   |---|---|---|
+   | `Revenue from operations was ₹48,211 crore` | Infosys 6-K, Q1 FY27 | nothing |
+   | `GMV of our Marketplace segment including Türkiye was ₸9,053 billion` | Kaspi.kz 20-F, FY2025 | $4, then nothing |
+   | `10.7 million Average MAU` | Kaspi.kz 20-F, FY2025 | nothing |
+
+   `revenue from operations` is the standard top-line wording in Indian and IFRS
+   filings, and `revenues?` matched "revenue" and then wanted a figure. The
+   Kaspi sentence needed two things the parser lacked: `was` as a connector, and
+   room for a segment name between the metric and its number. That span is
+   bounded to 45 characters and forbids digits and clause breaks, because an
+   earlier unbounded widening let "margin declined to 20% and churn rose to 7%"
+   read churn as margin — a test asserts the span cannot reach another metric's
+   figure.
+
+   Kaspi's marketplace GMV now reads as tens of billions of dollars from the
+   sentence its own 20-F states, having started the day as **$4**.
+
+   One caveat found while pinning this, and left as documented behaviour rather
+   than quietly changed: with the tenge symbol removed, "GMV was 9,053 billion"
+   reads as $9.05 trillion. That is the stated rule for an unmarked figure — the
+   plan's currency, defaulting to USD — and not a new defect. It is also a
+   number no plan means, so a plausibility flag on unmarked figures of that
+   magnitude is a candidate, not a fix made in passing.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 500):
+`tests/qventureDisclosedCorpus.test.ts`, 510):
 
 | Guard | Floor | Measured today |
 |---|---|---|

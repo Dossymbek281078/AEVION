@@ -434,7 +434,7 @@ const NUM = NUMBER_PATTERN;
  * "Revenue of $5M" form the parser has supported all along, so a plan stating
  * two different revenue figures in the ordinary phrasing raised nothing.
  */
-const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
+const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
 /**
  * Forward-looking INTENT, not a noun. A plan that says it TARGETS $20M ARR
  * next year has not earned $20M, and the revenue parser read it as if it had —
@@ -998,7 +998,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // carries a currency symbol.
   const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
-  const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
+  const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
   // "12,000-15,000 customers" read 15,000 — the flattering end, against the
   // rule every other band here follows. Fewer customers is the worse reading.
   const custRange = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
@@ -1219,6 +1219,12 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   }
   const gmv = s.gmvUsd !== null ? null
     : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+    // "GMV of our Marketplace segment including Turkiye was X" — a filing names
+    // the segment between the metric and its figure. The span carries no digit
+    // and no clause break, so it cannot reach across to another metric's number,
+    // and the connector is required rather than optional here: without it the
+    // span would swallow whatever followed the noun.
+    || latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s+(?:of\s+)?[^.;\d]{0,45}?\s*(?:was|were|totall?ed|amounted to|stood at|reached)\s+${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
   if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 

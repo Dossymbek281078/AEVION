@@ -2165,3 +2165,63 @@ describe("a currency symbol recognised is a currency symbol accepted", () => {
     expect(Math.abs(v! - toUsd(100_000_000, code as MoneyCurrency))).toBeLessThan(1);
   });
 });
+
+describe("the deck's own notation, and the metric that lacked it", () => {
+  // Applying the lesson from the currency symbols: ask not "is this metric
+  // covered" but "how many ways can it be written, and is each one covered".
+  //
+  // "Metric: value" is how a deck writes a metric, and seven of the nine here
+  // already read it — revenue, ARR, GMV, gross margin, churn, take rate,
+  // backlog. The customer count, which decks state that way most often, had no
+  // noun-first form at all.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["ARR", "ARR: $2M.", (s: PlanSignalsLike) => s.revenueUsd, 2_000_000],
+    ["GMV", "GMV: $10M.", (s: PlanSignalsLike) => s.gmvUsd, 10_000_000],
+    ["gross margin", "Gross margin: 70%.", (s: PlanSignalsLike) => s.grossMarginPct, 70],
+    ["take rate", "Take rate: 15%.", (s: PlanSignalsLike) => s.takeRatePct, 15],
+    ["backlog", "Backlog: $50M.", (s: PlanSignalsLike) => s.contractedRevenueUsd, 50_000_000],
+    ["customers", "Customers: 5,000.", (s: PlanSignalsLike) => s.customers, 5000],
+    ["users", "Users: 120,000.", (s: PlanSignalsLike) => s.customers, 120_000],
+  ])("colon form reads for %s", (_l, text, read, want) => {
+    expect(read(p(text) as PlanSignalsLike)).toBe(want);
+  });
+
+  test.each([
+    ["reached", "Active customers reached 11.8 million.", 11_800_000],
+    ["were", "Subscribers were 511,202.", 511_202],
+    ["the older number-first form is untouched", "We have 5,000 customers.", 5000],
+  ])("customer count, %s", (_l, text, want) => {
+    expect(p(text).customers).toBe(want);
+  });
+
+  test.each([
+    ["a price per customer is not a customer count", "Revenue per customer of $500."],
+    ["a money figure after the noun is not a count", "Customers at $50 each."],
+    ["a currency symbol before the number blocks it", "₩5,000 customers."],
+    ["revenue mentioning customers is not a count", "Revenue of $10 million from customers."],
+    ["a date is still not a metric", "For the year ended December 31, 2025, customers grew."],
+  ])("%s", (_l, text) => {
+    expect(p(text).customers).toBeNull();
+  });
+});
+
+type PlanSignalsLike = ReturnType<typeof parsePlanSignals>;
+
+describe("the connector in the noun-first customer form is load-bearing", () => {
+  // Written as a comment first, then proven, because a comment claiming a
+  // guard matters is worth nothing until a mutation shows what it stops.
+  // Making the connector optional lets six ordinary English sentences produce
+  // a customer count out of a number that has nothing to do with customers.
+  test.each([
+    ["a duration", "We serve customers 24 hours a day."],
+    ["a time ago", "Our customers 2 years ago were fewer."],
+    ["an age limit", "Users 18 and older only."],
+    ["a pensioner discount", "Members 65 and over receive a discount."],
+    ["a dunning window", "Accounts 30 days past due are suspended."],
+    ["a distance", "Stores 500 metres apart cannibalise each other."],
+  ])("%s is not a customer count", (_l, text) => {
+    expect(parsePlanSignals(text).customers).toBeNull();
+  });
+});

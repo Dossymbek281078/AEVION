@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 602
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 623
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (602
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (623
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -846,13 +846,34 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    source and requiring each to reach a figure — proven by mutation, which
    reddens the exact symbol removed.
 
+33. **Applying limit 32's lesson on purpose, and what it found.** The lesson
+   there was to stop asking "is this covered" and start asking "how many ways
+   can this be written, and is each one covered". Run deliberately across the
+   parser, most answers came back clean: every money-unit token reaches the
+   parser, every revenue and GMV noun reads in both sentence shapes, and
+   retention, churn, gross margin, take rate and payback all read prefix-first
+   and suffix-first alike. Worth recording that a search can come back empty.
+
+   Two did not. **`Metric: value` is how a deck writes a metric**, and seven of
+   the nine here already read it — revenue, ARR, GMV, gross margin, churn, take
+   rate, backlog. The customer count, which decks state that way more often than
+   any other, had no noun-first form at all: `Customers: 5,000` read as nothing.
+   And `NOT_MONEY`, which stops `$5,000 customers` being read as a count, listed
+   six currency symbols while the prefix pattern had grown to thirteen — so
+   `₩5,000 customers` was a count of five thousand.
+
+   The connector in the new form is required rather than optional, and that is
+   proven rather than asserted: made optional, six ordinary sentences produce a
+   customer count — "we serve customers 24 hours a day" reads 24, "users 18 and
+   older" reads 18, "accounts 30 days past due" reads 30. Each is a test.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 602):
+`tests/qventureDisclosedCorpus.test.ts`, 623):
 
 | Guard | Floor | Measured today |
 |---|---|---|

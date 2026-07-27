@@ -1014,7 +1014,9 @@ export function parsePlanSignals(text: string): PlanSignals {
   // count belongs to a different clause ("$144.1M on marketing to acquire
   // customers" must not read as 144 million customers), and not a figure that
   // carries a currency symbol.
-  const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
+  // Every symbol the currency prefix accepts, or a figure written with one of
+  // the newer ones — won, baht, dong, peso — is read as a customer count.
+  const NOT_MONEY = String.raw`(?<![$€£₽₸¥₹₪₺₩฿₫₱])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
   const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
   // "12,000-15,000 customers" read 15,000 — the flattering end, against the
@@ -1029,7 +1031,14 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const cust = s.customers !== null ? null
-    : latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count");
+    : latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count")
+    // "Customers: 5,000" is how a deck writes it, and every other metric here
+    // already reads that shape — revenue, GMV, margin, churn, take rate,
+    // backlog. The customer count, which decks state this way most often, had
+    // no noun-first form at all. The connector is REQUIRED, not optional:
+    // without it the span would match "customers 5,000" inside any sentence
+    // that happens to put a number after the noun.
+    || latestMatch(t, new RegExp(String.raw`(?:paying\s+|active\s+)?(?:${CUST_NOUN})\s*(?::|=|of|at|reached|totall?ed|stood at|were|was|number(?:ed)?)\s*${NOT_MONEY}${NUM}\s*${UNIT}`, "i"), s, "the customer count");
   if (cust && statedAsAchieved(t, cust.index ?? 0, cust[0].length)) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);

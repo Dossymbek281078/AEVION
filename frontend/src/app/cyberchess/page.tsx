@@ -445,11 +445,16 @@ function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if
 function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
 function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
-// Deterministic daily-puzzle index — same for all users on the same day
+/* Индекс дня по номеру суток. Комментарий раньше обещал «same for all users on the same
+   day» — это неправда: индекс берётся в массиве PUZZLES, а бэкенд отдаёт пул с
+   `shuffle=1`, то есть СВОЙ порядок на каждый запрос. Замер по двум запросам подряд:
+   совпало 0 позиций из 2000. Значит «пазл дня» менялся при каждой перезагрузке, а
+   проверка «решён сегодня» сравнивала FEN уже с ДРУГИМ пазлом. Пазл дня теперь
+   выбирается один раз и хранится ЦЕЛИКОМ — от порядка в пуле он больше не зависит. */
 function pickDailyIdx(total:number){if(total<=0)return 0;const n=daysSinceEpoch();let h=n*2654435761;h=(h^(h>>>16))>>>0;return h%total}
-type DailyState={v:1;date:string;idx:number;solved:boolean};
+type DailyState={v:2;date:string;pz:Puzzle;solved:boolean};
 const DK="aevion_daily_puzzle_v1";
-function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===1?r:null}catch{return null}}
+function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===2&&r?.pz?.fen?r:null}catch{return null}}
 function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
 
 /* ═══ PGN utilities ═══ */
@@ -2628,8 +2633,9 @@ export default function CyberChessPage(){
     if(PUZZLES.length===0)return;
     const tk=todayKey();const saved=ldDaily();
     if(saved&&saved.date===tk){sDailyState(saved);return}
-    const idx=pickDailyIdx(PUZZLES.length);
-    const next:DailyState={v:1,date:tk,idx,solved:false};
+    const pz=PUZZLES[pickDailyIdx(PUZZLES.length)];
+    if(!pz)return;
+    const next:DailyState={v:2,date:tk,pz,solved:false};
     svDaily(next);sDailyState(next);
   },[PUZZLES.length]);
 
@@ -3189,7 +3195,7 @@ export default function CyberChessPage(){
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;if(firstTime){addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}else showToast("↻ Повтор — награда уже получена","info");}
                 if(firstTime)bumpDaily("puzzle"); // цель «реши 3 задачи» — про три РАЗНЫЕ задачи
                 if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
-                if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+                if(dailyState&&!dailyState.solved&&dailyState.pz.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   bumpDaily("daily-puzzle");
                   setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
@@ -3230,7 +3236,7 @@ export default function CyberChessPage(){
           if(firstTime)bumpDaily("puzzle"); // цель «реши 3 задачи» — про три РАЗНЫЕ задачи
           if(firstTime&&pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
-          if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+          if(dailyState&&!dailyState.solved&&dailyState.pz.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
             bumpDaily("daily-puzzle");
             setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
@@ -4949,7 +4955,7 @@ export default function CyberChessPage(){
   };
   const loadDailyPuzzle=()=>{
     if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
-    const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
+    const pz=dailyState.pz;
     sTab("puzzles");
     let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Пазл дня · ${pz.r}`,"info");
@@ -10256,8 +10262,8 @@ export default function CyberChessPage(){
 
                 {/* Daily puzzle */}
                 <button onClick={()=>{
-                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Daily puzzle не готов","error");return}
-                  const pz=PUZZLES[dailyState.idx];
+                  if(!dailyState?.pz){showToast("Daily puzzle не готов","error");return}
+                  const pz=dailyState.pz;
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
                   showToast(`☀ Пазл дня · ${pz.r}`,"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Daily пазл</button>

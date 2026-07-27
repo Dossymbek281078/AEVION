@@ -12,10 +12,10 @@ import { LESSONS } from "../coachLessons";
 
    Nothing about that is visible by reading the file, so it is asserted here. */
 
-type Row = { where: string; fen?: string; bestMove?: string };
+type Row = { where: string; fen?: string; bestMove?: string; solution?: string };
 
 const knowledgeRows: Row[] = COACH_KNOWLEDGE.flatMap((cat) =>
-  cat.entries.map((e) => ({ where: `${cat.id}/${e.id}`, fen: e.fen, bestMove: e.bestMove })),
+  cat.entries.map((e) => ({ where: `${cat.id}/${e.id}`, fen: e.fen, bestMove: e.bestMove, solution: e.solution })),
 );
 
 const lessonRows: Row[] = LESSONS.flatMap((l) =>
@@ -52,6 +52,32 @@ describe("coach teaching positions", () => {
       }
       if (!legal.includes(r.bestMove!.replace(/[+#!?]/g, ""))) {
         bad.push(`${r.where}: ${r.bestMove}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  /* `solution` печатается игроку дословно как «правильный разбор». Восемь из тринадцати
+     разборов остались от прежних, уже заменённых позиций: они называли ходы, которых на
+     этой доске нет — ладью на h3, короля на d5, взятие давно исчезнувшей фигуры. Ход
+     bestMove при этом был легален, поэтому соседний тест их не видел. Здесь вариант
+     проигрывается на доске от начала до конца. */
+  it("plays every taught solution line out on the board", () => {
+    const bad: string[] = [];
+    for (const r of knowledgeRows.filter((x) => x.fen && x.solution)) {
+      const moves = r
+        .solution!.split("(")[0] // хвост в скобках — альтернатива, не главный вариант
+        .split(/\s+/)
+        .map((t) => t.replace(/^\d+\.+/, "").trim())
+        .filter((t) => t && /^[KQRBNa-h]/.test(t) && !/^(мост|wins)$/.test(t));
+      const c = new Chess(r.fen);
+      for (const san of moves) {
+        try {
+          c.move(san);
+        } catch {
+          bad.push(`${r.where}: «${r.solution}» — ход ${san} на этой доске невозможен`);
+          break;
+        }
       }
     }
     expect(bad).toEqual([]);

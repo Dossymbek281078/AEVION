@@ -49,6 +49,7 @@
 
 import { analyze, type AnalysisInput } from "../src/lib/qventure/engine";
 import { parsePlanSignals, type PlanSignals } from "../src/lib/qventure/signals";
+import { toUsd } from "../src/lib/metrics/currency";
 
 /** A figure the case text states, and how to read what the engine made of it. */
 export interface Expectation {
@@ -286,6 +287,35 @@ export const CASES: DisclosedCase[] = [
       { label: "48,390 preorders read as reservations", read: (s) => s.reservations, ...num(48_390) },
       { label: "preorders are not contracted revenue", read: (s) => s.contractedRevenueUsd, expected: 0 },
       { label: "the $1,000 deposit is not read as revenue", read: (s) => s.revenueUsd, expected: 0 },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "IPO prospectus, London Stock Exchange, March 2021",
+    sources: [
+      "https://dealroom.co/uploaded/2021/04/Deliveroo-IPO-10-March-2021.pdf",
+      "https://www.ig.com/en/news-and-trade-ideas/deliveroo-ipo-preview--losses-narrow-as-company-aims-to-raise-p1-210316",
+    ],
+    input: {
+      name: "Deliveroo",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "UK",
+      askUsd: 1_400_000_000,
+      description:
+        "Three-sided food delivery marketplace connecting restaurants, riders and consumers, with an editorial-free logistics network and company-operated delivery-only kitchens.",
+      tractionNotes:
+        "Gross transaction value of £4.1bn in 2020, up 64.3% from £2.5bn in 2019. Underlying loss of £223.7M in 2020, narrowed from £317.3M in 2019.",
+    },
+    // The only non-USD filing in the corpus. v5 claims money is read in the
+    // currency it was quoted in and converted at a checked-in rate; that claim
+    // had never been tested against a real filing that quotes pounds. The
+    // expectation is computed with the same conversion the engine uses, so a
+    // routine FX-table refresh cannot turn this red without a real defect.
+    expect: [
+      { label: "the plan is recognised as quoted in GBP", read: (s) => s.currency === "GBP", expected: true },
+      { label: "GTV £4.1bn read and converted to USD", read: (s) => s.gmvUsd, ...num(toUsd(4_100_000_000, "GBP")) },
+      { label: "growth 64.3% YoY", read: (s) => s.growthPct, ...num(64.3) },
     ],
   },
   {

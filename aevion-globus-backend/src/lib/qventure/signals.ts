@@ -655,8 +655,13 @@ function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCur
  */
 function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // ── Marketplace: GMV / gross bookings / TPV, and the take rate on it ──
-  const gmv = firstMatch(t, new RegExp(String.raw`(?:gmv|gross merchandise (?:value|volume)|gross bookings|total payment volume|tpv|transaction volume|annualized volume)\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:gmv|gross merchandise (?:value|volume)|gross bookings|tpv|transaction volume)`, "i"));
+  // "Gross transaction value" (and GTV) is what a delivery or travel
+  // marketplace calls the same number outside US filings — Deliveroo's
+  // prospectus leads with it, and the engine read it as no marketplace
+  // disclosure at all.
+  const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
+  const gmv = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"));
   if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
   const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"))

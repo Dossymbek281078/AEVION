@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import { CASES } from "../scripts/qventure-disclosed";
 import { analyze } from "../src/lib/qventure/engine";
 import { parsePlanSignals } from "../src/lib/qventure/signals";
+import { toUsd } from "../src/lib/metrics/currency";
 
 /**
  * The gate for the disclosed-figures corpus.
@@ -176,6 +177,26 @@ describe("a reservation book is disclosed, never credited", () => {
       tractionNotes: "Approximately 14,000 reservations. No revenue recognised.",
     });
     expect(r.redFlags.some((f) => /reservations \/ pre-orders/i.test(f))).toBe(true);
+  });
+});
+
+describe("a marketplace's headline number outside US filings", () => {
+  // v5 claimed money is read in the currency it was quoted in; that had never
+  // met a real filing quoting pounds. Two things had to hold at once, and only
+  // one did: the currency was detected, the noun was not.
+  const s = parsePlanSignals("Gross transaction value of £4.1bn in 2020, up 64.3% from £2.5bn in 2019.");
+
+  test("the pound is detected", () => {
+    expect(s.currency).toBe("GBP");
+  });
+  test("gross transaction value is GMV under another name", () => {
+    expect(s.gmvUsd).toBe(toUsd(4_100_000_000, "GBP"));
+  });
+  test("it is converted, not passed through as if it were dollars", () => {
+    expect(s.gmvUsd).toBeGreaterThan(4_100_000_000);
+  });
+  test("GTV as an initialism reads the same", () => {
+    expect(parsePlanSignals("GTV of $2.5B in 2024.").gmvUsd).toBe(2_500_000_000);
   });
 });
 

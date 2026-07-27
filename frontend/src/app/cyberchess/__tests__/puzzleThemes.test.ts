@@ -54,6 +54,27 @@ describe("themeLabel", () => {
 
     expect(untranslated).toEqual([]);
   });
+
+  /* Половина корпуса пришла из дампа Lichess с темой "fork", вторая половина несёт
+     русскую "Вилка" — для кода это ДВЕ разные темы. В списке фильтра они стояли двумя
+     пунктами, и выбор одного прятал задачи другого: «Завлечение» показывало 20 задач,
+     пока 261 лежала под "attraction". Поэтому тема приводится к метке на входе, в
+     месте загрузки puzzles.json. Тест держит сам факт синонимов: пока в корпусе есть
+     пары, сводящиеся к одной метке, нормализация обязана оставаться. */
+  it("has synonym themes in the corpus that must collapse to one label", () => {
+    const puzzles = JSON.parse(readFileSync("public/puzzles.json", "utf8")) as Array<{ theme?: string }>;
+    const byLabel = new Map<string, Set<string>>();
+    for (const p of puzzles) {
+      if (!p.theme) continue;
+      const label = themeLabel(p.theme);
+      if (!byLabel.has(label)) byLabel.set(label, new Set());
+      byLabel.get(label)!.add(p.theme);
+    }
+    const split = [...byLabel.entries()].filter(([, raws]) => raws.size > 1);
+    expect(split.length).toBeGreaterThan(0);
+    // «Вилка» и "fork" — самая наглядная пара, она обязана сводиться
+    expect(themeLabel("fork")).toBe("Вилка");
+  });
 });
 
 describe("puzzleTitle", () => {

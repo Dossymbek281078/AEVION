@@ -2569,7 +2569,13 @@ export default function CyberChessPage(){
           if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
         }
       }catch{}
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{}
+      /* Тема приводится к одному виду сразу на входе. Половина корпуса пришла из дампа
+         Lichess с темами вида "fork"/"kingsideAttack", вторая половина — с русскими
+         ("Вилка"). Без нормализации это ДВЕ разных темы: в списке фильтра они стояли
+         двумя пунктами, каждый показывал свою половину задач, счётчики и статистика по
+         теме делились пополам, а эмодзи с цветом не находились (THEME_META — по русским
+         ключам). themeLabel не знает тему — возвращает как есть. */
+      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles((d2 as Puzzle[]).map(p=>p.theme?{...p,theme:themeLabel(p.theme)}:p));}catch{}
     })();
   },[tab]);
 

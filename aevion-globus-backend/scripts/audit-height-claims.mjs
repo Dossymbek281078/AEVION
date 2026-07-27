@@ -25,6 +25,7 @@ import {
   parseInfoboxHeights, compareTagToArticle, storeyRatio,
 } from "./lib/wiki-infobox.mjs";
 import { parseMetres } from "./lib/city-twin-geometry.mjs";
+import fs from "node:fs";
 
 const BBOX = {
   astana: { minLat: 51.1183717, maxLat: 51.1356973, minLon: 71.4104119, maxLon: 71.4432041 },
@@ -39,6 +40,12 @@ const UA = "AEVION-QSkyway/1.0 (height-claim audit; contact via github.com/Dossy
 
 const city = process.argv[2];
 const showAll = process.argv.includes("--all");
+// Overpass is a donated public service, and this audit asks it the same question
+// every run. A cache keeps iteration off the wire entirely — the same courtesy
+// --plateau-cache extends to MLIT, and the reason a re-run of this script cost
+// minutes of someone else's server all afternoon.
+const cacheFlag = process.argv.indexOf("--osm-cache");
+const osmCache = cacheFlag > 0 ? process.argv[cacheFlag + 1] : null;
 if (!BBOX[city]) {
   console.error(`unknown city "${city}" — known: ${Object.keys(BBOX).join(", ")}`);
   process.exit(1);
@@ -114,12 +121,20 @@ async function articleText(tag) {
 }
 
 const b = BBOX[city];
-process.stderr.write(`QSkyway height audit: ${city} — querying Overpass…\n`);
-const elements = await overpass(
-  `[out:json][timeout:180];`
-  + `(way["building"]["height"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon});`
-  + ` relation["building"]["height"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}););out tags;`,
-);
+const cacheFile = osmCache ? `${osmCache}/audit-${city}-heights.json` : null;
+let elements;
+if (cacheFile && fs.existsSync(cacheFile)) {
+  elements = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+  process.stderr.write(`QSkyway height audit: ${city} — ${elements.length} elements from cache\n`);
+} else {
+  process.stderr.write(`QSkyway height audit: ${city} — querying Overpass…\n`);
+  elements = await overpass(
+    `[out:json][timeout:180];`
+    + `(way["building"]["height"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon});`
+    + ` relation["building"]["height"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}););out tags;`,
+  );
+  if (cacheFile) fs.writeFileSync(cacheFile, JSON.stringify(elements));
+}
 
 const rows = [];
 for (const el of elements) {

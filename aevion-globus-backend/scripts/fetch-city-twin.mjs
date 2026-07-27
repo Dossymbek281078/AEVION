@@ -12,10 +12,13 @@
  * cannot check; this script turns it back into one we can.
  *
  * Usage:
- *   node scripts/fetch-city-twin.mjs astana > src/routes/qskyway.city.ts
- *   node scripts/fetch-city-twin.mjs nyc    > src/routes/qskyway.city.nyc.ts
- *   node scripts/fetch-city-twin.mjs tokyo  > src/routes/qskyway.city.tokyo.ts
- *   node scripts/fetch-city-twin.mjs astana --compare   (diff vs committed, no output)
+ *   node scripts/fetch-city-twin.mjs astana --compare   (diff vs committed, writes nothing)
+ *   node scripts/fetch-city-twin.mjs astana --write     (replace the committed twin)
+ *
+ * NOTE: `> src/routes/qskyway.city.ts` looks equivalent to --write and is NOT.
+ * The shell truncates the target before node starts, and this script READS the
+ * committed twin (vertiports, and the comparison itself), so redirection would
+ * hand it an empty file. --write reads first, then replaces.
  *
  * HONEST SCOPE — read before regenerating anything:
  *  - OSM is a live database. Re-running this will NOT reproduce the 2026-07-13
@@ -28,6 +31,8 @@
  *    number in the UI kept looking the same. The registry therefore marks tokyo
  *    `osmOnly: false` and the script refuses to emit it.
  */
+
+import fs from "node:fs";
 
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
@@ -74,7 +79,7 @@ const CITIES = {
       "// QSkyway city digital-twin — real Astana buildings from OpenStreetMap (Overpass),",
       "// rasterized to a 20m height field. v2: per-building height provenance (hs) +",
       "// per-cell source grid + dataQuality summary. Regenerate with:",
-      "//   node scripts/fetch-city-twin.mjs astana > src/routes/qskyway.city.ts",
+      "//   node scripts/fetch-city-twin.mjs astana --write",
       "/* eslint-disable */",
       "export interface CityData {",
       "  city: string;",
@@ -101,7 +106,7 @@ const CITIES = {
       "// QSkyway city digital-twin — NYC Midtown (Manhattan), real OpenStreetMap buildings",
       "// (Overpass, ODbL), 20m height field. v2: height provenance + dataQuality.",
       "// Regenerate with:",
-      "//   node scripts/fetch-city-twin.mjs nyc > src/routes/qskyway.city.nyc.ts",
+      "//   node scripts/fetch-city-twin.mjs nyc --write",
       "/* eslint-disable */",
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
@@ -271,7 +276,6 @@ function rasterize(buildings) {
 }
 
 function loadCommitted(file) {
-  const fs = require("node:fs");
   const path = new URL(`../src/routes/${file}`, import.meta.url);
   const text = fs.readFileSync(path, "utf8");
   const start = text.indexOf('{"city"');
@@ -279,8 +283,6 @@ function loadCommitted(file) {
   return JSON.parse(text.slice(start, text.lastIndexOf("};") + 1));
 }
 
-const { createRequire } = await import("node:module");
-const require = createRequire(import.meta.url);
 
 process.stderr.write(`QSkyway twin: ${cityId} — querying Overpass…\n`);
 const elements = await overpass();
@@ -401,7 +403,13 @@ const data = {
   },
 };
 
-process.stdout.write(`${city.header}\nexport const ${city.exportName}: CityData = ${JSON.stringify(data)};\n`);
+const out = `${city.header}\nexport const ${city.exportName}: CityData = ${JSON.stringify(data)};\n`;
+if (process.argv.includes("--write")) {
+  fs.writeFileSync(new URL(`../src/routes/${city.committed}`, import.meta.url), out);
+  process.stderr.write(`wrote src/routes/${city.committed}\n`);
+} else {
+  process.stdout.write(out);
+}
 process.stderr.write(
   `done: ${total} buildings, ${measured} measured (${data.dataQuality.measuredPct}%), grid ${COLS}×${ROWS}\n`,
 );

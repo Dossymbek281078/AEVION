@@ -6,9 +6,11 @@ import QSkywayClient from "./_client";
 const TITLE = "QSkyway — navigation layer for the urban sky";
 const DESCRIPTION =
   "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
-  + "Astana, NYC & Tokyo: 4D routing, real FAA airspace ceilings, live METAR wind, height-data "
-  + "provenance with confidence-based clearance, an airspace-slot rights market and "
-  + "Ed25519-signed city twins. \"Google Maps + traffic rules for the sky.\"";
+  + "Astana, NYC & Tokyo. Routed against what the regulators actually publish: FAA airspace "
+  + "ceilings over Manhattan, Japan's MLIT permission regime over Tokyo, and Kazakhstan's "
+  + "published prohibited area UAP28 covering all of the Astana twin. Live METAR wind, "
+  + "height-data provenance, an airspace-slot "
+  + "rights market, and every flight exportable as a signed justification document.";
 
 export const metadata: Metadata = {
   title: TITLE,

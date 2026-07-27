@@ -16,6 +16,12 @@ export const AIRSPACE_NYC: CityAirspace = {
   "regime": "Part 107 small-UAS LAANC authorization ceilings",
   "effective": "7/9/2026",
   "fetched": "2026-07-26",
+  "bbox": {
+    "minLat": 40.7474728,
+    "maxLat": 40.7629936,
+    "minLon": -74.0002478,
+    "maxLon": -73.9758674
+  },
   "cells": [
     {
       "id": "faa-148561",

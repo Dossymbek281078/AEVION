@@ -1,5 +1,12 @@
 # QSkyway — Session Handoff (2026-07-22)
 
+> ⚠️ **SUPERSEDED for everything after 22.07 — see `AEVION_QSKYWAY_HANDOFF_2026-07-26.md`.**
+> In particular the "What's next" section below is DONE: the FAA UAS Facility Map
+> feed it proposed is ingested and live in PR #930/#934, and the Japanese feed it
+> left unresearched has been researched (negative for ceilings, positive for a
+> permission regime). Kept for the history of how the module got here.
+
+
 > Worktree: `C:\Users\user\aevion-qskyway`. Session scope was explicitly QSkyway-only
 > (user confirmed, see memory `project_qskyway_aerotaxi.md` — "аэротакси" = QSkyway).
 > Root `CLAUDE.md` and `HANDOFF.md` in this worktree are **stale/shared with other

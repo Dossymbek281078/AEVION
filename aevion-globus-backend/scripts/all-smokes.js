@@ -49,6 +49,11 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
+  // document. Prod-safe — the slot-booking and QRight-registry write legs
+  // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
+  // surface without leaving smoke rows in a live registry.
+  { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

@@ -12,16 +12,54 @@
  */
 
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
+// Write legs (slot booking, registry entry) self-skip against prod so the daily
+// run can cover the whole read surface without leaving smoke rows behind.
+const READ_ONLY = process.env.READ_ONLY === "1";
 let step = 0, failed = 0;
+let skipped = 0;
+const skip = (n, why) => { skipped++; console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`); };
+// A skipped write leg did not pass — folding it into the pass count would make
+// a prod run look like it verified more than it actually did.
+const summary = () => `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step - skipped}/${step} checks${skipped ? `, ${skipped} skipped` : ""})`;
 const ok = (n, x) => console.log(`  ${String(++step).padStart(2, "0")}  PASS  ${n}${x ? "  " + x : ""}`);
 const fail = (n, r) => { step++; failed++; console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${n}${r ? "  — " + r : ""}`); };
 const assert = (c, n, r) => (c ? ok(n) : fail(n, r));
 async function jget(p) { const r = await fetch(`${BASE}${p}`); return { status: r.status, json: await r.json().catch(() => null) }; }
 async function jpost(p, b) { const r = await fetch(`${BASE}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }); return { status: r.status, json: await r.json().catch(() => null) }; }
 
+/**
+ * Confirm we are talking to a QSkyway-capable backend before asserting anything.
+ *
+ * BASE defaults to port 4001, which on this machine is contested by 18+ AEVION
+ * worktrees. Point this at another session's server and you get a cascade of
+ * confusing failures that look like regressions in your own branch — an hour
+ * went to exactly that on 2026-07-27. A liveness check is not enough: something
+ * answers, it is just the wrong something.
+ */
+async function assertRightBackend() {
+  let h;
+  try {
+    h = await jget("/api/qskyway/health");
+  } catch (e) {
+    console.error(`\nCannot reach ${BASE} — is the backend running?  (${e instanceof Error ? e.message : e})`);
+    process.exit(1);
+  }
+  if (h.status !== 200 || h.json?.module !== "qskyway") {
+    console.error(`\n${BASE} answered ${h.status}, but this is not a QSkyway backend.`);
+    console.error("Another worktree is probably on this port. Check:  netstat -ano | grep LISTENING | grep ':<port> '");
+    process.exit(1);
+  }
+  if (!(h.json.features ?? []).includes("regulatory-airspace-ceilings")) {
+    console.error(`\n${BASE} is a QSkyway backend, but an OLDER build — no regulatory-airspace-ceilings feature.`);
+    console.error("Restart it from this worktree, or point BASE at the right port.");
+    process.exit(1);
+  }
+}
+
 async function main() {
   console.log(`QSkyway smoke → ${BASE}\n`);
 
+  await assertRightBackend();
   const h = await jget("/api/qskyway/health");
   assert(h.status === 200 && h.json?.status === "ok", "/health ok", `status=${h.status}`);
   assert((h.json?.buildings ?? 0) >= 300, "digital twin has buildings", `n=${h.json?.buildings}`);
@@ -158,7 +196,10 @@ async function main() {
   assert(asN.minCeilingM === 0 && asN.maxCeilingM > 0, "[nyc] ceilings span from no-auto-authorization to a real limit", `${asN?.minCeilingM}–${asN?.maxCeilingM}m`);
   // Cities without an open regulator feed must say so rather than inventing one.
   const cityAst = await jget("/api/qskyway/city?city=astana");
-  assert(cityAst.json?.airspace?.available === false, "[astana] no regulator feed is reported honestly, not faked");
+  assert(cityAst.json?.airspace?.available === false, "[astana] absence of a CEILING grid is reported honestly, not faked");
+  // The note must say which thing is missing. Claiming "no regulator source"
+  // for a city that sits inside a published prohibited zone was false.
+  assert(!/не найдено/.test(cityAst.json?.airspace?.note ?? "") && /permission/.test(cityAst.json?.airspace?.note ?? ""), "[astana] the note names the missing ceiling, not a missing regulator", (cityAst.json?.airspace?.note ?? "").slice(0, 60));
 
   // Advisory (default) mode must not have changed routability — the verdict is
   // added information, not a new restriction.
@@ -188,10 +229,144 @@ async function main() {
   const strictAst = await jpost("/api/qskyway/route", { from: 0, to: 1, city: "astana", respectCeiling: true });
   assert(strictAst.status === 200, "[astana] strict flag cannot block a city that has no published ceiling", `status=${strictAst.status}`);
 
+  // The snapshot is frozen data about a rule that changes — the service must be
+  // able to say whether it is still current, and must not guess when unchecked.
+  const fr = asN.freshness;
+  assert(fr && typeof fr.checked === "boolean" && "upToDate" in fr, "[nyc] airspace layer reports a freshness verdict");
+  assert(fr.snapshotEffective === asN.effective, "[nyc] freshness verdict names the edition actually routed against", `${fr?.snapshotEffective}`);
+  assert(fr.checked === false ? fr.upToDate === null : typeof fr.upToDate === "boolean", "[nyc] unchecked freshness is null, never a silent 'fresh'", `checked=${fr?.checked} upToDate=${fr?.upToDate}`);
+
+  // The ceiling layer is attested too, not just the city twin — otherwise "we
+  // routed against FAA edition X" is an unverifiable claim.
+  assert(asN._signature?.alg === "Ed25519" && /^[0-9a-f]{64}$/.test(asN._signature?.contentHash ?? ""), "[nyc] airspace layer carries an Ed25519 attestation");
+  const sigVer = await jget("/api/qskyway/verify?city=nyc");
+  assert(sigVer.status === 200 && sigVer.json?.twin?.valid === true, "[nyc] twin signature verifies", `status=${sigVer.status}`);
+  assert(sigVer.json?.airspace?.attested === true && sigVer.json.airspace.valid === true, "[nyc] airspace signature verifies");
+  assert(sigVer.json.airspace.contentHash === asN._signature.contentHash, "[nyc] /verify and /city attest the same airspace content");
+  assert(sigVer.json.airspace.effective === asN.effective, "[nyc] attestation is bound to the published edition", `${sigVer.json?.airspace?.effective}`);
+  const verAst = await jget("/api/qskyway/verify?city=astana");
+  assert(verAst.json?.airspace?.attested === false && verAst.json.airspace.valid === null, "[astana] nothing to attest is reported as such, not as invalid");
+  assert(verAst.json?.valid === true, "[astana] twin verdict is unaffected by the absent airspace layer");
+
   // Pads inherit the same published ceiling as the grid they stand on.
   const padCeil = (cityNyc.json?.vertiportScores ?? []).filter((v) => typeof v.ceilingM === "number");
   assert(padCeil.length === nycVp, "[nyc] every pad reports its published ceiling", `${padCeil.length}/${nycVp}`);
   assert(padCeil.some((v) => v.needsAtcCoordination === true), "[nyc] pads under a 0 ft ceiling are flagged for ATC coordination");
+
+  // One signed document an operator can actually file, instead of stitching
+  // three responses together by hand.
+  const just = await jpost("/api/qskyway/route/justification", { from: 1, to: 2, city: "nyc" });
+  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/1", "[nyc] route justification issued", `status=${just.status}`);
+  const jd = just.json.document;
+  assert(jd.twinContentHash === cityNyc.json._signature.contentHash, "justification binds the twin actually routed over");
+  assert(jd.airspace?.contentHash === asN._signature.contentHash, "justification binds the airspace edition actually obeyed");
+  assert(jd.airspace?.effective === asN.effective && jd.airspace?.authority === "FAA", "justification names the authority and edition", `${jd.airspace?.authority} ${jd.airspace?.effective}`);
+  assert(typeof jd.airspace?.compliant === "boolean", "justification states the verdict, green or not");
+  assert(typeof just.json?.scope === "string" && just.json.scope.includes("НЕ"), "scope limit travels with the document");
+  const jver = await jpost("/api/qskyway/route/justification/verify", { document: jd, attestation: just.json.attestation });
+  assert(jver.json?.valid === true && jver.json?.hashValid === true && jver.json?.signatureValid === true, "justification verifies round-trip");
+  // Tampering must be caught and attributed: a changed value is a hash failure,
+  // not a signature failure, and the two must not be reported as one.
+  const tampered = await jpost("/api/qskyway/route/justification/verify", {
+    document: { ...jd, cruiseAltM: jd.cruiseAltM + 100 }, attestation: just.json.attestation,
+  });
+  assert(tampered.json?.valid === false && tampered.json?.hashValid === false, "tampered justification is rejected as a content change", `hashValid=${tampered.json?.hashValid}`);
+  const justAst = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "astana" });
+  assert(justAst.status === 200 && justAst.json?.document?.airspace === null, "[astana] justification omits an altitude verdict it cannot make");
+  assert(/AIP KZ/.test(justAst.json?.document?.permission?.authority ?? ""), "[astana] justification still discloses the prohibition that does apply");
+  // Astana has no CEILING grid but does have a published prohibition, so the
+  // scope must say which of the two is missing — "нет" alone matched either.
+  assert(/потолк/i.test(justAst.json?.scope ?? "") && /ЗАПРЕТНАЯ/.test(justAst.json?.scope ?? ""), "[astana] scope calls the prohibition a prohibition, not a permission regime", (justAst.json?.scope ?? "").slice(0, 90));
+  assert(justAst.json?.document?.permission?.kind === "prohibition", "[astana] the SIGNED document carries the prohibition/permission distinction");
+  assert(!/требует индивидуального разрешения/.test(justAst.json?.scope ?? ""), "[astana] the filing never says a banned flight merely needs permission");
+
+  // Phase 8: a permission regime is a published rule too — a city with no
+  // ceiling grid must not be reported as having no regulator.
+  const cityTk = await jget("/api/qskyway/city?city=tokyo");
+  const perm = cityTk.json?.airspace?.permission;
+  assert(cityTk.json?.airspace?.available === false, "[tokyo] no ceiling grid is published — still reported honestly");
+  assert(perm?.available === true && /MLIT/.test(perm.authority ?? ""), "[tokyo] permission regime from the real authority is reported", `${perm?.authority}`);
+  assert(perm.basis === "raster-sampled", "[tokyo] permission provenance says it was sampled, not ingested", `basis=${perm?.basis}`);
+  assert(perm.coveragePct === 100 && perm.uniform === true, "[tokyo] uniform coverage is stated as uniform, not drawn as a map", `${perm?.coveragePct}%`);
+  // Astana: the eAIP publishes a prohibited area that covers the whole twin.
+  // Reporting it as "no source" was the module's own worst inaccuracy.
+  // The disclaimer is read by every API consumer; it must not still be claiming
+  // Astana has no source after the source was found.
+  const disc = h.json?.disclaimer ?? "";
+  assert(/UAP28/.test(disc) && !/Астана — открытого фида регулятора не найдено/.test(disc), "disclaimer names Astana's real zone rather than claiming none exists", disc.slice(-90));
+  const permAst = await jget("/api/qskyway/city?city=astana");
+  const pa = permAst.json?.airspace?.permission;
+  assert(pa?.available === true && /AIP KZ/.test(pa.authority ?? ""), "[astana] published prohibited area is reported", `${pa?.authority}`);
+  assert(pa.kind === "prohibition", "[astana] a prohibition is not rendered as a permission", `kind=${pa?.kind}`);
+  // The UI picks its label off this field, so its absence would silently relabel
+  // a ban as "needs permission" — the exact collapse the type exists to prevent.
+  const pt = (await jget("/api/qskyway/city?city=tokyo")).json?.airspace?.permission;
+  assert(pt?.kind === "permission", "[tokyo] permission regime keeps its own kind", `kind=${pt?.kind}`);
+  assert(pa.basis === "ingested" && /UAP28/.test(pa.regime ?? ""), "[astana] zone identifier and provenance are stated", `${pa?.regime?.slice(0, 40)}`);
+  assert(pa.coveragePct === 100 && /ЗАПРЕТНОЙ/.test(pa.note ?? ""), "[astana] full coverage is stated as prohibition, not as 'needs permission'");
+  // A demo circle named after a real restriction must say it is a demo circle.
+  const gov = (permAst.json?.nofly ?? []).find((z) => z.id === "nfz-gov");
+  assert(gov && /демо/i.test(gov.name ?? ""), "[astana] the placeholder zone is named as a placeholder", gov?.name);
+  assert(gov && /UAP28/.test(gov.realityNote ?? "") && /4\.5/.test(gov.realityNote ?? ""), "[astana] the placeholder points at the real published zone it stands in for");
+  const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
+  assert(cov?.withFeed === 3 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city now has a published rule of some kind", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
+  assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));
+  const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
+  assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");
+  // The disclaimer must not contradict the document it is attached to.
+  assert(/режим разрешений/.test(justTk.json?.scope ?? "") && !/фида регулятора нет/.test(justTk.json?.scope ?? ""), "[tokyo] scope text matches what the document actually contains");
+
+  // What the ceiling costs across the whole network — the figure the page shows
+  // and the pitch quotes, so it must come from the engine, not from a slide.
+  const imp = await jget("/api/qskyway/airspace/impact?city=nyc");
+  assert(imp.status === 200 && imp.json?.available === true, "[nyc] regulatory impact is measured", `status=${imp.status}`);
+  assert(imp.json?.pairs === imp.json?.routable, "[nyc] impact measures every pair, all still routable in advisory mode", `${imp.json?.routable}/${imp.json?.pairs}`);
+  assert(imp.json.compliant > 0 && imp.json.compliant < imp.json.pairs, "[nyc] the published ceiling genuinely bites — some pairs comply, some do not", `${imp.json?.compliant}/${imp.json?.pairs}`);
+  assert(imp.json.strictRoutable <= imp.json.pairs && imp.json.strictRoutable >= imp.json.compliant, "[nyc] strict-routable sits between compliant and total", `strict=${imp.json?.strictRoutable}`);
+  assert(imp.json.padsNeedingAtc >= 1 && !/\d+ площадок стоят/.test(imp.json.note ?? ""), "[nyc] impact note counts pads with correct Russian agreement", imp.json?.note?.slice(-60));
+  const impTk = await jget("/api/qskyway/airspace/impact?city=tokyo");
+  assert(impTk.json?.available === false, "[tokyo] no ceiling grid means nothing to measure, said plainly");
+
+  // The shipped Bitcoin proof: a proof nobody keeps is a proof that does not
+  // exist, so the one for the edition in use must verify with no arguments.
+  const pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  assert(pf.status === 200 && pf.json?.contentHash === asN._signature.contentHash, "[nyc] shipped proof is for the edition actually served", `${pf.status}`);
+  assert(pf.json?.coversCurrentEdition === true, "[nyc] shipped proof still covers the current edition");
+  assert(pf.json?.verification?.ots?.verified === true && pf.json?.verification?.ots?.status === "bitcoin-confirmed", "[nyc] shipped proof verifies against Bitcoin", `block=${pf.json?.verification?.ots?.bitcoinBlockHeight}`);
+  assert(pf.json?.verification?.fullyProven === true && pf.json?.bitcoinBlockHeight > 0, "[nyc] edition is trustlessly timestamped", `block=${pf.json?.bitcoinBlockHeight}`);
+  // The verdict is cached once Bitcoin-confirmed so a public GET stops calling
+  // the OpenTimestamps calendars on every request; the cached answer must be the
+  // same answer, not a trimmed one.
+  const pf2 = await jget("/api/qskyway/airspace/proof?city=nyc");
+  assert(JSON.stringify(pf2.json) === JSON.stringify(pf.json), "[nyc] repeat proof request returns an identical verdict (served from cache)");
+  // Anchoring an edition that is already anchored must not stamp again: a public
+  // POST into someone else's calendars is an open tap, and a second timestamp
+  // over the same hash proves nothing the first one did not.
+  const reAnchor = await jpost("/api/qskyway/airspace/anchor", { city: "nyc" });
+  assert(reAnchor.status === 200 && reAnchor.json?.reused === true, "[nyc] re-anchoring an already-anchored edition reuses the shipped proof", `reused=${reAnchor.json?.reused}`);
+  assert(reAnchor.json?.contentHash === asN._signature.contentHash && (reAnchor.json?.calendars ?? []).length === 0, "[nyc] the reused answer is the same proof and hit no calendars");
+  const pfAst = await jget("/api/qskyway/airspace/proof?city=astana");
+  assert(pfAst.status === 404, "[astana] no shipped proof where there is no edition to anchor", `status=${pfAst.status}`);
+
+  // Registry bridge. The DB is optional for QSkyway but mandatory for QRight, so
+  // both outcomes are legitimate — what must never happen is a success response
+  // when nothing was written.
+  if (READ_ONLY) {
+    skip("[nyc] airspace edition registered in QRight", "READ_ONLY — registry write skipped");
+  } else {
+  const reg1 = await jpost("/api/qskyway/airspace/register", { city: "nyc" });
+  if (reg1.status === 503) {
+    assert(!reg1.json?.ok && typeof reg1.json?.error === "string", "registry unavailable is reported as failure, not silent success", "no DB in this env");
+  } else {
+    assert(reg1.status === 201 || reg1.status === 200, "[nyc] airspace edition registered in QRight", `status=${reg1.status}`);
+    assert(reg1.json?.contentHash === asN._signature.contentHash, "registry entry carries the signed layer's hash");
+    // Idempotency is on the hash, so a second call must resolve to the same object.
+    const reg2 = await jpost("/api/qskyway/airspace/register", { city: "nyc" });
+    assert(reg2.json?.alreadyRegistered === true && reg2.json?.qrightObjectId === reg1.json.qrightObjectId, "re-registering the same edition returns the same object, not a duplicate");
+  }
+  const regAst = await jpost("/api/qskyway/airspace/register", { city: "astana" });
+  assert(regAst.status === 422, "[astana] nothing to register without a regulator feed", `status=${regAst.status}`);
+  }
 
   // bad route rejected
   const bad = await jpost("/api/qskyway/route", { from: 0, to: 0 });
@@ -204,6 +379,11 @@ async function main() {
   const before = await jget("/api/qskyway/slots");
   assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
+  if (READ_ONLY) {
+    skip("slot market capacity gate", "READ_ONLY — booking writes skipped");
+    console.log(`\n${summary()}`);
+    process.exit(failed === 0 ? 0 : 1);
+  }
   let okCount = 0, conflict = false;
   for (let i = 0; i < 5; i++) {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });
@@ -218,7 +398,7 @@ async function main() {
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");
 
-  console.log(`\n${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step} checks)`);
+  console.log(`\n${summary()}`);
   process.exit(failed === 0 ? 0 : 1);
 }
 main().catch((e) => { console.error("smoke crashed:", e); process.exit(1); });

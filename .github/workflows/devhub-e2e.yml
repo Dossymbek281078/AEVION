@@ -59,6 +59,7 @@ jobs:
             e2e/devhub-visual-edit.spec.ts \
             e2e/devhub-chat-diffs.spec.ts \
             e2e/devhub-capability-strip.spec.ts \
+            e2e/devhub-deploy-honesty.spec.ts \
             e2e/devhub-snippet.spec.ts \
             --project=chromium
       - if: failure()

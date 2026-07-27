@@ -1861,7 +1861,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // ── Cloudflare Pages deploy ──────────────────────────────────────────────────
   const [pagesDeploying, setPagesDeploying] = useState(false);
-  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string } | null>(null);
+  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string; domainReady?: boolean } | null>(null);
 
   const deployToPages = async () => {
     if (!project) return;
@@ -1876,8 +1876,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || "Pages deploy failed");
-      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl });
-      showToast(d.domain ? `Live: https://${d.domain}` : `Live: ${d.pagesUrl}`, "success");
+      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
+      // The server decides which address is live and hands it over as liveUrl —
+      // it falls back to pages.dev when the custom domain does not resolve.
+      // Announcing d.domain the moment it merely *exists* told people their
+      // page was live at an address that fails DNS, which is the exact lie the
+      // server-side check was added to stop.
+      // One message, not two: this Toast shows a single notice at a time, so a
+      // second call would silently replace the first — the user would see the
+      // caveat and never the address.
+      showToast(
+        d.domainReady && d.domain
+          ? `Live: https://${d.domain}`
+          : d.domain
+            ? `Live: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (зона не делегирована)`
+            : `Live: ${d.liveUrl ?? d.pagesUrl}`,
+        d.domain && !d.domainReady ? "warning" : "success",
+      );
       setTimeout(async () => {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const pd = await pr.json();

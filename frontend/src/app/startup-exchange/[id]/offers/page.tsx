@@ -161,7 +161,10 @@ export default function OffersPage() {
                       </div>
                       <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>
                         {labelOf(INTENT_LABEL, o.intent, "Тип сделки не указан")}
-                        {implied !== null && ` · это оценка ${usd(implied)}`}
+                        {/* Не «оценка» — это арифметика самого инвестора: чек делить
+                            на предложенную долю. Мы проект не оцениваем и говорим это
+                            на каждом экране, значит и подпись должна называть вещи так. */}
+                        {implied !== null && ` · по его условиям — ${usd(implied)} за всё`}
                       </div>
                     </div>
                     <div style={{ fontSize: 11.5, color: "#64748b", textAlign: "right" }}>

@@ -61,10 +61,19 @@ export async function POST(req: NextRequest) {
     return withCors(badRequest("title is required."));
   }
   const settlement = body.settlement === "aec" ? "aec" : "bank";
+  // Собственная спека (`/api/openapi.json`) обещает `integer, minimum: 1`, а код
+  // принимал `0.5` и `Infinity` (`1e400` в JSON — это Infinity, и `> 0` истинно).
+  // Расхождение кода с опубликованным контрактом — то же враньё, только тише.
+  if (body.expires_in_days !== undefined && body.expires_in_days !== null) {
+    const d = body.expires_in_days;
+    if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 3650) {
+      return withCors(
+        badRequest("expires_in_days must be a whole number of days between 1 and 3650.")
+      );
+    }
+  }
   const expDays =
-    typeof body.expires_in_days === "number" && body.expires_in_days > 0
-      ? body.expires_in_days
-      : null;
+    typeof body.expires_in_days === "number" ? body.expires_in_days : null;
 
   const id = genId("pl");
   const link: ApiLink = {

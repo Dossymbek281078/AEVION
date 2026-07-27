@@ -109,7 +109,8 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    of that revenue: WeWork's $729.7M quarterly operating loss and $24.6B of
    liabilities, Blue Apron's $144.1M of marketing against $795.4M of revenue.
 
-   **A burn multiple would not fix this, and the arithmetic says so.** Snowflake
+   **A burn multiple would not fix this, and the arithmetic says so** (limit 15
+   below tests a second ratio and refutes that one too). Snowflake
    disclosed a $348.5M net loss on $264.7M of revenue in the same fiscal year —
    a burn multiple of 1.32. WeWork's FY2018 loss against FY2018 revenue is under
    1.0. Charging burn would rank the success worse than the failure. On top of
@@ -311,6 +312,33 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    endpoints, a bank's net interest margin, a filing in yen. Those were
    attempted this session and left out because the figures could not be sourced
    to a document, which is the right reason to leave a case out.
+
+15. **Two hypotheses about the WeWork / Blue Apron inversion, both tested and
+   both wrong.** The two failures that outscore the weakest success do so on
+   real, disclosed revenue. Two ways of charging for the cost of that revenue
+   were proposed here and are now withdrawn, because the arithmetic refutes
+   them:
+
+   | Measure | Blue Apron (failed) | Snowflake (succeeded) |
+   |---|---|---|
+   | Burn multiple (loss ÷ revenue) | 0.07 | **1.32** |
+   | Loss per dollar of net-new revenue | 0.12 | **2.07** |
+
+   Blue Apron lost $54.9M on $795.4M of revenue that had grown from $340.8M;
+   Snowflake lost $348.5M on $264.7M grown from $96.7M. On either ratio the
+   FAILURE looks an order of magnitude healthier than the SUCCESS, so a rule
+   built on either would have ranked them exactly backwards.
+
+   What actually killed Blue Apron — marketing at 18% of revenue buying
+   customers who churned — is a CAC-and-retention story, and the engine has
+   machinery for both. It could not use it, because Blue Apron **did not
+   disclose churn or CAC at that round**. That is not a gap in the rubric; it is
+   the limit the second section of this document already states, now with
+   arithmetic behind it: on disclosure alone these two companies are not
+   separable, and no ratio of the figures they did disclose separates them.
+
+   Recorded so the idea is not implemented later by someone who has not run
+   the numbers.
 
 ## How this stays true
 

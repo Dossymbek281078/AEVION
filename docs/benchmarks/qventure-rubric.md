@@ -1484,6 +1484,21 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    condition came from reading what attempt one actually got wrong rather than
    from thinking harder about the problem.
 
+60. **The series rule extended to the metrics that share its shape.** Revenue
+   and retention were closed in limit 59; the customer count and gross margin
+   are stated the same way and were extended once the magnitude bound made the
+   walk safe. "3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020" gives
+   8,000; "gross margin was 60%, 70%, and 80%" gives 80%.
+
+   One exception, deliberate: a **negative** margin never enters a series.
+   Carrying a sign forward through a walk is a way to lose it, and a filing that
+   states a negative margin states it once — Solyndra'''s −45% is the headline of
+   its case. Seventeen traps across the two metrics, and everything the margin
+   already refused it still refuses: the dash, the range, a stated target.
+
+   All four guards clean: corpus 95/95, hard-cases gap 16.5, calibration range
+   unchanged, verdict bands reachable.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

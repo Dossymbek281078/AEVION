@@ -1191,10 +1191,19 @@ export function parsePlanSignals(text: string): PlanSignals {
   // milestone lists and the grant reader — the metric readers were the last
   // group that had never been asked.
   if (gm && s.grossMarginPct === null && statedAsAchieved(t, gm.index ?? 0, gm[0].length)) {
-    const magnitude = parseLocaleNumber(gm[2]);
+    const head = parseLocaleNumber(gm[2]);
     const negative = Boolean(gm[1]);
+    // "gross margin was 60% in 2018, 70% in 2019, and 80% in 2020" — same shape
+    // as the top line. Only when the head is POSITIVE: a series walk on a
+    // negative margin would have to carry the sign forward, and a filing that
+    // states a negative margin states it once.
+    const tail = !negative && isFinite(head) ? lastInSeries(t, (gm.index ?? 0) + gm[0].length, "percent", head) : null;
+    const magnitude = tail ? parseLocaleNumber(tail[1]) : head;
     if (isFinite(magnitude) && magnitude > 0 && magnitude <= 100) {
       s.grossMarginPct = negative ? -magnitude : magnitude;
+      if (tail) {
+        s.parseNotes.push(`Gross margin was stated for several periods in one sentence; the score uses the latest (${magnitude}%).`);
+      }
       if (negative) {
         s.parseNotes.push(`Gross margin was disclosed as negative (${s.grossMarginPct}%); it is scored at that sign, not as ${magnitude}%.`);
       }
@@ -1413,8 +1422,15 @@ export function parsePlanSignals(text: string): PlanSignals {
     // that happens to put a number after the noun.
     || latestMatch(t, new RegExp(String.raw`(?:paying\s+|active\s+)?(?:${CUST_NOUN})\s*(?:${LINK}|reached|totall?ed|stood at|were|was|number(?:ed)?)\s*${NOT_MONEY}${NUM}\s*${UNIT}`, "i"), s, "the customer count");
   if (cust && statedAsAchieved(t, cust.index ?? 0, cust[0].length)) {
-    const v = parseMoney(cust[1], cust[2]);
-    if (v && v >= 1) s.customers = Math.round(v);
+    const head = parseMoney(cust[1], cust[2]);
+    // "3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020" names the
+    // noun once, so the oldest count would win. Same shape as the top line.
+    const tail = head ? lastInSeries(t, (cust.index ?? 0) + cust[0].length, "money", head) : null;
+    const v = tail ? parseMoney(tail[1], tail[2]) : head;
+    if (v && v >= 1) {
+      s.customers = Math.round(v);
+      if (tail) s.parseNotes.push(`The customer count was stated for several periods in one sentence; the score uses the latest (${Math.round(v).toLocaleString("en-US")}).`);
+    }
   }
   // The count pattern above puts the figure BEFORE the noun, so "customers fell
   // to 900" reaches it in the wrong order and was dropped. Same family as the

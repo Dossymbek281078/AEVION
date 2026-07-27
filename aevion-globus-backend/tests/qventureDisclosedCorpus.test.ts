@@ -6196,3 +6196,43 @@ describe("a trend stated in one sentence reads its oldest figure", () => {
     expect(p("Our revenue was $400.3 million in 2020.").revenueUsd).toBe(400_300_000);
   });
 });
+
+describe("the series rule covers the metrics that share its shape", () => {
+  // Revenue and retention were closed first; customers and gross margin have
+  // the same shape and were extended once the magnitude bound made it safe.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["customers", "We had 3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020.", (x: Sig) => x.customers, 8000],
+    ["gross margin", "Gross margin was 60% in 2018, 70% in 2019, and 80% in 2020.", (x: Sig) => x.grossMarginPct, 80],
+  ])("a one-sentence trend gives its latest %s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test.each([
+    ["a single customer count", "We have 5,000 customers.", (x: Sig) => x.customers, 5000],
+    ["a prior period", "We have 8,000 customers, up from 3,000 a year ago.", (x: Sig) => x.customers, 8000],
+    ["a smaller unrelated number", "We have 5,000 customers, and 3 offices in 2024.", (x: Sig) => x.customers, 5000],
+    ["a second metric", "We have 5,000 customers, and churn is 3%.", (x: Sig) => x.customers, 5000],
+    ["a sentence boundary", "We have 5,000 customers. Revenue is $10 million.", (x: Sig) => x.customers, 5000],
+    ["a customer range", "12,000-15,000 customers.", (x: Sig) => x.customers, 12_000],
+    ["a single margin", "Gross margin of 75%.", (x: Sig) => x.grossMarginPct, 75],
+    ["a margin range", "Gross margin of 60-70%.", (x: Sig) => x.grossMarginPct, 60],
+    ["a margin beside another metric", "Gross margin was 75%, and churn is 3%.", (x: Sig) => x.grossMarginPct, 75],
+  ])("the walk stops at %s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("a negative margin never enters a series", () => {
+    // Carrying a sign forward through a walk is a way to lose it, and a filing
+    // that states a negative margin states it once. Solyndra's -45% is the
+    // headline of its case.
+    expect(p("Gross margin of -45%.").grossMarginPct).toBe(-45);
+    expect(p("Gross margin of (45)%.").grossMarginPct).toBe(-45);
+  });
+
+  test("and everything the margin already refused, it still refuses", () => {
+    expect(p("Gross margin — 45%.").grossMarginPct).toBeNull();
+    expect(p("We are targeting a gross margin of 70%.").grossMarginPct).toBeNull();
+  });
+});

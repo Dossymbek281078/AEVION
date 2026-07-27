@@ -797,7 +797,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // 20% MoM growth, handing a dying company +14 execution points for a metric it
   // never claimed. So a period word alone no longer qualifies — the match needs a
   // growth verb, the word "growth", or a growth-specific token (MoM/YoY/WoW).
-  const PERIOD_WORD = String.raw`(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week|monthly|annually|annual|yearly|per month|per year|per week)`;
+  const PERIOD_WORD = String.raw`(mom|yoy|wow|month[- ]over[- ]month|month[- ]on[- ]month|year[- ]over[- ]year|year[- ]on[- ]year|week[- ]over[- ]week|week[- ]on[- ]week|monthly|annually|annual|yearly|per month|per year|per week)`;
   const NOT_ANOTHER_METRIC = String.raw`(?!\s*(?:churn|attrition|retention|margin|discount|fee|interest|refund|conversion))`;
   // A stated DECLINE was read as growth of the same size: "revenue declined 20%
   // year over year" set +20 and scored exactly like +20% growth, because the
@@ -820,7 +820,9 @@ export function parsePlanSignals(text: string): PlanSignals {
   // several are disclosed, and whatever is used carries its basis so the report
   // can say "GMV growth" when that is what it is.
   const GROWTH_PATTERNS = [
-    String.raw`(?:grow(?:ing|th|s|n)?|grew|rose|climbed|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
+    // "increased approximately 3% year-on-year" is Sony's own wording, and
+    // the qualifier between the verb and the figure broke the match outright.
+    String.raw`(?:grow(?:ing|th|s|n)?|grew|rose|climbed|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*(?:approximately|approx\.?|about|around|nearly|almost|roughly|some|over|more than|just under)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
     String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`,
     // Growth written as a NOUN with the figure in front of it — "a 31.6%
     // increase over 2024", which is how TSMC states its own growth. Every
@@ -829,7 +831,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // and "decline" is deliberately absent: a fall is handled by the decline
     // parser, which knows to make it negative.
     String.raw`${NUM}\s*%\s*${PERIOD_WORD}?\s*(?:increase|growth|rise|gain|uplift)\b${NOT_ANOTHER_METRIC}`,
-    String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`,
+    String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|month[- ]on[- ]month|year[- ]over[- ]year|year[- ]on[- ]year|week[- ]over[- ]week|week[- ]on[- ]week)${NOT_ANOTHER_METRIC}`,
   ];
   const BASIS_NOUNS: Array<[GrowthBasis, RegExp]> = [
     ["revenue", /\b(?:revenues?|arr|mrr|net sales|sales)\b/g],

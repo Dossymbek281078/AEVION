@@ -1154,6 +1154,17 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    deliverable — the next attempt starts from "bound basisFor to the clause"
    rather than from the symptom.
 
+45. **Ninth new company, ninth new defect — two of them in eight words.** Sony
+   states its growth as "sales increased approximately 3% year-on-year". Both
+   halves failed: `year-on-year` is how most of the world writes it and the
+   pattern knew only `year-over-year`, so the rate came back with no period at
+   all — and a rate without its period is not a number, which is the first rule
+   in the metrics module. And the qualifier between the verb and the figure
+   (`approximately`, `about`, `nearly`) broke the match outright.
+
+   Nine companies, nine defects, and the last one was found with twelve minutes
+   left in a session by reading one sentence.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

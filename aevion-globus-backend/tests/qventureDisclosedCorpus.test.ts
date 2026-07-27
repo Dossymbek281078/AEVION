@@ -2555,3 +2555,34 @@ describe("a level stated with a rise verb is not a growth rate", () => {
     expect(g("Revenue grew 42% year over year; margin rose to 60%.")).toBe(42);
   });
 });
+
+describe("how growth is written outside a US filing", () => {
+  // Ninth new company, ninth new defect. Sony's 20-F: "sales increased
+  // approximately 3% year-on-year" — two failures in eight words.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("Sony's own sentence", () => {
+    const s = p("On a constant currency basis, sales increased approximately 3% year-on-year.");
+    expect(s.growthPct).toBe(3);
+    expect(s.growthPeriod).toBe("YoY");
+  });
+
+  test.each([
+    ["year-on-year", "Revenue increased 3% year-on-year.", "YoY"],
+    ["month-on-month", "Revenue grew 5% month-on-month.", "MoM"],
+    ["year-over-year still", "Revenue increased 3% year-over-year.", "YoY"],
+  ])("%s names the period", (_l, text, want) => {
+    // A rate without its period is not a number — 4% is excellent annually and
+    // fatal monthly. The "on" form is how most of the world writes it.
+    expect(p(text).growthPeriod).toBe(want);
+  });
+
+  test.each([
+    ["approximately", "Revenue increased approximately 3%.", 3],
+    ["about", "Revenue increased about 12%.", 12],
+    ["nearly", "Revenue increased nearly 40%.", 40],
+    ["roughly", "Revenue grew roughly 20% year over year.", 20],
+  ])("a qualifier between the verb and the figure: %s", (_l, text, want) => {
+    expect(p(text).growthPct).toBe(want);
+  });
+});

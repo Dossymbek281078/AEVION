@@ -1666,3 +1666,32 @@ describe("the deck path inherits the ownership test without new code", () => {
     expect(metricStatedAsIntention("12,000 customers.", CUSTOMERS)).toBe(false);
   });
 });
+
+describe("Indian numbering is a scale, not a decoration", () => {
+  // Every DRHP filed with SEBI states money in crore (10^7) or lakh (10^5).
+  // The unit list had neither, so the scale word was dropped and the bare
+  // number kept: Zomato's revenue of about $313M read as 2,604.7 rupees.
+  // That is the expensive class — a returned figure seven orders of magnitude
+  // too small, scored as if it were the disclosure.
+  const inr = (t: string) => parsePlanSignals(t).revenueUsd;
+
+  test("crore multiplies by ten million", () => {
+    const v = inr("We reported revenue of INR 2,604.7 crore.");
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(2e8); // hundreds of millions, not tens of rupees
+    expect(v!).toBeLessThan(4e8);
+  });
+
+  test("the plural and the symbol form read the same", () => {
+    expect(inr("We recorded ₹2,604.7 crore in revenue.")).toBe(inr("We reported revenue of INR 2,604.7 crore."));
+    expect(inr("We reported revenue of ₹2,604.7 crores.")).toBe(inr("We recorded ₹2,604.7 crore in revenue."));
+  });
+
+  test("the unit guard still holds — a scale word glued to another word is not a scale", () => {
+    expect(inr("We reported revenue of ₹5 croreish.")).toBeNull();
+  });
+
+  test("adding units did not move any existing scale", () => {
+    expect(inr("We reported revenue of $264.7 million.")).toBe(264_700_000);
+  });
+});

@@ -80,6 +80,13 @@ export const MONEY_MULTIPLIER: Record<string, number> = {
   thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12,
   // Cyrillic scale words: KZ/RU decks write "$450 млн ARR" and "₸2 млрд GMV".
   тыс: 1e3, млн: 1e6, млрд: 1e9, трлн: 1e12,
+  // Indian numbering: every DRHP filed with SEBI states money in crore (10^7)
+  // or lakh (10^5), not in millions. Without these the scale word was dropped
+  // and the bare number kept, so Zomato's "Rs. 2,604.7 crore" of revenue —
+  // about $313M — was read as 2,604.7 rupees, or $27. A miss falls back to a
+  // sector prior; this returned a figure seven orders of magnitude too small
+  // and scored it.
+  crore: 1e7, crores: 1e7, lakh: 1e5, lakhs: 1e5,
 };
 
 /**
@@ -124,12 +131,12 @@ export function parseLocaleNumber(raw: string): number {
  * alternation backtracks, so "million"/"billion" still match; only a bare letter
  * glued to the following word is rejected.
  */
-export const MONEY_UNIT_PATTERN = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion|тыс|млн|млрд|трлн)(?![a-zа-я]))?`;
+export const MONEY_UNIT_PATTERN = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion|crores?|lakhs?|тыс|млн|млрд|трлн)(?![a-zа-я]))?`;
 
 /** Parse a money-ish token like "$1.2M", "500k", "2 million", "1,500,000", "€1,5M". */
 export function parseMoney(numRaw: string, unitRaw?: string): number | null {
   const n = parseLocaleNumber(numRaw);
   if (!isFinite(n)) return null;
   const unit = (unitRaw || "").trim().toLowerCase();
-  return n * (MONEY_MULTIPLIER[unit] ?? 1);
+  return n * (Object.prototype.hasOwnProperty.call(MONEY_MULTIPLIER, unit) ? MONEY_MULTIPLIER[unit] : 1);
 }

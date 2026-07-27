@@ -544,6 +544,41 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    being true the moment someone adds a second gate beside the first, so it is
    asserted rather than assumed.
 
+22. **Open: money written the way most of the world writes it.** A probe of
+   non-US filing conventions found two defects of different severity, and the
+   difference matters more than the count.
+
+   | Written as | Read as | Actually | Class |
+   |---|---|---|---|
+   | `INR 2,604.7 crore` | **$27** | ~$313M | wrong number — **fixed** |
+   | `RM 458.2 million` | **$458.2M** | ~$97M | wrong number — **open** |
+   | `Rs. 26,047 lakh` | nothing | ~$313M | miss — open |
+   | `revenue of R$ 1,697.6 million` | nothing | ~$334M | miss — open |
+   | `revenue of S$ 12.5 billion` | nothing | ~$9.7B | miss — open |
+
+   **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
+   Cyrillic ones that were added for the same reason. Every DRHP filed with
+   SEBI states money in them; without them the scale word was dropped and the
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (321
+   assertions), including a case proving the `(?![a-z])` unit guard still
+   rejects a scale word glued to another word.
+
+   **Still open, and the more dangerous of the two:** an unrecognised currency
+   token is silently treated as dollars. `RM` (Malaysian ringgit) is in neither
+   the detection table nor the rate table, so "RM 458.2 million in revenue"
+   returns $458.2M — a 4.7x overstatement presented as a read figure. The fix
+   is not merely adding MYR: the rule should be that a currency-shaped token
+   immediately before a number, when unrecognised, **refuses the figure**
+   rather than assuming the reader's own currency. Deferred rather than rushed,
+   because it needs the corpus run to price it.
+
+   The misses are safe by comparison — `R$`, `S$` and `Rs.` are detected as
+   currencies but are absent from the number-prefix pattern, so the figure is
+   not read at all rather than read wrongly. Note the asymmetry that makes this
+   worth its own limit: the same currency parses correctly in one sentence
+   shape and not the other. `R$` after "we recorded" converts fine; `R$` after
+   "revenue of" returns nothing.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

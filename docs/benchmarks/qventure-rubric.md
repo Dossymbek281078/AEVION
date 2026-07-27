@@ -1389,6 +1389,37 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    silently and nothing else in the suite would notice. That is precisely how
    the gross-margin flag spent months unable to fire.
 
+56. **An average contract value is not a backlog.** Probing the efficiency
+   metrics a SaaS plan actually discloses — Rule of 40, magic number, ACV, NDR,
+   gross and logo retention, pipeline — turned up one wrong number and one
+   false description.
+
+   The backlog nouns included `contract value`, so `Average contract value of
+   $45,000` was read as $45,000 of contracted revenue. ACV is what one contract
+   is worth; contracted revenue is everything signed and not yet recognised.
+   A category error, and a wrong number rather than a missing one. Excluded by
+   lookbehind, with the five real backlog phrasings — total contract value,
+   sales backlog, offtake, TCV of large deal wins, contracted revenue — checked
+   unchanged.
+
+57. **A retention figure now says which retention it is.** Net, gross and logo
+   retention are three different numbers: net can exceed 100% and routinely
+   does, gross and logo cannot. All three read into one field, and the report
+   described every one of them as "net revenue retention" — so a plan
+   disclosing 92% *logo* retention was told back that it had disclosed 92% net
+   revenue retention. A sentence about a figure the plan never wrote, in the
+   same class as the TAM the rubric called "credible".
+
+   The signal carries the kind now and the rationale states it. Scoring is
+   untouched on purpose: whether gross retention should be judged on tiers
+   calibrated for net is a calibration question, and this was a description
+   problem. Recorded here so the calibration question is visible rather than
+   buried by having fixed the wording.
+
+   Still unread, and left that way: Rule of 40, magic number, qualified
+   pipeline and cohort retention. Each would need a factor to feed, and burn
+   multiple was already refuted by arithmetic in limit 6.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

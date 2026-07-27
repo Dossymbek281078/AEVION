@@ -1254,7 +1254,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // This is how defence, infrastructure, hardware and project-financed
   // businesses show demand. It is weaker than realised revenue and the engine
   // credits it as such — but reading it as "no traction" was plainly wrong.
-  const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
+  const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|total contract value|tcv(?: of large deal wins| of deal wins| of deals won)?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
   // Same band trap as GMV, and the same six-order consequence: "$20-60M" of
   // backlog was read as twenty dollars.
   const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
@@ -1266,7 +1266,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const backlog = s.contractedRevenueUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?(?:ing|ed)|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
+    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?(?:ing|ed)|=|:|at|is|was|were|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);

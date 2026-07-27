@@ -77,11 +77,15 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (26 real companies, rubric v6):**
-   parse coverage **73/73**, mean success **71.2** vs mean failure **60.3**, gap
-   **10.9 points**. The split is **7 failed, 10 succeeded, 9 `open`** — Rivian,
+5. **Measured on the disclosed-figures corpus (29 entries, 28 real companies,
+   rubric v6):** parse coverage **83/83**, mean success **71.2** vs mean failure
+   **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 12
+   `open`**. Infosys appears twice on purpose — once as the dollar release and
+   once as the rupee release of the same quarter — because the pair is the only
+   way to check that both readings of one set of accounts agree. Open cases are
+   Rivian,
    Deliveroo, Peloton, Beyond Meat, Affirm, Groupon, Lemonade, Rocket Lab and
-   Sunrun (the disclosure-free control, Fast, is labelled `failed` and excluded
+   Sunrun, Infosys (twice) and Kaspi.kz (the disclosure-free control, Fast, is labelled `failed` and excluded
    from parse coverage by a different route: it states no figures at all).
 
    `open` is not a hedge: those companies are still trading, and forcing them
@@ -760,6 +764,24 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    The honest version of the guard needs a real parser rather than a regex over
    lines — that, or a keyword set that does not collide with ordinary variable
    names. Recorded with the reproduction so the next attempt starts from here.
+
+28. **The first two filings that never quoted a dollar.** Every other case in
+   the corpus comes from a filing stating money in USD or converting to it.
+   Infosys reports in rupee crore and Kaspi.kz in tenge, and adding them took
+   parse coverage from 73 figures to 83.
+
+   Between them they account for four of today's defects — the crore scale word,
+   the year-of-a-date read as a metric, `revenue from operations`, and a segment
+   name sitting between a metric and its figure. Adding the cases then found a
+   fifth on the spot: `TCV of large deal wins was $3.6 billion` — the standard
+   IT-services disclosure of signed-but-unrecognised revenue — was not read,
+   because `tcv` was absent from the backlog nouns and `was` from its connector
+   list. Two entries in two lists; the sixth new company found a new defect, and
+   the yield still is not falling.
+
+   Infosys is entered twice by design: the dollar release and the rupee release
+   of the same quarter. A single case can only prove a figure was read; the pair
+   proves the two readings of one set of accounts agree.
 
 ## How this stays true
 

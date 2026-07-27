@@ -764,6 +764,96 @@ export const CASES: DisclosedCase[] = [
       { label: "937 units delivered read as deployments", read: (s) => s.pilots, ...num(937) },
     ],
   },
+  // ── First two cases whose figures were never quoted in dollars ────────────
+  // Every other case in this corpus comes from a filing that states money in
+  // USD, or converts to it. These two do not: an Indian issuer reports in
+  // rupee crore and a Kazakh one in tenge. Between them they surfaced four
+  // defects — the crore scale word, the date-as-metric read, "revenue from
+  // operations", and a segment name sitting between a metric and its figure —
+  // none of which any invented fixture had reason to contain.
+  {
+    outcome: "open",
+    round: "Form 6-K, quarter ended 30 June 2026",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1067491/000106749126000034/exv99w03.htm",
+      "https://www.sec.gov/Archives/edgar/data/1067491/000106749126000034/exv99w02.htm",
+    ],
+    input: {
+      name: "Infosys",
+      sector: "saas",
+      stage: "growth",
+      geography: "IN",
+      askUsd: 500_000_000,
+      description:
+        "IT services and consulting delivered from India to enterprise clients worldwide, billed on time-and-materials and fixed-price contracts.",
+      tractionNotes:
+        "Revenue from operations was ₹48,211 crore for the quarter. Operating margin at 21.1%. Reported revenues at $5,082 million, growth of 2.8% YoY. TCV of large deal wins was $3.6 billion.",
+    },
+    expect: [
+      // The engine reads the dollar figure the same release also states, which
+      // is the correct choice: it is the later, unconverted number. The crore
+      // figure is checked on its own below, where nothing competes with it.
+      { label: "revenue $5,082M", read: (s) => s.revenueUsd, ...num(5_082_000_000) },
+      // Operating margin is not gross margin, and reading one as the other would
+      // credit a cost structure the filing never states. Boolean, not a figure,
+      // so it is not counted as a disclosed number the engine failed to find.
+      { label: "operating margin 21.1% is not mistaken for gross margin", read: (s) => s.grossMarginPct === null, expected: true },
+      { label: "growth 2.8% YoY", read: (s) => s.growthPct, ...num(2.8) },
+      { label: "growth period is YoY", read: (s) => s.growthPeriod === "YoY", expected: true },
+      { label: "backlog $3.6bn of large-deal TCV", read: (s) => s.contractedRevenueUsd, ...num(3_600_000_000) },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "Form 6-K, quarter ended 30 June 2026 (rupee release)",
+    sources: ["https://www.sec.gov/Archives/edgar/data/1067491/000106749126000034/exv99w03.htm"],
+    input: {
+      name: "Infosys (rupee release)",
+      sector: "saas",
+      stage: "growth",
+      geography: "IN",
+      askUsd: 500_000_000,
+      description:
+        "The same quarter as filed with the Indian stock exchanges, stating every figure in rupee crore rather than dollars.",
+      tractionNotes:
+        "Revenue from operations was ₹48,211 crore for the quarter.",
+    },
+    expect: [
+      {
+        label: "revenue ₹48,211 crore read and converted",
+        read: (s) => s.revenueUsd,
+        ...num(toUsd(482_110_000_000, "INR"), 0.02),
+      },
+    ],
+  },
+  {
+    outcome: "open",
+    round: "Form 20-F, year ended 31 December 2025",
+    sources: ["https://www.sec.gov/Archives/edgar/data/1985487/000198548726000008/kspi-20251231.htm"],
+    input: {
+      name: "Kaspi.kz",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "KZ",
+      askUsd: 1_000_000_000,
+      description:
+        "A super app combining a marketplace, a payments network and a consumer finance business, used by most of the adult population of Kazakhstan and expanding into Türkiye.",
+      tractionNotes:
+        "GMV of our Marketplace segment including Türkiye was ₸9,053 billion, which is an increase of 52%. Kaspi.kz Super App had 10.7 million Average MAU. Kaspi Pay Super App had approximately 764,000 Active Merchants.",
+    },
+    expect: [
+      {
+        label: "GMV ₸9,053bn read and converted",
+        read: (s) => s.gmvUsd,
+        ...num(toUsd(9_053_000_000_000, "KZT"), 0.02),
+      },
+      { label: "growth 52%", read: (s) => s.growthPct, ...num(52) },
+      { label: "10.7 million Average MAU read as the customer count", read: (s) => s.customers, ...num(10_700_000) },
+      // The year in "year ended 31 December 2025" must not become a figure.
+      { label: "no metric equals the year", read: (s) => s.revenueUsd === 2025 || s.customers === 2025 || s.gmvUsd === 2025, expected: false },
+    ],
+  },
+
 ];
 
 // ── Reporting ───────────────────────────────────────────────────────────────

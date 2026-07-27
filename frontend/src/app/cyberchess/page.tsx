@@ -6971,8 +6971,12 @@ export default function CyberChessPage(){
             </div>
             <div style={{maxHeight:220,overflowY:"auto"}}>
               {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map((g,gIdx)=>{
-                const isWin=g.result.includes("You win")||g.result.includes("timed out");
-                const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+                /* Свой набор слов не знал ни «Draw agreed» (регистр), ни «Ничья
+                   (договорились)», ни победы у живого соперника и в вариантах — всё
+                   это красилось в историю КРАСНЫМ как поражение. */
+                const gRes=gameResultOf(g.result);
+                const isWin=gRes==="W";
+                const isDraw=gRes==="D";
                 const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
                 const catBadge:"danger"|"gold"|"brand"=g.category==="Bullet"?"danger":g.category==="Blitz"?"gold":"brand";
                 return(<div key={g.id} className="cc-focus-ring" role="button" tabIndex={0}
@@ -10472,7 +10476,8 @@ export default function CyberChessPage(){
             </button>}
             {/* ─── Best 3 games card — shown when user has ≥3 games and is in setup view ─── */}
             {setup&&savedGames.length>=3&&(()=>{
-              const isW=(g:SavedGame)=>g.result.includes("You win")||g.result.includes("win!");
+              // третий свой словарь на той же истории: победы у живого соперника и в вариантах сюда не попадали
+              const isW=(g:SavedGame)=>gameResultOf(g.result)==="W";
               const isD=(g:SavedGame)=>g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
               const wins=savedGames.filter(g=>isW(g)).slice(0,3);
               const toShow=wins.length>=3?wins:savedGames.slice(0,3);
@@ -14457,8 +14462,11 @@ ${question.trim()}`;
     />}
     {/* ─── Post-game overlay ─── */}
     {over&&!setup&&showGameOver&&!on&&(()=>{
-      const isWin=over.includes("win")||over.includes("Win")||over.includes("победа")||over.includes("Победа");
-      const isDraw=over.includes("ничья")||over.includes("Ничья")||over.includes("Draw")||over.includes("draw");
+      /* Было `over.includes("win")` — и строка поражения «Checkmate — AI wins» тоже
+         содержит "win", поэтому проигрыш встречал игрока ЗЕЛЁНЫМ победным оверлеем. */
+      const ovRes=gameResultOf(over);
+      const isWin=ovRes==="W";
+      const isDraw=ovRes==="D";
       const accentClr=isWin?"#759900":isDraw?"#888":"#c03030";
       const glowClr=isWin?"rgba(117,153,0,0.5)":isDraw?"rgba(120,120,120,0.4)":"rgba(180,30,30,0.5)";
       const calcSideAcc=(moves:{quality:string}[])=>{

@@ -178,16 +178,33 @@ export function svHunt(s: BrilliancyState) {
   try { localStorage.setItem(HUNT_KEY, JSON.stringify(s)) } catch {}
 }
 
-function todayKeyLocal() {
-  const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+export function todayKeyLocal(d: Date = new Date()) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
-function daysSinceEpochLocal() {
-  return Math.floor(Date.now() / 86400000);
+
+/* Номер суток ПО МЕСТНОМУ календарю.
+ *
+ * Раньше здесь стояло `Math.floor(Date.now()/86400000)` под именем
+ * daysSinceEpochLocal — имя обещало местное время, а формула считала UTC. Дата
+ * состояния при этом бралась местная (todayKeyLocal), и две величины
+ * переключались в разные моменты: для UTC+6 местная дата меняется в полночь,
+ * а UTC-сутки — только в 6 утра.
+ *
+ * Что это давало игроку в Казахстане каждую ночь с 00:00 до 06:00: дата уже
+ * новая, поэтому todayHunt() заводил новое состояние, но индекс задачи считался
+ * по старым UTC-суткам — то есть выдавалась ВЧЕРАШНЯЯ задача, уже решённая, и
+ * её повторное решение поднимало серию. Шесть часов в сутки, каждые сутки.
+ *
+ * Теперь номер суток переключается ровно тогда же, когда меняется строка даты.
+ */
+export function localDayNumber(d: Date = new Date()): number {
+  return Math.floor((d.getTime() - d.getTimezoneOffset() * 60_000) / 86_400_000);
 }
-function pickIdx(total: number) {
+
+/** Индекс задачи дня. Экспортирован ради теста связки «дата ↔ индекс». */
+export function pickIdx(total: number, day: number = localDayNumber()) {
   if (total <= 0) return 0;
-  const n = daysSinceEpochLocal();
-  let h = n * 2654435761; h = (h ^ (h >>> 16)) >>> 0;
+  let h = day * 2654435761; h = (h ^ (h >>> 16)) >>> 0;
   return h % total;
 }
 

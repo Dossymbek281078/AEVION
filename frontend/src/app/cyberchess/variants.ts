@@ -390,7 +390,12 @@ export function bestWinrateVariant(stats: VariantStats): { variant: VariantId; w
 
 // Daily variant — deterministic per day, picks from non-standard variants
 export function dailyVariant(): VariantId {
-  const days = Math.floor(Date.now() / 86400000);
+  /* Номер суток по МЕСТНОМУ календарю: состояние дневного вызова помечается
+     todayKey() (местная дата), и если считать сутки по UTC, две шкалы разъезжаются
+     на величину пояса — у UTC+5 с полуночи до 5 утра дата уже новая, а вариант ещё
+     вчерашний. Здесь фича целиком локальная, поэтому выравниваем к местным суткам. */
+  const now = new Date();
+  const days = Math.floor((now.getTime() - now.getTimezoneOffset() * 60_000) / 86_400_000);
   let h = days * 2654435761; h = (h ^ (h >>> 16)) >>> 0;
   // Skip "standard" — daily challenge should always be non-standard
   const pool = VARIANTS.filter(v => v.id !== "standard").map(v => v.id);

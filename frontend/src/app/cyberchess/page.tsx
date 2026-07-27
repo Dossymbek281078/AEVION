@@ -465,6 +465,18 @@ function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if
 function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
 function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
+/* Ключ суток для ПАЗЛА ДНЯ — по UTC, той же шкале, по которой его выбирает бэкенд
+   (pickDailyPuzzle получает dayNumber = Date.now()/86400000).
+
+   Состояние помечалось местной датой todayKey(), а ротация шла по UTC, и эти две
+   шкалы переключаются в разное время: на этой машине (UTC+5) местная дата меняется
+   в полночь, а сутки бэкенда — в 05:00. С полуночи до 5 утра ключ уже новый, поэтому
+   состояние заводилось заново — а сервер отдавал ВЧЕРАШНИЙ пазл со сброшенным
+   «решено». Пять часов каждую ночь одна и та же задача засчитывалась повторно.
+
+   Пазл дня общий для всех по замыслу, поэтому выравнивание идёт к UTC: сутки у
+   задачи переключаются для всех одновременно, а не у каждого в свою полночь. */
+function dailyPuzzleDayKey(){return new Date().toISOString().slice(0,10)}
 /* Индекс дня по номеру суток. Комментарий раньше обещал «same for all users on the same
    day» — это неправда: индекс берётся в массиве PUZZLES, а бэкенд отдаёт пул с
    `shuffle=1`, то есть СВОЙ порядок на каждый запрос. Замер по двум запросам подряд:
@@ -2660,8 +2672,9 @@ export default function CyberChessPage(){
      puzzles are loaded», и это ровно то, чего делать нельзя. */
   useEffect(()=>{
     if(PUZZLES.length===0)return;
-    const tk=todayKey();const saved=ldDaily();
-    if(saved&&saved.date===tk){sDailyState(saved);return}
+    const saved=ldDaily();
+    const dk=dailyPuzzleDayKey();
+    if(saved&&saved.date===dk){sDailyState(saved);return}
     let cancelled=false;
     (async()=>{
       /* Сначала спрашиваем бэкенд: у него пул целиком, и он выбирает задачу, не зависящую
@@ -2678,8 +2691,8 @@ export default function CyberChessPage(){
       if(!pz)return;
       // пока ходили в сеть, состояние могло появиться в другом эффекте — не перетираем
       const again=ldDaily();
-      if(again&&again.date===tk){sDailyState(again);return}
-      const next:DailyState={v:2,date:tk,pz,solved:false};
+      if(again&&again.date===dk){sDailyState(again);return}
+      const next:DailyState={v:2,date:dk,pz,solved:false};
       svDaily(next);sDailyState(next);
     })();
     return()=>{cancelled=true};

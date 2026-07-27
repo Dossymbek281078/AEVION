@@ -9,6 +9,7 @@ import { ListingWizard } from "./components/ListingWizard";
 import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
 import { ExampleListing } from "./components/ExampleListing";
+import { Toast } from "./components/Toast";
 import { apiUrl } from "@/lib/apiBase";
 import { ApiError, TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
@@ -482,29 +483,3 @@ function PageBtn({ disabled, onClick, children }: { disabled: boolean; onClick: 
   );
 }
 
-function Toast({ message, onDone }: { message: string; onDone: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 4500);
-    return () => clearTimeout(t);
-  }, [onDone]);
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 24,
-        right: 24,
-        background: "#0f172a",
-        color: "#fff",
-        padding: "12px 18px",
-        borderRadius: 10,
-        boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
-        fontSize: 13,
-        fontWeight: 600,
-        zIndex: 1100,
-        maxWidth: 360,
-      }}
-    >
-      {message}
-    </div>
-  );
-}

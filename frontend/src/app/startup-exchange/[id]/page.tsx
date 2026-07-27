@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { AssessmentPanel } from "../components/AssessmentPanel";
+import { Toast } from "../components/Toast";
 import { InterestModal } from "../components/InterestModal";
 import {
   BUILD_BY_LABEL,
@@ -260,25 +261,7 @@ export default function ListingDetailPage() {
         />
       )}
 
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: "#0f172a",
-            color: "#fff",
-            padding: "12px 18px",
-            borderRadius: 10,
-            fontSize: 13,
-            fontWeight: 600,
-            zIndex: 1100,
-          }}
-          onAnimationEnd={() => setToast(null)}
-        >
-          {toast}
-        </div>
-      )}
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </>
   );
 }

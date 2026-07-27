@@ -125,10 +125,16 @@ export function ghostBookMove(g: Ghost, ch: Chess): string | null {
 
 const PV: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
-// Style-weighted move scoring. Given a list of legal moves, picks one matching
-// the ghost's stylistic preferences. The supplied `engineMove` (from minimax/SF)
-// is the rational baseline — we score nearby moves to find a stylistic fit.
-// Returns a Move from the list.
+/* Стилевой выбор среди УЖЕ ОТОБРАННЫХ движком ходов.
+ *
+ * Комментарий здесь раньше ссылался на параметр `engineMove` как на «рациональную базу» —
+ * такого параметра у функции нет и не было. Заземление делает вызывающий: он считает все
+ * легальные ходы минимаксом, сортирует и передаёт сюда только топ-5 (page.tsx, ветка
+ * призрака). Функция сама соундность НЕ проверяет.
+ *
+ * Контракт: `candidates` обязаны быть предварительно отфильтрованы движком. Передать сюда
+ * весь список легальных ходов — значит получить призрака, который берёт ферзя «по стилю»,
+ * не заметив, что его после этого забирают. */
 export function pickGhostStyleMove(g: Ghost, ch: Chess, candidates: Move[]): Move {
   if (!candidates.length) throw new Error("no candidates");
   if (candidates.length === 1) return candidates[0];

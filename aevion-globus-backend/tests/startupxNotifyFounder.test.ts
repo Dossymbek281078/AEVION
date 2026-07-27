@@ -50,6 +50,14 @@ describe("письмо основателю об отклике", () => {
     expect(offerTerms({ ...base, ticketUsd: null, intent: null, equityPct: 7.5 })).toBe("за 7.5%");
   });
 
+  it("перевод строки из названия не доезжает до заголовка письма", () => {
+    // Название пишет пользователь, а из него собирается тема. CRLF в теме —
+    // это подстановка чужих полей письма («Bcc:» и что угодно ещё).
+    const { subject } = buildOfferEmail({ ...base, listingTitle: "Заявка\r\nBcc: evil@test" });
+    expect(subject).not.toMatch(/[\r\n]/);
+    expect(subject).toContain("Bcc: evil@test"); // остаётся текстом темы, а не полем
+  });
+
   it("название заявки экранируется — оно приходит от пользователя", () => {
     const { html } = buildOfferEmail({ ...base, listingTitle: '<img src=x onerror="alert(1)">' });
     expect(html).not.toContain("<img");

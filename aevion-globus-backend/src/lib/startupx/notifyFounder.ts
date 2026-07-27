@@ -56,11 +56,20 @@ export function offerTerms(notice: OfferNotice): string {
   return parts.length ? parts.join(" ") : "условия не указаны";
 }
 
+/**
+ * Заголовок письма собирается из названия заявки, а его пишет пользователь.
+ * Перевод строки в заголовке — это классическая подстановка чужих полей письма
+ * (`Bcc:` и что угодно ещё), поэтому в тему не должно попасть ни `\r`, ни `\n`.
+ */
+function singleLine(s: string, max = 160): string {
+  return s.replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, max);
+}
+
 /** Чистая функция: письмо целиком, без отправки. Её и проверяют тесты. */
 export function buildOfferEmail(notice: OfferNotice): { subject: string; text: string; html: string } {
   const terms = offerTerms(notice);
   const link = `${FRONTEND_BASE}/startup-exchange/${notice.listingId}`;
-  const subject = `Отклик по заявке «${notice.listingTitle}»: ${terms}`;
+  const subject = singleLine(`Отклик по заявке «${notice.listingTitle}»: ${terms}`);
   const text = [
     `По вашей заявке «${notice.listingTitle}» пришёл отклик.`,
     ``,
@@ -97,6 +106,12 @@ export function buildOfferEmail(notice: OfferNotice): { subject: string; text: s
  */
 export function sendOfferNotice(notice: OfferNotice): void {
   if (!notice.founderEmail) return;
+  // Адрес пришёл из формы. Перевод строки в нём — та же подстановка чужих полей
+  // письма, только со стороны получателя; такой адрес не отправляем вовсе.
+  if (/[\r\n]/.test(notice.founderEmail)) {
+    console.error("[StartupX] адрес основателя с переводом строки — письмо не отправлено");
+    return;
+  }
   const transport = getMailTransport();
   if (!transport) return; // SMTP не настроен — молча, это нормальный режим
   const { subject, text, html } = buildOfferEmail(notice);

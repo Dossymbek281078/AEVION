@@ -1207,6 +1207,25 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
+    // Битое тело запроса — вина клиента, а не сервера. body-parser бросает
+    // ошибку, у которой УЖЕ проставлен statusCode 400 и type
+    // "entity.parse.failed"; раньше мы это игнорировали и отвечали 500. Цена:
+    // любой кривой запрос выглядел как падение сервера — шумел в алертах,
+    // улетал в Sentry и говорил клиенту «сломались мы», хотя сломался он.
+    // Замерено 27.07.2026 обходом мусорными телами по ручкам биржи.
+    const status = (err as { statusCode?: number; status?: number } | null)?.statusCode
+      ?? (err as { status?: number } | null)?.status;
+    const type = (err as { type?: string } | null)?.type;
+    if (typeof status === "number" && status >= 400 && status < 500) {
+      if (!res.headersSent) {
+        res.status(status).json({
+          error: type === "entity.parse.failed" ? "bad_json"
+            : type === "entity.too.large" ? "payload_too_large"
+            : "bad_request",
+        });
+      }
+      return;
+    }
     console.error("[express]", err);
     captureException(err, {
       url: req.originalUrl ?? req.url,

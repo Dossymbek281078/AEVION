@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 263
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 274
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -422,13 +422,39 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Disabling the filter reddens 7 tests. Nothing else moved: corpus 71/71, hard
    cases 30/30, calibration identical to the decimal.
 
+19. **The last non-SaaS milestone met a real filing, and broke both ways.**
+   AeroVironment's 10-K was fetched to test the one entry in the regulatory list
+   that had never seen a real document: defence contracting status. It failed in
+   both directions inside the same filing.
+
+   - The sentence *explaining what an IDIQ contract is* — "we do not include
+     unfunded ceiling amounts for sole-source or multi-awardee IDIQ contracts in
+     unfunded backlog" — was credited as a defence contracting status, because a
+     bare `IDIQ` matched any mention of the words. A definition read as an award,
+     and the negation layer could not help: the sentence negates *including
+     amounts*, not the contract.
+   - The natural passive **"we were awarded a defense contract"** did not match
+     at all, because the pattern was fixed to the word order "defense contract
+     awarded".
+
+   Both fixed: the token now needs an award verb beside it, and the passive is
+   accepted. The ITAR risk-factor language in the same filing — "contractors are
+   subject to extensive legal and regulatory requirements, including ITAR" —
+   correctly stays out, because that half of the pattern already required
+   "registered".
+
+   Worth stating what this cost and returned: one filing, fetched and read, to
+   test one list entry. Every entry in that list had been written against
+   sentences this repository invented for itself, and the first real document
+   broke the one it met.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 263):
+`tests/qventureDisclosedCorpus.test.ts`, 274):
 
 | Guard | Floor | Measured today |
 |---|---|---|

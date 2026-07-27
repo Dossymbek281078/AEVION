@@ -1578,9 +1578,20 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    are bullets, where the colon does the separator work. Both are pinned.
 
    The fix is one change to the normalisation — keep the row break as a clause
-   boundary and the cell separator as a connector instead of flattening both —
-   and it sits upstream of every pattern on this branch, so it is not something
-   to attempt with twenty minutes left.
+   boundary and the cell separator as a connector instead of flattening both.
+   The elegant form is to map them into punctuation the parser already
+   understands: a row break to a semicolon, which every clause-bounded rule
+   already treats as a boundary, and a tab to a colon, which is already a
+   connector everywhere. Nothing downstream would need to change.
+
+   Attempted with twenty minutes left and reverted: the edit was written through
+   a shell heredoc and the string concatenation landed in the source as literal
+   text, taking .toLowerCase() with it. Notably tsc reported zero errors on the
+   corrupted file, which is its own small lesson — a type checker will not tell
+   you that a regular expression is nonsense.
+
+   The design above is right and is written down; what it needs is an editor
+   rather than a shell, and more than twenty minutes.
 
 ## How this stays true
 

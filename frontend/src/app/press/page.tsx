@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Wave1Nav } from "@/components/Wave1Nav";
 import { getApiBase } from "@/lib/apiBase";
 
 export const revalidate = 3600;
@@ -183,7 +182,18 @@ export default async function PressPage() {
   return (
     <main style={{ background: "linear-gradient(180deg, #f8fafc 0%, #fff 200px)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 20px 64px" }}>
-        <Wave1Nav />
+        {/* Одна ссылка назад вместо Wave1Nav.
+            Wave1Nav — внутренняя навигация по всем модулям, она стоит на 116
+            страницах и там уместна. Здесь нет: /press открывает журналист по
+            ссылке из письма, и с ней на телефоне до заголовка «AEVION Press Kit»
+            оказывалось ~1250px, то есть полторы прокрутки чужого каталога
+            (замер iPhone 13, 390×844, issue #949). Глобальная шапка на странице
+            остаётся — второй навигации не нужно. */}
+        <nav aria-label="Back to site" style={{ marginBottom: 14, fontSize: 13 }}>
+          <Link href="/" style={{ color: "#0f766e", fontWeight: 800, textDecoration: "none" }}>
+            ← AEVION
+          </Link>
+        </nav>
 
         <div style={{ marginTop: 12 }}>
           <p

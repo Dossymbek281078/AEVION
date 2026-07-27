@@ -22,7 +22,7 @@ import {
   NUMBER_PATTERN, MONEY_UNIT_PATTERN, parseLocaleNumber, MONEY_MULTIPLIER, type RatePeriod,
 } from "../metrics/periods";
 import {
-  CURRENCY_PREFIX_PATTERN, detectCurrency, detectCurrencyFirst, toUsd, type MoneyCurrency,
+  CURRENCY_PREFIX_PATTERN, detectCurrency, detectCurrencyFirst, toUsd, UNSUPPORTED_CURRENCY_BEFORE_NUMBER, type MoneyCurrency,
 } from "../metrics/currency";
 
 /**
@@ -479,6 +479,14 @@ function moneyUsd(
   const raw = parseMoney(numStr, unitStr);
   if (raw === null || !isFinite(raw)) return null;
   const at = m.index ?? 0;
+  // A currency we cannot convert, sitting directly in front of the figure,
+  // refuses the figure rather than letting it inherit the plan's currency.
+  // Silence here used to produce a wrong number, not a missing one: "RM 458.2
+  // million" returned $458.2M against a real ~$97M, and "HK$" was read as USD
+  // because of the dollar sign. A miss falls back to a sector prior and is
+  // visible in coverage; a wrong number is scored as though it were disclosed.
+  const numAt = t.indexOf(numStr, at);
+  if (numAt !== -1 && UNSUPPORTED_CURRENCY_BEFORE_NUMBER.test(t.slice(Math.max(0, numAt - 12), numAt))) return null;
   // Tight window, and first-by-position inside it. A wide window scanned in
   // table order made "$1M ARR in the US and €2M ARR in the EU" convert the
   // dollar figure at the euro rate, because EUR is checked before USD.

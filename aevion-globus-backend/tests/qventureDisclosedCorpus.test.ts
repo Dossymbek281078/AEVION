@@ -1695,3 +1695,46 @@ describe("Indian numbering is a scale, not a decoration", () => {
     expect(inr("We reported revenue of $264.7 million.")).toBe(264_700_000);
   });
 });
+
+describe("a currency we cannot convert refuses the figure", () => {
+  // The defect this replaces: an unrecognised currency token was ignored and
+  // the figure inherited the plan's currency — dollars. "RM 458.2 million"
+  // returned $458.2M against a real ~$97M, and "HK$" was read as USD outright
+  // because of the dollar sign. Both were wrong numbers presented as read
+  // ones, which is strictly worse than the miss they are now.
+  const rev = (t: string) => parsePlanSignals(t).revenueUsd;
+
+  test.each([
+    ["Malaysian ringgit, symbol", "We recorded RM 458.2 million in revenue."],
+    ["Malaysian ringgit, code", "We recorded MYR 458.2 million in revenue."],
+    ["Hong Kong dollar — the $ used to win", "We recorded HK$ 780 million in revenue."],
+    ["Indonesian rupiah", "We recorded Rp 461.1 billion in revenue."],
+    ["Thai baht", "We recorded ฿1.2 billion in revenue."],
+    ["Korean won", "We recorded ₩900 billion in revenue."],
+  ])("%s", (_label, text) => {
+    expect(rev(text)).toBeNull();
+  });
+
+  test("an English word that is also an ISO code is not a currency", () => {
+    // "the top 5 million users" must not refuse the sentence's real figure.
+    expect(rev("Our top 5 million users generated revenue of $20 million.")).toBe(20_000_000);
+  });
+
+  test.each([
+    ["USD", "We recorded $264.7 million in revenue.", 264_700_000],
+  ])("supported currencies are untouched: %s", (_c, text, expected) => {
+    expect(rev(text)).toBe(expected);
+  });
+
+  test("supported non-USD currencies still convert", () => {
+    for (const text of [
+      "We recorded £100 million in revenue.",
+      "We recorded ₹2,604.7 crore in revenue.",
+      "We recorded CHF 500 million in revenue.",
+    ]) {
+      const v = rev(text);
+      expect(v).not.toBeNull();
+      expect(v!).toBeGreaterThan(1e8);
+    }
+  });
+});

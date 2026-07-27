@@ -72,6 +72,30 @@ const MARKERS: Array<[MoneyCurrency, RegExp]> = [
 ];
 
 /**
+ * Currencies this table cannot convert, matched only where they sit directly in
+ * front of a number.
+ *
+ * The reason this exists rather than "just add the rates": an unrecognised
+ * currency token used to be silently ignored, and the figure then took the
+ * plan-level currency — in practice dollars. "RM 458.2 million in revenue"
+ * returned $458.2M against a real ~$97M, and "HK$" is worse, because the `$`
+ * is detected as USD outright. That is the expensive class: not a miss that
+ * falls back to a sector prior, but a wrong number presented as a read one.
+ *
+ * Adding rates would fix today's list and leave tomorrow's. Refusing the figure
+ * is the rule that holds for currencies nobody has thought of yet, so this list
+ * only has to be good enough to catch the common ones — every entry that lands
+ * turns a wrong number into an honest miss.
+ *
+ * Deliberately excluded: ISO codes that are also ordinary English words a
+ * sentence can put in front of a number (`ALL`, `TOP`, `PEN`, `MAD`, `BOB`,
+ * `CUP`, `GEL`). Refusing "the top 5 million" would trade this defect for a
+ * different one.
+ */
+export const UNSUPPORTED_CURRENCY_BEFORE_NUMBER =
+  /(?:hk\$|nt\$|nz\$|\brp(?![a-z])|\brm(?![a-z])|[₦₱₩฿₫৳₡₵₲₭₮﷼]|\b(?:hkd|twd|myr|idr|thb|vnd|php|krw|ngn|zar|mxn|clp|cop|ars|egp|pkr|bdt|lkr|npr|kes|ghs|dkk|nok|czk|huf|ron|uah|sar|qar|kwd|bhd|omr|jod|nzd|isk|bgn|ttd|jmd|dop|uyu|pyg|bob|crc)(?![a-z]))\s*$/i;
+
+/**
  * Regex source for an optional currency marker sitting in front of a number,
  * so "€3M ARR" and "KZT 450 млн" match the same money patterns "$3M" does.
  */

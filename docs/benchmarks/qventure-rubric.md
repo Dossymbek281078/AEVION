@@ -544,14 +544,14 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    being true the moment someone adds a second gate beside the first, so it is
    asserted rather than assumed.
 
-22. **Open: money written the way most of the world writes it.** A probe of
+22. **Closed: money written the way most of the world writes it.** A probe of
    non-US filing conventions found two defects of different severity, and the
    difference matters more than the count.
 
    | Written as | Read as | Actually | Class |
    |---|---|---|---|
    | `INR 2,604.7 crore` | **$27** | ~$313M | wrong number — **fixed** |
-   | `RM 458.2 million` | **$458.2M** | ~$97M | wrong number — **open** |
+   | `RM 458.2 million` | **$458.2M** | ~$97M | wrong number — **fixed** |
    | `Rs. 26,047 lakh` | nothing | ~$313M | miss — open |
    | `revenue of R$ 1,697.6 million` | nothing | ~$334M | miss — open |
    | `revenue of S$ 12.5 billion` | nothing | ~$9.7B | miss — open |
@@ -559,18 +559,28 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (321
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (330
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
-   **Still open, and the more dangerous of the two:** an unrecognised currency
-   token is silently treated as dollars. `RM` (Malaysian ringgit) is in neither
-   the detection table nor the rate table, so "RM 458.2 million in revenue"
-   returns $458.2M — a 4.7x overstatement presented as a read figure. The fix
-   is not merely adding MYR: the rule should be that a currency-shaped token
-   immediately before a number, when unrecognised, **refuses the figure**
-   rather than assuming the reader's own currency. Deferred rather than rushed,
-   because it needs the corpus run to price it.
+   **Also fixed, and it is the rule rather than the table entry.** An
+   unrecognised currency token used to be ignored, and the figure then took the
+   plan's currency — dollars. "RM 458.2 million in revenue" returned $458.2M
+   against a real ~$97M; "HK$" was worse, read as USD outright because of the
+   dollar sign. A currency this table cannot convert, sitting directly in front
+   of a figure, now **refuses the figure**. That turns a wrong number into an
+   honest miss, which coverage can see.
+
+   Adding rates would have fixed today's list and left tomorrow's, so the list
+   (`UNSUPPORTED_CURRENCY_BEFORE_NUMBER`) only has to be good enough to catch
+   the common ones. ISO codes that are also English words a sentence can put in
+   front of a number — `ALL`, `TOP`, `PEN`, `MAD`, `BOB`, `CUP`, `GEL` — are
+   deliberately excluded, and a test proves "our top 5 million users" still
+   reads the figure beside it.
+
+   **The cost, measured rather than argued:** corpus unchanged at 73/73, gap
+   unchanged at 10.9, hard cases 30/30, full backend suite green. No figure in
+   any real filing in the corpus was refused by it.
 
    The misses are safe by comparison — `R$`, `S$` and `Rs.` are detected as
    currencies but are absent from the number-prefix pattern, so the figure is

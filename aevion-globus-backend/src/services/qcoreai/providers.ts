@@ -204,7 +204,12 @@ export function getProviders(): Provider[] {
     {
       id: "gemini",
       name: "Gemini (Google)",
-      models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
+      // ТОЛЬКО Flash. С 01.04.2026 Pro-модели убраны из бесплатного тарифа
+      // Gemini, а этот список — ещё и список авто-фолбэка при 429
+      // (fallbackCandidates идёт по models любого провайдера с free:true).
+      // Пока здесь стоял gemini-1.5-pro, исчерпание бесплатного лимита Flash
+      // молча переключало на платную модель и начинало тратить деньги.
+      models: ["gemini-2.5-flash", "gemini-2.0-flash-001"],
       defaultModel: "gemini-2.5-flash",
       envKey: "GEMINI_API_KEY",
       configured: isConfigured("GEMINI_API_KEY"),
@@ -295,10 +300,12 @@ export function getProviders(): Provider[] {
     {
       id: "together",
       name: "Together (free model)",
-      models: [
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-      ],
+      // ТОЛЬКО модели с суффиксом -Free. У Together нет бесплатного тарифа как
+      // такового: аккаунт живёт на $25-50 пробных кредитов, и любая модель без
+      // -Free тратит их. А этот список — список авто-фолбэка при 429: пока в нём
+      // стоял платный Turbo, первое же упирание в лимит бесплатной модели молча
+      // уводило на платную. Сверено 27.07.2026.
+      models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"],
       defaultModel: process.env.TOGETHER_MODEL || "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
       envKey: "TOGETHER_API_KEY",
       configured: isConfigured("TOGETHER_API_KEY"),

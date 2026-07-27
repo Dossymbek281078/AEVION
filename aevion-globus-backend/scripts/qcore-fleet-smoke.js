@@ -56,6 +56,26 @@ ok("nvidia is a cloud free provider (not local)", nv?.free === true && nv?.tier 
 ok("nvidia unconfigured without NVIDIA_API_KEY", nv?.configured === false);
 ok("nvidia carries frontier model ids", Array.isArray(nv?.models) && nv.models.length >= 3);
 
+// 1b. Список моделей провайдера с free:true — это ЕЩЁ И список авто-фолбэка при
+// 429 (fallbackCandidates идёт по нему). Значит любая платная модель в этом
+// списке = тихий переход на деньги ровно в тот момент, когда бесплатный лимит
+// исчерпан. Замерено 27.07.2026: у gemini лежал gemini-1.5-pro (Pro убран из
+// бесплатного тарифа Google с 01.04.2026), у together — Turbo без суффикса
+// -Free при том, что у Together бесплатного тарифа нет вовсе.
+const gem = all.find((p) => p.id === "gemini");
+ok(
+  "gemini: во free-списке только Flash (Pro — платный с 01.04.2026)",
+  Array.isArray(gem?.models) && gem.models.every((m) => !/pro/i.test(m)),
+);
+const tog = all.find((p) => p.id === "together");
+ok(
+  "together: во free-списке только модели с суффиксом -Free",
+  Array.isArray(tog?.models) && tog.models.length > 0 && tog.models.every((m) => /-Free$/.test(m)),
+);
+for (const p of all.filter((x) => x.free && !x.local)) {
+  ok(`${p.id}: модель по умолчанию есть в списке фолбэка`, p.models.includes(p.defaultModel));
+}
+
 // 2. Only Anthropic configured → council degrades to varied Anthropic models; synth = Opus 4.8.
 process.env.ANTHROPIC_API_KEY = "sk-test";
 ok("no free vendor configured yet", getFreeProviders().length === 0);

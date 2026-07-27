@@ -45,8 +45,14 @@ const APP_DEFS: AppDef[] = [
     highlights: [
       "Monaco IDE (VS Code engine)",
       "AI code generation",
-      "Deploy: Railway · Vercel · Cloudflare Pages",
-      "Free *.aevion.build subdomain",
+      // Two claims that were not true when written down: Railway deploys of a
+      // user's project answer 501 (per-project services are behind an
+      // unreleased flag) and Vercel has no token in production, so Cloudflare
+      // Pages is the path that actually deploys. And the aevion.build zone was
+      // never delegated, so those subdomains do not resolve — the address that
+      // works is *.pages.dev.
+      "Deploy to Cloudflare Pages, verified live before it says live",
+      "Free *.pages.dev address",
       "50 AI videos · 200 images/mo",
       "Team collaborators",
     ],

@@ -41,6 +41,20 @@ interface Props {
   onPublished: (listing: Listing) => void;
 }
 
+/**
+ * Каркас описания. Не украшение: на наших же трёх заявках маркетинговый абзац
+ * получал 12/100 за ясность, а тот же смысл, разложенный по этим пяти строкам,
+ * — 76–88 (замер `scripts/startupx-terms-lab.ts`). Разбор ищет в тексте именно
+ * проблему, адресата, способ и модель заработка.
+ */
+const DESCRIPTION_SKELETON = [
+  "Проблема: ",
+  "Для кого: ",
+  "Мы делаем: ",
+  "Модель заработка: ",
+  "В отличие от: ",
+].join("\n");
+
 const NUM = (v: string): number | undefined => {
   const n = Number(v.replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : undefined;
@@ -277,9 +291,28 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           rows={7}
           style={{ ...input, resize: "vertical", lineHeight: 1.55, minHeight: 150 }}
         />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b", marginTop: -4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontSize: 11, color: "#64748b", marginTop: -4 }}>
           <span>{issueFor("description") ? <span style={{ color: "#dc2626" }}>{issueFor("description")}</span> : "Чем конкретнее, тем выше балл за ясность"}</span>
-          <span>{description.length} / {spec?.minDescription ?? 120} мин.</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" }}>
+            {/* Замер на наших же заявках: маркетинговый абзац даёт 12/100 за ясность,
+                тот же смысл по этому каркасу — 76–88. Подсказка прозой это не чинила,
+                поэтому каркас вставляется одной кнопкой. */}
+            <button
+              type="button"
+              onClick={() => setDescription(DESCRIPTION_SKELETON)}
+              disabled={description.trim().length > 0}
+              title={description.trim().length > 0 ? "Поле не пустое — каркас не подставляется поверх текста" : "Пять строк, по которым читает и человек, и разбор"}
+              style={{
+                background: "none", border: "none", padding: 0, fontSize: 11,
+                color: description.trim().length > 0 ? "#cbd5e1" : "#0f172a",
+                textDecoration: "underline",
+                cursor: description.trim().length > 0 ? "default" : "pointer",
+              }}
+            >
+              Вставить каркас
+            </button>
+            <span>{description.length} / {spec?.minDescription ?? 120} мин.</span>
+          </span>
         </div>
 
         <div style={twoCol}>

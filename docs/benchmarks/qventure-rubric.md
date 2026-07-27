@@ -71,15 +71,15 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 233
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 238
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (24 real companies, rubric v6):**
-   parse coverage **69/69**, mean success **71.2** vs mean failure **60.3**, gap
-   **10.9 points**. Eight of the twenty-four are labelled `open` — Rivian, Peloton,
+5. **Measured on the disclosed-figures corpus (25 real companies, rubric v6):**
+   parse coverage **71/71**, mean success **71.2** vs mean failure **60.3**, gap
+   **10.9 points**. Nine of the twenty-five are labelled `open` — Rivian, Peloton,
    Beyond Meat, Deliveroo, Affirm, Groupon, Lemonade and, by a different route,
    the disclosure-free control. `open` is
    not a hedge: those companies are still trading, and forcing them into
@@ -377,7 +377,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 233):
+`tests/qventureDisclosedCorpus.test.ts`, 238):
 
 | Guard | Floor | Measured today |
 |---|---|---|
@@ -386,7 +386,7 @@ months. The invariants now run on every push
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |
-| Every figure real filings state is recovered | 69/69 | 69/69 |
+| Every figure real filings state is recovered | 71/71 | 71/71 |
 | Separation on disclosed figures | ≥ 6 pts | 10.9 |
 | A large ask with no disclosure cannot reach `watch` | — | Fast, 43.9, `pass` |
 
@@ -396,7 +396,7 @@ update would have missed `reservations` in exactly the way the renderers did.
 Adding a numeric field to the parser and to nothing else reddens it by name.
 
 One of those guards is not a floor but an equality: parse coverage must stay at
-69/69. A silent reader failure is the defect class this corpus exists to catch,
+71/71. A silent reader failure is the defect class this corpus exists to catch,
 and "most figures parsed" is the state it was already in.
 
 They are floors, not targets — set well under the measured values so ordinary

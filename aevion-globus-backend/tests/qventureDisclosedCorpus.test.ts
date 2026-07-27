@@ -987,3 +987,31 @@ describe("the third currency", () => {
     expect(parsePlanSignals("218 million monthly active users globally in March 2016.").customers).toBe(218_000_000);
   });
 });
+
+describe("a launch company's evidence is an order book and a flight record", () => {
+  /**
+   * The non-SaaS readers had only ever met fixtures this repository wrote for
+   * itself. Rocket Lab's S-1 is the first real filing to state them, and it
+   * broke both on the first run.
+   */
+  test("a date before the word backlog is not the backlog", () => {
+    // "As of 30 June 2021, backlog totaled $141.4 million" read 2021 as the
+    // amount: the US spelling "totaled" was missing from the connector, so the
+    // name-first pattern failed and the figure-first one grabbed the year out
+    // of the date in front of it. A wrong number, not a missing one.
+    expect(parsePlanSignals("As of 30 June 2021, backlog totaled $141.4 million.").contractedRevenueUsd).toBe(141_400_000);
+  });
+
+  test("the backlog phrasings that already worked are unchanged", () => {
+    expect(parsePlanSignals("Sales backlog of $1.8B under signed multi-year agreements.").contractedRevenueUsd).toBe(1_800_000_000);
+    expect(parsePlanSignals("Contracted revenue of $210M under signed offtake agreements.").contractedRevenueUsd).toBe(210_000_000);
+    expect(parsePlanSignals("Backlog of $62M across signed contracts with two federal agencies.").contractedRevenueUsd).toBe(62_000_000);
+  });
+
+  test("missions flown are technical proof", () => {
+    // Stated as a count of flights, never as a test result — which is all the
+    // reader knew how to recognise.
+    const s = parsePlanSignals("Electron has delivered 105 satellites to orbit across 18 successful missions through July 2021.");
+    expect(s.technicalProof.length).toBeGreaterThan(0);
+  });
+});

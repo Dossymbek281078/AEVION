@@ -1079,7 +1079,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const backlog = s.contractedRevenueUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
+    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?(?:ing|ed)|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);
@@ -1153,6 +1153,9 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\bbenchmark(?:ed|s)?\b|\bstate[- ]of[- ]the[- ]art\b|\bsota\b|\boutperform\w*\b/i, "Benchmark result claimed"],
     [/\bpilot plant\b|\bproduction line\b|\bat scale in production\b|\bfactory (?:running|operational)\b/i, "Plant / production line running"],
     [/\bflight[- ]tested\b|\bfield[- ]tested\b|\bin operational use\b|\bdeployed (?:with|to) (?:customers|operators|units)\b/i, "Field / flight tested"],
+    // A flight record is the hardest evidence a launch company has, and it is
+    // stated as a count of missions flown, not as a test result.
+    [/\b\d+\s+successful\s+(?:missions?|launches|flights?)\b|\bsuccessfully (?:launched|flown)\b/i, "Flight record"],
     [/\bworking prototype\b|\bfunctional prototype\b|\bdemonstrat(?:ed|or) (?:unit|system|vehicle)\b/i, "Working prototype"],
   ];
   for (const [re, label] of PROOF) {

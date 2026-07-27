@@ -448,6 +448,33 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form S-1, September 2021",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1819994/000119312521282501/d212874ds1.htm",
+    ],
+    input: {
+      name: "Rocket Lab",
+      sector: "space",
+      stage: "growth",
+      geography: "US",
+      askUsd: 750_000_000,
+      description:
+        "Small-satellite launch provider operating its own vehicle and launch complex, selling launch services and satellite components to government and commercial customers.",
+      tractionNotes:
+        "As of 30 June 2021, backlog totaled $141.4 million. Electron has delivered 105 satellites to orbit for government and commercial customers across 18 successful missions through July 2021.",
+    },
+    // The non-SaaS evidence readers — contracted backlog, missions flown — have
+    // only ever met fixtures this repository wrote for itself. This is the first
+    // real filing to state them: a launch company whose entire case is a signed
+    // order book and a flight record, with no ARR, no churn and no margin.
+    expect: [
+      { label: "backlog $141.4M read as contracted revenue", read: (s) => s.contractedRevenueUsd, ...num(141_400_000) },
+      { label: "18 successful missions count as technical proof", read: (s) => s.technicalProof.length > 0, expected: true },
+    ],
+  },
+
   // ── Outcome: succeeded ────────────────────────────────────────────────────
   {
     outcome: "succeeded",

@@ -300,3 +300,25 @@ describe("heightOutliers — one wrong tag is trusted completely", () => {
     expect(heightOutliers(city(12, 900))).toEqual([]);
   });
 });
+
+describe("the committed twins publish what the generator could not vouch for", () => {
+  it("Astana ships the height that towers over it, with the building it belongs to", () => {
+    // height=382 tagged on a 75-storey tower: 5.1 m per storey, against a
+    // published 311 m. It enters as MEASURED, so the corridor clears it with no
+    // safety margin at all. Hiding that would make the twin look cleaner than
+    // it is; the fix belongs upstream in OSM, the disclosure belongs here.
+    const suspect = CITY.dataQuality.suspect ?? [];
+    expect(suspect).toHaveLength(1);
+    expect(suspect[0].h).toBe(382);
+    expect(suspect[0].times).toBeGreaterThan(3);
+    expect(CITY.buildings[suspect[0].i].h).toBe(suspect[0].h);
+    expect(CITY.buildings[suspect[0].i].hs).toBe(0);
+  });
+
+  it("a city with nothing to flag omits the field rather than shipping an empty list", () => {
+    // An always-present empty array reads, on a chip, as "checked and fine" in
+    // exactly the same way as "never checked". Absence is the honest shape.
+    expect(CITY_NYC.dataQuality.suspect).toBeUndefined();
+    expect(CITY_TOKYO.dataQuality.suspect).toBeUndefined();
+  });
+});

@@ -53,7 +53,11 @@ interface CityData {
   wind?: { fromDeg: number; groundMs: number; topMs: number; source?: "metar" | "illustrative" };
   airspace?: AirspaceSummary;
   vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number; ceilingM?: number | null; needsAtcCoordination?: boolean }[];
-  dataQuality?: DataQuality;
+  /** QSkyway-specific: heights the generator flagged as towering over the rest
+   *  of the city. Kept out of the shared DataQuality type on purpose — other
+   *  modules do not have an obstacle grid, and a wrong height only matters
+   *  because hs=0 buys zero safety clearance. */
+  dataQuality?: DataQuality & { suspect?: { i: number; h: number; times: number }[] };
   _signature?: { alg: string; contentHash: string };
 }
 /** The filing document /route/justification returns, signed as one unit. */
@@ -151,7 +155,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; times: number }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -342,6 +346,7 @@ export default function QSkywayClient() {
         heightPct: city.dataQuality?.measuredPct ?? 0,
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
+        suspect: city.dataQuality?.suspect ?? [],
         airspace: city.airspace,
       });
       type VpScore = NonNullable<CityData["vertiportScores"]>[number];
@@ -769,6 +774,18 @@ export default function QSkywayClient() {
                     {verify === "invalid" && " · ✗ проверка не прошла"}
                   </span>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
+                  {meta.suspect.length > 0 && (
+                    <span
+                      title={
+                        "Высота размечена как измеренная, поэтому коридор идёт над ней без страховочного запаса. " +
+                        "Но она в разы выше всей остальной застройки — чаще это ошибка тега в источнике, чем небоскрёб. " +
+                        "Мы её не правим молча: маршрут строится по опубликованному значению, а расхождение показываем."
+                      }
+                      style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
+                    >
+                      ⚠ высота под вопросом: {meta.suspect.map((o) => `${o.h} м (×${o.times} к застройке)`).join(", ")}
+                    </span>
+                  )}
                   <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
                 </div>
               )}

@@ -85,6 +85,10 @@ const CITIES = {
       "  dataQuality: {",
       "    total: number; measured: number; derived: number; guessed: number;",
       "    measuredPct: number; realPct: number; source: string; note: string;",
+      "    /** Heights that tower over the rest of the city — a wrong tag is trusted",
+      "     *  as completely as a right one, so it is published, not hidden.",
+      "     *  Absent when there is nothing to report. */",
+      "    suspect?: { i: number; h: number; times: number }[];",
       "  };",
       "}",
     ].join("\n"),
@@ -474,6 +478,14 @@ if (compareOnly) {
   process.exit(0);
 }
 
+const suspect = heightOutliers(buildings).map((o) => ({ i: o.index, h: o.h, times: o.times }));
+if (suspect.length) {
+  process.stderr.write(
+    `  ⚠ ${suspect.length} height(s) towering over the city: ${suspect.map((o) => `${o.h} m (${o.times}x p99)`).join(", ")}
+`,
+  );
+}
+
 const data = {
   city: city.name,
   bbox: city.bbox,
@@ -487,6 +499,11 @@ const data = {
     realPct: round1((100 * (measured + derived)) / total),
     source: sourceLabel,
     note: provenanceNote,
+    // Published rather than merely printed: the twin trusts a height tag
+    // absolutely (hs=0 gets zero safety clearance), so a tag that cannot be
+    // right has to reach whoever is looking at the city, not just whoever
+    // regenerates it. Omitted entirely when clean, so a quiet city stays quiet.
+    ...(suspect.length ? { suspect } : {}),
   },
 };
 

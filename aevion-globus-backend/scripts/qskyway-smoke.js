@@ -135,6 +135,23 @@ async function main() {
   const ver = await jget("/api/qskyway/verify?city=nyc");
   assert(ver.status === 200 && ver.json?.valid === true && ver.json?.alg === "Ed25519", "Ed25519 twin signature verifies");
 
+  // ── heights the generator could not vouch for ─────────────────────────────
+  // A wrong height tag enters the twin as MEASURED and therefore flies with zero
+  // safety clearance: Astana carries height=382 on a 75-storey tower, 4.7x the
+  // rest of the city. The product must not present that as an ordinary fact, so
+  // the flag has to survive all the way to /city — silently dropping it is the
+  // regression this guards.
+  const asDq = (await jget("/api/qskyway/city?city=astana")).json?.dataQuality;
+  assert(Array.isArray(asDq?.suspect) && asDq.suspect.length >= 1,
+    "[astana] height that towers over the city is published, not hidden",
+    `suspect=${JSON.stringify(asDq?.suspect)}`);
+  assert((asDq?.suspect ?? []).every((o) => o.times > 1 && o.h > 0 && Number.isInteger(o.i)),
+    "[astana] each flagged height names the building and how far it stands out");
+  const clean = (await jget("/api/qskyway/city?city=nyc")).json?.dataQuality;
+  assert(clean?.suspect === undefined,
+    "a city with nothing to flag stays quiet instead of shipping an empty warning",
+    `nyc suspect=${JSON.stringify(clean?.suspect)}`);
+
   // ── Tokyo (third city): no-fly exposed, avoided, twin signs + verifies ────
   const tk = await jget("/api/qskyway/city?city=tokyo");
   const tkNofly = tk.json?.nofly ?? [];

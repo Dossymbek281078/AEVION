@@ -622,7 +622,7 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     module: "qskyway",
-    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct, airspaceFeed: AIRSPACE[id]?.authority ?? null })),
+    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct, suspectHeights: c.dataQuality.suspect?.length ?? 0, airspaceFeed: AIRSPACE[id]?.authority ?? null })),
     city: CITY.city,
     buildings: CITY.buildings.length,
     vertiports: CITY.vertiports.length,

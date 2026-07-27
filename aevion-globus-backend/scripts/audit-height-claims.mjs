@@ -67,6 +67,16 @@ async function overpass(query) {
   throw last;
 }
 
+/**
+ * → { text } | { error }.
+ *
+ * The two outcomes must stay apart all the way to the report. An earlier version
+ * collapsed them and printed "published no height this parser could read" for
+ * articles it had simply been rate-limited out of — Wikipedia answers a burst of
+ * requests with "You are making too many requests", and the audit then blamed
+ * the data for a property of its own network call. It made the parser look
+ * broken on 小田急サザンタワー, whose article it parses perfectly.
+ */
 async function articleText(tag) {
   // `wikipedia=en:Some Title`; a bare title means English.
   const i = tag.indexOf(":");
@@ -75,10 +85,23 @@ async function articleText(tag) {
   const url = `https://${lang}.wikipedia.org/w/api.php?action=query&prop=revisions`
     + `&titles=${encodeURIComponent(page)}&rvprop=content&rvslots=main&format=json`
     + `&formatversion=2&redirects=1`;
-  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(60_000) });
-  if (!res.ok) return null;
-  const j = await res.json();
-  return j?.query?.pages?.[0]?.revisions?.[0]?.slots?.main?.content ?? null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(60_000) });
+      if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) return { error: `HTTP ${res.status}` };
+      const body = await res.text();
+      // A throttled answer arrives as plain text, not JSON.
+      if (!body.startsWith("{")) throw new Error(body.slice(0, 60).trim());
+      const j = JSON.parse(body);
+      const text = j?.query?.pages?.[0]?.revisions?.[0]?.slots?.main?.content;
+      return text ? { text } : { error: "article has no content" };
+    } catch (e) {
+      if (attempt === 4) return { error: e.message };
+      await new Promise((r) => setTimeout(r, 5_000 * attempt));
+    }
+  }
+  return { error: "unreachable" };
 }
 
 const b = BBOX[city];
@@ -105,21 +128,19 @@ for (const el of elements) {
 }
 
 const findings = [];
-const unreadable = [];
+const notFetched = [];  // we never saw the article
+const noHeight = [];    // we read it, and it states no height we understand
 for (const r of rows) {
   if (!r.wikipedia) continue;
-  const text = await articleText(r.wikipedia);
-  await new Promise((res) => setTimeout(res, 400)); // be polite to Wikipedia
-  if (!text) { r.article = { verdict: "no-article" }; unreadable.push(r); continue; }
-  const box = parseInfoboxHeights(text);
+  const got = await articleText(r.wikipedia);
+  await new Promise((res) => setTimeout(res, 800)); // be polite to Wikipedia
+  if (got.error) { r.article = { verdict: "not-fetched", error: got.error }; notFetched.push(r); continue; }
+  const box = parseInfoboxHeights(got.text);
   r.box = box;
   r.article = compareTagToArticle(r.h, box);
-  // An article this parser could not read a height out of is NOT a clean bill of
-  // health, and reporting it as one is how a tool ends up saying "no findings"
-  // about a city it never actually checked. Japanese infoboxes, for one, name
-  // their fields in Japanese — so a Tokyo run reads far fewer articles than it
-  // fetches, and the count below is what makes that visible instead of silent.
-  if (r.article.verdict === "unknown") unreadable.push(r);
+  // Neither of these is a clean bill of health, and reporting them as one is how
+  // a tool ends up saying "no findings" about a city it never checked.
+  if (r.article.verdict === "unknown") noHeight.push(r);
   if (r.article.verdict === "over" || r.article.verdict === "under") findings.push(r);
 }
 
@@ -140,9 +161,11 @@ process.stdout.write(
   + `\n⚠ the element disagrees with the article IT links to:\n`
   + `${findings.length ? findings.map((r) => `${line(r)}   [${r.article.verdict}]`).join("\n") : "  none"}\n`
   + (rows.some((r) => r.wikipedia)
-    ? `  (checked ${rows.filter((r) => r.wikipedia).length - unreadable.length}`
+    ? `  (read ${rows.filter((r) => r.wikipedia).length - notFetched.length - noHeight.length}`
       + ` of ${rows.filter((r) => r.wikipedia).length} linked articles`
-      + `${unreadable.length ? `; ${unreadable.length} published no height this parser could read — "none" above says nothing about those` : ""})\n`
+      + `${noHeight.length ? `; ${noHeight.length} state no height this parser understands` : ""}`
+      + `${notFetched.length ? `; ${notFetched.length} could not be fetched at all — that is our network, not their data` : ""}`
+      + `${notFetched.length + noHeight.length ? ` — "none" above says nothing about those` : ""})\n`
     : "")
   + `\n· unusual but possible (2-2.8 m per storey), reported only:\n`
   + `${suspicious.length ? suspicious.map(line).join("\n") : "  none"}\n`

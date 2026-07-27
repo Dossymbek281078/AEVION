@@ -942,8 +942,11 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const ratio = s.ltvCacRatio !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:${LINK}|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
-  if (ratio) {
+    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:${LINK}|is|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
+  // Five fields reached their assignment without this gate — a stated target
+  // was scored as an achieved result on LTV/CAC, CAC, LTV, payback and TAM.
+  // Seven others had it. Applied per site, missed at five.
+  if (ratio && statedAsAchieved(t, ratio.index ?? 0, ratio[0].length)) {
     const r = parseLocaleNumber(ratio[1]);
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
   }
@@ -970,7 +973,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // "$500 CAC" is how a deck writes it, and revenue, GMV and backlog all
     // read their suffix form already.
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${CAC_NAME}`, "i"));
-  if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency, s); if (v && v > 0) s.cacUsd = v; }
+  if (cac && statedAsAchieved(t, cac.index ?? 0, cac[0].length)) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency, s); if (v && v > 0) s.cacUsd = v; }
 
   const ltvRange = firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
@@ -980,7 +983,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const ltv = s.ltvUsd !== null ? null
     : firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${LTV_NAME}`, "i"));
-  if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency, s); if (v && v > 0) s.ltvUsd = v; }
+  if (ltv && statedAsAchieved(t, ltv.index ?? 0, ltv[0].length)) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency, s); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
   }
@@ -1006,7 +1009,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const pb = s.paybackMonths !== null ? null
     : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:${LINK}|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
     || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?(months?|years?)\s*payback`, "i"), s, "payback");
-  if (pb) {
+  if (pb && statedAsAchieved(t, pb.index ?? 0, pb[0].length)) {
     const v = parseLocaleNumber(pb[1]);
     const inYears = /year/i.test(pb[2] ?? "");
     const months = inYears ? v * 12 : v;
@@ -1157,7 +1160,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const tam = s.bottomUpTamUsd !== null ? null
     : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
-  if (tam) {
+  if (tam && statedAsAchieved(t, tam.index ?? 0, tam[0].length)) {
     // detect group layout
     const lead = startsWithFigure(tam[0]) && !/^(tam|total|addressable)/i.test(tam[0].trim());
     const numStr = lead ? tam[1] : tam[1];

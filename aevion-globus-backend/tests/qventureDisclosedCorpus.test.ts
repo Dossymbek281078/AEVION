@@ -2415,3 +2415,45 @@ describe("the deck cross-check knows the scales the parser knows", () => {
     expect(figureAppearsInText("Gross margin of 45%.", 45_000_000)).toBe(false);
   });
 });
+
+describe("every field refuses a target, not just the ones someone remembered", () => {
+  // The achievement gate was applied per assignment site, and five of twelve
+  // sites never got it: LTV/CAC, CAC, LTV, payback and TAM each scored "we are
+  // targeting X" as an achieved X. Same shape as the 0x08 defect in
+  // INTENDED_WORD earlier today — a goal counted as a result — reached by a
+  // different route.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["LTV/CAC", "We are targeting an LTV/CAC of 5x.", (s: Sig) => s.ltvCacRatio],
+    ["CAC", "We are targeting a CAC of $500.", (s: Sig) => s.cacUsd],
+    ["LTV", "We are targeting an LTV of $2,000.", (s: Sig) => s.ltvUsd],
+    ["payback", "We are targeting a payback of 12 months.", (s: Sig) => s.paybackMonths],
+    ["TAM", "We are targeting a TAM of $5 billion.", (s: Sig) => s.bottomUpTamUsd],
+    ["churn", "We are targeting churn of 3% monthly.", (s: Sig) => s.churnPct],
+    ["retention", "We are targeting retention of 120%.", (s: Sig) => s.retentionPct],
+    ["gross margin", "We are targeting a gross margin of 70%.", (s: Sig) => s.grossMarginPct],
+    ["revenue", "We are targeting revenue of $10 million.", (s: Sig) => s.revenueUsd],
+    ["customers", "We are targeting 5,000 customers.", (s: Sig) => s.customers],
+    ["GMV", "We are targeting GMV of $10 million.", (s: Sig) => s.gmvUsd],
+    ["take rate", "We are targeting a take rate of 15%.", (s: Sig) => s.takeRatePct],
+  ])("a target is refused for %s", (_l, text, read) => {
+    expect(read(p(text) as Sig)).toBeNull();
+  });
+
+  test.each([
+    ["LTV/CAC", "Our LTV/CAC is 5x.", (s: Sig) => s.ltvCacRatio, 5],
+    ["CAC", "Our CAC is $500.", (s: Sig) => s.cacUsd, 500],
+    ["LTV", "Our LTV is $2,000.", (s: Sig) => s.ltvUsd, 2000],
+    ["payback", "Our payback period is 12 months.", (s: Sig) => s.paybackMonths, 12],
+    ["TAM", "Bottom-up TAM of $5 billion.", (s: Sig) => s.bottomUpTamUsd, 5e9],
+  ])("a stated result is still credited for %s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("the conservative end of each band survives the gate", () => {
+    expect(p("CAC of $400-600.").cacUsd).toBe(600);
+    expect(p("LTV of $1,500-2,500.").ltvUsd).toBe(1500);
+    expect(p("Payback of 9-12 months.").paybackMonths).toBe(12);
+  });
+});

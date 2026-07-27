@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 670
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 688
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (670
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (688
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -974,13 +974,38 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    0 and the M of "$10M". A preceding letter still disqualifies, so the m of
    "programme" is not a million.
 
+39. **Five of twelve fields scored a target as a result.** Limit 24 fixed a
+   0x08 artefact that let "we target a 30% gross margin" be read as an achieved
+   margin. Asking the same question of every field found the same defect reached
+   by a different route: the achievement gate is applied at each assignment
+   site, and **five sites never got it** — LTV/CAC, CAC, LTV, payback and TAM.
+
+   "We are targeting a CAC of $500" scored a CAC of $500. "We are targeting a
+   TAM of $5 billion" scored the TAM. Seven other fields refused correctly,
+   which is what made it invisible: the behaviour looked right wherever anyone
+   checked.
+
+   All twelve now refuse a target and still credit a stated result, and the
+   conservative end of each band survives the gate — CAC the higher, LTV the
+   lower, payback the longer. Twenty assertions.
+
+   Found while reading the deck-extraction path rather than the parser, because
+   its intention veto covers six fields where the figure check covers seven —
+   `ltvCacRatio` is checked for existence in the deck and never vetoed. That
+   asymmetry is what prompted asking which fields the *parser* gates, and the
+   answer was worse.
+
+   One more gap surfaced in passing and is fixed: `Our LTV/CAC is 5x` read as
+   nothing, because `is` was missing from that metric's connector list while
+   every other metric had it.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 670):
+`tests/qventureDisclosedCorpus.test.ts`, 688):
 
 | Guard | Floor | Measured today |
 |---|---|---|

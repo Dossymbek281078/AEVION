@@ -276,13 +276,13 @@ export default function InvestorPage() {
               <div style={productBadge("#10b981")}>IP Trust Pipeline</div>
               <h3 style={productTitle}>QRight + QSign + Bureau</h3>
               <p style={productDesc}>
-                Register a SHA-256 fingerprint → Sign with <strong>ML-DSA-65</strong> (NIST FIPS 204, post-quantum) → Get a legally-meaningful certificate with Trust Graph edge.
+                Register a SHA-256 fingerprint → Sign with <strong>ML-DSA-65</strong> (NIST FIPS 204, post-quantum; key-activated) → Get a legally-meaningful certificate with Trust Graph edge.
               </p>
               <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(16,185,129,0.08)", borderRadius: 8, border: "1px solid rgba(16,185,129,0.2)" }}>
                 <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>WOW:</span>
                 <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 6 }}>
                   Harvest-now-decrypt-later. Documents signed with RSA today will not hold in court in 2031.
-                  Ours will. Only B2C product with ML-DSA-65 on the shelf.
+                  Ours will. ML-DSA-65 is implemented in QSign v2 and switches on with the signing key.
                 </span>
               </div>
               <div style={{ marginTop: 12 }}>
@@ -395,7 +395,7 @@ export default function InvestorPage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 20 }}>
             {[
-              { emoji: "🔐", title: "NIST ML-DSA-65 finalized", desc: "August 2024. Enterprises are starting to require post-quantum signatures in contracts. We already ship it." },
+              { emoji: "🔐", title: "NIST ML-DSA-65 finalized", desc: "August 2024. Enterprises are starting to require post-quantum signatures in contracts. QSign v2 implements it, key-activated." },
               { emoji: "🤖", title: "AI content flood", desc: "Sora, Midjourney, Suno create billions of files/day. Proving authorship became a crisis. Our pipeline solves it." },
               { emoji: "⚖️", title: "EU AI Act (2025)", desc: "Requires provenance documentation for AI-generated content. Our Bureau certificate is the compliance answer." },
             ].map(item => (
@@ -417,7 +417,7 @@ export default function InvestorPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 16 }}>
           {[
             { n: "1", title: "Trust Graph", desc: "Accumulates with every signature. Competitor starting today is 2 years behind." },
-            { n: "2", title: "Post-quantum on day 1", desc: "No one else ships ML-DSA-65 B2C. First mover in a mandatory migration." },
+            { n: "2", title: "Post-quantum built in", desc: "ML-DSA-65 (FIPS 204) is implemented in the product, key-activated — ahead of a mandatory migration." },
             { n: "3", title: "Atomic pipeline", desc: "4 platforms → 1 UI. Switching cost grows with every cert issued." },
             { n: "4", title: "Open velocity", desc: "130+ merged PRs in 30 days. Verifiable in public GitHub history." },
           ].map(m => (

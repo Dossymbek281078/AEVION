@@ -101,7 +101,7 @@ export default function AcquirePrintPage() {
           </div>
           <div className="pillar">
             <div className="title">2. Защита и право</div>
-            <div className="body">QSign v2 (FIPS 204 ML-DSA-65 GA) · QShield (threshold + Lagrange) · QRight · QContract · QChainGov · QMaskCard · VeilNetX · Z-Tide.</div>
+            <div className="body">QSign v2 (FIPS 204 ML-DSA-65, key-activated) · QShield (threshold + Lagrange) · QRight · QContract · QChainGov · QMaskCard · VeilNetX · Z-Tide.</div>
           </div>
           <div className="pillar">
             <div className="title">3. Dev-слой / DevHub</div>

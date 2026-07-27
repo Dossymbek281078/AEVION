@@ -39,26 +39,15 @@ const OVERPASS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
-// Height model, mirroring src/routes/qskyway.ts (SRC_CLEARANCE is indexed by it):
-//   hs 0 = measured  — explicit `height` tag
-//   hs 1 = derived   — building:levels × METRES_PER_LEVEL
-//   hs 2 = guessed   — blind default, deliberately the WORST confidence class
-const METRES_PER_LEVEL = 3.2;
-// Parapet/roof allowance on top of the storey stack. NOT a guess: the committed
-// twins were built with it, and every source that describes them said they were
-// not. Matching each committed building to its OSM element by footprint centroid
-// and testing candidate formulas against all 159 pairs that carry
-// `building:levels` gives levels*3.2 + 1.6 → 159/159, levels*3.2 → 0/159,
-// levels*3.5 → 65/159. Dropping it would silently lower every derived obstacle
-// by ~1.6 m the moment a twin was regenerated.
-const PARAPET_M = 1.6;
-const DEFAULT_HEIGHT_M = 12;
+import {
+  METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL,
+  projection, parseMetres, heightOf, ringsOf, inRing, rasterize,
+} from "./lib/city-twin-geometry.mjs";
 
-// Projection must match projector() in src/routes/qskyway.ts exactly, or routes
-// would be computed against a grid that does not line up with the buildings.
-const M_PER_LAT = 110540;
-const M_PER_LON_EQ = 111320;
-const CELL = 20;
+// The height model, the projection and the rasterizer live in
+// scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
+// the part that talks to the network and to disk. Constants are re-exported
+// there and mirrored by SRC_CLEARANCE in src/routes/qskyway.ts.
 
 const CITIES = {
   astana: {
@@ -142,14 +131,7 @@ if (!city.osmOnly && !compareOnly) {
 
 // ── projection ────────────────────────────────────────────────────────────────
 const { minLat, maxLat, minLon, maxLon } = city.bbox;
-const lat0 = (minLat + maxLat) / 2;
-const mPerLon = M_PER_LON_EQ * Math.cos((lat0 * Math.PI) / 180);
-const proj = (lon, lat) => [(lon - minLon) * mPerLon, (maxLat - lat) * M_PER_LAT];
-
-const W = Math.floor((maxLon - minLon) * mPerLon);
-const H = Math.floor((maxLat - minLat) * M_PER_LAT);
-const COLS = Math.ceil(W / CELL);
-const ROWS = Math.ceil(H / CELL);
+const { proj, w: W, h: H, cols: COLS, rows: ROWS } = projection(city.bbox);
 
 // ── fetch ─────────────────────────────────────────────────────────────────────
 const query = `[out:json][timeout:180];
@@ -191,90 +173,7 @@ async function overpass() {
   throw lastErr;
 }
 
-// ── height extraction ─────────────────────────────────────────────────────────
-// A tag may read "42", "42 m", "42.5m". Anything unparseable falls through to the
-// next source rather than becoming NaN — a NaN height would rasterize to a hole
-// in the obstacle grid, i.e. a corridor flown straight through a building.
-function parseMetres(v) {
-  if (typeof v !== "string") return null;
-  const m = v.trim().match(/^(-?\d+(?:\.\d+)?)\s*m?$/i);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function heightOf(tags = {}) {
-  const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
-  if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
-  const levels = parseMetres(tags["building:levels"]);
-  if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1 };
-  return { h: DEFAULT_HEIGHT_M, hs: 2 };
-}
-
 // ── build ─────────────────────────────────────────────────────────────────────
-function toRing(geom) {
-  const pts = (geom ?? []).filter((p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lon));
-  if (pts.length < 3) return null;
-  return pts.map((p) => {
-    const [x, y] = proj(p.lon, p.lat);
-    return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
-  });
-}
-
-// A building may be a way (one ring) or a multipolygon relation (several outer
-// ways, often with inner courtyards). Concatenating a relation's members into a
-// single ring — the obvious-looking one-liner — produces a polygon that zig-zags
-// between unrelated wings of the building and blocks cells nothing stands on.
-// Inner (courtyard) members are skipped rather than punched out: a courtyard
-// wrongly marked solid is conservative for flight, the reverse is not.
-function ringsOf(el) {
-  if (el.type === "way") {
-    const r = toRing(el.geometry);
-    return r ? [r] : [];
-  }
-  return (el.members ?? [])
-    .filter((m) => m.type === "way" && (m.role === "outer" || m.role === ""))
-    .map((m) => toRing(m.geometry))
-    .filter(Boolean);
-}
-
-// Even-odd point-in-polygon on the cell CENTRE. Chosen (over any-overlap) so a
-// 20 m cell is marked blocked when the building actually occupies its middle;
-// any-overlap would inflate every footprint by up to a cell in each direction
-// and quietly make the city denser than it is.
-function inRing(ring, x, y) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-function rasterize(buildings) {
-  const heights = new Array(COLS * ROWS).fill(0);
-  const src = new Array(COLS * ROWS).fill(0);
-  for (const b of buildings) {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const [x, y] of b.r) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-    }
-    const c0 = Math.max(0, Math.floor(minX / CELL)), c1 = Math.min(COLS - 1, Math.floor(maxX / CELL));
-    const r0 = Math.max(0, Math.floor(minY / CELL)), r1 = Math.min(ROWS - 1, Math.floor(maxY / CELL));
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        if (!inRing(b.r, c * CELL + CELL / 2, r * CELL + CELL / 2)) continue;
-        const i = r * COLS + c;
-        // Tallest building wins the cell, and carries ITS provenance with it:
-        // the clearance model must reflect the obstacle actually being cleared.
-        if (b.h > heights[i]) { heights[i] = b.h; src[i] = b.hs; }
-      }
-    }
-  }
-  return { heights, src };
-}
-
 function loadCommitted(file) {
   const path = new URL(`../src/routes/${file}`, import.meta.url);
   const text = fs.readFileSync(path, "utf8");
@@ -293,14 +192,14 @@ const buildings = [];
 const meta = [];
 for (const el of elements) {
   const { h, hs } = heightOf(el.tags);
-  for (const r of ringsOf(el)) {
+  for (const r of ringsOf(el, proj)) {
     buildings.push({ h, hs, r });
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
 }
 if (!buildings.length) throw new Error("Overpass returned no usable building footprints for this bbox");
 
-const { heights, src } = rasterize(buildings);
+const { heights, src } = rasterize(buildings, COLS, ROWS);
 
 const measured = buildings.filter((b) => b.hs === 0).length;
 const derived = buildings.filter((b) => b.hs === 1).length;

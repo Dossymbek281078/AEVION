@@ -1,0 +1,136 @@
+/**
+ * QSkyway — pure geometry and provenance rules behind a city digital-twin.
+ *
+ * Extracted from scripts/fetch-city-twin.mjs so it can be tested. Everything the
+ * committed twins depend on lives here, and every function is pure: no fetch, no
+ * filesystem, no module-level mutable state. A defect in this file corrupts the
+ * obstacle grid of every city at once — and the one bug already found here (a
+ * multipolygon relation flattened into a single zig-zag ring) was caught by
+ * comparing against OSM by hand, which is not a thing that runs in CI.
+ *
+ * Constants are exported rather than inlined because src/routes/qskyway.ts reads
+ * the SAME provenance codes through SRC_CLEARANCE: hs 0 measured / 1 derived /
+ * 2 guessed. The two files must agree or the safety clearance is applied to the
+ * wrong confidence class.
+ */
+
+export const METRES_PER_LEVEL = 3.2;
+// Parapet/roof allowance on top of the storey stack. Recovered, not invented:
+// matching every committed Astana building to its OSM element by footprint
+// centroid and testing candidate formulas over all 159 pairs carrying
+// `building:levels` gives levels*3.2 + 1.6 → 159/159, levels*3.2 → 0/159,
+// levels*3.5 → 65/159.
+export const PARAPET_M = 1.6;
+export const DEFAULT_HEIGHT_M = 12;
+export const CELL = 20;
+export const M_PER_LAT = 110540;
+export const M_PER_LON_EQ = 111320;
+
+/**
+ * Local metric frame for a bbox. Must stay identical to projector() in
+ * src/routes/qskyway.ts: routes are planned on this grid, so a divergence here
+ * would offset every corridor from the buildings it is meant to avoid.
+ */
+export function projection(bbox) {
+  const { minLat, maxLat, minLon, maxLon } = bbox;
+  const lat0 = (minLat + maxLat) / 2;
+  const mPerLon = M_PER_LON_EQ * Math.cos((lat0 * Math.PI) / 180);
+  const proj = (lon, lat) => [(lon - minLon) * mPerLon, (maxLat - lat) * M_PER_LAT];
+  const w = Math.floor((maxLon - minLon) * mPerLon);
+  const h = Math.floor((maxLat - minLat) * M_PER_LAT);
+  return { proj, w, h, cols: Math.ceil(w / CELL), rows: Math.ceil(h / CELL) };
+}
+
+/**
+ * A tag may read "42", "42 m", "42.5m". Anything unparseable returns null and
+ * falls through to the next source rather than becoming NaN — a NaN height
+ * rasterizes to a hole in the obstacle grid, i.e. a corridor flown straight
+ * through a building.
+ */
+export function parseMetres(v) {
+  if (typeof v !== "string") return null;
+  const m = v.trim().match(/^(-?\d+(?:\.\d+)?)\s*m?$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function heightOf(tags = {}) {
+  const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
+  if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
+  const levels = parseMetres(tags["building:levels"]);
+  if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1 };
+  return { h: DEFAULT_HEIGHT_M, hs: 2 };
+}
+
+export function toRing(geom, proj) {
+  const pts = (geom ?? []).filter((p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+  if (pts.length < 3) return null;
+  return pts.map((p) => {
+    const [x, y] = proj(p.lon, p.lat);
+    return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  });
+}
+
+/**
+ * A building is either a way (one ring) or a multipolygon relation (several
+ * outer ways, often with inner courtyards). Concatenating a relation's members
+ * into a single ring — the obvious-looking one-liner, and the bug this code
+ * shipped first — produces a polygon that zig-zags between unrelated wings and
+ * blocks cells nothing stands on. Inner (courtyard) members are skipped rather
+ * than punched out: a courtyard wrongly marked solid costs a detour, the
+ * reverse would route an aircraft through a wall.
+ */
+export function ringsOf(el, proj) {
+  if (el.type === "way") {
+    const r = toRing(el.geometry, proj);
+    return r ? [r] : [];
+  }
+  return (el.members ?? [])
+    .filter((m) => m.type === "way" && (m.role === "outer" || m.role === ""))
+    .map((m) => toRing(m.geometry, proj))
+    .filter(Boolean);
+}
+
+/**
+ * Even-odd point-in-polygon, evaluated at the cell CENTRE. Chosen over
+ * any-overlap so a 20 m cell counts as blocked when the building actually
+ * occupies its middle; any-overlap would inflate every footprint by up to a
+ * cell in each direction and quietly make the city denser than it is.
+ */
+export function inRing(ring, x, y) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Buildings → 20 m height field plus a parallel provenance grid. The tallest
+ * building wins a cell and carries ITS provenance with it, because the safety
+ * clearance must reflect the obstacle actually being cleared, not a shorter
+ * neighbour whose height happens to be better known.
+ */
+export function rasterize(buildings, cols, rows) {
+  const heights = new Array(cols * rows).fill(0);
+  const src = new Array(cols * rows).fill(0);
+  for (const b of buildings) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of b.r) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    const c0 = Math.max(0, Math.floor(minX / CELL)), c1 = Math.min(cols - 1, Math.floor(maxX / CELL));
+    const r0 = Math.max(0, Math.floor(minY / CELL)), r1 = Math.min(rows - 1, Math.floor(maxY / CELL));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        if (!inRing(b.r, c * CELL + CELL / 2, r * CELL + CELL / 2)) continue;
+        const i = r * cols + c;
+        if (b.h > heights[i]) { heights[i] = b.h; src[i] = b.hs; }
+      }
+    }
+  }
+  return { heights, src };
+}

@@ -122,6 +122,24 @@ import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { ingestPuzzles } from "./puzzleIngest";
 
+/* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
+   игроку («You win»). Во всех четырёх местах, где строился PGN и метаданные ролика, стояло
+   `over.includes("You win") ? "1-0" : …` без учёта цвета: победа ЧЁРНЫМИ выгружалась как
+   1-0. Файл при этом противоречил сам себе, потому что теги White/Black цвет уже учитывали
+   («Black: You» и результат «победили белые»).
+   Хотсит разбирается отдельно: там обе стороны — люди, и текст называет победителя прямо. */
+function pgnResultOf(over: string | null | undefined, playerColor: "w" | "b", hotseat: boolean): string {
+  const t = over || "";
+  if (hotseat) {
+    if (t.includes("Белые победили")) return "1-0";
+    if (t.includes("Чёрные победили")) return "0-1";
+    return "1/2-1/2";
+  }
+  const r = gameResultOf(t);
+  if (r === "D") return "1/2-1/2";
+  return (r === "W") === (playerColor === "w") ? "1-0" : "0-1";
+}
+
 import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
 import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
@@ -7737,7 +7755,7 @@ export default function CyberChessPage(){
                       <button onClick={async()=>{
                         try{
                           const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
-                          const result=over.includes("You win")?"1-0":over.includes("AI wins")?"0-1":"1/2-1/2";
+                          const result=pgnResultOf(over,pCol,hotseat);
                           const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                           const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
                           const dataUrl=await QRCode.toDataURL(url,{width:220,margin:2,color:{dark:"#bababa",light:"#161512"}});
@@ -8253,7 +8271,7 @@ export default function CyberChessPage(){
                 <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
                   const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
+                  const result=pgnResultOf(over,pCol,hotseat);
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
                   const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
@@ -8262,7 +8280,7 @@ export default function CyberChessPage(){
                 <Btn size="sm" variant="secondary" onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
                   const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
+                  const result=pgnResultOf(over,pCol,hotseat);
                   sReelMeta({white,black,result});sShowReel(true);
                 }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
@@ -14688,7 +14706,7 @@ ${question.trim()}`;
               <button onClick={async()=>{
                 try{
                   const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
-                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
+                  const result=pgnResultOf(over,pCol,hotseat);
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
                   const dataUrl=await QRCode.toDataURL(url,{width:220,margin:2,color:{dark:"#bababa",light:"#161512"}});

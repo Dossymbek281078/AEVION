@@ -137,3 +137,59 @@ export async function kvList<T>(key: string): Promise<T[]> {
 export function kvBackend(): KvBackend {
   return backend();
 }
+
+/**
+ * Сериализация операций «прочитал → проверил → записал» по одному ключу.
+ *
+ * `kvPush`/`kvSet` — это чтение-изменение-запись, а не атомарная операция.
+ * На возврате средств из-за этого настоящая гонка: два одновременных запроса
+ * читают ОДИН И ТОТ ЖЕ список прошлых возвратов, оба видят полный остаток, оба
+ * проходят проверку «не больше остатка» — и ссылка возвращается дважды. Второй
+ * `kvPush` вдобавок может затереть запись первого (потерянное обновление).
+ * Ровно этот класс уже чинился в QContract (атомарный `UPDATE … WHERE`) и
+ * QMaskCard; здесь SQL нет, поэтому нужен замок.
+ *
+ * В памяти — цепочка промисов на ключ: внутри инстанса это точная
+ * сериализация, а `memory`-режим и живёт в пределах инстанса.
+ * В KV — `SET lock NX EX`, атомарный на стороне Redis; если замок занят,
+ * вызывающий получает отказ и честный 409 вместо тихого двойного возврата.
+ */
+const memLocks = new Map<string, Promise<unknown>>();
+
+export async function withKeyLock<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T | "locked"> {
+  if (backend() === "memory") {
+    const prev = memLocks.get(key) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const chain = prev.then(() => gate);
+    memLocks.set(key, chain);
+    await prev.catch(() => {});
+    try {
+      return await fn();
+    } finally {
+      release();
+      // не даём карте расти: снимаем запись, если за нами никто не встал
+      if (memLocks.get(key) === chain) memLocks.delete(key);
+    }
+  }
+
+  const lockKey = `lock:${key}`;
+  try {
+    const out = (await kvFetch(["set", lockKey, "1", "nx", "ex", "10"])) as {
+      result: string | null;
+    };
+    if (!out.result) return "locked";
+  } catch {
+    // KV недоступен — не выдумываем успех, но и не блокируем работу:
+    // падаем на тот же путь, что и memory-режим.
+    return await fn();
+  }
+  try {
+    return await fn();
+  } finally {
+    await kvDel(lockKey).catch(() => {});
+  }
+}

@@ -13,6 +13,20 @@ import { indexCapabilities, isCapabilityBlocked, capabilityHint, type Capability
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 
+/**
+ * A write whose result the UI is about to act on.
+ *
+ * Several handlers here did `await fetch(...)` and then updated the screen
+ * whatever came back — the same defect as the editor's autosave. On the
+ * collaborator path it meant an owner who pressed × saw the person disappear
+ * from the list while their edit access was still live on the server.
+ */
+async function writeOrThrow(input: string, init?: RequestInit): Promise<Response> {
+  const r = await fetch(input, init);
+  if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
+  return r;
+}
+
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 function timeAgo(iso: string): string {
@@ -875,7 +889,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     if (!confirm(`Delete ${path}?`)) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);
       setFiles(remaining);
       if (selectedFile?.path === path) {
@@ -883,8 +897,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setSelectedFile(next);
         setEditorContent(next?.content ?? "");
       }
-    } catch {
-      showToast("Delete failed", "error");
+    } catch (e: any) {
+      // The file is still there; the tree must keep showing it.
+      showToast(`Файл НЕ удалён — ${e?.message || "нет связи"}`, "error");
     }
   };
 
@@ -916,7 +931,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
         return;
       }
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      const delR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      if (!delR.ok) {
+        // The copy exists, the original does too. Showing only the new path
+        // would hide a duplicate that then gets exported, pushed and deployed.
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json().catch(() => null);
+        if (listData?.files) setFiles(listData.files);
+        showToast(`Копия создана как ${target}, но старый файл не удалился (${delR.status}) — оба на месте`, "warning");
+        return;
+      }
       setFiles((fs) => {
         const updated = fs.map((f) => f.path === oldPath ? { ...f, path: target } : f);
         return updated.sort((a, b) => a.path.localeCompare(b.path));
@@ -1595,7 +1619,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const addEnvVar = async () => {
     if (!newEnvKey.trim() || !project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), {
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: newEnvKey, value: newEnvVal }),
@@ -1603,15 +1627,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setNewEnvKey(""); setNewEnvVal("");
       fetchEnv();
       showToast("Env var saved", "success");
-    } catch { showToast("Failed to save", "error"); }
+    } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
 
   const removeEnvVar = async (key: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
       fetchEnv();
-    } catch {}
+    } catch (e: any) {
+      // The list is re-read either way: a variable that is still on the server
+      // must reappear rather than look deleted.
+      fetchEnv();
+      showToast(`Переменная НЕ удалена — ${e?.message || "нет связи"}`, "error");
+    }
   };
 
   const applyTemplate = async (templateId: string) => {
@@ -1640,7 +1669,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     setSavingSettings(true);
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}`), {
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1651,8 +1680,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
       showToast("Settings saved", "success");
-    } catch {
-      showToast("Failed to save settings", "error");
+    } catch (e: any) {
+      showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
       setSavingSettings(false);
     }
@@ -1682,10 +1711,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const removeCollaborator = async (collabUserId: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
       setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
-    } catch {
-      showToast("Failed to remove collaborator", "error");
+      showToast("Доступ отозван", "success");
+    } catch (e: any) {
+      // Leave them in the list. Access is still live, and a list that hides
+      // that is worse than the error.
+      showToast(`Доступ НЕ отозван — ${e?.message || "нет связи"}`, "error");
     }
   };
 

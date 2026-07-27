@@ -2628,7 +2628,11 @@ export default function CyberChessPage(){
     let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
-  // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
+  /* Пазл дня выбирается ОДИН раз за сутки и дальше только читается. Эффект висит на
+     PUZZLES.length, потому что пул приезжает двумя порциями (слайс на 400 для главной,
+     затем полный), но при уже сохранённом состоянии на сегодня он выходит рано — иначе
+     вторая порция подменяла бы пазл. Прежний комментарий обещал «recompute whenever
+     puzzles are loaded», и это ровно то, чего делать нельзя. */
   useEffect(()=>{
     if(PUZZLES.length===0)return;
     const tk=todayKey();const saved=ldDaily();

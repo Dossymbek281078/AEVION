@@ -1116,3 +1116,38 @@ describe("capacity already in the ground, and the unit trap under it", () => {
     expect(parsePlanSignals("430 MW deployed.").fieldsFound).toBe(0);
   });
 });
+
+describe("a defence contracting status is an award, not a definition", () => {
+  /**
+   * The last of the non-SaaS milestone entries to meet a real filing.
+   * AeroVironment's 10-K broke it in both directions at once: the sentence
+   * EXPLAINING what an IDIQ contract is ("we do not include unfunded ceiling
+   * amounts for sole-source or multi-awardee IDIQ contracts in unfunded
+   * backlog") was credited as a defence contracting status, because a bare
+   * "IDIQ" matched any mention of the words — while the natural passive "we
+   * were awarded a defense contract" missed a pattern fixed to the word order
+   * "defense contract awarded".
+   */
+  const held = (t: string) => parsePlanSignals(t).regulatoryMilestones.includes("Defence contracting status");
+
+  for (const text of [
+    "ITAR registered.",
+    "We were awarded a defense contract worth $62M.",
+    "Awarded an OTA contract by the Defense Innovation Unit.",
+    "We hold an IDIQ position on the Army's small UAS programme.",
+    "IDIQ award received in 2025.",
+    "$8M non-dilutive from an OTA award.",
+  ]) {
+    test(`status held: ${text.slice(0, 46)}`, () => { expect(held(text)).toBe(true); });
+  }
+
+  for (const text of [
+    "Contractors are subject to extensive legal and regulatory requirements, including International Traffic in Arms Regulations (ITAR).",
+    "We do not include unfunded ceiling amounts for sole-source or multi-awardee Indefinite Delivery, Indefinite Quantity (IDIQ) contracts in unfunded backlog.",
+    "Sole-source and multi-awardee IDIQ contracts are excluded from unfunded backlog.",
+    "Failure to comply with ITAR could result in penalties.",
+    "We plan to pursue an IDIQ vehicle next year.",
+  ]) {
+    test(`not a status: ${text.slice(0, 46)}`, () => { expect(held(text)).toBe(false); });
+  }
+});

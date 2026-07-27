@@ -1203,7 +1203,14 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     [/\bind (?:cleared|filed|accepted)\b/i, "IND cleared"],
     [/\b(?:faa|easa) (?:certifi\w+|type certificate|approval)\b/i, "Aviation authority certification"],
     [/\b(?:banking|e-?money|emi|money transmitter|payment institution|broker[- ]dealer|lending) licen[cs]e\b/i, "Financial licence held"],
-    [/\bitar (?:registered|registration)|\bdefense contract awarded|\bidiq\b|\bota\b (?:award|contract)/i, "Defence contracting status"],
+    // A bare "IDIQ" matched any mention of the words, including AeroVironment's
+    // 10-K explaining what an IDIQ contract IS ("we do not include unfunded
+    // ceiling amounts for ... IDIQ contracts in unfunded backlog") — a
+    // definition credited as a defence contracting status. The token now needs
+    // an award verb beside it. The same 10-K also showed the opposite miss: the
+    // natural passive "we were awarded a defense contract" did not match a
+    // pattern fixed to the words "defense contract awarded".
+    [/\bitar (?:registered|registration)\b|\b(?:awarded|won|received|secured)[^.;]{0,40}?\b(?:defen[cs]e|military|government) contract\b|\bdefen[cs]e contract awarded\b|\b(?:awarded|won|holds?|received|secured)[^.;]{0,40}?\bidiq\b|\bidiq\b[^.;]{0,30}?\b(?:award(?:ed)?|win|won)\b|\bota\b (?:award|contract)/i, "Defence contracting status"],
     [/\bgrid interconnection agreement|\bppa\b|\bpower purchase agreement\b/i, "Grid/PPA agreement"],
   ];
   /**

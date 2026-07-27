@@ -71,15 +71,15 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 524
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 532
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (29 entries, 28 real companies,
-   rubric v6):** parse coverage **83/83**, mean success **71.2** vs mean failure
-   **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 12
+5. **Measured on the disclosed-figures corpus (30 entries, 29 real companies,
+   rubric v6):** parse coverage **89/89**, mean success **71.2** vs mean failure
+   **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 13
    `open`**. Infosys appears twice on purpose — once as the dollar release and
    once as the rupee release of the same quarter — because the pair is the only
    way to check that both readings of one set of accounts agree. Open cases are
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (524
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (532
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -794,13 +794,34 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    of the same quarter. A single case can only prove a figure was read; the pair
    proves the two readings of one set of accounts agree.
 
+29. **A third currency, a seventh new company, another defect.** Hepsiburada
+   reports in Turkish lira. Its own sentence — "our GMV increased by 4.3% to TRY
+   257.5 billion" — was not read: revenue has understood that shape for a long
+   time via `TO_LEVEL`, and GMV's connector list simply never got it. Fixed by
+   using the existing mechanism rather than adding a second one. Coverage goes
+   from 83 figures to 89.
+
+   Seven new companies in this session, seven new defects. The corpus has not
+   yet reached the point where adding a company teaches nothing.
+
+30. **Limit 6 now has a test, not just a paragraph.** Hepsiburada's 20-F leads
+   with a loss that tripled in two years — net income of TRY 142.8M, then a loss
+   of TRY 2,100.7M, then TRY 5,699.2M. Adding all three figures to its case
+   changes the score by **nothing**: 74.8, top band, either way.
+
+   That is limit 6 working as documented, and documented behaviour with a real
+   number attached to it is worth more than a paragraph. It is now asserted in
+   the suite — the score with the loss must equal the score without it, and the
+   score must be high enough for the omission to matter. If someone teaches the
+   engine to weigh cost, that test fails and has to be rewritten on purpose.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 524):
+`tests/qventureDisclosedCorpus.test.ts`, 532):
 
 | Guard | Floor | Measured today |
 |---|---|---|

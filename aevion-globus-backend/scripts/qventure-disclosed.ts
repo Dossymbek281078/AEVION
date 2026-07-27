@@ -854,6 +854,41 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form 20-F, year ended 31 December 2025",
+    sources: ["https://www.sec.gov/Archives/edgar/data/1850235/000110465926053195/heps-20251231x20f.htm"],
+    input: {
+      name: "Hepsiburada (D-MARKET)",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "TR",
+      askUsd: 300_000_000,
+      description:
+        "A Turkish e-commerce platform running a first-party direct sales business alongside a third-party marketplace, with its own delivery and payments services.",
+      tractionNotes:
+        "Our revenues increased by 13.4% to TRY 84.7 billion in the year ended December 31, 2025, from TRY 74.7 billion in the year ended December 31, 2024, and our GMV increased by 4.3% to TRY 257.5 billion. We served approximately 11.8 million Active Customers. In 2025, we incurred a net loss of TRY 5,699.2 million compared to a net loss of TRY 2,100.7 million and net income of TRY 142.8 million for the years ended December 31, 2024 and 2023, respectively.",
+    },
+    expect: [
+      {
+        label: "revenue TRY 84.7bn read and converted",
+        read: (s) => s.revenueUsd,
+        ...num(toUsd(84_700_000_000, "TRY"), 0.02),
+      },
+      {
+        label: "GMV TRY 257.5bn read from the \"increased by X% to Y\" form",
+        read: (s) => s.gmvUsd,
+        ...num(toUsd(257_500_000_000, "TRY"), 0.02),
+      },
+      { label: "growth 13.4% is attributed to revenue, not GMV", read: (s) => s.growthPct, ...num(13.4) },
+      { label: "growth basis names the top line", read: (s) => s.growthBasis === "revenue", expected: true },
+      { label: "11.8 million Active Customers", read: (s) => s.customers, ...num(11_800_000) },
+      // Two currencies-worth of figures and four years in one sentence: nothing
+      // may come back as 2024 or 2025.
+      { label: "no metric equals a year in the sentence", read: (s) => [s.revenueUsd, s.gmvUsd, s.customers].some((v) => v === 2024 || v === 2025), expected: false },
+    ],
+  },
+
 ];
 
 // ── Reporting ───────────────────────────────────────────────────────────────

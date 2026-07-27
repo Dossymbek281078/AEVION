@@ -1236,7 +1236,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const gmv = s.gmvUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     // "GMV of our Marketplace segment including Turkiye was X" — a filing names
     // the segment between the metric and its figure. The span carries no digit
     // and no clause break, so it cannot reach across to another metric's number,

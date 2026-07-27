@@ -2084,3 +2084,40 @@ describe("one reader for a percentage band", () => {
     expect(parsePlanSignals("Take rate of 0-18%.").takeRatePct).toBeNull();
   });
 });
+
+describe("the engine reads the good half of a disclosure", () => {
+  // Not a bug report — a limitation made visible. Limit 6 says the engine reads
+  // revenue and not the cost of it. Hepsiburada's own 20-F leads with a loss
+  // that tripled in two years (profit of TRY 142.8M, then a loss of TRY
+  // 2,100.7M, then TRY 5,699.2M) and the score does not move by a decimal.
+  //
+  // This lives in the suite rather than only in prose so that nobody can claim
+  // the engine weighs cost, and so that the day someone teaches it to, this
+  // test fails and has to be rewritten deliberately.
+  const WITHOUT =
+    "Our revenues increased by 13.4% to TRY 84.7 billion in the year ended December 31, 2025, and our GMV increased by 4.3% to TRY 257.5 billion. We served approximately 11.8 million Active Customers.";
+  const WITH_LOSS =
+    WITHOUT +
+    " In 2025, we incurred a net loss of TRY 5,699.2 million compared to a net loss of TRY 2,100.7 million and net income of TRY 142.8 million for the years ended December 31, 2024 and 2023, respectively.";
+
+  const score = (notes: string) =>
+    analyze({
+      name: "Hepsiburada (D-MARKET)",
+      sector: "marketplace",
+      stage: "growth",
+      geography: "TR",
+      askUsd: 300_000_000,
+      description: "A Turkish e-commerce platform running first-party sales alongside a third-party marketplace.",
+      tractionNotes: notes,
+    }).composite;
+
+  test("a disclosed and tripling loss changes the score by nothing", () => {
+    expect(score(WITH_LOSS)).toBe(score(WITHOUT));
+  });
+
+  test("and the score is high enough that this matters", () => {
+    // If it scored "pass" either way the omission would be academic. It does
+    // not: on revenue and GMV alone this reaches the top band.
+    expect(score(WITHOUT)).toBeGreaterThan(70);
+  });
+});

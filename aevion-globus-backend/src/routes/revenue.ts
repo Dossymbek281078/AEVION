@@ -64,6 +64,47 @@ export function isInternalPurchase(email: string | undefined | null, internal = 
   return internal.has((email ?? "").trim().toLowerCase());
 }
 
+/**
+ * Свод последних продаж по приложению и по источнику трафика.
+ *
+ * Вынесено из обработчика, чтобы правило «что считать продажей» можно было
+ * проверить тестом: до этого оно жило внутри маршрута и расходилось с тем же
+ * правилом в расчёте выручки, а увидеть расхождение можно было только глазами.
+ *
+ * Исключаются возвраты И наши собственные тестовые покупки. Второе — то, из-за
+ * чего свод и разъехался с выручкой (issue #1039): выручка перестала считать
+ * внутренние покупки в 49e238dd, а этот свод продолжал.
+ *
+ * Цена ошибки здесь выше, чем кажется. Метки `?c=` заводились ради вопроса
+ * «какой канал окупается», а проверять их естественнее всего собственной
+ * покупкой. Внешних продаж пока ноль — значит одна проверочная покупка дала бы
+ * каналу 100% приписанной выручки, и бюджет распределялся бы по собственному
+ * следу.
+ */
+export function aggregateRecentSales(
+  rows: Array<{ appId: string; email?: string | null; amountUsd: number; refunded?: boolean; channel?: string | null }>,
+): {
+  byApp: Record<string, { count: number; totalUsd: number }>;
+  bySource: Record<string, { count: number; totalUsd: number }>;
+} {
+  const byApp: Record<string, { count: number; totalUsd: number }> = {};
+  const bySource: Record<string, { count: number; totalUsd: number }> = {};
+  for (const s of rows) {
+    if (s.refunded) continue;
+    if (isInternalPurchase(s.email)) continue;
+    // Продажи без метки собираются в "unattributed", а не выбрасываются: молча
+    // терять часть выручки из сводки хуже, чем честно показать неразмеченное.
+    const src = s.channel ?? "unattributed";
+    if (!bySource[src]) bySource[src] = { count: 0, totalUsd: 0 };
+    bySource[src].count++;
+    bySource[src].totalUsd += s.amountUsd;
+    if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
+    byApp[s.appId].count++;
+    byApp[s.appId].totalUsd += s.amountUsd;
+  }
+  return { byApp, bySource };
+}
+
 // ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
@@ -855,19 +896,7 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
   //
   // Продажи без метки собираются в "unattributed", а не выбрасываются: молча терять
   // часть выручки из сводки хуже, чем честно показать, сколько её не размечено.
-  const bySource: Record<string, { count: number; totalUsd: number }> = {};
-
-  const byApp: Record<string, { count: number; totalUsd: number }> = {};
-  for (const s of recent) {
-    if (s.refunded) continue;
-    const src = s.channel ?? "unattributed";
-    if (!bySource[src]) bySource[src] = { count: 0, totalUsd: 0 };
-    bySource[src].count++;
-    bySource[src].totalUsd += s.amountUsd;
-    if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
-    byApp[s.appId].count++;
-    byApp[s.appId].totalUsd += s.amountUsd;
-  }
+  const { byApp, bySource } = aggregateRecentSales(recent);
 
   res.json({ sales: recent, byApp, bySource });
 });

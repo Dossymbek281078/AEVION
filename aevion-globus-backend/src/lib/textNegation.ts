@@ -20,12 +20,24 @@
  * otherwise would be worse than the honest limit.
  */
 
-/** Words that, appearing just before a keyword, invert its meaning. */
+/**
+ * Words that, appearing just before a keyword, invert its meaning.
+ *
+ * Russian added 2026-07-27: the platform is Russian-first, so until then this
+ * check was blind on most of its actual input — «выручки нет» and «без патентов»
+ * read as claims, exactly the defect the module exists to prevent. Safe for the
+ * existing QVenture caller: its patterns are English-only (`revenue`, `patents`,
+ * `mrr`), so a Russian negator can never change a match it makes.
+ */
 const NEGATORS = [
   "no", "not", "never", "without", "zero", "none", "lacks", "lack", "lacking",
   "aren't", "arent", "isn't", "isnt", "hasn't", "hasnt", "haven't", "havent",
   "don't", "dont", "doesn't", "doesnt", "yet to", "awaiting", "absent",
   "pre-launch", "prelaunch", "pre-revenue", "prerevenue",
+  // рус. — частицы и предлоги отрицания, плюс формы «отсутствует/нехватка»
+  "не", "нет", "ни", "без", "нету", "отсутствует", "отсутствуют", "отсутствие",
+  "лишён", "лишена", "лишено", "нехватка", "не хватает", "пока нет", "ещё нет",
+  "еще нет", "никаких", "никакого", "никакой",
 ];
 
 /** How far back to look for a negator, in characters. */
@@ -40,12 +52,29 @@ const LOOKBEHIND = 40;
  * in year one, but revenue reached $40k" was credited while the shorter "no
  * revenue yet, but revenue starts in Q3" was not. Length is not meaning.
  */
-const CONTRAST_RE = /\b(but|however|although|though|whereas|nevertheless|instead)\b/gi;
+// Границы — lookaround по буквам, а НЕ `\b`: в JS `\b` определён через
+// ASCII-класс слова и на кириллице не срабатывает вовсе, поэтому «но» и
+// «однако» с `\b` не находились бы.
+const CONTRAST_RE =
+  /(?<!\p{L})(but|however|although|though|whereas|nevertheless|instead|но|однако|зато|хотя|тогда как|тем не менее|вместо)(?!\p{L})/giu;
 
 const NEGATOR_RE = new RegExp(
-  String.raw`\b(${NEGATORS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\b[^.;!?]{0,30}$`,
-  "i"
+  String.raw`(?<!\p{L})(${NEGATORS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?!\p{L})[^.;!?]{0,30}$`,
+  "iu"
 );
+
+/**
+ * Отрицатели, которые в русском стоят ПОСЛЕ слова: «выручки нет», «удержания
+ * нет», «патентов нет». Английский так почти не строит, поэтому исходный
+ * lookbehind этого класса не видел вовсе — проверено 27.07: «Удержания нет»
+ * читалось как утверждение об удержании.
+ *
+ * Окно намеренно узкое: допускается не больше одного слова между ключевым и
+ * отрицателем и НИ ОДНОЙ запятой. Иначе «удержание есть, а роста нет» отняло бы
+ * удержание — отрицание там относится к другому слову.
+ */
+const POST_NEGATOR_RE =
+  /^[\s]*(?:\p{L}+[\s]+){0,1}(нет|нету|отсутствует|отсутствуют|не наблюдается)(?!\p{L})/iu;
 
 /**
  * True when `pattern` matches somewhere in `text` in a non-negated position.
@@ -68,7 +97,12 @@ export function mentionsUnnegated(text: string, pattern: RegExp): boolean {
     if (lastContrast?.index !== undefined) {
       before = before.slice(lastContrast.index + lastContrast[0].length);
     }
-    if (!NEGATOR_RE.test(before)) return true;
+    if (NEGATOR_RE.test(before)) continue;
+    // Постпозитивное отрицание: «удержания нет». Смотрим короткий хвост до
+    // первой запятой — дальше отрицание уже относится к другому члену.
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 30).split(",")[0];
+    if (POST_NEGATOR_RE.test(after)) continue;
+    return true;
   }
   return false;
 }

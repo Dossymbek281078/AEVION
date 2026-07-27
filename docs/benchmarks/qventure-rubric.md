@@ -371,6 +371,29 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    to prefer the later disclosure, and "the rule covers all fields except this
    one" is the shape of every defect found today.
 
+17. **Open: installed capacity is a disclosure with no field.** Sunrun's 2015
+   S-1 (fetched from EDGAR, `d880891ds1.htm`) states "we have deployed an
+   aggregate of 430 megawatts as of March 31, 2015" alongside "approximately
+   79,000 customers" and a 20-year contract term on every system.
+
+   The customer count parses. The **megawatts do not**, because there is no
+   field for physical capacity — and for a solar, storage or grid company that
+   figure is the business: it is what the contracted revenue is earned on. The
+   engine currently reads such a plan as a customer count and nothing else.
+
+   Not added to the corpus as a case, because a case whose stated figures the
+   engine cannot recover would break the 100% coverage gate, and the fix is a
+   new signal rather than a wider regex — capacity deployed, with its unit
+   (MW/GWh), scored as delivered infrastructure rather than as a promise. That
+   is a design decision about what counts as evidence, and it belongs in
+   daylight rather than at the end of a session.
+
+   Worth noting where this came from: two companies in a row had found nothing,
+   which read as the readers catching up. Both were ordinary consumer and
+   financial businesses. Every filing since with *unusual* evidence — a launch
+   company's order book and flight record, an energy company's installed base —
+   has found something.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

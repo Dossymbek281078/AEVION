@@ -13,6 +13,7 @@ import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PaywallModal } from "@/components/PaywallModal";
 import { AgentDock } from "@/components/AgentDock";
+import { AdPixels } from "@/components/AdPixels";
 
 // Prefixes where standalone app shells take over — no global header/footer.
 // These pages are full apps (game, dashboards, trading) — the global product nav
@@ -60,6 +61,11 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         {!isApp && !isBare && <SiteFooter />}
         <ServiceWorkerRegister />
         <WebVitals />
+        {/* Пиксели рекламных кабинетов. Вне isApp/isBare-развилок сознательно:
+            заход на /go — первое, что видит человек из рекламы, и терять его
+            PageView только потому, что страница «голая», нельзя. Без переменной
+            окружения компонент не рендерит ничего. */}
+        <AdPixels />
         <InstallPrompt />
         <PaywallModal />
         {/* Global AI Agent — available on product/module pages. Hidden on the

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
-import { productById } from "@/lib/products";
+import { productById, withChannel } from "@/lib/products";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -62,7 +62,7 @@ interface AssessResp {
 interface ProgMetric { key: string; name: string; baseline: number; latest: number; change: number; improved: boolean; }
 interface ProgResp { metrics: ProgMetric[]; improvedCount: number; total: number; progressScore: number; trajectory: string; interpretation: string; }
 
-export default function LongevityClient() {
+export default function LongevityClient({ channel = null }: { channel?: string | null }) {
   const [panel, setPanel] = useState<PanelResp | null>(null);
 
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -314,7 +314,7 @@ export default function LongevityClient() {
         {/* Протокол в PDF — модуль был живым с 13.07, но купить в нём было нечего.
             Цена и ссылка берутся из каталога @/lib/products, а не пишутся здесь. */}
         {PROTOCOL_PDF && (
-          <a href={PROTOCOL_PDF.href} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
+          <a href={withChannel(PROTOCOL_PDF.href, channel)} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
             <div style={styles.buyLeft}>
               <div style={styles.buyKicker}>{PROTOCOL_PDF.format}</div>
               <div style={styles.buyTitle}>Забрать протокол с собой</div>

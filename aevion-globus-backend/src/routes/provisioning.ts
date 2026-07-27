@@ -128,6 +128,32 @@ export function countSubscriptions(): number {
 }
 
 /**
+ * Все УНИКАЛЬНЫЕ адреса в сторе, в порядке первого появления.
+ *
+ * Живёт здесь, а не в скрипте-потребителе: формат стора (append-only JSONL,
+ * latest-wins) должен читаться одним способом. Второй читатель разошёлся бы с
+ * первым при первой же смене формата — а по этому списку рассылаются письма.
+ */
+export function listSubscriptionEmails(): string[] {
+  try {
+    if (!existsSync(subsFile())) return [];
+    const seen = new Set<string>();
+    for (const line of readFileSync(subsFile(), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const email = (JSON.parse(line) as Subscription).email?.trim().toLowerCase();
+        if (email) seen.add(email);
+      } catch {
+        /* битая строка в append-only логе не должна ронять рассылку */
+      }
+    }
+    return [...seen];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Latest subscription record for an email (case-insensitive). The store is
  * append-only and latest-wins, so a later "free" downgrade record (written by
  * the LS subscription webhook on cancel/expire) correctly supersedes an

@@ -43,6 +43,7 @@
     "check:fan-terms": "node scripts/fan-terms-consistency.js",
     "check:public-prices": "node scripts/public-price-drift.js",
     "check:module-counts": "node scripts/module-count-drift.js",
+    "fan:remind": "tsx scripts/fan-window-reminder.ts",
     "check:ls-price-drift": "node scripts/ls-variant-price-drift.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",

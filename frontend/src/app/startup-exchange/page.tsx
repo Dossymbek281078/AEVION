@@ -14,14 +14,26 @@ import { ApiError, TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type 
 
 const PAGE_SIZE = 10;
 
+/**
+ * Число в плитке — или прочерк, если сервер его не прислал.
+ *
+ * `String(undefined)` даёт на экране слово «undefined», и оно там было: фронт и
+ * бэкенд переезжают не одновременно (Vercel и Railway — разные деплои), и в
+ * окне между ними новая страница читает старый ответ без новых полей. Замерено
+ * живым кликом 27.07.2026: плитка «С разбором» показывала «undefined».
+ */
+function num(n: number | null | undefined): string {
+  return typeof n === "number" && Number.isFinite(n) ? String(n) : "—";
+}
+
 type TierFilter = "" | Tier;
 
 interface Stats {
-  total: number;
-  byTier: Record<string, number>;
-  recentCount: number;
-  assessed: number;
-  avgScore: number;
+  total?: number;
+  byTier?: Record<string, number>;
+  recentCount?: number;
+  assessed?: number;
+  avgScore?: number;
 }
 
 export default function StartupExchangePage() {
@@ -206,10 +218,10 @@ export default function StartupExchangePage() {
         {/* ── Stats ────────────────────────────────────────────────────────── */}
         {stats && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
-            <StatTile label="Заявок" value={String(stats.total)} accent="#0f172a" />
-            <StatTile label="За 7 дней" value={String(stats.recentCount)} accent="#0d9488" />
-            <StatTile label="С разбором" value={String(stats.assessed)} accent="#7c3aed" />
-            <StatTile label="Средний балл" value={stats.assessed > 0 ? String(stats.avgScore) : "—"} accent="#b45309" />
+            <StatTile label="Заявок" value={num(stats.total)} accent="#0f172a" />
+            <StatTile label="За 7 дней" value={num(stats.recentCount)} accent="#0d9488" />
+            <StatTile label="С разбором" value={num(stats.assessed)} accent="#7c3aed" />
+            <StatTile label="Средний балл" value={(stats.assessed ?? 0) > 0 ? num(stats.avgScore) : "—"} accent="#b45309" />
           </div>
         )}
 

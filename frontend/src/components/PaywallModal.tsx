@@ -40,6 +40,8 @@ export function PaywallModal() {
   const tp = usePricingT();
   const [info, setInfo] = useState<PaywallPayload | null>(null);
   const [fanOffer, setFanOffer] = useState<FanMeOffer | null>(null);
+  /** Спишет ли канал по умолчанию нашу сумму. false → цену не называем. */
+  const [honoured, setHonoured] = useState(false);
 
   const close = useCallback(() => {
     setInfo(null);
@@ -59,6 +61,7 @@ export function PaywallModal() {
   // Веер для заблокированного модуля — только для авторизованного покупателя.
   useEffect(() => {
     setFanOffer(null);
+    setHonoured(false);
     const token = getAuthToken();
     if (!info || !token) return;
     let alive = true;
@@ -69,7 +72,15 @@ export function PaywallModal() {
         const hit = (j.offers as FanMeOffer[] | undefined)?.find(
           (o) => o.module === info.module && o.discountPercent > 0,
         );
+        // 🔴 Цену показываем, только если её РЕАЛЬНО спишут. Найдено вычиткой
+        // 2026-07-27: этот блок называл «$12.35 вместо $19», не спрашивая
+        // канал, — а канал по умолчанию (LemonSqueezy) применяет нашу сумму
+        // только при LEMON_SQUEEZY_ALLOW_CUSTOM_PRICE=1. Человек видел скидку
+        // в стене, уходил платить и платил полную цену. Правило берётся из
+        // сервера (`discount.honouredByDefault`, тот же channelHonoursAmount,
+        // что у чекаута), а не решается здесь.
         if (hit) setFanOffer(hit);
+        setHonoured(j?.discount?.honouredByDefault === true);
       })
       .catch(() => {});
     return () => {
@@ -206,13 +217,21 @@ export function PaywallModal() {
               {tp("fan.paywall.title")}
             </div>
             <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#134e4a" }}>
-              {tp("fan.paywall.offer", {
-                module: fanOffer.module,
-                cur: "$",
-                price: fanOffer.priceMonthly,
-                list: fanOffer.listMonthly,
-              })}{" "}
-              <span style={{ fontWeight: 900, color: "#0f766e" }}>−{fanOffer.discountPercent}%</span>
+              {honoured ? (
+                <>
+                  {tp("fan.paywall.offer", {
+                    module: fanOffer.module,
+                    cur: "$",
+                    price: fanOffer.priceMonthly,
+                    list: fanOffer.listMonthly,
+                  })}{" "}
+                  <span style={{ fontWeight: 900, color: "#0f766e" }}>−{fanOffer.discountPercent}%</span>
+                </>
+              ) : (
+                /* Канал спишет цену продукта — называем скидку и где она
+                   применится, но НЕ цену, которой не будет в счёте. */
+                tp("fan.mine.pending", { pct: fanOffer.discountPercent })
+              )}
             </div>
           </div>
         )}

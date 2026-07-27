@@ -141,7 +141,7 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
         <button
           type="button"
           onClick={() => setShowMethod((v) => !v)}
-          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#7c3aed" }}
+          style={{ background: "none", border: "none", padding: "8px 0", minHeight: 36, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#7c3aed", textAlign: "left" }}
         >
           {showMethod ? "Скрыть методику" : "Откуда взяты рыночные цифры"}
         </button>

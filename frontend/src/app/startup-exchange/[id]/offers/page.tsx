@@ -108,7 +108,10 @@ export default function OffersPage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
-        <Link href={`/startup-exchange/${listing.id}`} style={{ fontSize: 13, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}>
+        <Link
+          href={`/startup-exchange/${listing.id}`}
+          style={{ display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 2px", fontSize: 13, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
+        >
           ← К заявке
         </Link>
 
@@ -178,9 +181,24 @@ export default function OffersPage() {
                     </p>
                   )}
 
+                  {/* Главное действие кабинета. Замерено 27.07.2026: ссылка была
+                      высотой 17px — на телефоне это промах пальцем, а промахнуться
+                      здесь значит не ответить инвестору. Кнопочная зона нажатия. */}
                   <a
                     href={`mailto:${o.investorEmail}?subject=${encodeURIComponent(`Re: ${listing.title}`)}`}
-                    style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed", textDecoration: "none" }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      minHeight: 40,
+                      padding: "8px 14px",
+                      borderRadius: 9,
+                      border: "1px solid #ddd6fe",
+                      background: "#f5f3ff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#6d28d9",
+                      textDecoration: "none",
+                    }}
                   >
                     Ответить: {o.investorEmail} ↗
                   </a>

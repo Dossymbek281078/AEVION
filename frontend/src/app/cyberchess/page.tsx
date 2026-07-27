@@ -3965,36 +3965,23 @@ export default function CyberChessPage(){
     if(!game.isCheck())return;
     // The side that just moved delivered the check (turn already toggled)
     const checker=game.turn()==="w"?"b":"w";
-    if(checker==="w"){
-      sChecksByWhite(c=>{
-        const nv=c+1;
-        if(nv>=3){
-          const youWon=pCol==="w";
-          setTimeout(()=>{
-            sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
-            sOn(false);snd("x");
-            if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
-            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
-          },50);
-        }
-        return nv;
-      });
-    }else{
-      sChecksByBlack(c=>{
-        const nv=c+1;
-        if(nv>=3){
-          const youWon=pCol==="b";
-          setTimeout(()=>{
-            sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
-            sOn(false);snd("x");
-            if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
-            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
-          },50);
-        }
-        return nv;
-      });
+    /* Счётчик увеличивается апдейтером, всё остальное — здесь. Раньше рейтинг, счёт побед
+       и начисление Chessy лежали ВНУТРИ sChecksByWhite(c=>…): React вправе вызвать
+       апдейтер повторно (в dev со StrictMode делает это всегда), и тогда третий шах менял
+       рейтинг и платил дважды. Значения счётчиков свежие — они в зависимостях эффекта, а
+       сам эффект защищён от повторного входа через lastCheckBkRef. */
+    const nv=(checker==="w"?checksByWhite:checksByBlack)+1;
+    if(checker==="w")sChecksByWhite(nv);else sChecksByBlack(nv);
+    if(nv>=3){
+      const youWon=pCol===checker;
+      setTimeout(()=>{
+        sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
+        sOn(false);snd("x");
+        if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
+        else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+      },50);
     }
-  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy]);
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,checksByWhite,checksByBlack]);
 
   /* ── Variant: Atomic — explosion on every capture ── */
   const lastAtomicBkRef=useRef(-1);
@@ -4160,35 +4147,36 @@ export default function CyberChessPage(){
     else res="draw";
     const reward=res==="win"?15:res==="draw"?5:0;
     if(reward>0)addChessy(reward,`турнир: ${res==="win"?"победа":"ничья"} с ${tournamentOpponent.name}`);
-    sTournament(prev=>{
-      if(!prev)return prev;
-      let t=applyPlayerResult(prev,res);
-      // Resolve all bot vs bot matches in this round
+    /* Сетка считается ЗДЕСЬ, а не внутри sTournament(prev=>…). Раньше приз за место и
+       запись трофея делались прямо в апдейтере состояния, а React вправе вызвать
+       апдейтер повторно — в dev при включённом StrictMode он это делает всегда. То есть
+       завершение турнира начисляло награду и клало кубок ДВАЖДЫ. Значение `tournament`
+       здесь свежее: оно в зависимостях эффекта, а сам эффект защищён от повторного
+       входа через tournamentLearnedRef. */
+    let t=applyPlayerResult(tournament,res);
+    // Resolve all bot vs bot matches in this round
+    t=resolveBotMatches(t);
+    // Advance to next round if all winners known
+    t=advanceBracket(t);
+    // If currentRound advanced, also resolve bot matches in new round
+    if(t.currentRound!==tournament.currentRound){
       t=resolveBotMatches(t);
-      // Advance to next round if all winners known
       t=advanceBracket(t);
-      // If still in same round and there's another player match, no-op (loop ends)
-      // If currentRound advanced, also resolve bot matches in new round
-      if(t.currentRound!==prev.currentRound){
-        t=resolveBotMatches(t);
-        t=advanceBracket(t);
+    }
+    if(t.currentRound==="done"){
+      const place=finalPlace(t);
+      if(place){
+        const reward2=placeReward(place);
+        const def=defeatedByPlayer(t);
+        const trophy:Trophy={v:1,ts:Date.now(),place,defeated:def,reward:reward2,variant:t.variant};
+        sTrophies(list=>[trophy,...list].slice(0,50));
+        setTimeout(()=>{
+          addChessy(reward2,place===1?"🏆 1-е место в турнире":place===2?"🥈 2-е место":place===4?"🥉 финал-4":"турнир: 1/4 финала");
+          sShowTournament(true);
+        },800);
       }
-      // Tournament finished?
-      if(t.currentRound==="done"){
-        const place=finalPlace(t);
-        if(place){
-          const reward2=placeReward(place);
-          const def=defeatedByPlayer(t);
-          const trophy:Trophy={v:1,ts:Date.now(),place,defeated:def,reward:reward2,variant:t.variant};
-          sTrophies(list=>[trophy,...list].slice(0,50));
-          setTimeout(()=>{
-            addChessy(reward2,place===1?"🏆 1-е место в турнире":place===2?"🥈 2-е место":place===4?"🥉 финал-4":"турнир: 1/4 финала");
-            sShowTournament(true);
-          },800);
-        }
-      }
-      return t;
-    });
+    }
+    sTournament(t);
     sTournamentOpponent(null);
   },[over,tournament,tournamentOpponent,fenHist.length,addChessy]);
 

@@ -103,6 +103,12 @@ const PROBES = {
     if (mismatch) mismatches.push({ id: cap.id, declared: cap.status, detail: result.detail });
   }
 
+  if (staleReds.length > 0) {
+    console.log(`
+${staleReds.length} capability(ies) report degraded while the probe succeeds:`);
+    for (const s of staleReds) console.log(`  - ${s.id}: ${s.detail} (clears within the health TTL; daily repeats mean something records failures that are not real)`);
+  }
+
   if (mismatches.length === 0) {
     console.log("\nno capability claims to work while failing");
     return;

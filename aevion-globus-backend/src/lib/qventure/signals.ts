@@ -290,7 +290,7 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  * drift apart.
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
-const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
 function statedAsAchieved(text: string, at: number, len: number): boolean {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
@@ -1131,14 +1131,18 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${grantRe}`, "i"));
   if (grant && mentionsUnnegated(t, new RegExp(grantRe, "i"))) {
     const v = moneyUsd(t, grant, grant[1], grant[2], s.currency);
-    if (v && v > 0) s.nonDilutiveUsd = v;
+    // A grant applied for is not a grant awarded: "we plan to apply for a
+    // $2M SBIR grant next year" credited $2M of non-dilutive capital.
+    if (v && v > 0 && statedAsAchieved(t, grant.index ?? 0, grant[0].length)) s.nonDilutiveUsd = v;
   }
 
   // ── Pilots, LOIs, design wins, deployments ──
   const pilots = firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:paid\s*|active\s*|commercial\s*)?(?:pilots?|lois?|letters of intent|design wins?|deployments?|installations?|production sites?|customer trials?)`, "i"));
   if (pilots) {
     const v = parseLocaleNumber(pilots[1]);
-    if (isFinite(v) && v >= 1 && v < 100000) s.pilots = Math.round(v);
+    // "We aim to reach 11 deployments by year end" is a target, not eleven
+    // deployments.
+    if (isFinite(v) && v >= 1 && v < 100000 && statedAsAchieved(t, pilots.index ?? 0, pilots[0].length)) s.pilots = Math.round(v);
   }
   // Units actually delivered are the hardware equivalent of a deployment count,
   // and the exact fact that separates a shipping hardware company from one with
@@ -1181,7 +1185,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     || firstMatch(t, new RegExp(String.raw`(?:reservations?|pre[- ]?orders?)\s*(?:for|of|totalling|totaling)?\s*(?:approximately\s*)?${NUM}\s*${UNIT}`, "i"));
   if (resv) {
     const v = parseMoney(resv[1], resv[2]);
-    if (v && v >= 1 && v < 1e9) s.reservations = Math.round(v);
+    if (v && v >= 1 && v < 1e9 && statedAsAchieved(t, resv.index ?? 0, resv[0].length)) s.reservations = Math.round(v);
   }
 
   // ── Regulatory milestones actually REACHED ──

@@ -1421,3 +1421,34 @@ describe("a clinical phase is a programme's state, not a word in a contract", ()
     expect(inPhase("We may never obtain EMA or other foreign regulatory body approval for any of our investigational medicines.", "EMA/MHRA approval")).toBe(false);
   });
 });
+
+describe("the same filter belongs to the numbers, not only the labels", () => {
+  /**
+   * The verb rule was derived on the two recognition LISTS. The numeric readers
+   * have the same exposure and had never been asked: a grant applied for is not
+   * a grant awarded, and a deployment target is not a deployment.
+   *
+   *   "We plan to apply for a $2M SBIR grant next year"  → $2M non-dilutive
+   *   "We aim to reach 11 deployments by year end"       → 11 deployments
+   *   "We hope to secure $4M in non-dilutive funding"    → $4M non-dilutive
+   *
+   * Money and counts are worse than labels here: a label adds a badge, a figure
+   * moves the score.
+   */
+  const sig = (t: string) => parsePlanSignals(t) as unknown as Record<string, number | null>;
+
+  test("an intention states no figure", () => {
+    expect(sig("We plan to apply for a $2M SBIR grant next year.").nonDilutiveUsd).toBeNull();
+    expect(sig("We hope to secure $4M in non-dilutive funding.").nonDilutiveUsd).toBeNull();
+    expect(sig("We aim to reach 11 deployments by year end.").pilots).toBeNull();
+    expect(sig("We expect to sign $60M of backlog in 2027.").contractedRevenueUsd).toBeNull();
+  });
+
+  test("the achieved forms are unchanged", () => {
+    expect(sig("$8M non-dilutive from an OTA award.").nonDilutiveUsd).toBe(8_000_000);
+    expect(sig("$12M non-dilutive from a national research programme.").nonDilutiveUsd).toBe(12_000_000);
+    expect(sig("Backlog of $62M across signed contracts with two federal agencies.").contractedRevenueUsd).toBe(62_000_000);
+    expect(sig("11 deployments live at customer sites.").pilots).toBe(11);
+    expect(sig("Approximately 14,000 reservations for fuel-cell trucks.").reservations).toBe(14_000);
+  });
+});

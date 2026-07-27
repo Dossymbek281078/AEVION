@@ -56,11 +56,21 @@ const FIELD = {
   tip: /\|[ \t]*tip[ \t]*=([^\n]*)/,
   roof: /\|[ \t]*roof[ \t]*=([^\n]*)/,
   architectural: /\|[ \t]*architectural[ \t]*=([^\n]*)/,
-  height: /\|[ \t]*height[ \t]*=([^\n]*)/,
+  // 高さ is the Japanese infobox's overall height. Without it a Tokyo audit
+  // reads none of the articles its elements link to and reports "no findings"
+  // about a city it never checked — which is how this parser first passed Tokyo
+  // while OSM had the Metropolitan Government Building at 133 m against the
+  // 243.4 m its own article publishes.
+  height: /\|[ \t]*(?:height|高さ)[ \t]*=([^\n]*)/,
   // Parsed for reporting only, and deliberately not a candidate for `tallest`.
   antennaSpire: /\|[ \t]*antenna_spire[ \t]*=([^\n]*)/,
 };
-const FLOORS = /\|[ \t]*floor_count[ \t]*=[ \t]*([\d]+)/;
+// 軒高 ("eave height") is the Japanese roof-deck figure, published inside the
+// same line as the overall height: 高さ = 243.4m（軒高：241.9m）.
+const EAVE = /軒高[：:][ \t]*([\d.,]+)[ \t]*m/;
+// floor_count, or 階数 = 地上48階、地下3階 — above-ground storeys only, because
+// basements are not obstacles.
+const FLOORS = /\|[ \t]*floor_count[ \t]*=[ \t]*([\d]+)|\|[ \t]*階数[ \t]*=[ \t]*地上([\d]+)階/;
 
 /**
  * Wikitext → { roof?, architectural?, antennaSpire?, height?, floors? } in
@@ -76,8 +86,15 @@ export function parseInfoboxHeights(wikitext) {
     const v = firstQuantity(m[1]);
     if (v !== null && v > 0) out[key] = v;
   }
+  if (out.roof === undefined) {
+    const eave = EAVE.exec(wikitext);
+    if (eave) {
+      const v = Number(eave[1].replace(/,/g, ""));
+      if (Number.isFinite(v) && v > 0) out.roof = v;
+    }
+  }
   const f = FLOORS.exec(wikitext);
-  if (f) out.floors = Number(f[1]);
+  if (f) out.floors = Number(f[1] ?? f[2]);
   return out;
 }
 

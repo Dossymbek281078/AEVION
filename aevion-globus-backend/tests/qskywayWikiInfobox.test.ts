@@ -138,3 +138,35 @@ describe("storeyRatio", () => {
     expect(storeyRatio(0, 10)).toBeNull();
   });
 });
+
+// Verbatim from ja:東京都庁舎 — the article way/89877471 links to. Japanese
+// infoboxes name their fields in Japanese, and until this parser learned them a
+// Tokyo audit read NONE of the 35 articles its elements link to and still
+// printed "no findings".
+const TOCHO_JA = `{{建築物
+|建築面積 = 11042
+|階数 = 地上48階、地下3階
+|高さ = 243.4m（軒高：241.9m）
+}}`;
+
+describe("японская карточка — иначе аудит Токио проверяет ноль статей", () => {
+  it("reads 高さ as the overall height and 軒高 as the roof figure", () => {
+    const box = parseInfoboxHeights(TOCHO_JA);
+    expect(box.height).toBeCloseTo(243.4, 1);
+    expect(box.roof).toBeCloseTo(241.9, 1);
+    expect(publishedHeights(box)).toMatchObject({ tallest: 243.4, roof: 241.9 });
+  });
+
+  it("counts only above-ground storeys out of 地上48階、地下3階", () => {
+    // Basements are not obstacles; reading 3 would make the ratio nonsense.
+    expect(parseInfoboxHeights(TOCHO_JA).floors).toBe(48);
+  });
+
+  it("flags the Metropolitan Government Building as UNDERstated in OSM", () => {
+    // OSM tags way/89877471 at 133 m. Its own article publishes 243.4 m — and
+    // this is the dangerous direction, since a height tag is trusted with zero
+    // clearance. Tokyo's PLATEAU survey corrects it downstream; a city without
+    // one would fly the understated figure.
+    expect(compareTagToArticle(133, parseInfoboxHeights(TOCHO_JA)).verdict).toBe("under");
+  });
+});

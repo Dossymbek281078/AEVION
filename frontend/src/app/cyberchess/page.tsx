@@ -2276,7 +2276,27 @@ export default function CyberChessPage(){
       const pid=localStorage.getItem("cc_ai_personality_v1");
       if(pid&&pid!=="standard")sPersonalityWins(n=>n+1);
     }catch{}
-  },[over,matchmakingId,hist.length]);
+    // Победа над сильным AI. Раньше это стояло ТОЛЬКО в ветке мата, поэтому выигрыш по
+    // флагу («AI timed out — you win!») не давал ни «Победил Expert», ни «Победил Master»:
+    // applyResult там вызывается, но он считает лишь рейтинг и статистику. Матчмейкинг
+    // исключён — там соперник человек, а не уровень AI.
+    if(!matchmakingId){
+      if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
+      if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
+    }
+  },[over,matchmakingId,hist.length,aiI,unlockAch]);
+
+  /* Счётные достижения за победы. Стояли в ветке мата и проверялись ТОЧНЫМ равенством
+     (`newWinCount===10`), поэтому победа по флагу не только не выдавала награду — она
+     навсегда уносила порог: десятая победа случилась, момент равенства не наступил, и
+     достижение становилось невыдаваемым. Здесь порог сравнивается через `>=` и следит
+     за самим счётчиком побед, который растёт на ЛЮБОМ пути завершения (`applyResult`).
+     `unlockAch` идемпотентен, так что для тех, кто порог уже прошёл, это самолечится. */
+  useEffect(()=>{
+    if(sts.w>=1)unlockAch("first_win",50,"Первая победа");
+    if(sts.w>=10)unlockAch("wins_10",100,"10 побед");
+    if(sts.w>=50)unlockAch("wins_50",300,"50 побед");
+  },[sts.w,unlockAch]);
 
   const achContext=useMemo(()=>({
     totalGames, totalWins: sts.w,
@@ -3348,14 +3368,9 @@ export default function CyberChessPage(){
             }
             setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`)},400);
             // Achievements
-            const newWinCount=sts.w+1;
-            setTimeout(()=>{
-              if(newWinCount===1)unlockAch("first_win",50,"Первая победа");
-              if(newWinCount===10)unlockAch("wins_10",100,"10 побед");
-              if(newWinCount===50)unlockAch("wins_50",300,"50 побед");
-              if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
-              if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
-            },900);
+            // Достижения за победу выдаются НЕ здесь: ветка мата — лишь один из путей
+            // завершения, и выигрыш по флагу её минует. См. эффекты рядом с
+            // lastWinTrackedRef: они следят за счётчиком побед и за самим фактом победы.
           }
           else{applyResult(false)}
         }

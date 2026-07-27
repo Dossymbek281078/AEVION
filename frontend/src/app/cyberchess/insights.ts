@@ -106,11 +106,12 @@ function inferOpening(g: SavedGame): string {
   return `1.${first} ${second}`;
 }
 
-export type PhaseAccuracy = {
-  opening: number; // % moves we'd consider "good" in opening
-  middlegame: number;
-  endgame: number;
-};
+/* PhaseAccuracy («% хороших ходов по фазам») здесь был объявлен, но НЕ входил в Insights
+   и не использовался ни в модуле, ни снаружи: тип обещал метрику, которую никто не
+   считает и никто не читает. Посчитать её из SavedGame нельзя в принципе — там только
+   нотация ходов, без оценок движка по каждому ходу. Это отдельная фича: нужно либо
+   сохранять eval на каждом ходу партии, либо переанализировать партию движком. Тип
+   удалён, чтобы не выглядеть обещанием. */
 
 export type TimePressure = {
   pctGamesLostOnTime: number;

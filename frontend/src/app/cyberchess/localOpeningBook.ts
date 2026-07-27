@@ -89,15 +89,32 @@ function build(rows: OpeningRow[]): void {
   }
 }
 
+/* Загрузка книги: провал НЕ кэшируется.
+ *
+ * Раньше `loadPromise` запоминался в любом случае, а ответ проверялся только тем,
+ * что `r.json()` не бросил. Значит одна неудачная загрузка при старте — недоступная
+ * сеть, 404 с HTML-страницей ошибки, обрыв — навсегда выключала книгу на всю
+ * сессию: повторных попыток не было, а наружу это выглядело не как ошибка, а как
+ * «бот слабый и играет 1.h4». Ровно то поведение, ради которого настраивается
+ * bookChance, только уже не настраиваемое.
+ *
+ * Теперь проверяется r.ok, а при любом провале промис сбрасывается — следующий
+ * ход попробует снова. Деградация остаётся тихой для игрока (партия не должна
+ * падать из-за книги), но в консоль уходит предупреждение: без него отличить
+ * «книга не загрузилась» от «бот вышел из книги» невозможно.
+ */
 function ensureLoaded(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     try {
       const r = await fetch("/openings.json");
+      if (!r.ok) throw new Error(`openings.json: HTTP ${r.status}`);
       const rows = (await r.json()) as OpeningRow[];
-      if (Array.isArray(rows)) build(rows);
-    } catch {
-      /* leave maps empty — caller degrades to "out of book" */
+      if (!Array.isArray(rows)) throw new Error("openings.json: ожидался массив");
+      build(rows);
+    } catch (e) {
+      loadPromise = null; // не запоминаем провал — следующий вызов попробует снова
+      if (typeof console !== "undefined") console.warn("[cyberchess] книга дебютов не загрузилась:", e);
     }
   })();
   return loadPromise;

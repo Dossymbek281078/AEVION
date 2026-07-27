@@ -1119,3 +1119,44 @@ describe("media capabilities report what the provider actually did", () => {
     __resetProviderHealth();
   });
 });
+
+
+describe("Brevo capabilities report delivery, not key presence", () => {
+  // The three Brevo capabilities all read "live" from one env var. Brevo has
+  // answered 401 from some IPs and 2xx-without-messageId on soft failures —
+  // neither ever reached the shop window.
+  test("a Brevo rejection marks email degraded", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.BREVO_API_KEY = "brevo-test";
+    process.env.BREVO_SENDER_EMAIL = "noreply@test.aevion.dev";
+    fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => "unauthorised IP" } as any);
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email")
+      .send({ to: "a@test.aevion.dev", subject: "hi", htmlBody: "<p>hi</p>" });
+
+    expect(r.status).toBe(401);
+    const h = getProviderHealth("email");
+    expect(h?.ok).toBe(false);
+    expect(h?.reason).toMatch(/401|unauthorised/i);
+    __resetProviderHealth();
+  });
+
+  test("a 2xx with no messageId is a failure too, not a green light", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.BREVO_API_KEY = "brevo-test";
+    process.env.BREVO_SENDER_EMAIL = "noreply@test.aevion.dev";
+    fetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({}), text: async () => "{}" } as any);
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email")
+      .send({ to: "a@test.aevion.dev", subject: "hi", htmlBody: "<p>hi</p>" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.degraded).toBe(true);
+    expect(getProviderHealth("email")?.ok).toBe(false);
+    __resetProviderHealth();
+  });
+});

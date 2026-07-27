@@ -1987,7 +1987,7 @@ Built, but ${url} did not answer 2xx in time`;
     return res.status(501).json({
       error: "Backend deploys are not available yet",
       detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
-      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.build subdomain.",
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages) and serve on a public *.pages.dev URL. The *.aevion.build subdomain is not available yet: the zone is still pending delegation, so those addresses do not resolve.",
       deploymentId: deployment.id,
     });
   }

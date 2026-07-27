@@ -46,7 +46,7 @@ const APP_DEFS: AppDef[] = [
       "Monaco IDE (VS Code engine)",
       "AI code generation",
       "Deploy: Railway · Vercel · Cloudflare Pages",
-      "Free *.aevion.build subdomain",
+      "Free public *.pages.dev URL",
       "50 AI videos · 200 images/mo",
       "Team collaborators",
     ],

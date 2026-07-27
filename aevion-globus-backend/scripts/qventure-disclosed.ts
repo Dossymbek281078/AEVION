@@ -912,9 +912,11 @@ export const CASES: DisclosedCase[] = [
       },
       { label: "gross margin 59.9%", read: (s) => s.grossMarginPct, ...num(59.9) },
       // The filing writes growth as a NOUN — "a 31.6% increase over 2024" — and
-      // the growth patterns were all built from the verb. Recorded as limit 43
-      // rather than claimed here: the corpus states what the engine reads.
-      { label: "growth stated as a noun is not read (limit 43)", read: (s) => s.growthPct === null, expected: true },
+      // every growth pattern was built from a verb. Closed the same session it
+      // was recorded; this assertion was written asserting the miss, and went
+      // red the moment the miss was fixed, which is what it was for.
+      { label: "growth 31.6% stated as a noun", read: (s) => s.growthPct, ...num(31.6) },
+      { label: "the growth is attributed to revenue", read: (s) => s.growthBasis === "revenue", expected: true },
       // The margin rose 3.8 points from 56.1% to 59.9%. Neither number is a
       // growth rate, and both used to be read as one.
       { label: "the margin is not also counted as growth", read: (s) => s.growthPct === 59.9 || s.growthPct === 56.1, expected: false },

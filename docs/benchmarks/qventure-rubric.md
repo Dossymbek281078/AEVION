@@ -78,7 +78,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    cancel, so it is shown to the reader rather than credited.
 
 5. **Measured on the disclosed-figures corpus (30 entries, 29 real companies,
-   rubric v6):** parse coverage **94/94**, mean success **71.2** vs mean failure
+   rubric v6):** parse coverage **95/95**, mean success **71.2** vs mean failure
    **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 13
    `open`**. Infosys appears twice on purpose — once as the dollar release and
    once as the rupee release of the same quarter — because the pair is the only
@@ -1065,7 +1065,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Eight new companies this session, eight new defects, and this one was in the
    first sentence read from the eighth. The corpus is nowhere near exhausted.
 
-43. **Open, with reproduction: growth written as a noun.** Every growth pattern
+43. **Closed: growth written as a noun.** Every growth pattern
    in the parser is built from a verb — `increased 31.6% year over year` reads,
    and these do not:
 
@@ -1080,11 +1080,28 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    verbs precisely because noun-anchored ones matched too much, and the growth
    patterns now match too little.
 
-   Not fixed here rather than fixed badly: adding a noun form to the growth
-   patterns needs the same trap testing every other widening on this branch got,
-   and there were nine minutes left in the session. The TSMC case asserts the
-   figure is **not** read, so the corpus states what the engine does and this
-   turns red the moment someone fixes it.
+   It was recorded as open with nine minutes left, with the TSMC case asserting
+   the figure was **not** read — and closed twenty minutes later, at which point
+   that assertion went red exactly as intended. Written down because it is the
+   cheapest thing in this file to copy: an assertion that pins a known miss
+   costs nothing and fails loudly the moment the miss is fixed, which is more
+   than a TODO ever does.
+
+   Two shapes were added: the figure in front of the noun (`a 31.6% increase`)
+   and the verbs `grew`, `rose`, `climbed`, which DIR_VERB knew and the growth
+   patterns did not. `decline` is deliberately absent from the noun list — a
+   fall belongs to the decline parser, which knows to make it negative.
+
+   Fixing it exposed a second, worse thing. The level-metric filter from limit
+   42 ran **after** the ordered pattern loop had already stopped on
+   `found.length`, so a sentence naming a margin consumed the growth read and
+   the filter then discarded it — hiding the growth stated in the sentence
+   beside it. TSMC's own case demonstrated it: 31.6% growth, stated plainly,
+   read as nothing because the next sentence mentioned a margin. The filter now
+   runs inside the selection, where it belongs.
+
+   Parse coverage 95/95. A guard placed one step too late is not a guard; it is
+   a way of losing data quietly.
 
 ## How this stays true
 

@@ -820,8 +820,15 @@ export function parsePlanSignals(text: string): PlanSignals {
   // several are disclosed, and whatever is used carries its basis so the report
   // can say "GMV growth" when that is what it is.
   const GROWTH_PATTERNS = [
-    String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
+    String.raw`(?:grow(?:ing|th|s|n)?|grew|rose|climbed|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`,
     String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`,
+    // Growth written as a NOUN with the figure in front of it — "a 31.6%
+    // increase over 2024", which is how TSMC states its own growth. Every
+    // other pattern here is anchored on a verb, so this shape read as nothing.
+    // NOT_ANOTHER_METRIC keeps it from crossing into a neighbouring figure,
+    // and "decline" is deliberately absent: a fall is handled by the decline
+    // parser, which knows to make it negative.
+    String.raw`${NUM}\s*%\s*${PERIOD_WORD}?\s*(?:increase|growth|rise|gain|uplift)\b${NOT_ANOTHER_METRIC}`,
     String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`,
   ];
   const BASIS_NOUNS: Array<[GrowthBasis, RegExp]> = [
@@ -865,7 +872,13 @@ export function parsePlanSignals(text: string): PlanSignals {
     for (const pat of GROWTH_PATTERNS) {
       const re = new RegExp(pat, "gi");
       for (let m = re.exec(t); m; m = re.exec(t)) {
-        found.push({ m: m as unknown as RegExpMatchArray, basis: basisFor(m.index) });
+        // Filter here, not after. A percentage belonging to a level metric used
+        // to be collected, stop the ordered loop on `found.length`, and then be
+        // discarded — so a sentence naming a margin hid the growth stated in
+        // the sentence beside it.
+        if (!LEVEL_METRIC_NEAR(t, m.index, m[0].length)) {
+          found.push({ m: m as unknown as RegExpMatchArray, basis: basisFor(m.index) });
+        }
         if (m.index === re.lastIndex) re.lastIndex++;
       }
       if (found.length) break; // patterns stay ordered by confidence, as before
@@ -902,7 +915,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // recorded 120% growth, which would score a flat company as tripling. The
   // figure belongs to the metric named in its own clause — and that metric has
   // already read it correctly.
-  if (growth && LEVEL_METRIC_NEAR(t, growth.index ?? 0, growth[0].length)) growth = null;
+  if (growth && LEVEL_METRIC_NEAR(t, growth.index ?? 0, growth[0].length)) growth = null; // also covers the decline path
   if (growth) {
     const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));

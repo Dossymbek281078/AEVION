@@ -64,6 +64,10 @@ const dissent = {
   numericConflicts: [{ context: "стоимость прогона", values: [], spread: 21 }],
   outlier: { agentId: "skeptic", distance: 0.7 },
   hedges: [{ agentId: "practic", kind: "hedged", note: "не уверен" }],
+  checks: [
+    { kind: "number", text: "Сверить число с источником — analyst: 40 против skeptic: 300.", agents: ["analyst", "skeptic"], weight: 3 },
+    { kind: "outlier", text: "Прочитать первым ответ агента skeptic.", agents: ["skeptic"], weight: 1 },
+  ],
 };
 
 const base = {
@@ -97,6 +101,15 @@ ok("ответы хранятся хешами, не текстом",
 ok("у не ответившего хеша нет", r.panel.find((p) => p.agentId === "practic")?.replyHash === null);
 ok("канонизация указана", r.canonicalization === "RFC8785", r.canonicalization);
 
+// Список «что проверить» — то, по чему человек ДЕЙСТВУЕТ. Не покрыть его чеком
+// значило бы оставить единственное место, где совет можно подменить незаметно.
+ok("список попал в чек", r.dissent.checks.length === 2, JSON.stringify(r.dissent.checks));
+ok("порядок списка сохранён", r.dissent.checks[0].kind === "number" && r.dissent.checks[1].kind === "outlier");
+ok("вес перенесён", r.dissent.checks[0].weight === 3);
+ok("совет хранится хешем, а не текстом",
+  r.dissent.checks.every((c) => /^[0-9a-f]{64}$/.test(c.textHash)) && !JSON.stringify(r).includes("Сверить число"),
+  "текст совета не должен попадать в чек");
+
 /* ── 2. Воспроизводимость ───────────────────────────────────────────────── */
 
 const again = m.buildReceipt(base);
@@ -120,6 +133,28 @@ ok("подменённый ответ меняет хеш", (await m.signReceipt
 
 const tamperedVerdict = m.buildReceipt({ ...base, dissent: { ...dissent, verdict: "consensus" } });
 ok("подменённый вердикт меняет хеш", (await m.signReceipt(tamperedVerdict)).hash !== s1.hash);
+
+// Главное свойство: подменённый совет обязан ломать хеш. Иначе чек покрывает
+// всё, кроме той части, ради которой его читают.
+const tamperedCheck = m.buildReceipt({
+  ...base,
+  dissent: {
+    ...dissent,
+    checks: [
+      { ...dissent.checks[0], text: "Ничего проверять не нужно, всё сходится." },
+      dissent.checks[1],
+    ],
+  },
+});
+ok("подменённый совет меняет хеш", (await m.signReceipt(tamperedCheck)).hash !== s1.hash);
+
+// И перестановка тоже: порядок здесь несёт смысл — сверху то, что проверяется
+// за минуту. Поменяв порядок местами, можно увести человека от главного.
+const reordered = m.buildReceipt({
+  ...base,
+  dissent: { ...dissent, checks: [dissent.checks[1], dissent.checks[0]] },
+});
+ok("перестановка советов меняет хеш", (await m.signReceipt(reordered)).hash !== s1.hash);
 
 ok("verifyReceiptHash подтверждает целый чек", m.verifyReceiptHash(r, s1.hash) === true);
 ok("verifyReceiptHash ловит подмену", m.verifyReceiptHash(tamperedPrompt, s1.hash) === false);

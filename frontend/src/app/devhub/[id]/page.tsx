@@ -3277,10 +3277,31 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           {/* AI Panel — bottom 40% */}
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
-            <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
+            {/* A real tab strip: these were plain buttons, so a screen reader
+                announced nine unrelated controls instead of a set of tabs, and
+                arrow keys did nothing. */}
+            <div role="tablist" aria-label="Панели DevHub" style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
+              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab, idx, all) => (
                 <button
                   key={tab}
+                  role="tab"
+                  id={`devhub-tab-${tab}`}
+                  aria-selected={activeTab === tab}
+                  aria-controls="devhub-tabpanel"
+                  tabIndex={activeTab === tab ? 0 : -1}
+                  onKeyDown={(e) => {
+                    // Arrow keys move between tabs; Home/End jump to the ends.
+                    const next =
+                      e.key === "ArrowRight" ? all[(idx + 1) % all.length]
+                      : e.key === "ArrowLeft" ? all[(idx - 1 + all.length) % all.length]
+                      : e.key === "Home" ? all[0]
+                      : e.key === "End" ? all[all.length - 1]
+                      : null;
+                    if (!next) return;
+                    e.preventDefault();
+                    setActiveTab(next);
+                    document.getElementById(`devhub-tab-${next}`)?.focus();
+                  }}
                   onClick={() => setActiveTab(tab)}
                   style={{
                     padding: "10px 14px", border: "none", background: "none", cursor: "pointer",
@@ -3300,7 +3321,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               ))}
             </div>
 
-            <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+            <div
+              id="devhub-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`devhub-tab-${activeTab}`}
+              style={{ flex: 1, overflow: "auto", padding: 16 }}
+            >
               {/* AI Chat Tab */}
               {activeTab === "chat" && (
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>

@@ -274,6 +274,22 @@ async function twitchChannelStats(login: string): Promise<{
 
 // ─── Gumroad helpers ──────────────────────────────────────────────────────
 
+/** Метки каналов, которые ставит `/go` (см. CHANNELS в frontend/src/lib/products.ts).
+ *  Список продублирован намеренно: фронт и бэкенд деплоятся раздельно, импорт через
+ *  границу пакетов здесь не заведён. Расходиться им нечем — это конечный список
+ *  из восьми строк, и любая незнакомая метка просто становится «без метки». */
+const KNOWN_CHANNELS = new Set([
+  "instagram", "tiktok", "threads", "youtube", "telegram", "facebook", "x", "qr-code",
+]);
+
+/** Сверяет метку из адреса платёжной страницы со списком. Всё чужое → null,
+ *  то есть продажа попадёт в «unattributed», а не создаст выдуманный источник. */
+function knownChannel(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  return KNOWN_CHANNELS.has(v) ? v : null;
+}
+
 interface GumroadSale {
   id?: string;
   /** Произвольные query-параметры со страницы оплаты. Сюда приезжает метка
@@ -775,7 +791,13 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),
     // null = продажа пришла без метки: либо до введения атрибуции, либо человек
     // попал на товар не через /go и /shop (прямая ссылка, поиск Gumroad).
-    channel: s.url_params?.channel ?? null,
+    //
+    // Метку СВЕРЯЕМ со списком, а не принимаем как есть: `url_params` — это то,
+    // что стояло в адресе платёжной страницы, то есть внешний ввод. Достаточно
+    // открыть товар с `?channel=что-угодно`, и в сводку «какой канал окупается»
+    // попадёт выдуманный источник. Белый список на фронте (`CHANNELS` в
+    // lib/products.ts) защищает только НАШИ ссылки; чужую он не видит.
+    channel: knownChannel(s.url_params?.channel),
     date: s.created_at ?? null,
   }));
 

@@ -151,6 +151,16 @@ vacanciesRouter.get("/", async (req, res) => {
       const v = vEnum(req.query.projectStatus, "projectStatus", PROJECT_STATUSES);
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`p."status" = $${params.length}`);
+    } else {
+      // Вакансия завершённого проекта — тоже мёртвый товар на витрине, даже
+      // если сама она осталась OPEN. Фид проектов скрывает DONE с #661, и без
+      // этой строки вакансия ведёт на проект, которого на витрине нет.
+      //
+      // Сегодня незаметно только по случайности: единственный DONE-проект на
+      // проде (6df11961) держит закрытую вакансию, и её уберёт фильтр по
+      // статусу вакансии выше. Стоит владельцу закрыть проект, не закрывая
+      // роли, — и соискателю предложат работу по завершённому проекту.
+      where.push(`p."status" <> 'DONE'`);
     }
     if (typeof req.query.q === "string" && req.query.q.trim()) {
       params.push(`%${req.query.q.trim()}%`);

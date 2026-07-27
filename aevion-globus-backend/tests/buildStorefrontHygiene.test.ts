@@ -48,6 +48,17 @@ describe("публичный фид вакансий отдаёт только O
     expect(feed).not.toMatch(/v\."status"\s*<>\s*'ARCHIVED'/);
   });
 
+  it("вакансии завершённых проектов тоже скрыты", () => {
+    // Иначе роль ведёт на проект, которого на витрине нет: фид проектов
+    // скрывает DONE с #661. Сегодня это незаметно по случайности —
+    // единственный DONE-проект держит закрытую вакансию.
+    expect(feed).toMatch(/p\."status"\s*<>\s*'DONE'/);
+  });
+
+  it("явный ?projectStatus= по-прежнему поддержан", () => {
+    expect(feed).toMatch(/req\.query\.projectStatus/);
+  });
+
   it("явный ?status= по-прежнему поддержан — рекрутёр видит свои закрытые", () => {
     expect(feed).toMatch(/req\.query\.status/);
     expect(feed).toMatch(/v\."status" = \$\$?\{params\.length\}|v\."status" = \$/);

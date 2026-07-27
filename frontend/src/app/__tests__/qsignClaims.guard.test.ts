@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Production answers `{"qsign":{"mode":"preview","reason":"seed_unset"}}` until the
@@ -14,7 +15,11 @@ import { join } from "node:path";
  * catch it after deploy.
  */
 
-const APP_DIR = join(process.cwd(), "src", "app");
+// Путь от самого файла теста, а не от process.cwd(): при полном прогоне
+// достаточно одного теста, сменившего рабочую папку в том же воркере, чтобы
+// сторож начал сканировать не тот каталог. Это уже случилось — он упал в
+// общем прогоне и был зелёным в одиночку.
+const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Phrases that assert the signature is live in production, not merely implemented. */
 const FORBIDDEN: { pattern: RegExp; why: string }[] = [

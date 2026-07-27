@@ -84,6 +84,12 @@ const SMOKES = [
   // подмену подписи и нулевую подпись нужной длины. Без этих трёх случаев
   // проверку прошла бы и заглушка `return true`.
   { name: "qsign-real-signature", script: "qsign-real-signature-smoke.js", readOnly: true, offline: true },
+  // Сверяет ИНВАРИАНТ между ручками денег: выручка на витрине обязана равняться
+  // сумме балансов каналов минус свои проверочные покупки. 27.07 своих было две
+  // на $158.99 — 89% брутто, и /pitch показывал их инвестору как выручку.
+  // Фильтр в computeLiveTotals чинит это только для тех каналов, что были в коде
+  // в тот день; новый канал мимо фильтра сломает именно равенство, а не функцию.
+  { name: "revenue-internal", script: "revenue-internal-consistency-smoke.js", readOnly: true },
   // Сверяет ПУБЛИЧНЫЕ УТВЕРЖДЕНИЯ на страницах с живым health. 26.07 нашлось,
   // что /acquire, /partner и /investor обещают «ML-DSA-65 in prod / GA /
   // Completed», пока health отвечал preview/seed_unset — и это прожило

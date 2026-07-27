@@ -781,6 +781,10 @@ revenueRouter.get("/gumroad/balance", async (_req, res) => {
   const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
   const grossUsd = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
   const feesUsd = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
+  // Здесь gross намеренно остаётся полным — он должен сходиться с кабинетом
+  // Gumroad. Свои проверочные покупки показываются рядом, чтобы дашборд мог
+  // сказать «из них свои», а сверка с провайдером не сломалась.
+  const internal = valid.filter((s) => isInternalPurchase(s.email));
 
   res.json({
     grossUsd,
@@ -789,6 +793,8 @@ revenueRouter.get("/gumroad/balance", async (_req, res) => {
     currency: "USD",
     saleCount: valid.length,
     refundedCount: sales.length - valid.length,
+    internalUsd: round2(internal.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0)),
+    internalCount: internal.length,
   });
 });
 
@@ -854,11 +860,16 @@ revenueRouter.get("/lemonsqueezy/balance", async (_req, res) => {
   if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
   const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
   const grossUsd = valid.reduce((s, o) => s + o.total / 100, 0);
+  // Как и у Gumroad: gross сходится с кабинетом провайдера, свои покупки —
+  // отдельной строкой. На 27.07.2026 весь LS-баланс это одна своя покупка.
+  const internal = valid.filter((o) => isInternalPurchase(o.email));
   res.json({
     grossUsd,
     currency: "USD",
     saleCount: valid.length,
     refundedCount: orders.length - valid.length,
+    internalUsd: round2(internal.reduce((sum, o) => sum + o.total / 100, 0)),
+    internalCount: internal.length,
     note: "LS забирает комиссию ~5%+pp; точный net — в Payouts LS",
   });
 });

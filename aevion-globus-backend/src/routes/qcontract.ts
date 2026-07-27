@@ -671,17 +671,40 @@ qcontractRouter.post("/view/:token", async (req, res) => {
   const ua = req.headers["user-agent"] ?? null;
   const signedAt = doc.require_signature && viewerEmail ? new Date().toISOString() : null;
 
+  // Прочтение ЗАНИМАЕТСЯ одним атомарным запросом, а не «проверили выше — увеличили
+  // здесь». Между SELECT и UPDATE стояла гонка: два одновременных запроса читали
+  // одинаковый view_count, оба проходили проверку isExpired и оба инкрементировали.
+  // Для продукта, чья главная функция — «сгорает после N прочтений», это означало,
+  // что документ с max_views=1 открывается сколько угодно раз, если запросы идут
+  // параллельно. Условие в WHERE выполняется самой базой под блокировкой строки,
+  // поэтому лишний читатель не получит строку и, значит, не получит содержимое.
+  const claim = await pool.query(
+    `UPDATE qcontract_documents
+        SET view_count = view_count + 1, updated_at = NOW()
+      WHERE id = $1
+        AND revoked_at IS NULL
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND (max_views IS NULL OR view_count < max_views)
+      RETURNING view_count`,
+    [doc.id],
+  );
+  if (claim.rowCount === 0) {
+    // Кто-то забрал последнее прочтение (или документ истёк) между проверкой и
+    // этим запросом. Содержимое НЕ отдаём — иначе гонка так и осталась бы лазейкой.
+    return res.status(410).json({ error: "document_expired", title: doc.title });
+  }
+
+  // Журнал просмотра пишем ТОЛЬКО после успешного занятия: раньше запись
+  // добавлялась до инкремента, и в аудите оставались просмотры, которых не было.
   await pool.query(
     `INSERT INTO qcontract_views (id, document_id, viewer_ip, viewer_ua, viewer_email, signed_at)
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [randomUUID(), doc.id, ip, ua, viewerEmail?.trim() ?? null, signedAt],
   );
-  await pool.query(
-    `UPDATE qcontract_documents SET view_count = view_count + 1, updated_at = NOW() WHERE id = $1`,
-    [doc.id],
-  );
 
-  const newCount = doc.view_count + 1;
+  // Счётчик берём из RETURNING, а не из doc.view_count + 1: последнее тоже
+  // устаревает под параллельной нагрузкой и показало бы читателю неверный номер.
+  const newCount = Number(claim.rows[0].view_count);
   const isLastView = doc.max_views != null && newCount >= doc.max_views;
 
   res.json({

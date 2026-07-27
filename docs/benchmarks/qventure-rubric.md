@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 688
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 697
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (688
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (697
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -999,13 +999,36 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    nothing, because `is` was missing from that metric's connector list while
    every other metric had it.
 
+40. **The deck veto knew fewer nouns than the parser, and a type error nobody
+   could see.** Sixth place the same knowledge was written twice. The veto
+   carried its own regexes — `/(?:arr|mrr|revenues?)/` against a list that also
+   knows net sales, revenue from operations and gross written premiums, and
+   `/(?:customers|users|subscribers)/` against nineteen customer nouns. So "we
+   plan to reach net sales of $10 million" was not seen as a metric stated as an
+   intention, the veto never fired, and a stated goal survived as a reported
+   figure. All ten metrics now read from `METRIC_NOUN_RE`, built from the
+   parser's own lists, and `ltvCacRatio` joins the veto it was missing from.
+
+   Two things fell out of doing it. `aim for` was not in the intention list —
+   only `aims to` — so "we aim for gross written premiums of $10 million" was a
+   result. And typechecking the change surfaced something the **2,141 passing
+   tests could not**: an earlier blanket edit in this session had appended an
+   argument to `detectRevenueRange`, `detectRevenueConflict`, four
+   `moneyRangeEnds` calls and four `toUsd` calls. JavaScript ignores extra
+   arguments; `tsc` does not, and CI runs `tsc`. Ten call sites, invisible to
+   every test, would have failed the merge gate.
+
+   Worth keeping as a rule: a green suite says nothing about types. The only
+   reason this was caught before the branch was pushed is that the compiler was
+   run deliberately, not because anything failed.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 688):
+`tests/qventureDisclosedCorpus.test.ts`, 697):
 
 | Guard | Floor | Measured today |
 |---|---|---|

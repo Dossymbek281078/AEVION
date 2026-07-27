@@ -11,7 +11,7 @@
 import { callProvider, pickConfiguredProvider, getProviders, type ChatMessage } from "../../services/qcoreai/providers";
 import { listSectors } from "./sectors";
 import { STAGES } from "./engine";
-import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText, type ChurnPeriod } from "./signals";
+import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText, METRIC_NOUN_RE, type ChurnPeriod } from "./signals";
 import { asRatePeriod, asGrowthPeriod } from "../metrics/periods";
 import { detectCurrencyFirst, toUsd, UNITS_PER_USD, type MoneyCurrency } from "../metrics/currency";
 
@@ -236,13 +236,25 @@ export async function extractDeckFields(text: string): Promise<DeckFields> {
       }
     }
 
+    // The metric regexes come from METRIC_NOUN_RE, built from the same noun
+    // lists the parser matches on. Written out here they were thinner:
+    // /(?:arr|mrr|revenues?)/ against a list that also knows net sales, revenue
+    // from operations and gross written premiums, and
+    // /(?:customers|users|subscribers)/ against nineteen customer nouns. So "we
+    // plan to reach net sales of $10 million" was not seen as a metric stated as
+    // an intention, the veto never fired, and a stated goal survived as a
+    // reported figure.
+    //
+    // ltvCacRatio was absent from this list entirely: checked for existence in
+    // the deck by the loop above and never vetoed. Seven checked, six vetoed.
     const INTENTION_VETO: Array<[keyof DeckFinancials, RegExp, number | null]> = [
-      ["arrUsd", /(?:arr|mrr|revenues?)/i, banded.revenueUsd],
-      ["grossMarginPct", /gross\s*margins?/i, banded.grossMarginPct],
-      ["churnPct", /churn/i, banded.churnPct],
-      ["customers", /(?:customers|users|subscribers)/i, banded.customers],
-      ["growthPct", /grow(?:th|ing)?/i, banded.growthPct],
-      ["bottomUpTamUsd", /(?:tam|addressable market)/i, banded.bottomUpTamUsd],
+      ["arrUsd", METRIC_NOUN_RE.revenue, banded.revenueUsd],
+      ["grossMarginPct", METRIC_NOUN_RE.grossMargin, banded.grossMarginPct],
+      ["churnPct", METRIC_NOUN_RE.churn, banded.churnPct],
+      ["customers", METRIC_NOUN_RE.customers, banded.customers],
+      ["growthPct", METRIC_NOUN_RE.growth, banded.growthPct],
+      ["bottomUpTamUsd", METRIC_NOUN_RE.tam, banded.bottomUpTamUsd],
+      ["ltvCacRatio", METRIC_NOUN_RE.ltvCac, banded.ltvCacRatio],
     ];
     for (const [field, metric, parsed] of INTENTION_VETO) {
       if (parsed === null && financials[field] !== null && metricStatedAsIntention(clean, metric)) {

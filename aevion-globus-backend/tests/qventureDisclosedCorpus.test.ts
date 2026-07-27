@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { CASES } from "../scripts/qventure-disclosed";
 import { analyze } from "../src/lib/qventure/engine";
-import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText } from "../src/lib/qventure/signals";
+import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText, METRIC_NOUN_RE } from "../src/lib/qventure/signals";
 import { PAIRS } from "../scripts/qventure-hardcases";
 import fs from "node:fs";
 import path from "node:path";
@@ -2455,5 +2455,38 @@ describe("every field refuses a target, not just the ones someone remembered", (
     expect(p("CAC of $400-600.").cacUsd).toBe(600);
     expect(p("LTV of $1,500-2,500.").ltvUsd).toBe(1500);
     expect(p("Payback of 9-12 months.").paybackMonths).toBe(12);
+  });
+});
+
+describe("the deck veto knows the nouns the parser knows", () => {
+  // Sixth place the same knowledge was written twice. The veto carried its own
+  // thinner regexes — /(?:arr|mrr|revenues?)/ against a list that also knows net
+  // sales, revenue from operations and gross written premiums, and
+  // /(?:customers|users|subscribers)/ against nineteen customer nouns.
+  test.each([
+    ["net sales", "We plan to reach net sales of $10 million next year.", "revenue"],
+    ["revenue from operations", "We expect revenue from operations of $10 million.", "revenue"],
+    ["gross written premiums", "We aim for gross written premiums of $10 million.", "revenue"],
+    ["merchants", "We plan to reach 5,000 merchants.", "customers"],
+    ["memberships", "We expect 5,000 memberships by year end.", "customers"],
+    ["MAU", "We are targeting 5 million MAU.", "customers"],
+  ])("an intention stated with %s is vetoed", (_l, text, key) => {
+    expect(metricStatedAsIntention(text, METRIC_NOUN_RE[key as keyof typeof METRIC_NOUN_RE])).toBe(true);
+  });
+
+  test.each([
+    ["revenue", "Our revenue is $10 million.", "revenue"],
+    ["customers", "We have 5,000 customers.", "customers"],
+  ])("a stated result is not vetoed: %s", (_l, text, key) => {
+    expect(metricStatedAsIntention(text, METRIC_NOUN_RE[key as keyof typeof METRIC_NOUN_RE])).toBe(false);
+  });
+
+  test("every metric in the dictionary compiles and matches its own name", () => {
+    // A guard that iterates an empty object passes forever.
+    const keys = Object.keys(METRIC_NOUN_RE);
+    expect(keys.length).toBeGreaterThan(8);
+    expect(METRIC_NOUN_RE.revenue.test("net sales")).toBe(true);
+    expect(METRIC_NOUN_RE.customers.test("policies in force")).toBe(true);
+    expect(METRIC_NOUN_RE.gmv.test("gross transaction value")).toBe(true);
   });
 });

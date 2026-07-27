@@ -290,7 +290,7 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  * drift apart.
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
-const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to\b|a\b|an\b|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to\b|a\b|an\b|[0-9$£€]))|aims? (?:to|for)|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
 /**
  * A third-party subject: whose figure this is.
  *
@@ -467,6 +467,36 @@ const NUM = NUMBER_PATTERN;
  * two different revenue figures in the ordinary phrasing raised nothing.
  */
 const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
+const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
+const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
+const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
+const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
+
+/**
+ * One regular expression per metric, built from the SAME noun lists the parser
+ * matches on.
+ *
+ * The deck path had its own, thinner copies — /(?:arr|mrr|revenues?)/ against a
+ * list that also knows net sales, revenue from operations and gross written
+ * premiums, and /(?:customers|users|subscribers)/ against a list of nineteen
+ * nouns. So "we plan to reach net sales of $10 million" was not recognised as a
+ * metric being stated as an intention, the veto never fired, and the model's
+ * figure for a plan's stated goal was kept.
+ *
+ * Exported so there is one answer to "what words mean this metric".
+ */
+export const METRIC_NOUN_RE = {
+  revenue: new RegExp(`(?:${REV_NOUN})`, "i"),
+  customers: new RegExp(`(?:${CUST_NOUN})`, "i"),
+  gmv: new RegExp(`(?:${GMV_NOUN})`, "i"),
+  takeRate: new RegExp(`(?:${TAKE_NOUN})`, "i"),
+  retention: new RegExp(`(?:${RET_NAME})`, "i"),
+  grossMargin: /gross\s*margins?/i,
+  churn: /churn/i,
+  growth: /grow(?:th|ing)?/i,
+  tam: /(?:tam|total addressable market|addressable market)/i,
+  ltvCac: /ltv[:/ ]*cac/i,
+} as const;
 /**
  * Forward-looking INTENT, not a noun. A plan that says it TARGETS $20M ARR
  * next year has not earned $20M, and the revenue parser read it as if it had —
@@ -653,7 +683,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const planCurrency = detectCurrencyFirst(t);
   s.currency = planCurrency;
 
-  detectRevenueRange(t, s, planCurrency, s);
+  detectRevenueRange(t, s, planCurrency);
 
   // ── Revenue: "$2M ARR" / "$500k MRR" / "$1.2m in revenue" / "arr of $3m" ──
   // "Net revenues of $87.9M" — the plural is how filings write it, and the
@@ -743,7 +773,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     s.mentionsRevenueNoNumber = true;
   }
 
-  detectRevenueConflict(t, s, planCurrency, s);
+  detectRevenueConflict(t, s, planCurrency);
 
   // ── Growth: "growing 20% MoM" / "30% month-over-month growth" / "up 15% MoM" ──
   // A bare "<n>% monthly" is NOT growth: "20% monthly churn" used to be read as
@@ -965,7 +995,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const LTV_NAME = String.raw`(?:ltv|lifetime values?|customer lifetime values?)`;
   const cacRange = firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cacRange) {
-    const ends = moneyRangeEnds(t, cacRange, planCurrency, s);
+    const ends = moneyRangeEnds(t, cacRange, planCurrency);
     if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
   }
   const cac = s.cacUsd !== null ? null
@@ -977,7 +1007,7 @@ export function parsePlanSignals(text: string): PlanSignals {
 
   const ltvRange = firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
-    const ends = moneyRangeEnds(t, ltvRange, planCurrency, s);
+    const ends = moneyRangeEnds(t, ltvRange, planCurrency);
     if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
   }
   const ltv = s.ltvUsd !== null ? null
@@ -1067,7 +1097,6 @@ export function parsePlanSignals(text: string): PlanSignals {
   // "net dollar expansion rate", "dollar-based net retention rate" and "NDR" are
   // the same disclosure, and the word "rate" sits between the name and the
   // figure often enough that omitting it dropped the standard S-1 phrasing.
-  const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
   // A band, read at the low end: less retention is the worse reading, the same
   // rule the revenue and margin bands already follow. Without this the whole
   // disclosure was dropped, so a plan stating 110–130% scored as if it had said
@@ -1096,7 +1125,6 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the newer ones — won, baht, dong, peso — is read as a customer count.
   const NOT_MONEY = String.raw`(?<![$€£₽₸¥₹₪₺₩฿₫₱])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
-  const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
   // "12,000-15,000 customers" read 15,000 — the flattering end, against the
   // rule every other band here follows. Fewer customers is the worse reading.
   const custRange = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
@@ -1149,8 +1177,8 @@ export function parsePlanSignals(text: string): PlanSignals {
       const a = parseMoney(nums[0], units[0]);
       const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
       if (a && b) {
-        const low = toUsd(Math.min(a, b), planCurrency, s);
-        const high = toUsd(Math.max(a, b), planCurrency, s);
+        const low = toUsd(Math.min(a, b), planCurrency);
+        const high = toUsd(Math.max(a, b), planCurrency);
         s.bottomUpTamUsd = low;
         const fmt = (n: number) => (n >= 1e9 ? `$${Math.round((n / 1e9) * 10) / 10}B` : `$${Math.round(n / 1e6)}M`);
         s.parseNotes.push(`Bottom-up TAM was disclosed as a range (${fmt(low)}–${fmt(high)}); the score uses the low end.`);
@@ -1213,8 +1241,8 @@ function detectRevenueRange(t: string, s: PlanSignals, planCurrency: MoneyCurren
   const a = parseMoney(nums[0], units[0]);
   const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
   if (!a || !b) return;
-  const low = toUsd(Math.min(a, b), planCurrency, s);
-  const high = toUsd(Math.max(a, b), planCurrency, s);
+  const low = toUsd(Math.min(a, b), planCurrency);
+  const high = toUsd(Math.max(a, b), planCurrency);
   const isMrr = /mrr/i.test(m[0]);
   s.revenueUsd = isMrr ? low * 12 : low;
   s.revenueBasis = isMrr ? "MRR" : /arr/i.test(m[0]) ? "ARR" : "revenue";
@@ -1309,14 +1337,13 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // marketplace calls the same number outside US filings — Deliveroo's
   // prospectus leads with it, and the engine read it as no marketplace
   // disclosure at all.
-  const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
   // A band, before the single-figure pattern: "GMV of $100-150M" used to match
   // the single pattern on "$100" with the "M" still attached to 150, so the
   // engine recorded a GMV of one hundred dollars. A magnitude error of six
   // orders, silent, on the headline number of a marketplace plan.
   const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (gmvRange) {
-    const ends = moneyRangeEnds(t, gmvRange, s.currency, s);
+    const ends = moneyRangeEnds(t, gmvRange, s.currency);
     if (ends) {
       s.gmvUsd = ends.low;
       s.parseNotes.push(`GMV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);
@@ -1333,7 +1360,6 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
   if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency, s); if (v && v > 0) s.gmvUsd = v; }
 
-  const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
   const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   const takeBand = percentBandLowEnd(takeRange, s, "Take rate", 100);
   if (takeBand !== null) s.takeRatePct = takeBand;
@@ -1358,7 +1384,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // backlog was read as twenty dollars.
   const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (backlogRange && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
-    const ends = moneyRangeEnds(t, backlogRange, s.currency, s);
+    const ends = moneyRangeEnds(t, backlogRange, s.currency);
     if (ends) {
       s.contractedRevenueUsd = ends.low;
       s.parseNotes.push(`Contracted backlog was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);

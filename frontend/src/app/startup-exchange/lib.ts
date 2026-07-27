@@ -187,7 +187,7 @@ const ERROR_TEXT: Record<string, string> = {
   reason_invalid: "Выберите причину из списка.",
 };
 
-function humanError(code: string | undefined, status: number): string {
+export function humanError(code: string | undefined, status: number): string {
   if (code && ERROR_TEXT[code]) return ERROR_TEXT[code];
   if (code && !/^[a-z0-9_]+$/.test(code)) return code; // сервер уже прислал текст
   return `Ошибка ${status}. Попробуйте ещё раз.`;

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   store,
@@ -115,17 +115,20 @@ export async function POST(req: NextRequest) {
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const raw = await req.text();
-  const idem = checkIdempotency(req, raw);
-  if (idem.hit) {
+  const idem = beginIdempotency(req, raw);
+  if (idem.status === "replay") {
     return attachRateHeaders(
       withCors(
-        new Response(idem.cachedBody, {
+        new Response(idem.body, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
         })
       ),
       gate.rateHeaders
     );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
   }
 
   let body: {
@@ -216,7 +219,7 @@ export async function POST(req: NextRequest) {
   void fanoutDisputeWebhook("dispute.created", dispute);
 
   const responseBody = JSON.stringify(dispute);
-  idem.cleanup?.();
+  idem.commit(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

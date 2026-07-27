@@ -4,7 +4,7 @@ import {
   badRequest,
   parseAmount,
   parseLimit,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   getOrigin,
@@ -49,6 +49,24 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй объект.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
+
   const { currency, title } = body;
   const amount = parseAmount(body.amount);
   if (typeof amount === "string") return withCors(badRequest(amount));
@@ -92,20 +110,8 @@ export async function POST(req: NextRequest) {
   };
 
   const responseBody = JSON.stringify(link);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.links.set(id, link);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "link.created", id, {
     amount: link.amount,
     currency: link.currency,

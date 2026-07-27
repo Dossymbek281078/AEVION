@@ -74,7 +74,7 @@ type Store = {
   subscriptions: Map<string, ApiSubscription>;
   webhooks: Map<string, ApiWebhook>;
   settlements: Map<string, ApiSettlement>;
-  idempotency: Map<string, { at: number; body: string }>;
+  idempotency: Map<string, { at: number; body: string | null; fingerprint: string; done: boolean }>;
 };
 
 const globalAny = globalThis as unknown as { __aevionPayStore?: Store };
@@ -313,19 +313,69 @@ export function getOrigin(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
-export function checkIdempotency(req: NextRequest, body: string):
-  | { hit: true; cachedBody: string }
-  | { hit: false; cleanup: () => void } {
+/**
+ * Идемпотентность по заголовку `Idempotency-Key`.
+ *
+ * Прежняя редакция давала три разных неверных исхода, и все — тихо:
+ *
+ * 1. **Повтор не защищал от повтора.** Запись в хранилище делалась в самом
+ *    конце (`cleanup()`), поэтому два ОДНОВРЕМЕННЫХ запроса с одним ключом оба
+ *    не находили записи и оба выполняли операцию целиком. Именно от этого
+ *    заголовок и существует: сеть моргнула, клиент повторил — списать должно
+ *    один раз.
+ * 2. **Возврат и спор кэшировали ТЕЛО ЗАПРОСА, а не ответа** — вызов был
+ *    `checkIdempotency(req, raw)`, где `raw = await req.text()`. Повторный
+ *    запрос получал обратно собственное тело с кодом 200 и читал его как
+ *    созданный ресурс: вместо объекта возврата приходило
+ *    `{"link_id":"pl_x","amount":50}`.
+ * 3. **Один ключ на разные тела** молча отдавал старый ответ: повторив ключ с
+ *    суммой 500 вместо 5, клиент получал успешный ответ на пятёрку и считал,
+ *    что вернул пятьсот.
+ *
+ * Теперь ключ резервируется СРАЗУ (до работы), вместе с отпечатком тела
+ * запроса; ответ дописывается в `commit()`. Параллельный второй запрос и
+ * несовпадение отпечатка — честный 409, а не тихий неверный успех.
+ */
+export type IdempotencyOutcome =
+  | { status: "replay"; body: string }
+  | { status: "conflict"; message: string }
+  | { status: "fresh"; commit: (responseBody: string) => void };
+
+export function beginIdempotency(req: NextRequest, requestBody: string): IdempotencyOutcome {
   const key = req.headers.get("idempotency-key");
   if (!key) {
-    return { hit: false, cleanup: () => undefined };
+    // Без заголовка гарантии нет и не обещается — работаем как обычно.
+    return { status: "fresh", commit: () => undefined };
   }
+
+  const fingerprint = createHmac("sha256", "idem").update(requestBody).digest("hex");
   const prior = store.idempotency.get(key);
-  if (prior) return { hit: true, cachedBody: prior.body };
+
+  if (prior) {
+    if (prior.fingerprint !== fingerprint) {
+      return {
+        status: "conflict",
+        message:
+          "This Idempotency-Key was already used with a different request body.",
+      };
+    }
+    if (!prior.done || prior.body === null) {
+      return {
+        status: "conflict",
+        message: "A request with this Idempotency-Key is still in flight; retry shortly.",
+      };
+    }
+    return { status: "replay", body: prior.body };
+  }
+
+  // Резервируем ключ ДО работы — иначе одновременный второй запрос тоже сочтёт
+  // себя первым. Это и есть весь смысл заголовка.
+  store.idempotency.set(key, { at: Date.now(), body: null, fingerprint, done: false });
+
   return {
-    hit: false,
-    cleanup: () => {
-      store.idempotency.set(key, { at: Date.now(), body });
+    status: "fresh",
+    commit: (responseBody: string) => {
+      store.idempotency.set(key, { at: Date.now(), body: responseBody, fingerprint, done: true });
       if (store.idempotency.size > 5000) {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         for (const [k, v] of store.idempotency.entries()) {

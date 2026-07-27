@@ -3,7 +3,7 @@ import {
   attachRateHeaders,
   badRequest,
   webhookUrlError,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   genSecret,
@@ -46,6 +46,24 @@ export async function POST(req: NextRequest) {
   const body = await readJson<{ url?: unknown; events?: unknown }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй объект.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
+
   const urlError = webhookUrlError(body.url);
   if (urlError) return withCors(badRequest(urlError));
   if (!Array.isArray(body.events) || body.events.length === 0) {
@@ -70,20 +88,8 @@ export async function POST(req: NextRequest) {
     created: Math.floor(Date.now() / 1000),
   };
   const responseBody = JSON.stringify(wh);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.webhooks.set(id, wh);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "webhook.registered", id, {
     url: wh.url,
     events: wh.events,

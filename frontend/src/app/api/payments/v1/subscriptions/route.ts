@@ -3,7 +3,7 @@ import {
   attachRateHeaders,
   badRequest,
   parseAmount,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   readJson,
@@ -48,6 +48,24 @@ export async function POST(req: NextRequest) {
     trial_days?: unknown;
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
+
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй объект.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
 
   if (typeof body.customer !== "string" || !body.customer.trim()) {
     return withCors(badRequest("customer is required."));
@@ -95,20 +113,8 @@ export async function POST(req: NextRequest) {
   };
 
   const responseBody = JSON.stringify(sub);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.subscriptions.set(id, sub);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "subscription.created", id, {
     customer: sub.customer,
     plan_name: sub.plan_name,

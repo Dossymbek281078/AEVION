@@ -54,7 +54,8 @@ describe("возврат средств: два одновременных за�
   it("сумма всех возвратов не превышает сумму ссылки", async () => {
     const [a, b] = await Promise.all([refund(req(100)), refund(req(100))]);
 
-    const statuses = [a.status, b.status].sort();
+    // числовой компаратор: .sort() по умолчанию сравнивает строки
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
     expect(statuses[0]).toBe(200); // один прошёл
     expect(statuses[1]).toBe(409); // второй честно отбит
 

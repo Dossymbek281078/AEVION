@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 165
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 176
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -205,7 +205,15 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
 
    When a plan discloses the same metric for more than one period, **the later
    period is now what gets scored**, and the choice is written into the
-   assumptions the reader sees rather than made silently. Figures nothing dates
+   assumptions the reader sees rather than made silently.
+
+   The revenue fix turned out to be one field of eight. `firstMatch` was used by
+   every metric, so "churn of 8% in 2019, churn of 3% in 2020" scored 8%, and
+   margin, retention, customers, GMV, take rate, payback and backlog all did the
+   same. The direction was arbitrary — for churn and payback the stale figure was
+   the harsher one, for the rest the kinder — which is the tell that it was never
+   a judgement. All eight now share one `latestMatch`, identical to `firstMatch`
+   unless two matches carry different years. Figures nothing dates
    keep the old ordering, so ordinary plans are unaffected, and a prior-year
    comparison ("up 97% from $100.8M in 2017") was never a candidate — it is
    context for the growth rate, not a competing disclosure. Disabling the rule
@@ -217,7 +225,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 165):
+`tests/qventureDisclosedCorpus.test.ts`, 176):
 
 | Guard | Floor | Measured today |
 |---|---|---|

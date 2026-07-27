@@ -617,3 +617,47 @@ describe("when a plan discloses two periods, the later one is the company", () =
     expect(parsePlanSignals("Revenue of $10M.").parseNotes.length).toBe(0);
   });
 });
+
+describe("every metric reads its latest disclosed period, not its first typed", () => {
+  /**
+   * The revenue fix was one field. `firstMatch` was used by all of them, so
+   * "churn of 8% in 2019, churn of 3% in 2020" scored 8% — a figure the same
+   * document supersedes two sentences later. All eight metric fields did this.
+   * Direction was arbitrary: for churn and payback the stale figure was the
+   * harsher one, for margin, retention, customers, GMV and backlog the kinder.
+   * Either way it is not what the plan says about itself today.
+   */
+  const cases: Array<[string, string, number]> = [
+    ["Churn of 8% monthly in 2019. Churn of 3% monthly in 2020.", "churnPct", 3],
+    ["Gross margin of 40% in 2019. Gross margin of 62% in 2020.", "grossMarginPct", 62],
+    ["Net revenue retention of 110% in 2019. Net revenue retention of 146% in 2020.", "retentionPct", 146],
+    ["12,000 customers in 2019. 30,000 customers in 2020.", "customers", 30_000],
+    ["GMV of $100M in 2019. GMV of $400M in 2020.", "gmvUsd", 400_000_000],
+    ["Payback of 26 months in 2019. Payback of 14 months in 2020.", "paybackMonths", 14],
+    ["Take rate of 9% in 2019. Take rate of 14% in 2020.", "takeRatePct", 14],
+    ["Contracted backlog of $20M in 2019. Contracted backlog of $60M in 2020.", "contractedRevenueUsd", 60_000_000],
+  ];
+  for (const [text, field, expected] of cases) {
+    test(`${field} takes the later period`, () => {
+      expect((parsePlanSignals(text) as unknown as Record<string, number | null>)[field]).toBe(expected);
+    });
+  }
+
+  // Identical to the previous behaviour unless two matches carry different
+  // years, so the conservative-end rules for ranges and the plain single
+  // disclosures must be untouched.
+  test("ranges still take their conservative end", () => {
+    expect(parsePlanSignals("2-3% monthly churn.").churnPct).toBe(3);
+    expect(parsePlanSignals("9-12 months payback.").paybackMonths).toBe(12);
+    expect(parsePlanSignals("70-80% gross margin.").grossMarginPct).toBe(70);
+  });
+  test("single disclosures are unchanged", () => {
+    expect(parsePlanSignals("3% annual churn.").churnPct).toBe(3);
+    expect(parsePlanSignals("GMV of $180M annualized with a 14% take rate.").gmvUsd).toBe(180_000_000);
+    expect(parsePlanSignals("Gross margin of -45%.").grossMarginPct).toBe(-45);
+  });
+  test("the reader is told when a later period was chosen", () => {
+    const s = parsePlanSignals("Churn of 8% monthly in 2019. Churn of 3% monthly in 2020.");
+    expect(s.parseNotes.some((n) => /latest \(2020\)/i.test(n))).toBe(true);
+  });
+});

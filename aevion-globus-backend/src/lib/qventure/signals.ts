@@ -244,6 +244,41 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
   return re.exec(text);
 }
 
+/** The year a match's own clause is about, or null. Bounded to the clause so a
+ *  date from a neighbouring sentence cannot date this figure. */
+function clauseYearAt(text: string, at: number, len: number): number | null {
+  const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
+  const afterDot = text.indexOf(".", at + len);
+  const to = afterDot === -1 ? text.length : afterDot;
+  const years = [...text.slice(from, to).matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
+  return years.length ? Math.max(...years) : null;
+}
+
+/**
+ * Like `firstMatch`, except that when the plan states the same metric for more
+ * than one DATED period it returns the latest rather than the first typed.
+ *
+ * Every field used `firstMatch`, so "churn of 8% in 2019, churn of 3% in 2020"
+ * scored 8% — a figure the same document supersedes two sentences later. It is
+ * an accident of where the matcher stops, not a reading, and it ran through all
+ * eight metric fields. Identical to `firstMatch` unless two or more matches
+ * carry different years, so undated plans are untouched.
+ */
+function latestMatch(text: string, re: RegExp, s: PlanSignals, label: string): RegExpMatchArray | null {
+  const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+  const found = [...text.matchAll(global)].map((m) => ({ m: m as RegExpMatchArray, year: clauseYearAt(text, m.index ?? 0, m[0].length) }));
+  if (!found.length) return null;
+  const dated = found.filter((f) => f.year !== null);
+  if (dated.length >= 2) {
+    const latest = dated.reduce((a, b) => ((b.year as number) > (a.year as number) ? b : a));
+    if (latest.m !== found[0].m) {
+      s.parseNotes.push(`More than one period was disclosed for ${label}; the score uses the latest (${latest.year}).`);
+      return latest.m;
+    }
+  }
+  return found[0].m;
+}
+
 // Number + money-unit patterns come from the platform metric primitives, which
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
 const NUM = NUMBER_PATTERN;
@@ -511,9 +546,9 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the opposite direction.
   const NEG = String.raw`(-|−|minus\s+|negative\s+)?`;
   const NOT_RANGE = String.raw`(?<![\d.,])`;
-  const gm = firstMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"));
+  const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".
@@ -605,8 +640,8 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const pb = s.paybackMonths !== null ? null
-    : firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?months?`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"));
+    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?months?`, "i"), s, "payback")
+    || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"), s, "payback");
   if (pb) { const v = parseLocaleNumber(pb[1]); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
 
   // ── Churn / retention / NRR ──
@@ -634,8 +669,8 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const churn = s.churnPct !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
+    : latestMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"), s, "churn")
+    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"), s, "churn");
   if (churn) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
@@ -652,8 +687,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the same disclosure, and the word "rate" sits between the name and the
   // figure often enough that omitting it dropped the standard S-1 phrasing.
   const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
-  const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"));
+  const ret = latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
+    || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
   if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
@@ -670,7 +705,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const NOT_MONEY = String.raw`(?<![$€£₽₸¥])`;
   const CUST_QUALIFIER = String.raw`(?:(?!on\s|of\s|in\s|to\s|for\s|from\s|with\s|at\s|by\s|per\s)[a-z]+\s+){0,3}`;
   const CUST_NOUN = String.raw`customers|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
-  const cust = firstMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"));
+  const cust = latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count");
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
@@ -824,11 +859,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // prospectus leads with it, and the engine read it as no marketplace
   // disclosure at all.
   const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
-  const gmv = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"));
+  const gmv = latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+    || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
   if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
-  const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"))
+  const take = latestMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
   if (take) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 
@@ -844,8 +879,8 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // businesses show demand. It is weaker than realised revenue and the engine
   // credits it as such — but reading it as "no traction" was plainly wrong.
   const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
-  const backlog = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
-    || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"));
+  const backlog = latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
+    || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);
     if (v && v > 0) s.contractedRevenueUsd = v;

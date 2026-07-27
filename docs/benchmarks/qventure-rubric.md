@@ -1448,10 +1448,26 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    of 107%. Four metrics behave this way; the rule itself is correct and only
    fails when the noun is not repeated, which is why it went unnoticed.
 
-   Not fixed here: recognising a series touches revenue, retention, customers
-   and margin at once, and every widening on this branch earned its trap tests
-   first. Pinned as assertions of the current wrong behaviour, so it goes red
-   the moment someone fixes it — the fourth time that technique is used here and
+   **Attempted and reverted, with the diagnosis worth more than the attempt.** A
+   series walker that steps forward through ", <figure>" while the clause holds
+   passed eighteen traps — comparison words, a second metric noun, a sentence
+   boundary, a range, a monthly figure, and years written in descending order
+   (Infosys writes 2025 before 2024, so choosing by position rather than by year
+   picks the older figure; the walker chooses by year).
+
+   It still had to go. The hard-cases mean gap fell from **16.5 to 15.8** and
+   `invest` stopped being reachable at all — and the reason was one fixture
+   reading a top line of **$62**. The walker had stepped onto a number that was
+   not revenue. Eighteen traps did not include "the tail figure must be the same
+   order of magnitude as the head", which is the missing rule.
+
+   Worth noting where the alarm came from: the disclosed-figures corpus stayed
+   at 95/95 throughout. The hard cases caught it, and the band-reachability test
+   caught it, and the doc gate caught the headline claim moving. Three
+   independent guards, none of them the one that usually fires.
+
+   Still pinned as assertions of the current wrong behaviour, so it goes red the
+   moment someone fixes it properly — the fourth use of that technique here, and
    it has reported a closure three times out of three.
 
 ## How this stays true

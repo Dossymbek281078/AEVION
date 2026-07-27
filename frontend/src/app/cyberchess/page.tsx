@@ -122,6 +122,7 @@ import { gameResultOf } from "./gameResult";
 import { claimReward, loadSolved } from "./puzzleProgress";
 import { isPlayerPly, isPlayerIndex } from "./plyOwner";
 import { accuracyOf } from "./accuracy";
+import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock } from "./chessyLedger";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -1984,30 +1985,54 @@ export default function CyberChessPage(){
   const lastWinKeyRef=useRef<string|null>(null);
   const[chessyLog,sChessyLog]=useState<ChessyLogEntry[]>(()=>ldChessyLog());
   useEffect(()=>{svChessyLog(chessyLog)},[chessyLog]);
-  const addChessy=useCallback((n:number,reason:string)=>{
+  /* Единственный путь пополнения баланса. `silent` — для случаев, где о начислении
+     уже сообщает отдельное окно (ежедневный бонус): раньше такие начисления меняли
+     баланс НАПРЯМУЮ, минуя журнал, и «📜 История Chessy» не показывала бонус до
+     200 Chessy — баланс прыгал без единой записи. */
+  const addChessy=useCallback((n:number,reason:string,silent=false)=>{
     if(n<=0)return;
-    sChessy(c=>({...c,balance:c.balance+n,lifetime:c.lifetime+n}));
+    sChessy(c=>ledgerAward(c,n));
     sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:1 as const},...log].slice(0,50));
-    showToast(`+${n} Chessy · ${reason}`,"success");
-    sChessyFloat({amount:n,key:Date.now()});
-  },[showToast]);
-  const spendChessy=useCallback((n:number,reason:string)=>{
-    let ok=false;
-    sChessy(c=>{if(c.balance<n)return c;ok=true;return {...c,balance:c.balance-n}});
-    if(ok){
-      sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:-1 as const},...log].slice(0,50));
-      showToast(`−${n} Chessy · ${reason}`,"info");
+    if(!silent){
+      showToast(`+${n} Chessy · ${reason}`,"success");
+      sChessyFloat({amount:n,key:Date.now()});
     }
-    else showToast(`Недостаточно Chessy (нужно ${n})`,"error");
-    return ok;
   },[showToast]);
+  /* Решение «хватило ли» принимается по ОТРИСОВАННОМУ балансу, а не по флагу,
+     выставленному внутри апдейтера.
+
+     Раньше было `let ok=false; sChessy(c=>{...ok=true...}); if(ok)`. React не обязан
+     выполнять апдейтер в момент вызова — он ставит его в очередь и выполняет в фазе
+     рендера. Когда апдейтер не успевал (очередь непуста — например, в том же
+     обработчике уже стоял другой setState), баланс списывался, а функция возвращала
+     false и говорила «Недостаточно Chessy»: игрок ПЛАТИЛ И НЕ ПОЛУЧАЛ товар.
+     Работало это ровно потому, что React часто вычисляет состояние заранее — то есть
+     ломалось не всегда, а под нагрузкой.
+
+     Проверка внутри апдейтера оставлена как страховка от ухода в минус, если два
+     списания попадут в один тик. */
+  const spendChessy=useCallback((n:number,reason:string)=>{
+    if(!canSpend(chessy,n)){showToast(`Недостаточно Chessy (нужно ${n})`,"error");return false;}
+    sChessy(c=>ledgerSpend(c,n));
+    sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:-1 as const},...log].slice(0,50));
+    showToast(`−${n} Chessy · ${reason}`,"info");
+    return true;
+  },[chessy.balance,showToast]);
+  /* Объявление о достижении вынесено ИЗ апдейтера. Внутри стоял setTimeout с тостом
+     и анимацией, а React вправе вызвать апдейтер повторно — в dev при StrictMode он
+     делает это всегда, и оба вызова получают одно и то же входное состояние. Значит
+     защита `if(c.ach[key])return c` их не разводила: награда начислялась один раз, а
+     тост и монетка показывались ДВА раза на одно достижение.
+     Ref-множество делает объявление ровно однократным независимо от батчинга. */
+  const achAnnouncedRef=useRef<Set<string>>(new Set());
   const unlockAch=useCallback((key:string,reward:number,label:string)=>{
-    sChessy(c=>{
-      if(c.ach[key])return c;
-      setTimeout(()=>{showToast(`🏆 ${label} · +${reward} Chessy`,"success");sChessyFloat({amount:reward,key:Date.now()})},300);
-      return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
-    });
-  },[showToast]);
+    if(Object.prototype.hasOwnProperty.call(chessy.ach,key)||achAnnouncedRef.current.has(key))return;
+    achAnnouncedRef.current.add(key);
+    const at=Date.now();
+    sChessy(c=>ledgerUnlock(c,key,reward,at));
+    sChessyLog(log=>[{ts:Date.now(),amount:reward,reason:label,sign:1 as const},...log].slice(0,50));
+    setTimeout(()=>{showToast(`🏆 ${label} · +${reward} Chessy`,"success");sChessyFloat({amount:reward,key:Date.now()})},300);
+  },[chessy.ach,showToast]);
   // Shop v2: consume time_boost — moved BELOW useTimer declarations (see ниже)
   const timeBoostAppliedRef=useRef<number>(0);
 
@@ -2794,7 +2819,9 @@ export default function CyberChessPage(){
     // First-time onboarding overlay (3-step color/AI/time choice) — runs BEFORE tour.
     if(!hasCompletedOnboarding())setTimeout(()=>sShowOnboarding(true),400);
     if(!c.welcome){
-      sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
+      // баланс — только через addChessy, иначе начисление не попадёт в журнал
+      sChessy(x=>({...x,welcome:true,lastDaily:tk,streak:1}));
+      addChessy(50,"приветственный бонус",true);
       // Первый визит: НЕ стопкой. Очередь — онбординг → приветствие → тур.
       // Приветствие триггерит OnboardingOverlay.onComplete/onSkip; тур — closeDailyReward.
       // Если онбординг уже пройден (edge) — приветствие сразу, тур после него.
@@ -2805,7 +2832,8 @@ export default function CyberChessPage(){
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
       const newStreak=c.lastDaily===yk?c.streak+1:1;
       const bonus=newStreak>=14?200:newStreak>=7?100:newStreak>=3?30:5;
-      sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
+      sChessy(x=>({...x,lastDaily:tk,streak:newStreak}));
+      addChessy(bonus,`ежедневный бонус · день ${newStreak}`,true);
       setTimeout(()=>sDailyReward({bonus,streak:newStreak,isWelcome:false}),800);
     }
     // Coach SR — surface due review reminders (1/3/7-day milestones).

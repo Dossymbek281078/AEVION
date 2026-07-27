@@ -131,10 +131,43 @@ export function formatTiers(tiers: CanonicalTier[]): string {
 
 export const PAYWALL_EVENT = "aevion:paywall";
 
-/** Fire the global paywall event so <PaywallModal/> can surface. */
-export function triggerPaywall(payload: PaywallPayload): void {
+/**
+ * Detail of PAYWALL_EVENT — серверная полезная нагрузка плюс происхождение
+ * запроса.
+ *
+ * `userInitiated: false` значит «запрос ушёл без жеста пользователя»: mount
+ * компонента или фоновый опрос по таймеру. Различать это обязательно: у
+ * /multichat-engine health-полоса опрашивала платную ручку раз в 30 секунд,
+ * каждый 402 поднимал модалку заново, и гость физически не мог пользоваться
+ * бесплатным демо — модалка возвращалась через полминуты после закрытия.
+ */
+export type PaywallEventDetail = PaywallPayload & { userInitiated?: boolean };
+
+/**
+ * Fire the global paywall event so <PaywallModal/> can surface.
+ *
+ * По умолчанию `userInitiated: true` — прямой вызов из кода модуля означает
+ * намерение показать стену. Автоматически поднимает флаг только перехватчик.
+ */
+export function triggerPaywall(payload: PaywallPayload, userInitiated = true): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<PaywallPayload>(PAYWALL_EVENT, { detail: payload }));
+  window.dispatchEvent(
+    new CustomEvent<PaywallEventDetail>(PAYWALL_EVENT, { detail: { ...payload, userInitiated } }),
+  );
+}
+
+/**
+ * Был ли жест пользователя прямо сейчас.
+ *
+ * Снимать ОБЯЗАТЕЛЬНО до запроса: окно активации живёт несколько секунд, и к
+ * моменту ответа медленного запроса обычный клик выглядел бы фоновым.
+ * Нет API (Safari, Firefox) → считаем жестом: лишняя модалка лучше, чем молча
+ * проглоченная платная стена.
+ */
+function isUserGesture(): boolean {
+  if (typeof navigator === "undefined") return true;
+  const ua = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation;
+  return typeof ua?.isActive === "boolean" ? ua.isActive : true;
 }
 
 const INSTALLED = Symbol.for("aevion.paywall.fetchPatched");
@@ -148,13 +181,14 @@ export function installPaywallInterceptor(): void {
 
   const original = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const userInitiated = isUserGesture();
     const res = await original(input, init);
     // Only 402s are interesting; everything else passes straight through
     // untouched (no clone → no overhead, streaming responses unaffected).
     if (res.status !== 402) return res;
     try {
       const body = await res.clone().json();
-      if (isPaywallPayload(body)) triggerPaywall(body);
+      if (isPaywallPayload(body)) triggerPaywall(body, userInitiated);
     } catch {
       /* not a JSON upgrade_required body — leave it to the caller */
     }

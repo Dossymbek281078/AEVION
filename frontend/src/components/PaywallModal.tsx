@@ -6,24 +6,34 @@
  * module answers a gated request with 402 upgrade_required.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   PAYWALL_EVENT,
   installPaywallInterceptor,
   formatTiers,
-  type PaywallPayload,
+  type PaywallEventDetail,
 } from "@/lib/paywall";
 
 export function PaywallModal() {
-  const [info, setInfo] = useState<PaywallPayload | null>(null);
+  const [info, setInfo] = useState<PaywallEventDetail | null>(null);
+  // Модули, стену которых пользователь уже закрыл в этой загрузке страницы.
+  const dismissed = useRef<Set<string>>(new Set());
 
-  const close = useCallback(() => setInfo(null), []);
+  const close = useCallback(() => {
+    if (info) dismissed.current.add(info.module);
+    setInfo(null);
+  }, [info]);
 
   useEffect(() => {
     installPaywallInterceptor();
     const onPaywall = (e: Event) => {
-      const detail = (e as CustomEvent<PaywallPayload>).detail;
-      if (detail) setInfo(detail);
+      const detail = (e as CustomEvent<PaywallEventDetail>).detail;
+      if (!detail) return;
+      // Закрыл — значит прочитал. Фоновый опрос за стеной не должен
+      // возвращать модалку каждые полминуты. Явное действие пользователя
+      // (userInitiated) показывает её снова: там она объясняет отказ.
+      if (detail.userInitiated === false && dismissed.current.has(detail.module)) return;
+      setInfo(detail);
     };
     window.addEventListener(PAYWALL_EVENT, onPaywall as EventListener);
     return () => window.removeEventListener(PAYWALL_EVENT, onPaywall as EventListener);

@@ -126,6 +126,7 @@ npx vitest run tests/startupxListings.test.ts     # 36 тестов
 npx vitest run tests/inMemoryWindow.test.ts       # 5 тестов общего лимитера (peek/уборка ключей)
 BASE=http://127.0.0.1:4001 node scripts/startupx-smoke.js   # 81 проверка
 node scripts/startupx-seed.js                     # сухой прогон первых заявок
+npx ts-node -T scripts/startupx-terms-lab.ts      # балл и полоса цены по шаблону первых заявок
 ```
 
 Смоук падает, если `DATABASE_URL` задан, а `dbReady` вернулся `false`: молчаливый откат на

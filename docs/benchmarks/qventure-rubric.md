@@ -27,7 +27,7 @@ QVenture does not predict success. The calibration corpus (32 companies)
 separates known failures from known successes by **6.6 points of mean
 composite**, and **8 of 15 failures still score at or above the weakest
 success**. Those descriptions were reconstructed by an author who knew the
-outcome, so even that 6.7 is generous to the rubric, not conservative.
+outcome, so even that 6.6 is generous to the rubric, not conservative.
 
 ## Known limits, stated plainly
 

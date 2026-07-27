@@ -103,6 +103,81 @@ const EXAMPLE_ANSWERS = [
 ];
 
 
+/** Скачивание одним способом на весь модуль: две реализации подряд разъезжаются
+ *  на первой же правке имени файла или типа. */
+function download(name: string, text: string, mime: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/** Читаемый отчёт по консилиуму.
+ *
+ *  Чек — артефакт машинный: его отдают на проверку, но не читают и не
+ *  пересылают коллеге. Отчёт закрывает вторую половину задачи: что спросили,
+ *  кто что ответил, где разошлись, что проверить — и хеш чека рядом, чтобы
+ *  получатель мог сверить подлинность, не веря отчёту на слово.
+ *
+ *  Markdown, а не PDF: открывается везде, вставляется в задачу или письмо без
+ *  конвертации, и его видно в diff, если положат в репозиторий. */
+function buildReport(
+  prompt: string,
+  results: AgentResult[],
+  dissent: Dissent | null,
+  receipt: SignedReceipt | null,
+  isExample: boolean
+): string {
+  const L: string[] = [];
+  L.push("# Консилиум AEVION", "");
+  if (isExample) L.push("> Это пример: ответы агентов заданы заранее, разногласия посчитаны настоящим алгоритмом.", "");
+  L.push(`**Вопрос:** ${prompt}`, "");
+
+  if (dissent) {
+    const verdict =
+      dissent.verdict === "consensus" ? "агенты сошлись"
+        : dissent.verdict === "split" ? "агенты разошлись"
+          : "сравнивать не с чем";
+    L.push(`## Итог: ${verdict}`, "", dissent.note, "");
+    if (dissent.agreement != null) L.push(`Схожесть ответов: ${dissent.agreement}`, "");
+    if (dissent.outlier) L.push(`Дальше всех от остальных: **${dissent.outlier.agentId}**`, "");
+
+    if (dissent.numericConflicts.length) {
+      L.push("### Расхождения в числах", "");
+      for (const c of dissent.numericConflicts) {
+        L.push(`- ${c.values.map((v) => `${v.agentId}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
+        L.push(`  - контекст: «${c.context}»`);
+      }
+      L.push("");
+    }
+
+    if (dissent.checks?.length) {
+      L.push("### Что проверить", "", "Порядок — по проверяемости: сверху то, что закрывается за минуту.", "");
+      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${c.text}`));
+      L.push("");
+    }
+  }
+
+  L.push("## Ответы агентов", "");
+  for (const r of results) {
+    L.push(`### ${r.agentId}${r.provider ? ` · ${r.provider}` : ""}`, "");
+    L.push(r.ok ? String(r.reply || "").trim() : `_Не ответил: ${r.error || "вызов не удался"}_`, "");
+  }
+
+  if (receipt) {
+    L.push("## Чек", "");
+    L.push(`- sha256: \`${receipt.hash}\``);
+    L.push(`- канонизация: RFC8785, дайджест sha256`);
+    L.push(`- подпись: ${receipt.signature ? `${receipt.signature.algo}, ключ ${receipt.signature.kid}` : receipt.signatureNote || "отсутствует"}`);
+    L.push(`- вызовов ${receipt.receipt.cost.calls}, ответили ${receipt.receipt.cost.answered}, не ответили ${receipt.receipt.cost.failed}`);
+    L.push("");
+    L.push("Отчёту верить не обязательно: скачайте чек и пересчитайте хеш — сами или сторонней реализацией. Спецификация открыта.", "");
+  }
+
+  return L.join("\n");
+}
+
 export function CouncilConsole() {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -334,14 +409,9 @@ export function CouncilConsole() {
             {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
           </span>
           <button
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" });
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = `aevion-receipt-${receipt.hash.slice(0, 12)}.json`;
-              a.click();
-              URL.revokeObjectURL(a.href);
-            }}
+            onClick={() =>
+              download(`aevion-receipt-${receipt.hash.slice(0, 12)}.json`, JSON.stringify(receipt, null, 2), "application/json")
+            }
             style={{ background: "transparent", border: `1px solid ${T.lineSoft}`, borderRadius: 8, padding: "4px 10px", color: T.textDim, fontSize: 12, cursor: "pointer" }}
           >
             Скачать чек
@@ -349,6 +419,28 @@ export function CouncilConsole() {
           <a href="/multichat-engine/verify" style={{ color: T.textMute, fontSize: 12, textDecoration: "underline" }}>
             проверить чек
           </a>
+        </div>
+      )}
+
+      {/* Отчёт доступен и без чека — например, у примера для гостя: пересылать
+          коллеге разбор осмысленно и тогда, когда подписывать нечего. */}
+      {results && results.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            onClick={() =>
+              download(
+                `aevion-consilium-${(receipt?.hash || "example").slice(0, 12)}.md`,
+                buildReport(prompt, results, dissent, receipt, isExample),
+                "text/markdown;charset=utf-8"
+              )
+            }
+            style={{ background: "transparent", border: `1px solid ${T.lineSoft}`, borderRadius: 8, padding: "6px 12px", color: T.textDim, fontSize: 13, cursor: "pointer" }}
+          >
+            Скачать отчёт
+          </button>
+          <span style={{ fontSize: 12, color: T.textFaded, marginLeft: 10 }}>
+            Markdown: вопрос, разногласия, что проверить, ответы и хеш чека
+          </span>
         </div>
       )}
 

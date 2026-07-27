@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createInMemoryRateLimiter } from "../src/lib/rateLimit/inMemoryWindow";
+import { createInMemoryRateLimiter, clientIp } from "../src/lib/rateLimit/inMemoryWindow";
 
 /**
  * Общий примитив: на нём стоят pipeline, quantum-shield и суточный потолок
@@ -59,5 +59,41 @@ describe("createInMemoryRateLimiter", () => {
     expect(rl.peek("a").allowed).toBe(false);
     rl.reset();
     expect(rl.peek("a").allowed).toBe(true);
+  });
+});
+
+/**
+ * По этому адресу считаются три вещи сразу: суточный потолок публикаций,
+ * счётчик показов заявки и дедуп жалоб. Ошибка здесь тихо склеивает разных
+ * людей в одного (или наоборот) — поэтому разбор заголовка пришпилен.
+ */
+describe("clientIp", () => {
+  const req = (headers: Record<string, string | string[] | undefined>, ip?: string) =>
+    ({ headers, ip } as unknown as Parameters<typeof clientIp>[0]);
+
+  it("берёт первый адрес из цепочки прокси — это клиент", () => {
+    expect(clientIp(req({ "x-forwarded-for": "203.0.113.7, 70.41.3.18, 150.172.238.178" })))
+      .toBe("203.0.113.7");
+  });
+
+  it("пробелы вокруг адреса не становятся частью ключа", () => {
+    expect(clientIp(req({ "x-forwarded-for": "  203.0.113.7 , 70.41.3.18" }))).toBe("203.0.113.7");
+  });
+
+  it("заголовок массивом (его можно прислать дважды) тоже разбирается", () => {
+    expect(clientIp(req({ "x-forwarded-for": ["203.0.113.7, 70.41.3.18", "8.8.8.8"] })))
+      .toBe("203.0.113.7");
+  });
+
+  it("IPv6 не режется по двоеточиям", () => {
+    expect(clientIp(req({ "x-forwarded-for": "2001:db8::1, 70.41.3.18" }))).toBe("2001:db8::1");
+  });
+
+  it("без заголовка — адрес соединения, а не пустая строка", () => {
+    expect(clientIp(req({}, "198.51.100.4"))).toBe("198.51.100.4");
+    // «unknown» — общий ключ на всех, поэтому важно, что он появляется только
+    // когда адреса действительно нет.
+    expect(clientIp(req({}))).toBe("unknown");
+    expect(clientIp(req({ "x-forwarded-for": "" }, "198.51.100.4"))).toBe("198.51.100.4");
   });
 });

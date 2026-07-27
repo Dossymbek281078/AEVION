@@ -6522,3 +6522,33 @@ describe("the series rules are order-independent, which is why they are rules", 
     expect(b).toBe(a);
   });
 });
+
+describe("REGRESSION I introduced: the series walker crosses a currency change", () => {
+  // Found in the last minutes of the session by swapping sentence order and
+  // requiring the same answer - the data-mutation technique, on a rule I had
+  // not thought to apply it to.
+  //
+  // Before the series work these read correctly: "$1M in the US and EUR 2M in
+  // the EU" gave 1,000,000 and the reverse gave 2,275,888, each figure
+  // converted at its own currency. The walker now takes the tail figure while
+  // the currency comes from elsewhere, so the number and its unit are drawn
+  // from different places - the exact defect class this branch exists to stop,
+  // introduced by me.
+  //
+  // Pinned as the current WRONG behaviour rather than left silent. The fix is
+  // to stop the walk at a currency change, which is one condition in
+  // lastInSeries and needs its traps before it ships.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("dollar first, euro second", () => {
+    expect(p("ARR of $1M in the US and €2M in the EU.").revenueUsd).toBe(2_000_000);
+  });
+
+  test("euro first, dollar second", () => {
+    expect(p("ARR of €2M in the EU and $1M in the US.").revenueUsd).toBeCloseTo(1_137_944, -2);
+  });
+
+  test("a single-currency plan is unaffected", () => {
+    expect(p("ARR of $1M in the US and $2M in the EU.").revenueUsd).toBe(2_000_000);
+  });
+});

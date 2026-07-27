@@ -15,7 +15,7 @@ baseline; `latest` is whatever a re-run produced).
 ## The claim we are willing to make
 
 > On plans that disclose evidence, QVenture separates a strong deal from a weak
-> one **in the same sector and stage** by a mean of **16.2 points** (min 8.8,
+> one **in the same sector and stage** by a mean of **16.6 points** (min 8.8,
 > max 30.8), including business models with no SaaS metrics — defence contracts,
 > clinical phases, offtake agreements, GMV × take rate, design wins.
 
@@ -461,7 +461,7 @@ months. The invariants now run on every push
 | Guard | Floor | Measured today |
 |---|---|---|
 | Each strong/weak pair separates | ≥ 6 pts | 8.8 – 30.8 |
-| Mean gap across the six models | ≥ 10 pts | 16.2 |
+| Mean gap across the six models | ≥ 10 pts | 16.6 |
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |

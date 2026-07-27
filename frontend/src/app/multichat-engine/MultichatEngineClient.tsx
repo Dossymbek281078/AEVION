@@ -795,6 +795,14 @@ function ProviderHealthStrip() {
       const r = await fetch(apiUrl("/api/multichat/provider-status"), {
         credentials: "include",
       });
+      // 402 — это не сбой, а ответ платной стены, и он не изменится от того,
+      // что мы спросим ещё сорок раз. Гость сюда вообще не заходит (см.
+      // эффект ниже), а вот у авторизованного на free-тарифе опрос иначе
+      // бьёт в стену каждые 30 секунд до конца жизни вкладки.
+      if (r.status === 402) {
+        setGated(true);
+        return;
+      }
       if (!r.ok) {
         setErr(`status ${r.status}`);
         return;
@@ -823,10 +831,13 @@ function ProviderHealthStrip() {
       setGated(true);
       return;
     }
+    // Стена уже ответила — переспрашивать нечего: эффект перезапустится по
+    // смене gated, снимет интервал и выйдет.
+    if (gated) return;
     load();
     const t = setInterval(load, 30_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, gated]);
 
   return (
     <section
@@ -1024,6 +1035,12 @@ function MissionPresetGrid() {
         const r = await fetch(apiUrl("/api/multichat/presets"), {
           credentials: "include",
         });
+        // «Mission presets unavailable: status 402» — не ошибка, а платный
+        // тариф. Показываем это как тариф, а не как поломку.
+        if (r.status === 402) {
+          if (alive) setGated(true);
+          return;
+        }
         if (!r.ok) {
           if (alive) setErr(`status ${r.status}`);
           return;

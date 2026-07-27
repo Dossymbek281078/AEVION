@@ -1359,8 +1359,24 @@ export default function CyberChessPage(){
   const PZ_STREAK_KEY="aevion_pz_streak_v1";
   const[pzStreak,sPzStreak]=useState<{cur:number;best:number}>(()=>{try{const v=JSON.parse(localStorage.getItem(PZ_STREAK_KEY)||"{}");return{cur:v.cur??0,best:v.best??0}}catch{return{cur:0,best:0}}});
   const savePzStreak=(s:{cur:number;best:number})=>{try{localStorage.setItem(PZ_STREAK_KEY,JSON.stringify(s))}catch{}};
-  const incPzStreak=()=>sPzStreak(s=>{const n=s.cur+1;const nb=Math.max(s.best,n);const ns={cur:n,best:nb};savePzStreak(ns);return ns});
-  const resetPzStreak=()=>sPzStreak(s=>{if(chessy.owned.streak_shield&&s.cur>=3){sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));showToast("🛡 Щит стрика поглотил ошибку!","success");return s;}const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
+  /* Апдейтеры чистые: запись на диск, трата щита и тост вынесены наружу.
+     Раньше внутри `sPzStreak(s=>{...})` стояли savePzStreak, sChessy и showToast, а
+     React вправе вызвать апдейтер повторно (в dev при StrictMode — всегда) и вправе
+     отбросить результат. То есть на диск мог лечь стрик, которого в состоянии так и
+     не случилось, а «щит поглотил ошибку» показывалось дважды за одну ошибку.
+     Сохранение переехало в эффект — тем же приёмом, что уже используется для
+     chessyLog чуть ниже. */
+  const incPzStreak=()=>sPzStreak(s=>({cur:s.cur+1,best:Math.max(s.best,s.cur+1)}));
+  const resetPzStreak=()=>{
+    if(chessy.owned.streak_shield&&pzStreak.cur>=3){
+      sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));
+      showToast("🛡 Щит стрика поглотил ошибку!","success");
+      return;
+    }
+    sPzStreak(s=>({cur:0,best:s.best}));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{savePzStreak(pzStreak)},[pzStreak]);
   // Daily goals tracking — stored by todayKey() in localStorage
   const DG_KEY="aevion_daily_goals_v1";
   const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{

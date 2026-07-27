@@ -32,8 +32,8 @@ const BBOX = {
   tokyo: { minLat: 35.683592, maxLat: 35.6978747, minLon: 139.6879457, maxLon: 139.7037075 },
 };
 const OVERPASS = [
-  "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
 ];
 const UA = "AEVION-QSkyway/1.0 (height-claim audit; contact via github.com/Dossymbek281078/AEVION)";
 
@@ -44,25 +44,34 @@ if (!BBOX[city]) {
   process.exit(1);
 }
 
+/**
+ * Rounds outside, hosts inside — deliberately, and not the obvious nesting.
+ *
+ * With hosts on the OUTER loop a dead mirror costs three full timeouts before
+ * anything else is tried: on 2026-07-27 overpass.kumi.systems stopped answering
+ * while overpass-api.de replied in one second, and this script sat for nine
+ * minutes per run because it asked the dead one three times first. Round-robin
+ * spends one timeout per host per round, so a healthy mirror is reached at once.
+ */
 async function overpass(query) {
   let last;
-  for (const host of OVERPASS) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let round = 1; round <= 3; round++) {
+    for (const host of OVERPASS) {
       try {
         const res = await fetch(host, {
           method: "POST", body: query,
           headers: { "Content-Type": "text/plain", "User-Agent": UA },
-          signal: AbortSignal.timeout(180_000),
+          signal: AbortSignal.timeout(120_000),
         });
         // 429/504 is Overpass asking us to wait, not saying the data is absent.
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()).elements;
       } catch (e) {
         last = e;
-        process.stderr.write(`  ${host} attempt ${attempt}: ${e.message}\n`);
-        if (attempt < 3) await new Promise((r) => setTimeout(r, 12_000 * attempt));
+        process.stderr.write(`  ${host} round ${round}: ${e.message}\n`);
       }
     }
+    if (round < 3) await new Promise((r) => setTimeout(r, 12_000 * round));
   }
   throw last;
 }
@@ -148,7 +157,12 @@ const impossible = rows.filter((r) => r.ratio?.band === "impossible");
 const suspicious = rows.filter((r) => r.ratio?.band === "suspicious");
 
 const line = (r) => `  ${r.id.padEnd(20)} ${String(r.h).padStart(7)} m`
-  + (r.levels !== null ? ` / ${r.levels} floors = ${r.ratio.mPerFloor} m per storey` : " (no floor count)")
+  // Guard on the RATIO, not on the floor count: OSM carries fractional storeys
+  // (`building:levels=0.5`), for which storeyRatio declines to answer while the
+  // level count is still present. Keying off `levels` crashed --all on exactly
+  // that row.
+  + (r.ratio ? ` / ${r.levels} floors = ${r.ratio.mPerFloor} m per storey`
+    : r.levels !== null ? ` / ${r.levels} floors` : " (no floor count)")
   + (r.article?.published ? `  | its article publishes ${r.article.published} m` : "")
   + (r.name ? `  ${r.name}` : "");
 
@@ -169,6 +183,16 @@ process.stdout.write(
     : "")
   + `\n· unusual but possible (2-2.8 m per storey), reported only:\n`
   + `${suspicious.length ? suspicious.map(line).join("\n") : "  none"}\n`
+  // The unread list is the audit's own backlog: every one of these may hide a
+  // finding, and printing only their COUNT makes the gap easy to leave open.
+  + (showAll && noHeight.length
+    ? `\n· read, but stating no height this parser understands:\n`
+      + noHeight.map((r) => `    ${r.id.padEnd(20)} tag ${r.h} m   ${r.wikipedia}`).join("\n") + "\n"
+    : "")
+  + (showAll && notFetched.length
+    ? `\n· never fetched (our network, not their data):\n`
+      + notFetched.map((r) => `    ${r.id.padEnd(20)} ${r.wikipedia}   ${r.article.error}`).join("\n") + "\n"
+    : "")
   + (showAll ? `\n· every height tag:\n${rows.map(line).join("\n")}\n` : "")
   + `\nA tag UNDER its published height is the expensive direction: the twin trusts\n`
   + `a height tag completely, so an understated obstacle is flown over with no\n`

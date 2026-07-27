@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  parseInfoboxHeights, publishedHeights, compareTagToArticle, storeyRatio,
+  parseInfoboxHeights, publishedHeights, compareTagToArticle, storeyRatio, extractInfobox,
 } from "../scripts/lib/wiki-infobox.mjs";
 
 // An OSM element that carries `wikipedia=` names its own reference, so its
@@ -189,5 +189,64 @@ describe("японские записи высоты, на которых пар
   it("flags Odakyu Southern Tower, tagged 84 m in OSM, as understated", () => {
     const box = parseInfoboxHeights("|高さ = 軒高 146.55 m、最高部 150.75 m");
     expect(compareTagToArticle(84, box).verdict).toBe("under");
+  });
+});
+
+describe("единица, записанная вики-ссылкой", () => {
+  it("reads `210.3 [[メートル|m]]` — 新宿住友ビルディング", () => {
+    // Requiring a bare letter after the number reads no height at all, and the
+    // article then looks like it states none. Sixteen of Tokyo's 35 linked
+    // articles were unread for reasons of this shape.
+    expect(parseInfoboxHeights("|高さ = 210.3 [[メートル|m]]{{Sfn|x|1992}}").height).toBeCloseTo(210.3, 1);
+  });
+
+  it("reads the unlinked form too", () => {
+    expect(parseInfoboxHeights("|高さ = 117.10 [[メートル]]").height).toBeCloseTo(117.1, 1);
+  });
+
+  it("still refuses a linked unit that is not metres", () => {
+    expect(parseInfoboxHeights("|高さ = 500 [[尺]]").height).toBeUndefined();
+  });
+});
+
+describe("границы карточки — поле чужой карточки не является заявлением о здании", () => {
+  // ja:JR東日本本社ビル carries two infoboxes: the building's own leaves its
+  // height fields empty, and a later one — for something else — says 31 m. The
+  // building is 150.1 m. Scanning the whole page reported the tower as OVERstated.
+  const TWO_BOXES = `{{基礎情報 超高層ビル
+|アンテナ_尖塔 = <!--アンテナや尖塔も含めた最頂部の高さ-->
+|屋上 = <!--屋上の高さ-->
+|階数 = 地上28階、地下4階
+}}
+本文。高さはそれぞれ、最高部150.1メートル。
+{{記念碑
+|高さ = 31 [[メートル|m]]
+}}`;
+
+  it("does not read a height out of a SECOND infobox", () => {
+    expect(parseInfoboxHeights(TWO_BOXES).height).toBeUndefined();
+    expect(compareTagToArticle(150, parseInfoboxHeights(TWO_BOXES)).verdict).toBe("unknown");
+  });
+
+  it("takes the first infobox whole, braces balanced", () => {
+    const box = extractInfobox(TWO_BOXES);
+    expect(box).toMatch(/基礎情報/);
+    expect(box).not.toMatch(/記念碑/);
+  });
+
+  it("survives nested templates inside the infobox", () => {
+    const nested = `{{Infobox building
+| roof = {{cvt|310.8|m}}<ref>{{cite web |title={{nowrap|x}}}}</ref>
+}}
+{{other| roof = 5 m}}`;
+    expect(parseInfoboxHeights(nested).roof).toBe(310.8);
+  });
+
+  it("falls back to the whole text when there is no infobox at all", () => {
+    expect(parseInfoboxHeights("| roof = 310.8 m").roof).toBe(310.8);
+  });
+
+  it("refuses an unbalanced infobox rather than guessing where it ends", () => {
+    expect(extractInfobox("{{Infobox building\n| roof = 5 m")).toBeNull();
   });
 });

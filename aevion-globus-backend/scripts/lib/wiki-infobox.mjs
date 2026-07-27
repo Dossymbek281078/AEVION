@@ -42,7 +42,10 @@ function firstQuantity(raw) {
   // 新宿三井ビルディング publishes `高さ = 223.6ｍ`. Matching only ASCII `m`
   // silently reads no height at all — the article looks empty rather than
   // unparsed, which is the failure this module is supposed to make loud.
-  const plain = /^\s*([\d.,]+)\s*[mｍ]/.exec(raw);
+  // Japanese articles routinely link the unit instead of writing it:
+  // `|高さ = 210.3 [[メートル|m]]`. Requiring a bare letter after the number
+  // reads no height at all, and the article then looks like it states none.
+  const plain = /^\s*([\d.,]+)\s*(?:\[\[\s*メートル[^\]]*\]\]|[mｍ])/.exec(raw);
   if (plain) {
     const n = Number(plain[1].replace(/,/g, ""));
     return Number.isFinite(n) ? n : null;
@@ -95,9 +98,39 @@ const FLOORS = /\|[ \t]*floor_count[ \t]*=[ \t]*([\d]+)|\|[ \t]*階数[ \t]*=[ \
  * metres. Missing and unparseable fields are simply absent — an infobox that
  * leaves `antenna_spire` blank is the normal case, not an error.
  */
-export function parseInfoboxHeights(wikitext) {
+const INFOBOX_START = /\{\{\s*(?:[Ii]nfobox[^\n|}]*|建築物|基礎情報[^\n|}]*)/;
+
+/**
+ * The FIRST infobox block, brace-balanced, or null.
+ *
+ * Scanning the whole article is what made this module report that
+ * ja:JR東日本本社ビル publishes 31 m for a 28-storey tower: the page carries two
+ * infoboxes, the building's own leaves its height fields empty, and a later one
+ * — for something else entirely — says 31 m. The real figure, 150.1 m, sits in
+ * prose. A field is only that article's claim about THIS building if it lives
+ * inside this building's infobox.
+ */
+export function extractInfobox(wikitext) {
+  const m = INFOBOX_START.exec(wikitext);
+  if (!m) return null;
+  let depth = 0;
+  for (let i = m.index; i < wikitext.length - 1; i++) {
+    if (wikitext[i] === "{" && wikitext[i + 1] === "{") { depth++; i++; continue; }
+    if (wikitext[i] === "}" && wikitext[i + 1] === "}") {
+      depth--;
+      if (depth === 0) return wikitext.slice(m.index, i + 2);
+      i++;
+    }
+  }
+  return null; // unbalanced — refuse rather than guess where it ends
+}
+
+export function parseInfoboxHeights(rawWikitext) {
   const out = {};
-  if (typeof wikitext !== "string") return out;
+  if (typeof rawWikitext !== "string") return out;
+  // Fall back to the whole text only when no infobox is present at all, so a
+  // bare `| roof = 310.8 m` snippet still parses.
+  const wikitext = extractInfobox(rawWikitext) ?? rawWikitext;
   for (const [key, re] of Object.entries(FIELD)) {
     const m = re.exec(wikitext);
     if (!m) continue;

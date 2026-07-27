@@ -2612,3 +2612,30 @@ describe("Japanese filing forms that already worked", () => {
     expect(p(text).growthPct).toBeNull();
   });
 });
+
+describe("known misses, pinned so they fail when fixed", () => {
+  // The technique that proved itself on limit 43: an assertion stating the
+  // CURRENT wrong behaviour costs nothing, documents the fact, and goes red the
+  // moment someone fixes it. A TODO never knows it has been done.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("limit 44: a fall written as a noun is not read", () => {
+    // Fixing this needs the decline path to classify what its figure belongs
+    // to; bounding basisFor to the clause was measured and refuted.
+    expect(p("Revenue saw a 12% decline in 2025.").growthPct).toBeNull();
+  });
+
+  test("limit 46: the Japanese negative triangle is not read", () => {
+    // ▲ and △ mean in a Japanese statement what parentheses mean in a US one.
+    expect(p("Gross margin of ▲45%.").grossMarginPct).toBeNull();
+  });
+
+  test("limit 46: gross margin has no 'was' connector", () => {
+    // Not about the sign: the gross-margin connector list is the only one not
+    // on the shared LINK constant, because a dash there is a minus.
+    expect(p("Gross margin was a negative 45%.").grossMarginPct).toBeNull();
+    // And the forms that DO work must keep working while that is true.
+    expect(p("Gross margin of negative 45%.").grossMarginPct).toBe(-45);
+    expect(p("Gross margin of (45)%.").grossMarginPct).toBe(-45);
+  });
+});

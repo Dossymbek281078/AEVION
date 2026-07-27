@@ -1861,3 +1861,53 @@ describe("every money unit the pattern accepts has a multiplier", () => {
     expect(parseMoney("5", "__proto__")).toBe(5);
   });
 });
+
+describe("every metric noun the parser lists reaches a field", () => {
+  // The third pair of this shape, named as open in the doc an hour ago. A noun
+  // list pairs with the field it fills; nothing checked that a noun added to a
+  // list actually arrives. A noun that does not arrive is the original silent
+  // defect of this whole branch — the factor falls back to its sector prior and
+  // a filed disclosure scores like no disclosure.
+  //
+  // The lists are read out of the source, not restated here. Two of the three
+  // are function-local, and exporting production constants purely so a test can
+  // see them would be its own kind of drift.
+  const SOURCE = fs.readFileSync(path.join(__dirname, "../src/lib/qventure/signals.ts"), "utf8");
+
+  const alternation = (name: string): string => {
+    const m = SOURCE.match(new RegExp(`${name} = String\.raw\`([^\`]*)\``));
+    if (!m) throw new Error(`${name} is no longer where this test looks for it`);
+    return m[1];
+  };
+
+  /** Turn a regex alternation into the concrete phrases a filing could contain. */
+  const nouns = (name: string): string[] =>
+    alternation(name)
+      // Collapse inner groups BEFORE splitting, or "(?:value|volume)" is torn
+      // in half by the split and the test asserts on nonsense.
+      .replace(/\(\?:([^)|]*)\|[^)]*\)/g, "$1")
+      .split("|")
+      .map((f) => f.replace(/\[- \]/g, "-").replace(/(.)\?/g, ""))
+      .filter(Boolean);
+
+  test("all three lists are still where this test looks for them", () => {
+    for (const n of ["REV_NOUN", "CUST_NOUN", "GMV_NOUN"]) {
+      expect(nouns(n).length).toBeGreaterThan(4);
+    }
+  });
+
+  test.each(nouns("REV_NOUN"))("revenue noun %s fills revenueUsd", (noun) => {
+    const v = parsePlanSignals(`We reported ${noun} of $10 million.`).revenueUsd;
+    // MRR is a monthly figure and is deliberately annualised, so the assertion
+    // is that the noun arrives, not that it arrives unscaled.
+    expect(v).toBe(noun === "mrr" ? 120_000_000 : 10_000_000);
+  });
+
+  test.each(nouns("CUST_NOUN"))("customer noun %s fills customers", (noun) => {
+    expect(parsePlanSignals(`We have 5,000 ${noun}.`).customers).toBe(5000);
+  });
+
+  test.each(nouns("GMV_NOUN"))("gmv noun %s fills gmvUsd", (noun) => {
+    expect(parsePlanSignals(`We processed $10 million in ${noun}.`).gmvUsd).toBe(10_000_000);
+  });
+});

@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 448
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 483
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -559,7 +559,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (448
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (483
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -629,9 +629,20 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    `hasOwnProperty`, because `MONEY_MULTIPLIER` is a plain object and a key like
    `constructor` would multiply a number by a function.
 
-   Still unguarded, and worth a future pass: the metric noun lists
-   (`REV_NOUN`, `CUST_NOUN`, `GMV_NOUN`) pair with the fields they fill, and
-   nothing checks that a noun added to a list reaches a field.
+   The metric noun lists (`REV_NOUN`, `CUST_NOUN`, `GMV_NOUN`) were named here
+   as the next candidate, and checking them produced a more useful answer than
+   expected. Each list is now read out of the source and every noun in it is
+   asserted to reach its field — but a mutation that *added* a noun passed,
+   because for these lists the list **is** the wiring: one alternation feeds one
+   field, so the currency-style divergence cannot occur. What the guard actually
+   buys is coverage, not divergence detection: it fails when a noun's phrasing
+   is one the surrounding pattern cannot match, which is the real failure mode
+   here (`net revenues` died on a trailing `s` in exactly this way).
+
+   Worth stating because the distinction is easy to lose: two of the three
+   guards in limits 22–23 catch two tables drifting apart; this one catches a
+   list entry that never worked. Calling them all the same thing would overstate
+   what is protected.
 
 ## How this stays true
 
@@ -639,7 +650,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 448):
+`tests/qventureDisclosedCorpus.test.ts`, 483):
 
 | Guard | Floor | Measured today |
 |---|---|---|

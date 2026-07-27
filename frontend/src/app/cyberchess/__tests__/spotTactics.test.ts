@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { spotTactics, explainMove, assessCenter, identifyOpening } from "../chessCoachEngine";
+import { spotTactics, explainMove, assessCenter, identifyOpening, detectPawnStructure } from "../chessCoachEngine";
 
 /* Подсказка про вилку смотрела ходы СОПЕРНИКА: после хода конём очередь уже перешла, и
    условие «есть взятие ферзя или ладьи» означало, что соперник может забрать ТВОЮ
@@ -77,5 +77,20 @@ describe("identifyOpening", () => {
 
   it("returns nothing for a line it does not know", () => {
     expect(identifyOpening("1.a4 h5 2.b4")).toBeNull();
+  });
+});
+
+/* Структуры пешек описывают скелет миттельшпиля. Без нижней границы голое окончание
+   подходило под них по букве: одинокая пешка d — «изолятор», две c+d — «висячие». */
+describe("detectPawnStructure", () => {
+  it("says nothing about a bare pawn ending", () => {
+    expect(detectPawnStructure("4k3/8/8/8/3P4/8/8/4K3 w - - 0 1")).toBeNull();
+    expect(detectPawnStructure("4k3/8/8/8/2PP4/8/8/4K3 w - - 0 1")).toBeNull();
+  });
+
+  it("still names a real isolated queen's pawn in a middlegame", () => {
+    const r = detectPawnStructure("r1bq1rk1/pp3ppp/2n1pn2/8/3P4/2N2N2/PP3PPP/R1BQ1RK1 w - - 0 9");
+    expect(r?.id).toBe("iqp");
+    expect(r?.owner).toBe("w");
   });
 });

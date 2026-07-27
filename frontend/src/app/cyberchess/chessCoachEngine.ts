@@ -701,6 +701,13 @@ export type DetectedStructure = PawnStructure & { owner: "w" | "b" };
 /** Распознать пешечную структуру по позиции. null — если ничего характерного нет. */
 export function detectPawnStructure(fen: string): DetectedStructure | null {
   const { wp, bp } = parsePawns(fen);
+  /* Это структуры МИТТЕЛЬШПИЛЯ: они описывают пешечный скелет, а не отдельные пешки.
+     Без порога голое окончание попадало под них по букве определения — одинокая белая
+     пешка d4 объявлялась «изолированной ферзевой» (c и e пусты — формально подходит), а
+     две пешки c4+d4 — «висячими», и коуч выдавал к ним миттельшпильные планы. Проверено
+     прогоном на 4k3/8/8/8/3P4/8/8/4K3 и 4k3/8/8/8/2PP4/8/8/4K3. Четыре пешки у каждой
+     стороны — нижняя граница, при которой скелет вообще существует. */
+  if (wp.size < 4 || bp.size < 4) return null;
   const has = (s: Set<string>, sq: string) => s.has(sq);
   const mk = (id: string, owner: "w" | "b"): DetectedStructure => ({ ...PAWN_STRUCTURES[id], owner });
 

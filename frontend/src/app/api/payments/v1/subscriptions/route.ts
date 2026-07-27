@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
+  parseAmountMinor,
   checkIdempotency,
   gateRequest,
   genId,
@@ -54,9 +55,8 @@ export async function POST(req: NextRequest) {
   if (typeof body.plan_name !== "string" || !body.plan_name.trim()) {
     return withCors(badRequest("plan_name is required."));
   }
-  if (typeof body.amount !== "number" || body.amount <= 0) {
-    return withCors(badRequest("amount must be a positive number (minor units)."));
-  }
+  const amount = parseAmountMinor(body.amount);
+  if (typeof amount === "string") return withCors(badRequest(amount));
   if (
     typeof body.currency !== "string" ||
     !ALLOWED_CURRENCIES.includes(body.currency as Currency)
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     id,
     customer: body.customer.trim(),
     plan_name: body.plan_name.trim(),
-    amount: body.amount,
+    amount,
     currency: body.currency as Currency,
     interval,
     trial_days: trial,

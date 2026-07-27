@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
+  parseAmountMinor,
   checkIdempotency,
   gateRequest,
   genId,
@@ -44,10 +45,9 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  const { amount, currency, title } = body;
-  if (typeof amount !== "number" || amount <= 0) {
-    return withCors(badRequest("amount must be a positive number (minor units)."));
-  }
+  const { currency, title } = body;
+  const amount = parseAmountMinor(body.amount);
+  if (typeof amount === "string") return withCors(badRequest(amount));
   if (typeof currency !== "string" || !ALLOWED_CURRENCIES.includes(currency as Currency)) {
     return withCors(
       badRequest(`currency must be one of: ${ALLOWED_CURRENCIES.join(", ")}.`)

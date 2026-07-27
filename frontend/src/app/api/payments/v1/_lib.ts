@@ -191,6 +191,38 @@ export function signHmac(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
+/**
+ * Верхняя граница суммы — 1 000 000 000 минорных единиц (10 млн в валюте).
+ * Не «сколько бывает», а «дальше начинается мусор»: у Stripe похожий предел.
+ */
+export const MAX_AMOUNT_MINOR = 1_000_000_000;
+
+/**
+ * Сумма в минорных единицах: целое, положительное, конечное, в пределах границы.
+ *
+ * Проверки `typeof x === "number" && x > 0` мало, и это не теория:
+ * `JSON.parse('{"amount":1e400}')` даёт **Infinity**, а `Infinity > 0` — истина,
+ * то есть тело запроса без единого нечислового символа проходило старую проверку
+ * и создавало ссылку на оплату с бесконечной суммой (после чего возврат «в
+ * пределах остатка» разрешал любую сумму). Дробное `0.5` в минорных единицах
+ * тоже проходило, хотя половины цента не существует.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+export function parseAmountMinor(value: unknown): number | string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "amount must be a finite number (minor units).";
+  }
+  if (!Number.isInteger(value)) {
+    return "amount must be a whole number of minor units (no fractions).";
+  }
+  if (value <= 0) return "amount must be a positive number (minor units).";
+  if (value > MAX_AMOUNT_MINOR) {
+    return `amount must not exceed ${MAX_AMOUNT_MINOR} minor units.`;
+  }
+  return value;
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },

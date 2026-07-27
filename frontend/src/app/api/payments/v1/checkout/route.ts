@@ -6,6 +6,7 @@ import {
   gateRequest,
   genId,
   getOrigin,
+  parseAmountMinor,
   readJson,
   store,
   withCors,
@@ -29,9 +30,8 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  if (typeof body.amount !== "number" || body.amount <= 0) {
-    return withCors(badRequest("amount must be a positive number (minor units)."));
-  }
+  const amount = parseAmountMinor(body.amount);
+  if (typeof amount === "string") return withCors(badRequest(amount));
   if (
     typeof body.currency !== "string" ||
     !ALLOWED_CURRENCIES.includes(body.currency as Currency)
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const secret = `${id}_secret_${Math.random().toString(36).slice(2, 22)}`;
   const checkout: ApiCheckout = {
     id,
-    amount: body.amount,
+    amount,
     currency: body.currency as Currency,
     settlement:
       typeof body.settlement === "string" ? body.settlement : "aevion-bank",

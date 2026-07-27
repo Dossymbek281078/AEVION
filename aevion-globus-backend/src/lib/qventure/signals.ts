@@ -306,6 +306,40 @@ export function statedAsAchieved(text: string, at: number, len: number): boolean
  * to keep it honest. "We target $10M ARR next year" must not become $10M of ARR
  * just because a model read the sentence and the regex did not.
  */
+/**
+ * Does this figure actually appear in the text?
+ *
+ * For the deck extractor, where a model reports numbers and nothing else checks
+ * them. A model asked for "only what the deck states" can still return a figure
+ * the deck never contains — computed, remembered, or simply wrong — and that
+ * number then enters the engine as an exact disclosure.
+ *
+ * Accepts the ways a figure is written rather than only its digits: 10000000
+ * matches "$10M", "10 million", "10,000,000"; 77 matches "77%"; 0.8 matches
+ * "0.8". Deliberately generous — the point is to catch a figure with no textual
+ * basis at all, not to police formatting.
+ */
+export function figureAppearsInText(text: string, value: number): boolean {
+  if (!isFinite(value) || value <= 0) return false;
+  const flat = text.toLowerCase().replace(/[,\s ]/g, "");
+  const forms = new Set<string>();
+  const add = (n: number) => {
+    if (!isFinite(n) || n <= 0) return;
+    forms.add(String(n));
+    if (Number.isInteger(n)) forms.add(n.toFixed(0));
+    forms.add(n.toFixed(1).replace(/\.0$/, ""));
+    forms.add(n.toFixed(2).replace(/0$/, "").replace(/\.$/, ""));
+  };
+  add(value);
+  for (const scale of [1e3, 1e6, 1e9]) {
+    if (value >= scale) add(value / scale);
+  }
+  for (const f of forms) {
+    if (f.length >= 1 && flat.includes(f)) return true;
+  }
+  return false;
+}
+
 export function metricStatedAsIntention(text: string, metric: RegExp): boolean {
   const t = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
   const re = new RegExp(metric.source, metric.flags.includes("g") ? metric.flags : metric.flags + "g");

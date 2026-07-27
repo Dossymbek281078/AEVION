@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { CASES } from "../scripts/qventure-disclosed";
 import { analyze } from "../src/lib/qventure/engine";
-import { parsePlanSignals, metricStatedAsIntention } from "../src/lib/qventure/signals";
+import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText } from "../src/lib/qventure/signals";
 import { PAIRS } from "../scripts/qventure-hardcases";
 import fs from "node:fs";
 import path from "node:path";
@@ -1526,5 +1526,42 @@ describe("a model reading a deck goes around the parser, and its guards", () => 
 
   test("the parser itself reports nothing for the sentence the model would answer", () => {
     expect(parsePlanSignals("We target $10M ARR next year.").revenueUsd).toBeNull();
+  });
+});
+
+describe("a figure a model reports must exist in the deck", () => {
+  /**
+   * The intention veto closed the case where a model answers a question the
+   * parser declined. This is the blunter companion: a model asked for "only
+   * what the deck states" can still return a number the deck never contains —
+   * computed, remembered, or simply wrong — and nothing downstream would know,
+   * because the figure arrives as an exact structured disclosure.
+   *
+   * Checked against the figure as the model reported it, before currency
+   * conversion: a euro deck does not contain the dollar equivalent derived from
+   * it.
+   */
+  test("figures written any ordinary way are found", () => {
+    expect(figureAppearsInText("We reached $10M ARR in 2024.", 10_000_000)).toBe(true);
+    expect(figureAppearsInText("Revenue of 10 million dollars.", 10_000_000)).toBe(true);
+    expect(figureAppearsInText("Revenue of $10,000,000.", 10_000_000)).toBe(true);
+    expect(figureAppearsInText("GMV of £4.1bn.", 4_100_000_000)).toBe(true);
+    expect(figureAppearsInText("Gross margin 77%.", 77)).toBe(true);
+    expect(figureAppearsInText("12,000 customers.", 12_000)).toBe(true);
+    expect(figureAppearsInText("LTV/CAC of 0.8.", 0.8)).toBe(true);
+  });
+
+  test("a figure with no basis in the text is not", () => {
+    expect(figureAppearsInText("We reached $10M ARR in 2024.", 25_000_000)).toBe(false);
+    expect(figureAppearsInText("Gross margin 77%.", 62)).toBe(false);
+    expect(figureAppearsInText("12,000 customers.", 30_000)).toBe(false);
+  });
+
+  test("it is deliberately generous about formatting", () => {
+    // The point is to catch a figure with no textual basis, not to police how
+    // the deck writes its numbers — a false rejection would silently discard a
+    // real disclosure, which is the failure mode this whole file is about.
+    expect(figureAppearsInText("ARR: 10.0M", 10_000_000)).toBe(true);
+    expect(figureAppearsInText("Churn 2.5% monthly", 2.5)).toBe(true);
   });
 });

@@ -11,7 +11,7 @@
 import { callProvider, pickConfiguredProvider, getProviders, type ChatMessage } from "../../services/qcoreai/providers";
 import { listSectors } from "./sectors";
 import { STAGES } from "./engine";
-import { parsePlanSignals, metricStatedAsIntention, type ChurnPeriod } from "./signals";
+import { parsePlanSignals, metricStatedAsIntention, figureAppearsInText, type ChurnPeriod } from "./signals";
 import { asRatePeriod, asGrowthPeriod } from "../metrics/periods";
 import { detectCurrencyFirst, toUsd, UNITS_PER_USD, type MoneyCurrency } from "../metrics/currency";
 
@@ -215,6 +215,27 @@ export async function extractDeckFields(text: string): Promise<DeckFields> {
     // therefore has nothing, the model's number is dropped rather than trusted.
     // This does not touch figures the deck states as fact, which is the whole
     // reason the model is here.
+    // Before the intention check, a blunter one: does the figure appear in the
+    // deck at all? A model asked for "only what the deck states" can still
+    // return a number the deck never contains — computed, remembered, or simply
+    // wrong — and nothing downstream would know. Checked against the figure as
+    // the MODEL reported it, before conversion, because a euro deck will not
+    // contain the dollar equivalent we derived from it.
+    const RAW_FIGURE_FIELDS: Array<[keyof DeckFinancials, unknown, number | null]> = [
+      ["arrUsd", rawFin.arrUsd, heur.financials.arrUsd],
+      ["grossMarginPct", rawFin.grossMarginPct, heur.financials.grossMarginPct],
+      ["ltvCacRatio", rawFin.ltvCacRatio, heur.financials.ltvCacRatio],
+      ["churnPct", rawFin.churnPct, heur.financials.churnPct],
+      ["customers", rawFin.customers, heur.financials.customers],
+      ["growthPct", rawFin.growthPct, heur.financials.growthPct],
+      ["bottomUpTamUsd", rawFin.bottomUpTamUsd, heur.financials.bottomUpTamUsd],
+    ];
+    for (const [field, raw, fallback] of RAW_FIGURE_FIELDS) {
+      if (typeof raw === "number" && isFinite(raw) && raw > 0 && !figureAppearsInText(clean, raw)) {
+        (financials[field] as number | null) = fallback;
+      }
+    }
+
     const INTENTION_VETO: Array<[keyof DeckFinancials, RegExp, number | null]> = [
       ["arrUsd", /(?:arr|mrr|revenues?)/i, banded.revenueUsd],
       ["grossMarginPct", /gross\s*margins?/i, banded.grossMarginPct],

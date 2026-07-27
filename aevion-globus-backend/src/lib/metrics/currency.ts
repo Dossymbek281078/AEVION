@@ -38,11 +38,29 @@ export const UNITS_PER_USD = {
   SGD: 1.290995,
   ILS: 3.055265,
   PLN: 3.795285,
+  // Added 2026-07-27 from the source this table already names, because real
+  // filings quote them: 20-F issuers in Hong Kong, Taiwan, Korea, Malaysia,
+  // Indonesia, Thailand, Vietnam, the Philippines, Mexico, South Africa and
+  // the Nordics. Until now each of these refused the figure rather than
+  // converting it — correct, but a refusal is still a figure not read.
+  HKD: 7.842426,
+  TWD: 32.353257,
+  KRW: 1459.602954,
+  MYR: 4.091139,
+  IDR: 17950.515989,
+  THB: 33.658926,
+  VND: 26256.748119,
+  PHP: 61.795217,
+  MXN: 17.450009,
+  ZAR: 16.762835,
+  NOK: 9.577248,
+  DKK: 6.550907,
+  NZD: 1.725629,
 } as const;
 
 export type MoneyCurrency = keyof typeof UNITS_PER_USD;
 
-export const RATES_AS_OF = "2026-07-26";
+export const RATES_AS_OF = "2026-07-27";
 export const RATES_SOURCE = "open.er-api.com";
 
 /**
@@ -51,6 +69,21 @@ export const RATES_SOURCE = "open.er-api.com";
  * the first entry whose pattern is present in the window wins.
  */
 const MARKERS: Array<[MoneyCurrency, RegExp]> = [
+  // Multi-character symbols must precede the bare $ below, or HK$ and NT$
+  // are read as US dollars — an 8x and a 32x overstatement respectively.
+  ["HKD", /hk\$|\bhkd(?![a-z])|\bhong kong dollars?\b/i],
+  ["TWD", /nt\$|\btwd(?![a-z])|\bnew taiwan dollars?\b/i],
+  ["NZD", /nz\$|\bnzd(?![a-z])|\bnew zealand dollars?\b/i],
+  ["MXN", /mex\$|\bmxn(?![a-z])|\bmexican pesos?\b/i],
+  ["KRW", /₩|\bkrw(?![a-z])|\bwon\b/i],
+  ["MYR", /\bmyr(?![a-z])|\brm(?=\s*[\d.])|\bringgit\b/i],
+  ["IDR", /\bidr(?![a-z])|\brp(?=\s*[\d.])|\brupiah\b/i],
+  ["THB", /฿|\bthb(?![a-z])|\bbaht\b/i],
+  ["VND", /₫|\bvnd(?![a-z])|\bdong\b/i],
+  ["PHP", /₱|\bphp(?![a-z])|\bphilippine pesos?\b/i],
+  ["ZAR", /\bzar(?![a-z])|\brand\b/i],
+  ["NOK", /\bnok(?![a-z])|\bnorwegian kroner?\b/i],
+  ["DKK", /\bdkk(?![a-z])|\bdanish kroner?\b/i],
   ["CAD", /\bcad(?![a-z])|c\$|\bcanadian dollars?\b/i],
   ["AUD", /\baud(?![a-z])|a\$|\baustralian dollars?\b/i],
   ["SGD", /\bsgd(?![a-z])|s\$|\bsingapore dollars?\b/i],
@@ -93,14 +126,14 @@ const MARKERS: Array<[MoneyCurrency, RegExp]> = [
  * different one.
  */
 export const UNSUPPORTED_CURRENCY_BEFORE_NUMBER =
-  /(?:hk\$|nt\$|nz\$|\brp(?![a-z])|\brm(?![a-z])|[₦₱₩฿₫৳₡₵₲₭₮﷼]|\b(?:hkd|twd|myr|idr|thb|vnd|php|krw|ngn|zar|mxn|clp|cop|ars|egp|pkr|bdt|lkr|npr|kes|ghs|dkk|nok|czk|huf|ron|uah|sar|qar|kwd|bhd|omr|jod|nzd|isk|bgn|ttd|jmd|dop|uyu|pyg|bob|crc)(?![a-z]))\s*$/i;
+  /(?:[₦৳₡₵₲₭₮﷼]|\b(?:ngn|clp|cop|ars|egp|pkr|bdt|lkr|npr|kes|ghs|czk|huf|ron|uah|sar|qar|kwd|bhd|omr|jod|isk|bgn|ttd|jmd|dop|uyu|pyg|bob|crc)(?![a-z]))\s*$/i;
 
 /**
  * Regex source for an optional currency marker sitting in front of a number,
  * so "€3M ARR" and "KZT 450 млн" match the same money patterns "$3M" does.
  */
 export const CURRENCY_PREFIX_PATTERN =
-  String.raw`(?:r\$|s\$|c\$|a\$|\brs\.?(?=[ 0-9])|[$€£₸₽¥₹₪₺]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|rmb|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln)(?![a-z]))?\s*`;
+  String.raw`(?:hk\$|nt\$|nz\$|mex\$|r\$|s\$|c\$|a\$|\brs\.?(?=[ 0-9])|[$€£₸₽¥₹₪₺₩฿₫₱]|\b(?:usd|eur|gbp|kzt|rub|jpy|cny|rmb|inr|chf|cad|aud|sek|aed|brl|try|sgd|ils|pln|hkd|twd|krw|myr|idr|thb|vnd|php|mxn|zar|nok|dkk|nzd)(?![a-z]))?\s*`;
 
 /**
  * Find the currency a figure is quoted in, given a small text window around it.

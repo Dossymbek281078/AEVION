@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 532
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 602
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (532
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (602
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -815,13 +815,44 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    score must be high enough for the omission to matter. If someone teaches the
    engine to weigh cost, that test fails and has to be rewritten on purpose.
 
+31. **Thirteen currencies moved from refused to read.** Limit 22 chose a rule
+   over a table: an unrecognised currency refuses the figure rather than
+   inheriting the plan's. That was right, and it left thirteen currencies real
+   20-F issuers actually quote — Hong Kong, Taiwan, Korea, Malaysia, Indonesia,
+   Thailand, Vietnam, the Philippines, Mexico, South Africa, Norway, Denmark,
+   New Zealand — returning nothing. A refusal beats a wrong number, but it is
+   still a figure not read.
+
+   Rates fetched from the source this table already names, on the date it now
+   records. The refusal rule is unchanged and still covers everything without a
+   rate: a test asserts naira, Chilean and Argentine pesos, Egyptian pounds and
+   Pakistani rupees are still refused rather than read as dollars, and a second
+   asserts the thirteen new ones convert at the checked-in rate.
+
+   `HK$` and `NT$` are the reason multi-character symbols sit before the bare
+   `$` in both tables. Read as US dollars they overstate by 8x and 32x.
+
+32. **The same asymmetry, caught by a probe rather than by the guard.** Adding
+   the currencies wired their **codes** into both tables, and the derived guard
+   from limit 23 passed — it builds "KRW 100 million" and checks that. The gap
+   was in the **symbol** form: won, baht, dong and peso were recognised as
+   currencies and then had no way to reach a figure written with them, because
+   the number-prefix character class was never extended. Exactly the defect
+   limit 22 closed for `R$` and `S$`, reintroduced four hours later by someone
+   who had read that limit.
+
+   A guard that tests one of two forms is a guard for one of two forms. There is
+   now a second, deriving every currency symbol from the `MARKERS` block of the
+   source and requiring each to reach a figure — proven by mutation, which
+   reddens the exact symbol removed.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 532):
+`tests/qventureDisclosedCorpus.test.ts`, 602):
 
 | Guard | Floor | Measured today |
 |---|---|---|

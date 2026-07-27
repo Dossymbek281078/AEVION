@@ -1705,15 +1705,32 @@ describe("a currency we cannot convert refuses the figure", () => {
   // ones, which is strictly worse than the miss they are now.
   const rev = (t: string) => parsePlanSignals(t).revenueUsd;
 
+  // The six currencies this test was written against are now in the rate table,
+  // fetched 2026-07-27 from the source the table already names. They no longer
+  // refuse — they convert, which is better, and the pair of assertions below
+  // covers both halves: the ones with a rate convert, the ones without still
+  // refuse rather than being read as dollars.
   test.each([
-    ["Malaysian ringgit, symbol", "We recorded RM 458.2 million in revenue."],
-    ["Malaysian ringgit, code", "We recorded MYR 458.2 million in revenue."],
-    ["Hong Kong dollar — the $ used to win", "We recorded HK$ 780 million in revenue."],
-    ["Indonesian rupiah", "We recorded Rp 461.1 billion in revenue."],
-    ["Thai baht", "We recorded ฿1.2 billion in revenue."],
-    ["Korean won", "We recorded ₩900 billion in revenue."],
-  ])("%s", (_label, text) => {
+    ["Nigerian naira", "We recorded NGN 458.2 million in revenue."],
+    ["Chilean peso", "We recorded CLP 780 million in revenue."],
+    ["Argentine peso", "We recorded ARS 461.1 billion in revenue."],
+    ["Egyptian pound", "We recorded EGP 1.2 billion in revenue."],
+    ["Pakistani rupee", "We recorded PKR 900 million in revenue."],
+  ])("no rate, so the figure is refused rather than read as dollars: %s", (_label, text) => {
     expect(rev(text)).toBeNull();
+  });
+
+  test.each([
+    ["Malaysian ringgit, symbol", "We recorded RM 458.2 million in revenue.", 458.2e6, "MYR"],
+    ["Malaysian ringgit, code", "We recorded MYR 458.2 million in revenue.", 458.2e6, "MYR"],
+    ["Hong Kong dollar — the $ must not win", "We recorded HK$ 780 million in revenue.", 780e6, "HKD"],
+    ["Indonesian rupiah", "We recorded Rp 461.1 billion in revenue.", 461.1e9, "IDR"],
+    ["Thai baht", "We recorded ฿1.2 billion in revenue.", 1.2e9, "THB"],
+    ["Korean won", "We recorded ₩900 billion in revenue.", 900e9, "KRW"],
+  ])("now converted at the checked-in rate: %s", (_label, text, amount, code) => {
+    const v = rev(text);
+    expect(v).not.toBeNull();
+    expect(Math.abs(v! - toUsd(amount as number, code as MoneyCurrency))).toBeLessThan(1);
   });
 
   test("an English word that is also an ISO code is not a currency", () => {
@@ -2119,5 +2136,32 @@ describe("the engine reads the good half of a disclosure", () => {
     // If it scored "pass" either way the omission would be academic. It does
     // not: on revenue and GMV alone this reaches the top band.
     expect(score(WITHOUT)).toBeGreaterThan(70);
+  });
+});
+
+describe("a currency symbol recognised is a currency symbol accepted", () => {
+  // The asymmetry that keeps coming back: MARKERS says what a currency is,
+  // CURRENCY_PREFIX_PATTERN says what may stand in front of a number. The
+  // by-code guard above missed it twice, because it tests "KRW 100 million" and
+  // the gap was in the symbol form — won, baht, dong and peso were detected and
+  // then had no way to reach a figure written with them.
+  //
+  // Symbols are read out of the source rather than restated here, so a currency
+  // added with a new symbol has to be added to both places.
+  const SRC = fs.readFileSync(path.join(__dirname, "../src/lib/metrics/currency.ts"), "utf8");
+  const markersBlock = SRC.slice(SRC.indexOf("const MARKERS"), SRC.indexOf("UNSUPPORTED_CURRENCY_BEFORE_NUMBER"));
+  const SYMBOLS = [...new Set(markersBlock.match(/[¡-￿]/g) ?? [])].filter((c) => /\p{Sc}/u.test(c));
+
+  test("the source still looks the way this test assumes", () => {
+    expect(markersBlock.length).toBeGreaterThan(200);
+    expect(SYMBOLS.length).toBeGreaterThan(8);
+  });
+
+  test.each(SYMBOLS)("%s reaches a figure written with it", (sym) => {
+    const code = detectCurrency(`${sym}100`);
+    expect(code).not.toBeNull();
+    const v = parsePlanSignals(`We reported revenue of ${sym}100 million.`).revenueUsd;
+    expect(v).not.toBeNull();
+    expect(Math.abs(v! - toUsd(100_000_000, code as MoneyCurrency))).toBeLessThan(1);
   });
 });

@@ -27,7 +27,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -51,6 +51,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Post-deploy verification scheduled by a test in this file used to fire
+  // during a LATER test and eat its mocked fetch — the suite then failed on a
+  // different test each run (issue #982). Drop what is still pending.
+  __clearDeferredDevHubWork();
   globalThis.fetch = originalFetch;
   vi.mocked(getProviders).mockReturnValue([]);
   vi.mocked(callProvider).mockReset();

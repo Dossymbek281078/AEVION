@@ -239,6 +239,32 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
   return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
 }
 
+// ── Deferred post-deploy work ────────────────────────────────────────────────
+// Deploy routes answer immediately and then verify, seconds later, that the
+// deployed URL actually serves (backend CLAUDE.md §10). Those timers outlive
+// the request — and in tests they outlive the test that started them, firing
+// during a later one and consuming its mocked fetch. That is what made the
+// backend suite fail on a different test each run (issue #982): a real
+// timing dependency, not a mystery.
+//
+// Prod behaviour is unchanged; the timers are merely tracked so a test can
+// drop the ones still pending.
+const deferredTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function deferred(fn: () => void | Promise<void>, ms: number): void {
+  const t = setTimeout(() => {
+    deferredTimers.delete(t);
+    void fn();
+  }, ms);
+  deferredTimers.add(t);
+}
+
+/** Drop post-deploy verification still waiting to run. Tests only. */
+export function __clearDeferredDevHubWork() {
+  for (const t of deferredTimers) clearTimeout(t);
+  deferredTimers.clear();
+}
+
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
@@ -2040,7 +2066,7 @@ Built, but ${url} did not answer 2xx in time`;
 
         // Verify the page actually serves before calling it live — same
         // honesty rule as the CF Pages / Vercel paths.
-        setTimeout(async () => {
+        deferred(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
           const serves = await verifyDeploymentServes(railwayDeployUrl);
           if (serves) {
@@ -2082,7 +2108,7 @@ Built, but ${url} did not answer 2xx in time`;
     })();
   } else {
     // Simulate build asynchronously — no Railway token
-    setTimeout(async () => {
+    deferred(async () => {
       deployment.status = "live";
       deployment.deployUrl = deployUrl;
       deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
@@ -5395,7 +5421,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
     // Verify the page actually serves before calling it live — same honesty
     // rule as the CF Pages path (a deploy that never serves is a failure).
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(liveUrl);
       if (serves) {
@@ -5580,7 +5606,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // then 500s forever while our records said "live" (found live 2026-07-21:
     // every CF Pages deploy ever made had this). Degraded-convention: a
     // deploy that doesn't serve is FAILED, not live.
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
       if (serves) {

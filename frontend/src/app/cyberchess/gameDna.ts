@@ -1,6 +1,7 @@
 // Game DNA — персональная аналитика игрока из savedGames.
 // Pure function, no side effects. Works on the SavedGame[] shape
 // declared in page.tsx.
+import { gameResultOf } from "./gameResult";
 
 export type SavedGameLike = {
   id: string;
@@ -42,16 +43,12 @@ export type GameDNA = {
   insights: string[];     // natural-language bullet points, ru-RU
 };
 
-function isWin(r: string) { return r.includes("You win") || r.includes("timed out") || r.includes("win!") }
-function isDraw(r: string) {
-  return r.includes("Draw") || r.includes("draw") || r.includes("Stalemate") ||
-         r.includes("repetition") || r.includes("Insufficient");
-}
-function classifyResult(r: string): "W" | "L" | "D" {
-  if (isWin(r)) return "W";
-  if (isDraw(r)) return "D";
-  return "L";
-}
+/* Четвёртая копия разбора результата в модуле — и последняя. На сегодняшних строках она
+   давала верный ответ, но держалась на `includes("timed out")`: появись финал вида
+   «You timed out», и поражение засчиталось бы победой. Три предыдущие копии уже разошлись
+   с общей (в insights.ts это записано в комментарии, в mirrorMode.ts копия не узнавала
+   ВООБЩЕ ни одной реальной строки). Классификатор один на проект. */
+const classifyResult = (r: string): "W" | "L" | "D" => gameResultOf(r);
 
 export function computeGameDNA(games: SavedGameLike[]): GameDNA {
   if (games.length === 0) {

@@ -290,7 +290,7 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
  * drift apart.
  */
 const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
-const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|target(?:s|ed)?(?=\s+(?:to|a|an|[0-9$£€]))|aims? to|hop(?:e|es|ing) to|will\s+(?:be|seek|file|submit|apply|deploy|have)|may\s+(?:apply|seek|obtain|file|become|need|be granted)|in the future|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
 function statedAsAchieved(text: string, at: number, len: number): boolean {
   const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
   const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
@@ -682,7 +682,10 @@ export function parsePlanSignals(text: string): PlanSignals {
       s.grossMarginPct = gmShare[1] ? -magnitude : magnitude;
     }
   }
-  if (gm && s.grossMarginPct === null) {
+  // A margin expected at scale is not a margin earned. Same filter as the
+  // milestone lists and the grant reader — the metric readers were the last
+  // group that had never been asked.
+  if (gm && s.grossMarginPct === null && statedAsAchieved(t, gm.index ?? 0, gm[0].length)) {
     const magnitude = parseLocaleNumber(gm[2]);
     const negative = Boolean(gm[1]);
     if (isFinite(magnitude) && magnitude > 0 && magnitude <= 100) {
@@ -809,7 +812,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // bleeding out. Exactly the confusion the churn-period machinery exists to
     // prevent, left open on the most natural phrasing of all.
     || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
-  if (churn) {
+  if (churn && statedAsAchieved(t, churn.index ?? 0, churn[0].length)) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
     const v = value !== undefined ? parseLocaleNumber(value) : NaN;
@@ -841,7 +844,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
-  if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
+  if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
   // Not every business calls them customers: a workspace operator discloses
@@ -870,7 +873,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
   const cust = s.customers !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NOT_MONEY}${NUM}\s*${UNIT}\s*(?:paying\s*|active\s*)?${CUST_QUALIFIER}(?:${CUST_NOUN})`, "i"), s, "the customer count");
-  if (cust) {
+  if (cust && statedAsAchieved(t, cust.index ?? 0, cust[0].length)) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
   }
@@ -1078,7 +1081,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const gmv = s.gmvUsd !== null ? null
     : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
-  if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
+  if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
   const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
   const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
@@ -1093,7 +1096,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const take = s.takeRatePct !== null ? null
     : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
-  if (take) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
+  if (take && statedAsAchieved(t, take.index ?? 0, take[0].length)) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 
   // Revenue the plan never stated directly but implied: GMV × take rate.
   if (s.revenueUsd === null && s.gmvUsd !== null && s.takeRatePct !== null) {

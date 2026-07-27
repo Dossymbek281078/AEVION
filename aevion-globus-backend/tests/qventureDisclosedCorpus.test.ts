@@ -1452,3 +1452,38 @@ describe("the same filter belongs to the numbers, not only the labels", () => {
     expect(sig("Approximately 14,000 reservations for fuel-cell trucks.").reservations).toBe(14_000);
   });
 });
+
+describe("a metric expected at scale is not a metric earned", () => {
+  /**
+   * The last group of readers that had never been asked the question. Two of
+   * the six were surviving on sentence shape rather than on a check — "gross
+   * margin should reach 80%" and "retention is expected to reach 130%" missed
+   * only because the words sat between the name and the figure. Luck, and the
+   * same luck the PPA and peer-review entries were living on this morning.
+   */
+  const sig = (t: string) => parsePlanSignals(t) as unknown as Record<string, number | null>;
+
+  test("an intended metric states no figure", () => {
+    expect(sig("We expect 80% gross margin at scale.").grossMarginPct).toBeNull();
+    expect(sig("Gross margin should reach 80% once volumes grow.").grossMarginPct).toBeNull();
+    expect(sig("We target 3% monthly churn.").churnPct).toBeNull();
+    expect(sig("Net revenue retention is expected to reach 130% next year.").retentionPct).toBeNull();
+    expect(sig("We aim for 12,000 customers by 2027.").customers).toBeNull();
+    expect(sig("We expect GMV of $400M in 2027.").gmvUsd).toBeNull();
+  });
+
+  test("the disclosed forms are untouched", () => {
+    expect(sig("Gross margin 77%.").grossMarginPct).toBe(77);
+    expect(sig("3% annual churn.").churnPct).toBe(3);
+    expect(sig("Net revenue retention 146%.").retentionPct).toBe(146);
+    expect(sig("12,000 customers.").customers).toBe(12_000);
+    expect(sig("GMV of $180M annualized.").gmvUsd).toBe(180_000_000);
+    expect(sig("Revenue of $198.1M in 2018, up 97% year over year.").revenueUsd).toBe(198_100_000);
+  });
+
+  test("'target' as a noun does not suppress a real figure", () => {
+    // The verb had to be added for "we target 3% churn"; "our target market"
+    // must not take the customer count down with it.
+    expect(sig("Our target market includes 12,000 clinics; we serve 1,200 customers.").customers).toBe(1_200);
+  });
+});

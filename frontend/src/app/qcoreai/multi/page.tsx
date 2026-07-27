@@ -80,6 +80,7 @@ type RunState = {
   turns: AgentTurn[];
   /** Set when the run hit its maxCostUsd budget cap and bailed early. */
   budgetExceeded?: { spentUsd: number; budgetUsd: number };
+  premiumQuotaExceeded?: { provider: string; model: string; usedTokens: number; limitTokens: number };
   /** Optional mid-run guidance items, rendered as inline chips before the
       agent stage they steered. */
   guidance?: GuidanceItem[];
@@ -159,6 +160,7 @@ type SSEPayload =
   | { type: "guidance_applied"; stage: Stage; role: AgentRole; text: string; instance?: string }
   | { type: "qright_attached"; items: { id: string; title: string | null; kind: string | null }[] }
   | { type: "budget_exceeded"; spentUsd: number; budgetUsd: number }
+  | { type: "premium_quota_exceeded"; provider: string; model: string; usedTokens: number; limitTokens: number }
   | {
       type: "route";
       classification: "open" | "fact";
@@ -1534,6 +1536,23 @@ export default function QCoreMultiAgentPage() {
               prev.map((r) =>
                 r.id === realRunId
                   ? { ...r, budgetExceeded: { spentUsd: payload.spentUsd, budgetUsd: payload.budgetUsd } }
+                  : r
+              )
+            );
+            break;
+          case "premium_quota_exceeded":
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? {
+                      ...r,
+                      premiumQuotaExceeded: {
+                        provider: payload.provider,
+                        model: payload.model,
+                        usedTokens: payload.usedTokens,
+                        limitTokens: payload.limitTokens,
+                      },
+                    }
                   : r
               )
             );
@@ -5366,6 +5385,18 @@ function RunCard({
               }}
             >
               💸 BUDGET CAP
+            </span>
+          )}
+          {run.premiumQuotaExceeded && (
+            <span
+              title={`Monthly premium-model quota exhausted (${run.premiumQuotaExceeded.usedTokens.toLocaleString()} / ${run.premiumQuotaExceeded.limitTokens.toLocaleString()} tokens) — ${run.premiumQuotaExceeded.provider}/${run.premiumQuotaExceeded.model} was skipped; the run degraded to the remaining models.`}
+              style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "rgba(168,85,247,0.12)", color: "#6b21a8",
+                fontSize: 10, fontWeight: 800, border: "1px solid rgba(168,85,247,0.4)",
+              }}
+            >
+              ⭐ PREMIUM QUOTA
             </span>
           )}
           {run.status === "error" && (

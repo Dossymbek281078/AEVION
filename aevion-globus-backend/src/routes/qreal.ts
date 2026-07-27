@@ -184,21 +184,28 @@ function renderCacheKey(engineId: string, prompt: string, durationSec: number, i
 // Урок 2026-07-21: рестарт процесса стёр in-memory проекты, оплаченные
 // джобы спас только ручной лог request_id. Журнал закрывает эту дыру и
 // восстанавливает кэш готовых рендеров при старте.
-const JOURNAL_PATH = process.env.QREAL_JOURNAL_PATH
-  || path.join(process.cwd(), "data", "qreal-render-journal.jsonl");
+// Resolved per call, not at import. Binding a file path once at import is how
+// the paywall suite ended up writing its fixtures into the real
+// data/subscriptions.jsonl: whichever module got imported first decided the
+// path, before the test could point it at a temp dir. Same shape here, so the
+// same guard.
+function journalPath(): string {
+  return process.env.QREAL_JOURNAL_PATH
+    || path.join(process.cwd(), "data", "qreal-render-journal.jsonl");
+}
 
 function journalAppend(entry: Record<string, unknown>): void {
   try {
-    fs.mkdirSync(path.dirname(JOURNAL_PATH), { recursive: true });
-    fs.appendFileSync(JOURNAL_PATH, JSON.stringify({ ts: nowIso(), ...entry }) + "\n");
+    fs.mkdirSync(path.dirname(journalPath()), { recursive: true });
+    fs.appendFileSync(journalPath(), JSON.stringify({ ts: nowIso(), ...entry }) + "\n");
   } catch { /* журнал best-effort, рендер важнее */ }
 }
 
 function restoreRenderCacheFromJournal(): number {
   try {
-    if (!fs.existsSync(JOURNAL_PATH)) return 0;
+    if (!fs.existsSync(journalPath())) return 0;
     let restored = 0;
-    for (const line of fs.readFileSync(JOURNAL_PATH, "utf8").split("\n")) {
+    for (const line of fs.readFileSync(journalPath(), "utf8").split("\n")) {
       if (!line.trim()) continue;
       try {
         const e = JSON.parse(line);

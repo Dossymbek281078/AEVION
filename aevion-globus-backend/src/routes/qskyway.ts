@@ -5,6 +5,7 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
+import { AIRSPACE, CeilingField, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
 import { getPool } from "../lib/dbPool";
 
 /**
@@ -24,22 +25,25 @@ import { getPool } from "../lib/dbPool";
  * данных → ниже коридор. Фаза 6 (уже реализована): наземный ветер — реальный
  * METAR ближайшего аэропорта (aviationweather.gov, без ключа, см.
  * qskyway.metar.ts), не иллюстрация; graceful fallback на демо-модель при
- * недоступности фида. Следующая фаза — боевые фиды запретных зон регулятора
- * (FAA UAS Facility Maps / NOTAM, EASA U-space, CAAC) вместо иллюстративных
- * зон, см. дисклеймер ниже.
+ * недоступности фида. Фаза 7 (уже реализована): регуляторные потолки высоты из
+ * официального фида — FAA UAS Facility Map для NYC (qskyway.airspace.ts). Города
+ * без открытого фида регулятора (Астана/KZ CAA, Токио/JCAB) честно отдают
+ * `airspace.available:false`, а не выдуманные данные.
  *
  * Честно: движок/PoC, не сертифицированное авиационное ПО. Данные зданий —
- * OpenStreetMap (ODbL, открытые). Запретные зоны здесь ИЛЛЮСТРАТИВНЫ; в проде
- * подключаются к официальным фидам регулятора (FAA/EASA/CAAC). Наземный ветер
- * — реальный METAR с graceful fallback; послойный рост с высотой — иллюстративная
- * экстраполяция (METAR не содержит данных о ветре на высоте).
+ * OpenStreetMap (ODbL, открытые). Точечные запретные зоны (qskyway.zones.ts)
+ * по-прежнему ИЛЛЮСТРАТИВНЫ. Регуляторный потолок NYC — реальный (FAA UASFM),
+ * но это сетка допусков для малых БВС Part 107, НЕ сертификация аэротакси.
+ * Наземный ветер — реальный METAR с graceful fallback; послойный рост с высотой
+ * — иллюстративная экстраполяция (METAR не содержит данных о ветре на высоте).
  *
  * Endpoints:
  *   GET  /health          — статус + список городов
  *   GET  /cities          — города (счётчики, bbox, подпись, площадки)
- *   GET  /city?city=id    — двойник + запретные зоны + ветер + подпись
+ *   GET  /city?city=id    — двойник + запретные зоны + ветер + потолки + подпись
  *   GET  /vertiports?city=id — площадки со скорингом пригодности
- *   POST /route           — {from,to,city?} → 4D-маршрут (обход зон + ветер в ETA)
+ *   POST /route           — {from,to,city?,respectCeiling?} → 4D-маршрут
+ *                           (обход зон + ветер в ETA + регуляторный потолок)
  *   GET  /verify?city=id  — проверка подписи Ed25519 двойника
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
  */
@@ -47,7 +51,7 @@ import { getPool } from "../lib/dbPool";
 export const qskywayRouter = Router();
 
 const DISCLAIMER =
-  "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Запретные зоны и ветер иллюстративны; в проде — официальные фиды регулятора и METAR. Полёты требуют допуска (U-space/UTM/CAAC).";
+  "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Наземный ветер — реальный METAR; потолки высоты NYC — реальный фид FAA UASFM (допуски Part 107 для малых БВС, не сертификация аэротакси). Точечные запретные зоны остаются иллюстративными. Полёты требуют допуска (U-space/UTM/CAAC).";
 
 // ── city registry ──────────────────────────────────────────────────────────
 const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO };
@@ -166,7 +170,19 @@ class MinHeap {
 }
 interface Cell { c: number; r: number; }
 
-function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r: number) => boolean): Cell[] | null {
+/**
+ * @param blocked     cell-level ban (no-fly zones)
+ * @param edgeBlocked optional edge-level ban that also sees the flight altitude —
+ *                    used by strict airspace mode, where an edge is illegal only
+ *                    because the corridor it requires is above the published ceiling.
+ */
+function astar(
+  g: CityData["grid"],
+  s: Cell,
+  goal: Cell,
+  blocked: (c: number, r: number) => boolean,
+  edgeBlocked?: (fc: number, fr: number, tc: number, tr: number, alt: number) => boolean,
+): Cell[] | null {
   const cols = g.cols, rows = g.rows;
   const edgeAlt = edgeAltOf(g);
   const idx = (c: number, r: number): number => r * cols + c;
@@ -188,6 +204,9 @@ function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r:
       if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
       if (blocked(nc, nr) && !isGoal(nc, nr) && !isStart(nc, nr)) continue; // обход запретной зоны
       const alt = edgeAlt(cur.c, cur.r, nc, nr);
+      // Unlike no-fly cells, a ceiling violation has no start/goal exemption:
+      // a pad you cannot legally lift off from is not a usable pad.
+      if (edgeBlocked?.(cur.c, cur.r, nc, nr, alt)) continue;
       const step = 1 + (alt - FLOOR) / 90;
       const t = gsc[ci] + step, ni = idx(nc, nr);
       if (t < gsc[ni]) { gsc[ni] = t; came[ni] = ci; open.push({ c: nc, r: nr, f: t + h(nc, nr) }); }
@@ -200,21 +219,85 @@ function astar(g: CityData["grid"], s: Cell, goal: Cell, blocked: (c: number, r:
   return path.length > 1 ? path : null;
 }
 
+/**
+ * Per-route verdict against the regulator's published ceiling.
+ *
+ * `compliant` answers one narrow question: does every segment of this corridor
+ * stay at or below the altitude the authority publishes as automatically
+ * authorizable for that cell? Non-compliant is not "illegal" — it means the
+ * flight needs ATC/LAANC coordination, which is exactly what an operator has to
+ * know before filing. Cities with no published feed report available:false and
+ * no verdict, rather than a green tick that means nothing.
+ */
+interface AirspaceCompliance {
+  available: boolean;
+  compliant: boolean | null;
+  coveragePct: number;
+  exceedingSegments: number;
+  zeroCeilingSegments: number;
+  maxExceedanceM: number;
+  lowestCeilingM: number | null;
+  note: string;
+}
+
+function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[]): AirspaceCompliance {
+  if (!field) {
+    return {
+      available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
+      zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
+      note: "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
+    };
+  }
+  let covered = 0, exceeding = 0, zeroSegs = 0, maxExc = 0;
+  let lowest: number | null = null;
+  for (let k = 0; k < alts.length; k++) {
+    // A segment is bound by the stricter of the two cells it touches.
+    const ceil = Math.min(ceilingAt(field, path[k].c, path[k].r), ceilingAt(field, path[k + 1].c, path[k + 1].r));
+    if (ceil === NO_CEILING) continue;
+    covered++;
+    lowest = lowest === null ? ceil : Math.min(lowest, ceil);
+    if (ceil === 0) zeroSegs++;
+    if (alts[k] > ceil) { exceeding++; maxExc = Math.max(maxExc, alts[k] - ceil); }
+  }
+  const compliant = exceeding === 0;
+  return {
+    available: true,
+    compliant,
+    coveragePct: Math.round((100 * covered) / Math.max(1, alts.length)),
+    exceedingSegments: exceeding,
+    zeroCeilingSegments: zeroSegs,
+    maxExceedanceM: Math.round(maxExc),
+    lowestCeilingM: lowest,
+    note: compliant
+      ? "Коридор укладывается в опубликованный потолок — автоматический допуск (LAANC) применим на всём протяжении."
+      : `${exceeding} из ${alts.length} участков выше опубликованного потолка (макс. превышение ${Math.round(maxExc)} м) — нужна координация с УВД, автоматического допуска недостаточно.`,
+  };
+}
+
 interface RouteResult {
   city: string; from: number; to: number; path: Cell[]; alts: number[]; obstacles: number[];
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
   avoidsNoFly: boolean;
   avgConfClearM: number; heightConfidencePct: number;
+  respectCeiling: boolean;
+  airspace: AirspaceCompliance;
 }
 
-function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number): RouteResult | null {
+function buildRoute(
+  cityId: string, city: CityData, fromVp: number, toVp: number, respectCeiling = false,
+): RouteResult | null {
   const vps = city.vertiports;
   if (fromVp < 0 || toVp < 0 || fromVp >= vps.length || toVp >= vps.length || fromVp === toVp) return null;
   const zones = zonesMeters(cityId, city);
   const blocked = noFlyTest(city, zones);
+  const field = ceilingField(cityId, city);
   const a = vps[fromVp], b = vps[toVp];
-  const path = astar(city.grid, { c: a.c, r: a.r }, { c: b.c, r: b.r }, blocked);
+  const ceilingGate = respectCeiling && field
+    ? (fc: number, fr: number, tc: number, tr: number, alt: number): boolean =>
+        alt > Math.min(ceilingAt(field, fc, fr), ceilingAt(field, tc, tr))
+    : undefined;
+  const path = astar(city.grid, { c: a.c, r: a.r }, { c: b.c, r: b.r }, blocked, ceilingGate);
   if (!path) return null;
   const edgeAlt = edgeAltOf(city.grid);
   const obst = obstOf(city.grid);
@@ -250,6 +333,8 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
     avoidsNoFly: zones.length > 0,
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
+    respectCeiling,
+    airspace: assessCeiling(field, path, alts),
   };
 }
 
@@ -257,12 +342,17 @@ function buildRoute(cityId: string, city: CityData, fromVp: number, toVp: number
 interface VertiportScore {
   id: string; c: number; r: number; x: number; y: number;
   openRadiusM: number; clearanceM: number; distNoFlyM: number;
+  /** published regulatory ceiling over the pad, metres AGL; null where no feed */
+  ceilingM: number | null;
+  /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
+  needsAtcCoordination: boolean;
   suitability: number; class: "candidate-pad" | "needs-infrastructure" | "unsuitable";
 }
 function suitability(cityId: string, city: CityData): VertiportScore[] {
   const g = city.grid;
   const obst = obstOf(g);
   const zones = zonesMeters(cityId, city);
+  const field = ceilingField(cityId, city);
   return city.vertiports.map((v, i) => {
     // open radius: expand until an obstacle > 15 m appears
     let openR = 0;
@@ -283,7 +373,18 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
     const clearScore = clearance < 8 ? 1 : clearance < 15 ? 0.6 : 0.2;
     const score = Math.round(100 * (0.5 * openScore + 0.35 * noflyScore + 0.15 * clearScore));
     const cls: VertiportScore["class"] = score >= 65 ? "candidate-pad" : score >= 35 ? "needs-infrastructure" : "unsuitable";
-    return { id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y, openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly), suitability: score, class: cls };
+    // Deliberately NOT folded into `suitability`: that score measures physical
+    // siting (openness, clearance, distance to zones). Regulatory status is a
+    // separate axis — a perfectly sited pad can still need ATC coordination —
+    // and merging them would make one number mean two different things.
+    const ceil = field ? ceilingAt(field, v.c, v.r) : NO_CEILING;
+    const ceilingM = ceil === NO_CEILING ? null : ceil;
+    return {
+      id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y,
+      openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly),
+      ceilingM, needsAtcCoordination: ceilingM === 0,
+      suitability: score, class: cls,
+    };
   });
 }
 
@@ -439,14 +540,15 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     module: "qskyway",
-    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct })),
+    cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct, airspaceFeed: AIRSPACE[id]?.authority ?? null })),
     city: CITY.city,
     buildings: CITY.buildings.length,
     vertiports: CITY.vertiports.length,
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
-    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance"],
+    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings"],
+    airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceSummary(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     wind: metarStatus(),
@@ -484,6 +586,7 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
         : "иллюстративная послойная модель (METAR временно недоступен)",
     },
+    airspace: airspaceSummary(id, city),
     vertiportScores: suitability(id, city),
     _signature: signCity(id, city),
   });
@@ -500,13 +603,31 @@ qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
 });
 
 qskywayRouter.post("/route", (req: Request, res: Response) => {
-  const { from, to, city } = req.body ?? {};
+  const { from, to, city, respectCeiling } = req.body ?? {};
   if (typeof from !== "number" || typeof to !== "number")
     return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
   const resolved = resolveCity(city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
-  const route = buildRoute(resolved.id, resolved.city, from, to);
-  if (!route) return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+  const strict = respectCeiling === true;
+  const route = buildRoute(resolved.id, resolved.city, from, to, strict);
+  if (!route) {
+    // In strict mode the usual "no corridor" answer is misleading: the corridor
+    // exists physically and is only barred by the published ceiling. Say which.
+    if (strict) {
+      const relaxed = buildRoute(resolved.id, resolved.city, from, to, false);
+      if (relaxed) {
+        return res.status(422).json({
+          error: "нет коридора в пределах опубликованного потолка регулятора",
+          reason: "airspace-ceiling",
+          respectCeiling: true,
+          airspaceIfUnrestricted: relaxed.airspace,
+          cruiseAltMIfUnrestricted: relaxed.cruiseAltM,
+          note: "Физически маршрут существует, но требует высоты выше автоматически разрешённой. Полёт возможен только по координации с УВД (вне LAANC).",
+        });
+      }
+    }
+    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+  }
   res.json(route);
 });
 

@@ -1,0 +1,68 @@
+name: DevHub E2E (browser)
+
+# Why this exists separately from "E2E (Playwright)": that job runs every spec
+# in the repo and has been red since 2026-07-24 on six cyberchess cases whose
+# assertions fell behind a redesign (issue #922). A suite that is always red
+# reports nothing — the same failure mode as the nightly whose issue step had
+# never worked. DevHub's browser tests deserve a signal that means something,
+# so they get their own gate covering only DevHub specs.
+#
+# What it protects: the browser-only defects unit tests cannot see. The one
+# that prompted it — right-click → Rename / Delete in the file tree did nothing
+# at all, because the menu closed before the click landed.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "frontend/src/app/devhub/**"
+      - "frontend/src/lib/devhub*"
+      - "frontend/e2e/devhub-*"
+      - ".github/workflows/devhub-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "frontend/src/app/devhub/**"
+      - "frontend/src/lib/devhub*"
+      - "frontend/e2e/devhub-*"
+
+jobs:
+  devhub-e2e:
+    name: DevHub specs (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      # The founder-flow spec is excluded on purpose: it fires a real AI
+      # generation against production and belongs to the nightly, not to a
+      # per-PR gate.
+      - name: Run DevHub browser specs
+        env:
+          CI: "1"
+        run: |
+          npx playwright test \
+            e2e/devhub-file-safety.spec.ts \
+            e2e/devhub-affordances.spec.ts \
+            e2e/devhub-shelf-affordances.spec.ts \
+            e2e/devhub-next-preview.spec.ts \
+            e2e/devhub-snippet.spec.ts \
+            --project=chromium
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devhub-e2e-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

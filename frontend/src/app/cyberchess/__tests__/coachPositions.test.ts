@@ -63,6 +63,52 @@ describe("coach teaching positions", () => {
     expect(bad).toEqual([]);
   });
 
+  /* Дебютная карточка заявляет номер хода прямо в FEN. Больше ходов, чем номер
+     позволяет, в позиции быть не может — так нашлись две испорченные диаграммы:
+     у Испанки белая ладья стояла на g1 при короле на e1 (четыре хода в позиции
+     «после третьего»), а у Староиндийского начала чёрные не сделали НИ ОДНОГО хода,
+     хотя очередь была их. У этюдов счётчик всегда 1 — они номера не заявляют. */
+  it("shows opening positions that fit the move number they claim", () => {
+    const startSquares = new Map<string, string>();
+    for (const row of new Chess().board()) {
+      for (const sq of row) if (sq) startSquares.set(sq.square, sq.color + sq.type);
+    }
+
+    const bad: string[] = [];
+    for (const r of knowledgeRows.filter((x) => x.fen)) {
+      const parts = r.fen!.split(" ");
+      const full = Number(parts[5]);
+      if (!Number.isFinite(full) || full < 2) continue; // счётчик 1 = этюд
+      let c: Chess;
+      try {
+        c = new Chess(r.fen);
+      } catch {
+        continue;
+      }
+      const now = new Map<string, string>();
+      for (const row of c.board()) {
+        for (const sq of row) if (sq) now.set(sq.square, sq.color + sq.type);
+      }
+      const moved = { w: 0, b: 0 };
+      for (const [sq, piece] of startSquares) {
+        if (now.get(sq) !== piece) moved[piece[0] as "w" | "b"]++;
+      }
+      const gone = {
+        w: 16 - [...now.values()].filter((p) => p[0] === "w").length,
+        b: 16 - [...now.values()].filter((p) => p[0] === "b").length,
+      };
+      // взятая фигура тоже освобождает свою клетку — её вычитаем из числа сдвигов
+      const budget = { w: full, b: parts[1] === "w" ? full - 1 : full };
+      for (const side of ["w", "b"] as const) {
+        const other = side === "w" ? "b" : "w";
+        if (moved[side] - gone[other] > budget[side]) {
+          bad.push(`${r.where}: ${side === "w" ? "белых" : "чёрных"} сдвигов ${moved[side]}, а ход всего ${full}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
   /* Текст объяснения — это то, что игрок читает рядом с доской, и цитируемые в нём ходы
      не проверял никто. Двух не существовало: «1.b5!» в прорыве, где поле b5 занято чужой
      пешкой, и «1.Ke5!» в оппозиции, где короли встали бы вплотную. Карточка, ведущая

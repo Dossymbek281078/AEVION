@@ -48,8 +48,12 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
           <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 6 }}>
             {dealHeadline(listing.deal)}
             {listing.deal?.intent === "raise" && a?.deal.implied.postMoneyUsd && (
-              <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }}>
-                {" "}· оценка {usd(a.deal.implied.postMoneyUsd)}
+              // «Оценка» на карточке читалась как наша оценка проекта — а биржа
+              // ровно этого не делает и говорит об этом на каждом экране. Число
+              // здесь — арифметика самого основателя: сколько просит за какую
+              // долю. Подпись должна называть именно это.
+              <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }} title="Пост-оценка по условиям самого основателя: сколько он просит за какую долю">
+                {" "}· по его условиям — {usd(a.deal.implied.postMoneyUsd)}
               </span>
             )}
           </div>

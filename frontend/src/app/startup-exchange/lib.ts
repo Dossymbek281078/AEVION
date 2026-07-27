@@ -161,6 +161,35 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Сервер отвечает кодом (`rate_limited`), а человек читает предложение. Без
+ * этого перевода основатель видел в красной строке «rate_limited» и не понимал,
+ * сломалось ли что-то у него или у нас.
+ */
+const ERROR_TEXT: Record<string, string> = {
+  rate_limited: "Слишком много запросов подряд. Подождите минуту и повторите.",
+  daily_publish_limit: "С этого адреса сегодня уже опубликовано максимум заявок. Следующая — завтра.",
+  validation_failed: "Проверьте отмеченные поля.",
+  assessment_failed: "Не удалось посчитать разбор. Попробуйте ещё раз.",
+  not_found: "Заявка не найдена — возможно, её сняли с публикации.",
+  idea_not_found: "Заявка не найдена — возможно, её сняли с публикации.",
+  invalid_id: "Ссылка на заявку испорчена.",
+  invalid_token: "Ссылка не подходит к этой заявке. Откройте её из письма с ключом.",
+  forbidden: "Нет прав на это действие.",
+  update_failed: "Не удалось сохранить правку. Попробуйте ещё раз.",
+  withdraw_failed: "Не удалось снять заявку. Попробуйте ещё раз.",
+  offers_unavailable: "Предложения сейчас недоступны. Попробуйте позже.",
+  report_failed: "Жалоба не отправилась. Попробуйте ещё раз.",
+  reason_required: "Выберите причину.",
+  reason_invalid: "Выберите причину из списка.",
+};
+
+function humanError(code: string | undefined, status: number): string {
+  if (code && ERROR_TEXT[code]) return ERROR_TEXT[code];
+  if (code && !/^[a-z0-9_]+$/.test(code)) return code; // сервер уже прислал текст
+  return `Ошибка ${status}. Попробуйте ещё раз.`;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(apiUrl(`/api/startupx${path}`), {
     ...init,
@@ -174,7 +203,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = payload as { success?: boolean; data?: T; error?: string; issues?: ValidationIssue[] };
   if (!resp.ok || body?.success === false) {
-    throw new ApiError(body?.error ?? `Ошибка ${resp.status}`, body?.issues ?? []);
+    throw new ApiError(humanError(body?.error, resp.status), body?.issues ?? []);
   }
   return body.data as T;
 }

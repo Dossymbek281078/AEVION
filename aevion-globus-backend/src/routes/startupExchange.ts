@@ -12,10 +12,11 @@
  * render the number without it.
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
+import { createInMemoryRateLimiter, clientIp } from "../lib/rateLimit/inMemoryWindow";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 
@@ -65,6 +66,50 @@ const assessLimiter = rateLimit({ windowMs: 60_000, max: 12, keyPrefix: "startup
 const offersLimiter = rateLimit({ windowMs: 60_000, max: 20, keyPrefix: "startupx:offers", message: "rate_limited" });
 // Жалоба — дешёвое действие с дорогими последствиями, поэтому лимит жёсткий.
 const reportLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "startupx:report", message: "rate_limited" });
+// Минутный лимит защищает сервер, но не ленту: 5 публикаций в минуту — это 300
+// в час, то есть один человек может затопить витрину за вечер. Суточный потолок
+// на адрес бьёт по потоку, а не по скорости. Живому основателю пяти заявок в
+// сутки хватит с запасом: у него их одна.
+//
+// Считаем ОПУБЛИКОВАННОЕ, а не попытки. Основатель, который пять раз промахнулся
+// мимо обязательного поля, не должен на сутки терять право подать заявку — иначе
+// защита от потока бьёт ровно по тому, ради кого биржа существует.
+//
+// Чего этот потолок НЕ делает: заголовок X-Forwarded-For приходит от клиента и
+// подделывается, так что упорный флудер обойдёт счётчик сменой адреса. От этого
+// защищает не лимит, а очередь модерации и жалобы (`/report`, `/reports`).
+const PUBLISH_PER_DAY = (() => {
+  const raw = Number(process.env.STARTUPX_PUBLISH_PER_DAY);
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 5;
+})();
+const publishQuota = createInMemoryRateLimiter({ max: PUBLISH_PER_DAY, windowMs: 24 * 60 * 60_000 });
+
+/**
+ * Один способ узнать адрес на весь модуль: счётчик показов, дедуп жалоб и
+ * суточный потолок публикаций обязаны видеть одного и того же человека.
+ */
+function requestIp(req: Request): string {
+  const ip = clientIp(req);
+  return ip !== "unknown" ? ip : req.socket?.remoteAddress || "unknown";
+}
+
+/**
+ * Ворота суточного потолка. Стоят ПЕРЕД минутным лимитом намеренно: когда
+ * исчерпаны оба, человеку надо сказать «сегодня всё», а не «подождите минуту» —
+ * минута ему не поможет. Здесь только проверка; списывается квота в обработчике,
+ * и только если заявка действительно опубликована. Цена этого разделения — на
+ * последнем оставшемся слоте два одновременных запроса могут пройти оба: лишняя
+ * заявка в сутки дешевле, чем сутки блокировки за опечатку в форме.
+ */
+function publishGate(req: Request, res: Response, next: NextFunction) {
+  const quota = publishQuota.peek(requestIp(req));
+  res.setHeader("X-Publish-Quota-Limit", String(PUBLISH_PER_DAY));
+  res.setHeader("X-Publish-Quota-Remaining", String(quota.remaining));
+  if (quota.allowed) return next();
+  const retryAfterSec = Math.max(1, Math.ceil(quota.retryAfterMs / 1000));
+  res.setHeader("Retry-After", String(retryAfterSec));
+  fail(res, "daily_publish_limit", 429, { retryAfterSec, limitPerDay: PUBLISH_PER_DAY });
+}
 
 export const startupExchangeRouter = Router();
 startupExchangeRouter.use(generalLimiter);
@@ -249,8 +294,16 @@ function fail(res: Response, error: string, status = 400, extra?: Record<string,
 }
 
 // ─── GET /api/startupx/health ────────────────────────────────────────────────
-startupExchangeRouter.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, dbReady: isStartupExchangeDbReady(), service: "startupx" });
+startupExchangeRouter.get("/health", (req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    dbReady: isStartupExchangeDbReady(),
+    service: "startupx",
+    // Суточный потолок публикаций и остаток именно для этого адреса: и человеку
+    // видно, сколько у него осталось, и смоук не гадает про настроенное число.
+    publishPerDay: PUBLISH_PER_DAY,
+    publishRemaining: publishQuota.peek(requestIp(req)).remaining,
+  });
 });
 
 // ─── GET /api/startupx/tiers ─────────────────────────────────────────────────
@@ -452,10 +505,7 @@ const VIEW_WINDOW_MS = 60 * 60 * 1000;
 const recentViews = new Map<string, number>();
 
 function shouldCountView(listingId: number, req: Request): boolean {
-  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-    || req.socket.remoteAddress
-    || "unknown";
-  const key = `${listingId}:${ip}`;
+  const key = `${listingId}:${requestIp(req)}`;
   const now = Date.now();
   const last = recentViews.get(key);
   if (last !== undefined && now - last < VIEW_WINDOW_MS) return false;
@@ -627,7 +677,8 @@ startupExchangeRouter.post("/assess", assessLimiter, (req: Request, res: Respons
 });
 
 // ─── POST /api/startupx/ideas ────────────────────────────────────────────────
-startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Response) => {
+startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Request, res: Response) => {
+  const ip = requestIp(req);
   const { listing, issues } = normalizeListing(req.body);
   if (!listing) return fail(res, "validation_failed", 400, { issues });
 
@@ -651,6 +702,24 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
   const qrightObjectId: string | null = null;
   const manage = mintManageToken();
 
+  // Путей записи два — Postgres и память, — а учёт квоты должен быть один:
+  // списываем ровно там, где заявка действительно появилась в ленте.
+  const created = (row: ListingRow) => {
+    const left = publishQuota.check(ip);
+    res.setHeader("X-Publish-Quota-Remaining", String(left.remaining));
+    return ok(res, {
+      id: row.id,
+      qrightProtected: true,
+      contentHash: row.content_hash,
+      // Shown to the founder once. Losing it means losing access to the
+      // offers on this listing — the UI has to say so at the moment it is
+      // handed over, not in a help page.
+      manageToken: manage.token,
+      listing: publicView(row),
+      assessment,
+    }, 201);
+  };
+
   try {
     if (isStartupExchangeDbReady()) {
       const { rows } = await pool.query(
@@ -670,18 +739,7 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
           qrightObjectId, contentHash, manage.hash,
         ],
       );
-      const row = (rows as ListingRow[])[0];
-      return ok(res, {
-        id: row.id,
-        qrightProtected: true,
-        contentHash: row.content_hash,
-        // Shown to the founder once. Losing it means losing access to the
-        // offers on this listing — the UI has to say so at the moment it is
-        // handed over, not in a help page.
-        manageToken: manage.token,
-        listing: publicView(row),
-        assessment,
-      }, 201);
+      return created((rows as ListingRow[])[0]);
     }
   } catch (e) {
     captureStartupXError(e);
@@ -712,14 +770,7 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     removed_at: null,
     visibility: "public",
   });
-  return ok(res, {
-    id: row.id,
-    qrightProtected: true,
-    contentHash: row.content_hash,
-    manageToken: manage.token,
-    listing: publicView(row),
-    assessment,
-  }, 201);
+  return created(row);
 });
 
 // ─── POST /api/startupx/ideas/:id/reassess ───────────────────────────────────
@@ -1085,9 +1136,7 @@ startupExchangeRouter.post("/ideas/:id/report", reportLimiter, async (req: Reque
   const note = clampStr(req.body?.note, 1000);
   // Хэш адреса, не сам адрес: для «одна жалоба с адреса» этого достаточно, а
   // хранить IP жалующегося незачем.
-  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-    || req.socket.remoteAddress || "unknown";
-  const reporterHash = crypto.createHash("sha256").update(`startupx:${ip}`).digest("hex").slice(0, 32);
+  const reporterHash = crypto.createHash("sha256").update(`startupx:${requestIp(req)}`).digest("hex").slice(0, 32);
 
   if (isStartupExchangeDbReady()) {
     try {

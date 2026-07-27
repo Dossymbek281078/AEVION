@@ -25,21 +25,35 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function req(method, path, body, attempt = 0) {
-  const opts = { method, headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000) };
+// Ждать имеет смысл только минутные окна. Суточный потолок публикаций тоже
+// отвечает 429, но с Retry-After почти в сутки — «подождать и повторить» там
+// означало бы повесить смоук до завтра, поэтому такой ответ отдаём тесту как есть.
+const MAX_RETRY_WAIT_SEC = 120;
+
+async function req(method, path, body, opts0 = {}) {
+  const { attempt = 0, headers = {} } = opts0;
+  const opts = {
+    method,
+    headers: { "Content-Type": "application/json", ...headers },
+    signal: AbortSignal.timeout(8000),
+  };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(`${BASE}${path}`, opts);
   const text = await r.text();
 
-  if (r.status === 429 && attempt < 2) {
-    const wait = (Number(r.headers.get("retry-after")) || 60) + 1;
+  const wait = (Number(r.headers.get("retry-after")) || 60) + 1;
+  if (r.status === 429 && attempt < 2 && wait <= MAX_RETRY_WAIT_SEC) {
     console.log(`  · лимит запросов: жду ${wait}с (сказал сервер) и повторяю`);
     await sleep(wait * 1000);
-    return req(method, path, body, attempt + 1);
+    return req(method, path, body, { ...opts0, attempt: attempt + 1 });
   }
 
-  try { return { status: r.status, body: JSON.parse(text) }; }
-  catch { return { status: r.status, body: text }; }
+  const head = {
+    quotaLimit: Number(r.headers.get("x-publish-quota-limit")),
+    quotaRemaining: Number(r.headers.get("x-publish-quota-remaining")),
+  };
+  try { return { status: r.status, headers: head, body: JSON.parse(text) }; }
+  catch { return { status: r.status, headers: head, body: text }; }
 }
 
 const DESCRIPTION =
@@ -334,6 +348,68 @@ async function run() {
     String(stats.body?.data?.assessmentVersion));
   assert("stats counts assessments scored by older rules",
     typeof stats.body?.data?.staleAssessments === "number", String(stats.body?.data?.staleAssessments));
+
+  console.log("\n12. Поток заявок: суточный потолок");
+  {
+    // Минутный лимит защищает сервер, но не ленту: 5 публикаций в минуту — это
+    // 300 в час, один человек затопит витрину за вечер. Проверяем потолок на
+    // сутки — и то, что он считает опубликованное, а не попытки.
+    //
+    // Свой адрес на прогон: потолок считается по адресу, и без этого второй
+    // запуск смоука за сутки упирался бы в остаток от первого — тест стал бы
+    // «зелёным только в первый раз».
+    const ip = () => `2001:db8::${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
+    // Два разных адреса, потому что минутный лимит (5 публикаций) считает и
+    // отклонённые попытки: на одном адресе неудачная заявка съела бы слот и
+    // пятая публикация уходила бы в минутное ожидание.
+    const H = { "X-Forwarded-For": ip() };
+    const H2 = { "X-Forwarded-For": ip() };
+    const fresh = await req("GET", "/api/startupx/health", null, { headers: H });
+    const perDay = fresh.body?.publishPerDay;
+    assert("сервер называет суточный потолок", Number.isInteger(perDay) && perDay >= 1, String(perDay));
+    assert("у нового адреса потолок не израсходован", fresh.body?.publishRemaining === perDay,
+      `${fresh.body?.publishRemaining} из ${perDay}`);
+
+    // Промах по обязательному полю не должен съедать суточный лимит: иначе
+    // защита от потока бьёт по тому, ради кого биржа существует.
+    const rejected = await req("POST", "/api/startupx/ideas",
+      { title: "Без условий", description: DESCRIPTION, tier: "idea" }, { headers: H2 });
+    assert("заявка без условий отклонена → 400", rejected.status === 400, String(rejected.status));
+    const afterFail = await req("GET", "/api/startupx/health", null, { headers: H2 });
+    assert("отклонённая заявка не расходует суточный лимит",
+      afterFail.body?.publishRemaining === perDay, `${afterFail.body?.publishRemaining} из ${perDay}`);
+
+    const created = [];
+    let blocked = null;
+    for (let i = 0; i < perDay + 1 && !blocked; i++) {
+      const r = await req("POST", "/api/startupx/ideas", {
+        title: `Поток ${i + 1}`, description: DESCRIPTION, tier: "idea",
+        deal: { intent: "raise", askUsd: 10000, equityOfferedPct: 10 },
+      }, { headers: H });
+      if (r.status === 201) created.push([r.body?.data?.id, r.body?.data?.manageToken]);
+      else blocked = r;
+    }
+    assert(`${perDay} заявок с адреса проходят`, created.length === perDay, `прошло ${created.length}`);
+    assert("следующая отклонена → 429", blocked?.status === 429, String(blocked?.status));
+    // Код важен: минутный лимит отвечает тем же 429, и «подождите минуту» здесь
+    // было бы враньём — до завтра минуты не хватит.
+    assert("отказ именно по суточному потолку", blocked?.body?.error === "daily_publish_limit",
+      String(blocked?.body?.error));
+    assert("сказано, когда можно вернуться", Number(blocked?.body?.retryAfterSec) > 3600,
+      String(blocked?.body?.retryAfterSec));
+
+    // Убираем за собой: тест не должен оставлять в ленте пять пустышек.
+    let removed = 0;
+    for (const [id, token] of created) {
+      if (!id || !token) continue;
+      const d = await req("DELETE", `/api/startupx/ideas/${id}?token=${token}`, null, { headers: H });
+      if (d.status === 200) removed++;
+    }
+    assert("все тестовые заявки сняты", removed === created.length, `${removed} из ${created.length}`);
+    const feed = await req("GET", "/api/startupx/ideas?limit=50&sort=recent");
+    const ids = new Set((feed.body?.data?.listings ?? []).map((l) => l.id));
+    assert("в ленте их больше нет", created.every(([id]) => !ids.has(id)));
+  }
 
   console.log(`\nStartup Exchange: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

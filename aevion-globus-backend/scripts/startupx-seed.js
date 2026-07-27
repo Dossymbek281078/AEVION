@@ -91,7 +91,9 @@ async function run() {
 
     const created = await post("/api/startupx/ideas", listing);
     if (created.status !== 201) {
-      console.log(`   ✗ не опубликовано: ${created.status}`);
+      // Код важен: 429 без него не отличить «подождите минуту» от «суточный
+      // потолок исчерпан, продолжите завтра» (`daily_publish_limit`).
+      console.log(`   ✗ не опубликовано: ${created.status}${created.body?.error ? " " + created.body.error : ""}`);
       for (const i of created.body?.issues ?? []) console.log(`     — ${i.field}: ${i.message}`);
       console.log("");
       continue;

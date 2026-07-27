@@ -80,6 +80,12 @@ export default function DevHubPage() {
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
   const [ideaStarting, setIdeaStarting] = useState(false);
+  // What actually works right now, from the server. The landing used to
+  // advertise every capability unconditionally while several were dead —
+  // video on an empty balance, images with every provider blocked, voice on a
+  // model the vendor had removed. Better to say so on the way in than to let
+  // someone discover it after typing their idea.
+  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; lastError?: string }>>([]);
 
   // Prompt-first entry: one phrase → project created → generation auto-runs
   // in the IDE (the prompt travels via localStorage; the IDE picks it up,
@@ -122,6 +128,13 @@ export default function DevHubPage() {
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCaps(Array.isArray(d.capabilities) ? d.capabilities : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
@@ -395,6 +408,38 @@ export default function DevHubPage() {
             In the IDE → Deploy
           </span>
         </div>
+
+        {/* Live capability strip — honest state on the way in, not after the
+            user has typed an idea and hit a dead button. Only rendered once
+            the server has answered; silence is better than a guess. */}
+        {caps.length > 0 && (() => {
+          const off = caps.filter((c) => c.status !== "live");
+          const live = caps.length - off.length;
+          return (
+            <div style={{
+              border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
+              padding: "12px 16px", marginBottom: 20, fontSize: 13, lineHeight: 1.6,
+            }}>
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>Сейчас работает: {live} из {caps.length}</span>
+              {off.length > 0 ? (
+                <>
+                  <span style={{ color: "#64748b" }}> · временно недоступно: </span>
+                  {off.map((c, i) => (
+                    <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
+                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
+                      {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
+                    </span>
+                  ))}
+                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                    Всё остальное — код, база данных, превью, деплой — работает. Наведите на название, чтобы увидеть причину.
+                  </div>
+                </>
+              ) : (
+                <span style={{ color: "#64748b" }}> · все интеграции отвечают</span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* One window vs a stack of subscriptions — deliberately honest: the
             money gap is small and saying otherwise would be a lie. The claim

@@ -11470,10 +11470,13 @@ ${question.trim()}`;
         }},
         {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"Pro: бесплатно. Coach пройдёт по всем ходам и выдаст план на будущее.":"Coach пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
         // New shop items
-        {id:"theme_wood",name:"Тема Wood 🪵",desc:"Тёплая деревянная доска",cost:40,kind:"unlock"},
-        {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
-        {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock"},
-        {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock"},
+        // soon:true — темы продавались, но доски под них нет: в списке тем доски всего три
+        // премиум-записи (Neon/Obsidian/Sakura), остальные владения не читает никто —
+        // покупка списывала Chessy и не меняла ничего. Как с ai_rival: «Скоро», не продаём.
+        {id:"theme_wood",name:"Тема Wood 🪵",desc:"Тёплая деревянная доска",cost:40,kind:"unlock",soon:true},
+        {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock",soon:true},
+        {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock",soon:true},
+        {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock",soon:true},
         {id:"streak_shield",name:"Щит стрика 🛡",desc:"Защита от сброса стрика пазлов один раз",cost:25,kind:"action",onBuy:()=>{
           sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит стрика активирован!","success");
         }},

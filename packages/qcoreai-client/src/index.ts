@@ -316,6 +316,24 @@ export type Dissent = {
   /** `insufficient` when fewer than two agents answered — not a cheerful consensus. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;
+  /**
+   * What to actually go and check. The map says WHERE the agents diverged;
+   * this turns that diagnosis into next steps.
+   *
+   * Ordered by how checkable an item is, not by how important it sounds: a
+   * number two agents disagree on can be settled against a source in a minute,
+   * whereas "read the outlier first" needs judgement. Advice that cannot be
+   * acted on quickly tends not to be acted on at all.
+   *
+   * Non-empty even on consensus — agreement between models proves little, and
+   * an empty list would read as "all clear".
+   */
+  checks?: Array<{
+    kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+    text: string;
+    agents: string[];
+    weight: 1 | 2 | 3;
+  }>;
 };
 
 export type SignedReceipt = {

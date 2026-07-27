@@ -16,9 +16,9 @@
 // Карта разногласий приходит с бэкенда посчитанной из уже полученных ответов,
 // без единого дополнительного вызова модели — она бесплатна и воспроизводима.
 //
-// Стиль инлайновый и тёмный: страница мультичата пока в тёмной теме, и светлый
-// «газетный» блок посреди неё читался бы как чужой. Миграция всей страницы на
-// светлый эталон — отдельная работа, здесь важнее целостность экрана.
+// Стиль инлайновый, цвета — только через токены ./theme (сырых значений в
+// модуле нет: контраст проверяется тестом, а литерал проверка не видит).
+// Страница переведена на светлый газетный эталон AEVION 2026-07-27.
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
@@ -48,6 +48,8 @@ type Dissent = {
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
   verdict: "consensus" | "split" | "insufficient";
   note: string;
+  /** Что пойти проверить. Порядок — по проверяемости, не по важности. */
+  checks?: Array<{ kind: "number" | "outlier" | "hedge" | "failure" | "consensus"; text: string; agents: string[]; weight: 1 | 2 | 3 }>;
 };
 
 type SignedReceipt = {
@@ -294,6 +296,27 @@ export function CouncilConsole() {
               <span style={{ color: T.textFaded }}>Осторожность и отказы: </span>
               {dissent.hedges.map((h) => `${h.agentId} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
             </p>
+          )}
+
+          {/* Карта разногласий — диагноз; человеку нужен следующий шаг. Список
+              стоит последним в блоке намеренно: сначала «где разошлись», потом
+              «что с этим делать», иначе совет читается без основания. */}
+          {dissent.checks && dissent.checks.length > 0 && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${T.lineSoft}` }}>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "0 0 8px" }}>
+                Что проверить
+              </p>
+              <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 7 }}>
+                {dissent.checks.map((c, i) => (
+                  <li key={i} style={{ fontSize: 14, color: T.textDim, lineHeight: 1.55 }}>
+                    {c.text}
+                  </li>
+                ))}
+              </ol>
+              <p style={{ fontSize: 11, color: T.textFaded, margin: "10px 0 0" }}>
+                Порядок — по проверяемости: сверху то, что закрывается за минуту.
+              </p>
+            </div>
           )}
         </div>
       )}

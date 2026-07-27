@@ -147,5 +147,55 @@ ok("повторный вызов даёт тот же результат",
   JSON.stringify(m.buildDissentMap(input)) === JSON.stringify(m.buildDissentMap(input)),
   "карта обязана быть воспроизводимой — иначе её нельзя класть в чек");
 
+/* ── 7. Список «что проверить» ──────────────────────────────────────────── */
+
+// Карта отвечает «где разошлись» — это диагноз. Человеку нужен следующий шаг.
+const withNumbers = m.buildDissentMap([
+  A("analyst", "На текущем трафике это примерно 40 посетителей в месяц, выборки не хватит."),
+  A("skeptic", "На текущем трафике это примерно 300 посетителей в месяц, и это меняет вывод."),
+  A("practic", "Не уверен, что это вообще развилка. Проверьте на десяти живых людях сначала."),
+]);
+const checks = withNumbers.checks;
+ok("список не пуст при расхождении", checks.length > 0, JSON.stringify(checks).slice(0, 80));
+ok("числовой пункт есть", checks.some((c) => c.kind === "number"));
+ok("числовой пункт называет обе стороны",
+  checks.some((c) => c.kind === "number" && c.text.includes("40") && c.text.includes("300")),
+  JSON.stringify(checks.find((c) => c.kind === "number")));
+ok("неуверенность попала в список", checks.some((c) => c.kind === "hedge"));
+ok("аутлаер попал в список", checks.some((c) => c.kind === "outlier"));
+
+// Порядок — по ПРОВЕРЯЕМОСТИ. Совет, который нельзя закрыть за минуту, на
+// практике не выполняют, поэтому числа обязаны идти раньше «прочитать и подумать».
+const iNum = checks.findIndex((c) => c.kind === "number");
+const iOut = checks.findIndex((c) => c.kind === "outlier");
+ok("проверяемое стоит раньше требующего суждения", iNum >= 0 && iOut > iNum, `число=${iNum}, аутлаер=${iOut}`);
+ok("вес убывает по списку", checks.every((c, i) => i === 0 || checks[i - 1].weight >= c.weight),
+  checks.map((c) => c.weight).join(","));
+ok("список ограничен по длине", checks.length <= 5, String(checks.length));
+
+// Упавший агент — не «мелочь»: без его ответа картина неполна, и это должно
+// стоять в списке наравне с числами, а не теряться внизу.
+const failedAgent = m.buildDissentMap([
+  A("gpt", "Ответ по существу с оценкой в 20 долларов за прогон."),
+  { agentId: "claude", ok: false, error: "timeout" },
+]);
+ok("отказ агента попал в список", failedAgent.checks.some((c) => c.kind === "failure"));
+ok("отказ имеет высокий вес", failedAgent.checks.find((c) => c.kind === "failure")?.weight === 3);
+
+// При согласии список НЕ пустой: молчание читалось бы как «всё в порядке»,
+// тогда как согласие моделей само по себе ничего не доказывает.
+const agreed = m.buildDissentMap([
+  A("gpt", "Стратегия роста через партнёрские интеграции выглядит оптимальной сейчас."),
+  A("claude", "Стратегия роста через партнёрские интеграции выглядит оптимальной сейчас."),
+]);
+ok("при согласии список предупреждает об общей посылке",
+  agreed.verdict === "consensus" && agreed.checks.some((c) => c.kind === "consensus"),
+  `${agreed.verdict} / ${JSON.stringify(agreed.checks)}`);
+
+// Дискриминирующая сила: на входе без единого расхождения числовых пунктов
+// быть НЕ должно, иначе тест выше проходил бы на чём угодно.
+ok("без расхождений числовых пунктов нет", !agreed.checks.some((c) => c.kind === "number"),
+  JSON.stringify(agreed.checks));
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

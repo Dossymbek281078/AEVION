@@ -237,6 +237,18 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
 // Number + money-unit patterns come from the platform metric primitives, which
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
 const NUM = NUMBER_PATTERN;
+/**
+ * A level stated after a direction verb: "churn fell to 3%", "retention
+ * declined to 85%", "margin improved to 62%", "churn improved from 8% to 3%".
+ *
+ * Every metric pattern below already accepted `of / = / : / at` between the
+ * metric's name and its figure. None accepted this, so seven fields out of
+ * eight dropped the number outright whenever a filing said which way it had
+ * moved — and filings say that constantly. The intermediate figure in
+ * "from X to Y" is matched non-capturing, because the current value is Y.
+ */
+const DIR_VERB = String.raw`(?:fell|fallen|declin(?:ed|ing)|decreas(?:ed|ing)|dropped|improv(?:ed|ing)|rose|risen|grew|grown|increas(?:ed|ing)|expand(?:ed|ing)|lengthened|shortened|narrowed|widened|climbed|slipped)`;
+const TO_LEVEL = String.raw`(?:${DIR_VERB}\s+(?:from\s+\d[\d,.]*\s*%?\s+)?(?:back\s+)?to)`;
 const UNIT = MONEY_UNIT_PATTERN;
 // Money can be marked with any currency, not just "$" — "€3M ARR" and
 // "₸450 млн GMV" have to reach the same patterns before they can be converted.
@@ -288,7 +300,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // same disclosure again under the name consumer-goods filings use.
   const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues?|net sales|sales`;
   const arr = firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (arr) {
     // group order differs between the two alternatives; detect which matched
     const hasLeadingNum = startsWithFigure(arr[0]);
@@ -372,8 +384,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   const NEG = String.raw`(-|−|minus\s+|negative\s+)?`;
   const NOT_RANGE = String.raw`(?<![\d.,])`;
   const gm = firstMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*${NEG}${NUM}\s*%`, "i"))
-    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*(\()\s*${NUM}\s*\)\s*%`, "i"));
+    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"))
+    || firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"));
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".
@@ -418,7 +430,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const ratio = s.ltvCacRatio !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?::\s*1)?`, "i"));
+    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
   if (ratio) {
     const r = parseLocaleNumber(ratio[1]);
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
@@ -465,7 +477,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const pb = s.paybackMonths !== null ? null
-    : firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*[- ]?months?`, "i"))
+    : firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?months?`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?months?\s*payback`, "i"));
   if (pb) { const v = parseLocaleNumber(pb[1]); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
 
@@ -495,7 +507,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   }
   const churn = s.churnPct !== null ? null
     : firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
   if (churn) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
@@ -513,7 +525,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // figure often enough that omitting it dropped the standard S-1 phrasing.
   const RET_NAME = String.raw`(?:dollar[- ]based\s*)?(?:net\s*)?(?:revenue\s*|dollar\s*)?(?:retention|expansion)|nrr|ndr`;
   const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was)?\s*\(?\s*${NUM}\s*%`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"));
   if (ret) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
@@ -534,6 +546,16 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (cust) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
+  }
+  // The count pattern above puts the figure BEFORE the noun, so "customers fell
+  // to 900" reaches it in the wrong order and was dropped. Same family as the
+  // percentage fields, different sentence shape.
+  if (s.customers === null) {
+    const custAfterVerb = firstMatch(t, new RegExp(String.raw`(?:${CUST_NOUN})\s*${TO_LEVEL}\s*${NUM}\s*${UNIT}`, "i"));
+    if (custAfterVerb) {
+      const v = parseMoney(custAfterVerb[1], custAfterVerb[2]);
+      if (v && v >= 1) s.customers = Math.round(v);
+    }
   }
 
   // ── Bottom-up TAM: "TAM of $12B" / "$500M TAM" / "addressable market of $8B" ──
@@ -677,7 +699,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"));
   if (gmv) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
-  const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"))
+  const take = firstMatch(t, new RegExp(String.raw`(?:take[- ]rate|commission(?: rate)?|net revenue margin)\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
   if (take) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 

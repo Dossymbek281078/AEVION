@@ -404,3 +404,69 @@ describe("a disclosed decline is not growth", () => {
     expect(down.factors.some((f) => /declining 20%/i.test(f.rationale))).toBe(true);
   });
 });
+
+describe("a level stated after a direction verb", () => {
+  /**
+   * "Churn fell to 3%", "retention declined to 85%", "margin improved to 62%" —
+   * filings say which way a number moved constantly, and every metric pattern
+   * accepted `of / = / : / at` between the name and the figure while none
+   * accepted this. Seven fields out of eight dropped the number outright.
+   *
+   * Fixed with one shared connector rather than seven patterns, because seven
+   * near-identical regexes drift apart and this family is exactly what drift
+   * looks like.
+   */
+  const cases: Array<[string, string, number]> = [
+    ["Churn fell to 3% monthly, down from 8%.", "churnPct", 3],
+    ["Churn improved from 8% to 3% monthly.", "churnPct", 3],
+    ["Churn declined to 3% monthly.", "churnPct", 3],
+    ["Net revenue retention declined to 85%.", "retentionPct", 85],
+    ["Net revenue retention improved to 130%.", "retentionPct", 130],
+    ["Retention improved from 85% to 130%.", "retentionPct", 130],
+    ["Gross margin declined to 20%.", "grossMarginPct", 20],
+    ["Gross margin improved to 62%.", "grossMarginPct", 62],
+    ["Take rate declined to 9%.", "takeRatePct", 9],
+    ["Customers fell to 900 from 1,200.", "customers", 900],
+    ["Customers grew to 12,000.", "customers", 12_000],
+    ["LTV/CAC fell to 0.8.", "ltvCacRatio", 0.8],
+    ["Payback lengthened to 26 months.", "paybackMonths", 26],
+    ["Payback shortened to 6 months.", "paybackMonths", 6],
+    ["Revenue fell to $5M in 2024.", "revenueUsd", 5_000_000],
+    ["Revenue grew to $10M.", "revenueUsd", 10_000_000],
+  ];
+  for (const [text, field, expected] of cases) {
+    test(`${field}: ${text}`, () => {
+      expect((parsePlanSignals(text) as unknown as Record<string, number | null>)[field]).toBe(expected);
+    });
+  }
+
+  test("in 'from X to Y' the current value is Y", () => {
+    // Reading X would report the number the company moved AWAY from, as fact.
+    expect(parsePlanSignals("Churn improved from 8% to 3% monthly.").churnPct).toBe(3);
+    expect(parsePlanSignals("Retention improved from 85% to 130%.").retentionPct).toBe(130);
+  });
+
+  test("two metrics in one sentence keep their own figures", () => {
+    const s = parsePlanSignals("Gross margin declined to 20% and churn rose to 7% monthly.");
+    expect(s.grossMarginPct).toBe(20);
+    expect(s.churnPct).toBe(7);
+  });
+
+  // Over-match guards. A direction verb is common prose, so the connector must
+  // stay anchored to the metric's own name.
+  test("a direction verb on something that is not a metric reads nothing", () => {
+    expect(parsePlanSignals("The team grew to 40 people.").customers).toBeNull();
+    expect(parsePlanSignals("Headcount fell to 900.").customers).toBeNull();
+  });
+  test("the plain forms are untouched", () => {
+    expect(parsePlanSignals("3% annual churn.").churnPct).toBe(3);
+    expect(parsePlanSignals("Net revenue retention 146%.").retentionPct).toBe(146);
+    expect(parsePlanSignals("12,000 customers.").customers).toBe(12_000);
+    expect(parsePlanSignals("Gross margin of -45%.").grossMarginPct).toBe(-45);
+    expect(parsePlanSignals("70-80% gross margin.").grossMarginPct).toBe(70);
+    expect(parsePlanSignals("GMV of $180M annualized with a 14% take rate.").takeRatePct).toBe(14);
+  });
+  test("a denial is still a denial", () => {
+    expect(parsePlanSignals("No churn figure is disclosed.").churnPct).toBeNull();
+  });
+});

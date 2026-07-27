@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 81
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 131
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -121,29 +121,33 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    for customers who churned. That is a real design problem, not a regex, and it
    is recorded here unsolved rather than closed with a rule that would do damage.
 
-7. **Open, found and not fixed: the "declined to X" family.** A figure stated
-   after a direction verb is dropped in seven fields out of eight. Reproduce
-   with `parsePlanSignals` on each of these — all return null for the field
-   named:
+7. **Closed: the "declined to X" family.** A level stated after a direction
+   verb was dropped in seven fields out of eight — filings say which way a
+   number moved constantly, and every metric pattern accepted `of / = / : / at`
+   between the name and the figure while none accepted this.
 
-   | Sentence | Field lost |
+   | Sentence | Field that was lost |
    |---|---|
    | `Churn fell to 3% monthly, down from 8%.` | churn |
    | `Churn improved from 8% to 3% monthly.` | churn |
    | `Net revenue retention declined to 85%.` | retention |
-   | `Gross margin declined to 20%.` | gross margin |
+   | `Gross margin improved to 62%.` | gross margin |
    | `Take rate declined to 9%.` | take rate |
    | `Customers fell to 900 from 1,200.` | customers |
    | `LTV/CAC fell to 0.8.` | LTV/CAC |
+   | `Payback lengthened to 26 months.` | payback |
+   | `Revenue fell to $5M in 2024.` | revenue |
 
-   Only revenue survives it (`Revenue of $10M, down from $15M` reads $10M).
-   This is the same family as the ten reader defects above — a level stated in
-   a sentence the pattern does not expect — and it is safe in direction: the
-   figure is dropped, not inverted. It is written down rather than patched
-   because six patterns changed at once, late, is how a mirror-image defect
-   gets introduced; the growth fix above needed three guards of its own
-   (dash-is-not-a-minus, range-is-not-a-minus, decline-is-not-growth) and each
-   was found by testing, not by writing the regex.
+   Fixed with **one shared connector**, not nine patched patterns: nine
+   near-identical regexes drift apart, and this family is what that drift looks
+   like — the eight fields had been maintained separately until one of them
+   grew a case the others never got. In `from X to Y` the current value is Y;
+   reading X would report the number the company moved away from as fact.
+
+   Guarded in the same commit, because a direction verb is ordinary prose: the
+   connector stays anchored to the metric's own name, so `the team grew to 40
+   people` and `headcount fell to 900` still read nothing, and every plain form
+   is untouched. Neutering the connector reddens 18 tests.
 
 ## How this stays true
 
@@ -151,7 +155,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 81):
+`tests/qventureDisclosedCorpus.test.ts`, 131):
 
 | Guard | Floor | Measured today |
 |---|---|---|

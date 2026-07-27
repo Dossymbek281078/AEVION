@@ -80,6 +80,7 @@ export interface AnalysisResult {
       nonDilutiveUsd?: number | null;
       pilots?: number | null;
       reservations?: number | null;
+      capacityDeployedMw?: number | null;
       churnPct?: number | null;
       churnPeriod?: string | null;
       churnMonthlyPct?: number | null;
@@ -760,6 +761,9 @@ function EvidencePanel({ s }: { s: NonNullable<AnalysisResult["result"]["signals
   // nothing for it; showing it unlabelled here would put the credit back in the
   // reader's head, which is the same mistake one layer up.
   if (s.reservations) items.push(["Reservations / pre-orders", `${s.reservations.toLocaleString("en-US")} (uncommitted demand, not backlog)`]);
+  // Infrastructure already built and running — the number a solar, storage or
+  // grid plan is actually about, and the one the engine used to read as nothing.
+  if (s.capacityDeployedMw) items.push(["Capacity deployed", `${s.capacityDeployedMw.toLocaleString("en-US")} MW`]);
   if (s.churnPct != null) {
     const period = s.churnPeriod && s.churnPeriod !== "unspecified" ? s.churnPeriod : "monthly (period not stated)";
     const monthly = s.churnMonthlyPct != null && s.churnMonthlyPct !== s.churnPct ? ` → ${s.churnMonthlyPct}%/mo` : "";

@@ -102,6 +102,24 @@ export interface PlanSignals {
    * uncommitted, rather than silently crediting it as traction.
    */
   reservations: number | null;
+  /**
+   * Physical capacity already built and running, in megawatts. For a solar,
+   * storage or grid company this is the business — it is what the contracted
+   * revenue is earned on — and there was no field for it, so such a plan read
+   * as a customer count and nothing else.
+   *
+   * POWER only. A first attempt at this reader took "16 GWh of installed
+   * capacity" as 16,000 MW: GWh is energy and GW is power, Northvolt's own
+   * fixture in this corpus states its factory in GWh, and the naive unit list
+   * would have introduced a thousand-fold error while closing a miss. Energy
+   * units are rejected outright rather than converted, because converting them
+   * needs a duration the plan rarely states.
+   *
+   * Backs no factor yet, like `reservations`: whether delivered infrastructure
+   * should move a score the way revenue does is a rubric decision that needs
+   * calibration, not a regex. It is parsed so the reader sees it.
+   */
+  capacityDeployedMw: number | null;
   /** Regulatory milestones the plan claims to have REACHED (not merely planned). */
   regulatoryMilestones: string[];
   /** Technical validation the plan claims: peer review, trial phase, benchmark, working plant. */
@@ -221,7 +239,7 @@ export function emptySignals(): PlanSignals {
     retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false, currency: null,
     gmvUsd: null, takeRatePct: null, contractedRevenueUsd: null, nonDilutiveUsd: null,
-    pilots: null, reservations: null,
+    pilots: null, reservations: null, capacityDeployedMw: null,
     regulatoryMilestones: [], technicalProof: [], conflicts: [], parseNotes: [],
     fieldsFound: 0,
   };
@@ -257,6 +275,27 @@ function moneyRangeEnds(
 function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
   re.lastIndex = 0;
   return re.exec(text);
+}
+
+/**
+ * Is the thing matched at `at` stated as ACHIEVED, rather than intended?
+ *
+ * An explicit achievement word wins outright; otherwise an intention marker
+ * anywhere in the same clause disqualifies it. Clause-bounding is what lets
+ * "FDA clearance granted; we expect launch in 2027" keep its clearance — the
+ * intention is in the next clause and is about something else.
+ *
+ * Shared, because the same distinction decides a regulatory milestone and a
+ * megawatt already in the ground, and writing it twice is how the two would
+ * drift apart.
+ */
+const ACHIEVED_WORD = /\b(?:granted|received|obtained|awarded|cleared|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|delivered|operating|in hand)\b/i;
+const INTENDED_WORD = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply|deploy|have)|to submit|to file|once|upon|plan(?:ned)? for|plan|by 20\d\d)\b/i;
+function statedAsAchieved(text: string, at: number, len: number): boolean {
+  const from = Math.max(text.lastIndexOf(".", at), text.lastIndexOf(";", at)) + 1;
+  const ends = [text.indexOf(".", at + len), text.indexOf(";", at + len)].filter((i) => i !== -1);
+  const clause = text.slice(from, ends.length ? Math.min(...ends) : text.length);
+  return ACHIEVED_WORD.test(clause) || !INTENDED_WORD.test(clause);
 }
 
 /** The year a match's own clause is about, or null. Bounded to the clause so a
@@ -1117,6 +1156,26 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
 
+  // ── Capacity deployed — infrastructure already built and running ──
+  // The unit alternation is power-only and the negative lookahead is what keeps
+  // energy out: "16 GWh" must not become 16,000 MW.
+  const CAP_UNIT = String.raw`(mw|gw|megawatts?|gigawatts?)(?!h|\s*h\b|-hours?|\s*hours?)`;
+  const CAP_STATE = String.raw`(?:deployed|installed|operational|in operation|online|commissioned|built)`;
+  const cap = firstMatch(t, new RegExp(String.raw`${CAP_STATE}[^.;]{0,28}?(?<![0-9.])${NUM}\s*${CAP_UNIT}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(?<![0-9.])${NUM}\s*${CAP_UNIT}[^.;]{0,28}?${CAP_STATE}`, "i"));
+  if (cap) {
+    const groups = cap.slice(1).filter((g): g is string => typeof g === "string");
+    const numStr = groups.find((g) => /^[0-9]/.test(g));
+    const unitStr = groups.find((g) => /^[a-z]/i.test(g)) ?? "";
+    const v = numStr !== undefined ? parseLocaleNumber(numStr) : NaN;
+    if (isFinite(v) && v > 0 && statedAsAchieved(t, cap.index ?? 0, cap[0].length)) {
+      s.capacityDeployedMw = /^g/i.test(unitStr) ? v * 1000 : v;
+      if (/^g/i.test(unitStr)) {
+        s.parseNotes.push(`Capacity was disclosed in gigawatts (${v} GW); it is recorded as ${s.capacityDeployedMw} MW.`);
+      }
+    }
+  }
+
   // ── Reservations / pre-orders — read, but kept apart from committed demand ──
   const resv = firstMatch(t, new RegExp(String.raw`${NUM}\s*${UNIT}\s*(?:reservations?|pre[- ]?orders?|orders? reserved|non[- ]binding orders?)`, "i"))
     || firstMatch(t, new RegExp(String.raw`(?:reservations?|pre[- ]?orders?)\s*(?:for|of|totalling|totaling)?\s*(?:approximately\s*)?${NUM}\s*${UNIT}`, "i"));
@@ -1161,22 +1220,10 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
    * granted; we expect launch in 2027" keep its clearance — the intention lives
    * in the next clause, and it is about something else.
    */
-  const ACHIEVED = /\b(?:granted|received|obtained|awarded|cleared|clearance held|certified|approved|issued|secured|holds?|complete[d]?|executed|signed|registered|in hand)\b/i;
-  const INTENDED = /\b(?:expect\w*|anticipat\w*|plan(?:s|ning)?\s+to|plans\b|intend\w*|pursu\w+|seeking|applying for|applied for|application pending|targeting|aims? to|will\s+(?:be|seek|file|submit|apply)|to submit|to file|once|upon|plan(?:ned)? for|plan)\b/i;
-  const clauseAround = (at: number, len: number): string => {
-    const from = Math.max(t.lastIndexOf(".", at), t.lastIndexOf(";", at)) + 1;
-    const dot = t.indexOf(".", at + len);
-    const semi = t.indexOf(";", at + len);
-    const ends = [dot, semi].filter((i) => i !== -1);
-    return t.slice(from, ends.length ? Math.min(...ends) : t.length);
-  };
   for (const [re, label] of REG) {
     if (!mentionsUnnegated(t, re) || s.regulatoryMilestones.includes(label)) continue;
     const m = firstMatch(t, new RegExp(re.source, re.flags.replace("g", "")));
-    if (m) {
-      const clause = clauseAround(m.index ?? 0, m[0].length);
-      if (!ACHIEVED.test(clause) && INTENDED.test(clause)) continue;
-    }
+    if (m && !statedAsAchieved(t, m.index ?? 0, m[0].length)) continue;
     s.regulatoryMilestones.push(label);
   }
 

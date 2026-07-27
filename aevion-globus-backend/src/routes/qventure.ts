@@ -705,6 +705,9 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
       const grant = m(sig.nonDilutiveUsd);
       if (grant) lines.push(`Non-dilutive awarded: ${grant}`);
       if (typeof sig.pilots === "number") lines.push(`Pilots / design wins: ${sig.pilots}`);
+      if (typeof sig.capacityDeployedMw === "number") {
+        lines.push(`Capacity deployed: ${sig.capacityDeployedMw.toLocaleString("en-US")} MW`);
+      }
       if (typeof sig.reservations === "number") {
         lines.push(`Reservations / pre-orders: ${sig.reservations.toLocaleString("en-US")} (uncommitted demand, not backlog)`);
       }

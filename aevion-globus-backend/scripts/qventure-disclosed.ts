@@ -475,6 +475,32 @@ export const CASES: DisclosedCase[] = [
     ],
   },
 
+  {
+    outcome: "open",
+    round: "Form S-1, June 2015",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1469367/000119312515234545/d880891ds1.htm",
+    ],
+    input: {
+      name: "Sunrun",
+      sector: "climate",
+      stage: "growth",
+      geography: "US",
+      askUsd: 250_000_000,
+      description:
+        "Residential solar sold as a service: the company owns the system on the customer's roof and sells them the power it produces under a long-term contract, rather than selling the hardware.",
+      tractionNotes:
+        "We have deployed an aggregate of 430 megawatts as of March 31, 2015, serving approximately 79,000 customers. Systems are sold under a 20-year initial term.",
+    },
+    // The shape that forced a new signal rather than a wider regex: for a solar,
+    // storage or grid company the installed base IS the business, and the engine
+    // read such a plan as a customer count and nothing else.
+    expect: [
+      { label: "430 MW deployed read as capacity", read: (s) => s.capacityDeployedMw, ...num(430) },
+      { label: "79,000 customers", read: (s) => s.customers, ...num(79_000) },
+    ],
+  },
+
   // ── Outcome: succeeded ────────────────────────────────────────────────────
   {
     outcome: "succeeded",

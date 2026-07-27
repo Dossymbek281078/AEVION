@@ -71,15 +71,15 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 256
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 263
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (25 real companies, rubric v6):**
-   parse coverage **71/71**, mean success **71.2** vs mean failure **60.3**, gap
-   **10.9 points**. Nine of the twenty-five are labelled `open` — Rivian, Peloton,
+5. **Measured on the disclosed-figures corpus (26 real companies, rubric v6):**
+   parse coverage **73/73**, mean success **71.2** vs mean failure **60.3**, gap
+   **10.9 points**. Ten of the twenty-six are labelled `open` — Rivian, Peloton,
    Beyond Meat, Deliveroo, Affirm, Groupon, Lemonade and, by a different route,
    the disclosure-free control. `open` is
    not a hedge: those companies are still trading, and forcing them into
@@ -371,35 +371,30 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    to prefer the later disclosure, and "the rule covers all fields except this
    one" is the shape of every defect found today.
 
-17. **Open: installed capacity is a disclosure with no field.** Sunrun's 2015
-   S-1 (fetched from EDGAR, `d880891ds1.htm`) states "we have deployed an
-   aggregate of 430 megawatts as of March 31, 2015" alongside "approximately
-   79,000 customers" and a 20-year contract term on every system.
+17. **Closed: installed capacity is now a signal.** Sunrun's 2015 S-1 states "we
+   have deployed an aggregate of 430 megawatts as of March 31, 2015" beside
+   roughly 79,000 customers. The customer count parsed; the megawatts did not,
+   because there was no field for physical capacity — and for a solar, storage
+   or grid company that number is the business, since it is what the contracted
+   revenue is earned on.
 
-   The customer count parses. The **megawatts do not**, because there is no
-   field for physical capacity — and for a solar, storage or grid company that
-   figure is the business: it is what the contracted revenue is earned on. The
-   engine currently reads such a plan as a customer count and nothing else.
+   **This took two attempts, and the first one is the reason it is worth
+   writing down.** A naive unit list reads "16 GWh of installed capacity" as
+   16,000 MW. GWh is energy, GW is power, and Northvolt's own fixture in this
+   corpus states its factory in GWh — so the obvious pattern would have
+   introduced a thousand-fold silent error while closing a miss. Energy units
+   are now rejected outright rather than converted, because converting them
+   needs a duration the plan rarely states.
 
-   Not added to the corpus as a case, because a case whose stated figures the
-   engine cannot recover would break the 100% coverage gate, and the fix is a
-   new signal rather than a wider regex — capacity deployed, scored as delivered
-   infrastructure rather than as a promise.
+   The reader also refuses a plan to build: "we plan to have 430 megawatts
+   deployed by 2027" is not an installed base. That check is the same
+   `statedAsAchieved` helper the regulatory milestones use — written once,
+   because the same distinction decides a clearance and a megawatt, and writing
+   it twice is how the two drift apart.
 
-   **A prototype was written and reverted, and it earned its keep:** a naive
-   unit list reads "16 GWh of installed capacity" as 16,000 MW. GWh is energy
-   and GW is power — Northvolt's own fixture in this corpus states its factory
-   in GWh — so the obvious pattern would have introduced a fresh silent
-   thousand-fold error while fixing a miss. The reader must reject energy units
-   explicitly, and the field must be rendered on both surfaces before the
-   visibility gate will accept it. Both are small; neither is a last-ten-minutes
-   change.
-
-   Worth noting where this came from: two companies in a row had found nothing,
-   which read as the readers catching up. Both were ordinary consumer and
-   financial businesses. Every filing since with *unusual* evidence — a launch
-   company's order book and flight record, an energy company's installed base —
-   has found something.
+   Like `reservations`, capacity backs **no factor** and is rendered on both
+   surfaces instead. Whether delivered infrastructure should move a score the
+   way revenue does is a rubric decision that needs calibration, not a regex.
 
 18. **Closed: the milestone reader recorded intentions as achievements.** The
    comment above the regulatory list had always promised that "FDA approval
@@ -433,7 +428,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 256):
+`tests/qventureDisclosedCorpus.test.ts`, 263):
 
 | Guard | Floor | Measured today |
 |---|---|---|
@@ -442,7 +437,7 @@ months. The invariants now run on every push
 | Known successes vs known failures | ≥ 4 pts | 6.6 |
 | Capital-intensive arm (≥4 cases per side) | ≥ 3 pts | 6.6 |
 | `pass` and `watch` both reachable on real cases | — | both present |
-| Every figure real filings state is recovered | 71/71 | 71/71 |
+| Every figure real filings state is recovered | 73/73 | 73/73 |
 | Separation on disclosed figures | ≥ 6 pts | 10.9 |
 | A large ask with no disclosure cannot reach `watch` | — | Fast, 43.9, `pass` |
 
@@ -452,7 +447,7 @@ update would have missed `reservations` in exactly the way the renderers did.
 Adding a numeric field to the parser and to nothing else reddens it by name.
 
 One of those guards is not a floor but an equality: parse coverage must stay at
-71/71. A silent reader failure is the defect class this corpus exists to catch,
+73/73. A silent reader failure is the defect class this corpus exists to catch,
 and "most figures parsed" is the state it was already in.
 
 They are floors, not targets — set well under the measured values so ordinary

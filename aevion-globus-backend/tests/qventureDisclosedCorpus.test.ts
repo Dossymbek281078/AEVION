@@ -321,7 +321,7 @@ describe("no parsed figure is invisible to the reader", () => {
   // visible, so keep them in step.
   const RENDERED_BY_EVIDENCE_PANEL = new Set([
     "revenueUsd", "gmvUsd", "takeRatePct", "contractedRevenueUsd",
-    "nonDilutiveUsd", "pilots", "reservations", "churnPct",
+    "nonDilutiveUsd", "pilots", "reservations", "capacityDeployedMw", "churnPct",
   ]);
   // Shown through a figure derived from them: LTV/CAC and payback are both
   // rendered, and each is a stated function of these two.
@@ -1075,5 +1075,44 @@ describe("a milestone is something reached, not something intended", () => {
     // Clause-bounding is the whole reason this rule can be strict without
     // suppressing achievements that happen to sit next to plans.
     expect(reached("FDA clearance granted; we expect launch in 2027.")).toBe(true);
+  });
+});
+
+describe("capacity already in the ground, and the unit trap under it", () => {
+  /**
+   * For a solar, storage or grid company the installed base is the business —
+   * it is what the contracted revenue is earned on — and there was no field for
+   * it, so Sunrun's S-1 read as a customer count and nothing else.
+   *
+   * The reason this took two attempts: a naive unit list reads "16 GWh of
+   * installed capacity" as 16,000 MW. GWh is energy, GW is power, and
+   * Northvolt's own fixture in this corpus states its factory in GWh — the
+   * obvious pattern would have introduced a thousand-fold error while closing a
+   * miss. Energy units are rejected rather than converted, because converting
+   * them needs a duration the plan rarely states.
+   */
+  const mw = (t: string) => parsePlanSignals(t).capacityDeployedMw;
+
+  test("power is read", () => {
+    expect(mw("We have deployed an aggregate of 430 megawatts as of March 31, 2015.")).toBe(430);
+    expect(mw("430 MW deployed.")).toBe(430);
+    expect(mw("1,200 MW operational across 14 sites.")).toBe(1_200);
+  });
+  test("gigawatts are normalised to megawatts", () => {
+    expect(mw("3 GW of capacity installed.")).toBe(3_000);
+  });
+  test("energy is NOT power", () => {
+    expect(mw("The plant has 16 GWh of installed capacity.")).toBeNull();
+    expect(mw("16 GWh installed.")).toBeNull();
+    expect(mw("Deployed 500 MWh of storage.")).toBeNull();
+  });
+  test("a plan to build is not an installed base", () => {
+    expect(mw("We plan to have 430 megawatts deployed by 2027.")).toBeNull();
+    expect(mw("We will deploy 430 MW by 2027.")).toBeNull();
+  });
+  test("it backs no factor, like reservations", () => {
+    // Whether delivered infrastructure should move a score the way revenue does
+    // is a rubric decision needing calibration. Until then it is shown, not scored.
+    expect(parsePlanSignals("430 MW deployed.").fieldsFound).toBe(0);
   });
 });

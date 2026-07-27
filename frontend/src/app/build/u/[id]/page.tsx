@@ -476,7 +476,15 @@ async function MatchingVacanciesBlock({ skill }: { skill: string }) {
     );
     if (!res.ok) return null;
     const j = await res.json();
-    const items = j?.data?.items as { id: string; title: string; salary: number; city: string | null }[];
+    // salaryCurrency читаем из фида: без него formatSalary ниже показывал бы
+    // сумму дефолтной валютой (issue гигиены витрины, 27.07).
+    const items = j?.data?.items as {
+      id: string;
+      title: string;
+      salary: number;
+      salaryCurrency?: string | null;
+      city: string | null;
+    }[];
     if (!items || items.length === 0) return null;
     return (
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -492,7 +500,7 @@ async function MatchingVacanciesBlock({ skill }: { skill: string }) {
             >
               <span className="text-white">{v.title}</span>
               <span className="text-emerald-300">
-                {formatSalary(v.salary)}
+                {formatSalary(v.salary, v.salaryCurrency)}
                 {v.city ? ` · ${v.city}` : ""}
               </span>
             </Link>

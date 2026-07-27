@@ -529,7 +529,12 @@ function RecentlyViewedRow() {
               {v.title}
             </div>
             <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
-              {v.salary > 0 && <span className="text-emerald-300">{formatSalary(v.salary)}</span>}
+              {/* Валюту передавать обязательно: без второго аргумента
+                  formatSalary подставляет дефолт, и сумма в USD показывалась
+                  как рубли. Ровно для этого он и заводился. */}
+              {v.salary > 0 && (
+                <span className="text-emerald-300">{formatSalary(v.salary, v.salaryCurrency)}</span>
+              )}
               {v.city && <span>📍 {v.city}</span>}
             </div>
           </Link>

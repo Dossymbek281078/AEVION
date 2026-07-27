@@ -50,7 +50,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       .getVacancy(id)
       .then(async (v) => {
         setVacancy(v);
-        recordVacancyView({ id: v.id, title: v.title, salary: v.salary, city: v.city });
+        recordVacancyView({ id: v.id, title: v.title, salary: v.salary, salaryCurrency: v.salaryCurrency, city: v.city });
         if (me?.id) {
           const isOwner = v.clientId === me.id;
           const [my, owned] = await Promise.all([

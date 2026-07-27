@@ -5,6 +5,16 @@ export type RecentVacancy = {
   id: string;
   title: string;
   salary: number;
+  /**
+   * Валюта записывается вместе с суммой: без неё карточка «недавно
+   * просмотренных» форматировала зарплату дефолтной валютой и показывала
+   * доллары рублями (гигиена витрины, 27.07).
+   *
+   * Необязательное: записи, сделанные до этой правки, поля не имеют —
+   * formatSalary для них ведёт себя как прежде, и они вытесняются по мере
+   * просмотра новых.
+   */
+  salaryCurrency?: string | null;
   city: string | null;
   ts: number;
 };
@@ -24,13 +34,20 @@ function read(): RecentVacancy[] {
   }
 }
 
-export function recordVacancyView(v: { id: string; title: string; salary: number; city?: string | null }) {
+export function recordVacancyView(v: {
+  id: string;
+  title: string;
+  salary: number;
+  salaryCurrency?: string | null;
+  city?: string | null;
+}) {
   if (typeof window === "undefined") return;
   const items = read().filter((x) => x.id !== v.id);
   items.unshift({
     id: v.id,
     title: v.title.slice(0, 80),
     salary: v.salary || 0,
+    salaryCurrency: v.salaryCurrency ?? null,
     city: v.city ?? null,
     ts: Date.now(),
   });

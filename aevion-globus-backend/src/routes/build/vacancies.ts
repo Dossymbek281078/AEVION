@@ -231,7 +231,11 @@ vacanciesRouter.get("/", async (req, res) => {
       : `((SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())) DESC NULLS LAST, v."createdAt" DESC`;
 
     const result = await pool.query(
-      `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
+      // salaryCurrency обязателен в проекции: без него карточка витрины
+      // форматирует сумму дефолтной валютой. Фильтр `?currency=` по этому полю
+      // здесь есть с самого начала, а в ответе поля не было — то есть отобрать
+      // по валюте можно было, а показать её нет.
+      `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."salaryCurrency", v."status", v."createdAt",
               v."skillsJson", v."expiresAt",
               COALESCE(v."region", p."region") AS "region", COALESCE(v."country", p."country") AS "country",
               v."workMode", v."minExperienceYears", v."educationLevel",

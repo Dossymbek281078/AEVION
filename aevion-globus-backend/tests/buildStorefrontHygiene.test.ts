@@ -55,6 +55,21 @@ describe("публичный фид вакансий отдаёт только O
     expect(feed).toMatch(/p\."status"\s*<>\s*'DONE'/);
   });
 
+  // Фильтр `?currency=` по salaryCurrency в этом фиде был с самого начала, а
+  // самого поля в ответе не было: отобрать по валюте можно, показать — нет.
+  // Карточка витрины форматировала сумму дефолтной валютой, и зарплаты в USD
+  // выводились как рубли («800₽» вместо «$800») — проверено на проде 27.07.
+  //
+  // Проверять именно СПИСОК ВЫБОРКИ, а не файл целиком: `v."salaryCurrency"`
+  // встречается ещё в условии `?currency=`, и первая версия этой проверки
+  // оставалась зелёной после удаления поля из SELECT — то есть подтверждала
+  // сама себя. Поймано мутацией.
+  it("проекция отдаёт salaryCurrency, иначе витрина покажет чужую валюту", () => {
+    const select = feed.slice(feed.indexOf("SELECT v."), feed.indexOf('FROM "BuildVacancy"'));
+    expect(select.length, "не найден список выборки фида").toBeGreaterThan(0);
+    expect(select).toMatch(/v\."salaryCurrency"/);
+  });
+
   it("явный ?projectStatus= по-прежнему поддержан", () => {
     expect(feed).toMatch(/req\.query\.projectStatus/);
   });

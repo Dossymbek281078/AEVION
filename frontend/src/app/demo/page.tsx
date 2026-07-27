@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
+import { LIVE_MODULES, MODULE_NODES, REGISTRY_ENTRIES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -505,7 +505,7 @@ export default function DemoShowcasePage() {
         >
           <span><strong style={{ color: "#34d399" }}>{liveMvpCount} deep MVPs</strong></span>
           <span style={{ color: "#475569" }}>·</span>
-          <span><strong style={{ color: "#7dd3fc" }}>{MODULE_NODES} modules · {LIVE_MODULES} deployed</strong></span>
+          <span><strong style={{ color: "#7dd3fc" }}>{REGISTRY_ENTRIES} in the registry · {LIVE_MODULES} deployed</strong></span>
           <span style={{ color: "#475569" }}>·</span>
           <span><strong style={{ color: "#fbbf24" }}>$340B</strong> addressable market (our estimate)</span>
         </div>

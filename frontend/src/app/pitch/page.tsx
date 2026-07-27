@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
+import { LIVE_MODULES, MODULE_NODES, REGISTRY_ENTRIES } from "@/data/pitchFacts";
 import {
   ask,
   billionDefense,
@@ -446,7 +446,7 @@ export default function PitchPage() {
             <HeroStat
               value={`${liveCount}`}
               unit="deep MVPs"
-              hint={`of ${MODULE_NODES} modules · ${LIVE_MODULES} deployed`}
+              hint={`of ${REGISTRY_ENTRIES} in the registry · ${LIVE_MODULES} deployed`}
             />
             <HeroStat
               value="$340B"
@@ -1079,7 +1079,7 @@ export default function PitchPage() {
       {/* ───────── LAUNCHED MODULES ───────── */}
       <Section
         anchor="modules"
-        eyebrow={`${liveCount} deep MVPs · ${MODULE_NODES} modules in the registry, ${LIVE_MODULES} deployed`}
+        eyebrow={`${liveCount} deep MVPs · ${REGISTRY_ENTRIES} in the registry, ${LIVE_MODULES} deployed`}
         title="Every module sells separately. The bundle sells the company."
       >
         {(Object.keys(groupedLaunched) as ValueBucket[]).map((bucket) => {

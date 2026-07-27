@@ -469,7 +469,7 @@ function PlanCard({
   const showPrice = !isPPH;
   const baseMonthly = cycle === "YEARLY" ? Math.round(plan.yearly / 12) : plan.priceMonthly;
   // Apply loyalty-tier discount on top of yearly cycle. Both stack
-  // multiplicatively: yearly already gives ~17% off, tier shaves more.
+  // multiplicatively: yearly already gives 20% off (YEARLY_DISCOUNT), tier shaves more.
   const discountFactor =
     tierDiscountBps > 0 ? Math.max(0, 10000 - tierDiscountBps) / 10000 : 1;
   const priceMonthly =

@@ -3114,3 +3114,35 @@ describe("an average contract value is not a backlog", () => {
     expect(backlog(text)).toBe(want);
   });
 });
+
+describe("a trend stated in one sentence reads its oldest figure", () => {
+  // Open, pinned. An S-1 presents a trend in a single sentence — "revenue was
+  // $186.4 million in 2018, $289.2 million in 2019, and $400.3 million in 2020"
+  // — and the metric noun appears once, so there is exactly one match and
+  // nothing for the latest-period rule to choose between. The first figure
+  // wins, which is the oldest and, on a growing company, the most flattering
+  // to nobody: Procore's top line reads 2.1x lower than it is.
+  //
+  // Both sentences are verbatim from Procore's S-1.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("revenue takes the oldest of three years", () => {
+    expect(p("Our revenue was $186.4 million in 2018, $289.2 million in 2019, and $400.3 million in 2020.").revenueUsd)
+      .toBe(186_400_000);
+  });
+
+  test("so does retention", () => {
+    expect(p("Our net retention rate was 121% as of December 31, 2018, 117% as of December 31, 2019, and 107% as of December 31, 2020.").retentionPct)
+      .toBe(121);
+  });
+
+  test("the rule works when the periods are separate sentences", () => {
+    // Which is why this went unnoticed: the mechanism is correct, and only
+    // fails when the noun is not repeated.
+    expect(p("Net retention was 121% in 2018. Net retention was 107% in 2020.").retentionPct).toBe(107);
+  });
+
+  test("a single-year sentence is unaffected", () => {
+    expect(p("Our revenue was $400.3 million in 2020.").revenueUsd).toBe(400_300_000);
+  });
+});

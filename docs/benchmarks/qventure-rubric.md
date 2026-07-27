@@ -1420,6 +1420,40 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    pipeline and cohort retention. Each would need a factor to feed, and burn
    multiple was already refuted by arithmetic in limit 6.
 
+58. **The calibration question from limit 57, answered with a count.** Should
+   gross retention be judged on tiers calibrated for net? Counting first: all
+   four retention figures across both corpora are **net**. Zero gross, zero
+   logo. A tier change for gross retention could not be seen on either corpus,
+   and limit 4 already says a rubric change invisible to your corpus has not
+   been validated by it. So: not changed, and the count is the reason.
+
+   Making the question answerable was the better use of the time. Procore's S-1
+   states **both** on the same dates — gross retention 94% and net retention
+   107% as of 31 December 2020 — which is exactly the case needed to calibrate
+   one against the other.
+
+59. **Open, pinned: a trend stated in one sentence reads its oldest figure.**
+   Fetching Procore turned up something worse than the question it was fetched
+   to answer.
+
+   An S-1 presents a trend in a single sentence, and the metric noun appears
+   once:
+
+   > Our revenue was \$186.4 million in 2018, \$289.2 million in 2019, and
+   > \$400.3 million in 2020.
+
+   One noun, one match, nothing for the latest-period rule to choose between —
+   so the first figure wins, which is the **oldest**. Procore's top line reads
+   \$186.4M instead of \$400.3M, understated 2.1x. Retention reads 121% instead
+   of 107%. Four metrics behave this way; the rule itself is correct and only
+   fails when the noun is not repeated, which is why it went unnoticed.
+
+   Not fixed here: recognising a series touches revenue, retention, customers
+   and margin at once, and every widening on this branch earned its trap tests
+   first. Pinned as assertions of the current wrong behaviour, so it goes red
+   the moment someone fixes it — the fourth time that technique is used here and
+   it has reported a closure three times out of three.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

@@ -13018,23 +13018,24 @@ ${question.trim()}`;
             </div>
           </div>
           {renderMiniBoard()}
-          {!brilliancyState.solved&&!brilliancyState.givenUp&&<>
+          {!brilliancyState.solved&&!brilliancyState.givenUp&&(()=>{
+            /* Один обработчик на Enter и на кнопку. Раньше тело было скопировано в оба
+               места дословно: правка в одном давала бы разное поведение клавиатуре и
+               мыши, причём молча. */
+            const submitBrilliancy=()=>{
+              const val=brilliancyInput.trim();
+              if(!val)return;
+              const{state:newState,correct,reward}=applyGuess(brilliancyHunt,brilliancyState,val);
+              sBrilliancyState(newState);sBrilliancyResult({correct,reward});
+              if(correct&&reward>0)addChessy(reward,`💎 brilliancy "${brilliancyHunt.title.slice(0,30)}"`);
+            };
+            return <>
             <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
               <input type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
                 placeholder="Введи ход (напр. Be7, Nxc3, O-O, e5)"
                 style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,fontFamily:"ui-monospace, monospace",background:CC.surface1}}
-                onKeyDown={e=>{
-                  if(e.key==="Enter"&&brilliancyInput.trim()){
-                    const{state:newState,correct,reward}=applyGuess(brilliancyHunt,brilliancyState,brilliancyInput.trim());
-                    sBrilliancyState(newState);sBrilliancyResult({correct,reward});
-                    if(correct&&reward>0)addChessy(reward,`💎 brilliancy "${brilliancyHunt.title.slice(0,30)}"`);
-                  }
-                }}/>
-              <Btn variant="primary" size="md" disabled={!brilliancyInput.trim()} onClick={()=>{
-                const{state:newState,correct,reward}=applyGuess(brilliancyHunt,brilliancyState,brilliancyInput.trim());
-                sBrilliancyState(newState);sBrilliancyResult({correct,reward});
-                if(correct&&reward>0)addChessy(reward,`💎 brilliancy "${brilliancyHunt.title.slice(0,30)}"`);
-              }}>Проверить</Btn>
+                onKeyDown={e=>{if(e.key==="Enter")submitBrilliancy()}}/>
+              <Btn variant="primary" size="md" disabled={!brilliancyInput.trim()} onClick={submitBrilliancy}>Проверить</Btn>
             </div>
             {brilliancyResult&&!brilliancyResult.correct&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`,fontSize:12,color:"#991b1b"}}>
               ✗ Не тот ход. Попыток: {brilliancyState.attempts}. Это «{brilliancyInput}» — попробуй ещё. Думай о геометрии, а не очевидном взятии.
@@ -13048,7 +13049,8 @@ ${question.trim()}`;
                 if(confirm("Сдаёшься? Streak обнулится."))sBrilliancyState(giveUp(brilliancyHunt,brilliancyState))
               }}>🏳 Сдаюсь</Btn>
             </div>
-          </>}
+          </>;
+          })()}
           {brilliancyState.solved&&<div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfdf5,#a7f3d0)",border:`2px solid ${CC.brand}`,textAlign:"center"}}>
             <div style={{fontSize:48,lineHeight:1}}>💎</div>
             <div style={{fontSize:18,fontWeight:900,color:"#065f46",marginTop:SPACE[2]}}>BRILLIANCY!</div>

@@ -1195,7 +1195,14 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     // was written, because the list could not yet tell "certified" from "plans
     // to pursue certification"; released now that it can.
     [/\biso[\s-]?27001\b|\bsoc\s?2(?:\s*type\s*(?:i{1,2}|[12]))?\b|\bhitrust\b|\bfedramp\b/i, "Security certification held"],
-    [/\bce mark(?:ed|ing)?\b|\bmdr certifi/i, "CE mark"],
+    // iRhythm's 10-K uses "CE mark" three ways: one holding ("marked in the EU
+    // under OUR CE mark issued by BSI in December 2023") and two definitions
+    // ("the means for achieving the requirements for the CE mark vary", "each
+    // certified device is marked with the CE mark which shows..."). The bare
+    // noun credited all three, and the second definition even carries an
+    // achievement word — "certified" — so the intention filter could not help.
+    // The mark has to be attached to this company or to an act of issuing it.
+    [/\bce marked\b|\bour ce mark\b|\bce mark\b[^.;]{0,30}?\b(?:granted|issued|obtained|received|held|awarded)\b|\b(?:granted|issued|obtained|received|holds?|awarded)\b[^.;]{0,30}?\bce mark\b|\bmdr certifi/i, "CE mark"],
     [/\bema approval|\bmhra approval/i, "EMA/MHRA approval"],
     [/\bphase\s*(?:iii|3)\b/i, "Phase 3 clinical"],
     [/\bphase\s*(?:ii|2)\b/i, "Phase 2 clinical"],

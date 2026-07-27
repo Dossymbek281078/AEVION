@@ -1289,3 +1289,40 @@ describe("an aviation authorisation, and the regulator that merely regulates", (
     expect(parsePlanSignals("Results were published in a peer-reviewed journal.").technicalProof.length).toBeGreaterThan(0);
   });
 });
+
+describe("one filing uses the same words for a holding and a definition", () => {
+  /**
+   * iRhythm's 10-K says "CE mark" three ways: one holding — "the Zio monitor
+   * System and ZEUS are currently marked in the EU under OUR CE mark issued by
+   * BSI in December 2023" — and two definitions: "the means for achieving the
+   * requirements for the CE mark vary according to the nature of the device"
+   * and "each certified device is marked with the CE mark which shows that the
+   * device has a certificate of conformance".
+   *
+   * The bare noun credited all three. The second definition even carries an
+   * achievement word ("certified"), so the intention filter could not help —
+   * the mark has to be attached to this company or to an act of issuing it.
+   *
+   * The 510(k) entry needed no change: the same filing's "a 510(k) submission
+   * must demonstrate...", "managed within the 510(k) framework" and "devices
+   * for which we are SEEKING marketing authorization require 510(k) clearance"
+   * all stay out already.
+   */
+  const held = (t: string, label: string) => parsePlanSignals(t).regulatoryMilestones.includes(label);
+
+  test("a mark held counts", () => {
+    expect(held("The Zio monitor System and ZEUS are currently marked in the EU under our CE mark issued by BSI in December 2023.", "CE mark")).toBe(true);
+    expect(held("FDA 510(k) clearance granted and CE marked.", "CE mark")).toBe(true);
+  });
+  test("a definition of the mark does not", () => {
+    expect(held("The means for achieving the requirements for the CE mark vary according to the nature of the device.", "CE mark")).toBe(false);
+    expect(held("Each certified device is marked with the CE mark which shows that the device has a certificate of conformance under the EU MDR.", "CE mark")).toBe(false);
+  });
+  test("and neither does a description of the 510(k) process", () => {
+    const l = "FDA clearance/approval";
+    expect(held("A 510(k) submission must demonstrate that the device is substantially equivalent to a device legally in commercial distribution.", l)).toBe(false);
+    expect(held("To date, our product changes have been managed within the 510(k) framework.", l)).toBe(false);
+    expect(held("Devices for which we are seeking marketing authorization require 510(k) clearance from FDA in order to be marketed in the United States.", l)).toBe(false);
+    expect(held("FDA 510(k) clearance granted.", l)).toBe(true);
+  });
+});

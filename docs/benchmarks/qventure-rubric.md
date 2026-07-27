@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 623
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 636
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (623
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (636
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -867,13 +867,38 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    customer count — "we serve customers 24 hours a day" reads 24, "users 18 and
    older" reads 18, "accounts 30 days past due" reads 30. Each is a test.
 
+34. **The third notation: what a deck writes instead of a sentence.** After
+   prose and the colon form, the remaining way a plan states a metric is a
+   table row or a bullet. Bullets, tabs and newline-separated label/value pairs
+   already worked. The pipe of a markdown table and the em/en dash of a slide
+   label did not — in any of the **twenty-four** connector lists in the parser,
+   which is also why nobody had added them: there was no one place to add them
+   to. All twenty-four now carry the notation separators.
+
+   **One metric is deliberately excluded, and it is the interesting part.**
+   Gross margin still refuses `Gross margin — 45%`. Everywhere else a dash
+   between a label and a figure is punctuation; on gross margin the sign *is*
+   the finding — Solyndra's −45% was the headline of its case — and a rule
+   turning the dash into a separator would read a negative margin as a positive
+   one. The pipe works there; the dash does not, on purpose, with a test saying
+   so.
+
+   That exclusion was not planned. A test written earlier today pinned the
+   refusal, the blanket change broke it, and the failure is what forced the
+   question of whether a dash means "label" or "minus" per metric rather than
+   globally. A guard that only ever agrees with you teaches nothing.
+
+   The plain hyphen and the arrow stay out. A hyphen is a range separator and a
+   minus sign in this corpus already; an arrow usually means "will become",
+   which is an intention, not a result.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 623):
+`tests/qventureDisclosedCorpus.test.ts`, 636):
 
 | Guard | Floor | Measured today |
 |---|---|---|

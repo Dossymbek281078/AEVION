@@ -2225,3 +2225,49 @@ describe("the connector in the noun-first customer form is load-bearing", () => 
     expect(parsePlanSignals(text).customers).toBeNull();
   });
 });
+
+describe("the notations a deck actually uses", () => {
+  // Third form after prose and the colon. Bullets, tabs and newlines already
+  // worked; the pipe of a markdown table and the em/en dash of a slide label
+  // did not, in any of the twenty-four connector lists — which is why nobody
+  // had added them: there was no one place to add them to.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test.each([
+    ["pipe, revenue", "ARR | $2M", (s: Sig) => s.revenueUsd, 2_000_000],
+    ["pipe, GMV", "GMV | $10M", (s: Sig) => s.gmvUsd, 10_000_000],
+    ["pipe, customers", "Customers | 5,000", (s: Sig) => s.customers, 5000],
+    ["pipe, gross margin", "Gross margin | 45%", (s: Sig) => s.grossMarginPct, 45],
+    ["em dash, revenue", "ARR — $2M", (s: Sig) => s.revenueUsd, 2_000_000],
+    ["en dash, GMV", "GMV – $10M", (s: Sig) => s.gmvUsd, 10_000_000],
+    ["em dash, retention", "Net revenue retention — 120%", (s: Sig) => s.retentionPct, 120],
+  ])("%s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("gross margin keeps refusing the dash, and that is deliberate", () => {
+    // Everywhere else a dash between a label and a figure is punctuation. Here
+    // the sign IS the finding — Solyndra's -45% was the headline of its case —
+    // so a rule turning the dash into a separator would read a negative margin
+    // as a positive one. The ambiguous form stays refused.
+    expect(p("Gross margin — 45%.").grossMarginPct).toBeNull();
+    expect(p("Gross margin – 45%.").grossMarginPct).toBeNull();
+  });
+
+  test.each([
+    ["a range still reads its low end", "Gross margin 60–70%.", (s: Sig) => s.grossMarginPct, 60],
+    ["a hyphen range too", "Revenue of $5-10 million.", (s: Sig) => s.revenueUsd, 5_000_000],
+    ["a minus is still a minus", "Gross margin of -45%.", (s: Sig) => s.grossMarginPct, -45],
+    ["parentheses are still negative", "Gross margin of (45)%.", (s: Sig) => s.grossMarginPct, -45],
+  ])("%s", (_l, text, read, want) => {
+    expect(read(p(text) as Sig)).toBe(want);
+  });
+
+  test("the notations that already worked still do", () => {
+    expect(p("• ARR: $2M").revenueUsd).toBe(2_000_000);
+    expect(p("- Customers: 5,000").customers).toBe(5000);
+    expect(p("Metric\tValue\nARR\t$2M\nCustomers\t5,000").revenueUsd).toBe(2_000_000);
+  });
+});
+
+type Sig = ReturnType<typeof parsePlanSignals>;

@@ -639,7 +639,7 @@ export function parsePlanSignals(text: string): PlanSignals {
    */
   const candidates = [
     ...statedCandidates(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`),
-    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`),
+    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|\||—|–|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`),
   ];
   let arr: RegExpMatchArray | null = candidates[0]?.m ?? null;
   const dated = candidates.filter((c) => c.year !== null);
@@ -808,7 +808,12 @@ export function parsePlanSignals(text: string): PlanSignals {
   // A stated band is read at its low end, like a revenue range: the plan
   // disclosed a floor, and scoring the ceiling would credit a number it never
   // committed to. The choice is stated in the assumptions, not assumed.
-  const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
+  // Pipe yes, dashes no — and only here. Everywhere else an em dash between a
+  // label and a figure is punctuation. On gross margin the sign IS the
+  // finding: Solyndra's -45% was the headline of its case, and a rule that
+  // turns a dash into a separator would read a negative margin as positive.
+  // Refusing the ambiguous form is the conservative reading and stays.
+  const gmRange = firstMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|\||are|is|between)?\s*\(?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*gross\s*margin`, "i"));
   const gmBand = percentBandLowEnd(gmRange, s, "Gross margin", 100);
   if (gmBand !== null) s.grossMarginPct = gmBand;
@@ -828,8 +833,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   const NEG = String.raw`(-|−|minus\s+|negative\s+)?`;
   const NOT_RANGE = String.raw`(?<![\d.,])`;
   const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|\||are|is|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:of|=|:|at|\||are|is|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".
@@ -866,8 +871,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   // "and" only counts after an explicit "between": without that guard,
   // "LTV:CAC of 8:1 and 6 month payback" parsed as the range 8–6 and scored the
   // deal on a ratio of 6 that belonged to the payback clause.
-  const ratioRange = firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*${NUM}\s*(?:x|:\s*1)?\s*(?:-|–|—|to)\s*${NUM}\s*(?:x|:\s*1)?`, "i"))
-    || firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at)?\s*between\s*${NUM}\s*(?:x|:\s*1)?\s*and\s*${NUM}\s*(?:x|:\s*1)?`, "i"));
+  const ratioRange = firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at|\||—|–)?\s*${NUM}\s*(?:x|:\s*1)?\s*(?:-|–|—|to)\s*${NUM}\s*(?:x|:\s*1)?`, "i"))
+    || firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at|\||—|–)?\s*between\s*${NUM}\s*(?:x|:\s*1)?\s*and\s*${NUM}\s*(?:x|:\s*1)?`, "i"));
   if (ratioRange) {
     const a = parseLocaleNumber(ratioRange[1]);
     const b = parseLocaleNumber(ratioRange[2]);
@@ -877,7 +882,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const ratio = s.ltvCacRatio !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
+    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:of|=|:|at|\||—|–|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
   if (ratio) {
     const r = parseLocaleNumber(ratio[1]);
     if (isFinite(r) && r > 0 && r < 100) s.ltvCacRatio = r;
@@ -889,22 +894,22 @@ export function parsePlanSignals(text: string): PlanSignals {
   // Bands here run in opposite directions: a HIGHER CAC and a LOWER LTV are both
   // the worse reading, so "CAC $8-12k, LTV $40-60k" scores 12k against 40k —
   // the pessimistic corner of the box the plan drew, not its flattering one.
-  const cacRange = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const cacRange = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|\||—|–|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cacRange) {
     const ends = moneyRangeEnds(t, cacRange, planCurrency);
     if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
   }
   const cac = s.cacUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+    : firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:of|=|:|at|\||—|–|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency); if (v && v > 0) s.cacUsd = v; }
 
-  const ltvRange = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const ltvRange = firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|\||—|–|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
     const ends = moneyRangeEnds(t, ltvRange, planCurrency);
     if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
   }
   const ltv = s.ltvUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+    : firstMatch(t, new RegExp(String.raw`ltv\s*(?:of|=|:|at|\||—|–|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
@@ -913,7 +918,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ── Payback: "payback of 8 months" / "8-month payback" ──
   // A payback band takes the LONGER end — the conservative reading of a range is
   // the one that is worse for the plan, and "9-12 months" promises 12.
-  const pbRange = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?`, "i"))
+  const pbRange = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|\||—|–|is|between)?\s*${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?\s*payback`, "i"));
   if (pbRange) {
     const a = parseLocaleNumber(pbRange[1]);
@@ -929,7 +934,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // figure written in years would turn 2 years into an excellent 2-month
   // payback: the same class of error the churn period exists to prevent.
   const pb = s.paybackMonths !== null ? null
-    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
+    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:of|=|:|at|\||—|–|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
     || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?(months?|years?)\s*payback`, "i"), s, "payback");
   if (pb) {
     const v = parseLocaleNumber(pb[1]);
@@ -948,7 +953,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // longer one: "2-3% monthly churn" promises 3%, and reading 2% would score a
   // company on the best month it ever had.
   const churnRange = firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:of|=|:|at|\||—|–|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   if (churnRange) {
     const groups = churnRange.slice(1).filter((g): g is string => typeof g === "string");
     const nums = groups.filter((g) => /^\d/.test(g)).map(parseLocaleNumber);
@@ -973,7 +978,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // ordinary number, was scored as 24% a month and charged as a company
     // bleeding out. Exactly the confusion the churn-period machinery exists to
     // prevent, left open on the most natural phrasing of all.
-    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
+    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|\||—|–|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
   if (churn && statedAsAchieved(t, churn.index ?? 0, churn[0].length)) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
@@ -994,13 +999,13 @@ export function parsePlanSignals(text: string): PlanSignals {
   // rule the revenue and margin bands already follow. Without this the whole
   // disclosure was dropped, so a plan stating 110–130% scored as if it had said
   // nothing about retention at all.
-  const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|\||—|–|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   // 500, not 100: net revenue retention above 100% is the point of the metric.
   const retBand = percentBandLowEnd(retRange, s, "Retention", 500);
   if (retBand !== null) s.retentionPct = retBand;
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
-    || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
+    || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:of|=|:|at|\||—|–|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
   if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) { const v = parseLocaleNumber(ret[1]); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }
 
   // ── Customers / users: "10,000 customers" / "1,200 paying users" ──
@@ -1038,7 +1043,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // no noun-first form at all. The connector is REQUIRED, not optional:
     // without it the span would match "customers 5,000" inside any sentence
     // that happens to put a number after the noun.
-    || latestMatch(t, new RegExp(String.raw`(?:paying\s+|active\s+)?(?:${CUST_NOUN})\s*(?::|=|of|at|reached|totall?ed|stood at|were|was|number(?:ed)?)\s*${NOT_MONEY}${NUM}\s*${UNIT}`, "i"), s, "the customer count");
+    || latestMatch(t, new RegExp(String.raw`(?:paying\s+|active\s+)?(?:${CUST_NOUN})\s*(?::|=|\||—|–|of|at|reached|totall?ed|stood at|were|was|number(?:ed)?)\s*${NOT_MONEY}${NUM}\s*${UNIT}`, "i"), s, "the customer count");
   if (cust && statedAsAchieved(t, cust.index ?? 0, cust[0].length)) {
     const v = parseMoney(cust[1], cust[2]);
     if (v && v >= 1) s.customers = Math.round(v);
@@ -1099,8 +1104,8 @@ export function parsePlanSignals(text: string): PlanSignals {
   parseNonSaasEvidence(t, s);
 
   // Contradictions on the metrics that never had the check revenue has had.
-  detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:of|=|:|at|are|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
-  detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:of|=|:|at|\||are|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:of|=|:|at|\||—|–|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
   detectMetricConflict(t, s, "customer count", String.raw`(?<![$€£₽₸¥])(\d[\d.,]*)\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:${"customers|users|subscribers|members|memberships|merchants|policyholders"})`, (m) => parseMoney(m[1], m[2]));
 
   s.fieldsFound = countFields(s);
@@ -1194,7 +1199,7 @@ function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCur
   // the smoke run caught exactly that: a bare "plan" swallowed a real
   // contradiction because the sentence happened to use the word.
   const figureFirst = new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`, "gi");
-  const nameFirst = new RegExp(String.raw`(?:net\s*|total\s*)?(?:${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "gi");
+  const nameFirst = new RegExp(String.raw`(?:net\s*|total\s*)?(?:${REV_NOUN})\s*(?:of|=|:|at|\||—|–|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "gi");
   const seen = new Set<number>();
   const stated: number[] = [];
   for (const m of [...t.matchAll(figureFirst), ...t.matchAll(nameFirst)]) {
@@ -1236,7 +1241,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // the single pattern on "$100" with the "M" still attached to 150, so the
   // engine recorded a GMV of one hundred dollars. A magnitude error of six
   // orders, silent, on the headline number of a marketplace plan.
-  const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|\||—|–|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (gmvRange) {
     const ends = moneyRangeEnds(t, gmvRange, s.currency);
     if (ends) {
@@ -1245,7 +1250,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const gmv = s.gmvUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|is|reached|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:of|=|:|at|\||—|–|is|reached|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     // "GMV of our Marketplace segment including Turkiye was X" — a filing names
     // the segment between the metric and its figure. The span carries no digit
     // and no clause break, so it cannot reach across to another metric's number,
@@ -1256,11 +1261,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
 
   const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
-  const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|\||—|–|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   const takeBand = percentBandLowEnd(takeRange, s, "Take rate", 100);
   if (takeBand !== null) s.takeRatePct = takeBand;
   const take = s.takeRatePct !== null ? null
-    : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
+    : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:of|=|:|at|\||—|–|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
   if (take && statedAsAchieved(t, take.index ?? 0, take[0].length)) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 

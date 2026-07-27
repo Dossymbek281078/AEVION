@@ -71,7 +71,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 639
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 644
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -563,7 +563,7 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    **Fixed:** crore (10^7) and lakh (10^5) are now scale units, beside the
    Cyrillic ones that were added for the same reason. Every DRHP filed with
    SEBI states money in them; without them the scale word was dropped and the
-   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (639
+   bare number kept. Pinned in `qventureDisclosedCorpus.test.ts` (644
    assertions), including a case proving the `(?![a-z])` unit guard still
    rejects a scale word glued to another word.
 
@@ -730,12 +730,8 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Kaspi's marketplace GMV now reads as tens of billions of dollars from the
    sentence its own 20-F states, having started the day as **$4**.
 
-   One caveat found while pinning this, and left as documented behaviour rather
-   than quietly changed: with the tenge symbol removed, "GMV was 9,053 billion"
-   reads as $9.05 trillion. That is the stated rule for an unmarked figure — the
-   plan's currency, defaulting to USD — and not a new defect. It is also a
-   number no plan means, so a plausibility flag on unmarked figures of that
-   magnitude is a candidate, not a fix made in passing.
+   One caveat found while pinning this was deliberately left alone at the time,
+   and is now closed (limit 36).
 
 27. **Closed: hunting the duplicates instead of stumbling on them.** Three defects
    today came from one concept living in two places. All three were found by
@@ -914,13 +910,30 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    concept written out per-site, correct everywhere, until one site needed
    changing.
 
+36. **Closed: a figure too large to be a currency it did not name.** Strip the
+   tenge sign from Kaspi's "GMV was 9,053 billion" and the engine returned
+   **$9.05 trillion** — the documented rule for an unmarked figure is the plan's
+   currency, defaulting to dollars, and the rule was working exactly as written.
+   It was recorded rather than fixed in passing, because changing what the
+   engine scores without measuring it is how rubrics rot.
+
+   An unmarked figure above **$5 trillion** is now ignored and said so in a
+   parse note, rather than scored. The ceiling is absurd on purpose: four times
+   the largest GMV any company has reported, above every revenue figure ever
+   filed, and it never sees Visa's ~$15tn of annual payment volume because that
+   is marked. A figure that names its currency is believed at any size — the
+   rule is about the absent marker, never about the magnitude of a real one.
+
+   It lives in `moneyUsd`, the one door every money figure passes through, so
+   the fourteen sites that read money inherit it. Corpus unchanged at 89/89.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 639):
+`tests/qventureDisclosedCorpus.test.ts`, 644):
 
 | Guard | Floor | Measured today |
 |---|---|---|

@@ -510,8 +510,28 @@ function startsWithFigure(matched: string): boolean {
  * plan names). An unmarked plan is read as USD — stated in the assumptions, not
  * assumed silently.
  */
+/**
+ * The largest single-company figure this engine will believe from a plan that
+ * did not say which currency it meant.
+ *
+ * Five trillion dollars is about four times the largest GMV any company has
+ * ever reported, and well above every revenue figure ever filed. A figure above
+ * it, stated WITHOUT a currency marker, is a parse artefact rather than a
+ * disclosure —
+ * strip the tenge sign from Kaspi's "GMV was 9,053 billion" and the engine
+ * happily returned $9.05 trillion, because an unmarked figure is read as
+ * dollars by the stated rule.
+ *
+ * Deliberately absurd rather than tight: the point is to refuse impossibilities,
+ * not to second-guess an ambitious plan. A marked figure is never touched — if
+ * a filing says tenge, it is believed at whatever size, and Visa's ~$15tn of
+ * annual payment volume is marked, so this never sees it.
+ */
+const IMPLAUSIBLE_UNMARKED_USD = 5e12;
+
 function moneyUsd(
   t: string, m: RegExpMatchArray, numStr: string, unitStr: string | undefined, planCurrency: MoneyCurrency | null,
+  s?: PlanSignals,
 ): number | null {
   const raw = parseMoney(numStr, unitStr);
   if (raw === null || !isFinite(raw)) return null;
@@ -528,7 +548,15 @@ function moneyUsd(
   // table order made "$1M ARR in the US and €2M ARR in the EU" convert the
   // dollar figure at the euro rate, because EUR is checked before USD.
   const tight = t.slice(Math.max(0, at - 8), at + m[0].length);
-  return toUsd(raw, detectCurrencyFirst(tight) ?? planCurrency);
+  const marked = detectCurrencyFirst(tight) ?? planCurrency;
+  const usd = toUsd(raw, marked);
+  if (marked === null && usd > IMPLAUSIBLE_UNMARKED_USD) {
+    s?.parseNotes.push(
+      `A figure of ${fmtUsdShort(usd)} was stated without a currency and is too large to be one; it was ignored rather than scored.`,
+    );
+    return null;
+  }
+  return usd;
 }
 
 /**
@@ -609,7 +637,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   const planCurrency = detectCurrencyFirst(t);
   s.currency = planCurrency;
 
-  detectRevenueRange(t, s, planCurrency);
+  detectRevenueRange(t, s, planCurrency, s);
 
   // ── Revenue: "$2M ARR" / "$500k MRR" / "$1.2m in revenue" / "arr of $3m" ──
   // "Net revenues of $87.9M" — the plural is how filings write it, and the
@@ -672,7 +700,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     const numStr = hasLeadingNum ? arr[1] : arr[2];
     const unitStr = hasLeadingNum ? arr[2] : arr[3];
     const kindStr = (hasLeadingNum ? arr[3] : arr[1]) || "";
-    const val = moneyUsd(t, arr, numStr, unitStr, planCurrency);
+    const val = moneyUsd(t, arr, numStr, unitStr, planCurrency, s);
     // A range already resolved this (at its low end) — the single-figure pattern
     // would otherwise overwrite it with whichever end of the range it matched.
     if (val && val > 0 && s.revenueUsd === null) {
@@ -699,7 +727,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     s.mentionsRevenueNoNumber = true;
   }
 
-  detectRevenueConflict(t, s, planCurrency);
+  detectRevenueConflict(t, s, planCurrency, s);
 
   // ── Growth: "growing 20% MoM" / "30% month-over-month growth" / "up 15% MoM" ──
   // A bare "<n>% monthly" is NOT growth: "20% monthly churn" used to be read as
@@ -912,21 +940,21 @@ export function parsePlanSignals(text: string): PlanSignals {
   // the pessimistic corner of the box the plan drew, not its flattering one.
   const cacRange = firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cacRange) {
-    const ends = moneyRangeEnds(t, cacRange, planCurrency);
+    const ends = moneyRangeEnds(t, cacRange, planCurrency, s);
     if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
   }
   const cac = s.cacUsd !== null ? null
     : firstMatch(t, new RegExp(String.raw`(?<!ltv[:/ ]{0,4})cac\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
-  if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency); if (v && v > 0) s.cacUsd = v; }
+  if (cac) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency, s); if (v && v > 0) s.cacUsd = v; }
 
   const ltvRange = firstMatch(t, new RegExp(String.raw`ltv\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
-    const ends = moneyRangeEnds(t, ltvRange, planCurrency);
+    const ends = moneyRangeEnds(t, ltvRange, planCurrency, s);
     if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
   }
   const ltv = s.ltvUsd !== null ? null
     : firstMatch(t, new RegExp(String.raw`ltv\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"));
-  if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency); if (v && v > 0) s.ltvUsd = v; }
+  if (ltv) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency, s); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
     s.ltvCacRatio = Math.round((s.ltvUsd / s.cacUsd) * 10) / 10;
   }
@@ -1092,8 +1120,8 @@ export function parsePlanSignals(text: string): PlanSignals {
       const a = parseMoney(nums[0], units[0]);
       const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
       if (a && b) {
-        const low = toUsd(Math.min(a, b), planCurrency);
-        const high = toUsd(Math.max(a, b), planCurrency);
+        const low = toUsd(Math.min(a, b), planCurrency, s);
+        const high = toUsd(Math.max(a, b), planCurrency, s);
         s.bottomUpTamUsd = low;
         const fmt = (n: number) => (n >= 1e9 ? `$${Math.round((n / 1e9) * 10) / 10}B` : `$${Math.round(n / 1e6)}M`);
         s.parseNotes.push(`Bottom-up TAM was disclosed as a range (${fmt(low)}–${fmt(high)}); the score uses the low end.`);
@@ -1108,7 +1136,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     const lead = startsWithFigure(tam[0]) && !/^(tam|total|addressable)/i.test(tam[0].trim());
     const numStr = lead ? tam[1] : tam[1];
     const unitStr = lead ? tam[2] : tam[2];
-    const v = moneyUsd(t, tam, numStr, unitStr, planCurrency);
+    const v = moneyUsd(t, tam, numStr, unitStr, planCurrency, s);
     if (v && v > 0) s.bottomUpTamUsd = v;
   }
 
@@ -1156,8 +1184,8 @@ function detectRevenueRange(t: string, s: PlanSignals, planCurrency: MoneyCurren
   const a = parseMoney(nums[0], units[0]);
   const b = parseMoney(nums[1], units[units.length - 1] ?? units[0]);
   if (!a || !b) return;
-  const low = toUsd(Math.min(a, b), planCurrency);
-  const high = toUsd(Math.max(a, b), planCurrency);
+  const low = toUsd(Math.min(a, b), planCurrency, s);
+  const high = toUsd(Math.max(a, b), planCurrency, s);
   const isMrr = /mrr/i.test(m[0]);
   s.revenueUsd = isMrr ? low * 12 : low;
   s.revenueBasis = isMrr ? "MRR" : /arr/i.test(m[0]) ? "ARR" : "revenue";
@@ -1221,7 +1249,7 @@ function detectRevenueConflict(t: string, s: PlanSignals, planCurrency: MoneyCur
   for (const m of [...t.matchAll(figureFirst), ...t.matchAll(nameFirst)]) {
     const at = m.index ?? 0;
     if (forwardLooking(t, at)) continue;
-    const val = moneyUsd(t, m as RegExpMatchArray, m[1], m[2], planCurrency);
+    const val = moneyUsd(t, m as RegExpMatchArray, m[1], m[2], planCurrency, s);
     if (!val || val <= 0) continue;
     const noun = [m[3], m[1]].find((x) => typeof x === "string" && !/^[\d.,]/.test(x)) ?? "";
     const annual = /mrr/i.test(noun) ? val * 12 : val;
@@ -1259,7 +1287,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // orders, silent, on the headline number of a marketplace plan.
   const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (gmvRange) {
-    const ends = moneyRangeEnds(t, gmvRange, s.currency);
+    const ends = moneyRangeEnds(t, gmvRange, s.currency, s);
     if (ends) {
       s.gmvUsd = ends.low;
       s.parseNotes.push(`GMV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);
@@ -1274,7 +1302,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     // span would swallow whatever followed the noun.
     || latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s+(?:of\s+)?[^.;\d]{0,45}?\s*(?:was|were|totall?ed|amounted to|stood at|reached)\s+${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
-  if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency); if (v && v > 0) s.gmvUsd = v; }
+  if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency, s); if (v && v > 0) s.gmvUsd = v; }
 
   const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;
   const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
@@ -1301,7 +1329,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // backlog was read as twenty dollars.
   const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (backlogRange && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
-    const ends = moneyRangeEnds(t, backlogRange, s.currency);
+    const ends = moneyRangeEnds(t, backlogRange, s.currency, s);
     if (ends) {
       s.contractedRevenueUsd = ends.low;
       s.parseNotes.push(`Contracted backlog was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the low end.`);
@@ -1311,7 +1339,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?(?:ing|ed)|=|:|at|is|was|were|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
-    const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency);
+    const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency, s);
     if (v && v > 0) s.contractedRevenueUsd = v;
   }
 
@@ -1320,7 +1348,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const grant = firstMatch(t, new RegExp(String.raw`${grantRe}\s*(?:of|worth|totall?ing|=|:|at|award(?:ed)?)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${grantRe}`, "i"));
   if (grant && mentionsUnnegated(t, new RegExp(grantRe, "i"))) {
-    const v = moneyUsd(t, grant, grant[1], grant[2], s.currency);
+    const v = moneyUsd(t, grant, grant[1], grant[2], s.currency, s);
     // A grant applied for is not a grant awarded: "we plan to apply for a
     // $2M SBIR grant next year" credited $2M of non-dilutive capital.
     if (v && v > 0 && statedAsAchieved(t, grant.index ?? 0, grant[0].length)) s.nonDilutiveUsd = v;

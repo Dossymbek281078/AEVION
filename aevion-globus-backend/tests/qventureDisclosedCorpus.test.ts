@@ -2298,3 +2298,39 @@ describe("one place to say what links a metric to its figure", () => {
     expect(callSites.every((l) => /gross/i.test(l))).toBe(true);
   });
 });
+
+describe("a figure too large to be a currency it did not name", () => {
+  // Found while pinning limit 26 and deliberately left alone then, because
+  // fixing it in passing would have been a rubric change made without measuring.
+  // Strip the tenge sign from Kaspi's "GMV was 9,053 billion" and the engine
+  // returned $9.05 trillion — the documented rule for an unmarked figure is the
+  // plan's currency, defaulting to dollars, and the rule was working.
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("an unmarked figure above the plausible ceiling is ignored, and said so", () => {
+    const s = p("GMV was 9,053 billion.");
+    expect(s.gmvUsd).toBeNull();
+    expect(s.parseNotes.some((n) => /without a currency and is too large/i.test(n))).toBe(true);
+  });
+
+  test("the same figure WITH its currency is believed", () => {
+    // The rule is about an absent marker, never about the size of a real one.
+    const v = p("GMV was ₸9,053 billion.").gmvUsd;
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(1e10);
+  });
+
+  test.each([
+    ["nine billion", "GMV was 9 billion.", 9e9],
+    ["nine hundred billion", "GMV was 900 billion.", 9e11],
+  ])("a large but possible unmarked figure is untouched: %s", (_l, text, want) => {
+    expect(p(text).gmvUsd).toBe(want);
+  });
+
+  test("the ceiling is absurd on purpose, not tight", () => {
+    // Visa reports roughly $15tn of annual payment volume — marked, so this
+    // never sees it. The ceiling only has to be above every unmarked figure a
+    // real plan could mean, and below a magnitude no plan could.
+    expect(p("Total payment volume of $15 trillion.").gmvUsd).toBe(15e12);
+  });
+});

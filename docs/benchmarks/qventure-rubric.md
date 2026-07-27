@@ -71,7 +71,7 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
    | Reservations / pre-orders | `14,000 reservations` | Nikola's 10-Q parsed to **zero** fields — coverage 0% |
    | Units delivered | `937 Roadsters sold to customers` | Tesla's shipped product read as no traction |
 
-   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 153
+   All six are fixed and pinned (`tests/qventureDisclosedCorpus.test.ts`, 165
    assertions). Reservations are deliberately parsed into their own field that
    backs **no** factor and raises a flag instead: a reservation book is the
    largest number a pre-revenue hardware plan has and the one its customers can
@@ -197,11 +197,19 @@ outcome, so even that 6.7 is generous to the rubric, not conservative.
      ordinary phrasing raised nothing. Both readers now share one module-level
      noun list, because they had already drifted.
 
-   **Open, not settled:** Lemonade's filing states in-force premium of $116M for
-   2019 and $133M as of Q1 2020. The engine takes the first stated, and the 14.7%
-   gap falls under the 20% threshold that treats a difference as rounding. Whether
-   a screen should prefer the most recent disclosure is a real question and is
-   left here rather than decided by fixture.
+   **Settled since:** Lemonade's filing states in-force premium of $116M for 2019
+   and $133M as of Q1 2020, and the engine scored 2019 — not as a judgement, but
+   because it appeared first in the text and `firstMatch` stops there. The 14.7%
+   gap also sits under the threshold that treats a difference as rounding, so
+   nothing was flagged either.
+
+   When a plan discloses the same metric for more than one period, **the later
+   period is now what gets scored**, and the choice is written into the
+   assumptions the reader sees rather than made silently. Figures nothing dates
+   keep the old ordering, so ordinary plans are unaffected, and a prior-year
+   comparison ("up 97% from $100.8M in 2017") was never a candidate — it is
+   context for the growth rate, not a competing disclosure. Disabling the rule
+   reddens 4 tests.
 
 ## How this stays true
 
@@ -209,7 +217,7 @@ The harnesses used to be hand-run, which is how the rubric decayed the first
 time: v1 could not reach a "pass" verdict on any input and nobody noticed for
 months. The invariants now run on every push
 (`aevion-globus-backend/tests/qventureHardCases.test.ts`, 28 assertions, and
-`tests/qventureDisclosedCorpus.test.ts`, 153):
+`tests/qventureDisclosedCorpus.test.ts`, 165):
 
 | Guard | Floor | Measured today |
 |---|---|---|

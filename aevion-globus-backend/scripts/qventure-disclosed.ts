@@ -440,12 +440,10 @@ export const CASES: DisclosedCase[] = [
     // called customers. Neither vocabulary existed in the parser.
     expect: [
       // The filing states two in-force premium figures — $116M for 2019 and
-      // $133M as of Q1 2020. The engine takes the first stated, and the gap
-      // (14.7%) falls under the 20% threshold that treats a difference as
-      // rounding rather than a contradiction, so nothing is flagged. Whether a
-      // screen should prefer the MOST RECENT disclosure is a real open question,
-      // recorded in the rubric doc rather than settled here by fixture.
-      { label: "in-force premium read as revenue (first stated)", read: (s) => s.revenueUsd, ...num(116_000_000) },
+      // $133M as of Q1 2020. Both are true; the later one is the company as it
+      // stands, and scoring 2019 because it was typed first was an accident of
+      // the regex rather than a reading.
+      { label: "in-force premium read at the LATEST disclosed period", read: (s) => s.revenueUsd, ...num(133_000_000) },
       { label: "730,000 policyholders read as customers", read: (s) => s.customers, ...num(730_000) },
     ],
   },

@@ -343,15 +343,46 @@ export function parsePlanSignals(text: string): PlanSignals {
     const at = m.index ?? 0;
     return forwardLooking(t, at) ? null : m;
   };
-  const firstStated = (pattern: string): RegExpMatchArray | null => {
+  /**
+   * The year a figure's own clause is about. Bounded to the clause so a date
+   * from a neighbouring sentence cannot date this figure.
+   */
+  const clauseYear = (at: number, len: number): number | null => {
+    const from = Math.max(t.lastIndexOf(".", at), t.lastIndexOf(";", at)) + 1;
+    const afterDot = t.indexOf(".", at + len);
+    const to = afterDot === -1 ? t.length : afterDot;
+    const years = [...t.slice(from, to).matchAll(/(?:19|20)[0-9]{2}/g)].map((m) => Number(m[0]));
+    return years.length ? Math.max(...years) : null;
+  };
+  const statedCandidates = (pattern: string) => {
+    const out: Array<{ m: RegExpMatchArray; year: number | null }> = [];
     for (const m of t.matchAll(new RegExp(pattern, "gi"))) {
       const kept = notForward(m as RegExpMatchArray);
-      if (kept) return kept;
+      if (kept) out.push({ m: kept, year: clauseYear(kept.index ?? 0, kept[0].length) });
     }
-    return null;
+    return out;
   };
-  const arr = firstStated(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`)
-    || firstStated(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`);
+  /**
+   * When a plan discloses the same metric for more than one period, the LATER
+   * one is the company as it stands — "in-force premium of $116M in 2019" and
+   * "$133M as of Q1 2020" are both true, and scoring 2019 because it was typed
+   * first is an accident of the regex, not a reading. Order of the two shapes
+   * still decides when nothing dates the figures, so ordinary plans are
+   * unaffected, and the choice is stated rather than made silently.
+   */
+  const candidates = [
+    ...statedCandidates(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`),
+    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:of|=|:|at|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`),
+  ];
+  let arr: RegExpMatchArray | null = candidates[0]?.m ?? null;
+  const dated = candidates.filter((c) => c.year !== null);
+  if (dated.length >= 2) {
+    const latest = dated.reduce((a, b) => ((b.year as number) > (a.year as number) ? b : a));
+    if (latest.m !== arr) {
+      arr = latest.m;
+      s.parseNotes.push(`More than one period was disclosed for the top line; the score uses the latest (${latest.year}).`);
+    }
+  }
   if (arr) {
     // group order differs between the two alternatives; detect which matched
     const hasLeadingNum = startsWithFigure(arr[0]);

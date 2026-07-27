@@ -579,3 +579,41 @@ describe("filings that are not American, not software, and not yet true", () => 
     expect(parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year from $100.8M in 2017.").conflicts.length).toBe(0);
   });
 });
+
+describe("when a plan discloses two periods, the later one is the company", () => {
+  /**
+   * Lemonade's S-1 states in-force premium of $116M for 2019 and $133M as of
+   * Q1 2020. Both are true. Scoring 2019 because it appeared first in the text
+   * was an accident of `firstMatch`, not a reading — and the 14.7% gap sits
+   * under the threshold that treats a difference as rounding, so nothing was
+   * flagged either.
+   */
+  test("the later disclosed period wins", () => {
+    const s = parsePlanSignals("In-force premium of $116M in 2019. In-force premium of $133M as of 31 March 2020.");
+    expect(s.revenueUsd).toBe(133_000_000);
+  });
+
+  test("and the reader is told the choice was made", () => {
+    const s = parsePlanSignals("In-force premium of $116M in 2019. In-force premium of $133M as of 31 March 2020.");
+    expect(s.parseNotes.some((n) => /latest \(2020\)/i.test(n))).toBe(true);
+  });
+
+  test("a prior-year comparison is not a second period to choose from", () => {
+    // "from $100.8M in 2017" is context for the growth rate, not a competing
+    // disclosure — it is not attached to a revenue noun and never was a candidate.
+    const s = parsePlanSignals("Revenue of $198.1M in 2018, up 97% year over year from $100.8M in 2017.");
+    expect(s.revenueUsd).toBe(198_100_000);
+    expect(s.parseNotes.some((n) => /latest/i.test(n))).toBe(false);
+  });
+
+  test("undated figures keep the old ordering, and still raise the contradiction", () => {
+    const s = parsePlanSignals("ARR of $5M. ARR of $8M.");
+    expect(s.revenueUsd).toBe(5_000_000);
+    expect(s.conflicts.length).toBe(1);
+  });
+
+  test("a single disclosure is untouched", () => {
+    expect(parsePlanSignals("Revenue of $10M.").revenueUsd).toBe(10_000_000);
+    expect(parsePlanSignals("Revenue of $10M.").parseNotes.length).toBe(0);
+  });
+});

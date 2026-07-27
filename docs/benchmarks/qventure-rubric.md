@@ -401,6 +401,33 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    company's order book and flight record, an energy company's installed base —
    has found something.
 
+18. **Open: the milestone reader records intentions as achievements.** The
+   comment above the regulatory list promises that "FDA approval expected in
+   2027 is a plan, not a milestone; the negation layer plus the explicit
+   past-tense wording keep those out". It does not:
+
+   ```
+   parsePlanSignals("FDA approval expected in 2027.").regulatoryMilestones
+   → ["FDA clearance/approval"]
+   ```
+
+   The negation layer catches "no FDA approval". It does not catch a future
+   tense placed *after* the phrase, and every entry in that list inherits the
+   hole — so a plan that has applied for nothing can be credited with a
+   clearance, a PPA, a defence contracting status or a banking licence.
+
+   Found while adding two more entries (emergency use authorization, and
+   ISO 27001 / SOC 2 / FedRAMP). Both work and both leak the same way — "we plan
+   to pursue ISO 27001 certification next year" reads as certified — so they are
+   **held back rather than shipped**: adding two more leaks while the hole is
+   open makes the report more confidently wrong, not more complete.
+
+   The fix is not the `forwardLooking` helper used for revenue, which looks
+   *behind* a figure within its clause. This needs a short look *ahead* as well,
+   and it has to leave "FDA clearance granted; we expect launch in 2027" alone —
+   which is why it is written down rather than attempted at the end of a
+   session.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

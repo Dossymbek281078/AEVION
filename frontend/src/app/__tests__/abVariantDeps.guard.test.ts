@@ -44,12 +44,38 @@ export function variantVarNames(source: string): string[] {
   return names;
 }
 
-/** Массивы зависимостей вида `}, [a, b]);` — то, что React сравнивает между рендерами. */
+/**
+ * Массивы зависимостей ТОЛЬКО у `useEffect`.
+ *
+ * Первая версия брала любой `}, [a, b])` и потому ловила ещё `useCallback` и
+ * `useMemo` — а там вариант в зависимостях законен: коллбэк от их смены не
+ * выполняется, он лишь пересоздаётся. Проверено на живом коде: в
+ * `bank/page.tsx:228` отложенное значение стоит именно в `useCallback`, и это
+ * не дефект (issue #1042). Сторож, требующий переписать корректный код, хуже
+ * отсутствующего.
+ *
+ * Границу вызова ищем балансировкой скобок от `useEffect(` — так вложенные
+ * `useCallback` внутри эффекта не принимаются за его собственные зависимости.
+ */
 export function dependencyArrays(source: string): string[] {
   const out: string[] = [];
-  const re = /\}\s*,\s*\[([^\]]*)\]\s*\)/g;
+  const marker = /useEffect\s*\(/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(source))) out.push(m[1]);
+  while ((m = marker.exec(source))) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    for (; i < source.length && depth > 0; i++) {
+      const ch = source[i];
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+    }
+    if (depth !== 0) continue; // незакрытый вызов — не наше дело
+    // Аргументы эффекта: от `useEffect(` до закрывающей скобки. Массив
+    // зависимостей — последний `[...]` перед ней.
+    const call = source.slice(m.index + m[0].length, i - 1);
+    const deps = call.match(/\[([^[\]]*)\]\s*$/);
+    if (deps) out.push(deps[1]);
+  }
   return out;
 }
 
@@ -92,5 +118,36 @@ describe("A/B-вариант не стоит в зависимостях эфф�
     `;
     expect(variantVarNames(bad)).toEqual(["heroVariant"]);
     expect(dependencyArrays(bad)).toEqual(["heroVariant"]);
+  });
+
+  // Ложное срабатывание хуже отсутствия сторожа: оно заставит переписать
+  // корректный код. Вариант в useCallback/useMemo законен — от их смены
+  // ничего не выполняется, коллбэк лишь пересоздаётся (issue #1042,
+  // живой пример — bank/page.tsx:228).
+  it("useCallback и useMemo НЕ считаются нарушением", () => {
+    const ok = `
+      const heroVariant = useABVariant("hero");
+      const pay = useCallback(() => { track({ v: heroVariant }); }, [heroVariant, other]);
+      const label = useMemo(() => heroVariant + "!", [heroVariant]);
+    `;
+    expect(dependencyArrays(ok)).toEqual([]);
+  });
+
+  it("вложенный useCallback внутри эффекта не подменяет его зависимости", () => {
+    const src = `
+      useEffect(() => {
+        const cb = useCallback(() => {}, [inner]);
+        run(cb);
+      }, [outer]);
+    `;
+    expect(dependencyArrays(src)).toEqual(["outer"]);
+  });
+
+  it("несколько эффектов разбираются по отдельности", () => {
+    const src = `
+      useEffect(() => { a(); }, []);
+      useEffect(() => { b(); }, [x, y]);
+    `;
+    expect(dependencyArrays(src)).toEqual(["", "x, y"]);
   });
 });

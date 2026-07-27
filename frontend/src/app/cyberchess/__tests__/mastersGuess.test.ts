@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreGuess, getValidGames, buildFenLine } from "../masters";
+import { scoreGuess, getValidGames, buildFenLine, MASTER_GAMES } from "../masters";
 
 /* The guess arrives as free text the player types, and it used to be compared to the
    stored SAN character for character. The shipped games contain 49 moves ending in "+"
@@ -68,5 +68,22 @@ describe("the shipped master games", () => {
         expect(san).not.toMatch(/0-0/);
       }
     }
+  });
+});
+
+/* getValidGames() проигрывает каждую партию и молча выбрасывает ту, что не сходится —
+   поэтому опечатка не падает, а просто убирает партию из раздела. Так и было: три из
+   одиннадцати не доигрывались, игрок видел восемь. Две спотыкались о результат «1-0»,
+   записанный как ход, у третьей после мата Ne2# стояли ещё два хода, которых быть не
+   может. Фильтр обязан возвращать ВСЕ партии — иначе контент исчезает беззвучно. */
+describe("MASTER_GAMES", () => {
+  it("loses none of its games to the validity filter", () => {
+    const dropped = MASTER_GAMES.filter((g) => !getValidGames().some((v) => v.id === g.id)).map((g) => g.id);
+    expect(dropped).toEqual([]);
+  });
+
+  it("never carries a result token inside the moves", () => {
+    const withResult = MASTER_GAMES.filter((g) => g.moves.some((m) => /^(1-0|0-1|1\/2-1\/2|\*)$/.test(m))).map((g) => g.id);
+    expect(withResult).toEqual([]);
   });
 });

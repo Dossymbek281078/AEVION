@@ -204,7 +204,7 @@ export const MASTER_GAMES: MasterGame[] = [
       "Rf3","e5","Rh3+","Qh6","Rxh6+","Kxh6","Qd7","Bf6","Qxb7","Kg7","Rf1","Rab8",
       "Qd7","Rfd8","Qg4+","Kf8","fxe5","Bg7","e6","Rb7","Qg6","f6","Rxf6+","Bxf6",
       "Qxf6+","Ke8","Qh8+","Ke7","Qg7+","Kxe6","Qxb7","Rd6","Qxa6","d4","exd4","cxd4",
-      "h4","d3","Qxd3","1-0",
+      "h4","d3","Qxd3",
     ],
     notes: {
       28: "15.Bxh7+! — первая жертва слона. Король вытащен из укрытия.",
@@ -228,8 +228,7 @@ export const MASTER_GAMES: MasterGame[] = [
       "d4","e6","e4","d5","Nc3","c5","Nf3","Nc6","exd5","exd5","Be2","Nf6",
       "O-O","Be7","Bg5","O-O","dxc5","Be6","Nd4","Bxc5","Nxe6","fxe6","Bg4","Qd6",
       "Bh3","Rae8","Qd2","Bb4","Bxf6","Rxf6","Rad1","Qc5","Qe2","Bxc3","bxc3","Qxc3",
-      "Rxd5","Nd4","Qh5","Ref8","Re5","Rh6","Qg5","Rxh3","Rc5","Qg3","hxg3","Ne2+",
-      "Kh1","Rxf2",
+      "Rxd5","Nd4","Qh5","Ref8","Re5","Rh6","Qg5","Rxh3","Rc5","Qg3","hxg3","Ne2#",
     ],
     notes: {
       45: "23.Rc5 — белые думают, что атакуют ферзя.",
@@ -255,7 +254,7 @@ export const MASTER_GAMES: MasterGame[] = [
       "Nxe6","fxe6","e4","d4","f4","Qe7","e5","Rb8","Bc4","Kh8","Qh3","Nf8",
       "b3","a5","f5","exf5","Rxf5","Nh7","Rcf1","Qd8","Qg3","Re7","h4","Rbb7",
       "e6","Rbc7","Qe5","Qe8","a4","Qd8","R1f2","Qe8","R2f3","Qd8","Bd3","Qe8",
-      "Qe4","Nf6","Rxf6","gxf6","Rxf6","Kg8","Bc4","Kh8","Qf4","1-0",
+      "Qe4","Nf6","Rxf6","gxf6","Rxf6","Kg8","Bc4","Kh8","Qf4",
     ],
     notes: {
       26: "13.Qa3! — давление по диагонали + дальнобойный слон. Маленькое преимущество накапливается.",

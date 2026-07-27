@@ -284,7 +284,14 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
     s += sig.customers >= 1000 ? 8 : sig.customers >= 100 ? 5 : sig.customers >= 10 ? 2 : 1;
     notes.push(`${sig.customers.toLocaleString("en-US")} customers`);
   }
-  if (sig.retentionPct !== null) s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
+  // Every other line in this block records what it awarded. This one did not,
+  // so up to 6 points appeared in the execution factor with nothing in the
+  // report that mentions retention at all — the reader saw the points and not
+  // the reason, which is the same defect as an unexplained deduction.
+  if (sig.retentionPct !== null) {
+    s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
+    notes.push(`${sig.retentionPct}% net revenue retention`);
+  }
   // Scored on the monthly-equivalent rate, so "20% annual churn" (1.8%/mo, fine)
   // is not punished like "20% monthly churn" (92%/yr, fatal).
   const churnMonthly = sig.churnMonthlyPct ?? sig.churnPct;

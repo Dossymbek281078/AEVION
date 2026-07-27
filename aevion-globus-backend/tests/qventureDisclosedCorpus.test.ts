@@ -268,3 +268,33 @@ describe("structured input is not worse than typing it in a sentence", () => {
     expect(exact.composite).toBe(typed.composite);
   });
 });
+
+describe("a figure that moves the score is named in the report", () => {
+  // Retention added up to 6 points to execution and appeared nowhere in the
+  // report — the reader saw the points and not the reason. Found by sweeping
+  // every parsed field against everything a human can actually see, which is
+  // the same sweep that found the reservation count missing from the exports.
+  const withRetention = analyze({
+    name: "Retention probe", sector: "saas", stage: "growth", geography: "US",
+    description: "Observability platform sold bottom-up to engineering teams.",
+    tractionNotes: "Revenue of $198.1M in 2018. Net revenue retention 146%.",
+  });
+
+  test("retention is parsed", () => {
+    expect(withRetention.signals.retentionPct).toBe(146);
+  });
+
+  test("retention is named in a factor rationale", () => {
+    const visible = withRetention.factors.map((f) => f.rationale).join(" ");
+    expect(visible).toMatch(/146%\s*net revenue retention/i);
+  });
+
+  test("it still moves the score, so the note describes real points", () => {
+    const without = analyze({
+      name: "Retention probe", sector: "saas", stage: "growth", geography: "US",
+      description: "Observability platform sold bottom-up to engineering teams.",
+      tractionNotes: "Revenue of $198.1M in 2018.",
+    });
+    expect(withRetention.composite).toBeGreaterThan(without.composite);
+  });
+});

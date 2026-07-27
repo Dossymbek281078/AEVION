@@ -733,6 +733,34 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    number no plan means, so a plausibility flag on unmarked figures of that
    magnitude is a candidate, not a fix made in passing.
 
+27. **Open: hunting the duplicates instead of stumbling on them.** Three defects
+   today came from one concept living in two places. All three were found by
+   accident, so the obvious next step was to search rather than wait.
+
+   A line-for-line duplicate scan over the parser finds **nothing** — the two
+   copies of `clauseYearAt` differed only in the name of the variable they read.
+   Adding alpha-renaming (every identifier becomes `X`, keywords kept) and
+   running it against the commit *before* the fix points straight at the two
+   line numbers. So the method works.
+
+   The guard built on it did not, and was removed rather than kept. `from` is in
+   the keyword set — it has to be, for `import ... from` — so a copy that names
+   its variable `start` no longer matches one that names it `from`, and a
+   deliberately planted structural duplicate slipped past. A test that claims a
+   protection it does not provide is worse than no test: it is the defect this
+   whole branch is about, one level up.
+
+   What the scan did establish, run by hand: the parser has exactly **one**
+   structural repeat left — "read a percentage range at its low end, validate
+   it, set the field, state the choice", written once for gross margin and again
+   for take rate. Both copies are correct today, which is the state the other
+   three were in before one of them changed. Extracting a shared helper is the
+   fix; it is a refactor with 1,954 tests behind it, not a five-minute change.
+
+   The honest version of the guard needs a real parser rather than a regex over
+   lines — that, or a keyword set that does not collide with ordinary variable
+   names. Recorded with the reproduction so the next attempt starts from here.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

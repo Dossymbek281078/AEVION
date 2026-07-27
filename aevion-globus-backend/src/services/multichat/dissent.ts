@@ -186,7 +186,87 @@ export type DissentMap = {
   /** Куда смотреть человеку в первую очередь. */
   verdict: "consensus" | "split" | "insufficient";
   note: string;
+  /** Что именно пойти проверить. См. buildChecklist. */
+  checks: Check[];
 };
+
+/** Один пункт «пойти и проверить».
+ *
+ *  kind — источник пункта, чтобы UI мог расставить акценты; weight — насколько
+ *  пункт проверяем руками, от 1 (нужно суждение) до 3 (можно закрыть за минуту).
+ */
+export type Check = {
+  kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+  text: string;
+  agents: string[];
+  weight: 1 | 2 | 3;
+};
+
+const MAX_CHECKS = 5;
+
+/** Карта разногласий отвечает «где агенты разошлись». Сама по себе это диагноз,
+ *  а человеку нужен следующий шаг — «что пойти проверить».
+ *
+ *  Порядок не по важности, а по ПРОВЕРЯЕМОСТИ: сначала числа (расхождение
+ *  закрывается одним запросом к источнику), потом отказы и неуверенность, и лишь
+ *  затем расхождение по существу, где нужно читать и думать. Совет, который
+ *  нельзя выполнить за минуту, на практике не выполняют вовсе.
+ *
+ *  Считается из уже готовой карты, без единого вызова модели — то есть остаётся
+ *  бесплатным и воспроизводимым, как и она сама. */
+export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
+  const out: Check[] = [];
+
+  for (const c of map.numericConflicts) {
+    const spread = c.values.map((v) => `${v.agentId}: ${v.raw}`).join(" против ");
+    out.push({
+      kind: "number",
+      text: `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
+      agents: c.values.map((v) => v.agentId),
+      weight: 3,
+    });
+  }
+
+  for (const h of map.hedges) {
+    out.push(
+      h.kind === "failed"
+        ? {
+            kind: "failure",
+            text: `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
+            agents: [h.agentId],
+            weight: 3,
+          }
+        : {
+            kind: "hedge",
+            text: `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
+            agents: [h.agentId],
+            weight: 2,
+          }
+    );
+  }
+
+  if (map.outlier) {
+    out.push({
+      kind: "outlier",
+      text: `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
+      agents: [map.outlier.agentId],
+      weight: 1,
+    });
+  }
+
+  // При согласии список не пустой: согласие само по себе ничего не доказывает,
+  // и молчаливый пустой блок читался бы как «всё в порядке».
+  if (!out.length && map.verdict === "consensus") {
+    out.push({
+      kind: "consensus",
+      text: "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
+      agents: [],
+      weight: 1,
+    });
+  }
+
+  return out.sort((a, b) => b.weight - a.weight).slice(0, MAX_CHECKS);
+}
 
 /** Порог, ниже которого ответы считаем разошедшимися. 0.45 по доле общих слов:
  *  выше — агенты пересказывают одно и то же, ниже — говорят о разном. */
@@ -236,7 +316,7 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
         ? `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`
         : `Расхождение${conflicts.length ? `, включая ${conflicts.length} числовых` : ""}. Смотреть в первую очередь сюда.`;
 
-  return {
+  const base = {
     agents: list.length,
     answered: good.length,
     agreement,
@@ -247,4 +327,6 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     verdict,
     note,
   };
+
+  return { ...base, checks: buildChecklist(base) };
 }

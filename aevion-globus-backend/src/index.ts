@@ -673,6 +673,14 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/multichat/receipt/verify": {
         post: { summary: "PUBLIC — recompute a receipt's RFC8785/sha256 hash and check its ed25519 signature", security: [] },
       },
+      "/api/multichat/dissent/preview": {
+        post: {
+          summary:
+            "PUBLIC — dissent map for answers you already have (max 8). Free because it makes no model call: " +
+            "similarity, outlier, numeric conflicts and hedges are derived from the answer text alone",
+          security: [],
+        },
+      },
       "/api/multichat/rooms": {
         get: { summary: "List user chat rooms (Bearer required)" },
         post: { summary: "Create new room (Bearer required)" },

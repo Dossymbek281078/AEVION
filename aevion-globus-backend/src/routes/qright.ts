@@ -66,6 +66,9 @@ async function ensureQRightTable() {
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "country" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "city" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT;`);
+  // ?mine=1 (below) filters by ownerUserId on every call — QRightWebhook already
+  // indexes the same column shape (QRightWebhook_owner_idx); this table was missing it.
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QRightObject_ownerUserId_idx" ON "QRightObject" ("ownerUserId");`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReason" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReasonCode" TEXT;`);

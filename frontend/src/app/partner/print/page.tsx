@@ -188,14 +188,14 @@ export default function PartnerPrintPage() {
             <tr><td>Time to first product</td><td>18-24 months</td><td><strong>Now</strong> — QSign in production</td></tr>
             <tr><td>Foundation cost</td><td>$15-30M</td><td><strong>Already done</strong></td></tr>
             <tr><td>Innovation pipeline</td><td>Hire product visionary ($2-5M/yr)</td><td><strong>Included</strong> — Chief Idea Officer in the deal</td></tr>
-            <tr><td>QSign FIPS 204 compliance</td><td>12-18 months of regulatory work</td><td><strong>Completed</strong>, SDK published</td></tr>
+            <tr><td>QSign FIPS 204 compliance</td><td>12-18 months of regulatory work</td><td><strong>Implemented</strong>, key-activated; SDK published</td></tr>
             <tr><td>MENA first-mover on DevHub</td><td>Available 18+ months later</td><td><strong>Available now</strong></td></tr>
           </tbody>
         </table>
 
         <h2>Verification — check yourself</h2>
         <ul>
-          <li><strong>aevion.app/transparency</strong> — live health-board, daily smoke 24/24</li>
+          <li><strong>aevion.app/transparency</strong> — live health-board, daily smoke полностью зелёный</li>
           <li><strong>aevion.app/constitution</strong> — Constitution v1, QSign-attested, 3 languages</li>
           <li><strong>aevion.app/partner</strong> — full visual brief</li>
           <li><strong>/api/aevion/registry</strong> — JSON registry of all {MODULE_NODES} modules</li>

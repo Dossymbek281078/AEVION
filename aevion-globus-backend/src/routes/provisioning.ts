@@ -18,23 +18,19 @@ import { degraded } from "../lib/degradedResponse";
 const capture = makeServiceCapture("provisioning");
 
 /**
- * Путь к стору подписок. Читается ПРИ ВЫЗОВЕ, а не при импорте модуля.
+ * Resolved per call, not once at import.
  *
- * Раньше это была константа, вычисляемая при импорте, и она давала гонку
- * «env против импорта»: кто выставляет SUBSCRIPTIONS_FILE уже после того, как
- * модуль импортирован (пусть и транзитивно, через planGate), получал дефолтный
- * путь. Практический эффект был доказан 26.07.2026 на tests/paywallProvisionFlow:
- * тестовые подписки уезжали в РЕАЛЬНЫЙ data/subscriptions.jsonl, переживали
- * прогон, и следующий запуск видел покупателя уже подписанным — проверка «до
- * покупки доступ закрыт» падала. Каждый прогон отравлял следующий.
- *
- * В проде поведение не меняется: переменные окружения там выставлены до старта
- * процесса, так что значение то же самое — просто вычисляется позже.
+ * Binding it at import time meant the path was whatever the environment said
+ * the first time ANY module pulled this file in. In a full test run another
+ * suite imports it first, so the paywall tests — which set
+ * SUBSCRIPTIONS_FILE to a temp dir — ended up writing their fixtures into the
+ * real data/subscriptions.jsonl. Seventeen `buyer@test.aevion.dev`
+ * subscriptions later, that file grants the test user a paid tier, and the
+ * suite's own "denied before purchase" assertion fails on every machine that
+ * has ever run it.
  */
 function subsFile(): string {
-  return process.env.SUBSCRIPTIONS_FILE
-    ? process.env.SUBSCRIPTIONS_FILE
-    : join(process.cwd(), "data", "subscriptions.jsonl");
+  return process.env.SUBSCRIPTIONS_FILE || join(process.cwd(), "data", "subscriptions.jsonl");
 }
 
 const RESEND_KEY = process.env.RESEND_API_KEY?.trim();

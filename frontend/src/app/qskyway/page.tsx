@@ -6,9 +6,9 @@ import QSkywayClient from "./_client";
 const TITLE = "QSkyway — navigation layer for the urban sky";
 const DESCRIPTION =
   "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
-  + "Astana, NYC & Tokyo: 4D routing, no-fly avoidance, layered wind, height-data provenance "
-  + "with confidence-based clearance, an airspace-slot rights market and Ed25519-signed city "
-  + "twins. \"Google Maps + traffic rules for the sky.\"";
+  + "Astana, NYC & Tokyo: 4D routing, real FAA airspace ceilings, live METAR wind, height-data "
+  + "provenance with confidence-based clearance, an airspace-slot rights market and "
+  + "Ed25519-signed city twins. \"Google Maps + traffic rules for the sky.\"";
 
 export const metadata: Metadata = {
   title: TITLE,

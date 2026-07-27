@@ -1165,6 +1165,30 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    Nine companies, nine defects, and the last one was found with twelve minutes
    left in a session by reading one sentence.
 
+46. **Open, with reproduction: two ways of writing a negative.** A sweep of
+   negative-figure notations — the class this corpus cares most about, since
+   Solyndra's −45% margin was its headline finding — came back four for six.
+   Parentheses, the word "negative", the hyphen-minus and the Unicode minus all
+   read correctly, and a positive margin and a parenthetical "(unaudited)" are
+   both untouched. Two do not read:
+
+   | Sentence | Read as |
+   |---|---|
+   | `Gross margin of ▲45%.` | nothing |
+   | `Gross margin was a negative 45%.` | nothing |
+
+   The triangle is the Japanese convention for a negative figure — ▲ and △ mean
+   what parentheses mean in a US filing, and Sony's own statements use it. The
+   second is not about the sign at all: `was` is missing from the gross-margin
+   connector list, which is the only list on this branch that does not sit on
+   the shared LINK constant, because a dash there is a minus rather than
+   punctuation (limit 34).
+
+   Both are misses rather than wrong numbers, and both were found with four
+   minutes left. Recorded rather than patched: the margin connector is the one
+   place where widening has a wrong-number failure mode, and that deserves the
+   trap testing every other widening on this branch received.
+
 ## How this stays true
 
 The harnesses used to be hand-run, which is how the rubric decayed the first

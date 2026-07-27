@@ -1565,3 +1565,31 @@ describe("a figure a model reports must exist in the deck", () => {
     expect(figureAppearsInText("Churn 2.5% monthly", 2.5)).toBe(true);
   });
 });
+
+describe("the cost of the figure check, measured rather than assumed", () => {
+  /**
+   * The guard rejects any model figure absent from the deck, which includes
+   * figures the model derived correctly. The obvious case is a deck stating MRR
+   * while the model reports ARR: "$500k MRR" contains no "6000000", so the
+   * model's correct $6M is dropped.
+   *
+   * It costs nothing, because the deterministic fallback annualizes MRR itself
+   * and lands on the same figure. Worth pinning: this is the first objection a
+   * reviewer will raise, and the answer is a run, not an argument.
+   */
+  const deck = "Traction: $500k MRR, growing 12% MoM. 1,200 paying customers.";
+
+  test("a derived ARR is rejected by the check", () => {
+    expect(figureAppearsInText(deck, 6_000_000)).toBe(false);
+  });
+
+  test("and the deterministic fallback produces the same number anyway", () => {
+    const s = parsePlanSignals(deck);
+    expect(s.revenueUsd).toBe(6_000_000);
+    expect(s.revenueBasis).toBe("MRR");
+  });
+
+  test("a deck stating ARR directly passes the check", () => {
+    expect(figureAppearsInText("Traction: $6M ARR.", 6_000_000)).toBe(true);
+  });
+});

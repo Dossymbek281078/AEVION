@@ -36,8 +36,31 @@ const SURFACES = [
   // /press is where journalists copy figures verbatim, so it belongs on the
   // same guard as the investor surfaces. It was missing here, and carried an
   // invented "$340B addressable market" plus an inverted live/MVP split.
-  "src/app/press/page.tsx",
+  // SEO-метаданные и OG-описания — «классические отстающие», как и написано
+  // в шапке pitchFacts. Их тут не было, и «37 modules deployed» пережило рост
+  // реестра до 41: страницы поправили, а описание в <head> и превью в соцсетях
+  // остались со старым числом.
+  "src/app/pitch/layout.tsx",
+  "src/app/demo/layout.tsx",
+  "src/lib/i18n-data.ts",
 ];
+
+/**
+ * Записи чейнджлога описывают, что было сделано НА ТОТ МОМЕНТ. «Сравнение всех
+ * 37 модулей» — это правда о фиче, выпущенной тогда, когда модулей было 37.
+ * Переписать её значит подделать историю, поэтому строки чейнджлога из проверки
+ * на отставшие числа исключены. Всё остальное в i18n-data — живой текст,
+ * который пользователь видит сейчас, и он обязан быть актуальным.
+ */
+const CHANGELOG_KEY = /"[a-zA-Z0-9_.]*changelog[a-zA-Z0-9_.]*":/i;
+
+/** Убирает из содержимого строки чейнджлога — только для файла переводов. */
+function stripChangelogLines(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !CHANGELOG_KEY.test(line))
+    .join("\n");
+}
 
 // Retired figures. Each must not appear on any surface above.
 const RETIRED: Array<{ pattern: RegExp; reason: string }> = [
@@ -52,6 +75,12 @@ const RETIRED: Array<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /Seed \$5M/i,
     reason: '"Seed $5M" — retired ask (canonical offer is a $10M returnable advance, not an equity seed)',
+  },
+  {
+    pattern: /\b37\b[^\n]{0,24}(modules?\s+deployed|modules?\s+live|product nodes)/i,
+    reason:
+      '"37 modules deployed" — stale module count (37). It survived in SEO meta and ' +
+      "OG descriptions after the registry grew to 41; import MODULE_NODES instead.",
   },
   {
     pattern: /\b29\b[^\n]{0,20}(product nodes|modules? live|nodes)/i,
@@ -82,7 +111,10 @@ describe("AutoTranslate — the module-count phrase stays translatable", () => {
 describe("pitch numbers — retired figures must not resurface", () => {
   for (const rel of SURFACES) {
     it(`${rel} carries no retired figures`, () => {
-      const src = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      const raw = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      // Файл переводов держит и живой текст, и записи чейнджлога. Вторые —
+      // историческая правда о том, что было выпущено при 37 модулях.
+      const src = rel.endsWith("i18n-data.ts") ? stripChangelogLines(raw) : raw;
       for (const { pattern, reason } of RETIRED) {
         const hit = src.match(pattern);
         expect(

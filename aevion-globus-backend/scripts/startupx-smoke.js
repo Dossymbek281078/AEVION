@@ -10,6 +10,13 @@
  * feed honest (no deal terms → no listing; no demo link → no product listing).
  */
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/$/, "");
+
+// Свой адрес на прогон. Иначе повторный запуск против того же живого сервера
+// упирается в суточный потолок публикаций (5 на адрес) — и падает на ровном
+// месте, хотя ничего не сломано: замерено 27.07.2026, второй прогон за день
+// дал 14 красных. Заодно детерминированными становятся счётчик показов и
+// дедуп жалоб — они тоже считаются по адресу.
+const RUN_IP = `2001:db8:5e:${Math.floor(Math.random() * 0xffff).toString(16)}::1`;
 let passed = 0, failed = 0;
 
 function assert(label, cond, info = "") {
@@ -34,7 +41,7 @@ async function req(method, path, body, opts0 = {}) {
   const { attempt = 0, headers = {} } = opts0;
   const opts = {
     method,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": RUN_IP, ...headers },
     signal: AbortSignal.timeout(8000),
   };
   if (body) opts.body = JSON.stringify(body);

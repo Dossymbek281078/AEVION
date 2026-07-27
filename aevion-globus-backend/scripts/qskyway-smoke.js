@@ -147,6 +147,19 @@ async function main() {
     `suspect=${JSON.stringify(asDq?.suspect)}`);
   assert((asDq?.suspect ?? []).every((o) => o.times > 1 && o.h > 0 && Number.isInteger(o.i)),
     "[astana] each flagged height names the building and how far it stands out");
+  // The second shape of the same field, and the one the UI got wrong first: a
+  // contradiction record carries `was`/`levels` and no `times`. The page renders
+  // the two reasons differently, so an entry missing its discriminator printed
+  // "27 m (xundefined)" on Tokyo — a defect no unit test saw, because the data
+  // was right and only the pairing of shape to wording was wrong.
+  const tkDq = (await jget("/api/qskyway/city?city=tokyo")).json?.dataQuality;
+  const contradictions = (tkDq?.suspect ?? []).filter((o) => o.was !== undefined);
+  assert(contradictions.length >= 1,
+    "[tokyo] a height its own floor count contradicted is reported with what the tag claimed",
+    `suspect=${JSON.stringify(tkDq?.suspect)}`);
+  assert(contradictions.every((o) => o.levels > 0 && o.h > o.was && o.times === undefined),
+    "[tokyo] a contradiction record says was/levels and does NOT pretend to be an outlier");
+
   const clean = (await jget("/api/qskyway/city?city=nyc")).json?.dataQuality;
   assert(clean?.suspect === undefined,
     "a city with nothing to flag stays quiet instead of shipping an empty warning",
@@ -346,7 +359,17 @@ async function main() {
 
   // The shipped Bitcoin proof: a proof nobody keeps is a proof that does not
   // exist, so the one for the edition in use must verify with no arguments.
-  const pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  // The verdict is computed on first ask, not at boot: the route has to reach the
+  // OpenTimestamps calendars, and until one answers it legitimately reports
+  // pending. Only after bitcoin-confirmed is the verdict cached. Asserting on a
+  // cold first request therefore fails on a freshly restarted server and passes
+  // on a warm one — which is a property of the clock, not of the code. Poll a
+  // bounded number of times, and let the assertions below judge the result.
+  let pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  for (let i = 0; i < 12 && pf.json?.verification?.fullyProven !== true; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  }
   assert(pf.status === 200 && pf.json?.contentHash === asN._signature.contentHash, "[nyc] shipped proof is for the edition actually served", `${pf.status}`);
   assert(pf.json?.coversCurrentEdition === true, "[nyc] shipped proof still covers the current edition");
   assert(pf.json?.verification?.ots?.verified === true && pf.json?.verification?.ots?.status === "bitcoin-confirmed", "[nyc] shipped proof verifies against Bitcoin", `block=${pf.json?.verification?.ots?.bitcoinBlockHeight}`);

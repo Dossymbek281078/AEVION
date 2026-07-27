@@ -2749,7 +2749,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(d.puzzles as Puzzle[]);return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(repairUnshiftedPuzzles(normalizeThemes(d.puzzles as Puzzle[])));return;}
         }
       }catch{}
       // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул

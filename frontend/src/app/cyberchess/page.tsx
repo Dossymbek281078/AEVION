@@ -2573,6 +2573,8 @@ export default function CyberChessPage(){
   // ветке мата и в кнопке «Сдаться», — здесь они в одном месте, потому что
   // ФЛАГ их вообще не применял: партия по времени завершалась, но ни рейтинг,
   // ни счётчик не менялись. В блице 5+0 (умолчание) это самый частый исход.
+  /* Партия считается рейтинговой, только если соперник — бот. */
+  const rated=!hotseat&&!p2pMode;
   const applyResult=useCallback((win:boolean)=>{
     const nr=win
       ? Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)))
@@ -4057,10 +4059,17 @@ export default function CyberChessPage(){
          даёт +5 за победу и -170 за поражение, а вариант — +10/-8 при любом уровне,
          то есть рейтинг фармился вариантами против самого слабого бота. Теперь
          варианты считаются той же формулой, что и всё остальное. */
-      applyResult(!youLost);
-      if(!youLost)setTimeout(()=>addChessy(15,"👑 Twin Kings — захват второго короля"),400);
+      /* Партия за одной доской и партия с живым соперником не меняют рейтинг —
+         так устроены все прочие окончания (таймеры, мат, сдача). Ветки вариантов
+         были единственными без этой проверки, а Hotseat — просто переключатель:
+         включаешь, выбираешь Три шаха, выигрываешь СВОИМ цветом и получаешь и
+         рейтинг, и Chessy за победу над самим собой. */
+      if(rated){
+        applyResult(!youLost);
+        if(!youLost)setTimeout(()=>addChessy(15,"👑 Twin Kings — захват второго короля"),400);
+      }
     }
-  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult]);
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult,rated]);
 
   /* ── Variant: King of the Hill — king on center square = win ── */
   useEffect(()=>{
@@ -4070,10 +4079,12 @@ export default function CyberChessPage(){
       const youWon=winner===pCol;
       sOver(youWon?"⛰ Король взошёл на холм — победа!":"⛰ Соперник занял центр — поражение");
       sOn(false);snd("x");
-      applyResult(youWon);
-      if(youWon)setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
+      if(rated){
+        applyResult(youWon);
+        if(youWon)setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
+      }
     }
-  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult]);
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy,applyResult,rated]);
 
   /* ── Variant: Three-Check — track checks; 3 = win ── */
   useEffect(()=>{
@@ -4095,11 +4106,10 @@ export default function CyberChessPage(){
       setTimeout(()=>{
         sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
         sOn(false);snd("x");
-        applyResult(youWon);
-        if(youWon)addChessy(12,"⚡ Three-Check");
+        if(rated){applyResult(youWon);if(youWon)addChessy(12,"⚡ Three-Check")}
       },50);
     }
-  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,checksByWhite,checksByBlack,applyResult]);
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,checksByWhite,checksByBlack,applyResult,rated]);
 
   /* ── Variant: Atomic — explosion on every capture ── */
   const lastAtomicBkRef=useRef(-1);
@@ -4122,8 +4132,7 @@ export default function CyberChessPage(){
         setTimeout(()=>{
           sOver(youDied?"💥 Твой король взорван — поражение":"💥 Король соперника взорван — победа!");
           sOn(false);snd("x");
-          applyResult(!youDied);
-          if(!youDied)addChessy(15,"💥 Atomic");
+          if(rated){applyResult(!youDied);if(!youDied)addChessy(15,"💥 Atomic")}
         },100);
       }else{
         try{
@@ -4133,7 +4142,7 @@ export default function CyberChessPage(){
         }catch{}
       }
     }catch{}
-  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast,applyResult]);
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast,applyResult,rated]);
 
   /* ── Variant: Power Drop / Crazyhouse — capture goes to pool ── */
   useEffect(()=>{

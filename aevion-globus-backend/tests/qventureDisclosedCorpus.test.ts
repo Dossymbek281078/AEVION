@@ -6555,6 +6555,39 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
+describe("KNOWN MISSES on the top line — pinned, not fixed", () => {
+  /**
+   * The same probe that found the margin defects found these, and they are
+   * worse: the top line carries more weight in the rubric than any other
+   * figure, and "Revenue in 2025 was $412.6 million" is not exotic English.
+   *
+   * Pinned as the CURRENT WRONG behaviour rather than left silent, which is how
+   * this file has handled known misses eight times now and closed seven of
+   * them. Deliberately not fixed in the same sitting as the margin work: the
+   * revenue reader is the most heavily guarded path in the engine, and a
+   * widening there verified in the last ten minutes of a session is exactly how
+   * a silent regression gets in — I put one there last session doing precisely
+   * that.
+   *
+   * Each assertion below goes RED when the miss is fixed. That is the point.
+   */
+  const rev = (t: string) => parsePlanSignals(t).revenueUsd;
+
+  test("a period clause between the noun and its verb kills the reading", () => {
+    expect(rev("Revenue for the quarter was $412.6 million.")).toBeNull();
+    expect(rev("Revenue for the three months ended June 30, 2025 was $412.6 million.")).toBeNull();
+    expect(rev("Revenue in 2025 was $412.6 million.")).toBeNull();
+    // Reads correctly without the clause — the pattern, not the figure.
+    expect(rev("Revenue was $412.6 million.")).toBe(412_600_000);
+  });
+
+  test("'totaled' is not accepted as a linking verb", () => {
+    expect(rev("Revenue totaled $1.24 billion.")).toBeNull();
+    expect(rev("Total revenue totaled $1.24 billion.")).toBeNull();
+    expect(rev("Total revenue was $1.24 billion.")).toBe(1_240_000_000);
+  });
+});
+
 describe("a margin survives the words a filing puts around it", () => {
   /**
    * Found by probing ordinary earnings-release English against the engine

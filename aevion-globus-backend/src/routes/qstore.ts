@@ -77,6 +77,46 @@ const memPurchases = new Map<string, Purchase>();
 // key: `${productId}:${userId}`
 const memReviews = new Map<string, Review>();
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_TITLE_LEN = 200;
+const MAX_DESCRIPTION_LEN = 5000;
+const MAX_URL_LEN = 2000;
+const MAX_PRICE = 1_000_000;
+const MAX_TAGS = 20;
+const MAX_TAG_LEN = 40;
+
+/**
+ * Цена товара. Ноль допустим — бесплатный товар это нормально; отрицательная и
+ * бесконечная — нет.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+function parseProductPrice(value: unknown): number | string {
+  if (value === undefined || value === null || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "price must be a finite number";
+  if (n < 0) return "price must not be negative";
+  if (n > MAX_PRICE) return `price must not exceed ${MAX_PRICE}`;
+  if (Math.abs(Math.round(n * 100) - n * 100) > 1e-6) return "price must have at most 2 decimal places";
+  return n;
+}
+
+/** Метки: массив коротких строк. @returns массив либо строку с причиной. */
+function normaliseTags(value: unknown): string[] | string {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return "tags must be an array of strings";
+  if (value.length > MAX_TAGS) return `tags must not exceed ${MAX_TAGS} items`;
+  const out: string[] = [];
+  for (const t of value) {
+    if (typeof t !== "string") return "tags must be an array of strings";
+    const trimmed = t.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > MAX_TAG_LEN) return `tag must not exceed ${MAX_TAG_LEN} chars`;
+    out.push(trimmed);
+  }
+  return out;
+}
+
 const CATEGORIES = [
   { id: "template", name: "Templates" },
   { id: "preset", name: "Presets" },
@@ -239,6 +279,38 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
 
   if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
   if (!category) { res.status(400).json({ error: "category is required" }); return; }
+  if (title.trim().length > MAX_TITLE_LEN) { res.status(400).json({ error: "title too long" }); return; }
+  if ((description ?? "").length > MAX_DESCRIPTION_LEN) {
+    res.status(400).json({ error: "description too long" }); return;
+  }
+
+  // Категория не сверялась со списком: товар мог получить категорию, которой
+  // нет ни в одном фильтре, и пропасть из витрины насовсем.
+  if (!CATEGORIES.some((c) => c.id === category)) {
+    res.status(400).json({ error: "unknown category", allowed: CATEGORIES.map((c) => c.id) });
+    return;
+  }
+
+  // Цена принималась как `Number(price) || 0`, то есть без единой проверки
+  // диапазона: `-500` сохранялось как минус пятьсот, `1e400` (в JSON это
+  // Infinity) — как бесконечность. Товар с отрицательной ценой на витрине —
+  // это не «странное число», а прямой путь к разбирательству с покупателем.
+  const priceCheck = parseProductPrice(price);
+  if (typeof priceCheck === "string") { res.status(400).json({ error: priceCheck }); return; }
+
+  // Метки приходят массивом строк — или чем угодно: строка вместо массива
+  // ложилась в колонку `text[]` и роняла вставку пятисоткой.
+  const cleanTags = normaliseTags(tags);
+  if (typeof cleanTags === "string") { res.status(400).json({ error: cleanTags }); return; }
+
+  if (previewUrl !== undefined && previewUrl !== null && String(previewUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(previewUrl))) {
+      res.status(400).json({ error: "previewUrl must be an absolute http(s) URL" }); return;
+    }
+    if (String(previewUrl).length > MAX_URL_LEN) {
+      res.status(400).json({ error: "previewUrl too long" }); return;
+    }
+  }
 
   const newId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -248,10 +320,10 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
     title: title.trim(),
     description: description?.trim() || "",
     category,
-    price: Number(price) || 0,
+    price: priceCheck,
     currency: "usd",
     previewUrl: previewUrl || "",
-    tags: tags || [],
+    tags: cleanTags,
     salesCount: 0,
     avgRating: 0,
     reviewCount: 0,

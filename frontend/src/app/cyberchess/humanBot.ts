@@ -181,6 +181,29 @@ const BLUNDER_CP = 200;
  * Choose a move the way a sub-1200 human would: usually sound, occasionally
  * catastrophic — instead of uniformly mediocre on every single turn.
  */
+/* Острота позиции — насколько в ней легко ошибиться.
+ *
+ * Считается по самим ходам, без движка: доля взятий и шахов среди легальных.
+ * Смысл прямой — чем больше на доске форсированных продолжений, тем больше веток
+ * надо просчитать и тем чаще человек не досчитывает. Тихая позиция, где взятий нет
+ * вовсе, даёт 0: ошибиться там почти негде, и зевок фигуры в такой позиции читается
+ * не как человеческая ошибка, а как поломка бота.
+ *
+ * Дорогих вычислений нет намеренно: функция зовётся на каждый ход бота, и любая
+ * дополнительная работа движка здесь стоила бы времени ответа.
+ */
+export function sharpnessOf(scored: ScoredMove[]): number {
+  if (!scored.length) return 0;
+  let loud = 0;
+  for (const s of scored) {
+    const m = s.move as { flags?: string; san?: string };
+    const isCapture = typeof m.flags === "string" && (m.flags.includes("c") || m.flags.includes("e"));
+    const isCheck = typeof m.san === "string" && (m.san.includes("+") || m.san.includes("#"));
+    if (isCapture || isCheck) loud++;
+  }
+  return loud / scored.length;
+}
+
 export function pickHumanMove(
   scored: ScoredMove[],
   profile: HumanProfile,

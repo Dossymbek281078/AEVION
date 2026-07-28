@@ -97,3 +97,45 @@ describe("QChainGov: публичная выдача предложения от
     expect(extra, `наружу ушли лишние поля: ${extra.join(", ")}`).toEqual([]);
   });
 });
+
+describe("GET /proposals/:id/votes — внутренний id голосующего наружу не уходит", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (/FROM "QChainGovVote"/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: "v1",
+              voterUserId: "user-42",
+              choice: "yes",
+              weight: 1,
+              rationale: "по существу",
+              createdAt: "2026-07-28T00:00:00.000Z",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+  });
+
+  test("вместо voterUserId отдаётся псевдоним", async () => {
+    const res = await request(makeApp()).get("/api/qchaingov/proposals/p1/votes");
+    expect(res.status).toBe(200);
+    const vote = res.body.votes[0];
+    expect(vote).not.toHaveProperty("voterUserId");
+    expect(JSON.stringify(res.body)).not.toContain("user-42");
+    expect(vote.voter).toMatch(/^[0-9a-f]{12}$/);
+    // Содержательные поля на месте — иначе «починка» превратила бы список в пустышку.
+    expect(vote.choice).toBe("yes");
+    expect(vote.rationale).toBe("по существу");
+  });
+
+  test("один человек в разных голосованиях — разные псевдонимы", async () => {
+    const a = await request(makeApp()).get("/api/qchaingov/proposals/p1/votes");
+    const b = await request(makeApp()).get("/api/qchaingov/proposals/p2/votes");
+    expect(a.body.votes[0].voter).not.toBe(b.body.votes[0].voter);
+  });
+});

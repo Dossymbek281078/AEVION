@@ -513,6 +513,14 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
   }
 });
 
+/**
+ * Псевдоним голосующего для публичной выдачи: соль — само голосование, поэтому
+ * один и тот же человек в двух обсуждениях выглядит двумя разными строками.
+ */
+function voterAlias(proposalId: string, voterUserId: string): string {
+  return crypto.createHash("sha256").update(`${proposalId}:${voterUserId}`).digest("hex").slice(0, 12);
+}
+
 qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
   try {
     await ensureTables();
@@ -523,7 +531,20 @@ qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
        FROM "QChainGovVote" WHERE "proposalId" = $1 ORDER BY "createdAt" DESC LIMIT 200`,
       [id],
     );
-    res.json({ votes: r.rows, total: r.rowCount });
+    // Ручка открыта без входа, а `voterUserId` — внутренний идентификатор
+    // пользователя. Наружу отдаём псевдоним, посоленный самим голосованием:
+    // различать голосующих в одном обсуждении он позволяет, а связать одного и
+    // того же человека между голосованиями по нему нельзя. Фронт этого поля не
+    // читает вовсе — проверено грепом перед правкой.
+    const votes = r.rows.map((row: Record<string, unknown>) => ({
+      id: row.id,
+      voter: voterAlias(id, String(row.voterUserId)),
+      choice: row.choice,
+      weight: row.weight,
+      rationale: row.rationale,
+      createdAt: row.createdAt,
+    }));
+    res.json({ votes, total: r.rowCount });
   } catch (err: unknown) {
     console.error("[qchaingov] votes_list_failed", err instanceof Error ? err.message : err);
     captureQChaingov(err, { route: "qchaingov/GET/proposals/:id/votes" });

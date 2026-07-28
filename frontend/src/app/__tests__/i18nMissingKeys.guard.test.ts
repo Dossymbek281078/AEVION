@@ -71,6 +71,38 @@ export function resolveDict(source: string): Resolution {
   return "unknown";
 }
 
+/**
+ * Ключи словаря, объявленного В САМОМ файле:
+ * `const STR: Record<string, Record<Lang, string>> = { ключ: { ru, en, kk } }`.
+ *
+ * Нужен, чтобы не оставлять исключений. Единственный такой файл —
+ * `healthai/_client.tsx`, и его `t` тоже падает на ключ
+ * (`STR[key]?.[lang] ?? key`), то есть пропуск виден на экране так же, как у
+ * глобального. Границы объявления берутся балансировкой фигурных скобок; ключи —
+ * с верхнего уровня блока (отступ ровно два пробела).
+ *
+ * Возвращает `null`, если объявление не найдено или скобки не сбалансированы, —
+ * тогда файл честно уходит в `skipped`, а не проверяется чужим словарём.
+ */
+export function localDictKeys(source: string): Set<string> | null {
+  const decl = /const\s+[A-Za-z_][A-Za-z0-9_]*\s*:\s*Record<[^=]*=\s*\{/.exec(source);
+  if (!decl) return null;
+  const open = source.indexOf("{", decl.index);
+  let depth = 0;
+  let i = open;
+  for (; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}") {
+      depth--;
+      if (depth === 0) break;
+    }
+  }
+  if (depth !== 0) return null;
+  const block = source.slice(open, i + 1);
+  const keys = Array.from(block.matchAll(/\n {2}"?([A-Za-z0-9_.]+)"?\s*:\s*\{/g), (m) => m[1]);
+  return keys.length ? new Set(keys) : null;
+}
+
 export function findMissingKeys(files: string[]): {
   violations: string[];
   scanned: number;
@@ -93,9 +125,16 @@ export function findMissingKeys(files: string[]): {
     const used = new Set(Array.from(src.matchAll(/\bt\(\s*"([^"]+)"/g), (m) => m[1]));
     if (used.size === 0) continue;
     const where = resolveDict(src);
-    const dict = dicts[where];
+    let dict = dicts[where];
+    if (where === "local") {
+      // Не пропускаем: словарь лежит в самом файле и проверяется им же.
+      const own = localDictKeys(src);
+      if (!own) { skipped++; continue; }
+      dict = own;
+    }
     if (!dict) {
-      // local / unknown — свой набор строк, глобальным словарём не проверяется.
+      // unknown — источник `t` не распознан. Проверять его глобальным словарём
+      // нельзя: это дало бы ложные срабатывания на чужих ключах.
       skipped++;
       continue;
     }
@@ -132,6 +171,24 @@ describe("ключи i18n есть в своём словаре", () => {
         "Добавьте их в соответствующий словарь. Если строка не должна переводиться — " +
         "не оборачивайте её в t().",
     ).toEqual([]);
+  });
+
+  it("файл со своей функцией t ПРОВЕРЯЕТСЯ своим словарём, а не пропускается", () => {
+    // Без этой проверки поддержка локальных словарей осталась бы мёртвым кодом:
+    // тест выше был бы зелёным и при полном пропуске файла.
+    const healthai = path.join(SRC, "app", "healthai", "_client.tsx");
+    const src = readFileSync(healthai, "utf8");
+    expect(resolveDict(src), "healthai должен опознаваться как локальный").toBe("local");
+    const own = localDictKeys(src);
+    expect(own, "локальный словарь healthai не разобран").not.toBeNull();
+    // Замерено 28.07: 236 объявленных ключей при 182 используемых.
+    expect(own!.size).toBeGreaterThan(200);
+    expect(own!.has("bmi")).toBe(true);
+    // И он действительно попадает в проверку, а не в skipped.
+    const { violations, resolved, skipped } = findMissingKeys([healthai]);
+    expect(resolved, "файл ушёл в skipped вместо проверки").toBe(1);
+    expect(skipped).toBe(0);
+    expect(violations).toEqual([]);
   });
 
   it("сторож ловит отсутствующий ключ (негативная проверка)", () => {

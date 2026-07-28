@@ -1299,9 +1299,30 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ambiguous with a label separator and stays excluded (limit 34).
   const NEG = String.raw`(-|−|▲|△|minus\s+|negative\s+)?`;
   const NOT_RANGE = String.raw`(?<![\d.,])`;
+  /**
+   * The period a margin is stated for, sitting between the noun and its verb.
+   *
+   * "Gross margin for the quarter was 62.3%" is TSMC's own wording in its
+   * fourth-quarter 6-K, and it read as null: the connector group allowed a verb
+   * straight after the noun and nothing in between. "Gross margin was 62.3%"
+   * parsed fine, which is why no test caught it — every fixture had been
+   * written by someone who already knew the pattern.
+   *
+   * Bounded so it cannot bridge to another metric: it must END on a period
+   * noun, and the optional "ended ..." tail stops at the first sentence
+   * punctuation or percent sign.
+   *
+   * The tail excludes DIGITS, and that is not tidiness. Dates are masked to
+   * spaces before parsing, so "for the quarter ended December 31, 2025 was
+   * 62.3%" leaves blanks where the date was — and a greedy tail ran through
+   * them, through "was 6", and returned **2.3**. A margin off by sixty points,
+   * silently, from a bound written to be safe. Caught by a trap in the same
+   * batch as the fix; digits after "ended" are the figure, never the period.
+   */
+  const PERIOD_OF = String.raw`(?:\s+(?:for|in|during)\s+(?:the\s+)?[a-z ]{0,20}?(?:quarter|year|period|months?|half)\b(?:\s+ended\b[^.;%\d]{0,32}?)?)?`;
   const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".

@@ -512,13 +512,18 @@ qsocialRouter.post("/follow/:userId", async (req: Request, res: Response) => {
         await pool.query(`DELETE FROM "QSocialFollow" WHERE "followerId"=$1 AND "followingId"=$2`, [auth.sub, followingId]);
         following = false;
       } else {
-        await pool.query(
-          `INSERT INTO "QSocialFollow" ("followerId","followingId","createdAt") VALUES ($1,$2,NOW()) ON CONFLICT DO NOTHING`,
+        const added = await pool.query(
+          `INSERT INTO "QSocialFollow" ("followerId","followingId","createdAt") VALUES ($1,$2,NOW())
+           ON CONFLICT DO NOTHING RETURNING "followingId"`,
           [auth.sub, followingId],
         );
         following = true;
-        // Notify followee
-        addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
+        // Уведомление шлётся только за реально созданную подписку. Раньше оно
+        // уходило безусловно: вставку отбрасывали как дубль, а человек получал
+        // ещё одно «на вас подписались» — по одному на каждое нажатие.
+        if ((added.rowCount ?? 0) > 0) {
+          addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
+        }
       }
       return res.json({ following });
     }

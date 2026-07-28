@@ -148,6 +148,46 @@ describe("лайк несуществующего поста", () => {
   });
 });
 
+describe("подписка: уведомление за реальную подписку, а не за нажатие", () => {
+  const follow = () =>
+    request(makeApp()).post("/api/qsocial/follow/other-1").set("Authorization", `Bearer ${token}`).send({});
+
+  function stubFollow(opts: { alreadyFollowing: boolean; insertWins: boolean }) {
+    mockQuery.mockImplementation(async (sql: string) => {
+      sqlLog.push(sql.trim().split("\n")[0].trim());
+      if (sql.includes('FROM "QSocialFollow"') && sql.includes("SELECT")) {
+        return opts.alreadyFollowing ? { rows: [{ x: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('INSERT INTO "QSocialFollow"')) {
+        return opts.insertWins ? { rows: [{ followingId: "other-1" }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+  }
+
+  test("вставка подписки спрашивает RETURNING", async () => {
+    stubFollow({ alreadyFollowing: false, insertWins: true });
+    await follow();
+    const insert = mockQuery.mock.calls.map((c) => String(c[0])).find((s) => s.includes('INSERT INTO "QSocialFollow"'));
+    expect(insert).toMatch(/RETURNING/i);
+  });
+
+  test("первая подписка проходит", async () => {
+    stubFollow({ alreadyFollowing: false, insertWins: true });
+    const res = await follow();
+    expect(res.status).toBe(200);
+    expect(res.body.following).toBe(true);
+  });
+
+  test("повторное нажатие не создаёт вторую подписку", async () => {
+    stubFollow({ alreadyFollowing: false, insertWins: false });
+    const res = await follow();
+    expect(res.status).toBe(200);
+    const inserts = sqlLog.filter((s) => s.includes('INSERT INTO "QSocialFollow"')).length;
+    expect(inserts).toBe(1);
+  });
+});
+
 describe("уведомление автору", () => {
   test("на отброшенном дубле уведомление не шлётся — иначе автор получит их пачку", async () => {
     stubDb({ alreadyLiked: false, insertWins: false });

@@ -695,6 +695,26 @@ export default function DemoShowcasePage() {
             >
               Investor pitch →
             </Link>
+            {/* Сравнение с аналогами — обязательная часть демо. Инвестор и
+                пользователь первым делом спрашивают «а чем вы лучше X», и
+                отвечать на это надо страницей, где честно указано и где мы
+                хуже: таблица с победой по всем строкам не убеждает никого. */}
+            <Link
+              href="/compare"
+              style={{
+                display: "inline-block",
+                padding: "14px 28px",
+                borderRadius: 12,
+                background: "rgba(148,163,184,0.12)",
+                border: "1px solid rgba(148,163,184,0.35)",
+                color: "#e2e8f0",
+                fontWeight: 750,
+                textDecoration: "none",
+                fontSize: 16,
+              }}
+            >
+              Us vs alternatives →
+            </Link>
             <Link
               href="/demo/deep"
               style={{

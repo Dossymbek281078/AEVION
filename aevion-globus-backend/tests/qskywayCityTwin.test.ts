@@ -42,9 +42,12 @@ describe("parseMetres — a bad tag must not become NaN", () => {
 });
 
 describe("heightOf — provenance decides the safety clearance, so it must be exact", () => {
-  it("an explicit height tag is measured (hs 0)", () => {
-    expect(heightOf({ height: "88" })).toEqual({ h: 88, hs: 0 });
-    expect(heightOf({ "building:height": "31.4" })).toEqual({ h: 31, hs: 0 });
+  it("тег height из OSM — DERIVED (hs 1), а не обмер", () => {
+    // hs=0 покупает нулевой запас: твин доверяет числу полностью. Такое доверие
+    // заслуживает обмер властей, а не тег волонтёра — тег ошибается на порядок в
+    // обе стороны (30 Rockefeller: height=10 при 70 этажах; Байтерек: 382 при 310.8).
+    expect(heightOf({ height: "88" })).toMatchObject({ h: 88, hs: 1 });
+    expect(heightOf({ "building:height": "31.4" })).toMatchObject({ h: 31, hs: 1 });
   });
 
   it("levels are derived with the parapet allowance (hs 1)", () => {
@@ -73,8 +76,10 @@ describe("heightOf — provenance decides the safety clearance, so it must be ex
     expect(heightOf({ height: "tall" })).toEqual({ h: DEFAULT_HEIGHT_M, hs: 2 });
   });
 
-  it("a measured height wins over levels", () => {
-    expect(heightOf({ height: "100", "building:levels": "2" })).toEqual({ h: 100, hs: 0 });
+  it("тег height задаёт ВЕЛИЧИНУ поверх этажности, но не класс доверия", () => {
+    // Значение берём из тега — он точнее прикидки по этажам. Класс всё равно
+    // derived: точнее не значит подтверждено.
+    expect(heightOf({ height: "100", "building:levels": "2" })).toMatchObject({ h: 100, hs: 1, stated: true });
   });
 });
 
@@ -304,22 +309,32 @@ describe("heightOutliers — one wrong tag is trusted completely", () => {
 
 describe("the committed twins publish what the generator could not vouch for", () => {
   it("Astana ships the height that towers over it, with the building it belongs to", () => {
-    // height=382 tagged on a 75-storey tower: 5.1 m per storey, against a
-    // published 311 m. It enters as MEASURED, so the corridor clears it with no
-    // safety margin at all. Hiding that would make the twin look cleaner than
-    // it is; the fix belongs upstream in OSM, the disclosure belongs here.
+    // height=382 на 75-этажной башне: 5.1 м на этаж против опубликованных 311.
+    // ДО 2026-07-28 это входило в сетку как MEASURED — коридор расходился с ним
+    // без запаса вообще. Теперь тег OSM это derived (hs=1), и запас появляется;
+    // само число по-прежнему неверно, поэтому раскрытие остаётся здесь, а
+    // починка — выше по течению, в OSM.
     const suspect = CITY.dataQuality.suspect ?? [];
     expect(suspect).toHaveLength(1);
     expect(suspect[0].h).toBe(382);
     expect(suspect[0].times).toBeGreaterThan(3);
     expect(CITY.buildings[suspect[0].i].h).toBe(suspect[0].h);
-    expect(CITY.buildings[suspect[0].i].hs).toBe(0);
+    expect(CITY.buildings[suspect[0].i].hs).toBe(1);
   });
 
-  it("a city with nothing to flag omits the field rather than shipping an empty list", () => {
-    // An always-present empty array reads, on a chip, as "checked and fine" in
-    // exactly the same way as "never checked". Absence is the honest shape.
-    expect(CITY_NYC.dataQuality.suspect).toBeUndefined();
+  it("пустой список никогда не отгружается — поля либо нет, либо в нём есть записи", () => {
+    // Всегда присутствующий пустой массив читается на чипе как «проверено, всё
+    // хорошо» ровно так же, как «не проверяли». Честная форма — отсутствие.
+    //
+    // Раньше здесь стоял Нью-Йорк как город «без находок». После пересборки
+    // 2026-07-28 находки появились и у него: три тега противоречат собственной
+    // этажности, включая 30 Rockefeller Plaza (height=10 при 70 этажах → 226 м).
+    // Привязка к конкретному городу оказалась привязкой к состоянию данных, а не
+    // к правилу. Проверяем само правило — по всем городам сразу.
+    for (const [name, city] of [["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]] as const) {
+      const s = city.dataQuality.suspect;
+      expect(s === undefined || s.length > 0, `${name} отгрузил пустой список находок`).toBe(true);
+    }
   });
 
   it("Tokyo reports the height tags its own floor counts contradicted", () => {
@@ -357,8 +372,12 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
     // 3 m per storey is a normal building, not a contradiction. The rule must
     // fire on the impossible, not on the merely short — otherwise it becomes a
     // second, silent height model competing with the source.
+    // Признак «правило сработало» — это `contradicted` и подменённая высота, а
+    // НЕ hs: с 2026-07-28 тег OSM и так derived, поэтому обе ветки дают hs=1 и
+    // по нему их больше не различить. Тест, оставшийся на hs, был бы зелёным и
+    // при полностью отключённом правиле.
     const got = heightOf({ height: "30", "building:levels": "10" });
-    expect(got).toMatchObject({ h: 30, hs: 0 });
+    expect(got).toMatchObject({ h: 30, hs: 1 });
     expect(got.contradicted).toBeUndefined();
   });
 
@@ -366,16 +385,21 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
     // A canopy tagged levels=1, height=1 is a modelling convention. Treating it
     // as a hidden tower would inflate every awning in the city — eleven such
     // rows exist in Nishi-Shinjuku against three genuine contradictions.
-    expect(heightOf({ height: "1", "building:levels": "1" })).toMatchObject({ h: 1, hs: 0 });
-    expect(heightOf({ height: "1", "building:levels": "2" })).toMatchObject({ h: 1, hs: 0 });
+    for (const levels of ["1", "2"]) {
+      const got = heightOf({ height: "1", "building:levels": levels });
+      expect(got.h).toBe(1);
+      expect(got.contradicted).toBeUndefined();
+    }
     expect(CONTRADICTION_MIN_LEVELS).toBe(3);
   });
 
   it("keeps the boundary where a storey stops being possible", () => {
     expect(MIN_STOREY_M).toBe(2);
-    // exactly 2 m per storey is allowed; below it is not
-    expect(heightOf({ height: "20", "building:levels": "10" })).toMatchObject({ hs: 0 });
-    expect(heightOf({ height: "19", "building:levels": "10" })).toMatchObject({ hs: 1 });
+    // ровно 2 м на этаж допустимо, ниже — уже нет. Различаем по `contradicted`:
+    // hs после 2026-07-28 равен 1 в обеих ветках и границу не показывает.
+    expect(heightOf({ height: "20", "building:levels": "10" }).h).toBe(20);
+    expect(heightOf({ height: "20", "building:levels": "10" }).contradicted).toBeUndefined();
+    expect(heightOf({ height: "19", "building:levels": "10" })).toMatchObject({ contradicted: 19 });
   });
 
   it("leaves a CANOPY alone, where a floor count describes something else entirely", () => {
@@ -385,9 +409,9 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
     // rule turns an awning into a 152 m obstacle, and in Tokyo only a second
     // source stood in the way. Astana has no second source.
     expect(heightOf({ building: "roof", height: "7", "building:levels": "47" }))
-      .toMatchObject({ h: 7, hs: 0 });
+      .toMatchObject({ h: 7 });
     for (const kind of LEVELS_MEANINGLESS_FOR) {
-      expect(heightOf({ building: kind, height: "7", "building:levels": "47" }).hs).toBe(0);
+      expect(heightOf({ building: kind, height: "7", "building:levels": "47" }).contradicted).toBeUndefined();
     }
   });
 
@@ -398,7 +422,7 @@ describe("heightOf — a measured tag its own source contradicts is not a measur
   });
 
   it("still needs BOTH tags — one alone says nothing about the other", () => {
-    expect(heightOf({ height: "7" })).toMatchObject({ h: 7, hs: 0 });
+    expect(heightOf({ height: "7" })).toMatchObject({ h: 7, hs: 1 });
     expect(heightOf({ "building:levels": "47" })).toMatchObject({ hs: 1 });
   });
 });

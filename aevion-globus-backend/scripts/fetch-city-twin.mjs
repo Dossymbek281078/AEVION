@@ -248,12 +248,12 @@ const buildings = [];
 const meta = [];
 const contradicted = [];
 for (const el of elements) {
-  const { h, hs, contradicted: was } = heightOf(el.tags);
+  const { h, hs, stated, contradicted: was } = heightOf(el.tags);
   for (const r of ringsOf(el, proj)) {
     if (was !== undefined) {
       contradicted.push({ i: buildings.length, h, was, levels: Number(el.tags["building:levels"]) });
     }
-    buildings.push({ h, hs, r });
+    buildings.push({ h, hs, r, stated });
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
 }
@@ -348,7 +348,18 @@ if (city.measured) {
     const p = measuredAt[i];
     if (p.how === "contained") {
       contained++;
-      if (b.hs === 0) {
+      // Условие — «у OSM есть СВОЁ число», а не «оно считается обмером».
+      //
+      // Причина брать большее физическая: съёмка меряет крышу, тег часто
+      // включает мачту. К классу доверия это отношения не имеет, и когда правило
+      // было привязано к hs===0, оно молча выключилось, стоило понизить класс
+      // тега OSM (28.07.2026). Цена выключения проверяется тестом: максимум
+      // твина Нью-Йорка падал с 443 до 427 — то есть коридор шёл сквозь антенну
+      // Эмпайр-Стейт, потому что съёмка города меряет крыши без мачт.
+      //
+      // Прикидке по этажам и подставленному значению по умолчанию спорить с
+      // обмером нечем — там побеждает съёмка.
+      if (b.stated) {
         if (p.h > b.h) plateauTaller++; else if (b.h > p.h) osmTaller++;
         b.h = Math.round(Math.max(p.h, b.h));
       } else {
@@ -508,7 +519,9 @@ const data = {
   bbox: city.bbox,
   meters: { w: W, h: H },
   grid: { cols: COLS, rows: ROWS, cell: CELL, heights, src },
-  buildings,
+  // `stated` — служебный признак этапа сверки, а не часть твина: в объявленном
+  // CityData его нет, и в отгружаемом файле ему делать нечего.
+  buildings: buildings.map(({ h, hs, r }) => ({ h, hs, r })),
   vertiports: city.vertiports ?? committed.vertiports,
   dataQuality: {
     total, measured, derived, guessed,

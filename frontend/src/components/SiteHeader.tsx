@@ -50,6 +50,10 @@ export function SiteHeader() {
             Shop
           </Link>
           {[
+            // Скромной строкой, а не четвёртой яркой кнопкой: три ярких уже
+            // спорят между собой за нажатие. Сравнение нужно тому, кто уже
+            // заинтересовался и ищет причину не уходить.
+            { href: "/compare", label: "Compare" },
             { href: "/auth", label: "Auth" },
             { href: "/qright", label: "QRight" },
             { href: "/qsign", label: "QSign" },

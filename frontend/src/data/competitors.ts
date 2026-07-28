@@ -18,6 +18,28 @@
  * основания, добавить запись сюда. Страница `/compare` подхватит автоматически.
  */
 
+/**
+ * Через сколько дней срез считается протухшим. Девяносто — потому что за
+ * квартал конкурент успевает выпустить то, что переворачивает строку таблицы,
+ * а мы успеваем закрыть то, что в ней записано как наша слабость.
+ */
+export const REVIEW_AFTER_DAYS = 90;
+
+/**
+ * Дата, после которой строку надо пересмотреть.
+ *
+ * Считается ТОЛЬКО из даты среза, без обращения к часам. Это принципиально:
+ * страница статическая, и «прошло N дней» замёрзло бы на моменте сборки —
+ * читатель видел бы свежую цифру у полугодового среза. Здесь он видит дату
+ * и сравнивает со своим сегодня сам.
+ */
+export function reviewAfter(surveyedAt: string, days: number = REVIEW_AFTER_DAYS): string {
+  const d = new Date(`${surveyedAt}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return surveyedAt;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export type Basis = "measured" | "public" | "design";
 
 export interface Claim {

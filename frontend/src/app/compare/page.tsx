@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { COMPARISONS, UNANALYSED, type Basis, type Claim } from "@/data/competitors";
+import { COMPARISONS, UNANALYSED, REVIEW_AFTER_DAYS, reviewAfter, type Basis, type Claim } from "@/data/competitors";
 
 export const metadata: Metadata = {
   title: "AEVION против аналогов — где мы сильнее и где слабее",
@@ -87,7 +87,10 @@ export default function ComparePage() {
             У каждого модуля здесь обязательно есть строка «где мы слабее». Таблица, в которой одна
             сторона выигрывает везде, ничего не сообщает: ею нельзя пользоваться, чтобы выбрать
             инструмент. У каждого утверждения указано основание — наш замер, публичные данные
-            конкурента или свойство устройства продукта.
+            конкурента или свойство устройства продукта. У каждой карточки стоит дата среза
+            и дата, после которой её надо пересматривать: через {REVIEW_AFTER_DAYS} дней
+            конкурент успевает выпустить то, что переворачивает строку. Просроченный срез
+            видно сразу — сравните с сегодняшним числом.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 12.5, color: "#64748b" }}>
             <span>Разобрано модулей: <b style={{ color: "#0f172a" }}>{COMPARISONS.length}</b></span>
@@ -115,7 +118,9 @@ export default function ComparePage() {
               <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#0f172a" }}>
                 <a href={c.page} style={{ color: "inherit", textDecoration: "none" }}>{c.module} ↗</a>
               </h2>
-              <span style={{ fontSize: 11.5, color: "#94a3b8" }}>срез {c.surveyedAt}</span>
+              <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                срез {c.surveyedAt} · пересмотреть после {reviewAfter(c.surveyedAt)}
+              </span>
             </div>
             <p style={{ margin: "6px 0 14px", fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
               Сравниваем с категорией: {c.category}.

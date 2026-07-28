@@ -143,6 +143,15 @@ export default function ViewDocument() {
       const d = await res.json();
       if (!res.ok) {
         if (d.error === "wrong_password") { setError(t("qcontract.viewer.error.wrong_password")); return; }
+        // Блокировка после серии неверных вводов. Оставляем человека на форме пароля,
+        // а не выбрасываем на экран ошибки: документ цел, ждать надо конечное время.
+        // Без этой ветки он увидел бы служебный код too_many_password_attempts и решил,
+        // что сломался документ, а не что сработала защита.
+        if (d.error === "too_many_password_attempts") {
+          const min = Math.max(1, Math.ceil((d.retryAfterSeconds ?? 900) / 60));
+          setError(t("qcontract.viewer.error.too_many_attempts", { min }));
+          return;
+        }
         if (d.error === "signature_required") { setStage("signature"); return; }
         if (d.error === "document_expired") { setStage("expired"); return; }
         setError(d.error ?? t("qcontract.viewer.error.generic")); setStage("error"); return;

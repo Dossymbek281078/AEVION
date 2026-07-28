@@ -31,5 +31,6 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "src/components/__tests__", "**/*.test.ts", "**/*.test.tsx"]
+  "_comment_exclude_frontend": "frontend/ — случайная вложенная КОПИЯ этого же приложения, попавшая в main старым коммитом 6c159d3a (53 файла). Её [id]/page.tsx до сих пор объявляет params как Promise<{id}> | {id} — сигнатуру до Next 16. Правка 504fdc92 от 26.07 починила настоящий файл, а копию не заметила. Из-за include '**/*.tsx' проверка типов затягивала копию, и next build падал на PageProps. Исключение — минимальная обратимая мера; правильное решение — удалить каталог, но это 53 отслеживаемых файла в main и решение основателя.",
+  "exclude": ["node_modules", "frontend", "src/components/__tests__", "**/*.test.ts", "**/*.test.tsx"]
 }

@@ -6700,9 +6700,20 @@ describe("five readers now accept 'was', and one still does not", () => {
      * field with different sign rules is the shape of the bug, not an accident
      * of it.
      *
-     * Growth is NOT the same cause and must be diagnosed separately: its regex
-     * does not match "Negative revenue growth of 15%" at all in isolation.
-     * Assuming one cause for both is how the next attempt fails the same way.
+     * ── CAUSE FOUND (growth) — and it is NOT the same one ──
+     *
+     * The noun form of growth has no sign handling at all, which is worse than
+     * the margin case rather than a copy of it. Measured:
+     *
+     *   "Revenue growth of 15%."            →  15   correct
+     *   "Negative revenue growth of 15%."   →  15   sign dropped
+     *   "Revenue growth of negative 15%."   → null  not read at all
+     *
+     * The third line is the tell. On margin that wording works — "gross margin
+     * of negative 20%" gives -20 — so the growth reader is simply missing the
+     * NEG group its sibling has, not misordering an assignment. Two different
+     * repairs: margin needs one place to decide the sign, growth needs a sign
+     * to decide at all.
      */
     expect(p("Negative gross margin of 20%.").grossMarginPct).toBe(20);
     expect(p("Negative revenue growth of 15%.").growthPct).toBe(15);
@@ -6719,6 +6730,12 @@ describe("five readers now accept 'was', and one still does not", () => {
 
   test("STILL A MISS: growth stated with a sign", () => {
     expect(p("Revenue growth was -15%.").growthPct).toBeNull();
+    // The noun form has no NEG group at all — its margin sibling reads the
+    // same wording correctly, which is what makes this a missing feature
+    // rather than a misordered assignment.
+    expect(p("Revenue growth of negative 15%.").growthPct).toBeNull();
+    expect(p("Gross margin of negative 20%.").grossMarginPct).toBe(-20);
+    expect(p("Revenue growth of 15%.").growthPct).toBe(15);
   });
 
   test("STILL A MISS: growth stated as a noun with a period", () => {

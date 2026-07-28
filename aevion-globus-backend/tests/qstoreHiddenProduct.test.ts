@@ -61,6 +61,8 @@ function serveProduct(isPublic: boolean) {
             previewUrl: null,
             tags: [],
             salesCount: 0,
+            avgRating: 4.6,
+            reviewCount: 12,
             isPublic,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -100,6 +102,15 @@ describe("QStore: снятый с витрины товар не открыва�
   test("публичный товар доступен кому угодно", async () => {
     serveProduct(true);
     expect((await get()).status).toBe(200);
+  });
+
+  test("рейтинг и число отзывов остаются — их показывает страница товара", async () => {
+    // Первая редакция проекции их срезала, и страница показала бы рейтинг 0.
+    // Сверка с интерфейсом и поймала регрессию.
+    serveProduct(true);
+    const res = await get();
+    expect(res.body.product.avgRating).toBe(4.6);
+    expect(res.body.product.reviewCount).toBe(12);
   });
 
   test("служебные поля наружу не уходят", async () => {

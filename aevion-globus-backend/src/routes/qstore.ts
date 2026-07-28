@@ -224,7 +224,8 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
  */
 const PUBLIC_PRODUCT_FIELDS = [
   "id", "sellerId", "title", "description", "category", "price", "currency",
-  "previewUrl", "tags", "salesCount", "isPublic", "createdAt", "updatedAt",
+  "previewUrl", "tags", "salesCount", "avgRating", "reviewCount",
+  "isPublic", "createdAt", "updatedAt",
 ] as const;
 
 function publicProduct(row: Record<string, unknown>): Record<string, unknown> {
@@ -245,7 +246,8 @@ qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
       // бы, что товар существует.
       const row = await pool.query(
         `SELECT "id","sellerId","title","description","category","price","currency",
-                "previewUrl","tags","salesCount","isPublic","createdAt","updatedAt"
+                "previewUrl","tags","salesCount","avgRating","reviewCount",
+                "isPublic","createdAt","updatedAt"
            FROM "QStoreProduct" WHERE "id" = $1`,
         [id],
       );

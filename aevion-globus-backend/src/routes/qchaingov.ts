@@ -216,8 +216,17 @@ qchaingovRouter.get("/proposals/:id", readLimit, async (req, res) => {
     const id = String(req.params.id || "").trim();
     if (!id) return res.status(400).json({ error: "id required" });
     const pool = getPool();
+    // Поля перечислены поимённо, а не `SELECT *`. Ручка публичная (входа не
+    // требует), а «выбрать всё» опасно не тем, что отдаёт сегодня, а тем, что
+    // объём выдачи растёт сам: колонку добавили обычным обновлением базы — и
+    // она сразу уехала наружу, никто ничего не менял в коде. Соседний список
+    // предложений строкой выше поля как раз перечисляет — расходились.
     const p = await pool.query(
-      `SELECT * FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`, [id],
+      `SELECT "id","authorUserId","title","summary","body","category","voteMode","options",
+              "quorumPercent","passThreshold","status","votesOpenAt","votesCloseAt",
+              "executedAt","createdAt"
+       FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
+      [id],
     );
     if (p.rowCount === 0) return res.status(404).json({ error: "proposal_not_found" });
     const tallyR = await pool.query(
@@ -230,8 +239,19 @@ qchaingovRouter.get("/proposals/:id", readLimit, async (req, res) => {
        FROM "QChainGovVote" WHERE "proposalId" = $1`,
       [id],
     );
+    // Отдаём РАЗРЕШЁННОЕ списком, а не «строку из базы». Перечисления полей в
+    // запросе мало: оно держится на строке SQL, которую легко вернуть к
+    // `SELECT *` одной правкой, и тогда выдача снова поедет вслед за схемой.
+    const row = p.rows[0] as Record<string, unknown>;
+    const PUBLIC_PROPOSAL_FIELDS = [
+      "id", "authorUserId", "title", "summary", "body", "category", "voteMode", "options",
+      "quorumPercent", "passThreshold", "status", "votesOpenAt", "votesCloseAt", "executedAt", "createdAt",
+    ] as const;
+    const proposal: Record<string, unknown> = {};
+    for (const f of PUBLIC_PROPOSAL_FIELDS) proposal[f] = row[f];
+
     res.json({
-      proposal: p.rows[0],
+      proposal,
       tally: tallyR.rows,
       totals: totalR.rows[0],
     });
@@ -249,22 +269,44 @@ qchaingovRouter.post("/proposals/:id/votes", voteLimit, async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
     const id = String(req.params.id || "").trim();
-    const { choice, weight = 1, rationale } = req.body || {};
+    const { choice, weight, rationale } = req.body || {};
     if (!choice || typeof choice !== "string") return res.status(400).json({ error: "choice required" });
-    const w = Number(weight);
-    if (!Number.isFinite(w) || w <= 0 || w > 1_000_000) return res.status(400).json({ error: "weight 0..1000000" });
     const pool = getPool();
     const p = await pool.query(
-      `SELECT "status","options" FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
+      `SELECT "status","options","voteMode" FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
       [id],
     );
     if (p.rowCount === 0) return res.status(404).json({ error: "proposal_not_found" });
-    const proposal = p.rows[0] as { status: string; options: string[] };
+    const proposal = p.rows[0] as { status: string; options: string[]; voteMode: string };
     if (proposal.status !== "open") return res.status(400).json({ error: "voting_not_open", status: proposal.status });
     const allowedOptions = Array.isArray(proposal.options) ? proposal.options : [];
     if (!allowedOptions.includes(choice)) {
       return res.status(400).json({ error: "invalid_choice", allowed: allowedOptions });
     }
+    // ПРАВО ГОЛОСА ОПРЕДЕЛЯЕТ СЕРВЕР. Раньше вес приходил телом запроса и
+    // принимался вплоть до миллиона, а итог считается `SUM("weight")` — то есть
+    // любой вошедший пользователь мог одним запросом перевесить всех
+    // остальных. Тот же класс, что «клиент заявил — сервер списал» на денежном
+    // пути, только решается им исход голосования.
+    //
+    // Пока источника силы голоса нет (AEV-взвешивание из описания модуля не
+    // подключено), правило простое и честное: одно лицо — один голос.
+    const votingPower = 1;
+    let w = votingPower;
+    if (proposal.voteMode === "weighted") {
+      // В режиме «weighted» тело задаёт ДОЛЮ собственного права, а не число
+      // из воздуха: 0 < доля ≤ 1.
+      const fraction = weight === undefined || weight === null ? 1 : Number(weight);
+      if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
+        return res.status(400).json({ error: "weight_must_be_fraction_0_to_1" });
+      }
+      w = votingPower * fraction;
+    } else if (weight !== undefined && weight !== null && Number(weight) !== 1) {
+      // Явный отказ вместо тихого игнорирования: клиент должен узнать, что его
+      // число не учтено, а не думать, что проголосовал с весом 1000.
+      return res.status(400).json({ error: "weight_not_accepted_in_this_mode", voteMode: proposal.voteMode });
+    }
+
     const voteId = crypto.randomUUID();
     try {
       await pool.query(
@@ -388,6 +430,11 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
     let passed = false;
     let achievedPct = 0;
     let winningChoice: string | null = null;
+    // Ничья — это НЕ победа одной из сторон. Раньше она молча превращалась в
+    // ответ: в режиме «да/нет» равенство отдавало «no», а в остальных режимах
+    // побеждал тот вариант, который база вернула первым, — то есть исход
+    // зависел от порядка строк в `GROUP BY`, не определённого стандартом.
+    let tie = false;
 
     if (proposal.voteMode === "yes-no-abstain") {
       const yesWeight = tally.find(r => r.choice === "yes")?.weight ?? 0;
@@ -395,16 +442,36 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
       const denom = yesWeight + noWeight;
       achievedPct = denom > 0 ? (yesWeight / denom) * 100 : 0;
       passed = quorumMet && achievedPct >= proposal.passThreshold;
-      winningChoice = passed ? "yes" : (yesWeight > noWeight ? "yes" : (noWeight > 0 ? "no" : null));
-    } else {
-      // weighted or ranked-choice — winner = highest weight bucket
-      let topWeight = -1;
-      for (const row of tally) {
-        if (row.weight > topWeight) {
-          topWeight = row.weight;
-          winningChoice = row.choice;
-        }
+      if (passed) {
+        winningChoice = "yes";
+      } else if (yesWeight > noWeight) {
+        winningChoice = "yes";
+      } else if (noWeight > yesWeight) {
+        winningChoice = "no";
+      } else {
+        // равенство (в том числе 0:0) — победителя нет
+        winningChoice = null;
+        tie = denom > 0;
       }
+    } else {
+      // weighted или ranked-choice — побеждает вариант с наибольшим весом.
+      // При равенстве весов порядок определяем ЯВНО: сначала порядок вариантов,
+      // объявленный автором предложения, затем алфавит. Иначе один и тот же
+      // расклад голосов даёт разный результат от прогона к прогону.
+      const order = new Map(
+        (Array.isArray(proposal.options) ? proposal.options : []).map((o, i) => [o, i] as const),
+      );
+      const ranked = [...tally].sort((a, b) => {
+        if (b.weight !== a.weight) return b.weight - a.weight;
+        const ia = order.get(a.choice) ?? Number.MAX_SAFE_INTEGER;
+        const ib = order.get(b.choice) ?? Number.MAX_SAFE_INTEGER;
+        if (ia !== ib) return ia - ib;
+        return a.choice.localeCompare(b.choice);
+      });
+      const top = ranked[0];
+      const topWeight = top?.weight ?? 0;
+      tie = ranked.length > 1 && ranked[1].weight === topWeight && topWeight > 0;
+      winningChoice = top && topWeight > 0 ? top.choice : null;
       achievedPct = totalWeight > 0 ? (Math.max(topWeight, 0) / totalWeight) * 100 : 0;
       passed = quorumMet && achievedPct >= proposal.passThreshold;
     }
@@ -432,6 +499,9 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
       quorumMet,
       threshold: { required: proposal.passThreshold, achieved: Number(achievedPct.toFixed(2)) },
       winningChoice,
+      // Отдаём наружу, а не прячем: человек должен видеть, что расклад ничейный,
+      // а не получить «победителя», выбранного правилом разрешения ничьих.
+      tie,
       totalVotes,
       totalWeight,
       executedAt,
@@ -443,6 +513,14 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
   }
 });
 
+/**
+ * Псевдоним голосующего для публичной выдачи: соль — само голосование, поэтому
+ * один и тот же человек в двух обсуждениях выглядит двумя разными строками.
+ */
+function voterAlias(proposalId: string, voterUserId: string): string {
+  return crypto.createHash("sha256").update(`${proposalId}:${voterUserId}`).digest("hex").slice(0, 12);
+}
+
 qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
   try {
     await ensureTables();
@@ -453,7 +531,20 @@ qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
        FROM "QChainGovVote" WHERE "proposalId" = $1 ORDER BY "createdAt" DESC LIMIT 200`,
       [id],
     );
-    res.json({ votes: r.rows, total: r.rowCount });
+    // Ручка открыта без входа, а `voterUserId` — внутренний идентификатор
+    // пользователя. Наружу отдаём псевдоним, посоленный самим голосованием:
+    // различать голосующих в одном обсуждении он позволяет, а связать одного и
+    // того же человека между голосованиями по нему нельзя. Фронт этого поля не
+    // читает вовсе — проверено грепом перед правкой.
+    const votes = r.rows.map((row: Record<string, unknown>) => ({
+      id: row.id,
+      voter: voterAlias(id, String(row.voterUserId)),
+      choice: row.choice,
+      weight: row.weight,
+      rationale: row.rationale,
+      createdAt: row.createdAt,
+    }));
+    res.json({ votes, total: r.rowCount });
   } catch (err: unknown) {
     console.error("[qchaingov] votes_list_failed", err instanceof Error ? err.message : err);
     captureQChaingov(err, { route: "qchaingov/GET/proposals/:id/votes" });

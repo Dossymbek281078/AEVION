@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { repoUrl } from "@/lib/repoUrl";
 
 export const revalidate = 3600;
 
@@ -54,7 +55,7 @@ const CHANGELOG_PATHS: Record<string, string> = {
   "catalog-client": "packages/aevion-catalog-client/CHANGELOG.md",
 };
 
-const GITHUB_REPO = "https://github.com/Dossymbek281078/AEVION";
+const GITHUB_REPO = repoUrl();
 
 export default async function FintechChangelogPage() {
   const data = await fetchSdks();

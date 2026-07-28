@@ -11,6 +11,7 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
+import { repoPath } from "@/lib/repoUrl";
 
 // AEV connector — Proof-of-Play engine A: успешные signing/verify действия mint'ят
 // AEV в общий wallet. Возвращает количество сminted AEV или 0 если cap/off-mode.
@@ -1895,7 +1896,7 @@ export default function QSignPage() {
               OpenAPI 3.0 spec ↗
             </a>
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/aevion-globus-backend/sdk"
+              href={repoPath("tree/main/aevion-globus-backend/sdk")}
               target="_blank"
               rel="noreferrer"
               style={{

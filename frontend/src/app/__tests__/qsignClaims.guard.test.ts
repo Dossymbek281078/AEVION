@@ -34,6 +34,12 @@ const FORBIDDEN: { pattern: RegExp; why: string }[] = [
   { pattern: /we already ship it/i, why: "«we already ship it» о постквантовой подписи" },
   { pattern: /ML-DSA-65 on the shelf/i, why: "«on the shelf» — утверждение о доступности" },
   { pattern: /No one else ships ML-DSA-65/i, why: "непроверяемое «никто больше не поставляет»" },
+  // Найдено 28.07.2026 повторной вычиткой: прод отвечает
+  // `active: {hmac, ed25519}` — ML-DSA не включён. Формулировки ниже
+  // утверждали обратное, каждая своим способом.
+  { pattern: /signature attached to the record/i, why: "«подпись приложена к записи» — сегодня подписывает Ed25519" },
+  { pattern: /sign with ML-DSA-65/i, why: "«подпиши через ML-DSA-65» как описание живого пути" },
+  { pattern: /\$9[^\n]{0,40}ML-DSA-65 \+ cert/i, why: "платный тариф обещает ML-DSA как включённое" },
 ];
 
 function collectSourceFiles(dir: string): string[] {

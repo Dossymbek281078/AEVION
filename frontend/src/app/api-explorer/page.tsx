@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { repoPath } from "@/lib/repoUrl";
 
 export const metadata: Metadata = {
   title: "AEVION API explorer — interactive playground for the Hub catalog",
@@ -316,7 +317,7 @@ const stats = await cat.stats();`}</pre>
           <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>
             Source:{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href={repoPath("tree/main/packages/aevion-catalog-client")}
               style={{ color: "#0d9488", fontWeight: 700 }}
               target="_blank"
               rel="noreferrer"

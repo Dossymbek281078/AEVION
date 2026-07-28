@@ -589,7 +589,7 @@ export default function PitchPage() {
               code: "QSIGN",
               name: "Sign · ML-DSA-65",
               href: "/qsign",
-              body: "Post-quantum NIST FIPS 204 signature attached to the record.",
+              body: "NIST FIPS 204 post-quantum signature, key-activated; Ed25519 signs the record today.",
               color: "#a78bfa",
             },
             {

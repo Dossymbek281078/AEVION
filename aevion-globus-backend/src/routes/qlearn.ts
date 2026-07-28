@@ -176,6 +176,50 @@ function computeStreak(days: Set<string>): { current: number; longest: number; t
   return { current, longest, totalDays: days.size };
 }
 
+const MAX_LESSON_DURATION_MIN = 24 * 60;
+const MAX_LESSON_ORDER = 10_000;
+
+/**
+ * Длительность урока и его порядковый номер. Раньше оба брались как
+ * `Number(x) || 0`: отрицательное сохранялось как есть, `1e400` (в JSON это
+ * Infinity) уходило в целочисленную колонку. Тот же шаблон, что и с ценой.
+ *
+ * Здесь мусор не отбивается ошибкой, а приводится к нулю: это второстепенные
+ * поля, ради которых отклонять урок целиком незачем — но и записывать в базу
+ * минус двести минут тоже.
+ */
+function lessonNumber(value: unknown, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.round(n), max);
+}
+
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_COURSE_TITLE_LEN = 200;
+const MAX_COURSE_DESCRIPTION_LEN = 5000;
+const MAX_COURSE_PRICE = 1_000_000;
+const COURSE_LEVELS = ["beginner", "intermediate", "advanced"];
+
+/**
+ * Цена курса. Ноль допустим — бесплатный курс это нормально; отрицательная и
+ * бесконечная — нет.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+function parseCoursePrice(value: unknown): number | string {
+  if (value === undefined || value === null || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "price must be a finite number";
+  if (n < 0) return "price must not be negative";
+  if (n > MAX_COURSE_PRICE) return `price must not exceed ${MAX_COURSE_PRICE}`;
+  // Поле несёт ЦЕНТЫ: форма считает `Number(input) * 100`, и из-за плавающей
+  // точки «19.99» превращается в 1998.9999999999998. Проверка «два знака после
+  // запятой» такие числа отбивала — регрессия, найденная сверкой с формой.
+  // Доли цента не бывает, микроскопический хвост от умножения — бывает.
+  if (Math.abs(n - Math.round(n)) > 1e-6) return "price must be a whole number of cents";
+  return Math.round(n);
+}
+
 const CATEGORIES = [
   { id: "tech", name: "Technology" },
   { id: "business", name: "Business" },
@@ -237,24 +281,61 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
 });
 
 // GET /api/qlearn/courses/:id
+/**
+ * Поля курса, которые допустимо отдавать наружу.
+ *
+ * Перечисления колонок в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список стоит и здесь,
+ * при сборке ответа.
+ */
+const PUBLIC_COURSE_FIELDS = [
+  "id", "authorId", "title", "description", "category", "level", "price",
+  "isPublic", "enrollmentCount", "createdAt", "updatedAt",
+] as const;
+
+function publicCourse(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_COURSE_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qlearnRouter.get("/courses/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  // Список курсов отдаёт только `"isPublic" = TRUE` (и так же фильтрует путь
+  // через память), а выдача по идентификатору не смотрела на признак вовсе:
+  // неопубликованный курс открывался по прямой ссылке. Свой черновик автор
+  // видит; остальным 404, а не 403 — 403 подтвердил бы, что курс существует.
+  const auth = verifyBearerOptional(req);
   if (isQLearnDbReady()) {
     try {
-      const row = await pool.query(`SELECT * FROM "QLearnCourse" WHERE "id" = $1`, [id]);
-      if (row.rows.length === 0) { res.status(404).json({ error: "Course not found" }); return; }
+      const row = await pool.query(
+        `SELECT "id","authorId","title","description","category","level","price",
+                "isPublic","enrollmentCount","createdAt","updatedAt"
+           FROM "QLearnCourse" WHERE "id" = $1`,
+        [id],
+      );
+      const courseRow = row.rows[0];
+      if (!courseRow || (courseRow.isPublic !== true && auth?.sub !== courseRow.authorId)) {
+        res.status(404).json({ error: "Course not found" });
+        return;
+      }
       const lessons = await pool.query(
         `SELECT "id","title","order","duration" FROM "QLearnLesson" WHERE "courseId" = $1 ORDER BY "order"`,
         [id],
       );
-      res.json({ course: row.rows[0], lessons: lessons.rows });
+      res.json({ course: publicCourse(courseRow), lessons: lessons.rows });
       return;
     } catch {
       // fall through
     }
   }
+  // То же правило на пути через память — иначе признак соблюдался бы только при
+  // поднятой базе и тихо переставал при откате.
   const course = memCourses.get(id);
-  if (!course) { res.status(404).json({ error: "Course not found" }); return; }
+  if (!course || (course.isPublic !== true && auth?.sub !== course.authorId)) {
+    res.status(404).json({ error: "Course not found" });
+    return;
+  }
   const lessons = Array.from(memLessons.values())
     .filter((l) => l.courseId === id)
     .map(({ id: lid, title, order, duration }) => ({ id: lid, title, order, duration }))
@@ -272,6 +353,28 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
   };
   if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
   if (!category) { res.status(400).json({ error: "category is required" }); return; }
+  if (title.trim().length > MAX_COURSE_TITLE_LEN) { res.status(400).json({ error: "title too long" }); return; }
+  if ((description ?? "").length > MAX_COURSE_DESCRIPTION_LEN) {
+    res.status(400).json({ error: "description too long" }); return;
+  }
+
+  // Категория не сверялась со списком: курс мог получить категорию, которой нет
+  // ни в одном фильтре, и пропасть из каталога.
+  if (!CATEGORIES.some((c) => c.id === category)) {
+    res.status(400).json({ error: "unknown category", allowed: CATEGORIES.map((c) => c.id) });
+    return;
+  }
+  // Уровень тоже уходил в базу любой строкой, хотя в интерфейсе их три.
+  if (level !== undefined && level !== null && !COURSE_LEVELS.includes(String(level))) {
+    res.status(400).json({ error: "unknown level", allowed: COURSE_LEVELS });
+    return;
+  }
+
+  // Цена принималась как `Number(price) || 0` — без проверки диапазона:
+  // отрицательная сохранялась как есть, `1e400` (в JSON это Infinity) — как
+  // бесконечность. Тот же дефект был в QStore, и он тут дословно повторён.
+  const priceCheck = parseCoursePrice(price);
+  if (typeof priceCheck === "string") { res.status(400).json({ error: priceCheck }); return; }
 
   const newId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -282,7 +385,7 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
     description: description?.trim() || "",
     category,
     level: level || "beginner",
-    price: Number(price) || 0,
+    price: priceCheck,
     isPublic: true,
     enrollmentCount: 0,
     createdAt: now,
@@ -341,8 +444,8 @@ qlearnRouter.post("/me/courses/:id/lessons", async (req: Request, res: Response)
     title: title.trim(),
     content: content || "",
     videoUrl: videoUrl || "",
-    duration: Number(duration) || 0,
-    order: Number(order) || 0,
+    duration: lessonNumber(duration, MAX_LESSON_DURATION_MIN),
+    order: lessonNumber(order, MAX_LESSON_ORDER),
     createdAt: now,
   };
 

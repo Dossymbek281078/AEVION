@@ -92,7 +92,11 @@ export default function ComparePage() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 12.5, color: "#64748b" }}>
             <span>Разобрано модулей: <b style={{ color: "#0f172a" }}>{COMPARISONS.length}</b></span>
             <span>Утверждений на собственных замерах: <b style={{ color: "#0f172a" }}>{measuredCount}</b></span>
-            <span>Ждут разбора: <b style={{ color: "#0f172a" }}>{UNANALYSED.length}</b></span>
+            {UNANALYSED.length > 0 ? (
+              <span>Ждут разбора: <b style={{ color: "#0f172a" }}>{UNANALYSED.length}</b></span>
+            ) : (
+              <span>Модулей с аналогами без разбора: <b style={{ color: "#0f172a" }}>не осталось</b></span>
+            )}
           </div>
         </header>
 

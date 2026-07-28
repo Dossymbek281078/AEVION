@@ -1147,6 +1147,161 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/quantum-shield.ts", "память project_aevion_protection"],
   },
+
+  {
+    moduleId: "qevents",
+    module: "QEvents — события и записи",
+    page: "/qevents",
+    category: "площадки для событий и регистрации участников",
+    rivals: [
+      { name: "Eventbrite", url: "https://eventbrite.com", strength: "продажа билетов, возвраты, налоги и своя аудитория, которая ищет события" },
+      { name: "Luma", url: "https://lu.ma", strength: "самая быстрая страница события, приглашения и напоминания, платный вход из коробки" },
+      { name: "Timepad", url: "https://timepad.ru", strength: "локальный билетный оператор с кассой и отчётностью" },
+    ],
+    weWin: [
+      {
+        text: "Вместимость и лист ожидания встроены: место освободилось — очередь есть, отдельного сервиса не нужно",
+        basis: "design",
+        evidence: "capacity у события и маршруты /events/:id/waitlist",
+      },
+      {
+        text: "Регистрация, список пришедших и календарь — одна ручка API, без сборки из трёх сервисов",
+        basis: "design",
+        evidence: "/rsvp, /attendees, /me/rsvps, /calendar",
+      },
+    ],
+    weLose: [
+      {
+        text: "Оплаты нет вообще: у события есть поле цены, но пути оплаты в модуле не существует — платное мероприятие через нас не провести",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: в qevents.ts нет ни одного упоминания checkout/платежа",
+      },
+      {
+        text: "Нет аудитории: на Eventbrite люди приходят искать события, к нам — нет",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет рассылок, напоминаний и страницы события уровня Luma",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше для бесплатных событий внутри своего круга, где важны вместимость и очередь. Продавать билеты — только у билетных операторов.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qevents.ts"],
+  },
+
+  {
+    moduleId: "qsocial",
+    module: "QSocial — лента и публикации",
+    page: "/qsocial",
+    category: "социальные ленты и микроблоги",
+    rivals: [
+      { name: "X (Twitter)", url: "https://x.com", strength: "аудитория планетарного масштаба — там, где все остальные" },
+      { name: "Threads", url: "https://threads.net", strength: "мгновенный старт на базе Instagram и мобильные приложения" },
+      { name: "Mastodon", url: "https://joinmastodon.org", strength: "федерация: своя площадка без потери связи с остальной сетью" },
+    ],
+    weWin: [
+      {
+        text: "Лента строго хронологическая — никакого алгоритма, который решает, что вам показать",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: выборка ленты — ORDER BY createdAt DESC, других правил ранжирования в модуле нет",
+      },
+      {
+        text: "Живёт внутри платформы: пост рядом с продуктом, о котором он написан, а не в отдельном мире",
+        basis: "design",
+        evidence: "общий контур с остальными модулями AEVION",
+      },
+    ],
+    weLose: [
+      {
+        text: "Сети нет: социальная сеть без людей не работает, и это главный недостаток, который кодом не лечится",
+        basis: "design",
+        evidence: "по природе продукта",
+      },
+      {
+        text: "Модерации в модуле нет — ни фильтров, ни жалоб, ни блокировок",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: в qsocial.ts нет маршрутов модерации и фильтрации",
+      },
+      {
+        text: "Нет мобильных приложений и уведомлений",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет федерации: уйти к другому серверу, сохранив подписчиков, как в Mastodon, нельзя",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше как честная хронологическая лента внутри платформы. Как замена X или Threads — нет, и притворяться тут нечем.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qsocial.ts"],
+  },
+
+  {
+    moduleId: "qbuild",
+    module: "QBuild — найм и смены на стройке",
+    page: "/build",
+    category: "подбор рабочих и управление сменами в строительстве",
+    rivals: [
+      { name: "hh.kz / HeadHunter", url: "https://hh.kz", strength: "здесь лежат резюме — главный актив, которого у нас нет" },
+      { name: "Instawork / Workrise", url: "https://instawork.com", strength: "смены и подмена рабочего в тот же день, отлаженная логистика найма" },
+      { name: "Procore", url: "https://procore.com", strength: "управление стройкой целиком: чертежи, качество, бюджет" },
+    ],
+    weWin: [
+      {
+        text: "Цепочка найма замкнута на смену: отклик → собеседование → тестовое задание → выход на смену с отметкой прихода и ухода",
+        basis: "design",
+        evidence: "applications, interviews, trial-tasks, shifts с checkin/checkout — 35 разделов модуля в одном контуре",
+      },
+      {
+        text: "Инструктаж по технике безопасности привязан к конкретной смене, а не лежит бумагой в папке",
+        basis: "design",
+        evidence: "safety-briefing: шаблон и запись, привязанная к /shift/:id",
+      },
+      {
+        text: "Есть проверка человека и статистика по зарплатам — работодатель видит, кого берёт и по какой цене рынок",
+        basis: "design",
+        evidence: "verification с очередью модерации и salary-stats",
+      },
+      {
+        text: "ИИ работает по всей цепочке: разбор резюме, шорт-лист, подготовка к собеседованию, перевод вакансии",
+        basis: "design",
+        evidence: "build/ai: consult, parse-resume, shortlist, interview-prep, translate-vacancy",
+      },
+    ],
+    weLose: [
+      {
+        text: "Резюме и рабочих у нас нет — hh.kz побеждает одним фактом наличия базы, и никакая функция это не компенсирует",
+        basis: "design",
+        evidence: "площадка без обеих сторон рынка не работает",
+      },
+      {
+        text: "Проверка человека ручная: заявка попадает в очередь администратору, автоматических сверок нет",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: verification — request и админские approve/reject, внешних проверок нет",
+      },
+      {
+        text: "Это не управление стройкой: чертежей, качества и бюджета объекта, как в Procore, здесь нет",
+        basis: "design",
+        evidence: "модуль про людей и смены, не про объект",
+      },
+      {
+        text: "Нет логистики подмены в тот же день, на которой стоят Instawork и Workrise",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда подрядчику нужен весь путь от вакансии до отметки на смене с инструктажем в одном месте. Искать людей всё равно придётся там, где они есть.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/build/*.ts"],
+  },
 ];
 
 /**
@@ -1156,7 +1311,4 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "QEvents — события и записи", likelyRivals: "Eventbrite, Timepad, Luma" },
-  { module: "QSocial — публикации", likelyRivals: "Buffer, Hootsuite, Later" },
-  { module: "QBuild — стройка и подряд", likelyRivals: "Procore, PlanRadar, локальные тендерные площадки" },
 ];

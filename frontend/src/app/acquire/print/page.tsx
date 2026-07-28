@@ -66,7 +66,6 @@ export default function AcquirePrintPage() {
         <h3>Что покупатель проверит сам</h3>
         <ul>
           <li><strong>aevion.app/launch-status</strong> — daily smoke 24/24</li>
-          <li><strong>aevion.app/transparency</strong> — health-board всех модулей</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 9 интеграций в проде, единый AEV-биллинг</li>
           <li><strong>/api/aevion/registry · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
@@ -111,7 +110,7 @@ export default function AcquirePrintPage() {
           </div>
           <div className="pillar" style={{ gridColumn: "span 2" }}>
             <div className="title">5. Governance / Trust</div>
-            <div className="body">Constitution v1 (опубликован через QSign envelope, commit 1cacd5a1, три языка RU/EN/KK) · /planet attestation registry · /transparency health-board · open coordination protocol.</div>
+            <div className="body">Constitution v1 (опубликован через QSign envelope, commit 1cacd5a1, три языка RU/EN/KK) · /planet attestation registry · open coordination protocol.</div>
           </div>
         </div>
 
@@ -126,7 +125,7 @@ export default function AcquirePrintPage() {
             <tr><td>Защита и право</td><td>QSign v2, QShield, QRight, QContract, QChainGov, QMaskCard, VeilNetX, Z-Tide</td><td>7/8 в проде, QSign GA</td></tr>
             <tr><td>Dev / DevHub</td><td>DevHub (9 integrations), QCoreAI (5+ providers, 230 routes), QBuild (60+ endpoints), Bureau v2</td><td>23 vitest · 364 vitest · 30/30 ATS tests</td></tr>
             <tr><td>Consumer</td><td>CyberChess, HealthAI, Multichat, KidsAI, Smeta Trainer, MapReality, LifeBox, StartupX, PsyApp, QFusionAI, VeilNetX consumer, Q-Good, ShadowNet, QLife, QPersona, DeepSan, Voe</td><td>7+ retention-products live</td></tr>
-            <tr><td>Governance</td><td>Constitution v1, /planet, /transparency, /launch-status, AEVION_COORDINATION, /awards, /press, /changelog</td><td>Constitution attested via QSign envelope</td></tr>
+            <tr><td>Governance</td><td>Constitution v1, /planet, /launch-status, AEVION_COORDINATION, /awards, /press, /changelog</td><td>Constitution attested via QSign envelope</td></tr>
           </tbody>
         </table>
         <p style={{ fontSize: "9.5pt", color: "#555" }}>

@@ -15293,6 +15293,12 @@ ${question.trim()}`;
         }},
 
         // ── SETTINGS ──
+        /* Настроек в палитре не было вовсе — при 48 командах и целой группе
+           «Settings». Заметил, когда искал через палитру обходной путь к окну
+           настроек: единственная клавиатурная дорога в приложении не вела к
+           единственному месту, где живут резервная копия прогресса и сброс данных. */
+        {id:"settings",     icon:"⚙",  group:"Settings", label:"Настройки",            hint:"Тема, звук, пауза ИИ, резервная копия прогресса", run:()=>sShowSettings(true)},
+        {id:"backup",       icon:"💾", group:"Settings", label:"Резервная копия прогресса", hint:"Сохранить всё одним файлом или восстановить", run:()=>sShowSettings(true)},
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
         {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
         {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},

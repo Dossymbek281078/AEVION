@@ -138,7 +138,15 @@ describe("заявления о масштабе экосистемы свере
 
     for (const file of walk(SRC_ROOT)) {
       const rel = path.relative(SRC_ROOT, file).replace(/\\/g, "/");
-      const lines = readFileSync(file, "utf8").split("\n");
+      const raw = readFileSync(file, "utf8");
+      // Дешёвый отсев ДО построчного разбора: совпадение возможно только там,
+      // где есть и цифра, и слово масштаба или готовности. Дерево — 27 МБ и
+      // 1827 файлов, и построчные регулярки по всему объёму дважды за день
+      // выводили сторож за таймаут. Семантика не меняется: без этих подстрок
+      // NUM_THEN_WORD и NUM_THEN_READY совпасть не могут по определению.
+      if (!/\d/.test(raw)) continue;
+      if (!/modul|node|модул|узл|feature-complete|доделан|готов/i.test(raw)) continue;
+      const lines = raw.split("\n");
 
       lines.forEach((line, idx) => {
         // Гигантские сгенерированные строки переводов сканируем, но без

@@ -19,6 +19,22 @@ import {
  * told so rather than left to assume it was.
  */
 
+/**
+ * Russian plural agreement for the derived counts.
+ *
+ * Needed the moment the numbers stopped being fixed: with one module left
+ * unresearched the header read "ЕЩЁ 1 МОДУЛЕЙ", and a page arguing that we are
+ * careful with numbers cannot get the grammar around them wrong.
+ */
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = n % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 const VERDICT: Record<ComparisonRow["verdict"], { label: string; fg: string; bg: string }> = {
   ours: { label: "Сильнее у нас", fg: "#6ee7b7", bg: "rgba(16,185,129,0.12)" },
   theirs: { label: "Сильнее у них", fg: "#fca5a5", bg: "rgba(239,68,68,0.12)" },
@@ -88,8 +104,12 @@ export function CompetitiveTable() {
         месте — таблица, выигрывающая везде, не стоит ничего.
       </p>
       <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 20px" }}>
-        {LANDSCAPE_STATS.rows} строк сравнения · из них {LANDSCAPE_STATS.rowsWhereTheyWin} в пользу конкурента ·{" "}
-        {LANDSCAPE_STATS.sourcedClaims} утверждений со ссылкой · {LANDSCAPE_STATS.unverifiedClaims} помечены как непроверенные
+        {LANDSCAPE_STATS.researched} {plural(LANDSCAPE_STATS.researched, "модуль", "модуля", "модулей")} ·{" "}
+        {LANDSCAPE_STATS.rows} {plural(LANDSCAPE_STATS.rows, "строка", "строки", "строк")} сравнения · из них{" "}
+        {LANDSCAPE_STATS.rowsWhereTheyWin} в пользу конкурента · {LANDSCAPE_STATS.sourcedClaims}{" "}
+        {plural(LANDSCAPE_STATS.sourcedClaims, "утверждение", "утверждения", "утверждений")} со ссылкой ·{" "}
+        {LANDSCAPE_STATS.unverifiedClaims}{" "}
+        {plural(LANDSCAPE_STATS.unverifiedClaims, "помечено", "помечены", "помечены")} как непроверенные
       </p>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
@@ -194,7 +214,7 @@ export function CompetitiveTable() {
 
       <div style={{ marginTop: 22, borderTop: "1px solid rgba(148,163,184,0.15)", paddingTop: 18 }}>
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", color: "#94a3b8", marginBottom: 10 }}>
-          ЕЩЁ {PENDING.length} МОДУЛЕЙ С АНАЛОГАМИ — СРАВНЕНИЕ НЕ ПРОВЕДЕНО
+          ЕЩЁ {PENDING.length} {plural(PENDING.length, "МОДУЛЬ", "МОДУЛЯ", "МОДУЛЕЙ")} С АНАЛОГАМИ — СРАВНЕНИЕ НЕ ПРОВЕДЕНО
         </div>
         <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, margin: "0 0 12px" }}>
           Перечислены, а не сравнены. Пустая строка честнее выдуманной.

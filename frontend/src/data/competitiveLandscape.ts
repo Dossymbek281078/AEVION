@@ -717,7 +717,178 @@ const QSIGN: Landscape = {
   ],
 };
 
-export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL, QSKYWAY, QSIGN];
+// ── StartupX ───────────────────────────────────────────────────────────────
+
+/**
+ * SeedInvest was in the PENDING list and is not in this table: StartEngine
+ * acquired it in May 2023 and it no longer runs as a standalone platform.
+ * A competitor column for a platform that stopped existing three years ago is
+ * the kind of error that ends a reading.
+ */
+const STARTUPX: Landscape = {
+  moduleId: "startup-exchange",
+  module: "StartupX",
+  category: "Биржа стартапов",
+  framing:
+    "AngelList и Republic поднимают деньги по закону: первый — зарегистрированный в FINRA брокер-дилер, вторая — портал Regulation Crowdfunding под правилами SEC. Мы не то и не другое. StartupX не принимает и не переводит ни одной копейки: это лента идей с защитой хешем и сигналом интереса от инвестора. Дальше стороны идут в юридическое поле сами. Строку про привлечение денег мы проигрываем начисто, и это не недоработка, а другой продукт.",
+  competitors: [
+    { id: "angellist", name: "AngelList", url: "https://www.angellist.com/" },
+    { id: "republic", name: "Republic", url: "https://republic.com/" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Можно ли реально привлечь деньги",
+      why: "Единственный вопрос, ради которого основатель приходит на такую площадку.",
+      ours: { value: "Нет. Денежных операций в модуле не существует." },
+      theirs: {
+        angellist: {
+          value: "Брокер-дилер с регистрацией в FINRA: вправе привлекать инвестиции и брать комиссию со сделки",
+          source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026",
+        },
+        republic: {
+          value: "Funding portal под Regulation Crowdfunding, потолок $5 млн в год на компанию",
+          source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026",
+        },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Порог входа для инвестора",
+      why: "Определяет, кто вообще может нажать кнопку.",
+      ours: { value: "Порога нет — денег на площадке нет." },
+      theirs: {
+        angellist: {
+          value: "От $1 000 через синдикаты",
+          source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026",
+        },
+        republic: {
+          value: "Часто от $100, розничным инвесторам",
+          source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026",
+        },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Что защищает идею до показа",
+      why: "Основатель боится показать идею раньше, чем сможет доказать, что она его.",
+      ours: {
+        value: "Хеш SHA-256 на подачу в момент публикации, приватность по умолчанию — идея видна только после согласия автора.",
+        measured: "/api/startupx, механика QRight",
+      },
+      theirs: {
+        angellist: { value: "Защита идеи как отдельная функция не заявлена", unverified: true },
+        republic: { value: "Защита идеи как отдельная функция не заявлена", unverified: true },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Стоимость для основателя",
+      why: "Комиссия площадки съедает часть раунда ещё до того, как деньги дойдут.",
+      ours: { value: "Внутри платформы AEVION; комиссии со сделки нет, потому что нет сделки." },
+      theirs: {
+        angellist: {
+          value: "Издержки соответствия $500 тыс. — $2 млн в год перекладываются в комиссию 5–8% плюс 2–5% carry на выходе",
+          source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026",
+        },
+        republic: { value: "Нагрузка соответствия ниже, чем у брокер-дилера", source: "https://angelinvestorsnetwork.com/regulatory-compliance/best-sec-compliant-angel-investor-platforms-us-2026" },
+      },
+      verdict: "different-jobs",
+    },
+  ],
+};
+
+// ── QCoreAI ────────────────────────────────────────────────────────────────
+
+const QCOREAI: Landscape = {
+  moduleId: "qcoreai",
+  module: "QCoreAI",
+  category: "Мультиагентный совет",
+  framing:
+    "LangGraph, CrewAI и AutoGen — библиотеки, из которых разработчик собирает своих агентов. QCoreAI — не библиотека и не претендует ею быть: это готовая ручка внутри AEVION с фиксированным составом ролей, к которой обращаются остальные модули платформы, ничего не настраивая. По возможностям, зрелости и экосистеме мы проигрываем всем троим и не собираемся утверждать обратное.",
+  competitors: [
+    { id: "langgraph", name: "LangGraph", url: "https://www.langchain.com/langgraph" },
+    { id: "crewai", name: "CrewAI", url: "https://www.crewai.com/" },
+    { id: "autogen", name: "AutoGen", url: "https://microsoft.github.io/autogen/" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Зрелость и распространённость",
+      why: "У фреймворка с миллионами загрузок отлажены те грани, о которых свой код узнаёт в проде.",
+      ours: { value: "Внутренний модуль одной платформы. Публичных цифр установки нет." },
+      theirs: {
+        langgraph: {
+          value: "34,5 млн загрузок в месяц; агенты в проде у Klarna, Uber, LinkedIn",
+          source: "https://dev.to/cristian_iridon_286794874/langgraph-vs-crewai-vs-autogen-in-2026-pick-the-right-ai-agent-framework-or-skip-frameworks-4m2c",
+        },
+        crewai: {
+          value: "44 тыс. звёзд на GitHub; заявлено проникновение в 60% Fortune 500",
+          source: "https://dev.to/cristian_iridon_286794874/langgraph-vs-crewai-vs-autogen-in-2026-pick-the-right-ai-agent-framework-or-skip-frameworks-4m2c",
+        },
+        autogen: {
+          value: "55 тыс. звёзд, но переведён в режим поддержки — Microsoft перенесла разработку в Microsoft Agent Framework",
+          source: "https://dev.to/cristian_iridon_286794874/langgraph-vs-crewai-vs-autogen-in-2026-pick-the-right-ai-agent-framework-or-skip-frameworks-4m2c",
+        },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Гибкость сценария",
+      why: "Чем сложнее задача, тем важнее управлять графом состояний, а не только списком ролей.",
+      ours: { value: "Фиксированный совет из четырёх ролей: учёный, дата-аналитик, экономист, юрист. Произвольный граф не собирается." },
+      theirs: {
+        langgraph: {
+          value: "Граф состояний с точками отката и журналом — под отказоустойчивый прод",
+          source: "https://dev.to/cristian_iridon_286794874/langgraph-vs-crewai-vs-autogen-in-2026-pick-the-right-ai-agent-framework-or-skip-frameworks-4m2c",
+        },
+        crewai: {
+          value: "Роли с целями — быстро прототипировать команду",
+          source: "https://dev.to/cristian_iridon_286794874/langgraph-vs-crewai-vs-autogen-in-2026-pick-the-right-ai-agent-framework-or-skip-frameworks-4m2c",
+        },
+        autogen: { value: "Диалог агентов между собой", unverified: true },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Что нужно сделать, чтобы получить ответ",
+      why: "Библиотеку надо развернуть, настроить и обслуживать. Это работа, которой у части задач нет бюджета.",
+      ours: {
+        value: "Один HTTP-вызов /api/qcoreai/chat изнутри платформы. Остальные модули AEVION — QVenture, DeepSan, QPersona, Kids AI — уже ходят в него.",
+        measured: "src/routes/qcoreai.ts; вызовы из описаний модулей в src/data/projects.ts",
+      },
+      theirs: {
+        langgraph: { value: "Библиотека: разворачивается и обслуживается своими силами", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+        crewai: { value: "Библиотека: разворачивается и обслуживается своими силами", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+        autogen: { value: "Библиотека: разворачивается и обслуживается своими силами", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Открытый код",
+      why: "Открытый код можно проверить, форкнуть и унести с собой. Закрытый — нет.",
+      ours: { value: "Закрытый, внутри платформы." },
+      theirs: {
+        langgraph: { value: "Открытый исходный код", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+        crewai: { value: "Открытый исходный код", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+        autogen: { value: "Открытый исходный код", source: "https://www.firecrawl.dev/blog/best-open-source-agent-frameworks" },
+      },
+      verdict: "theirs",
+    },
+  ],
+};
+
+export const LANDSCAPES: Landscape[] = [
+  QVENTURE,
+  DEVHUB,
+  CYBERCHESS,
+  SMETA,
+  QREAL,
+  QSKYWAY,
+  QSIGN,
+  STARTUPX,
+  QCOREAI,
+];
 
 /**
  * Modules with obvious analogues that have NOT been researched yet.
@@ -726,9 +897,11 @@ export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QRE
  * and this list is what stops the table quietly implying the rest were checked.
  */
 export const PENDING: Array<{ module: string; category: string; analogues: string[] }> = [
-  { module: "StartupX", category: "Биржа стартапов", analogues: ["AngelList", "Republic", "SeedInvest"] },
-  { module: "QTrade", category: "Торговый симулятор", analogues: ["TradingView Paper", "Thinkorswim paperMoney"] },
-  { module: "QCoreAI", category: "Мультиагентный совет", analogues: ["CrewAI", "AutoGen", "LangGraph"] },
+  // Left uncompared on purpose: the registry calls this "Offline Trade & Payments"
+  // (accounts, transfers, top-up, CSV) while other notes describe fills and bracket
+  // orders. Those are two different products, and a comparison written before
+  // knowing which one ships would be invention rather than research.
+  { module: "QTrade", category: "Платежи или торговый движок — требует уточнения", analogues: ["TradingView Paper", "Thinkorswim paperMoney"] },
 ];
 
 /** Counts for the section header — derived, never typed in. */

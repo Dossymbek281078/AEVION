@@ -83,6 +83,20 @@ describe("the competitive table cannot make an unsourced claim", () => {
     expect(dates).toBe(landscapes);
   });
 
+  test("the visible text is Russian and Latin only", () => {
+    // Caught for real: "У框架 с миллионами загрузок" reached the file, two CJK
+    // characters mid-sentence in a why-line nobody would reread. Same class as
+    // the 0x08 bytes that got into the parser source earlier — a character the
+    // author cannot see, in text no compiler validates, on a page shown to
+    // investors. tsc is perfectly happy with it.
+    const stray = [...src].filter((ch) => {
+      const c = ch.codePointAt(0)!;
+      if (c < 0x2580) return false; // ASCII, Cyrillic, punctuation, arrows, box-drawing section rules
+      return c < 0x1f300 || c > 0x1faff; // emoji are deliberate (🔴 marks an unmeasured claim)
+    });
+    expect([...new Set(stray)].join(" "), "characters from an unexpected script").toEqual("");
+  });
+
   test("counts shown to the reader are derived, not typed in", () => {
     // The alternative is a headline number that drifts from the table under it,
     // which is how this document's own assertion count went stale for hours.

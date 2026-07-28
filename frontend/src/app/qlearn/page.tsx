@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
+import { LEVEL_COLORS, CATEGORY_ICONS } from "./courseLook";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
@@ -38,20 +42,7 @@ const LEVELS = [
   { id: "advanced", name: "Advanced" },
 ];
 
-const LEVEL_COLORS: Record<string, { bg: string; fg: string }> = {
-  beginner: { bg: "#dcfce7", fg: "#15803d" },
-  intermediate: { bg: "#fef3c7", fg: "#92400e" },
-  advanced: { bg: "#fee2e2", fg: "#991b1b" },
-};
 
-const CATEGORY_ICONS: Record<string, string> = {
-  tech: "💻",
-  business: "📊",
-  design: "🎨",
-  music: "🎵",
-  language: "🌍",
-  other: "📚",
-};
 
 function LevelBadge({ level }: { level: string }) {
   const colors = LEVEL_COLORS[level] ?? { bg: "#f1f5f9", fg: "#475569" };
@@ -123,9 +114,13 @@ function CourseCard({
         <span style={{ fontSize: 28 }}>{icon}</span>
         <LevelBadge level={course.level} />
       </div>
-      <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.3 }}>
+      {/* Заголовок ведёт на страницу курса: программа занятий и запись */}
+      <Link
+        href={`/qlearn/${course.id}`}
+        style={{ display: "block", fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.3, textDecoration: "none" }}
+      >
         {course.title}
-      </div>
+      </Link>
       {course.description && (
         <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5, flex: 1 }}>
           {course.description.slice(0, 110)}{course.description.length > 110 ? "..." : ""}
@@ -313,12 +308,15 @@ interface CreateCourseForm {
   price: string;
 }
 
+// Ключ входа один на платформу — `@/lib/auth`. Здесь читался устаревший
+// `aevion_auth_token`: вход кладёт токен под `aevion_auth_token_v1`, поэтому
+// запись на курс не срабатывала даже у вошедшего.
 function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("aevion_auth_token");
+  return getAuthToken();
 }
 
 export default function QLearnPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -417,14 +415,14 @@ export default function QLearnPage() {
   };
 
   const handleResume = (courseId: string) => {
-    // Anchor / scroll to course in main grid; no dedicated detail page yet.
-    const el = document.getElementById(`course-${courseId}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    else setNotice("Course not in current view — clear filters to find it.");
+    // Раньше здесь прокручивало список к карточке — страницы курса не
+    // существовало, и «продолжить» из закладок промахивалось мимо, если курс
+    // отфильтрован. Теперь ведём на сам курс: там программа и запись.
+    router.push(`/qlearn/${courseId}`);
   };
 
   const handleEnroll = async (courseId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getToken();
     if (!token) {
       setNotice("Sign in to enroll in courses.");
       return;
@@ -450,7 +448,7 @@ export default function QLearnPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getToken();
     if (!token) { setFormError("Sign in to create a course"); return; }
     if (!form.title.trim()) { setFormError("Title is required"); return; }
     setCreating(true);

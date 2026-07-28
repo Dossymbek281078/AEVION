@@ -178,17 +178,46 @@ qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qsocial/posts/:id ──────────────────────────────────────────────
+/** Поля поста, которые допустимо отдавать наружу. */
+const PUBLIC_POST_FIELDS = [
+  "id", "userId", "content", "mediaUrl", "type", "likesCount", "commentsCount",
+  "isPublic", "tags", "createdAt",
+] as const;
+
+function publicPost(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_POST_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qsocialRouter.get("/posts/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  // Пост читает кто угодно, поэтому автора определяем мягко: он и только он
+  // вправе открыть собственный НЕпубличный пост.
+  const auth = verifyBearerOptional(req);
   try {
     if (isQSocialDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QSocialPost" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ post: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      // Лента отдаёт только `isPublic = TRUE`, а выдача по идентификатору не
+      // проверяла флаг вовсе — ни здесь, ни на пути через память. То есть автор
+      // прятал пост из ленты, а по прямой ссылке его читал любой. Отвечаем 404,
+      // а не 403: 403 подтвердил бы, что пост существует.
+      if (!row || (row.isPublic !== true && auth?.sub !== row.userId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ post: publicPost(row) });
     }
     const post = memPosts.get(id);
-    if (!post) return res.status(404).json({ error: "not_found" });
-    return res.json({ post });
+    if (!post || (post.isPublic !== true && auth?.sub !== post.userId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    return res.json({ post: publicPost(post as unknown as Record<string, unknown>) });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });

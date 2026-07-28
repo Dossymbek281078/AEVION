@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  webhookUrlError,
+  beginIdempotency,
   gateRequest,
   genId,
   genSecret,
@@ -45,9 +46,26 @@ export async function POST(req: NextRequest) {
   const body = await readJson<{ url?: unknown; events?: unknown }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  if (typeof body.url !== "string" || !/^https?:\/\//i.test(body.url)) {
-    return withCors(badRequest("url must be an absolute http(s) URL."));
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй объект.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
   }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
+
+  const urlError = webhookUrlError(body.url);
+  if (urlError) return withCors(badRequest(urlError));
   if (!Array.isArray(body.events) || body.events.length === 0) {
     return withCors(badRequest("events must be a non-empty array of event names."));
   }
@@ -63,27 +81,15 @@ export async function POST(req: NextRequest) {
   const id = genId("we");
   const wh: ApiWebhook = {
     id,
-    url: body.url,
+    url: body.url as string,
     events,
     secret: genSecret(),
     enabled: true,
     created: Math.floor(Date.now() / 1000),
   };
   const responseBody = JSON.stringify(wh);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.webhooks.set(id, wh);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "webhook.registered", id, {
     url: wh.url,
     events: wh.events,

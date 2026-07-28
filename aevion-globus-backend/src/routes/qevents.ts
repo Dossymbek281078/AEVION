@@ -55,6 +55,13 @@ const memWaitlist = new Map<string, string[]>(); // eventId -> userId[]
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_EVENT_TITLE_LEN = 200;
+const MAX_EVENT_DESCRIPTION_LEN = 5000;
+const MAX_EVENT_URL_LEN = 2000;
+const MAX_EVENT_CAPACITY = 1_000_000;
+const MAX_EVENT_PRICE = 1_000_000;
+
 const EVENT_CATEGORIES = ["tech", "business", "art", "music", "sports", "education", "networking", "other"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -129,10 +136,14 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
       const where = conditions.join(" AND ");
       const orderBy = whenFilter === "past" ? `ORDER BY "startAt" DESC` : `ORDER BY "startAt" ASC`;
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`,
+        // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+        // идентификатору. Иначе афиша поедет вслед за схемой.
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`,
         [...args, limitN],
       );
-      return res.json({ events: rows, when: whenFilter });
+      return res.json({ events: rows.map(publicEvent), when: whenFilter });
     }
 
     let events = Array.from(memEvents.values()).filter((e) => e.isPublic);
@@ -162,16 +173,51 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qevents/events/:id ─────────────────────────────────────────────
+/**
+ * Поля события, которые допустимо отдавать наружу.
+ *
+ * Перечислить колонки в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список полей стоит и
+ * здесь, при сборке ответа. Поймал это на соседнем модуле: тест с мок-базой,
+ * вернувшей лишнее поле, показал, что оно уходит наружу.
+ */
+const PUBLIC_EVENT_FIELDS = [
+  "id", "organizerId", "title", "description", "category", "location", "startAt",
+  "endAt", "capacity", "price", "attendeeCount", "isPublic", "coverUrl", "createdAt", "updatedAt",
+] as const;
+
+function publicEvent(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_EVENT_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qeventsRouter.get("/events/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
+    // Список событий отдаёт только `"isPublic"=TRUE`, а выдача по идентификатору
+    // не смотрела на флаг вовсе — ни через базу, ни через память. Организатор
+    // прятал событие из афиши, а по прямой ссылке его открывал кто угодно.
+    // Своё непубличное событие видит только организатор; остальным 404, а не
+    // 403: 403 подтвердил бы, что событие существует.
+    const auth = verifyBearerOptional(req);
     if (isQEventsDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ event: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      if (!row || (row.isPublic !== true && auth?.sub !== row.organizerId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ event: publicEvent(row) });
     }
     const event = memEvents.get(id);
-    if (!event) return res.status(404).json({ error: "not_found" });
+    if (!event || (event.isPublic !== true && auth?.sub !== event.organizerId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
     return res.json({ event });
   } catch (err) {
     capture(err);
@@ -206,6 +252,52 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
   }
 
+  if (title.trim().length > MAX_EVENT_TITLE_LEN) {
+    return res.status(400).json({ error: "title too long" });
+  }
+  if (typeof description === "string" && description.length > MAX_EVENT_DESCRIPTION_LEN) {
+    return res.status(400).json({ error: "description too long" });
+  }
+
+  // Конец события не сверялся с началом: «закончилось раньше, чем началось»
+  // спокойно сохранялось и потом показывалось в афише как есть.
+  let normalizedEndAt: string | null = null;
+  if (endAt !== undefined && endAt !== null && String(endAt).trim() !== "") {
+    const endTs = Date.parse(String(endAt));
+    if (!Number.isFinite(endTs)) {
+      return res.status(400).json({ error: "endAt must be a valid ISO-8601 date" });
+    }
+    if (endTs <= Date.parse(normalizedStartAt)) {
+      return res.status(400).json({ error: "endAt must be after startAt" });
+    }
+    normalizedEndAt = new Date(endTs).toISOString();
+  }
+
+  // `capacity > 0` и `price >= 0` пропускают Infinity: `1e400` в JSON именно им
+  // и становится, а колонка вместимости целочисленная — вставка падала бы
+  // пятисоткой. Дробные места и цена мельче копейки смысла тоже не имеют.
+  if (capacity !== undefined && capacity !== null) {
+    if (
+      typeof capacity !== "number" || !Number.isInteger(capacity) ||
+      capacity < 1 || capacity > MAX_EVENT_CAPACITY
+    ) {
+      return res.status(400).json({ error: `capacity must be a whole number 1..${MAX_EVENT_CAPACITY}` });
+    }
+  }
+  if (price !== undefined && price !== null) {
+    if (
+      typeof price !== "number" || !Number.isFinite(price) || price < 0 ||
+      price > MAX_EVENT_PRICE || Math.abs(Math.round(price * 100) - price * 100) > 1e-6
+    ) {
+      return res.status(400).json({ error: `price must be 0..${MAX_EVENT_PRICE} with at most 2 decimals` });
+    }
+  }
+  if (coverUrl !== undefined && coverUrl !== null && String(coverUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(coverUrl)) || String(coverUrl).length > MAX_EVENT_URL_LEN) {
+      return res.status(400).json({ error: "coverUrl must be an absolute http(s) URL" });
+    }
+  }
+
   const event: QEvent = {
     id: crypto.randomUUID(),
     organizerId: auth.sub,
@@ -214,7 +306,7 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     category: typeof category === "string" && EVENT_CATEGORIES.includes(category) ? category : "tech",
     location: typeof location === "string" ? location.trim() : "Online",
     startAt: normalizedStartAt,
-    endAt: typeof endAt === "string" ? endAt : null,
+    endAt: normalizedEndAt,
     capacity: typeof capacity === "number" && capacity > 0 ? capacity : 100,
     price: typeof price === "number" && price >= 0 ? price : 0,
     attendeeCount: 0,
@@ -467,7 +559,9 @@ qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
       const monthStart = `${ym}-01T00:00:00.000Z`;
       const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
         [monthStart, monthEnd],
       );
       for (const ev of rows as QEvent[]) {

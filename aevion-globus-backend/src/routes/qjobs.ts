@@ -59,6 +59,15 @@ const memSavedJobs = new Map<string, Set<string>>(); // userId -> Set<jobId>
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_JOB_TITLE_LEN = 200;
+const MAX_JOB_DESCRIPTION_LEN = 20_000;
+const MAX_JOB_COMPANY_LEN = 200;
+const MAX_JOB_LOCATION_LEN = 200;
+const MAX_JOB_SALARY_LEN = 100;
+const MAX_JOB_SKILLS = 30;
+const MAX_JOB_SKILL_LEN = 60;
+
 const JOB_TYPES = ["full-time", "part-time", "contract", "freelance", "internship"];
 const APP_STATUSES = ["pending", "reviewing", "accepted", "rejected"];
 
@@ -207,6 +216,37 @@ qjobsRouter.post("/me/jobs", postLimiter, async (req: Request, res: Response) =>
 
   if (!title || !description || !company) {
     return res.status(400).json({ error: "title, description, company required" });
+  }
+
+  // Длины не ограничивались вовсе: описание на мегабайт спокойно уходило в базу
+  // и потом ломало вёрстку карточки.
+  if (title.trim().length > MAX_JOB_TITLE_LEN) return res.status(400).json({ error: "title too long" });
+  if (description.trim().length > MAX_JOB_DESCRIPTION_LEN) {
+    return res.status(400).json({ error: "description too long" });
+  }
+  if (company.trim().length > MAX_JOB_COMPANY_LEN) return res.status(400).json({ error: "company too long" });
+  if (typeof location === "string" && location.trim().length > MAX_JOB_LOCATION_LEN) {
+    return res.status(400).json({ error: "location too long" });
+  }
+  if (typeof salary === "string" && salary.trim().length > MAX_JOB_SALARY_LEN) {
+    return res.status(400).json({ error: "salary too long" });
+  }
+
+  // Неизвестный тип занятости подменялся на "full-time" МОЛЧА: работодатель
+  // видел в форме одно, а в вакансии оказывалось другое. Лучше честный отказ.
+  if (type !== undefined && type !== null && !JOB_TYPES.includes(String(type))) {
+    return res.status(400).json({ error: "unknown type", allowed: JOB_TYPES });
+  }
+
+  // Навыки: массив коротких строк, а не что попало и не бесконечной длины.
+  if (skills !== undefined && skills !== null) {
+    if (!Array.isArray(skills)) return res.status(400).json({ error: "skills must be an array of strings" });
+    if (skills.length > MAX_JOB_SKILLS) {
+      return res.status(400).json({ error: `skills must not exceed ${MAX_JOB_SKILLS} items` });
+    }
+    if (skills.some((sk) => typeof sk === "string" && sk.length > MAX_JOB_SKILL_LEN)) {
+      return res.status(400).json({ error: `skill must not exceed ${MAX_JOB_SKILL_LEN} chars` });
+    }
   }
 
   const job: JobPosting = {

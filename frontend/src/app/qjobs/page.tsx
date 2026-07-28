@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { TYPE_COLORS } from "./jobTypes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,16 +54,9 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
-  "full-time": { bg: "#dcfce7", fg: "#15803d" },
-  "part-time": { bg: "#fef3c7", fg: "#92400e" },
-  contract: { bg: "#eff6ff", fg: "#2563eb" },
-  freelance: { bg: "#f5f3ff", fg: "#7c3aed" },
-  internship: { bg: "#fce7f3", fg: "#be185d" },
-};
 
 function TypeBadge({ type }: { type: string }) {
-  const colors = TYPE_COLORS[type] ?? { bg: "#f1f5f9", fg: "#475569" };
+  const colors = TYPE_COLORS[type] ?? TYPE_COLORS.other;
   return (
     <span
       style={{
@@ -131,9 +126,13 @@ function JobCard({
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
+          {/* Заголовок ведёт на страницу вакансии: полное описание и отклик */}
+          <Link
+            href={`/qjobs/${job.id}`}
+            style={{ display: "block", fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6, textDecoration: "none" }}
+          >
             {job.title}
-          </div>
+          </Link>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
             <span style={{ fontWeight: 600, color: "#334155", fontSize: 14 }}>{job.company}</span>
             <span style={{ color: "#94a3b8", fontSize: 13 }}>📍 {job.location}</span>

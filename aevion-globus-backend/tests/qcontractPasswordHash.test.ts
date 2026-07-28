@@ -45,10 +45,19 @@ function makeApp() {
 const AUTH = `Bearer ${signJwt({ sub: "u1", email: "u1@test.aev", role: "USER" })}`;
 const TOKEN = "tok_test_document";
 
-/** Документ, который вернёт SELECT в обработчике просмотра. */
-function docRow(passwordHash: string) {
+/**
+ * Документ, который вернёт SELECT в обработчике просмотра.
+ *
+ * Идентификатор задаётся снаружи, и это не украшение: перенос старого хеша на
+ * scrypt идёт ВДОГОНКУ ответу, поэтому его запрос к базе может прийти уже после
+ * того, как следующий тест сбросил счётчик вызовов. При общем id такой поздний
+ * вызов засчитывался бы следующему тесту — и тест «неверный пароль не
+ * переписывает» падал через раз. Поймано на общем прогоне: в одиночку файл был
+ * зелёным.
+ */
+function docRow(passwordHash: string, id = "doc-1") {
   return {
-    id: "doc-1",
+    id,
     title: "Договор",
     content: "Текст",
     content_type: "text",
@@ -141,26 +150,33 @@ describe("QContract: пароль документа", () => {
   });
 
   test("документ со СТАРЫМ хешем продолжает открываться", async () => {
-    wirePool(docRow(sha256("old-secret")));
+    wirePool(docRow(sha256("old-secret"), "doc-legacy-open"));
     expect((await open("old-secret")).status).toBe(200);
   });
 
   test("старый хеш молча переписывается на новый при верном вводе", async () => {
-    wirePool(docRow(sha256("old-secret")));
+    wirePool(docRow(sha256("old-secret"), "doc-legacy-upgrade"));
     await open("old-secret");
     await new Promise((r) => setTimeout(r, 150)); // перенос идёт вдогонку ответу
 
     const upgrade = mockQuery.mock.calls.find(
-      (c) => String(c[0]).includes("SET password_hash") && String(c[1]?.[0]).startsWith("scrypt$"),
+      (c) =>
+        String(c[0]).includes("SET password_hash") &&
+        String(c[1]?.[0]).startsWith("scrypt$") &&
+        c[1]?.[1] === "doc-legacy-upgrade",
     );
     expect(upgrade, "перенос на scrypt не выполнен").toBeTruthy();
   });
 
   test("неверный пароль к старому хешу не открывает и не переписывает", async () => {
-    wirePool(docRow(sha256("old-secret")));
+    wirePool(docRow(sha256("old-secret"), "doc-legacy-wrong"));
     expect((await open("nope")).status).toBe(403);
     await new Promise((r) => setTimeout(r, 100));
-    const upgrade = mockQuery.mock.calls.find((c) => String(c[0]).includes("SET password_hash"));
+    // Ищем перенос ИМЕННО этого документа: поздний вызов от соседнего теста
+    // сюда попасть может, и раньше он ронял проверку через раз.
+    const upgrade = mockQuery.mock.calls.find(
+      (c) => String(c[0]).includes("SET password_hash") && c[1]?.[1] === "doc-legacy-wrong",
+    );
     expect(upgrade).toBeFalsy();
   });
 

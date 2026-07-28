@@ -6,9 +6,11 @@ import { test, expect } from "@playwright/test";
  * hold 94 — about 1%. Someone picking German got German menus and Russian
  * everything else, and nothing on screen said so beforehand.
  *
- * The share shown is computed from the dictionary, so this spec also guards
- * against the label going stale: when a language is genuinely translated it
- * moves into the complete group on its own.
+ * Checked on prod the same day: switching to German does produce German — the
+ * gap is filled by machine translation at runtime. So the label says "машинный"
+ * rather than "not translated", and the exact share sits in the tooltip. The
+ * grouping is computed from the dictionary, so a language that gets translated
+ * for real moves into the complete group on its own.
  */
 test("the language switcher says which languages are only started", async ({ page }) => {
   test.setTimeout(180_000);
@@ -32,8 +34,9 @@ test("the language switcher says which languages are only started", async ({ pag
   for (const name of ["Deutsch", "Français", "Español"]) {
     const at = text.indexOf(name);
     expect(at, `${name} is offered`).toBeGreaterThan(-1);
-    expect(text.slice(at, at + 60), `${name} admits how little is translated`).toMatch(/переведено \d+%/);
+    expect(text.slice(at, at + 60), `${name} is marked as machine-translated`).toContain("машинный");
   }
 
   expect(text, "and the summary counts them honestly").toContain("3 из 11 переведены полностью");
+  expect(text, "while saying what the others actually are").toContain("машинный перевод");
 });

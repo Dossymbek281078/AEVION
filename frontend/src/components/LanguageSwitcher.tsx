@@ -117,12 +117,20 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
               >
                 <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{LANG_FLAG[l]}</span>
                 <span style={{ flex: 1 }}>{LANG_FULL[l]}</span>
-                {/* Choosing a language should not be a guess: a language that
-                    covers 1% of the interface says so before it is picked,
-                    instead of after, in the form of Russian text. */}
+                {/* Choosing a language should not be a guess. These eight have
+                    almost no dictionary of their own — measured 28.07.2026 at
+                    about 1% — and are filled in by machine translation as the
+                    page runs. That is worth knowing before the click, and it is
+                    a different promise from a language we translated ourselves.
+                    Checked on prod the same day: switching to German does
+                    produce German, so "not translated" would be the wrong
+                    label; "machine" is the true one. */}
                 {partialShare !== null && (
-                  <span style={{ fontSize: 11, color: "#8a8886", flexShrink: 0 }}>
-                    переведено {partialShare}%
+                  <span
+                    style={{ fontSize: 11, color: "#8a8886", flexShrink: 0 }}
+                    title={`Готового словаря — ${partialShare}%. Остальное переводится машинным переводом на лету; если он недоступен, текст останется на языке оригинала.`}
+                  >
+                    машинный
                   </span>
                 )}
                 {active && <span style={{ fontSize: 12, color: "#98b800" }}>✓</span>}
@@ -138,7 +146,7 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
             color: "#5d5b59",
             textAlign: "center",
           }}>
-            {usable.length} из {usable.length + partial.length} переведены полностью
+            {usable.length} из {usable.length + partial.length} переведены полностью · остальные — машинный перевод
           </div>
         </div>
       )}

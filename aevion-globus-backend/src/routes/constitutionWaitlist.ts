@@ -103,7 +103,23 @@ constitutionWaitlistRouter.post(
             [row.email, row.source, row.createdAt],
           );
           storage = "postgres";
-        } catch { /* fall through */ }
+        } catch (dbErr) {
+          // Раньше тут стоял молчаливый провал в память. Человек получал
+          // «вы записаны» и письмо-подтверждение, а запись жила в памяти
+          // одного инстанса — до ближайшего перезапуска. Никто об этом не
+          // узнавал: заявки просто испарялись. Запись в память оставляем
+          // (в пределах жизни процесса это лучше, чем потерять сразу), но
+          // теперь об этом кричим.
+          capture(dbErr, {
+            route: "constitution/waitlist/subscribe",
+            severity: "leads-at-risk",
+            note: "запись в Postgres не удалась — заявка лежит только в памяти инстанса и будет потеряна при перезапуске",
+          });
+          console.error(
+            "[Constitution] ЗАЯВКА НЕ СОХРАНЕНА В БАЗУ — только в памяти, будет потеряна при перезапуске.",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
       if (!memList.has(row.email)) memList.set(row.email, row);
 
@@ -192,7 +208,12 @@ function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: 
  *
  * Call from cron scheduler (already exists in qcoreai.ts) every Sunday.
  */
-export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number }> {
+/**
+ * `aborted` отличает «рассылать было некому» от «список не прочитался».
+ * Без этого флага вызывающий видит одинаковый ноль в обоих случаях, а это
+ * разные вещи: во втором подписчики есть, просто мы их не увидели.
+ */
+export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number; aborted?: boolean }> {
   try {
     // 1. Get top-5 artifacts by votes in last 7 days
     await ensureWaitlistTable();
@@ -227,7 +248,23 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         const pool = getPool();
         const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
         subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
-      } catch { /* fall through */ }
+      } catch (dbErr) {
+        // Раньше при сбое базы дайджест уходил по списку из ПАМЯТИ — в проде
+        // это почти пустой список, — и функция рапортовала об успехе. То есть
+        // недельная рассылка считалась отправленной, не дойдя ни до кого.
+        // Отправка по неполному списку хуже неотправки: письмо нельзя послать
+        // второй раз «уже правильно», а отчёт врёт.
+        capture(dbErr, {
+          route: "constitution/digest",
+          severity: "digest-aborted",
+          note: "список подписчиков не прочитан из Postgres — рассылка отменена, чтобы не уйти по неполному списку из памяти",
+        });
+        console.error(
+          "[Constitution] ДАЙДЖЕСТ ОТМЕНЁН: список подписчиков не прочитан из базы.",
+          dbErr instanceof Error ? dbErr.message : dbErr,
+        );
+        return { sent: 0, skipped: 0, aborted: true };
+      }
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };
 

@@ -18,6 +18,7 @@ import {
   thesis,
   useCases,
 } from "@/data/pitchModel";
+import { repoLabel, repoUrl } from "@/lib/repoUrl";
 
 // Print-only flat layout. Black-on-white, no hero gradients, no animations,
 // no sticky chrome. Auto-opens the print dialog on mount so this page IS the
@@ -227,7 +228,7 @@ export default function PitchPrintPage() {
         </p>
         <p style={{ margin: 0 }}>
           To follow up: <a href={ask.ctaPrimary.href}>{ask.ctaPrimary.label}</a>. Live product:{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION">github.com/Dossymbek281078/AEVION</a>.
+          <a href={repoUrl()}>{repoLabel()}</a>.
           AEVION · {totalNodes} nodes · {liveCount} live MVPs · one Trust Graph.
         </p>
       </footer>

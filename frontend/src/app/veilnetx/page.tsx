@@ -6,6 +6,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { PaywallError, apiFetchOrPaywall, type PaywallPayload } from "@/lib/paywall";
+import { repoUrl } from "@/lib/repoUrl";
 
 type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
@@ -649,7 +650,7 @@ export default function VeilNetXLanding() {
             Live status JSON →
           </Link>
           <Link
-            href="https://github.com/Dossymbek281078/AEVION"
+            href={repoUrl()}
             className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"
           >
             Watch on GitHub →

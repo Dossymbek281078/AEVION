@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { repoPath } from "@/lib/repoUrl";
 
 export const metadata: Metadata = {
   title: "AEVION Fintech — SDK Migration Guide",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 
 const C = { bg: "#050810", surface: "#0d1117", border: "#1e2a3a", text: "#e2e8f0", muted: "#64748b", code: "#0f1923", green: "#10b981", amber: "#f59e0b", red: "#ef4444", accent: "#6366f1" };
 
-const GITHUB_CHANGELOG = "https://github.com/Dossymbek281078/AEVION/blob/main/packages/fintech-sdk/CHANGELOG.md";
+const GITHUB_CHANGELOG = repoPath("blob/main/packages/fintech-sdk/CHANGELOG.md");
 
 function CodePre({ children }: { children: string }) {
   return (

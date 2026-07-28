@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import FintechFooter from "@/components/fintech/FintechFooter";
+import { repoLabel, repoPath } from "@/lib/repoUrl";
 
 // Zone: aevion-core/main owns frontend/src/app/fintech/**
 
@@ -180,8 +181,8 @@ export default function FintechChangelogPage() {
         {/* GitHub link */}
         <div style={{ marginTop: 32, padding: "12px 16px", background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 12, color: C.dim, textAlign: "center" }}>
           Full commit history:{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION/commits/main" style={{ color: C.accent, textDecoration: "none" }}>
-            github.com/Dossymbek281078/AEVION →
+          <a href={repoPath("commits/main")} style={{ color: C.accent, textDecoration: "none" }}>
+            {repoLabel()} →
           </a>
         </div>
 

@@ -51,13 +51,27 @@ export async function fetchLichessGames(username: string, max = 30): Promise<str
 }
 
 // Parse a PGN block into { headers, sans, sideOfUser } where sideOfUser is "w"|"b"|null
-function parsePgnBlock(pgn: string, username: string): { white: string; black: string; result: string; sans: string[]; userSide: "w" | "b" | null; whiteElo: number; blackElo: number } {
+/** Экспортирована ради теста: разбор чужого PGN — вход недоверенных данных. */
+export function parsePgnBlock(pgn: string, username: string): { white: string; black: string; result: string; sans: string[]; userSide: "w" | "b" | null; whiteElo: number; blackElo: number } {
   const headerMap: Record<string, string> = {};
   const headerRe = /\[(\w+)\s+"([^"]*)"\]/g;
   let m: RegExpExecArray | null;
   while ((m = headerRe.exec(pgn))) headerMap[m[1]] = m[2];
   let body = pgn.replace(/^\s*\[[^\]]*\][^\n]*\n/gm, "");
-  body = body.replace(/\{[^}]*\}/g, "").replace(/\([^)]*\)/g, "");
+  /* Комментарии и варианты снимаются ДО ПОЛНОГО ИСЧЕРПАНИЯ, а не одним проходом.
+     Один `replace(/\([^)]*\)/g)` снимает только внешний уровень: из «(a (b) c)»
+     остаётся «c)». Дальше этот огрызок попадает в список ходов, `ch.move()` на нём
+     бросает, а цикл разбора делает `break` — партия молча обрезается в том месте,
+     где встретился первый вложенный вариант. Для аннотированных PGN (а такими
+     приходят выгрузки с комментариями) это срезает игру почти в начале, и профиль
+     стиля строится по огрызку, ничем не показывая, что данных не хватило. */
+  const stripNested = (t: string, re: RegExp) => {
+    let prev: string;
+    do { prev = t; t = t.replace(re, "") } while (t !== prev);
+    return t;
+  };
+  body = stripNested(body, /\{[^{}]*\}/g);
+  body = stripNested(body, /\([^()]*\)/g);
   body = body.replace(/\$\d+/g, "").replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, "");
   body = body.replace(/\d+\.(\.\.)?/g, "");
   const sans = body.split(/\s+/).filter(t => t && !/^\d+$/.test(t));

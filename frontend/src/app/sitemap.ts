@@ -130,6 +130,10 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/constitution/welcome",     changeFrequency: "monthly", priority: 0.4 },
   { path: "/constitution/showcase",    changeFrequency: "weekly",  priority: 0.85 },
   { path: "/constitution/status",      changeFrequency: "hourly",  priority: 0.6 },
+  // Сравнение с аналогами: запрос «AEVION vs <продукт>» — один из немногих,
+  // по которым человек ищет нас осознанно. Автосканер подхватил бы страницу
+  // и сам, но с приоритетом по умолчанию 0.6.
+  { path: "/compare",                  changeFrequency: "weekly",  priority: 0.85 },
 ];
 
 const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";

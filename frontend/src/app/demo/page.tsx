@@ -274,6 +274,25 @@ export default function DemoShowcasePage() {
             sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>partnership thesis</Link>, see /pitch.
           </p>
 
+          {/* Первый вопрос любого, кто досмотрел демо: «чем это лучше того, чем я уже
+              пользуюсь». Отвечать на него надо здесь же, а не ждать, пока человек уйдёт
+              искать сравнение сам — и найдёт чужое. */}
+          <p
+            style={{
+              fontSize: "clamp(15px, 2.2vw, 18px)",
+              lineHeight: 1.55,
+              maxWidth: 720,
+              color: "rgba(226,232,240,0.92)",
+              margin: "18px 0 0",
+            }}
+          >
+            И сразу честный ответ на вопрос «чем это лучше того, чем я уже пользуюсь»:{" "}
+            <Link href="/compare" style={{ color: "#5eead4", fontWeight: 700 }}>
+              сравнение с аналогами
+            </Link>{" "}
+            — у каждого модуля названо и то, в чём сильнее мы, и то, в чём сильнее они.
+          </p>
+
           <div style={{ marginTop: 28 }} className="demo-marquee-wrap">
             <div className="demo-marquee-track" aria-hidden>
               <span style={{ paddingRight: 48, whiteSpace: "nowrap", fontSize: 15, fontWeight: 700, color: "#5eead4" }}>

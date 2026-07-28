@@ -174,6 +174,10 @@ export default function ExplorePlanet() {
           <div className="aevx-brand"><span className="aevx-dot" />AEVION</div>
           <nav className="aevx-nav">
             <a href="/qventure">QVenture</a>
+            {/* Человек, листающий 25 модулей, рано или поздно спросит «а чем это
+                лучше того, чем я пользуюсь». Ответ должен быть в шапке, а не
+                находиться поиском. */}
+            <a href="/compare">Compare</a>
             <a href="/pricing">Pricing</a>
             <a href="/">Enter →</a>
           </nav>

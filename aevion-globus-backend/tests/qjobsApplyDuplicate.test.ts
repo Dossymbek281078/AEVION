@@ -135,3 +135,25 @@ describe("повторный отклик не проходит и не накр
     expect(sqlLog).toEqual([]);
   });
 });
+
+describe("транзакция вокруг заявки и счётчика", () => {
+  test("успешная заявка коммитится", async () => {
+    stubDb({ duplicate: false });
+    await apply();
+    expect(sqlLog.some((l) => /^BEGIN/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(true);
+  });
+
+  test("дубль откатывается и не коммитится", async () => {
+    stubDb({ duplicate: true });
+    await apply();
+    expect(sqlLog.some((l) => /^ROLLBACK/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(false);
+  });
+
+  test("несуществующая вакансия тоже откатывается", async () => {
+    stubDb({ jobExists: false, duplicate: false });
+    await apply();
+    expect(sqlLog.some((l) => /^ROLLBACK/i.test(l))).toBe(true);
+  });
+});

@@ -56,13 +56,13 @@ export default async function Image() {
         <div
           style={{ fontSize: 30, color: "#cbd5e1", lineHeight: 1.4, maxWidth: 980, marginBottom: 40 }}
         >
-          Tor-routed proxy · end-to-end encryption · anti-fingerprinting ·
-          open-source clients (CLI/desktop/mobile)
+          Exposure scan · browser leak check (WebRTC, fingerprint entropy) ·
+          no logs, no email, no KYC
         </div>
 
         <div style={{ display: "flex", gap: 12, marginTop: "auto", flexWrap: "wrap" }}>
           {[
-            { t: "🧅 Tor-routed", c: "#06b6d4" },
+            { t: "🔎 Exposure scan", c: "#06b6d4" },
             { t: "🔇 No logs", c: "#16a34a" },
             { t: "🪪 No KYC", c: "#a855f7" },
             { t: "🛡 Anti-fingerprint", c: "#f59e0b" },

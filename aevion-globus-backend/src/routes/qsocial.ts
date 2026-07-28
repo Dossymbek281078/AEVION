@@ -323,25 +323,50 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
 
   try {
     if (isQSocialDbReady()) {
+      // Счётчик двигается ТОЛЬКО следом за строкой, которую он считает.
+      // До 28.07.2026 здесь было «прочитал, вставил через ON CONFLICT DO
+      // NOTHING, увеличил безусловно»: двойное нажатие давало два запроса,
+      // оба видели лайка нет, вторая вставка молча отбрасывалась, а
+      // likesCount вырастал на два. Гонки для этого не нужны — хватает
+      // обычного дабл-тапа по кнопке.
+      const { rows: postOwner } = await pool.query(
+        `SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`,
+        [postId],
+      );
+      // Раньше 404 стоял только в in-memory ветке: лайк несуществующего
+      // поста в проде создавал строку лайка и отвечал успехом.
+      if (!postOwner[0]) return res.status(404).json({ error: "not_found" });
+
       const { rows: existing } = await pool.query(
         `SELECT 1 FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`,
         [auth.sub, postId],
       );
+
       let liked: boolean;
       if (existing.length > 0) {
-        await pool.query(`DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`, [auth.sub, postId]);
-        await pool.query(`UPDATE "QSocialPost" SET "likesCount"=GREATEST(0,"likesCount"-1) WHERE "id"=$1`, [postId]);
+        const removed = await pool.query(
+          `DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2 RETURNING "postId"`,
+          [auth.sub, postId],
+        );
+        if ((removed.rowCount ?? 0) > 0) {
+          await pool.query(`UPDATE "QSocialPost" SET "likesCount"=GREATEST(0,"likesCount"-1) WHERE "id"=$1`, [postId]);
+        }
         liked = false;
       } else {
-        await pool.query(`INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW()) ON CONFLICT DO NOTHING`, [auth.sub, postId]);
-        await pool.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
-        liked = true;
-        // Notify post owner (not self)
-        const { rows: ownerRows } = await pool.query(`SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
-        if (ownerRows[0] && ownerRows[0].userId !== auth.sub) {
-          addNotification(ownerRows[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+        const added = await pool.query(
+          `INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW())
+           ON CONFLICT DO NOTHING RETURNING "postId"`,
+          [auth.sub, postId],
+        );
+        if ((added.rowCount ?? 0) > 0) {
+          await pool.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
+          if (postOwner[0].userId !== auth.sub) {
+            addNotification(postOwner[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+          }
         }
+        liked = true;
       }
+
       const { rows: postRows } = await pool.query(`SELECT "likesCount" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
       return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0 });
     }

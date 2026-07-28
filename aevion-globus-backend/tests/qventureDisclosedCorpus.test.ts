@@ -6669,6 +6669,26 @@ describe("five readers now accept 'was', and one still does not", () => {
      * Left for a clean pass anyway. A sign error introduced while fixing a sign
      * error is indistinguishable from the one it replaced, and the ten probes
      * above are the regression set it should be verified against.
+     *
+     * ── One attempt made and reverted; what it ruled out ──
+     *
+     * Tried: a `precededByNegative(t, match.index)` check reading the twelve
+     * characters before the match. Both targets stayed positive, so it was
+     * reverted rather than left half-working — a sign fix that looks applied
+     * and is not is worse than none.
+     *
+     * Measured before reverting, so the next pass need not re-check:
+     *   - the margin regex lands at index 9 of "Negative gross margin of 20%",
+     *     with exactly "Negative " in the preceding window;
+     *   - /\b(?:negative|minus)\s+$/i matches that window;
+     *   - latestMatch uses text.matchAll and returns an index relative to the
+     *     full string, so the index is not the problem either.
+     *
+     * So the break is DOWNSTREAM of the match and its index. Look at what sits
+     * between the match and the assignment — the statedAsAchieved gate and the
+     * band reader that runs first — before touching any pattern. Note also
+     * that the growth regex did not match "Negative revenue growth of 15%" at
+     * all in isolation, so growth and margin may not share one cause.
      */
     expect(p("Negative gross margin of 20%.").grossMarginPct).toBe(20);
     expect(p("Negative revenue growth of 15%.").growthPct).toBe(15);

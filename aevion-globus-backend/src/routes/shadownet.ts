@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 /**
  * ShadowNet — concept simulator for an alternative private internet.
  *
@@ -54,6 +55,8 @@ interface ShadowNetPost {
   iv: string;
   salt: string;
   size_bytes: number;
+  /** Секрет удаления. NULL у постов, созданных до 28.07 — см. ensureShadowNetTables. */
+  delete_secret?: string | null;
   created_at: string;
 }
 
@@ -374,6 +377,8 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
   // Payload size guard: cap on actual byte length (UTF-8 can be multi-byte,
   // so a char-count check alone underestimates the stored/transmitted size).
   const sizeBytes = Buffer.byteLength(ciphertext, "utf8");
+  // Секрет удаления: права переезжают с публичного псевдонима на него.
+  const deleteSecret = crypto.randomBytes(18).toString("base64url");
   if (sizeBytes > MAX_CIPHERTEXT_BYTES) {
     return fail(res, "ciphertext too large (≤256KB)", 413);
   }
@@ -381,12 +386,13 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
   if (isShadowNetDbReady()) {
     try {
       const result = await pool.query(
-        `INSERT INTO shadownet_posts (alias, ciphertext, iv, salt, size_bytes)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO shadownet_posts (alias, ciphertext, iv, salt, size_bytes, delete_secret)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, alias, size_bytes, created_at`,
-        [alias, ciphertext, iv, salt, sizeBytes],
+        [alias, ciphertext, iv, salt, sizeBytes, deleteSecret],
       );
-      return ok(res, result.rows[0], 201);
+      // deleteSecret отдаётся РОВНО здесь: он и есть право удалить свой пост.
+      return ok(res, { ...result.rows[0], deleteSecret }, 201);
     } catch (e) {
       console.error("[ShadowNet] POST /posts db error:", e);
       // fall through to memory
@@ -401,12 +407,13 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
     iv,
     salt,
     size_bytes: sizeBytes,
+    delete_secret: deleteSecret,
     created_at: new Date().toISOString(),
   };
   memPosts.set(id, post);
   return ok(
     res,
-    { id, alias, size_bytes: sizeBytes, created_at: post.created_at },
+    { id, alias, size_bytes: sizeBytes, created_at: post.created_at, deleteSecret },
     201,
   );
 });
@@ -435,7 +442,9 @@ shadownetRouter.get("/posts", async (req: Request, res: Response) => {
   const rows = Array.from(memPosts.values())
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, limit);
-  ok(res, { items: rows, total: rows.length });
+  // publicPost: в памяти объекты несут секрет, в отличие от выдачи из БД,
+  // где колонки перечислены явно. Без снятия он уехал бы в ленту.
+  ok(res, { items: rows.map(publicPost), total: rows.length });
 });
 
 shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
@@ -487,8 +496,37 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
     .filter((p) => p.alias === alias)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, limit);
-  ok(res, rows);
+  ok(res, rows.map(publicPost));
 });
+
+/**
+ * Право удалить пост.
+ *
+ * Есть секрет — решает он; нет (пост создан до 28.07) — прежнее поведение по
+ * псевдониму, чтобы автор не потерял возможность удалить своё. Псевдоним ключом
+ * быть не может: его отдаёт публичная лента (`SELECT id, alias, …`).
+ */
+/** Пост БЕЗ секрета удаления — для любой выдачи наружу. */
+function publicPost(p: ShadowNetPost): Omit<ShadowNetPost, "delete_secret"> {
+  const { delete_secret: _s, ...rest } = p;
+  void _s;
+  return rest;
+}
+
+function maySoftDelete(
+  row: { alias: string; delete_secret?: string | null },
+  alias: string,
+  req: Request,
+): boolean {
+  if (row.delete_secret) {
+    const given = String(req.header("x-delete-secret") ?? (req.body as { deleteSecret?: unknown })?.deleteSecret ?? "");
+    const a = Buffer.from(given);
+    const b = Buffer.from(row.delete_secret);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  console.warn(`[ShadowNet] удаление поста без секрета (создан до 28.07), автор «${row.alias}»`);
+  return row.alias === alias;
+}
 
 shadownetRouter.delete("/posts/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
@@ -502,9 +540,20 @@ shadownetRouter.delete("/posts/:id", async (req: Request, res: Response) => {
 
   if (isShadowNetDbReady()) {
     try {
+      // Сначала читаем пост: право определяет СЕКРЕТ, а не псевдоним (он
+      // публичный — его отдаёт лента). У постов без секрета (созданы до 28.07)
+      // сохранено прежнее поведение, иначе автор не смог бы удалить своё.
+      const found = await pool.query(
+        `SELECT id, alias, delete_secret FROM shadownet_posts WHERE id = $1`,
+        [id],
+      );
+      if (!found.rows[0]) return fail(res, "not found", 404);
+      if (!maySoftDelete(found.rows[0], alias, req)) {
+        return fail(res, "not found or secret mismatch", 404);
+      }
       const result = await pool.query(
-        `DELETE FROM shadownet_posts WHERE id = $1 AND alias = $2 RETURNING id`,
-        [id, alias],
+        `DELETE FROM shadownet_posts WHERE id = $1 RETURNING id`,
+        [id],
       );
       if (result.rowCount === 0) {
         return fail(res, "not found or alias mismatch", 404);
@@ -517,8 +566,8 @@ shadownetRouter.delete("/posts/:id", async (req: Request, res: Response) => {
   }
 
   const post = memPosts.get(id);
-  if (!post || post.alias !== alias) {
-    return fail(res, "not found or alias mismatch", 404);
+  if (!post || !maySoftDelete(post, alias, req)) {
+    return fail(res, "not found or secret mismatch", 404);
   }
   memPosts.delete(id);
   ok(res, { id, deleted: true });

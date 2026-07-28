@@ -47,6 +47,20 @@ export async function ensureShadowNetTables(pool: PgPoolInstance): Promise<void>
         created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // Секрет удаления. Отдельным ALTER: таблица на проде уже есть.
+    //
+    // ЗАЧЕМ. Удаление шло `WHERE id = $1 AND alias = $2`, то есть ключом служил
+    // псевдоним — а его же публичный список постов отдаёт наружу
+    // (`SELECT id, alias, …`). Прочитал автора в ленте — удалил его пост.
+    //
+    // Псевдонимность ShadowNet при этом остаётся: псевдоним по-прежнему виден как
+    // подпись, права переезжают на секрет. NULL допустим — у постов, созданных до
+    // правки, секрета нет, и требовать его значило бы отобрать у автора
+    // возможность удалить своё.
+    await pool.query(`
+      ALTER TABLE shadownet_posts
+        ADD COLUMN IF NOT EXISTS delete_secret TEXT;
+    `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_shadownet_alias
         ON shadownet_posts(alias);

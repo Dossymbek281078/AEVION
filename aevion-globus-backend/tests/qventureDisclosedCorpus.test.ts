@@ -6684,11 +6684,25 @@ describe("five readers now accept 'was', and one still does not", () => {
      *   - latestMatch uses text.matchAll and returns an index relative to the
      *     full string, so the index is not the problem either.
      *
-     * So the break is DOWNSTREAM of the match and its index. Look at what sits
-     * between the match and the assignment — the statedAsAchieved gate and the
-     * band reader that runs first — before touching any pattern. Note also
-     * that the growth regex did not match "Negative revenue growth of 15%" at
-     * all in isolation, so growth and margin may not share one cause.
+     * ── CAUSE FOUND (margin) ──
+     *
+     * The sign-aware block is gated: `if (gm && s.grossMarginPct === null &&
+     * statedAsAchieved(...))`. By the time it runs the value is ALREADY SET by
+     * the band reader on the line above — `if (gmBand !== null)
+     * s.grossMarginPct = gmBand`, which has no leading-negative handling of its
+     * own. So the whole negative branch, and the attempted fix inside it, never
+     * executed. Nothing was wrong with the pattern, the index or the gate:
+     * statedAsAchieved returns true for both sentences, checked directly.
+     *
+     * That makes the fix a question of WHERE, not what. Either the band reader
+     * learns the leading "negative", or the two are merged so one place decides
+     * the sign. Merging is the better answer — two readers writing the same
+     * field with different sign rules is the shape of the bug, not an accident
+     * of it.
+     *
+     * Growth is NOT the same cause and must be diagnosed separately: its regex
+     * does not match "Negative revenue growth of 15%" at all in isolation.
+     * Assuming one cause for both is how the next attempt fails the same way.
      */
     expect(p("Negative gross margin of 20%.").grossMarginPct).toBe(20);
     expect(p("Negative revenue growth of 15%.").growthPct).toBe(15);

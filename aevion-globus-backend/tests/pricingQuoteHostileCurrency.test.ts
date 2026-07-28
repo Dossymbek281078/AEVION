@@ -44,3 +44,28 @@ describe("POST /api/pricing/quote — ключи прототипа не про�
     expect(r.body.total).toBeGreaterThan(0);
   });
 });
+
+// Защита в маршруте стоит ДАЛЕКО от расчёта, а buildQuote экспортирован: курс
+// берётся внутри него, значит и не доверять валюте он должен сам. Иначе
+// следующий вызывающий получит NaN молча — ровно тот дефект, только в обход
+// починенной ручки.
+import { buildQuote } from "../src/data/pricing";
+
+describe("buildQuote — курс не уводится в NaN мимо маршрута", () => {
+  it.each(["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"])(
+    "валюта «%s» даёт смету с числами, а не NaN",
+    (cur) => {
+      const q = buildQuote({ tierId: "lite", modules: [], seats: 1, period: "monthly", currency: cur as never });
+      expect(Number.isFinite(q.total)).toBe(true);
+      expect(Number.isFinite(q.subtotal)).toBe(true);
+      expect(q.total).toBeGreaterThan(0);
+    },
+  );
+
+  it("настоящая валюта считается по своему курсу — иначе защита выродилась бы в «всегда USD»", () => {
+    const usd = buildQuote({ tierId: "lite", modules: [], seats: 1, period: "monthly", currency: "USD" });
+    const eur = buildQuote({ tierId: "lite", modules: [], seats: 1, period: "monthly", currency: "EUR" });
+    expect(Number.isFinite(eur.total)).toBe(true);
+    expect(eur.total).not.toBe(usd.total);
+  });
+});

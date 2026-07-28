@@ -90,8 +90,16 @@ signature internals» — и это правда, но соседняя `/artifa
 | `build /public/rss/vacancies.xml` | ✅ явные колонки, XML экранирован |
 | `build /projects/:id/public` | ✅ `clientId` публичен ПО ЗАМЫСЛУ — по нему строится ссылка на `/build/u/:id` |
 
-Механическая часть правила проверяется тестом
-`aevion-globus-backend/tests/selectStarOnSensitiveTables.guard.test.ts`:
+Механическая часть правила проверяется ДВУМЯ сторожами.
+
+`tests/publicHandlersNoPrivateColumns.guard.test.ts` — обработчик публичной ручки
+не выбирает колонку со словом «private» в имени, плюс точечная проверка на
+сертификат в ручке артефакта Planet (перечень обязан содержать
+`publicPayloadJson` и `signature` и не содержать `privatePayloadJson`, `ownerId`,
+`revokedBy`). Он закрывает вторую половину дефекта: перечислить колонки явно И
+вписать среди них приватную — тогда сторож ниже молчит, а утечка возвращается.
+
+`tests/selectStarOnSensitiveTables.guard.test.ts` —
 `SELECT *` запрещён для таблиц с колонкой вида private/secret/password/apiKey.
 Список таблиц не зашит — вычисляется из `CREATE TABLE`, поэтому новая колонка с
 секретом подводит таблицу под правило сама.

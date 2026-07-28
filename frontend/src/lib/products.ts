@@ -356,11 +356,26 @@ export const CHANNELS: Record<string, string> = {
   qr: "qr-code",
 };
 
-/** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет). */
+/** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет).
+ *
+ *  Проверка идёт через `Object.hasOwn`, а НЕ через `CHANNELS[key] ?? null`.
+ *  Обычный объект наследует ключи прототипа, и на проде это давало
+ *  (проверено 27.07.2026 живыми запросами):
+ *    /shop?c=constructor → channel=function%20Object()%20%7B%20%5Bnative%20code%5D%20%7D
+ *    /shop?c=__proto__   → channel=%5Bobject%20Object%5D
+ *  То есть белый список обходился, а в РЕАЛЬНУЮ платёжную ссылку уезжал мусор:
+ *  продажа записывалась бы с выдуманным источником, и решение «какой канал
+ *  окупается» принималось бы по испорченным данным. Ссылку с таким адресом
+ *  достаточно один раз кому-то отправить. */
 export function channelFrom(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
   if (!v) return null;
-  return CHANNELS[v.trim().toLowerCase()] ?? null;
+  const key = v.trim().toLowerCase();
+  if (!Object.hasOwn(CHANNELS, key)) return null;
+  const value = CHANNELS[key];
+  // Даже у собственного ключа значение обязано быть строкой: тип Record не
+  // проверяется в рантайме, а сюда приходит внешний ввод.
+  return typeof value === "string" ? value : null;
 }
 
 /**

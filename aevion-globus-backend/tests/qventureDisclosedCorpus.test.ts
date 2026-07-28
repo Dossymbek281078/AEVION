@@ -6718,16 +6718,29 @@ describe("the top line survives the words a filing puts around it", () => {
     expect(rev("Revenue in the segment declined while marketing spend was $9 million.")).toBeNull();
   });
 
-  test("KNOWN MISS: deferred revenue is read as the top line", () => {
-    // Pre-existing and unrelated to the widening — verified against the tree
-    // before it. Deferred revenue is a liability: cash collected for something
-    // not yet delivered. Reading it as the top line overstates a company by
-    // whatever it has been paid in advance, silently.
+  test("a word containing 'revenue' is not the top line", () => {
+    // Five wrong readings, all in the flattering direction, which is the
+    // direction that matters: a dropped figure understates and shows up as thin
+    // coverage; an absorbed one inflates the score and looks like traction.
     //
-    // Pinned rather than fixed here because the fix belongs with the noun list,
-    // not with this change, and mixing the two would hide which one moved the
-    // corpus if either did.
-    expect(rev("Deferred revenue of $3 million.")).toBe(3_000_000);
+    // Deferred and unearned revenue are LIABILITIES — cash taken for something
+    // not yet delivered — so reading them as the top line overstates a company
+    // by exactly its prepayments. Cost of revenue is a cost: a plan disclosing
+    // only what it spends to deliver was credited with earning that much.
+    expect(rev("Deferred revenue of $3 million.")).toBeNull();
+    expect(rev("Deferred revenue was $3 million.")).toBeNull();
+    expect(rev("Unearned revenue of $3 million.")).toBeNull();
+    expect(rev("Cost of revenue was $3 million.")).toBeNull();
+    expect(rev("Cost of revenues of $3 million.")).toBeNull();
+
+    // The forms that ARE the top line are untouched.
+    expect(rev("Net revenue was $10 million.")).toBe(10_000_000);
+    expect(rev("Recurring revenue of $10 million.")).toBe(10_000_000);
+    expect(rev("Revenue from operations was $10 million.")).toBe(10_000_000);
+    expect(rev("Net sales were $10 million.")).toBe(10_000_000);
+
+    // And the sentence a filing actually writes: both appear, one is the score.
+    expect(rev("Deferred revenue of $3 million. Revenue was $10 million.")).toBe(10_000_000);
   });
 });
 

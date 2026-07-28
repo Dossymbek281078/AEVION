@@ -503,7 +503,24 @@ const NUM = NUMBER_PATTERN;
  * "Revenue of $5M" form the parser has supported all along, so a plan stating
  * two different revenue figures in the ordinary phrasing raised nothing.
  */
-const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
+/**
+ * What counts as the top line — and what merely contains the word.
+ *
+ * The lookbehinds are not tidiness. Without them "Deferred revenue of $3
+ * million" and "Cost of revenue was $3 million" both scored as three million of
+ * revenue. Deferred revenue is a LIABILITY — cash taken for something not yet
+ * delivered — so reading it as the top line overstates a company by exactly its
+ * prepayments. Cost of revenue is a cost: a plan disclosing only what it spends
+ * to deliver was credited with earning that much.
+ *
+ * Both errors run in the flattering direction, which is the direction that
+ * matters here: a dropped figure understates and shows up as thin coverage, an
+ * absorbed one inflates the score and looks like traction.
+ *
+ * "revenues? from operations" and "recurring revenues?" sit earlier in the
+ * alternation and are unaffected — those ARE the top line.
+ */
+const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|(?<!deferred )(?<!unearned )(?<!cost of )(?<!costs of )revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
 const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
 const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
 const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;

@@ -6622,14 +6622,28 @@ describe("five readers now accept 'was', and one still does not", () => {
     expect(p("Operating margin came in at 54.0%.").grossMarginPct).toBeNull();
   });
 
-  test("STILL A MISS: contracted revenue and TAM in their filing forms", () => {
-    // Same class, different readers — these two spell their own connector too.
-    // Left for the next pass rather than widened at the end of a session; each
-    // has a working control beside it, so this is the pattern, not the figure.
-    expect(p("Contracted revenue stood at $55 billion.").contractedRevenueUsd).toBeNull();
+  test("contracted revenue and TAM in their filing forms", () => {
+    // The backlog reader had "stands at" but not "stood at" — a hand-spelled
+    // list one tense short, which is the whole argument for the constant.
+    expect(p("Contracted revenue stood at $55 billion.").contractedRevenueUsd).toBe(55_000_000_000);
     expect(p("Contracted revenue of $55 billion.").contractedRevenueUsd).toBe(55_000_000_000);
-    expect(p("The addressable market is estimated at $4 billion.").bottomUpTamUsd).toBeNull();
+    expect(p("Backlog stood at $20 million.").contractedRevenueUsd).toBe(20_000_000);
+
+    // TAM takes a separate constant, SIZED_AT, and must never share it.
+    expect(p("The addressable market is estimated at $4 billion.").bottomUpTamUsd).toBe(4_000_000_000);
+    expect(p("The addressable market is valued at $4 billion.").bottomUpTamUsd).toBe(4_000_000_000);
     expect(p("TAM of $4 billion.").bottomUpTamUsd).toBe(4_000_000_000);
+  });
+
+  test("an estimate of a MARKET is readable; an estimate of REVENUE is not", () => {
+    // The reason "estimated at" is not in COPULA. An addressable market is an
+    // estimate by definition, so refusing the wording would refuse every TAM
+    // ever written. Revenue is not: "revenue is estimated at $5 million" is a
+    // forecast, and crediting a forecast as achieved revenue would be the worst
+    // single thing this parser could do — it is the whole premise of the module
+    // that the score rests on what a company has done, not what it expects.
+    expect(p("Revenue is estimated at $5 million.").revenueUsd).toBeNull();
+    expect(p("Revenue is projected at $5 million.").revenueUsd).toBeNull();
   });
 
   test("STILL A MISS: growth stated as a noun with a period", () => {

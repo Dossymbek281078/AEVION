@@ -481,6 +481,17 @@ const LINK = String.raw`${LINK_NO_DASH}|—|–`;
  * not an exotic gap. Kept as one constant rather than a sixth hand-spelling.
  */
 const COPULA = String.raw`is|are|was|were|totall?ed|reached|stood at|came in at`;
+/**
+ * How a market size is worded — and deliberately NOT part of COPULA.
+ *
+ * An addressable market is an estimate by definition; "the addressable market
+ * is estimated at $4 billion" is the only way anyone states one. But "revenue
+ * is estimated at $5 million" is a FORECAST, and crediting a forecast as
+ * achieved revenue is the worst thing this parser could do. So this belongs to
+ * the TAM reader alone and stays out of the shared constant.
+ */
+const SIZED_AT = String.raw`(?:estimated|valued|projected|pegged|sized)\s+at`;
+
 
 // Number + money-unit patterns come from the platform metric primitives, which
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
@@ -1634,7 +1645,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // elsewhere: the market factor is log-scaled and an inflated TAM is one of the
   // engine's red flags, so quietly taking the ceiling would flatter the plan on
   // the one number founders are most tempted to stretch.
-  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA}|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA}|between)?\s*(?:${SIZED_AT})?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     // Numbers first, keyword after ("€2B to €4B TAM") — without this the
     // single-figure pattern matched the SECOND figure and took the ceiling.
     || firstMatch(t, new RegExp(String.raw`(?:between\s*)?${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
@@ -1655,7 +1666,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const tam = s.bottomUpTamUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA})?\s*(?:${SIZED_AT})?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
   if (tam && statedAsAchieved(t, tam.index ?? 0, tam[0].length)) {
     // detect group layout
@@ -1851,7 +1862,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   const backlogRe = String.raw`(?:backlog|order book|contracted revenue|committed revenue|signed contracts?|total contract value|tcv(?: of large deal wins| of deal wins| of deals won)?|(?<!average )(?<!annual )(?<!mean )(?<!avg )(?<!avg. )contract value|offtake(?: agreements?)?|framework agreements?|bookings|purchase orders?)`;
   // Same band trap as GMV, and the same six-order consequence: "$20-60M" of
   // backlog was read as twenty dollars.
-  const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?ing|=|:|at|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const backlogRange = firstMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:${LINK}|${COPULA}|worth|totall?ing|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (backlogRange && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const ends = moneyRangeEnds(t, backlogRange, s.currency);
     if (ends) {
@@ -1860,7 +1871,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const backlog = s.contractedRevenueUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:of|worth|totall?(?:ing|ed)|=|:|at|is|was|were|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
+    : latestMatch(t, new RegExp(String.raw`${backlogRe}\s*(?:${LINK}|${COPULA}|worth|totall?ing|stands at)?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "contracted backlog")
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?${backlogRe}`, "i"), s, "contracted backlog");
   if (backlog && mentionsUnnegated(t, new RegExp(backlogRe, "i"))) {
     const v = moneyUsd(t, backlog, backlog[1], backlog[2], s.currency, s);

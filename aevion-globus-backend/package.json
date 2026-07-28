@@ -11,6 +11,8 @@
     "start": "node dist/index.js",
     "verify:sql-guards": "node scripts/verify-qgood-idempotency-sql.mjs && node scripts/verify-qevents-capacity-sql.mjs",
     "verify:qgood-audit": "node scripts/qgood-audit-selftest.mjs",
+    "audit:qgood-duplicates": "node scripts/qgood-duplicate-donations-audit.mjs",
+    "audit:qevents-drift": "node scripts/qevents-attendee-drift-audit.mjs",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:qskyway": "node scripts/qskyway-smoke.js",
     "smoke:airspace-freshness": "tsx scripts/airspace-freshness-smoke.ts",

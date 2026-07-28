@@ -59,6 +59,15 @@ const memSavedJobs = new Map<string, Set<string>>(); // userId -> Set<jobId>
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_JOB_TITLE_LEN = 200;
+const MAX_JOB_DESCRIPTION_LEN = 20_000;
+const MAX_JOB_COMPANY_LEN = 200;
+const MAX_JOB_LOCATION_LEN = 200;
+const MAX_JOB_SALARY_LEN = 100;
+const MAX_JOB_SKILLS = 30;
+const MAX_JOB_SKILL_LEN = 60;
+
 const JOB_TYPES = ["full-time", "part-time", "contract", "freelance", "internship"];
 const APP_STATUSES = ["pending", "reviewing", "accepted", "rejected"];
 
@@ -137,16 +146,52 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qjobs/jobs/:id ──────────────────────────────────────────────────
+/**
+ * Поля вакансии, которые допустимо отдавать наружу.
+ *
+ * Перечислить колонки в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Поэтому список полей
+ * стоит и здесь, при сборке ответа.
+ */
+const PUBLIC_JOB_FIELDS = [
+  "id", "employerId", "title", "description", "company", "location", "type",
+  "salary", "skills", "isActive", "applicantCount", "createdAt", "updatedAt",
+] as const;
+
+function publicJob(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_JOB_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qjobsRouter.get("/jobs/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
+    // Список вакансий отдаёт только `"isActive"=TRUE` (и так же фильтрует путь
+    // через память), а выдача по идентификатору не смотрела на признак вовсе:
+    // закрытая вакансия продолжала открываться по прямой ссылке. Пятый случай
+    // одного и того же перекоса за день — правило написано в списке и не
+    // написано здесь.
+    const auth = verifyBearerOptional(req);
     if (isQJobsDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QJobsPosting" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ job: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","employerId","title","description","company","location","type","salary",
+                "skills","isActive","applicantCount","createdAt","updatedAt"
+           FROM "QJobsPosting" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      // Свою закрытую вакансию работодатель видит; остальным 404, а не 403:
+      // 403 подтвердил бы, что вакансия существует.
+      if (!row || (row.isActive !== true && auth?.sub !== row.employerId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ job: publicJob(row) });
     }
     const job = memJobs.get(id);
-    if (!job) return res.status(404).json({ error: "not_found" });
+    if (!job || (job.isActive !== true && auth?.sub !== job.employerId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
     return res.json({ job });
   } catch (err) {
     captureQJobsError(err, { route: "qjobs" });
@@ -171,6 +216,37 @@ qjobsRouter.post("/me/jobs", postLimiter, async (req: Request, res: Response) =>
 
   if (!title || !description || !company) {
     return res.status(400).json({ error: "title, description, company required" });
+  }
+
+  // Длины не ограничивались вовсе: описание на мегабайт спокойно уходило в базу
+  // и потом ломало вёрстку карточки.
+  if (title.trim().length > MAX_JOB_TITLE_LEN) return res.status(400).json({ error: "title too long" });
+  if (description.trim().length > MAX_JOB_DESCRIPTION_LEN) {
+    return res.status(400).json({ error: "description too long" });
+  }
+  if (company.trim().length > MAX_JOB_COMPANY_LEN) return res.status(400).json({ error: "company too long" });
+  if (typeof location === "string" && location.trim().length > MAX_JOB_LOCATION_LEN) {
+    return res.status(400).json({ error: "location too long" });
+  }
+  if (typeof salary === "string" && salary.trim().length > MAX_JOB_SALARY_LEN) {
+    return res.status(400).json({ error: "salary too long" });
+  }
+
+  // Неизвестный тип занятости подменялся на "full-time" МОЛЧА: работодатель
+  // видел в форме одно, а в вакансии оказывалось другое. Лучше честный отказ.
+  if (type !== undefined && type !== null && !JOB_TYPES.includes(String(type))) {
+    return res.status(400).json({ error: "unknown type", allowed: JOB_TYPES });
+  }
+
+  // Навыки: массив коротких строк, а не что попало и не бесконечной длины.
+  if (skills !== undefined && skills !== null) {
+    if (!Array.isArray(skills)) return res.status(400).json({ error: "skills must be an array of strings" });
+    if (skills.length > MAX_JOB_SKILLS) {
+      return res.status(400).json({ error: `skills must not exceed ${MAX_JOB_SKILLS} items` });
+    }
+    if (skills.some((sk) => typeof sk === "string" && sk.length > MAX_JOB_SKILL_LEN)) {
+      return res.status(400).json({ error: `skill must not exceed ${MAX_JOB_SKILL_LEN} chars` });
+    }
   }
 
   const job: JobPosting = {

@@ -977,9 +977,29 @@ export function parsePlanSignals(text: string): PlanSignals {
    * still decides when nothing dates the figures, so ordinary plans are
    * unaffected, and the choice is stated rather than made silently.
    */
+  /**
+   * The words a filing puts between the top-line noun and its figure.
+   *
+   * "Revenue for the quarter was $412.6 million" and "Revenue in 2025 was
+   * $412.6 million" both read as null; drop the middle and both read fine, so
+   * this is the pattern and not the figure. Found by probing ordinary earnings
+   * English rather than by writing another fixture — the existing ones were all
+   * written by someone who already knew which shape was accepted.
+   *
+   * The linking verb is REQUIRED in this alternative, and that is the whole
+   * safety argument. With both the qualifier and the verb optional, the noun
+   * could reach thirty characters forward and land on any figure that happened
+   * to be there; requiring "was"/"were"/"totalled" means the sentence has to
+   * actually predicate the figure of the noun. The span also excludes a
+   * currency mark, so it cannot step OVER an intervening money amount to reach
+   * a later one.
+   */
+  const REV_QUALIFIER = String.raw`\s*,?\s*(?:for|in|during)\s+[^.;%$€£₸₽¥₹]{0,30}?\s*,?\s*`;
+  const REV_VERB = String.raw`(?:${LINK}|were|was|totall?ed|${TO_LEVEL})`;
   const candidates = [
     ...statedCandidates(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`),
-    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*(?:${LINK}|were|was|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`),
+    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*${REV_VERB}?\s*${CUR}${NUM}\s*${UNIT}`),
+    ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})${REV_QUALIFIER}${REV_VERB}\s*${CUR}${NUM}\s*${UNIT}`),
   ];
   let arr: RegExpMatchArray | null = candidates[0]?.m ?? null;
   const dated = candidates.filter((c) => c.year !== null);

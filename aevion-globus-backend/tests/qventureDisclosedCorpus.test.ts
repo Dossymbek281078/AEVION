@@ -6555,36 +6555,76 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
-describe("KNOWN MISSES on the top line — pinned, not fixed", () => {
+describe("the top line survives the words a filing puts around it", () => {
   /**
-   * The same probe that found the margin defects found these, and they are
-   * worse: the top line carries more weight in the rubric than any other
-   * figure, and "Revenue in 2025 was $412.6 million" is not exotic English.
+   * These were pinned as known misses one commit earlier and the pins went red
+   * the moment the reader was widened, which is what pins are for. Kept as the
+   * real assertions now.
    *
-   * Pinned as the CURRENT WRONG behaviour rather than left silent, which is how
-   * this file has handled known misses eight times now and closed seven of
-   * them. Deliberately not fixed in the same sitting as the margin work: the
-   * revenue reader is the most heavily guarded path in the engine, and a
-   * widening there verified in the last ten minutes of a session is exactly how
-   * a silent regression gets in — I put one there last session doing precisely
-   * that.
-   *
-   * Each assertion below goes RED when the miss is fixed. That is the point.
+   * The safety argument for the widening lives in the trap test below, not in
+   * the successes: with both the qualifier and the verb optional, the noun
+   * could reach thirty characters forward and land on whatever figure happened
+   * to be sitting there. Requiring the linking verb means the sentence has to
+   * predicate the figure of the noun, and excluding currency marks from the
+   * span means it cannot step over an intervening amount to reach a later one.
    */
   const rev = (t: string) => parsePlanSignals(t).revenueUsd;
 
-  test("a period clause between the noun and its verb kills the reading", () => {
-    expect(rev("Revenue for the quarter was $412.6 million.")).toBeNull();
-    expect(rev("Revenue for the three months ended June 30, 2025 was $412.6 million.")).toBeNull();
-    expect(rev("Revenue in 2025 was $412.6 million.")).toBeNull();
-    // Reads correctly without the clause — the pattern, not the figure.
-    expect(rev("Revenue was $412.6 million.")).toBe(412_600_000);
+  test("a period clause between the noun and its verb", () => {
+    expect(rev("Revenue for the quarter was $412.6 million.")).toBe(412_600_000);
+    expect(rev("Revenue for the three months ended June 30, 2025 was $412.6 million.")).toBe(412_600_000);
+    expect(rev("Revenue in 2025 was $412.6 million.")).toBe(412_600_000);
   });
 
-  test("'totaled' is not accepted as a linking verb", () => {
-    expect(rev("Revenue totaled $1.24 billion.")).toBeNull();
-    expect(rev("Total revenue totaled $1.24 billion.")).toBeNull();
+  test("'totalled' is a linking verb, spelled either way", () => {
+    expect(rev("Revenue totaled $1.24 billion.")).toBe(1_240_000_000);
+    expect(rev("Total revenue totaled $1.24 billion.")).toBe(1_240_000_000);
+    expect(rev("Revenue for fiscal 2025 totalled $1.24 billion.")).toBe(1_240_000_000);
+  });
+
+  test("the shapes that already worked still do", () => {
+    expect(rev("Revenue was $412.6 million.")).toBe(412_600_000);
     expect(rev("Total revenue was $1.24 billion.")).toBe(1_240_000_000);
+    expect(rev("We generated $5.2 million in revenue.")).toBe(5_200_000);
+    expect(rev("Revenue was $400M, up from $186M.")).toBe(400_000_000);
+    expect(rev("Revenue of $1M in 2019 and 2M in 2020.")).toBe(2_000_000);
+    expect(rev("ARR of $1M in the US and €2M in the EU.")).toBe(1_000_000);
+  });
+
+  test("the qualifier cannot reach a figure that is not the top line", () => {
+    // These four are the ones that DISCRIMINATE, and finding that out took a
+    // second pass. The first traps I wrote here passed with the linking verb
+    // required and passed again with it optional — they agreed with the safety
+    // argument without testing it, which is the worst kind of green.
+    //
+    // With the verb made optional these fail as follows, measured:
+    //   "...reflected demand for $12 million..."        → 2025   (the YEAR)
+    //   "...excluding a $4 million one-off, grew."       → 4000000
+    //   "...alongside $6 million of deferred items."     → 6000000
+    //   "...including $15 million of services."          → 2025   (the YEAR)
+    // A sentence that merely mentions revenue near a number would have been
+    // scored as that company's top line, and one of them reads the year.
+    expect(rev("Revenue in 2025 reflected demand for $12 million of new hardware.")).toBeNull();
+    expect(rev("Revenue during the period, excluding a $4 million one-off, grew.")).toBeNull();
+    expect(rev("Revenue in the quarter, alongside $6 million of deferred items.")).toBeNull();
+    expect(rev("Revenue for 2025 across all regions, including $15 million of services.")).toBeNull();
+
+    // Kept as well: these hold either way, so they document intent rather than
+    // guard the bound.
+    expect(rev("Revenue for the quarter is not disclosed. Gross profit was $5 million.")).toBeNull();
+    expect(rev("Revenue in the segment declined while marketing spend was $9 million.")).toBeNull();
+  });
+
+  test("KNOWN MISS: deferred revenue is read as the top line", () => {
+    // Pre-existing and unrelated to the widening — verified against the tree
+    // before it. Deferred revenue is a liability: cash collected for something
+    // not yet delivered. Reading it as the top line overstates a company by
+    // whatever it has been paid in advance, silently.
+    //
+    // Pinned rather than fixed here because the fix belongs with the noun list,
+    // not with this change, and mixing the two would hide which one moved the
+    // corpus if either did.
+    expect(rev("Deferred revenue of $3 million.")).toBe(3_000_000);
   });
 });
 

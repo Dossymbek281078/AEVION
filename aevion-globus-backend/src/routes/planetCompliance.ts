@@ -2161,7 +2161,25 @@ planetComplianceRouter.get("/artifacts/:artifactVersionId/public", async (req, r
     return res.status(404).json({ error: "not published (no certificate)" });
   }
 
-  const cert = await pool.query(`SELECT * FROM "PlanetCertificate" WHERE "id"=$1`, [row.certificateId]);
+  // Явный список колонок, а НЕ `SELECT *`.
+  //
+  // До 28.07 здесь стояла звёздочка, и вся строка уходила в ответ ручки с
+  // именем `/public` — вместе с `ownerId` и колонкой `privatePayloadJson`,
+  // название которой прямо говорит, что наружу ей нельзя. Внутри неё лежит и
+  // `signaturePayload` — точные байты, по которым считается подпись.
+  //
+  // Соседний `/certificates/:certId/embed` делает правильно и даже объясняет
+  // это в комментарии («drops the privatePayloadJson, evidence, and signature
+  // internals»). То есть правило в коде уже было — просто применялось в одном
+  // месте из двух. Звёздочка опасна именно этим: она отдаёт и те колонки,
+  // которых на момент написания запроса не существовало.
+  const cert = await pool.query(
+    `SELECT "id","artifactVersionId","status","publicPayloadJson",
+            "policyManifestHash","evidenceRoot","signature",
+            "createdAt","revokedAt","revokeReason"
+     FROM "PlanetCertificate" WHERE "id"=$1`,
+    [row.certificateId],
+  );
   const votes = await pool.query(
     `
     SELECT "codeSymbol","score","categoryId","createdAt","leafHash"

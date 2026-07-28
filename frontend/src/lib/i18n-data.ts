@@ -22483,6 +22483,7 @@ const PLANET_ARTIFACT_EXTRA_EN: Record<string, string> = {
   "planetArt.summary.lineageBefore": "Previous version (resubmission):",
 
   "planetArt.cert.title": "Certificate (public payload)",
+  "planetArt.cert.noPublicPayload": "Public payload is empty — nothing to show. Internal certificate fields are not published.",
 
   "planetArt.stats.title": "Planet participants (for \"X of Y\")",
   "planetArt.stats.eligibleBefore": "(active CodeSymbol):",
@@ -22569,6 +22570,7 @@ const PLANET_ARTIFACT_EXTRA_RU: Record<string, string> = {
   "planetArt.summary.lineageBefore": "Предыдущая версия (пересдача):",
 
   "planetArt.cert.title": "Сертификат (публичный payload)",
+  "planetArt.cert.noPublicPayload": "Публичная часть пуста — показывать нечего. Внутренние поля сертификата не публикуются.",
 
   "planetArt.stats.title": "Участники Planet (для «X из Y»)",
   "planetArt.stats.eligibleBefore": "(активный CodeSymbol):",

@@ -363,8 +363,18 @@ export default function PlanetArtifactPublicPage() {
       {data?.certificate ? (
         <section style={cardStyle}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.cert.title")}</div>
+          {/*
+            Печатаем ТОЛЬКО публичную часть сертификата.
+            Фолбэк `|| data.certificate` убран 28.07: при пустом publicPayloadJson
+            он выводил на экран всю строку из БД, а до того же дня ручка отдавала
+            её целиком — вместе с ownerId и колонкой privatePayloadJson. Бэкенд
+            теперь перечисляет колонки явно, но подстраховка нужна и здесь:
+            страница не должна показывать «что пришло», если пришло лишнее.
+          */}
           <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 10, fontSize: 11, overflow: "auto" }}>
-            {JSON.stringify(data.certificate.publicPayloadJson || data.certificate, null, 2)}
+            {data.certificate.publicPayloadJson
+              ? JSON.stringify(data.certificate.publicPayloadJson, null, 2)
+              : t("planetArt.cert.noPublicPayload")}
           </pre>
         </section>
       ) : null}

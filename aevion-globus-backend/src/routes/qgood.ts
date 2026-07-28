@@ -102,6 +102,22 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodDonation_campaign_idx" ON "QGoodDonation" ("campaignId", "createdAt");`);
+  // Ссылка на платёж должна быть уникальной: повтор того же платежа (сеть
+  // моргнула, платёжная система прислала уведомление дважды) иначе создаёт
+  // ВТОРОЕ пожертвование и второй раз увеличивает собранную сумму — кампания
+  // показывает больше денег, чем пришло. Индекс частичный: пожертвования без
+  // ссылки на платёж (пожелания с формы) друг другу не мешают.
+  try {
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "QGoodDonation_paymentRef_uniq"
+         ON "QGoodDonation" ("paymentRef") WHERE "paymentRef" IS NOT NULL;`,
+    );
+  } catch (err) {
+    // На базе, где дубли уже накопились, индекс не создастся. Это не повод
+    // ронять весь модуль — но и молчать нельзя: пока индекса нет, защита от
+    // повторов работает только на уровне запроса.
+    console.error("[QGood] paymentRef unique index not created (duplicates in table?)", err);
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QGoodMatchingPool" (
       "id"               TEXT PRIMARY KEY,
@@ -283,9 +299,14 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
     const emailHash = donorEmail
       ? crypto.createHash("sha256").update(String(donorEmail).toLowerCase().trim()).digest("hex").slice(0, 32)
       : null;
-    await pool.query(
+    // Повтор одного и того же платежа не должен ни создавать второе
+    // пожертвование, ни второй раз увеличивать собранную сумму. Решает база:
+    // при совпадении ссылки на платёж вставка возвращает ноль строк.
+    const insertedDonation = await pool.query(
       `INSERT INTO "QGoodDonation" ("id","campaignId","amountCents","currency","donorName","donorEmailHash","messageText","anonymous","paymentRef")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT ("paymentRef") WHERE "paymentRef" IS NOT NULL DO NOTHING
+       RETURNING "id"`,
       [
         donationId, id, amount, String(currency).slice(0, 8).toUpperCase(),
         donorName ? String(donorName).slice(0, 100) : null,
@@ -295,6 +316,24 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
         paymentRef ? String(paymentRef).slice(0, 100) : null,
       ],
     );
+    if ((insertedDonation.rowCount ?? 0) === 0) {
+      // Такой платёж уже засчитан. Отвечаем как на успех — повтор не должен
+      // выглядеть ошибкой для платёжной системы, иначе она будет слать его
+      // снова, — но ничего не начисляем.
+      const prior = await pool.query(
+        `SELECT "id","amountCents" FROM "QGoodDonation" WHERE "paymentRef" = $1 LIMIT 1`,
+        [String(paymentRef).slice(0, 100)],
+      );
+      // Тело — той же формы, что и при успехе, плюс явный признак повтора:
+      // вызывающему коду не придётся разбирать два разных ответа.
+      return res.status(200).json({
+        id: prior.rows[0]?.id ?? null,
+        campaignId: id,
+        amountCents: Number(prior.rows[0]?.amountCents ?? amount),
+        match: null,
+        duplicate: true,
+      });
+    }
     await pool.query(
       `UPDATE "QGoodCampaign"
        SET "raisedCents" = "raisedCents" + $1, "donorCount" = "donorCount" + 1

@@ -6555,6 +6555,61 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
+describe("KNOWN MISSES: five readers do not accept 'was'", () => {
+  /**
+   * One defect class across five metrics, found by probing each in isolation
+   * after the same probe closed the margin and top-line misses today.
+   *
+   * The pattern is consistent and narrow: "<metric> of N" reads, "<metric> was
+   * N" does not. Every pair below differs only in that. A plan writing "churn
+   * was 2.1%" — which is how anyone writes it — contributes nothing to the
+   * score, and the reader says nothing about having dropped it.
+   *
+   * A caution learned getting here: the first probe reported eleven misses out
+   * of fourteen, and I nearly wrote that number down. It was the instrument.
+   * Some assertions had been written against field names I assumed rather than
+   * read, so absent fields looked like failed parses. The list below is what
+   * survived checking the field names against the object the engine actually
+   * returns, and each line was measured one sentence at a time.
+   *
+   * Pinned, not fixed: five readers widened in the last quarter hour of a
+   * session, verified in a hurry, is how the currency regression got in. Each
+   * assertion goes red when its miss is closed.
+   */
+  const p = (t: string) => parsePlanSignals(t);
+
+  test("churn", () => {
+    expect(p("Churn was 2.1%.").churnPct).toBeNull();
+    expect(p("Our churn rate was 2.1%.").churnPct).toBeNull();
+    expect(p("Monthly churn of 2.1%.").churnPct).toBe(2.1); // the working twin
+  });
+
+  test("customer acquisition cost", () => {
+    expect(p("CAC was $1,200.").cacUsd).toBeNull();
+    expect(p("Customer acquisition cost of $1,200.").cacUsd).toBe(1200);
+  });
+
+  test("lifetime value", () => {
+    expect(p("LTV was $9,600.").ltvUsd).toBeNull();
+  });
+
+  test("payback", () => {
+    expect(p("CAC payback was 14 months.").paybackMonths).toBeNull();
+    expect(p("Payback period of 14 months.").paybackMonths).toBe(14);
+  });
+
+  test("take rate", () => {
+    expect(p("Take rate was 11.4%.").takeRatePct).toBeNull();
+    expect(p("Our take rate is 11.4%.").takeRatePct).toBe(11.4);
+  });
+
+  test("the customer count with a period clause", () => {
+    // Same shape as the top-line miss closed this session, on a different noun.
+    expect(p("Customers for the quarter totaled 12,500.").customers).toBeNull();
+    expect(p("We had 12,500 customers.").customers).toBe(12_500);
+  });
+});
+
 describe("the top line survives the words a filing puts around it", () => {
   /**
    * These were pinned as known misses one commit earlier and the pins went red

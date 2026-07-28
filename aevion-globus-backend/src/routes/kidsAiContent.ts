@@ -163,6 +163,13 @@ kidsAiContentRouter.use(globalLimit);
 
 kidsAiContentRouter.get("/health", async (_req: Request, res: Response) => {
   let lessonsCount = memLessons.length;
+  // Откуда взято число. Без этого поля health при сбое запроса отдавал
+  // dbReady: true и счётчик из памяти — монитор видел правдоподобную цифру и
+  // считал, что всё в порядке. Ручке здоровья такое врать нельзя: именно на
+  // неё смотрят, когда что-то ломается. Соседний /stats так и сделан (source),
+  // здесь этого не хватало.
+  let lessonsCountSource: "postgres" | "memory" = "memory";
+  let dbQueryFailed = false;
   if (isKidsAiDbReady()) {
     try {
       const r = await pool.query(
@@ -170,19 +177,23 @@ kidsAiContentRouter.get("/health", async (_req: Request, res: Response) => {
       );
       const row = r.rows[0] as { count?: string } | undefined;
       lessonsCount = Number(row?.count ?? lessonsCount);
+      lessonsCountSource = "postgres";
     } catch (err: unknown) {
+      dbQueryFailed = true;
       console.warn(
         "[KidsAI] GET /health count query failed:",
         err instanceof Error ? err.message : err,
       );
-      // fall through to in-memory count
+      // Число берём из памяти, но помечаем это в ответе — см. комментарий выше.
     }
   }
   res.json({
-    ok: true,
+    ok: !dbQueryFailed,
     module: "kids-ai-content",
     dbReady: isKidsAiDbReady(),
+    dbQueryFailed,
     lessonsCount,
+    lessonsCountSource,
     timestamp: new Date().toISOString(),
   });
 });

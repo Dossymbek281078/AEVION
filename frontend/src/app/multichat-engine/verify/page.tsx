@@ -15,15 +15,8 @@
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { T } from "../theme";
-
-type VerifyResult = {
-  hashMatches: boolean;
-  computedHash: string;
-  signature: "valid" | "invalid" | "absent" | "unverifiable";
-  signatureNote: string | null;
-  spec: { canonicalization: string; digest: string; signature: string };
-};
-
+import type { VerifyResult } from "./types";
+import { verdictOf } from "./verdict";
 
 export default function VerifyReceiptPage() {
   const [raw, setRaw] = useState("");
@@ -64,7 +57,14 @@ export default function VerifyReceiptPage() {
     void check(text);
   }
 
-  const verdictColor = !res ? T.textMute : res.hashMatches ? T.accent : T.bad;
+  const verdict = res ? verdictOf(res) : null;
+  const verdictColor = !verdict
+    ? T.textMute
+    : verdict.tone === "good"
+      ? T.accent
+      : verdict.tone === "warn"
+        ? T.warn
+        : T.bad;
 
   return (
     <main style={{ background: T.canvas, minHeight: "100vh", padding: "48px 20px", color: T.text }}>
@@ -123,11 +123,14 @@ export default function VerifyReceiptPage() {
 
         {error && <p style={{ color: T.bad, fontSize: 14, marginTop: 14 }}>{error}</p>}
 
-        {res && (
+        {res && verdict && (
           <div style={{ marginTop: 22, background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 18 }}>
-            <h2 style={{ fontSize: 20, margin: 0, color: verdictColor }}>
-              {res.hashMatches ? "Хеш сходится — содержимое не изменено" : "Хеш НЕ сходится — содержимое изменено"}
-            </h2>
+            <h2 style={{ fontSize: 20, margin: 0, color: verdictColor }}>{verdict.title}</h2>
+            <p style={{ fontSize: 14, color: T.textDim, margin: "10px 0 0", lineHeight: 1.6 }}>{verdict.detail}</p>
+            <p style={{ fontSize: 14, color: T.textDim, margin: "12px 0 0" }}>
+              <span style={{ color: T.textFaded }}>Хеш: </span>
+              {res.hashMatches ? "сходится с содержимым" : "НЕ сходится"}
+            </p>
             <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded, margin: "10px 0 0", wordBreak: "break-all" }}>
               пересчитано: {res.computedHash}
             </p>
@@ -148,12 +151,6 @@ export default function VerifyReceiptPage() {
               подпись {res.spec.signature}.
             </p>
 
-            {!res.hashMatches && (
-              <p style={{ fontSize: 13, color: T.warn, margin: "12px 0 0", lineHeight: 1.6 }}>
-                Расхождение означает одно из двух: файл отредактировали после выдачи, либо это чек
-                другого ответа. Сравните поле <code>hash</code> в файле с пересчитанным выше.
-              </p>
-            )}
           </div>
         )}
       </div>

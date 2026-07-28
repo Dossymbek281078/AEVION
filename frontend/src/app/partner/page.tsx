@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { repoUrl } from "@/lib/repoUrl";
 
 const IDEAS = [
   {
@@ -174,7 +175,7 @@ export default function PartnerPage() {
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 24 }}>
           {[
-            { label: "130+ PR · 500+ коммитов на GitHub", href: "https://github.com/Dossymbek281078/AEVION", note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
+            { label: "130+ PR · 500+ коммитов на GitHub", href: repoUrl(), note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
             { label: "GET /api/aevion/catalog", href: "https://aevion.app/api-backend/api/aevion/catalog", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
             { label: "QSign v2 — postquantum подпись", href: "https://aevion.app/qsign", note: "ML-DSA-65 FIPS 204 — реализовано в QSign v2, включается ключом подписи", color: "#8b5cf6" },
             { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { repoUrl } from "@/lib/repoUrl";
 
 export type RelatedModule = {
   id: string;       // route slug, e.g. "psyapp-deps" or "healthai"
@@ -379,7 +380,7 @@ export default function PlanningLanding(props: PlanningLandingProps) {
         <div className="flex items-center gap-4">
           <ModulePricingChip moduleId={props.id} theme="dark" />
           <Link
-            href="https://github.com/Dossymbek281078/AEVION"
+            href={repoUrl()}
             className="text-xs text-slate-400 hover:text-white"
           >
             GitHub →

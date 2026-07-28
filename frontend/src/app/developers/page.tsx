@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
+import { repoPath } from "@/lib/repoUrl";
 
 export const metadata: Metadata = {
   title: "AEVION Developers — APIs, SDKs, webhooks, sandbox",
@@ -515,7 +516,7 @@ export default function DevelopersPage() {
               </div>
             </Link>
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href={repoPath("tree/main/packages/aevion-catalog-client")}
               target="_blank"
               rel="noreferrer"
               style={{

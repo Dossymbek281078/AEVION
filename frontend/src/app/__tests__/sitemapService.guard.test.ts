@@ -22,10 +22,14 @@ const INTENTIONAL = new Set([
   "/fintech/dashboard",
 ]);
 
+// Обход файловой системы делается один раз на загрузке модуля. Внутри it()
+// он укладывался в таймаут в одиночку и не укладывался в полном прогоне —
+// зелёный в изоляции, красный вместе со всеми. См. feedback_fs_scanning_test_timeout.
+const SITEMAP_ENTRIES = await sitemap();
+
 describe("карта сайта не зовёт Google в служебные разделы", () => {
-  it("в карте нет админок и личных кабинетов", async () => {
-    const entries = await sitemap();
-    const paths = entries.map((e) => new URL(e.url).pathname);
+  it("в карте нет админок и личных кабинетов", () => {
+    const paths = SITEMAP_ENTRIES.map((e) => new URL(e.url).pathname);
     expect(paths.length).toBeGreaterThan(50);
     const offenders = paths.filter((p) => SERVICE_PATTERN.test(p) && !INTENTIONAL.has(p));
     expect(offenders).toEqual([]);

@@ -779,7 +779,7 @@ function noteChurnConversion(s: PlanSignals, stated: number): void {
  *    figure that does is a different quantity wearing the same punctuation.
  */
 function lastInSeries(
-  t: string, from: number, shape: "money" | "percent", head: number,
+  t: string, from: number, shape: "money" | "percent", head: number, headText: string,
 ): RegExpExecArray | null {
   const figure = shape === "money"
     ? new RegExp(String.raw`^[^.;]{0,40}?(?:,|\band\b)\s*(?:and\s+)?${CUR}${NUM}\s*${UNIT}`, "i")
@@ -806,6 +806,15 @@ function lastInSeries(
     return m ? Number(m[0]) : null;
   };
 
+  /**
+   * The currency the head figure is quoted in, or null when nothing marks it.
+   *
+   * Read with detectCurrency rather than a second pattern of my own: the file
+   * already has one reader of currency markers, and a walk that disagreed with
+   * the converter about what "R$" means would be worse than no check at all.
+   */
+  const headCur = shape === "money" ? detectCurrency(headText) : null;
+
   /** Same quantity, or a different one wearing the same punctuation? */
   const comparable = (m: RegExpExecArray): boolean => {
     const raw = shape === "money" ? parseMoney(m[1], m[2]) : parseLocaleNumber(m[1]);
@@ -821,6 +830,19 @@ function lastInSeries(
     if (!m) break;
     const bridge = m[0].slice(0, m[0].search(/[,]|\band\b/i) + 1);
     if (STOP.test(bridge) || OTHER_METRIC.test(bridge)) break;
+    // A figure in a different currency is a different quantity, and taking it
+    // is worse than taking a wrong number: the value comes from the tail while
+    // the unit comes from the head, so "$1M in the US and €2M in the EU" was
+    // read as $2M — the euro figure priced in dollars. This regression was
+    // mine, introduced with the walk itself, and it survived four independent
+    // guards because the disclosed corpus had no two-currency plan in it.
+    //
+    // Only a CHANGE stops the walk. A tail that names no currency inherits the
+    // head's, which is how "revenue of $1M in 2019 and 2M in 2020" is written.
+    if (headCur) {
+      const tailCur = detectCurrency(m[0]);
+      if (tailCur && tailCur !== headCur) break;
+    }
     if (!comparable(m)) break;
     // A continuation never repeats the noun. "5,000 in 2019" is the same
     // metric again; "290 million Premium Subscribers" is a different one that
@@ -988,7 +1010,7 @@ export function parsePlanSignals(text: string): PlanSignals {
       const monthly = /\bmrr\b/i.test(kindStr)
         || /\bmonthly\s+recurring\b/i.test(around)
         || /\b(?:per|a)\s+month\b|\/\s*mo(?:nth)?\b/i.test(around);
-      const tail = lastInSeries(t, at + arr[0].length, "money", val);
+      const tail = lastInSeries(t, at + arr[0].length, "money", val, arr[0]);
       const tailUsd = tail ? moneyUsd(t, tail, tail[1], tail[2], planCurrency, s) : null;
       const chosen = tailUsd !== null && tailUsd > 0 ? tailUsd : val;
       if (tailUsd !== null && tailUsd > 0) {
@@ -1232,7 +1254,7 @@ export function parsePlanSignals(text: string): PlanSignals {
       // the top line has, and the first figure — the older, flattering one —
       // was winning. Only on a rise: a decline series would have to carry the
       // sign forward, which is how a sign gets lost.
-      const gTail = !usingDecline ? lastInSeries(t, (growth.index ?? 0) + growth[0].length, "percent", g) : null;
+      const gTail = !usingDecline ? lastInSeries(t, (growth.index ?? 0) + growth[0].length, "percent", g, "") : null;
       const gVal = gTail ? parseLocaleNumber(gTail[1]) : g;
       if (gTail && isFinite(gVal)) {
         s.parseNotes.push(`Growth was stated for several periods in one sentence; the score uses the latest (${gVal}%).`);
@@ -1304,7 +1326,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // as the top line. Only when the head is POSITIVE: a series walk on a
     // negative margin would have to carry the sign forward, and a filing that
     // states a negative margin states it once.
-    const tail = !negative && isFinite(head) ? lastInSeries(t, (gm.index ?? 0) + gm[0].length, "percent", head) : null;
+    const tail = !negative && isFinite(head) ? lastInSeries(t, (gm.index ?? 0) + gm[0].length, "percent", head, "") : null;
     const magnitude = tail ? parseLocaleNumber(tail[1]) : head;
     if (isFinite(magnitude) && magnitude > 0 && magnitude <= 100) {
       s.grossMarginPct = negative ? -magnitude : magnitude;
@@ -1484,7 +1506,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
   if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) {
     const headPct = parseLocaleNumber(ret[1]);
-    const tail = lastInSeries(t, (ret.index ?? 0) + ret[0].length, "percent", headPct);
+    const tail = lastInSeries(t, (ret.index ?? 0) + ret[0].length, "percent", headPct, "");
     const v = tail ? parseLocaleNumber(tail[1]) : headPct;
     if (isFinite(v) && v > 0 && v <= 500) {
       s.retentionPct = v;
@@ -1533,7 +1555,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     const head = shared ? parseMoney(shared.value, shared.unit) : parseMoney(cust[1], cust[2]);
     // "3,000 customers in 2018, 5,000 in 2019, and 8,000 in 2020" names the
     // noun once, so the oldest count would win. Same shape as the top line.
-    const tail = head ? lastInSeries(t, (cust.index ?? 0) + cust[0].length, "money", head) : null;
+    const tail = head ? lastInSeries(t, (cust.index ?? 0) + cust[0].length, "money", head, cust[0]) : null;
     const v = tail ? parseMoney(tail[1], tail[2]) : head;
     if (v && v >= 1) {
       s.customers = Math.round(v);

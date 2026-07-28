@@ -2368,6 +2368,38 @@ describe("the document's headline number is the harness's number", () => {
 
 
 
+  test("the corpus size and split in the doc match the corpus itself", () => {
+    /**
+     * Found drifted: the doc said 30 entries, 29 companies and 13 `open` while
+     * CASES held 32, 31 and 15. Nothing caught it, because the gate above
+     * watches the hard-cases gap and nothing watched this paragraph — and the
+     * stale sentence sits four lines from a live one, which is what makes it
+     * convincing.
+     *
+     * Written as a comparison against the corpus rather than against literals.
+     * A test asserting "32" would be correct today and an obstacle the next
+     * time a filing is added: it would go red for doing the work, and get
+     * deleted rather than updated.
+     */
+    const doc = fs.readFileSync(docPath, "utf8");
+    const head = doc.match(/disclosed-figures corpus \((\d+) entries, (\d+) real companies/);
+    const split = doc.match(/The split is \*\*(\d+) failed, (\d+) succeeded, (\d+)\s*\n?\s*`open`\*\*/);
+    expect(head, "corpus-size sentence not found in the rubric doc").not.toBeNull();
+    expect(split, "corpus-split sentence not found in the rubric doc").not.toBeNull();
+
+    // Infosys is in twice on purpose — the dollar and rupee releases of one
+    // quarter — so entries and companies are deliberately different numbers,
+    // and the doc states both.
+    const companies = new Set(CASES.map((c) => c.input.name.replace(/\s*\(rupee release\)\s*$/, ""))).size;
+    expect(Number(head![1]), "stated entry count").toBe(CASES.length);
+    expect(Number(head![2]), "stated company count").toBe(companies);
+
+    const by = (o: string) => CASES.filter((c) => c.outcome === o).length;
+    expect(Number(split![1]), "stated failed count").toBe(by("failed"));
+    expect(Number(split![2]), "stated succeeded count").toBe(by("succeeded"));
+    expect(Number(split![3]), "stated open count").toBe(by("open"));
+  });
+
   test("the guard table carries the same figure as the claim", () => {
 
     const doc = fs.readFileSync(docPath, "utf8");
@@ -6523,32 +6555,42 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
-describe("REGRESSION I introduced: the series walker crosses a currency change", () => {
-  // Found in the last minutes of the session by swapping sentence order and
-  // requiring the same answer - the data-mutation technique, on a rule I had
-  // not thought to apply it to.
+describe("the series walker stops at a currency change", () => {
+  // Was pinned here as the current WRONG behaviour: a regression I introduced
+  // with the walk itself. It took the tail figure while the currency still came
+  // from the head, so "$1M in the US and EUR 2M in the EU" read as $2M — the
+  // euro figure priced in dollars. Value from one place, unit from another,
+  // which is the precise defect class this branch exists to stop.
   //
-  // Before the series work these read correctly: "$1M in the US and EUR 2M in
-  // the EU" gave 1,000,000 and the reverse gave 2,275,888, each figure
-  // converted at its own currency. The walker now takes the tail figure while
-  // the currency comes from elsewhere, so the number and its unit are drawn
-  // from different places - the exact defect class this branch exists to stop,
-  // introduced by me.
+  // It survived all four guards. Not because they are weak, but because the
+  // disclosed corpus had no two-currency plan in it: every guard was asked
+  // about text where the question could not arise. Found only by swapping the
+  // sentence order and demanding the same answer.
   //
-  // Pinned as the current WRONG behaviour rather than left silent. The fix is
-  // to stop the walk at a currency change, which is one condition in
-  // lastInSeries and needs its traps before it ships.
+  // Now fixed in lastInSeries, and the assertions below are the real ones.
   const p = (t: string) => parsePlanSignals(t);
 
-  test("dollar first, euro second", () => {
-    expect(p("ARR of $1M in the US and €2M in the EU.").revenueUsd).toBe(2_000_000);
+  test("dollar first, euro second — the dollar figure stands", () => {
+    expect(p("ARR of $1M in the US and €2M in the EU.").revenueUsd).toBe(1_000_000);
   });
 
-  test("euro first, dollar second", () => {
-    expect(p("ARR of €2M in the EU and $1M in the US.").revenueUsd).toBeCloseTo(1_137_944, -2);
+  test("euro first, dollar second — the euro figure stands, converted", () => {
+    // Order-swapped twin of the case above. Two segments in two currencies are
+    // not a time series, so neither reading should walk; whichever is stated
+    // first is the one the sentence is about.
+    expect(p("ARR of €2M in the EU and $1M in the US.").revenueUsd).toBeCloseTo(2_275_888, -2);
   });
 
-  test("a single-currency plan is unaffected", () => {
+  test("a single-currency plan still walks to the later figure", () => {
+    // The bound has to be narrow. A stop-on-any-currency-mention rule would
+    // have broken this, and did — that was the first attempted fix.
     expect(p("ARR of $1M in the US and $2M in the EU.").revenueUsd).toBe(2_000_000);
+  });
+
+  test("a tail that names no currency inherits the head's", () => {
+    // Only a CHANGE stops the walk. This is how a plan actually writes a
+    // series, and treating a bare figure as a currency change would silently
+    // freeze every trend at its first year.
+    expect(p("Revenue of $1M in 2019 and 2M in 2020.").revenueUsd).toBe(2_000_000);
   });
 });

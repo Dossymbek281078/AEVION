@@ -156,6 +156,7 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from 
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import { collectProgress, parseBackup, applyProgress, backupFilename, ourKeys } from "./progressBackup";
+import { parseUciMove, safeOpponentName } from "./p2pGuards";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
@@ -612,19 +613,9 @@ function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){
     },[]),
   };
 }
-/* Часы «М:СС». Округление ВНУТРИ, а не у вызывающих.
- *
- * Раньше функция брала число как есть, а секунды приходят из
- * `(deadline - Date.now())/1000` — дробными. Все нынешние вызывающие округляют
- * сами, поэтому сегодня всё в порядке, но защита, которую надо помнить на каждом
- * вызове, однажды не сработает: `fmt(157.4159)` даёт `2:37.41589999999999` прямо
- * на циферблате. NaN тоже отсекается — иначе на экране появлялось бы `NaN:NaN`.
- */
-export function fmt(s:number){
-  if(!Number.isFinite(s)||s<=0)return "0:00";
-  const t=Math.round(s);
-  return `${Math.floor(t/60)}:${String(t%60).padStart(2,"0")}`;
-}
+// fmt вынесена в ./clockFormat — страница Next не вправе экспортировать ничего, кроме default и метаданных
+import { fmt } from "./clockFormat";
+
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
 /* ═══ Theme ═══ */
@@ -4517,11 +4508,23 @@ export default function CyberChessPage(){
   useEffect(()=>{
     p2pMsgRef.current=(msg:P2PMessage)=>{
       if(msg.t==="mv"){
-        const f=msg.uci.slice(0,2) as Square,t=msg.uci.slice(2,4) as Square;
-        const pr=msg.uci[4] as any||undefined;
-        exec(f,t,pr,false);
-      }else if(msg.t==="hello"){sP2pOpponentName((msg as any).name||"Оппонент")}
-      else if(msg.t==="resign"){sOver(`${p2pOpponentName} сдался — Вы победили!`);sOn(false)}
+        /* Ход соперника — недоверенный ввод. Раньше строка резалась .slice() без
+           единой проверки, а результат применялся как есть. Две дыры: мусор вместо
+           хода ронял обработчик, и — важнее — ход применялся без проверки, ЧЬЕЙ
+           фигурой он сделан. chess.js разрешает ход той стороны, чья сейчас очередь,
+           поэтому сообщение, присланное когда очередь ВАША, двигало ВАШУ фигуру:
+           соперник мог сам подставить вашего ферзя. */
+        const mv=parseUciMove((msg as {uci?:unknown}).uci);
+        if(!mv)return;
+        const piece=game.get(mv.from as Square);
+        if(!piece||piece.color===pCol)return; // своими фигурами ходит только сам игрок
+        exec(mv.from as Square,mv.to as Square,mv.promotion,false);
+      }else if(msg.t==="hello"){sP2pOpponentName(safeOpponentName((msg as {name?:unknown}).name))}
+      /* Имя соперника в строку исхода НЕ подставляется. Классификатор исхода ищет в
+         ней слова «поражение» и «ничья», поэтому соперник, назвавшийся «поражение»,
+         превращал вашу победу в проигрыш — в рейтинге, серии и статистике. Имя видно
+         в интерфейсе отдельно; исход собирается только из наших слов. */
+      else if(msg.t==="resign"){sOver("Соперник сдался — Вы победили!");sOn(false)}
       else if(msg.t==="draw-accept"){sOver("Ничья (договорились)");sOn(false)}
     };
     return()=>{p2pMsgRef.current=null};

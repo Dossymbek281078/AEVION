@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmt } from "../page";
+import { fmt } from "../clockFormat";
 
 /* Циферблат читают каждую секунду всю партию, поэтому ошибка здесь видна сразу и
    выглядит как поломка. Секунды приходят из (deadline - now)/1000, то есть дробными:

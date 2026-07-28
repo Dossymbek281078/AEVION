@@ -136,10 +136,14 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
       const where = conditions.join(" AND ");
       const orderBy = whenFilter === "past" ? `ORDER BY "startAt" DESC` : `ORDER BY "startAt" ASC`;
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`,
+        // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+        // идентификатору. Иначе афиша поедет вслед за схемой.
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`,
         [...args, limitN],
       );
-      return res.json({ events: rows, when: whenFilter });
+      return res.json({ events: rows.map(publicEvent), when: whenFilter });
     }
 
     let events = Array.from(memEvents.values()).filter((e) => e.isPublic);
@@ -555,7 +559,9 @@ qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
       const monthStart = `${ym}-01T00:00:00.000Z`;
       const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
         [monthStart, monthEnd],
       );
       for (const ev of rows as QEvent[]) {

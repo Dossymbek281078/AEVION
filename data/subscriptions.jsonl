@@ -1,0 +1,3 @@
+{"id":"sub_1785226126384_4xr271","ts":"2026-07-28T08:08:46.384Z","email":"buyer@test.aevion.dev","tierId":"medium","period":"monthly","seats":1,"modules":[],"trialDays":0,"validUntil":"2026-08-27T08:08:46.388Z","source":"gumroad"}
+{"id":"sub_expired","ts":"2026-07-28T08:08:46.405Z","email":"expired@test.aevion.dev","tierId":"medium","period":"monthly","seats":1,"modules":[],"trialDays":0,"validUntil":"2026-07-27T08:08:46.405Z","source":"gumroad"}
+{"id":"sub_1785226126417_a7oil2","ts":"2026-07-28T08:08:46.417Z","email":"lite-buyer@test.aevion.dev","tierId":"lite","period":"monthly","seats":1,"modules":["healthai"],"trialDays":0,"validUntil":"2026-08-27T08:08:46.417Z","source":"gumroad"}

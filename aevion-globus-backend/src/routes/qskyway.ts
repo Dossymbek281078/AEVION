@@ -72,7 +72,16 @@ const DISCLAIMER =
 const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO };
 const DEFAULT_CITY = "astana";
 const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
-  const key = typeof id === "string" && id in CITIES ? id : id == null ? DEFAULT_CITY : null;
+  // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
+  // `"constructor" in CITIES` истинно, ключом становилось само слово, а городом —
+  // функция Object.prototype.constructor. Живой прод 28.07.2026 отвечал HTTP 500
+  // на ?city=constructor, ?city=__proto__ и ?city=toString вместо честного 404
+  // «неизвестный город» — и так на КАЖДОЙ ручке, зовущей resolveCity.
+  //
+  // Пятисотка здесь не косметика: это ручки регуляторного слоя, по которым
+  // сторонний проверяющий судит, отвечает ли модуль предсказуемо.
+  const known = typeof id === "string" && Object.prototype.hasOwnProperty.call(CITIES, id);
+  const key = known ? (id as string) : id == null ? DEFAULT_CITY : null;
   return key ? { id: key, city: CITIES[key] } : null;
 };
 

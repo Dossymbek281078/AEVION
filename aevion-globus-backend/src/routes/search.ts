@@ -27,6 +27,32 @@ interface SearchResult {
   score: number;
 }
 
+/**
+ * Адреса результатов ведут ТОЛЬКО на страницы, которые существуют во фронте.
+ * Проверено на проде 27.07.2026: детальные страницы есть лишь у двух источников —
+ * `/qstore/[id]` и `/qright/object/[id]` (обе отдают 200). Маршрутов
+ * `/qlearn/courses/*`, `/qnews/*`, `/qevents/*`, `/qjobs/*` в приложении нет,
+ * прежние ссылки отдавали 404 — незаметно, потому что поиск не был подключён
+ * ни к одной странице. Для этих источников ведём на страницу модуля и оставляем
+ * id в параметре: ссылка живая сейчас и станет глубокой, когда появится деталь.
+ */
+
+/** Внешняя ссылка новости — только если она реально ведёт наружу. */
+export function newsUrl(stored: unknown, id: string): string {
+  const raw = typeof stored === "string" ? stored.trim() : "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const host = new URL(raw).hostname.toLowerCase();
+      // Собственный домен в поле url — это внутренний путь вида /news/<slug>,
+      // такого маршрута во фронте нет (проверено: 404 и на aevion.app, и на vercel).
+      if (!/(^|\.)aevion\.(app|vercel\.app)$/.test(host)) return raw;
+    } catch {
+      /* битый url — уходим на страницу модуля */
+    }
+  }
+  return `/qnews?item=${encodeURIComponent(id)}`;
+}
+
 function scoreText(query: string, title: string, description: string): number {
   const q = query.toLowerCase();
   const t = title.toLowerCase();
@@ -77,7 +103,7 @@ async function searchQLearn(pool: any, q: string, limit: number): Promise<Search
       type: "qlearn" as const,
       title: row.title,
       description: (row.description || "").slice(0, 200),
-      url: `/qlearn/courses/${row.id}`,
+      url: `/qlearn?course=${encodeURIComponent(row.id)}`,
       metadata: { category: row.category, level: row.level, enrollmentCount: row.enrollmentCount },
       score: scoreText(q, row.title, row.description || "") + 5,
     }));
@@ -87,10 +113,15 @@ async function searchQLearn(pool: any, q: string, limit: number): Promise<Search
 async function searchQNews(pool: any, q: string, limit: number): Promise<SearchResult[]> {
   try {
     const r = await pool.query(
-      `SELECT id, title, summary, url, source, category
+      // DISTINCT ON по заголовку — как в QStore/QEvents: лента переливается из
+      // нескольких источников, и один и тот же материал лежит несколькими
+      // строками с разными id. Дедуп по (type,id) их не склеивает, и в выдаче
+      // видно два одинаковых блока — поймано на живой выдаче 27.07.2026
+      // («QCoreAI Now Powers 5 LLM Providers» дважды по запросу «ai»).
+      `SELECT DISTINCT ON (LOWER(title)) id, title, summary, url, source, category, "createdAt"
        FROM "QNewsArticle"
        WHERE LOWER(title) LIKE $1 OR LOWER(summary) LIKE $1 OR LOWER(category) LIKE $1
-       ORDER BY "createdAt" DESC LIMIT $2`,
+       ORDER BY LOWER(title), "createdAt" DESC LIMIT $2`,
       [`%${q.toLowerCase()}%`, limit],
     );
     return r.rows.map((row: any) => ({
@@ -98,7 +129,7 @@ async function searchQNews(pool: any, q: string, limit: number): Promise<SearchR
       type: "qnews" as const,
       title: row.title,
       description: (row.summary || "").slice(0, 200),
-      url: row.url || `/qnews/${row.id}`,
+      url: newsUrl(row.url, row.id),
       metadata: { source: row.source, category: row.category },
       score: scoreText(q, row.title, row.summary || ""),
     }));
@@ -120,7 +151,7 @@ async function searchQEvents(pool: any, q: string, limit: number): Promise<Searc
       type: "qevents" as const,
       title: row.title,
       description: (row.description || "").slice(0, 200),
-      url: `/qevents/${row.id}`,
+      url: `/qevents?event=${encodeURIComponent(row.id)}`,
       metadata: { category: row.category, location: row.location, startAt: row.startAt, attendeeCount: row.attendeeCount },
       score: scoreText(q, row.title, row.description || "") + 3,
     }));
@@ -143,7 +174,7 @@ async function searchQJobs(pool: any, q: string, limit: number): Promise<SearchR
       type: "qjobs" as const,
       title: row.title,
       description: (row.description || "").slice(0, 200),
-      url: `/qjobs/${row.id}`,
+      url: `/qjobs?job=${encodeURIComponent(row.id)}`,
       metadata: { jobType: row.jobType, location: row.location, salary: row.salary, company: row.companyName },
       score: scoreText(q, row.title, row.description || ""),
     }));
@@ -165,7 +196,7 @@ async function searchQRight(pool: any, q: string, limit: number): Promise<Search
       type: "qright" as const,
       title: row.title,
       description: (row.description || "").slice(0, 200),
-      url: `/qright/${row.id}`,
+      url: `/qright/object/${row.id}`,
       metadata: { kind: row.kind, ownerName: row.ownerName },
       score: scoreText(q, row.title, row.description || "") - 5,
     }));

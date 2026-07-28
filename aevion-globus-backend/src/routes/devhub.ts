@@ -184,24 +184,56 @@ async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
   } catch { memTiers.set(userId, tier); }
 }
 
-async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
+/**
+ * Возвращает `null`, когда расход ПРОЧИТАТЬ НЕ УДАЛОСЬ.
+ *
+ * Раньше здесь стояло `catch { return 0; }`, то есть «не смогли прочитать»
+ * выдавалось за «не тратил». Последствие не косметическое: `checkCredit` считает
+ * `used + amount <= limit`, поэтому при недоступном счётчике каждый вызов видел
+ * чистый счёт и платная квота фактически никого не ограничивала — молча, без
+ * падения и без записи в лог.
+ *
+ * `null` вместо нуля не меняет политику (она остаётся продуктовым решением —
+ * пускать всех или не пускать никого при недоступном счётчике), но делает
+ * состояние ОТЛИЧИМЫМ: вызывающий сам решает, как трактовать неизвестность, и
+ * `/studio/credits` теперь сообщает об этом наружу.
+ */
+async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number | null> {
   if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
   try {
     const r = await pool.query(
       `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
       [userId, month, capability]
     );
+    // Строки нет — расхода действительно ноль. Это НЕ то же самое, что сбой.
     return r.rows[0]?.used ?? 0;
-  } catch { return 0; }
+  } catch (e) {
+    // Причина уходит в лог сервера: без неё недоступный счётчик остаётся
+    // невидимым и снаружи, и в диагностике.
+    console.error(
+      `[devhub/credits] не удалось прочитать расход (${capability}):`,
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
 }
 
-async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier; usageKnown: boolean }> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
-  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  // Безлимитный тариф: счётчик не читается вовсе, поэтому расход ИЗВЕСТЕН —
+  // ограничения нет, и неизвестность тут ничего не значит.
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usageKnown: true };
   const month = creditMonth();
-  const used = await getMonthUsage(userId, month, capability);
-  return { allowed: used + amount <= limit, used, limit, tier };
+  const read = await getMonthUsage(userId, month, capability);
+  // ПОЛИТИКА НЕ МЕНЯЕТСЯ: при недоступном счётчике по-прежнему пускаем (иначе
+  // сбой базы отключил бы платным клиентам оплаченные возможности). Но теперь
+  // это ЯВНЫЙ выбор в одной строке, а не побочный эффект `catch { return 0 }`,
+  // и он назван — `usageKnown: false`. Смена политики на «не пускать» —
+  // решение основателя, вынесено ему.
+  const usageKnown = read !== null;
+  const used = read ?? 0;
+  return { allowed: used + amount <= limit, used, limit, tier, usageKnown };
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
@@ -226,16 +258,20 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
   }
 }
 
-async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usageKnown: boolean; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
   const tier = await getUserTier(userId);
   const month = creditMonth();
   const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
   const usage: Record<string, { used: number; limit: number }> = {};
+  // Признак «числам можно верить». Без него ответ «использовано 0» при
+  // недоступном счётчике не отличался от честного нуля.
+  let usageKnown = true;
   for (const cap of caps) {
-    const used = await getMonthUsage(userId, month, cap);
-    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+    const read = await getMonthUsage(userId, month, cap);
+    if (read === null) usageKnown = false;
+    usage[cap] = { used: read ?? 0, limit: TIER_LIMITS[tier][cap] };
   }
-  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+  return { tier, month, usageKnown, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────

@@ -3166,7 +3166,14 @@ export default function CyberChessPage(){
     const params=new URLSearchParams(window.location.search);
     const room=params.get("room");const hostColor=(params.get("color")||"w") as ChessColor;
     if(!room)return;
-    sP2pMode(true);sP2pRoomId(room);
+    /* Конфликтующие режимы сбрасываются ЗДЕСЬ ТОЖЕ, а не только при создании
+       комнаты. Вход по ссылке-приглашению этого не делал: игрок, у которого включён
+       Hotseat, открывал присланную ссылку и оказывался в противоречивом состоянии —
+       локально ходят обе стороны и одновременно приходят ходы соперника. С
+       включённым «Соперником» на партию по сети вдобавок навешивалось обучение
+       профиля Rival. Ветка создания комнаты гасила эти режимы с самого начала,
+       ветка входа — нет. */
+    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
     p2p.join(room);
     // Take opposite color of host
     const myColor:ChessColor=hostColor==="w"?"b":"w";
@@ -6713,7 +6720,8 @@ export default function CyberChessPage(){
                   {/* P2P — play with friend online via WebRTC */}
                   <button onClick={()=>{
                     const room=genRoomId();const myColor:ChessColor="w";
-                    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);
+                    // тот же набор, что и при входе по ссылке: все четыре конфликтующих режима
+                    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
                     p2p.host(room);
                     sPCol(myColor);sFlip(false);
                     const url=typeof window!=="undefined"?`${window.location.origin}/cyberchess?room=${room}&color=${myColor}`:`/cyberchess?room=${room}&color=${myColor}`;

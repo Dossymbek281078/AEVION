@@ -122,4 +122,36 @@ describe("QSocial: непубличный пост не читается по п
     const sql = mockQuery.mock.calls.map((c) => String(c[0])).find((q) => q.includes('FROM "QSocialPost"'));
     expect(sql).not.toMatch(/SELECT\s+\*/i);
   });
+
+  /**
+   * Списочные ручки страдают тем же: они отдавали строки из базы целиком, и
+   * выдача росла бы вслед за схемой. Проверяем ленту и посты пользователя.
+   */
+  test("лента и посты пользователя не отдают служебные поля", async () => {
+    mockQuery.mockReset();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('FROM "QSocialPost"')) {
+        return {
+          rows: [
+            {
+              id: "post-1", userId: AUTHOR, content: "текст", mediaUrl: null, type: "text",
+              likesCount: 0, commentsCount: 0, isPublic: true, tags: [],
+              createdAt: new Date().toISOString(),
+              moderationFlag: "under_review",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const feed = await request(makeApp()).get("/api/qsocial/feed");
+    expect(feed.status).toBe(200);
+    expect(feed.body.posts[0]).not.toHaveProperty("moderationFlag");
+
+    const byUser = await request(makeApp()).get(`/api/qsocial/users/${AUTHOR}/posts`);
+    expect(byUser.status).toBe(200);
+    expect(byUser.body.posts[0]).not.toHaveProperty("moderationFlag");
+  });
 });

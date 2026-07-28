@@ -161,15 +161,21 @@ qsocialRouter.get("/health", (_req: Request, res: Response) => {
 qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
   try {
     if (isQSocialDbReady()) {
+      // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+      // идентификатору. Иначе лента поедет вслед за схемой: колонку добавили
+      // обновлением базы, и она уехала наружу без единой правки кода.
       const { rows } = await pool.query(
-        `SELECT * FROM "QSocialPost" WHERE "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
       );
-      return res.json({ posts: rows });
+      return res.json({ posts: rows.map(publicPost) });
     }
     const posts = Array.from(memPosts.values())
       .filter((p) => p.isPublic)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((p) => publicPost(p as unknown as Record<string, unknown>));
     return res.json({ posts });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
@@ -512,15 +518,18 @@ qsocialRouter.get("/users/:userId/posts", async (req: Request, res: Response) =>
   try {
     if (isQSocialDbReady()) {
       const { rows } = await pool.query(
-        `SELECT * FROM "QSocialPost" WHERE "userId"=$1 AND "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "userId"=$1 AND "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
         [userId],
       );
-      return res.json({ posts: rows });
+      return res.json({ posts: rows.map(publicPost) });
     }
     const posts = Array.from(memPosts.values())
       .filter((p) => p.userId === userId && p.isPublic)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((p) => publicPost(p as unknown as Record<string, unknown>));
     return res.json({ posts });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });

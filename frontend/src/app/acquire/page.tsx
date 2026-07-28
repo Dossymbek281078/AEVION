@@ -127,7 +127,7 @@ const PILLARS: Pillar[] = [
     title: "Governance / Trust",
     oneLine:
       "Constitution v1 + Planet attestations + публичный health-board.",
-    modules: ["Constitution v1", "/planet", "/transparency", "/launch-status", "AEVION_COORDINATION"],
+    modules: ["Constitution v1", "/planet", "/launch-status", "AEVION_COORDINATION"],
     proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · 24/24 daily smoke",
     tamAnchor: "Trust premium для всех четырёх слоёв",
     accent: "#f472b6",

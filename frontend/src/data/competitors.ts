@@ -525,6 +525,52 @@ export const COMPARE_ROWS: CompareRow[] = [
     // цифры в строке — наши собственные.
     noRivalClaims: true,
   },
+  {
+    module: "qskyway",
+    title: t("QSkyway — коридоры для дронов над городом", "QSkyway — urban drone corridors"),
+    rivals: ["Aloft", "AirMap"],
+    headline: t(
+      "Они выдают настоящие разрешения на полёт, мы — нет. Зато мы читаем опубликованные потолки трёх стран в трёх разных формах и отказываем в маршруте по ним, а не по красивой картинке.",
+      "They issue real flight authorisations, we do not. What we do is read published ceilings in three countries — in three different formats — and refuse a route by them rather than by a pretty picture.",
+    ),
+    verdict: "they-stronger",
+    strengths: [
+      t(
+        "Правила берём из первоисточника и в той форме, в какой их публикует регулятор: открытый машинный слой FAA по Нью-Йорку, растровые карты MLIT по Токио, текстовый документ AIP по Казахстану. «Нет API» у нас не означает «нет правила».",
+        "Rules come from the primary source in whatever form the regulator publishes them: an open machine-readable FAA layer for New York, MLIT raster maps for Tokyo, an AIP text document for Kazakhstan. \"No API\" does not mean \"no rule\" here.",
+      ),
+      t(
+        "Отказ в маршруте называет причину и высоту: «потолок воздушного пространства», а не общее «нельзя». Над Мидтауном 28% ячеек сетки имеют нулевой потолок — там автоматически не разрешено ничего, и маршрут это учитывает.",
+        "A refused route names the reason and the altitude — \"airspace ceiling\", not a generic \"denied\". Over Midtown 28% of grid cells sit under a zero ceiling where nothing is automatically authorised, and routing obeys that.",
+      ),
+      t(
+        "Если данных нет, модуль говорит «нет данных», а не выдумывает потолок. До этой работы все ограничения в QSkyway были иллюстративными — это было честно названо и заменено фактическими.",
+        "When data is missing the module says so instead of inventing a ceiling. Before this work every restriction in QSkyway was illustrative — that was named plainly and replaced with real data.",
+      ),
+    ],
+    weaknesses: [
+      t(
+        "Разрешения на полёт мы не выдаём. Aloft — одобренный FAA поставщик LAANC: через него пилот получает НАСТОЯЩЕЕ разрешение за секунды. У нас планирование, а не допуск.",
+        "We issue no authorisations. Aloft is an FAA-approved LAANC provider: a pilot gets a REAL authorisation through it in seconds. What we have is planning, not clearance.",
+      ),
+      t(
+        "Три города, а не страна: Нью-Йорк, Токио, Алматы. За пределами этих участков сказать нечего.",
+        "Three cities, not a country: New York, Tokyo, Almaty. Outside those areas we have nothing to say.",
+      ),
+      t(
+        "Ни одного реального полёта по нашему маршруту не выполнено. Это карта и расчёт, а не эксплуатация.",
+        "Not a single real flight has been flown on our route. This is a map and a calculation, not operations.",
+      ),
+    ],
+    measured: t(
+      "Наша сторона — прогон загрузки данных FAA 26.07.2026 по двойнику Мидтауна: 9 опубликованных ячеек покрывают 99% участка, потолки 0-122 м, 2520 из 8858 ячеек сетки (28%) с нулевым потолком, прямой маршрут проходит у 21 из 42 пар вертипортов. Про Aloft утверждается только то, что написано на странице программы LAANC у FAA.",
+      "Our side — an FAA data ingestion run on 2026-07-26 over the Midtown twin: 9 published cells cover 99% of the area, ceilings 0-122 m, 2520 of 8858 grid cells (28%) under a zero ceiling, a direct route exists for 21 of 42 vertiport pairs. About Aloft we assert only what the FAA LAANC programme page states.",
+    ),
+    sources: [
+      { label: t("FAA: обмен данными LAANC и список поставщиков", "FAA: LAANC data exchange and provider list"), url: "https://www.faa.gov/uas/programs_partnerships/data_exchange" },
+      { label: t("Aloft — поставщик разрешений LAANC", "Aloft — LAANC authorisation provider"), url: "https://www.aloft.ai/" },
+    ],
+  },
 ];
 
 /**
@@ -534,7 +580,6 @@ export const COMPARE_ROWS: CompareRow[] = [
  */
 export const NOT_COMPARED: { module: string; rivals: string }[] = [
   { module: "qlearn", rivals: "Teachable, Udemy" },
-  { module: "qskyway", rivals: "Aloft, AirMap" },
   { module: "veilnetx", rivals: "Blacklight, Privacy Badger" },
   { module: "startup-exchange", rivals: "AngelList, Republic" },
   { module: "qnews", rivals: "Feedly, Google News" },

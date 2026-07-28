@@ -1449,6 +1449,61 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/mapReality.ts", "tests/mapRealityHealthHonesty.test.ts"],
   },
+
+  {
+    moduleId: "qpaynet",
+    module: "QPayNet — кошельки и приём платежей внутри платформы",
+    page: "/qpaynet",
+    category: "встроенные платежи и кошельки для продуктов",
+    rivals: [
+      { name: "Stripe", url: "https://stripe.com", strength: "лицензии в десятках стран, приём карт, выплаты, споры и налоги — всё настоящее" },
+      { name: "Adyen", url: "https://adyen.com", strength: "платежи корпоративного масштаба с локальными методами оплаты" },
+      { name: "Paddle", url: "https://paddle.com", strength: "берёт на себя роль продавца: НДС, счета и возвраты — не ваша забота" },
+    ],
+    weWin: [
+      {
+        text: "Кошельки, переводы, ключи мерчанта и выгрузка операций — одна ручка API на весь контур, без отдельного аккаунта у провайдера",
+        basis: "design",
+        evidence: "/wallets, /transfer, /merchant/keys, /merchant/charge, /transactions.csv",
+      },
+      {
+        text: "Повторный запрос не спишет деньги дважды: операции принимают Idempotency-Key",
+        basis: "design",
+        evidence: "заголовок Idempotency-Key в описании операций пополнения, списания и перевода",
+      },
+      {
+        text: "Есть контур KYC с ручной проверкой и отдельными админскими ручками",
+        basis: "design",
+        evidence: "/kyc/submit и /admin/kyc/:ownerId/verify|reject",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это НЕ платёжный провайдер: лицензий нет, настоящие деньги через нас не ходят — пополнение в собственной документации помечено как sandbox",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: в OpenAPI-описании операция пополнения названа «Top up wallet (test/sandbox)»",
+      },
+      {
+        text: "Нет приёма карт, выплат, работы со спорами и налогами — то есть всего, за что платят Stripe и Adyen",
+        basis: "design",
+        evidence: "в модуле нет ни карточного эквайринга, ни вывода средств",
+      },
+      {
+        text: "KYC ручной, без внешних проверок документов и санкционных списков",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: решение принимает администратор, внешних сверок нет",
+      },
+      {
+        text: "Свои же продажи платформа проводит через Gumroad и LemonSqueezy, а не через QPayNet — это и есть честная оценка его готовности",
+        basis: "measured",
+        evidence: "факт из монетизации AEVION: живые продажи идут внешними провайдерами",
+      },
+    ],
+    verdict:
+      "Мы лучше как внутренний учёт и песочница для сборки платёжных сценариев. Брать деньги с людей — только через лицензированного провайдера, и мы сами так и делаем.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qpaynet.ts"],
+  },
 ];
 
 /**

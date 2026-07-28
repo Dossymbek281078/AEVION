@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import ComparePage from "../page";
-import { COMPARISONS } from "@/data/competitors";
+import ComparePage, { buildRivalIndex } from "../page";
+import { COMPARISONS, NON_PRODUCT_RIVALS } from "@/data/competitors";
 
 /**
  * Данные могут быть честными, а страница — показывать половину.
@@ -57,6 +57,17 @@ describe("страница сравнения показывает обе сто
 
     const broken = [...new Set(anchors)].filter((a) => !cardIds.has(a));
     expect(broken, "Ссылка ведёт на несуществующий якорь: " + broken.join(", ")).toEqual([]);
+  });
+
+  it("указатель не предлагает заменить живого специалиста приложением", () => {
+    // «нарколог → PsyApp» и «живой психотерапевт → QGood» — строки, которые
+    // читаются как обещание, которого мы не даём. В самом сравнении такие
+    // аналоги остаются (с ними нас и правда сравнивают), в указателе замены —
+    // нет. Дефект нашёлся глазами на превью, ни один тест его не видел.
+    const listed = buildRivalIndex().map((r) => r.rival);
+    const wrong = listed.filter((r) => NON_PRODUCT_RIVALS.has(r));
+    expect(wrong, "В указателе замены оказался не продукт: " + wrong.join(", ")).toEqual([]);
+    expect(listed.length, "Указатель опустел целиком").toBeGreaterThan(10);
   });
 
   it("каждый названный аналог попал в указатель", () => {

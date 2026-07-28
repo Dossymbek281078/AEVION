@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { COMPARISONS, NOT_COMPARED_NOTE, type ModuleComparison } from "@/data/competitors";
+import {
+  COMPARISONS,
+  NON_PRODUCT_RIVALS,
+  NOT_COMPARED_NOTE,
+  type ModuleComparison,
+} from "@/data/competitors";
 
 // /compare — «чем это лучше того, чем я уже пользуюсь».
 //
@@ -51,10 +56,13 @@ const BASIS_NOTE: Record<ModuleComparison["basis"], string> = {
  * Без этого списка ему пришлось бы просматривать 36 карточек, чтобы понять,
  * есть ли у нас вообще что-то на эту тему.
  */
-function buildRivalIndex(): Array<{ rival: string; modules: ModuleComparison[] }> {
+export function buildRivalIndex(): Array<{ rival: string; modules: ModuleComparison[] }> {
   const byRival = new Map<string, ModuleComparison[]>();
   for (const c of COMPARISONS) {
     for (const r of c.rivals) {
+      // Живой специалист и офлайн-практика в указатель замены не идут:
+      // «нарколог → PsyApp» звучало бы как предложение заменить врача.
+      if (NON_PRODUCT_RIVALS.has(r)) continue;
       // Один и тот же продукт встречается как аналог у нескольких модулей —
       // например, DocSend и у QVenture, и у QContract. Схлопываем в одну строку.
       const list = byRival.get(r) ?? [];
@@ -158,8 +166,13 @@ export default function ComparePage() {
           </p>
         </section>
 
-        <section style={styles.rules}>
-          <h2 style={styles.rulesTitle}>Ищете замену чему-то конкретному?</h2>
+        {/* Свёрнут по умолчанию: на телефоне это несколько экранов списка
+            перед самими сравнениями. Кому нужен вход со стороны знакомого
+            продукта — раскроет; <details> работает без JS. */}
+        <details style={styles.rules}>
+          <summary style={styles.summary}>
+            Ищете замену чему-то конкретному? — {rivalIndex.length} продуктов
+          </summary>
           <p style={styles.rulesFoot}>
             Слева — продукт, которым вы, возможно, уже пользуетесь. Справа — наш модуль,
             который делает похожее.
@@ -181,7 +194,7 @@ export default function ComparePage() {
               </li>
             ))}
           </ul>
-        </section>
+        </details>
 
         {COMPARISONS.map((c) => (
           <Card key={c.id} c={c} />
@@ -301,6 +314,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: MUTED,
   },
 
+  summary: { fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, cursor: "pointer" },
   rivalIndex: { listStyle: "none", margin: "12px 0 0", padding: 0 },
   rivalRow: {
     display: "grid",

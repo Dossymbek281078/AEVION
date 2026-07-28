@@ -60,6 +60,9 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
         Accept: "application/json",
       },
       body: JSON.stringify(body),
+      // Без таймаута зависший Brevo держал запрос бесконечно и вместе с ним
+      // соединение из пула. Письмо не критично, ждать его нечего.
+      signal: AbortSignal.timeout(10_000),
     });
     if (!r.ok) {
       const text = await r.text().catch(() => "");

@@ -163,6 +163,9 @@ async function callQCoreAiChat(description: string): Promise<{
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    // Ответ модели может быть долгим, но не бесконечным. Потоковый вызов ниже
+    // намеренно оставлен без таймаута: там ожидание — часть работы.
+    signal: AbortSignal.timeout(60_000),
   });
   if (!r.ok) {
     throw new Error(`QCoreAI HTTP ${r.status}`);

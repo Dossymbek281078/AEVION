@@ -105,6 +105,10 @@ async function createLsCheckout(
       "Content-Type": "application/vnd.api+json",
     },
     body: JSON.stringify(body),
+    // Без таймаута зависший LemonSqueezy держал нажатие «Купить» бесконечно:
+    // ни ссылки на оплату, ни ошибки — человек просто смотрит на кнопку.
+    // Идиом взят из constitutionStatus.ts, где таймаут уже стоял.
+    signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

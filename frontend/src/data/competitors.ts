@@ -1969,6 +1969,96 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/ventures.ts"],
   },
+
+  {
+    moduleId: "z-tide",
+    module: "Z-Tide — счёт вклада в экосистему",
+    page: "/z-tide",
+    category: "баллы вовлечённости и репутация участника",
+    rivals: [
+      { name: "Карма Reddit", url: "https://reddit.com", strength: "самая известная репутация в сети: понятна каждому и подделывается плохо" },
+      { name: "Серии Duolingo", url: "https://duolingo.com", strength: "серия дней как двигатель привычки — механика, отлаженная на сотнях миллионов" },
+      { name: "Программы лояльности (Loyverse, Smile.io)", url: "https://smile.io", strength: "баллы, которые действительно меняются на деньги или товар" },
+    ],
+    weWin: [
+      {
+        text: "Счёт затухает со временем: это оценка сегодняшнего вклада, а не памятник прошлым заслугам",
+        basis: "design",
+        evidence: "tide score — экспоненциальное скользящее среднее с затуханием, коэффициент настраивается на каждый вид события",
+      },
+      {
+        text: "Считается вклад по всей платформе сразу, а не активность в одном разделе",
+        basis: "design",
+        evidence: "события приходят из разных модулей AEVION в общий счёт",
+      },
+    ],
+    weLose: [
+      {
+        text: "Баллы ни на что не меняются: кошелька нет, перенести их нельзя — так и написано в модуле",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: «Wallet: none — purely score, not transferable»",
+      },
+      {
+        text: "Без людей репутация ничего не значит: карма Reddit работает потому, что её видят миллионы",
+        basis: "design",
+        evidence: "по природе репутационной механики",
+      },
+      {
+        text: "Нет привычки-двигателя уровня серий Duolingo — там на этом построен весь продукт",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше как честная оценка текущего вклада: затухание не даёт почивать на старых заслугах. Как награда — нет: обменять баллы не на что.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/ztide.ts"],
+  },
+
+  {
+    moduleId: "revenue-hub",
+    module: "Revenue Hub — выручка по всем продуктам в одном месте",
+    page: "/revenue",
+    category: "сводка доходов из разных источников",
+    rivals: [
+      { name: "ChartMogul", url: "https://chartmogul.com", strength: "стандарт подписочной аналитики: MRR, отток, когорты — посчитанные правильно" },
+      { name: "Baremetrics", url: "https://baremetrics.com", strength: "подключение к Stripe за минуты и прогноз выручки из коробки" },
+      { name: "Stripe Dashboard", url: "https://stripe.com", strength: "бесплатно и уже есть у всех, кто принимает через Stripe" },
+    ],
+    weWin: [
+      {
+        text: "Сводит источники, которых нет в подписочной аналитике: YouTube, Twitch и Paddle рядом в одной сводке",
+        basis: "design",
+        evidence: "/youtube/:channelId, /twitch/:login, /paddle/balance и /paddle/recent в одном модуле",
+      },
+      {
+        text: "Есть цели и разбивка по продуктам, а не только общая цифра",
+        basis: "design",
+        evidence: "/goals, /apps/:appId, /overview",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это сводка, а не аналитика: ни оттока, ни когорт, ни MRR по правилам — то есть всего, ради чего берут ChartMogul",
+        basis: "design",
+        evidence: "модуль складывает поступления, метрик подписки в нём нет",
+      },
+      {
+        text: "Нет прогноза выручки, который у Baremetrics идёт из коробки",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Для тех, у кого всё в Stripe, наш модуль лишний: дашборд Stripe бесплатен и точнее",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда деньги приходят из разнородных мест и их некуда свести. Один платёжный провайдер и подписки — берите его дашборд или ChartMogul.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/revenue.ts"],
+  },
 ];
 
 /**

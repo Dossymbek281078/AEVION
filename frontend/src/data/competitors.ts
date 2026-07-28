@@ -1504,6 +1504,101 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/qpaynet.ts"],
   },
+
+  {
+    moduleId: "qnews",
+    module: "QNews — лента новостей технологий",
+    page: "/qnews",
+    category: "агрегаторы новостей и дайджесты",
+    rivals: [
+      { name: "Feedly", url: "https://feedly.com", strength: "тянет тысячи источников и умеет фильтровать поток за вас" },
+      { name: "Hacker News", url: "https://news.ycombinator.com", strength: "сообщество, которое само отбирает важное — этого не подделать" },
+      { name: "Techmeme", url: "https://techmeme.com", strength: "редакторская выжимка отрасли за день" },
+    ],
+    weWin: [
+      {
+        text: "Дайджест собирается ИИ по свежим материалам каждой категории, а не просто списком заголовков",
+        basis: "design",
+        evidence: "POST /ai/digest берёт по свежей статье на категорию (DISTINCT ON) и сводит их вместе",
+      },
+      {
+        text: "Есть закладки и отдача ленты в RSS — читать можно там, где удобно, а не только у нас",
+        basis: "design",
+        evidence: "/articles/:id/bookmark, /me/bookmarks, /rss",
+      },
+    ],
+    weLose: [
+      {
+        text: "Лента НЕ ОБНОВЛЯЕТСЯ сама: статьи — зашитый в код набор, никакого сбора источников в модуле нет",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: массив SEED с фиксированными материалами, ни одного вызова fetch во всём файле — то есть ни RSS-опроса, ни краулера",
+      },
+      {
+        text: "Источников единицы против тысяч у Feedly, и добавить их может только авторизованный пользователь вручную",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: POST /articles требует токен, автоматического наполнения нет",
+      },
+      {
+        text: "Нет сообщества, которое отбирает важное, — главная сила Hacker News",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Пока это витрина с дайджестом, а не агрегатор: без сбора источников сравнивать себя с Feedly не за что. Читать новости — там; смотреть, как выглядит ИИ-дайджест — здесь.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qnews.ts"],
+  },
+
+  {
+    moduleId: "qtradeoffline",
+    module: "QTradeOffline — счета и переводы без интернета",
+    page: "/qtradeoffline",
+    category: "учёт средств и переводов между счетами",
+    rivals: [
+      { name: "Excel / Google Sheets", url: "https://sheets.google.com", strength: "самый честный конкурент любого учёта: гибче всего и уже у всех есть" },
+      { name: "Wave / Zoho Books", url: "https://waveapps.com", strength: "полноценная бухгалтерия: счета, налоги, отчётность" },
+      { name: "Revolut Business", url: "https://revolut.com/business", strength: "счета с настоящими деньгами и картами" },
+    ],
+    weWin: [
+      {
+        text: "Счёт, перевод и операция — готовые ручки API, любую из них можно выгрузить таблицей",
+        basis: "design",
+        evidence: "/accounts, /transfers, /operations и CSV-выгрузка каждого из трёх",
+      },
+      {
+        text: "Есть предел на операцию: перевод сверх лимита не проходит, а состояние лимита можно спросить заранее",
+        basis: "design",
+        evidence: "маршрут /cap-status рядом с /transfers",
+      },
+      {
+        text: "Поиск получателя по счёту не раскрывает баланс",
+        basis: "design",
+        evidence: "/accounts/lookup отдаёт только то, что нужно для перевода",
+      },
+    ],
+    weLose: [
+      {
+        text: "Настоящих денег здесь нет — это учёт, а не банк: ни ввода, ни вывода средств",
+        basis: "design",
+        evidence: "модуль оперирует записями, платёжного контура в нём нет",
+      },
+      {
+        text: "Это не бухгалтерия: ни налогов, ни отчётности, ни счетов контрагентам",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Гибкость таблицы в Excel мы не перебьём — там любую схему учёта можно собрать за вечер",
+        basis: "design",
+        evidence: "по природе продукта",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда учёт нужен как API внутри своего продукта. Для денег — банк, для бухгалтерии — бухгалтерия, для свободной формы — таблица.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qtrade.ts"],
+  },
 ];
 
 /**

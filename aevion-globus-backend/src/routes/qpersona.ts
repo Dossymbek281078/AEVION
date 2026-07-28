@@ -11,6 +11,7 @@
  *   GET  /api/qpersona/stats                     — aggregate stats
  */
 
+import crypto from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
@@ -48,8 +49,23 @@ interface PersonaRecord {
   skills: string[];
   links: string[];
   visibility: "public" | "private";
+  /** Секрет правки. NULL у персон, созданных до 28.07 — см. ensureQPersonaTables. */
+  edit_secret?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Персона БЕЗ секрета правки — для любой выдачи наружу.
+ *
+ * Белый список тут не нужен: поле ровно одно и оно новое. Важно другое — секрет
+ * не должен просочиться ни в список, ни в карточку, иначе защита станет
+ * декоративной ровно так же, как псевдоним в mapReality (см. docs/PUBLIC-ENDPOINTS.md).
+ */
+function publicPersona(p: PersonaRecord): Omit<PersonaRecord, "edit_secret"> {
+  const { edit_secret: _secret, ...rest } = p;
+  void _secret;
+  return rest;
 }
 
 let _memSeq = 1;
@@ -67,11 +83,12 @@ async function dbCreate(fields: {
   avatar_prompt?: string;
   skills: string[];
   links: string[];
+  edit_secret: string;
 }): Promise<PersonaRecord> {
   const { rows } = await pool.query(
     `INSERT INTO qpersona_profiles
-       (alias, display_name, bio, avatar_prompt, skills, links)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+       (alias, display_name, bio, avatar_prompt, skills, links, edit_secret)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
      RETURNING *`,
     [
       fields.alias,
@@ -80,6 +97,7 @@ async function dbCreate(fields: {
       fields.avatar_prompt ?? null,
       JSON.stringify(fields.skills),
       JSON.stringify(fields.links),
+      fields.edit_secret,
     ]
   );
   return rows[0];
@@ -148,6 +166,7 @@ function memCreate(fields: {
   avatar_prompt?: string;
   skills: string[];
   links: string[];
+  edit_secret: string;
 }): PersonaRecord {
   const now = new Date().toISOString();
   const record: PersonaRecord = {
@@ -156,6 +175,7 @@ function memCreate(fields: {
     display_name: fields.display_name,
     bio: fields.bio ?? null,
     avatar_prompt: fields.avatar_prompt ?? null,
+    edit_secret: fields.edit_secret,
     skills: fields.skills,
     links: fields.links,
     visibility: "public",
@@ -229,7 +249,9 @@ qpersonaRouter.get("/personas", readLimit, async (req: Request, res: Response) =
     const personas = isQPersonaDbReady()
       ? await dbList(limit, offset)
       : memList(limit, offset);
-    res.json({ ok: true, personas, limit, offset });
+    // publicPersona на КАЖДОМ пути чтения: секрет правки не должен уехать
+    // ни списком, ни карточкой — иначе защита декоративна.
+    res.json({ ok: true, personas: personas.map(publicPersona), limit, offset });
   } catch (e: any) {
     captureQPersonaError(e, { route: "qpersona/GET/personas" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
@@ -263,6 +285,12 @@ qpersonaRouter.post("/personas", writeLimit, async (req: Request, res: Response)
       links:  Array.isArray(links)  ? links.map(String).slice(0, 20)  : [],
     };
 
+    // Секрет правки: выдаётся ОДИН раз в ответе на создание и больше нигде не
+    // возвращается. До 28.07 правка персоны шла по псевдониму из адреса без
+    // всякой сверки — кто открыл чужую персону, тот её и переписывал.
+    const editSecret = crypto.randomBytes(18).toString("base64url");
+    const fieldsWithSecret = { ...fields, edit_secret: editSecret };
+
     let persona: PersonaRecord;
     if (isQPersonaDbReady()) {
       // Check uniqueness gracefully
@@ -271,16 +299,18 @@ qpersonaRouter.post("/personas", writeLimit, async (req: Request, res: Response)
         res.status(409).json({ ok: false, error: "alias already taken" });
         return;
       }
-      persona = await dbCreate(fields);
+      persona = await dbCreate(fieldsWithSecret);
     } else {
       if (memPersonas.has(fields.alias)) {
         res.status(409).json({ ok: false, error: "alias already taken" });
         return;
       }
-      persona = memCreate(fields);
+      persona = memCreate(fieldsWithSecret);
     }
 
-    res.status(201).json({ ok: true, persona });
+    // editSecret отдаётся ТОЛЬКО здесь. Сама персона очищается от секрета, чтобы
+    // он не уехал в публичное чтение (тот же класс, что утечки 28.07).
+    res.status(201).json({ ok: true, persona: publicPersona(persona), editSecret });
   } catch (e: any) {
     const msg = e?.message || "internal error";
     if (msg.includes("unique") || msg.includes("duplicate")) {
@@ -301,7 +331,7 @@ qpersonaRouter.get("/personas/:alias", readLimit, async (req: Request, res: Resp
       res.status(404).json({ ok: false, error: "persona not found" });
       return;
     }
-    res.json({ ok: true, persona });
+    res.json({ ok: true, persona: publicPersona(persona) });
   } catch (e: any) {
     captureQPersonaError(e, { route: "qpersona/GET/personas/:alias" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
@@ -320,6 +350,31 @@ qpersonaRouter.patch("/personas/:alias", writeLimit, async (req: Request, res: R
     if (skills !== undefined)        patch.skills        = Array.isArray(skills) ? skills.map(String).slice(0, 30) : [];
     if (links !== undefined)         patch.links         = Array.isArray(links)  ? links.map(String).slice(0, 20)  : [];
 
+    // Сверка владельца. До 28.07 её не было вовсе: правка шла по псевдониму из
+    // АДРЕСА, то есть чужую персону переписывал любой, кто её открыл.
+    const current = isQPersonaDbReady() ? await dbGet(alias) : memPersonas.get(alias);
+    if (!current) {
+      res.status(404).json({ ok: false, error: "persona not found" });
+      return;
+    }
+    if (current.edit_secret) {
+      const given = String(req.header("x-edit-secret") ?? req.body?.editSecret ?? "");
+      // timingSafeEqual требует равной длины — сначала сравниваем её.
+      const a = Buffer.from(given);
+      const b = Buffer.from(current.edit_secret);
+      const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+      if (!ok) {
+        res.status(403).json({ ok: false, error: "edit secret does not match" });
+        return;
+      }
+    }
+    // У персон, созданных ДО этой правки, секрета нет. Требовать его значило бы
+    // отобрать доступ у настоящих владельцев, поэтому поведение сохранено, но
+    // случай виден в логе — по нему видно, сколько таких осталось.
+    else {
+      console.warn(`[qpersona] правка персоны «${alias}» без секрета (создана до 28.07)`);
+    }
+
     const persona = isQPersonaDbReady()
       ? await dbUpdate(alias, patch)
       : memUpdate(alias, patch);
@@ -328,7 +383,7 @@ qpersonaRouter.patch("/personas/:alias", writeLimit, async (req: Request, res: R
       res.status(404).json({ ok: false, error: "persona not found" });
       return;
     }
-    res.json({ ok: true, persona });
+    res.json({ ok: true, persona: publicPersona(persona) });
   } catch (e: any) {
     captureQPersonaError(e, { route: "qpersona/PATCH/personas/:alias" });
     res.status(500).json({ ok: false, error: e?.message || "internal error" });

@@ -44,6 +44,23 @@ export async function ensureQPersonaTables(pool: PgPoolInstance): Promise<void> 
       );
     `);
 
+    // Секрет правки. Добавлен 28.07 отдельным ALTER, а не в CREATE TABLE:
+    // таблица уже существует на проде, и CREATE TABLE IF NOT EXISTS её не
+    // тронет — колонка появилась бы только на чистой базе.
+    //
+    // ЗАЧЕМ. До этого `PATCH /personas/:alias` правил персону по псевдониму из
+    // АДРЕСА без всякой сверки: кто открыл чужую персону, тот её и перепишет.
+    // Псевдоним здесь не может быть ключом — он и есть публичный адрес.
+    //
+    // NULL допустим намеренно: у персон, созданных ДО этой правки, секрета нет,
+    // и требовать его значило бы отобрать доступ у настоящих владельцев. Такие
+    // записи остаются с прежним поведением, новые — защищены. Что делать со
+    // старыми, решает основатель.
+    await pool.query(`
+      ALTER TABLE qpersona_profiles
+        ADD COLUMN IF NOT EXISTS edit_secret TEXT;
+    `);
+
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_qpersona_alias
         ON qpersona_profiles (alias);

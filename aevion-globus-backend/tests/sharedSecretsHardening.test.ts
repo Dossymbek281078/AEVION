@@ -21,6 +21,44 @@ import { getQSignSecret } from "../src/lib/qsignSecret";
 
 const ENV_KEYS = ["NODE_ENV", "QSIGN_SECRET"];
 
+/**
+ * Один обход src/routes на весь файл.
+ *
+ * До 28.07 здесь лежали ЧЕТЫРЕ побайтово одинаковые копии `walkTs`, по одной в
+ * каждом describe, и ни одна из четырёх проверок не убеждалась, что обход
+ * что-то нашёл. Все пять сканов заканчиваются `expect(offenders).toEqual([])`,
+ * а пустой список нарушений при пустом обходе выглядит ровно как чистый код:
+ * сломайся `walkTs` или окажись каталог переименован — набор security-проверок
+ * (утечка секретов, alg:none в JWT, HMAC по пересобранному телу, детали ошибок
+ * в 500) молча зеленел бы, не прочитав ни строчки.
+ */
+function walkTs(dir: string): string[] {
+  const out: string[] = [];
+  for (const ent of readdirSync(dir)) {
+    const full = path.join(dir, ent);
+    const st = statSync(full);
+    if (st.isDirectory()) out.push(...walkTs(full));
+    else if (ent.endsWith(".ts")) out.push(full);
+  }
+  return out;
+}
+
+const ROUTES_DIR = path.join(__dirname, "..", "src", "routes");
+const files = walkTs(ROUTES_DIR);
+
+describe("сканируемый набор роутов не пуст", () => {
+  test("обход src/routes нашёл реальное дерево, а не ноль файлов", () => {
+    // Замерено 28.07: в src/routes 159 файлов .ts. Порог намеренно с большим
+    // запасом — сторож должен ловить обвал обхода, а не падать от каждого
+    // удалённого роута. Плюс два файла поимённо: переезд каталога не пройдёт
+    // незаметно, даже если новое место случайно окажется многолюдным.
+    expect(files.length).toBeGreaterThan(40);
+    expect(files.some((f) => f.endsWith("qsign.ts"))).toBe(true);
+    expect(files.some((f) => f.endsWith("auth.ts"))).toBe(true);
+  });
+});
+
+
 beforeEach(() => {
   for (const k of ENV_KEYS) delete process.env[k];
 });
@@ -62,20 +100,7 @@ describe("getQSignSecret production safety", () => {
 // Static regression — fails if anyone reintroduces a hardcoded dev fallback.
 // This is a defense-in-depth check; CI catches it before merge.
 describe("regression: no insecure secret defaults in src/routes/", () => {
-  const routesDir = path.join(__dirname, "..", "src", "routes");
 
-  function walkTs(dir: string): string[] {
-    const out: string[] = [];
-    for (const ent of readdirSync(dir)) {
-      const full = path.join(dir, ent);
-      const st = statSync(full);
-      if (st.isDirectory()) out.push(...walkTs(full));
-      else if (ent.endsWith(".ts")) out.push(full);
-    }
-    return out;
-  }
-
-  const files = walkTs(routesDir);
 
   // Pattern: `<NAME>_SECRET || "dev-` (the regression we fixed).
   // Also catches `<NAME>_TOKEN || "<literal>"` — pricing.ts's dashboardSecret
@@ -88,7 +113,7 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
       const src = readFileSync(f, "utf8");
       // Strip line comments before scanning so explanatory comments don't trip.
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-      if (insecureRegex.test(stripped)) offenders.push(path.relative(routesDir, f));
+      if (insecureRegex.test(stripped)) offenders.push(path.relative(ROUTES_DIR, f));
     }
     expect(offenders).toEqual([]);
   });
@@ -100,7 +125,7 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
       const src = readFileSync(f, "utf8");
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
       for (const lit of literals) {
-        if (stripped.includes(lit)) offenders.push({ file: path.relative(routesDir, f), literal: lit });
+        if (stripped.includes(lit)) offenders.push({ file: path.relative(ROUTES_DIR, f), literal: lit });
       }
     }
     expect(offenders).toEqual([]);
@@ -121,7 +146,7 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
       const src = readFileSync(f, "utf8");
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
       const m = stripped.match(credRegex);
-      if (m) offenders.push({ file: path.relative(routesDir, f), match: m[0].slice(0, 30) + "..." });
+      if (m) offenders.push({ file: path.relative(ROUTES_DIR, f), match: m[0].slice(0, 30) + "..." });
     }
     expect(offenders).toEqual([]);
   });
@@ -133,22 +158,10 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
 // allowed algorithm list. Caught two regressions during the Tier 3 sweep
 // (bureau and auth) — this test prevents the next one.
 describe("regression: jwt.verify must pin algorithms: ['HS256']", () => {
-  const routesDir = path.join(__dirname, "..", "src", "routes");
-
-  function walkTs(dir: string): string[] {
-    const out: string[] = [];
-    for (const ent of readdirSync(dir)) {
-      const full = path.join(dir, ent);
-      const st = statSync(full);
-      if (st.isDirectory()) out.push(...walkTs(full));
-      else if (ent.endsWith(".ts")) out.push(full);
-    }
-    return out;
-  }
 
   test("every jwt.verify in src/routes/ pins HS256", () => {
     const offenders: string[] = [];
-    for (const f of walkTs(routesDir)) {
+    for (const f of files) {
       const src = readFileSync(f, "utf8");
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
       // Balanced-paren match is annoying in JS regex. Heuristic: locate every
@@ -165,7 +178,7 @@ describe("regression: jwt.verify must pin algorithms: ['HS256']", () => {
       for (const at of indices) {
         const window = stripped.slice(at, at + 200);
         if (!/algorithms/.test(window)) {
-          offenders.push(`${path.relative(routesDir, f)} :: ${window.slice(0, 80).replace(/\s+/g, " ")}`);
+          offenders.push(`${path.relative(ROUTES_DIR, f)} :: ${window.slice(0, 80).replace(/\s+/g, " ")}`);
         }
       }
     }
@@ -184,22 +197,9 @@ describe("regression: jwt.verify must pin algorithms: ['HS256']", () => {
 // near it (within 5 lines) AND does NOT also reference rawBody. Skips files
 // that demonstrably go through the rawBody-first pattern.
 describe("regression: HMAC verify must use req.rawBody not re-serialised body", () => {
-  const routesDir = path.join(__dirname, "..", "src", "routes");
-
-  function walkTs(dir: string): string[] {
-    const out: string[] = [];
-    for (const ent of readdirSync(dir)) {
-      const full = path.join(dir, ent);
-      const st = statSync(full);
-      if (st.isDirectory()) out.push(...walkTs(full));
-      else if (ent.endsWith(".ts")) out.push(full);
-    }
-    return out;
-  }
 
   test("HMAC users in routes either reference rawBody or skip JSON.stringify(req.body)", () => {
-    const files = walkTs(routesDir);
-    const offenders: string[] = [];
+      const offenders: string[] = [];
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -213,7 +213,7 @@ describe("regression: HMAC verify must use req.rawBody not re-serialised body", 
       // Remaining files: HMAC + req.body, no rawBody anywhere → suspect.
       // Confirm the bad pattern is actually present.
       if (/JSON\.stringify\s*\(\s*req\.body/.test(stripped)) {
-        offenders.push(path.relative(routesDir, f));
+        offenders.push(path.relative(ROUTES_DIR, f));
       }
     }
     expect(offenders).toEqual([]);
@@ -226,18 +226,6 @@ describe("regression: HMAC verify must use req.rawBody not re-serialised body", 
 // error code string only. Tier 3 sweep (2026-05-10) removed 273 occurrences
 // across 73 route files — this test prevents regression.
 describe("regression: no details:err.message info-leaks in 500 responses", () => {
-  const routesDir = path.join(__dirname, "..", "src", "routes");
-
-  function walkTs(dir: string): string[] {
-    const out: string[] = [];
-    for (const ent of readdirSync(dir)) {
-      const full = path.join(dir, ent);
-      const st = statSync(full);
-      if (st.isDirectory()) out.push(...walkTs(full));
-      else if (ent.endsWith(".ts")) out.push(full);
-    }
-    return out;
-  }
 
   // Matches any of the known leak patterns:
   //   details: err.message / err?.message / (err as Error).message
@@ -247,13 +235,12 @@ describe("regression: no details:err.message info-leaks in 500 responses", () =>
     /details\s*:\s*(?:err\??\.message|\(err as Error\)\.message|String\(err\)|err instanceof Error[^,}]+|e\??\.message|\(e as Error\)\.message)/;
 
   test("no route file exposes internal error details in JSON responses", () => {
-    const files = walkTs(routesDir);
-    const offenders: string[] = [];
+      const offenders: string[] = [];
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
       if (leakRegex.test(stripped)) {
-        offenders.push(path.relative(routesDir, f));
+        offenders.push(path.relative(ROUTES_DIR, f));
       }
     }
     expect(offenders).toEqual([]);

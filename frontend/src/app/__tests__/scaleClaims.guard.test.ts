@@ -112,6 +112,73 @@ const NUM_THEN_WORD = new RegExp(`\\b(\\d{2,3})\\s*\\+?\\s+${SCALE_WORD}\\b`, "g
 // измерение, которого не было.
 const NUM_THEN_READY = new RegExp(`\\b(\\d{1,3})\\s*\\+?\\s+(?:feature-complete|доделан\\w*|готов\\w*)\\b`, "gi");
 
+/**
+ * Обход вынесен из тела теста НАМЕРЕННО.
+ *
+ * 28.07 мутацией проверено: пока цикл жил прямо внутри колбэка `it`, замена
+ * `continue` на `return` внутри него выбрасывала управление из всего теста —
+ * до строки `expect(scanned).toBeGreaterThan(500)` дело просто не доходило, и
+ * сторож зеленел, не проверив ни одного файла. Счётчик, стоящий на том же
+ * уровне, что и обрываемый цикл, не может быть свидетелем этого обрыва.
+ *
+ * Здесь `return` может завершить только эту функцию, а она обязана вернуть
+ * `scanned`. Любой ранний выход становится маленьким числом, и проверка
+ * снаружи падает.
+ */
+export function scanScaleClaims(
+  root: string,
+  exactOk: ReadonlySet<string>,
+  total: number,
+): { violations: string[]; scanned: number } {
+  const violations: string[] = [];
+  let scanned = 0;
+
+  for (const file of walk(root)) {
+    scanned++;
+    const rel = path.relative(root, file).replace(/\\/g, "/");
+    const raw = readFileSync(file, "utf8");
+    // Дешёвый отсев ДО построчного разбора: совпадение возможно только там,
+    // где есть и цифра, и слово масштаба или готовности. Дерево — 27 МБ и
+    // 1827 файлов, и построчные регулярки по всему объёму дважды за день
+    // выводили сторож за таймаут. Семантика не меняется: без этих подстрок
+    // NUM_THEN_WORD и NUM_THEN_READY совпасть не могут по определению.
+    if (!/\d/.test(raw)) continue;
+    if (!/modul|node|модул|узл|feature-complete|доделан|готов/i.test(raw)) continue;
+    const lines = raw.split("\n");
+
+    lines.forEach((line, idx) => {
+      // Гигантские сгенерированные строки переводов сканируем, но без
+      // экстремальных: там одна строка может быть на пол-экрана.
+      if (line.length > 900) return;
+      if (CHANGELOG_LINE.test(line)) return;
+      if (EXPLANATORY_COMMENT.test(line)) return;
+      if (/Модуль\s*#\d/.test(line)) return;
+      if (ALLOWED.some((a) => line.includes(a.fragment))) return;
+
+      for (const m of line.matchAll(NUM_THEN_WORD)) {
+        const num = m[1];
+        if (exactOk.has(num)) continue;
+        const value = Number(num);
+        if (value > 100) continue; // явно не про счёт модулей
+        // «N+» — занижение, а не ошибка, пока N не больше факта.
+        if (m[0].includes("+") && value <= total) continue;
+        violations.push(`${rel}:${idx + 1}  «${m[0].trim()}»`);
+      }
+
+      // Точное число доделанных модулей — заявление, которое нечем
+      // подтвердить: поля «feature-complete» в реестре нет. Аудит #484
+      // установил «~a dozen»; точная цифра читается как измерение.
+      for (const m of line.matchAll(NUM_THEN_READY)) {
+        violations.push(
+          `${rel}:${idx + 1}  «${m[0].trim()}» — точного списка доделанных модулей нет, пишите «~a dozen»`,
+        );
+      }
+    });
+  }
+
+  return { violations, scanned };
+}
+
 describe("заявления о масштабе экосистемы сверены с реестром", () => {
   const total = countRegistryTotal();
   const nodes = total - 1; // globus — оболочка карты, не продуктовый узел
@@ -134,60 +201,13 @@ describe("заявления о масштабе экосистемы свере
   });
 
   it("ни одно число рядом со словом масштаба не разошлось с реестром", () => {
-    const violations: string[] = [];
-    let scanned = 0;
+    const { violations, scanned } = scanScaleClaims(SRC_ROOT, EXACT_OK, total);
 
-    for (const file of walk(SRC_ROOT)) {
-      scanned++;
-      const rel = path.relative(SRC_ROOT, file).replace(/\\/g, "/");
-      const raw = readFileSync(file, "utf8");
-      // Дешёвый отсев ДО построчного разбора: совпадение возможно только там,
-      // где есть и цифра, и слово масштаба или готовности. Дерево — 27 МБ и
-      // 1827 файлов, и построчные регулярки по всему объёму дважды за день
-      // выводили сторож за таймаут. Семантика не меняется: без этих подстрок
-      // NUM_THEN_WORD и NUM_THEN_READY совпасть не могут по определению.
-      if (!/\d/.test(raw)) continue;
-      if (!/modul|node|модул|узл|feature-complete|доделан|готов/i.test(raw)) continue;
-      const lines = raw.split("\n");
-
-      lines.forEach((line, idx) => {
-        // Гигантские сгенерированные строки переводов сканируем, но без
-        // экстремальных: там одна строка может быть на пол-экрана.
-        if (line.length > 900) return;
-        if (CHANGELOG_LINE.test(line)) return;
-        if (EXPLANATORY_COMMENT.test(line)) return;
-        if (/Модуль\s*#\d/.test(line)) return;
-        if (ALLOWED.some((a) => line.includes(a.fragment))) return;
-
-        for (const m of line.matchAll(NUM_THEN_WORD)) {
-          const num = m[1];
-          if (EXACT_OK.has(num)) continue;
-          const value = Number(num);
-          if (value > 100) continue; // явно не про счёт модулей
-          // «N+» — занижение, а не ошибка, пока N не больше факта.
-          if (m[0].includes("+") && value <= total) continue;
-          violations.push(`${rel}:${idx + 1}  «${m[0].trim()}»`);
-        }
-
-        // Точное число доделанных модулей — заявление, которое нечем
-        // подтвердить: поля «feature-complete» в реестре нет. Аудит #484
-        // установил «~a dozen»; точная цифра читается как измерение.
-        for (const m of line.matchAll(NUM_THEN_READY)) {
-          violations.push(
-            `${rel}:${idx + 1}  «${m[0].trim()}» — точного списка доделанных модулей нет, пишите «~a dozen»`,
-          );
-        }
-      });
-    }
-
-    // Счётчик просмотренных файлов: ловит случай, когда обход вернул мало
-    // файлов (сузили SKIP_DIRS, сломали walk, не тот корень).
-    //
-    // ЧЕГО ОН НЕ ЛОВИТ, проверено мутацией 28.07: если внутри цикла стоит
-    // `return` вместо `continue`, управление выходит из колбэка `it` и до
-    // этой строки просто не доходит — тест зеленеет молча. Защита от такого
-    // требует вынести обход в функцию, возвращающую { violations, scanned },
-    // и проверять её результат снаружи. Не сделано, задача записана.
+    // Счётчик просмотренных файлов ловит обрыв обхода: сузили SKIP_DIRS,
+    // сломали walk, указали не тот корень — или внутри цикла оказался ранний
+    // выход. Последнее работает только потому, что цикл живёт в отдельной
+    // функции: раньше он был прямо здесь, и `return` вместо `continue`
+    // пролетал мимо этой строки, оставляя сторож зелёным при нуле проверок.
     expect(scanned, "обход оборвался — сторож проверил слишком мало файлов").toBeGreaterThan(500);
 
     expect(

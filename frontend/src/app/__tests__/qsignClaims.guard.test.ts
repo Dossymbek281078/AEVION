@@ -59,9 +59,19 @@ function collectSourceFiles(dir: string): string[] {
   return out;
 }
 
-export function findClaimViolations(files: string[]): string[] {
+/**
+ * Отдаёт и нарушения, и число прочитанных файлов — тем же контрактом, что
+ * соседние дисковые сторожа. Пустой список при оборванном цикле неотличим от
+ * честного «всё чисто», а проверки `FILES.length` для этого мало: она
+ * свидетельствует об обходе диска, а не о том, что чтение дошло до конца.
+ */
+export function findClaimViolations(
+  files: string[],
+): { violations: string[]; scanned: number } {
   const violations: string[] = [];
+  let scanned = 0;
   for (const file of files) {
+    scanned++;
     const text = readFileSync(file, "utf8");
     for (const { pattern, why } of FORBIDDEN) {
       const match = text.match(pattern);
@@ -70,7 +80,7 @@ export function findClaimViolations(files: string[]): string[] {
       violations.push(`${file.replace(APP_DIR, "src/app")}:${line} — ${why}: «${match[0]}»`);
     }
   }
-  return violations;
+  return { violations, scanned };
 }
 
 // Сканирование сотен файлов делается один раз при загрузке модуля, а не внутри
@@ -78,7 +88,7 @@ export function findClaimViolations(files: string[]): string[] {
 // 45 файлами тестов — упиралось в дефолтные 5 с и падало по таймауту. Тест,
 // который краснеет от загруженности машины, не отличить от настоящей находки.
 const FILES = collectSourceFiles(APP_DIR);
-const VIOLATIONS = findClaimViolations(FILES);
+const { violations: VIOLATIONS, scanned: SCANNED } = findClaimViolations(FILES);
 
 describe("post-quantum claims match what production answers", () => {
   it("scans a real, non-trivial set of page sources", () => {
@@ -86,6 +96,7 @@ describe("post-quantum claims match what production answers", () => {
   });
 
   it("no page claims the signature is GA or in production", () => {
+    expect(SCANNED, "цикл чтения оборвался — прочитано слишком мало файлов").toBeGreaterThan(50);
     expect(VIOLATIONS).toEqual([]);
   });
 
@@ -94,6 +105,6 @@ describe("post-quantum claims match what production answers", () => {
     // The fixture holds the exact wording that shipped on /acquire before this
     // guard existed. If the matcher ever stops recognising it, the check above
     // becomes decoration.
-    expect(findClaimViolations([seeded]).length).toBeGreaterThan(0);
+    expect(findClaimViolations([seeded]).violations.length).toBeGreaterThan(0);
   });
 });

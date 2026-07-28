@@ -31,10 +31,21 @@ function walk(dir: string): string[] {
 // comment terminator followed by more non-whitespace content on the same line.
 const OFFENDER = /^\s*\*.*\*\/\s*\S/;
 
+const FILES = walk(SRC_DIR);
+
 describe("JSDoc comment terminators", () => {
+  // The scan below ends in `expect(offenders).toEqual([])`, and an empty list
+  // from an empty walk is indistinguishable from clean code. Assert the walk
+  // found a real tree first — otherwise a broken `walk`, a renamed directory,
+  // or a bad SRC_DIR would leave this guard green having read nothing.
+  it("the walk found a real source tree, not zero files", () => {
+    expect(FILES.length).toBeGreaterThan(40);
+    expect(FILES.some((f) => f.endsWith("index.ts"))).toBe(true);
+  });
+
   it("no '*/' buried inside a JSDoc comment body across src/**/*.ts", () => {
     const offenders: string[] = [];
-    for (const file of walk(SRC_DIR)) {
+    for (const file of FILES) {
       const lines = readFileSync(file, "utf8").split("\n");
       lines.forEach((line, i) => {
         if (OFFENDER.test(line)) {

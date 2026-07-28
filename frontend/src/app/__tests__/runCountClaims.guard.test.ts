@@ -42,10 +42,18 @@ function collectSourceFiles(dir: string): string[] {
   return out;
 }
 
-export function findUndatedRunCounts(files: string[]): string[] {
+/**
+ * Отдаёт и находки, и число прочитанных файлов — общий контракт дисковых
+ * сторожей: пустой результат при оборванном цикле выглядит как чистый код.
+ */
+export function findUndatedRunCounts(
+  files: string[],
+): { bad: string[]; scanned: number } {
   const bad: string[] = [];
+  let scanned = 0;
   for (const file of files) {
     if (CHRONICLE.test(file)) continue;
+    scanned++;
     const text = readFileSync(file, "utf8");
     for (const match of text.matchAll(RUN_COUNT)) {
       const after = text.slice((match.index ?? 0) + match[0].length);
@@ -54,11 +62,11 @@ export function findUndatedRunCounts(files: string[]): string[] {
       bad.push(`${file.replace(APP_DIR, "src/app")}:${line} — счёт без даты замера: «${match[0]}»`);
     }
   }
-  return bad;
+  return { bad, scanned };
 }
 
 const FILES = collectSourceFiles(APP_DIR);
-const UNDATED = findUndatedRunCounts(FILES);
+const { bad: UNDATED, scanned: SCANNED } = findUndatedRunCounts(FILES);
 
 describe("run-count claims carry the date they were measured", () => {
   it("scans a real, non-trivial set of page sources", () => {
@@ -66,12 +74,13 @@ describe("run-count claims carry the date they were measured", () => {
   });
 
   it("every smoke/run count on a page says when it was measured", () => {
+    expect(SCANNED, "цикл чтения оборвался — прочитано слишком мало файлов").toBeGreaterThan(50);
     expect(UNDATED).toEqual([]);
   });
 
   it("catches every undated count in the fixture and none of the dated one", () => {
     const seeded = join(APP_DIR, "__tests__", "fixtures", "undatedRunCount.txt");
-    const found = findUndatedRunCounts([seeded]);
+    const { bad: found } = findUndatedRunCounts([seeded]);
     // Ровно три: две отгруженные строки с /acquire и русский вариант.
     // Точное число, а не «больше нуля»: иначе ложное срабатывание на
     // датированной строке прошло бы незамеченным.

@@ -371,4 +371,45 @@ test.describe("DevHub — writes that must not lose a file", () => {
     expect(writes).toHaveLength(0);
     expect(deletes).toHaveLength(0);
   });
+
+  test("a partial GitHub push says how many files did not make it", async ({ page }) => {
+    // The backend learned to report this today; what the user actually sees had
+    // never been checked in a browser. "Pushed 1 file" beside a repo missing
+    // half the project is the lie the change exists to stop.
+    const PUSH_PID = PROJECT_ID;
+    await page.route("**/api/devhub/**", async (route) => {
+      const url = route.request().url();
+      const json = (body: unknown) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/github/push")) {
+        return json({
+          ok: true,
+          repoUrl: "https://github.com/octo/probe",
+          pushedFiles: 1,
+          failedFiles: [{ path: "big.bin", reason: "HTTP 422: size too large" }],
+          degraded: true,
+          degradedReason: "1 of 2 file(s) were not pushed: big.bin (HTTP 422: size too large)",
+        });
+      }
+      if (url.includes("/github/status")) return json({ linked: false });
+      if (url.includes("/github/branches")) return json({ branches: [] });
+      if (url.includes(`/projects/${PUSH_PID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PUSH_PID}`)) {
+        return json({
+          project: { id: PUSH_PID, name: "gh", description: "", stack: "static", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: FILES,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      return json({ ok: true });
+    });
+
+    await page.goto(`/devhub/${PUSH_PID}`);
+    await page.getByRole("tab", { name: "GitHub", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("button", { name: /Push to GitHub/i }).first().click();
+
+    const panel = page.getByRole("tabpanel");
+    await expect(panel.getByText(/Отправлено 1 из 2 файлов/)).toBeVisible({ timeout: 15_000 });
+    await expect(panel.getByText(/big\.bin/)).toBeVisible();
+  });
 });

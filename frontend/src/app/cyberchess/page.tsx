@@ -124,6 +124,7 @@ import { isPlayerPly, isPlayerIndex } from "./plyOwner";
 import { accuracyOf } from "./accuracy";
 import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock, migrateWallet } from "./chessyLedger";
 import { buildPuzzleQuery } from "./puzzleQuery";
+import { themeLabel } from "./puzzleThemes";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -1361,6 +1362,32 @@ export default function CyberChessPage(){
      задач из 500 000 и фильтрует их у себя; узкий фильтр опустошает выборку, хотя в
      банке таких задач тысячи. Раньше в этом случае писали «Нет задач по фильтру» —
      утверждение об отсутствии, которого никто не проверял. */
+  /* Полный перечень тем банка. Списки тем в фильтре строились из ЗАГРУЖЕННОЙ
+     выборки (до 20 000 из 500 000), поэтому редкие темы в них не попадали — их
+     нельзя было даже выбрать, не то что найти. Бэкенд отдаёт перечень отдельной
+     ручкой `/themes`, подписанной дословно «for building filter UIs», и она не
+     использовалась ни разу. Названия приводим тем же нормализатором, что и задачи,
+     иначе выбранная тема не совпала бы с темой загруженных задач. */
+  const[bankThemes,sBankThemes]=useState<{theme:string;count:number}[]>([]);
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles/themes");
+        if(!r.ok)return;
+        const d=await r.json();
+        if(cancelled||!d||!d.ok||!Array.isArray(d.themes))return;
+        const seen=new Map<string,number>();
+        for(const t of d.themes as {theme?:unknown;count?:unknown}[]){
+          if(typeof t?.theme!=="string"||typeof t?.count!=="number")continue;
+          const label=themeLabel(t.theme);
+          seen.set(label,(seen.get(label)||0)+t.count);
+        }
+        sBankThemes([...seen.entries()].map(([theme,count])=>({theme,count})).sort((a,b)=>b.count-a.count));
+      }catch{/* нет банка — останется список по загруженным */}
+    })();
+    return()=>{cancelled=true};
+  },[]);
   const[bankSearching,sBankSearching]=useState(false);
   const searchBank=useCallback(async()=>{
     sBankSearching(true);
@@ -10291,7 +10318,10 @@ export default function CyberChessPage(){
                   <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Тема</div>
                   <select value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
                     <option value="all">Все темы</option>
-                    {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{th}</option>)}
+                    {(bankThemes.length>0
+                      ? bankThemes.map(t=>({th:t.theme,cnt:t.count}))
+                      : [...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=>({th,cnt:0}))
+                     ).map(({th,cnt})=><option key={th} value={th}>{cnt>0?`${th} · ${cnt.toLocaleString("ru-RU")}`:th}</option>)}
                   </select>
                 </div>
                 {/* Difficulty level filter — 4 levels */}

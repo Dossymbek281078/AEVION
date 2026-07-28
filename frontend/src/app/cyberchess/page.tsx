@@ -4248,15 +4248,20 @@ export default function CyberChessPage(){
        и тогда из него уходили два setTimeout на одно и то же достижение. */
     const nextStats=recordVariantResult(variantStats,variant,res);
     sVariantStats(nextStats);
-    if(res==="w"&&variant!=="standard"){
+    if(res==="w"&&variant!=="standard"&&!p2pMode){
       const newWins=nextStats[variant].w;
       if(newWins===1)setTimeout(()=>unlockAch(variantAchKey(variant,"first"),VARIANT_ACH_REWARDS.firstWin,variantAchLabel(variant,"first")),900);
       else if(newWins===5)setTimeout(()=>unlockAch(variantAchKey(variant,"five"),VARIANT_ACH_REWARDS.fiveWins,variantAchLabel(variant,"five")),900);
       else if(newWins===25)setTimeout(()=>unlockAch(variantAchKey(variant,"twentyfive"),VARIANT_ACH_REWARDS.twentyFiveWins,variantAchLabel(variant,"twentyfive")),900);
     }
     // Daily Variant Challenge: if today's daily matches current variant, award bonus
+    /* Награды за вариант не платятся в партии с живым соперником: исход там можно
+       просто договорить. Рейтинг это уже учитывает (см. `rated` выше), а здесь стояла
+       проверка только на Hotseat — то есть 50 Chessy за Daily Challenge, самая крупная
+       разовая награда за вариант, спокойно фармились через p2p. Статистика вариантов
+       ведётся как раньше: она ничего не стоит. */
     const today=getDailyVariantState();
-    if(today.variant===variant&&!today.played){
+    if(today.variant===variant&&!today.played&&!p2pMode){
       const updated=markDailyVariantPlayed(res==="w");
       sDailyVariantInfo(updated);
       if(res==="w"){
@@ -4264,7 +4269,7 @@ export default function CyberChessPage(){
         setTimeout(()=>addChessy(50,`☀ Daily Challenge: ${meta?.name||variant}`),700);
       }
     }
-  },[over,variant,fenHist.length,hotseat,addChessy]);
+  },[over,variant,fenHist.length,hotseat,p2pMode,addChessy]);
 
   /* ── Tournament: process result on game over, advance bracket ── */
   useEffect(()=>{

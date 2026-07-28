@@ -431,6 +431,62 @@ const QREAL: CompetitorSet = {
   ],
 };
 
+// QPayNet. Здесь честность важнее всего остального в файле: заявить платёжную
+// способность, не имея лицензии, — риск для основателя, а не преувеличение в
+// питче. Поэтому главная строка говорит прямо: платёжное учреждение не мы.
+// Проверено по коду: реальные карты идут через Stripe Checkout при заданном
+// STRIPE_SECRET_KEY, без ключа выдаётся заглушка, а прямое пополнение кошелька
+// в собственной документации помечено «test/sandbox».
+const QPAYNET: CompetitorSet = {
+  moduleId: "qpaynet-embedded",
+  title: "QPayNet и платёжные компании",
+  peers: [
+    { name: "Stripe", kind: "финансовая компания, обработка платежей и API для приёма денег" },
+    { name: "Wise", kind: "финтех-компания международных переводов и бизнес-финансов" },
+  ],
+  rows: [
+    {
+      axis: "Кто держит лицензию и двигает деньги",
+      ours: {
+        text: "не мы: реальные карты проходят через Stripe Checkout, лицензированная сторона — он; своей лицензии у нас нет",
+        source: "measured",
+      },
+      theirs: {
+        text: "Stripe — финансовая компания с обработкой платежей; Wise — финтех международных переводов",
+        source: "public",
+        asOf: "28.07.2026",
+        href: "https://en.wikipedia.org/wiki/Stripe,_Inc.",
+      },
+      verdict: "theirs",
+      why: "это не разрыв в коде, а разница в правовом статусе — и заявлять обратное нельзя ни при каких формулировках",
+    },
+    {
+      axis: "Что делает наш слой",
+      ours: {
+        text: "кошельки, возвраты, повторы доставки, идемпотентность по ключу, аудит и админ-события — поверх чужого процессинга",
+        source: "measured",
+      },
+      theirs: { text: "у них это часть собственной платформы", source: "public", asOf: "28.07.2026" },
+      verdict: "different",
+    },
+    {
+      axis: "Готовность к реальным деньгам",
+      ours: {
+        text: "прямое пополнение кошелька помечено в нашей же документации как test/sandbox; без ключа Stripe выдаётся заглушка вместо оплаты",
+        source: "measured",
+      },
+      theirs: { text: "работают с реальными деньгами в проде", source: "public", asOf: "28.07.2026" },
+      verdict: "theirs",
+    },
+  ],
+  weaknesses: [
+    "Мы НЕ платёжное учреждение и не имеем лицензии: деньги двигает Stripe, мы только слой поверх.",
+    "Прямое пополнение кошелька — песочница, так помечено в нашей собственной спецификации API.",
+    "Без ключа Stripe оплата подменяется заглушкой: демонстрация флоу, а не приём денег.",
+    "Комплаенса под перевод средств (KYC/AML в требуемом объёме) у модуля нет — это отдельный контур, а не настройка.",
+  ],
+};
+
 export const COMPETITOR_SETS: Record<string, CompetitorSet> = {
   qskyway: QSKYWAY,
   "smeta-trainer": SMETA,
@@ -438,6 +494,7 @@ export const COMPETITOR_SETS: Record<string, CompetitorSet> = {
   cyberchess: CYBERCHESS,
   "aevion-ip-bureau": BUREAU,
   qreal: QREAL,
+  "qpaynet-embedded": QPAYNET,
 };
 
 export function competitorsFor(moduleId: string): CompetitorSet | null {

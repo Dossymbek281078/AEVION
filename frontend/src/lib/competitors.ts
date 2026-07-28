@@ -487,6 +487,59 @@ const QPAYNET: CompetitorSet = {
   ],
 };
 
+// QVenture. Здесь легко переобещать словом «due diligence», поэтому граница
+// проведена в первой же строке: это СКРИНИНГ, а не глубокая проверка. Наша
+// колонка проверена по коду: 8 факторов (market, timing, moat, economics,
+// execution, science, legal, competition), веса версионированы, а бенчмарк
+// строится по корпусу реально разобранных сделок и честно отказывается, когда
+// их мало.
+const QVENTURE: CompetitorSet = {
+  moduleId: "qventure",
+  title: "QVenture и платформы данных о сделках",
+  peers: [
+    { name: "Crunchbase", kind: "база данных о частных и публичных компаниях" },
+  ],
+  rows: [
+    {
+      axis: "Что это по сути",
+      ours: {
+        text: "скрининг: 8 факторов сводятся в балл 0–100 и вердикт с конкретной рекомендацией",
+        source: "measured",
+      },
+      theirs: {
+        text: "база данных о компаниях, наполняемая живыми данными, ИИ и сообществом более 80 млн пользователей",
+        source: "public",
+        asOf: "28.07.2026",
+        href: "https://en.wikipedia.org/wiki/Crunchbase",
+      },
+      verdict: "different",
+      why: "они дают данные, мы даём оценку поверх данных — это не одно и то же, и подменять одно другим нечестно",
+    },
+    {
+      axis: "Объём данных",
+      ours: { text: "корпус ограничен тем, что разобрано у нас; бенчмарк прямо отказывается, когда сделок мало", source: "measured" },
+      theirs: { text: "многолетняя база компаний и сделок", source: "public", asOf: "28.07.2026" },
+      verdict: "theirs",
+      why: "по объёму данных мы несопоставимы, и наш бенчмарк сам об этом говорит вместо того, чтобы выдать число",
+    },
+    {
+      axis: "Сопоставимость оценок между собой",
+      ours: {
+        text: "баллы сравнимы ТОЛЬКО внутри версии весов: сравнение чисел из разных версий молча бессмысленно, и это записано в самом движке",
+        source: "measured",
+      },
+      theirs: { text: "не проверяли, как это устроено у них", source: "unverified" },
+      verdict: "different",
+    },
+  ],
+  weaknesses: [
+    "Это скрининг, а НЕ due diligence: из 8 факторов данными самого стартапа подкреплён в основном execution, остальные опираются на секторный бенчмарк.",
+    "Корпус небольшой: качество бенчмарка растёт только по мере накопления разобранных сделок.",
+    "Балл — не инвестиционная рекомендация и не заменяет проверку юристом и финансистом.",
+    "Сравнивать баллы из разных версий весов нельзя; при смене весов старые числа теряют смысл.",
+  ],
+};
+
 export const COMPETITOR_SETS: Record<string, CompetitorSet> = {
   qskyway: QSKYWAY,
   "smeta-trainer": SMETA,
@@ -495,6 +548,7 @@ export const COMPETITOR_SETS: Record<string, CompetitorSet> = {
   "aevion-ip-bureau": BUREAU,
   qreal: QREAL,
   "qpaynet-embedded": QPAYNET,
+  qventure: QVENTURE,
 };
 
 export function competitorsFor(moduleId: string): CompetitorSet | null {

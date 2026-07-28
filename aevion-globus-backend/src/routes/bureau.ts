@@ -29,6 +29,7 @@ import { refererHost } from "../lib/qrightHelpers";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
+import { stubBlocked } from "../lib/stubGuard";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -1493,6 +1494,7 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
 /* ─────────────────── Stub-only helper for demo flow ─────────────────── */
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
+  if (stubBlocked(res)) return;
   if (process.env.BUREAU_KYC_PROVIDER && process.env.BUREAU_KYC_PROVIDER !== "stub") {
     return res.status(404).json({ error: "stub flow disabled in this environment" });
   }

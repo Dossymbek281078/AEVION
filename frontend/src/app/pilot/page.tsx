@@ -23,7 +23,15 @@ const PILOTS: Pilot[] = [
     title: "Подпись · секреты · IP-аттестация",
     price: "$50 000",
     duration: "90 дней",
-    modules: ["QSign v2 (ML-DSA-65 FIPS 204)", "QShield (threshold)", "QRight (IP registry)"],
+    // Состав платного пилота — это обязательство. На проде 28.07 подпись
+    // Ed25519; ML-DSA-65 реализован и включается ключом, что для пилота как раз
+    // выполнимо, — но написать надо так, чтобы клиент не решил, будто она уже
+    // работает по умолчанию.
+    modules: [
+      "QSign v2 (Ed25519; ML-DSA-65 FIPS 204 включается ключом)",
+      "QShield (threshold)",
+      "QRight (IP registry)",
+    ],
     included: [
       "Onboarding-call с founder + technical lead",
       "5 SDK seats (TS + Python) с приоритетным каналом в Slack",

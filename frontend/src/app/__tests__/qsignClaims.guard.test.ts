@@ -33,6 +33,15 @@ const FORBIDDEN: { pattern: RegExp; why: string }[] = [
   { pattern: /FIPS\s*204[^.\n]{0,30}в production/i, why: "«в production» — прод отвечает preview" },
   { pattern: /we already ship it/i, why: "«we already ship it» о постквантовой подписи" },
   { pattern: /ML-DSA-65 on the shelf/i, why: "«on the shelf» — утверждение о доступности" },
+  // Пропущенные формы, найденные 28.07 сверкой с реестром ключей на проде.
+  // Сторож ловил «GA», «in production» и «we already ship it» — но мимо прошли
+  // другая форма того же («already shipping»), обещание в составе ПЛАТНОГО
+  // тарифа и инструкция «подпишите через ML-DSA-65». Последние два хуже
+  // маркетинга: человек платит и делает шаги, рассчитывая на то, чего нет.
+  { pattern: /already shipping it/i, why: "«already shipping» — на проде Ed25519, ML-DSA включается ключом" },
+  { pattern: /\$\d+[^\n]{0,40}ML-DSA-65/i, why: "ML-DSA-65 в составе платного тарифа" },
+  { pattern: /sign (?:it )?with ML-DSA-65/i, why: "инструкция подписать тем, что не включено" },
+  { pattern: /контур, FIPS\s*204 post-quantum/i, why: "«контур FIPS 204» без оговорки о ключе" },
   { pattern: /No one else ships ML-DSA-65/i, why: "непроверяемое «никто больше не поставляет»" },
 ];
 

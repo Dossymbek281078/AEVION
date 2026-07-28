@@ -101,7 +101,10 @@ const PILLARS: Pillar[] = [
     id: "trust",
     title: "Защита и право",
     oneLine:
-      "Подпись, секреты, патенты и governance — встроены в один контур, FIPS 204 post-quantum.",
+      // «FIPS 204 post-quantum» без оговорки читается как «контур уже
+      // постквантовый». На проде 28.07 активны Ed25519 и HMAC; ML-DSA-65
+      // реализован и включается ключом. Пишем то, что отвечает реестр ключей.
+      "Подпись, секреты, патенты и governance — встроены в один контур: сегодня Ed25519, FIPS 204 post-quantum реализован и включается ключом.",
     modules: ["QSign v2", "QShield", "QRight", "QContract", "QChainGov", "QMaskCard", "VeilNetX", "Z-Tide"],
     proof: "ML-DSA-65 (FIPS 204), key-activated · prod smoke 24/24 (27 Jul) · QShield Lagrange-reconstruct · QRight IP-registry live",
     tamAnchor: "IP economy + cybersec ≈ $400B → $700B",

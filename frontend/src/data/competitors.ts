@@ -158,6 +158,76 @@ export const COMPARE_ROWS: CompareRow[] = [
     ],
   },
   {
+    module: "qcontract",
+    title: "QContract — документ по защищённой ссылке",
+    rivals: ["PandaDoc", "DocuSign"],
+    headline:
+      "Мы решаем другую задачу: не согласование договора, а безопасную выдачу документа — пароль, счётчик просмотров, срок и отзыв. Зато всего, ради чего покупают PandaDoc, у нас нет.",
+    verdict: "different-league",
+    strengths: [
+      "Ссылка с паролем, лимитом просмотров, сроком жизни и отзывом: посмотрели трижды — доступ закрылся. У PandaDoc ссылка на документ так не ограничивается.",
+      "Списание просмотра атомарное: одновременные открытия не пробивают лимит (исправлено 27.07.2026).",
+      "Бесплатно и без оплаты за пользователя: у PandaDoc Starter стоит $19 за пользователя в месяц при годовой оплате, Business — $49.",
+    ],
+    weaknesses: [
+      "На проде ровно 2 документа. Это не продукт с пользователями, а работающий механизм.",
+      "Нет ничего из того, ради чего покупают PandaDoc: шаблонов, согласований, интеграций с CRM, библиотеки контента, оплаты внутри документа.",
+      "Юридической силы подписи нет: квалифицированная подпись у PandaDoc — отдельная услуга, у нас её нет вовсе.",
+    ],
+    measured:
+      "Наша сторона — прод-запрос `/api/qcontract/health` 28.07.2026: `documents: 2`; пароль, лимит просмотров, срок и отзыв — по коду роутера. Тарифы PandaDoc — публичные, сверено 28.07.2026.",
+    sources: [
+      { label: "Тарифы PandaDoc 2026: $19–$49 за пользователя в месяц", url: "https://costbench.com/software/contract-management/pandadoc/" },
+      { label: "Разбор планов PandaDoc 2026", url: "https://www.docupilot.com/blog/pandadoc-pricing" },
+    ],
+  },
+  {
+    module: "qstore",
+    title: "QStore — продажа цифровых товаров",
+    rivals: ["Gumroad", "Lemon Squeezy"],
+    headline:
+      "Мы не берём комиссию, потому что и денег не принимаем. Пока это витрина, а не магазин: продавец не получит выплату.",
+    verdict: "they-stronger",
+    strengths: [
+      "Нет платформенной комиссии: Gumroad берёт 10% + $0,50 с продажи, Lemon Squeezy — от 5% + $0,50.",
+      "Товар живёт внутри платформы и виден поиску и соседним модулям, а не только на отдельной странице продавца.",
+    ],
+    weaknesses: [
+      "Мы не merchant of record. Gumroad и Lemon Squeezy берут на себя НДС и налоговую отчётность по всему миру — это и есть главное, за что им платят.",
+      "Выплат продавцу нет: деньги через нас не проходят.",
+      "На проде 21 товар и нет своей аудитории; у Gumroad есть витрина Discover, которая приводит покупателей — за 30% с такой продажи.",
+    ],
+    measured:
+      "Наша сторона — прод-запрос `/api/qstore/products?limit=100` 28.07.2026: 21 товар; отсутствие выплат — по коду. Комиссии аналогов — публичные, сверено 28.07.2026.",
+    sources: [
+      { label: "Комиссии Gumroad 2026: 10% + $0,50, Discover 30%", url: "https://www.swell.is/content/gumroad-pricing" },
+      { label: "Lemon Squeezy против Gumroad: арифметика комиссий", url: "https://www.getly.store/blog/gumroad-vs-lemon-squeezy" },
+    ],
+  },
+  {
+    module: "qchaingov",
+    title: "QChainGov — голосования сообщества",
+    rivals: ["Snapshot", "Aragon"],
+    headline:
+      "Строку пишу против себя: у Snapshot 35 000 сообществ и бесплатное голосование без комиссии сети, а у нас на проде 15 предложений, и все пятнадцать — смоук-тесты.",
+    verdict: "they-stronger",
+    strengths: [
+      "Голосование привязано к входу в платформу, а не к кошельку: участнику не нужен ни кошелёк, ни токен.",
+      "Под каждым решением — подпись QSign, то есть запись остаётся проверяемой без блокчейна.",
+    ],
+    weaknesses: [
+      "На проде 15 предложений, и все 15 созданы смоук-тестами. Реального использования нет.",
+      "Квадратичного голосования и дерева делегирования у нас нет — в роутере ноль упоминаний. У Snapshot это готовые стратегии, включая делегирование по модели Compound и Uniswap. Обещание с витрины снято 27.07.2026.",
+      "Snapshot бесплатен и обслуживает более 35 000 сообществ; нам предъявить нечего.",
+    ],
+    measured:
+      "Наша сторона — прод-запрос `/api/qchaingov/proposals?limit=100` 28.07.2026: 15 записей, у всех 15 в заголовке Smoke/Test; отсутствие квадратичного голосования — счётчик по роутеру 27.07.2026. Данные Snapshot — публичные, сверено 28.07.2026.",
+    sources: [
+      { label: "Snapshot: бесплатное голосование без газа, 35 000+ сообществ", url: "https://www.dextools.io/tutorials/what-is-snapshot-dao-governance-voting-guide-2026" },
+      { label: "Стратегии Snapshot: квадратичное голосование и делегирование", url: "https://chainscorelabs.com/en/glossary/smart-contracts/dao-governance-contracts/snapshot-voting" },
+    ],
+  },
+  {
     module: "qmedia",
     title: "QMedia — музыка и видео пользователя",
     rivals: ["Spotify", "YouTube"],
@@ -186,13 +256,10 @@ export const COMPARE_ROWS: CompareRow[] = [
  * проверенного. Пустая строка в таблице лучше выдуманной.
  */
 export const NOT_COMPARED: { module: string; rivals: string }[] = [
-  { module: "qcontract", rivals: "PandaDoc, Ironclad" },
-  { module: "qstore", rivals: "Gumroad, Lemon Squeezy" },
   { module: "qlearn", rivals: "Teachable, Udemy" },
   { module: "qskyway", rivals: "Aloft, AirMap" },
   { module: "smeta-trainer", rivals: "АВС-4, Смета РК, Сана" },
   { module: "healthai", rivals: "InsideTracker, Function Health" },
-  { module: "qchaingov", rivals: "Snapshot, Aragon" },
   { module: "veilnetx", rivals: "Blacklight, Privacy Badger" },
   { module: "startup-exchange", rivals: "AngelList, Republic" },
   { module: "qnews", rivals: "Feedly, Google News" },

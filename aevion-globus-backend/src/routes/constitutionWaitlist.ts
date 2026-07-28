@@ -67,7 +67,11 @@ function isAdmin(req: Request): boolean {
   return false;
 }
 
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
+// Формат email проверяется Zod-схемой WaitlistSubscribeSchema
+// (z.string().email().max(120)) на входе в маршрут. Здесь раньше лежала
+// вторая, НИКЕМ НЕ ВЫЗЫВАЕМАЯ регулярка: читающий видел её и считал, что
+// есть ещё один слой проверки, которого не было. Убрана, чтобы код не
+// обещал того, чего не делает.
 
 export const constitutionWaitlistRouter = Router();
 export const constitutionWaitlistAdminRouter = Router();

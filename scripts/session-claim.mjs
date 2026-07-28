@@ -47,6 +47,46 @@ function zonesFor(id) {
   return { appDir, routes };
 }
 
+// ── Ответ «FREE» обязан быть обеспечен настоящими зонами ───────────────────
+//
+// Этот инструмент выдаёт разрешение редактировать. Значит, единственный опасный
+// для него исход — не отказ, а ЛОЖНОЕ разрешение: оно посылает сессию в чужой
+// каталог, ровно туда, ради чего инструмент и написан.
+//
+// А выдавалось оно на двух совершенно обычных входах (проверено 28.07.2026):
+//
+//   session-claim.mjs frontend/src/app/compare   → зона frontend/src/app/frontend/src/app/compare
+//   session-claim.mjs qskiway  (опечатка)        → зона frontend/src/app/qskiway
+//
+// Обе не существуют, поэтому не совпадают ни с чем, поэтому «✅ FREE». Причём
+// первый вход естественнее правильного: в глобальном правиле команда стоит
+// рядом с путями, и рука сама подставляет путь. Второй страшнее: ЛЮБАЯ описка в
+// имени модуля означала разрешение.
+
+/** Путь внутри репозитория → id модуля, которому он принадлежит (или null). */
+function idFromPath(p) {
+  const norm = p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  const app = norm.match(/(?:^|\/)frontend\/src\/app\/([^/]+)/);
+  if (app) return reverseAlias(app[1], "app");
+  const route = norm.match(/(?:^|\/)aevion-globus-backend\/src\/routes\/([^/]+?)(?:\.ts)?(?:\/|$)/);
+  if (route) return reverseAlias(route[1], "route");
+  return null;
+}
+
+/** Каталог/файл зоны → id модуля: у части модулей имя папки отличается от id. */
+function reverseAlias(name, kind) {
+  for (const [id, a] of Object.entries(ALIAS)) {
+    if (kind === "app" && a.app === name) return id;
+    if (kind === "route" && (a.routes || []).some((r) => r === name || r === `${name}.ts`)) return id;
+  }
+  return name;
+}
+
+/** Существует ли хоть одна зона модуля на диске. */
+function zonesExist(prefixes) {
+  return prefixes.some((p) => existsSync(resolve(ROOT, p)));
+}
+
 function sh(cmd, cwd) {
   try {
     return execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -110,9 +150,37 @@ if (!arg) {
 }
 
 // Claim-check mode for a specific module.
-const id = arg;
+//
+// Путь принимаем, но НЕ как имя модуля: сначала переводим в id владеющего им
+// модуля. Иначе `frontend/src/app/compare` превращалось в зону
+// `frontend/src/app/frontend/src/app/compare` и отвечало «свободно».
+let id = arg;
+if (/[/\\]/.test(arg)) {
+  const mapped = idFromPath(arg);
+  if (!mapped) {
+    console.error(`Путь "${arg}" не удалось отнести ни к одному модулю.`);
+    console.error(`Зоны модулей — это frontend/src/app/<модуль> и`);
+    console.error(`aevion-globus-backend/src/routes/<модуль>[.ts]. Позовите по имени модуля:`);
+    console.error(`  node scripts/session-claim.mjs <module-id>`);
+    process.exit(2);
+  }
+  console.log(`(путь "${arg}" отнесён к модулю "${mapped}")`);
+  id = mapped;
+}
+
 const { appDir, routes } = zonesFor(id);
 const prefixes = [appDir, ...routes].filter(Boolean);
+
+// Неизвестный модуль — это НЕ «свободно». У опечатки зоны не существует, она ни
+// с чем не совпадает, и молчание выглядело бы как разрешение.
+if (!(id in ALIAS) && !zonesExist(prefixes)) {
+  console.error(`Модуль "${id}" не найден: ни одна из его зон не существует на диске.`);
+  console.error(`  ${prefixes.join("\n  ")}`);
+  console.error(`\nСкорее всего опечатка в имени. Список worktree и их зон:`);
+  console.error(`  node scripts/session-claim.mjs`);
+  console.error(`\nЭто НЕ значит «свободно» — проверка не выполнена.`);
+  process.exit(2);
+}
 const token = (ALIAS[id]?.app || id).toLowerCase();
 
 const conflicts = [];

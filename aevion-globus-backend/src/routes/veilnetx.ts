@@ -19,6 +19,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID, createHash } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { scoreExposure, gradeFor } from "../lib/veilnetxExposure";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 
 const captureVeilNetXError = makeServiceCapture("veilnetx");
@@ -289,118 +290,25 @@ veilnetxRouter.get("/inspect", (req: Request, res: Response) => {
   };
   const geoLeaked = Boolean(geo.country || geo.city || geo.region);
 
-  // ── Exposure scoring: 0 = invisible, 100 = fully exposed ──────────────────
-  // Each finding carries a category (network / identity / fingerprint) and an
-  // actionable fix so the report is a hardening checklist, not just a verdict.
-  type Cat = "network" | "identity" | "fingerprint";
-  const findings: {
-    id: string;
-    label: string;
-    severity: "low" | "med" | "high";
-    exposed: boolean;
-    category: Cat;
-    advice: string;
-  }[] = [
-    {
-      id: "real-ip",
-      label: proxyDetected
-        ? "Запрос идёт через прокси — реальный IP скрыт от конечного сервера"
-        : "Реальный IP виден серверу напрямую (нет прокси/Tor)",
-      severity: "high",
-      exposed: !proxyDetected,
-      category: "network",
-      advice: "Используй Tor Browser или доверенный VPN — реальный IP выдаёт провайдера и приблизительное местоположение.",
-    },
-    {
-      id: "geo",
-      label: geoLeaked
-        ? `Гео определяется по IP: ${[geo.country, geo.city].filter(Boolean).join(", ") || "да"}`
-        : "Гео по IP не раскрыто на этом хопе",
-      severity: "high",
-      exposed: geoLeaked,
-      category: "network",
-      advice: "Скрытие IP (Tor/VPN) автоматически скрывает и гео — оно вычисляется из IP.",
-    },
-    {
-      id: "user-agent",
-      label: ua.raw
-        ? `User-Agent раскрывает браузер/ОС: ${ua.browser} / ${ua.os}`
-        : "User-Agent не передан",
-      severity: "med",
-      exposed: Boolean(ua.raw),
-      category: "fingerprint",
-      advice: "Tor Browser унифицирует User-Agent у всех пользователей — так ты сливаешься с толпой.",
-    },
-    {
-      id: "client-hints",
-      label: clientHintsLeaked
-        ? `Client Hints раскрывают точную версию/платформу: ${[clientHints.platform, clientHints.arch, clientHints.model].filter(Boolean).join(" · ") || "да"}`
-        : "Client Hints (Sec-CH-UA) не переданы",
-      severity: "med",
-      exposed: clientHintsLeaked,
-      category: "fingerprint",
-      advice: "Sec-CH-UA-* пинят мажорную версию браузера, платформу и (high-entropy hints) архитектуру CPU. Tor Browser их не шлёт.",
-    },
-    {
-      id: "language",
-      label: primaryLanguage
-        ? `Accept-Language раскрывает локаль: ${primaryLanguage}`
-        : "Accept-Language не передан",
-      severity: "low",
-      exposed: Boolean(primaryLanguage),
-      category: "identity",
-      advice: "Локаль сужает круг: en-US ≠ kk-KZ. Tor Browser шлёт всем одинаковый en-US.",
-    },
-    {
-      id: "referer",
-      label: referer
-        ? "Referer раскрывает, с какой страницы ты пришёл (кросс-сайтовая связка)"
-        : "Referer не передан",
-      severity: "med",
-      exposed: Boolean(referer),
-      category: "identity",
-      advice: "Настрой Referrer-Policy: strict-origin-when-cross-origin или no-referrer в браузере/расширении.",
-    },
-    {
-      id: "cookie",
-      label: cookiePresent
-        ? "В запросе есть cookie — потенциальная кросс-сессионная привязка"
-        : "Cookie в запросе нет",
-      severity: "low",
-      exposed: cookiePresent,
-      category: "identity",
-      advice: "Чисти cookie между сессиями или используй контейнеры/приватный режим для изоляции.",
-    },
-    {
-      id: "dnt",
-      label: dnt
-        ? "Do-Not-Track включён"
-        : "Do-Not-Track не установлен (большинство сайтов его игнорируют, но это маркер)",
-      severity: "low",
-      exposed: !dnt,
-      category: "identity",
-      advice: "Включи Do-Not-Track как маркер намерения (защита слабая — не полагайся только на него).",
-    },
-  ];
-
-  const weight = { low: 8, med: 16, high: 26 } as const;
-  const exposureScore = Math.min(
-    100,
-    findings.reduce((sum, f) => (f.exposed ? sum + weight[f.severity] : sum), 0),
-  );
-  const level = exposureScore >= 60 ? "red" : exposureScore >= 30 ? "yellow" : "green";
-  const grade = gradeFor(exposureScore);
-
-  // Category rollup — how many exposed findings in each bucket.
-  const byCategory: Record<Cat, { exposed: number; total: number }> = {
-    network: { exposed: 0, total: 0 },
-    identity: { exposed: 0, total: 0 },
-    fingerprint: { exposed: 0, total: 0 },
-  };
-  for (const f of findings) {
-    byCategory[f.category].total += 1;
-    if (f.exposed) byCategory[f.category].exposed += 1;
-  }
+  // ── Exposure scoring ──────────────────────────────────────────────────────
+  // Логика вынесена в lib/veilnetxExposure, чтобы шкалу можно было проверить
+  // тестом: пока она жила здесь, её единственным способом измерения был живой
+  // HTTP-запрос — и месяцами не замечали, что лучшая оценка недостижима (#785).
+  const exposure = scoreExposure({
+    proxyDetected,
+    geoLeaked,
+    geoLabel: [geo.country, geo.city].filter(Boolean).join(", "),
+    uaRaw: ua.raw ?? null,
+    uaBrowser: ua.browser,
+    uaOs: ua.os,
+    clientHintsLeaked,
+    clientHintsLabel: [clientHints.platform, clientHints.arch, clientHints.model].filter(Boolean).join(" · "),
+    primaryLanguage,
+    refererPresent: Boolean(referer),
+    cookiePresent,
+    dnt,
+  });
+  const { findings, exposureScore, level, grade, byCategory } = exposure;
 
   res.json({
     module: "veilnetx",
@@ -448,15 +356,6 @@ const FP_BITS: Record<string, number> = {
   memory: 1.5,
   touch: 1,
 };
-
-function gradeFor(score: number): string {
-  // score = exposure/surface, 0 = best (invisible), 100 = worst (fully unique).
-  if (score <= 12) return "A";
-  if (score <= 28) return "B";
-  if (score <= 45) return "C";
-  if (score <= 65) return "D";
-  return "F";
-}
 
 function num(v: unknown): number | null {
   const n = Number(v);

@@ -157,8 +157,8 @@ const ECOSYSTEM: EcoRow[] = [
   {
     module: "CyberChess",
     rivals: "Chess.com, Lichess",
-    ours: { text: "500 000 задач из открытого дампа; ИИ-разбор партии; бот, играющий по-человечески — 0 зевков на 476 ходов (26.07)", origin: "measured" },
-    missing: "силу движка против Lichess не сравнивали",
+    ours: { text: "502 584 задачи; ИИ-разбор партии; бот, играющий по-человечески — 0 зевков на 476 ходов (26.07)", origin: "measured" },
+    missing: "у Lichess 6 057 356 задач — в 12 раз больше; аудитории и рейтинга у нас нет, силу движка не сравнивали",
   },
   {
     module: "Smeta Trainer",
@@ -177,6 +177,30 @@ const ECOSYSTEM: EcoRow[] = [
     rivals: "Higgsfield, Runway, Kling",
     ours: { text: "Директивы реализма добавляются к каждому видеопромту из общего модуля", origin: "measured" },
     missing: "сравнение качества не проводилось — и публиковать его нельзя, пока нет слепого бенчмарка",
+  },
+  {
+    module: "QSign и IP-бюро",
+    rivals: "DocuSign",
+    ours: { text: "Нет платы за пользователя и потолка документов — у DocuSign 100 конвертов на человека в год; авторство фиксируется хешем", origin: "public" },
+    missing: "подпись не квалифицированная, личность подписанта не проверяется",
+  },
+  {
+    module: "QContract",
+    rivals: "PandaDoc, DocuSign",
+    ours: { text: "Ссылка с паролем, лимитом просмотров, сроком и отзывом; списание просмотра атомарное", origin: "measured" },
+    missing: "на проде два документа; нет шаблонов, согласований и CRM — того, ради чего покупают PandaDoc за $19–49 с человека",
+  },
+  {
+    module: "Платёжный API",
+    rivals: "Stripe, Paddle",
+    ours: { text: "Привычная форма API, бесплатная песочница", origin: "measured" },
+    missing: "эквайринга нет — деньги не двигаются; нет лицензии и PCI DSS",
+  },
+  {
+    module: "QStore",
+    rivals: "Gumroad, Lemon Squeezy",
+    ours: { text: "Без комиссии — у Gumroad 10% плюс $0,50 с продажи", origin: "public" },
+    missing: "мы не merchant of record: НДС и отчётность остаются на продавце, выплат нет",
   },
   {
     module: "Остальные модули экосистемы",

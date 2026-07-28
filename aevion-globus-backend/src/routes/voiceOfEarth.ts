@@ -146,7 +146,10 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
       }
       const where = `WHERE ${conditions.join(" AND ")}`;
       const { rows } = await pool.query(
-        `SELECT * FROM voe_tracks ${where}
+        // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+        // идентификатору. Иначе список поедет вслед за схемой.
+        `SELECT id, title, artist_alias, language, lyrics, mood, audio_url, votes, status, created_at
+           FROM voe_tracks ${where}
          ORDER BY votes DESC, created_at DESC
          LIMIT $${idx++} OFFSET $${idx++}`,
         [...args, limit, offset],
@@ -156,7 +159,7 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
         args,
       );
       return res.json({
-        items: rows,
+        items: rows.map(publicTrack),
         total: Number(cnt[0]?.c ?? "0"),
         backend: "postgres",
       });

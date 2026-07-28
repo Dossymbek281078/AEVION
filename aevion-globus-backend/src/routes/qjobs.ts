@@ -119,10 +119,14 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
 
       const where = conditions.join(" AND ");
       const [{ rows }, { rows: countRows }] = await Promise.all([
-        pool.query(`SELECT * FROM "QJobsPosting" WHERE ${where} ORDER BY "createdAt" DESC LIMIT $${idx}`, [...args, limitN]),
+        // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+        // идентификатору. Иначе список поедет вслед за схемой.
+        pool.query(`SELECT "id","employerId","title","description","company","location","type",
+                           "salary","skills","isActive","applicantCount","createdAt","updatedAt"
+                      FROM "QJobsPosting" WHERE ${where} ORDER BY "createdAt" DESC LIMIT $${idx}`, [...args, limitN]),
         pool.query(`SELECT COUNT(*)::int AS total FROM "QJobsPosting" WHERE ${where}`, args),
       ]);
-      return res.json({ jobs: rows, total: countRows[0]?.total ?? rows.length });
+      return res.json({ jobs: rows.map(publicJob), total: countRows[0]?.total ?? rows.length });
     }
 
     let jobs = Array.from(memJobs.values()).filter((j) => j.isActive);

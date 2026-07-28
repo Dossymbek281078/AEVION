@@ -21,7 +21,28 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globals: false,
-    testTimeout: 10_000,
+    // 30 с, а не 10, И отдельный лимит для хуков.
+    //
+    // Замер 28.07: за день ТРИ файла краснели по таймауту, и каждый раз это
+    // выглядело как настоящий дефект, а не как исчерпанный лимит —
+    // `tier3OgRoutes` (10169–10695 мс), `qtradeInternalCredit` (15660 мс),
+    // `qcoreaiPublicNoOwnerLeak` (хук, «Hook timed out in 10000ms», ронял ФАЙЛ
+    // целиком и уводил все семь тестов в skip). Ни один из них не делает
+    // тяжёлой работы: время уходит на `await import("../src/routes/…")`, который
+    // тянет дерево зависимостей маршрутов. В одиночку все три — доли секунды.
+    //
+    // Смысл таймаута — поймать зависание, и для этого 30 с не хуже 10; зато
+    // исчезает целый класс ложной красноты. Обход показал ещё ПЯТЬ файлов с
+    // тяжёлыми динамическими импортами и без своего лимита
+    // (`qsignV2.dilithium` — 12 импортов, `qsignV2.sentry` — 7,
+    // `provisioning.sendEmail`, `qcoreV35`, тот же `qtradeInternalCredit`), то
+    // есть чинить по одному значило бы ждать следующего.
+    //
+    // `hookTimeout` задаётся отдельно НЕ для симметрии: у vitest это независимый
+    // лимит, и `testTimeout` на хуки не распространяется — на этом я и попался
+    // со своим `beforeAll`.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // `opentimestamps` (0.4.x, CJS, no clean exports map) intermittently trips
     // Vite's dep optimizer when several test files import it concurrently on a
     // cold cache — surfacing as "Failed to resolve entry for package

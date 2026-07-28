@@ -44,9 +44,32 @@ const BASIS_NOTE: Record<ModuleComparison["basis"], string> = {
     "Вывод из устройства продуктов, без замера. Самое слабое основание — годится для «у них закрыто, у нас открыто», не годится для «мы быстрее».",
 };
 
+/**
+ * Обратный указатель: от знакомого продукта к нашему модулю.
+ *
+ * Человек редко ищет «модуль для подписи» — он ищет «чем заменить DocuSign».
+ * Без этого списка ему пришлось бы просматривать 36 карточек, чтобы понять,
+ * есть ли у нас вообще что-то на эту тему.
+ */
+function buildRivalIndex(): Array<{ rival: string; modules: ModuleComparison[] }> {
+  const byRival = new Map<string, ModuleComparison[]>();
+  for (const c of COMPARISONS) {
+    for (const r of c.rivals) {
+      // Один и тот же продукт встречается как аналог у нескольких модулей —
+      // например, DocSend и у QVenture, и у QContract. Схлопываем в одну строку.
+      const list = byRival.get(r) ?? [];
+      list.push(c);
+      byRival.set(r, list);
+    }
+  }
+  return [...byRival.entries()]
+    .map(([rival, modules]) => ({ rival, modules }))
+    .sort((a, b) => a.rival.localeCompare(b.rival, "ru"));
+}
+
 function Card({ c }: { c: ModuleComparison }) {
   return (
-    <article style={styles.card}>
+    <article id={c.id} style={styles.card}>
       <div style={styles.cardHead}>
         <div>
           <h2 style={styles.cardTitle}>{c.name}</h2>
@@ -93,6 +116,7 @@ function Card({ c }: { c: ModuleComparison }) {
 
 export default function ComparePage() {
   const measured = COMPARISONS.filter((c) => c.basis === "measured").length;
+  const rivalIndex = buildRivalIndex();
 
   return (
     <main style={styles.page}>
@@ -132,6 +156,31 @@ export default function ComparePage() {
           <p style={styles.rulesFoot}>
             Разобрано модулей: {COMPARISONS.length}, из них с собственным замером: {measured}.
           </p>
+        </section>
+
+        <section style={styles.rules}>
+          <h2 style={styles.rulesTitle}>Ищете замену чему-то конкретному?</h2>
+          <p style={styles.rulesFoot}>
+            Слева — продукт, которым вы, возможно, уже пользуетесь. Справа — наш модуль,
+            который делает похожее.
+          </p>
+          <ul style={styles.rivalIndex}>
+            {rivalIndex.map(({ rival, modules }) => (
+              <li key={rival} style={styles.rivalRow}>
+                <span style={styles.rivalName}>{rival}</span>
+                <span>
+                  {modules.map((m, i) => (
+                    <span key={m.id}>
+                      {i > 0 && ", "}
+                      <a href={`#${m.id}`} style={styles.link}>
+                        {m.name}
+                      </a>
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {COMPARISONS.map((c) => (
@@ -252,6 +301,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: MUTED,
   },
 
+  rivalIndex: { listStyle: "none", margin: "12px 0 0", padding: 0 },
+  rivalRow: {
+    display: "grid",
+    // На телефоне две колонки схлопываются в одну: имя продукта и ссылка
+    // на модуль иначе ужимаются до переносов по одному слову.
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 2,
+    padding: "7px 0",
+    borderTop: `1px solid ${RULE}`,
+    fontSize: 14,
+  },
+  rivalName: { fontWeight: 700 },
   tail: { marginTop: 30, borderTop: `2px solid ${INK}`, paddingTop: 16 },
   link: { color: GOLD },
 };

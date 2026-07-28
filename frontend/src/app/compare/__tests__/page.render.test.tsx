@@ -46,6 +46,24 @@ describe("страница сравнения показывает обе сто
   it("на странице есть оговорка о том, чего в сравнении нет", () => {
     expect(html).toContain("Чего здесь нет");
   });
+
+  it("указатель «чем заменить X» ведёт на существующие карточки, а не в никуда", () => {
+    // Якоря собираются из id модулей, а карточки — из тех же id, поэтому
+    // разъехаться они могут только при правке одной стороны. Проверка стоит
+    // одной строки, а битая ссылка в указателе выглядит как сломанная страница.
+    const anchors = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
+    const cardIds = new Set([...html.matchAll(/<article id="([^"]+)"/g)].map((m) => m[1]));
+    expect(anchors.length, "Указатель аналогов пуст").toBeGreaterThan(10);
+
+    const broken = [...new Set(anchors)].filter((a) => !cardIds.has(a));
+    expect(broken, "Ссылка ведёт на несуществующий якорь: " + broken.join(", ")).toEqual([]);
+  });
+
+  it("каждый названный аналог попал в указатель", () => {
+    const rivals = new Set(COMPARISONS.flatMap((c) => c.rivals));
+    const missing = [...rivals].filter((r) => !html.includes(escapeForHtml(r)));
+    expect(missing, "Аналог назван в данных, но не выведен: " + missing.join(", ")).toEqual([]);
+  });
 });
 
 /** React экранирует кавычки и амперсанды — сравниваем в том же виде. */

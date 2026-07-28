@@ -3,6 +3,26 @@
 import Link from "next/link";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { COMPARISONS } from "@/data/competitors";
+
+/**
+ * Шесть карточек для демо. Берём НЕ первые попавшиеся: порядок в источнике —
+ * это порядок добавления, то есть в демо попадали самые старые разборы просто
+ * потому, что их завели раньше.
+ *
+ * Сортируем по числу утверждений, подтверждённых собственным замером
+ * (`basis: "measured"`). Смотрящему демо важнее всего именно проверяемое:
+ * «мы измерили и вот число» весомее, чем «так устроено». Порядок при равенстве
+ * сохраняется исходный, так что выбор детерминирован и не прыгает между сборками.
+ */
+const DEMO_COMPARISONS = [...COMPARISONS]
+  .map((c, i) => ({
+    c,
+    i,
+    measured: [...c.weWin, ...c.weLose].filter((x) => x.basis === "measured").length,
+  }))
+  .sort((a, b) => b.measured - a.measured || a.i - b.i)
+  .slice(0, 6)
+  .map((x) => x.c);
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -680,7 +700,7 @@ export default function DemoShowcasePage() {
             утверждением на <Link href="/compare" style={{ color: "#7dd3fc", fontWeight: 700 }}>/compare</Link>.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {COMPARISONS.slice(0, 6).map((c) => (
+            {DEMO_COMPARISONS.map((c) => (
               <article
                 key={c.moduleId}
                 style={{

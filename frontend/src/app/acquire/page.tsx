@@ -258,7 +258,6 @@ export default function AcquirePage() {
             Запросить LOI → yahiin1978@gmail.com
           </a>
           <Link href="/launch-status" style={btnGhost}>Live status</Link>
-          <Link href="/transparency" style={btnGhost}>Transparency board</Link>
           <Link href="/constitution" style={btnGhost}>Constitution v1</Link>
         </div>
 
@@ -673,7 +672,6 @@ export default function AcquirePage() {
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/launch-status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live status</Link>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Transparency</Link>
             <Link href="/constitution" style={{ color: "#94a3b8", textDecoration: "none" }}>Constitution</Link>
             <Link href="/devhub" style={{ color: "#94a3b8", textDecoration: "none" }}>DevHub</Link>
             <Link href="/planet" style={{ color: "#94a3b8", textDecoration: "none" }}>Planet</Link>

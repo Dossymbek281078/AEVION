@@ -75,6 +75,19 @@ export interface ModuleComparison {
   sources: string[];
 }
 
+/**
+ * Соответствие `moduleId` здесь и `id` в реестре `aevion-globus-backend/src/data/projects.ts`.
+ * Совпадает не всё, и без этой таблички проверка полноты «чего ещё нет в
+ * сравнении» показывает лишние расхождения:
+ *
+ *   ip-bureau   ← aevion-ip-bureau
+ *   kids-ai     ← kids-ai-content
+ *   health-line ← healthai
+ *   fintech     ← сводный разбор группы (qpaynet-embedded и соседние)
+ *   qai         ← multichat-engine / qcoreai-чат в пользовательском виде
+ *
+ * Проверяя, что ещё не разобрано, сначала сверяйтесь с этим списком.
+ */
 export const COMPARISONS: ModuleComparison[] = [
   {
     moduleId: "startup-exchange",
@@ -1380,6 +1393,61 @@ export const COMPARISONS: ModuleComparison[] = [
       "Мы лучше там, где важен матчинг и честность цифры сбора. Собирать деньги по-настоящему — пока только на площадках с выплатами и доверием.",
     surveyedAt: "2026-07-28",
     sources: ["src/routes/qgood.ts", "npm run verify:sql-guards"],
+  },
+
+  {
+    moduleId: "mapreality",
+    module: "MapReality — карта нужд и просьб рядом",
+    page: "/mapreality",
+    category: "карты городских сигналов и взаимопомощи по геолокации",
+    rivals: [
+      { name: "FixMyStreet", url: "https://fixmystreet.com", strength: "многолетняя связка с коммунальными службами: сигнал уходит тому, кто обязан починить" },
+      { name: "Nextdoor", url: "https://nextdoor.com", strength: "живое соседское сообщество и подтверждение адреса" },
+      { name: "OpenStreetMap Notes", url: "https://openstreetmap.org", strength: "открытые данные и армия редакторов" },
+    ],
+    weWin: [
+      {
+        text: "Три типа сигнала в одной карте: нужда, событие и просьба — а не только жалоба на яму",
+        basis: "design",
+        evidence: "категории need / event / request в модуле",
+      },
+      {
+        text: "Поиск по близости и поддержка сигнала соседями встроены, причём повторная поддержка одним человеком не проходит",
+        basis: "design",
+        evidence: "/signals/nearby и /signals/:id/support с ON CONFLICT DO NOTHING RETURNING — дубль отбрасывается и счётчик не растёт",
+      },
+      {
+        text: "Ручка здоровья честно говорит, откуда взято число сигналов",
+        basis: "measured",
+        evidence: "проверено 3 тестами 28.07.2026: при сбое базы health помечает источник memory и снимает ok; до этой даты отдавал ok: true с числом из памяти",
+      },
+    ],
+    weLose: [
+      {
+        text: "Сигнал никуда не уходит: связи с коммунальными службами, на которой стоит FixMyStreet, у нас нет",
+        basis: "design",
+        evidence: "в модуле только хранение и просмотр сигналов",
+      },
+      {
+        text: "Нет соседского сообщества и подтверждения адреса — без этого карта наполняется медленно и доверия к ней меньше",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Автор сигнала — просто псевдоним, никакой проверки личности",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: поле author_alias, аутентификация для создания сигнала не требуется",
+      },
+      {
+        text: "Данные закрыты внутри платформы, в отличие от OpenStreetMap",
+        basis: "design",
+        evidence: "выгрузки открытых данных в модуле нет",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда нужна быстрая карта «кому что нужно рядом» без бюрократии. Чтобы яму действительно починили — FixMyStreet и городские сервисы.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/mapReality.ts", "tests/mapRealityHealthHonesty.test.ts"],
   },
 ];
 

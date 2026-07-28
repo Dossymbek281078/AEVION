@@ -96,9 +96,9 @@ const PILLARS: Pillar[] = [
     id: "trust",
     title: "Защита и право",
     oneLine:
-      "Подпись, секреты, патенты и governance — встроены в один контур, FIPS 204 post-quantum.",
+      "Подпись, секреты, патенты и governance — встроены в один контур, канонизация RFC 8785.",
     modules: ["QSign v2", "QShield", "QRight", "QContract", "QChainGov", "QMaskCard", "VeilNetX", "Z-Tide"],
-    proof: "ML-DSA-65 GA · prod smoke 20/20 · QShield Lagrange-reconstruct · QRight IP-registry live",
+    proof: "QSign v2: Ed25519 + HMAC-SHA256 · prod smoke 20/20 · QShield Lagrange-reconstruct · QRight IP-registry live",
     tamAnchor: "IP economy + cybersec ≈ $400B → $700B",
     accent: "#3b82f6",
   },

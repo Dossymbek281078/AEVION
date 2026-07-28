@@ -388,6 +388,219 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-27",
     sources: ["CLAUDE.md тренажёра", "курс smeta-rk-kurs"],
   },
+
+  {
+    moduleId: "qskyway",
+    module: "QSkyway — воздушные коридоры над городом",
+    page: "/qskyway",
+    category: "работа с низковысотным воздушным пространством для дронов и городской аэромобильности",
+    rivals: [
+      { name: "Aloft", url: "https://www.aloft.ai", strength: "ведущий одобренный FAA поставщик LAANC — выдаёт настоящее разрешение на полёт, обрабатывает половину всех авторизаций США" },
+      { name: "Airspace Link", url: "https://airspacelink.com", strength: "одобренный USS плюс сервисы B4UFLY, работа с городами" },
+      { name: "Airbus UTM", url: "https://acubed.airbus.com/airbusutm-laanc/", strength: "одобренный USS от авиапроизводителя, промышленная UTM-инфраструктура" },
+      { name: "DJI Fly / GEO", url: "https://fly-safe.dji.com", strength: "ограничения зашиты прямо в дрон — самый массовый способ узнать о зоне" },
+    ],
+    weWin: [
+      {
+        text: "Правило берётся из формы, в которой его опубликовал сам регулятор, а не из чужой перепечатки — и формы у всех разные",
+        basis: "measured",
+        evidence: "три города, три разных источника: NYC — машиночитаемый фид FAA UASFM (ред. 7/9/2026), Токио — растровый слой MLIT/JCAB (DID), Астана — нормативный документ eAIP (зона UAP28, R=4.5 км, GND–4800 ft)",
+      },
+      {
+        text: "Ответ считается по конкретному коридору между зданиями, а не по «зона/не зона»",
+        basis: "measured",
+        evidence: "12 из 42 пар Мидтауна укладываются в потолок FAA, 20 из 42 проходят в строгом режиме; 28% ячеек грида имеют потолок 0 футов. Считает эндпоинт, в коде цифра не зашита",
+      },
+      {
+        text: "У каждого числа на экране видно происхождение и качество данных",
+        basis: "design",
+        evidence: "DataProvenanceChip и тип DataQuality: покрытие цифрового двойника 99–100% по трём городам",
+      },
+      {
+        text: "«Нет API» не считается «нет правила» — документ регулятора разбирается так же, как фид",
+        basis: "design",
+        evidence: "Астана и Токио попали в систему именно так; смоук 116/116",
+      },
+    ],
+    weLose: [
+      {
+        text: "Мы не USS: разрешение на полёт через LAANC выдать не можем — это делают Aloft, Airspace Link, Airbus",
+        basis: "public",
+        evidence: "список одобренных FAA поставщиков, срез 2026-07-28",
+      },
+      {
+        text: "Три города против национального покрытия у одобренных поставщиков",
+        basis: "measured",
+        evidence: "NYC, Токио, Астана на 2026-07-27",
+      },
+      {
+        text: "Живого трафика и телеметрии дронов нет — мы про правило и геометрию, а не про диспетчеризацию",
+        basis: "design",
+        evidence: "по устройству модуля",
+      },
+      {
+        text: "У DJI ограничения встроены в сам дрон, и это охватывает пилотов, которые ни на какой сайт не зайдут",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда надо понять, что говорит правило именно над этим маршрутом и на чём это основано. Когда нужно разрешение на конкретный полёт — идти к одобренному USS.",
+    surveyedAt: "2026-07-28",
+    sources: ["память project_qskyway_faa_airspace", "faa.gov/uas/programs_partnerships/data_exchange"],
+  },
+
+  {
+    moduleId: "qventure",
+    module: "QVenture — разбор стартапа глазами инвестора",
+    page: "/qventure",
+    category: "AI-скоринг и due diligence стартапов",
+    rivals: [
+      { name: "Vettable", url: "https://www.getvettable.com/", strength: "готовый скоринг дилфлоу для фондов" },
+      { name: "CENTRL DD360", url: "https://www.centrl.ai/due-diligence/", strength: "промышленная платформа due diligence с процессами и аудитом" },
+      { name: "Lyzr Startup Evaluation Agent", url: "https://www.lyzr.ai/blueprints/venture-capital/startup-evaluation-agent", strength: "готовый агент оценки под воронку фонда" },
+      { name: "PitchBook / Affinity", url: "https://pitchbook.com", strength: "данные по рынку и связям, которых у нас нет и не будет" },
+    ],
+    weWin: [
+      {
+        text: "Разбор адресован основателю, а не фонду: рынок AI-скоринга продаёт инструмент тому, кто заявки читает",
+        basis: "public",
+        evidence: "срез рынка 2026-07-26: Vettable, CENTRL, Lyzr — все продаются со стороны инвестора",
+      },
+      {
+        text: "Счёт прозрачный: 8 взвешенных факторов с видимыми весами, а не «оценка 72, поверьте»",
+        basis: "design",
+        evidence: "квант-скор 0–100, веса на экране (рынок 0.20, ров 0.15, тайминг 0.10 и далее)",
+      },
+      {
+        text: "Каждый фактор сообщает, на чём основан — на цифрах компании или на отраслевой статистике",
+        basis: "design",
+        evidence: "основание фактора выводится вместе со счётом",
+      },
+    ],
+    weLose: [
+      {
+        text: "Своей рыночной базы у нас нет — PitchBook и Affinity видят сделки и связи, которых мы не видим",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Процессов due diligence уровня CENTRL (аудит, роли, документооборот) нет",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Скор не откалиброван на исходах: мы не знаем, какие оценки выжили через три года — этого замера ни у нас, ни в публичном доступе нет",
+        basis: "design",
+        evidence: "честное ограничение, вынесено в интерфейс вместе с дисклеймером",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда основателю нужно увидеть свой проект чужими глазами до разговора. Для работы фонда с потоком сделок сильнее специализированные платформы.",
+    surveyedAt: "2026-07-28",
+    sources: ["docs/startupx-market.md", "память project_qventure"],
+  },
+
+  {
+    moduleId: "health-line",
+    module: "Линия здоровья — HealthAI, QMelanin, Протокол долголетия",
+    page: "/longevity",
+    category: "персональные протоколы здоровья на основе анализов и биомаркеров",
+    rivals: [
+      { name: "InsideTracker", url: "https://www.insidetracker.com", strength: "своя лабораторная интеграция: кровь сдана — рекомендации построены на настоящих цифрах" },
+      { name: "Function Health", url: "https://www.functionhealth.com", strength: "сотня с лишним биомаркеров дважды в год плюс врачебная интерпретация" },
+      { name: "Ada Health", url: "https://ada.com", strength: "клинически валидированный разбор симптомов, регуляторные допуски" },
+      { name: "Oura / WHOOP", url: "https://ouraring.com", strength: "непрерывные объективные данные с тела, а не разовый опрос" },
+    ],
+    weWin: [
+      {
+        text: "Цикл построен как «измерь → воздействуй → перемерь через 12 недель», а не как разовая выдача советов",
+        basis: "design",
+        evidence: "протокол долголетия: панель анализов на входе, стек вмешательств, повторный замер",
+      },
+      {
+        text: "У каждого вмешательства проставлен уровень доказательности A/B/C/Э, а не одинаковый уверенный тон",
+        basis: "design",
+        evidence: "четыре направления стека с явной градацией",
+      },
+      {
+        text: "Ранняя седина разобрана как биомаркер дефицитов, и разобрана честно: возрастная названа необратимой",
+        basis: "measured",
+        evidence: "проверка по 8 источникам: медь как кофактор тирозиназы подтверждена сильно, «уровень меланина» кровью не измеряется — меряем управляющие биомаркеры",
+      },
+    ],
+    weLose: [
+      {
+        text: "Мы не берём анализы: у InsideTracker и Function Health своя лабораторная цепочка, у нас человек приходит с готовой панелью",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет врача в контуре и нет регуляторного статуса медицинского изделия — у Ada это есть",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет непрерывных данных с тела: кольцо и браслет видят сон и нагрузку каждый день, мы — только то, что человек внёс",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Клинической валидации собственных рекомендаций нет; RESONANCE (аллергия) заявлен как пилот, а не как доказанный результат",
+        basis: "design",
+        evidence: "8-недельный пилот в плане, RCT Phase II — не пройден",
+      },
+    ],
+    verdict:
+      "Мы лучше как рамка: собрать разрозненные анализы в план с честной градацией доказательности и заставить перемерить через 12 недель. Нужны сами анализы, врач или непрерывные данные — это к ним.",
+    surveyedAt: "2026-07-28",
+    sources: ["память project_aevion_longevity_protocol", "память project_qmelanin", "память project_aevion_resonance"],
+  },
+
+  {
+    moduleId: "fintech",
+    module: "Финтех-линия — QTrade, Bank, QPayNet, QTradeOffline",
+    page: "/bank",
+    category: "платёжная и банковская инфраструктура",
+    rivals: [
+      { name: "Wise", url: "https://wise.com", strength: "лицензии в десятках юрисдикций, реальные мультивалютные счета, курс без скрытой наценки" },
+      { name: "Revolut Business", url: "https://www.revolut.com/business/", strength: "полноценный банковский продукт для компаний с картами и эквайрингом" },
+      { name: "Stripe", url: "https://stripe.com", strength: "стандарт индустрии для приёма платежей, зрелые API и антифрод" },
+    ],
+    weWin: [
+      {
+        text: "Офлайн-передача ценности между устройствами подписью ECDSA P-256 с последующей синхронизацией пачкой",
+        basis: "design",
+        evidence: "QTradeOffline: /sync принимает батч подписанных операций — сценарий, которого у перечисленных нет",
+      },
+      {
+        text: "Платёжный слой встроен в тот же контур, что подписи и права: чек, договор и отпечаток живут вместе",
+        basis: "design",
+        evidence: "QPayNet соседствует с QSign/QRight внутри одной экосистемы",
+      },
+    ],
+    weLose: [
+      {
+        text: "Лицензий нет. Это не банк и не платёжный провайдер: реальные деньги пользователей мы не держим и держать не вправе",
+        basis: "design",
+        evidence: "модули работают как песочница и демонстрация контура; приём наших собственных платежей идёт через внешние сервисы (Gumroad, LemonSqueezy, Paddle)",
+      },
+      {
+        text: "Нет страхования вкладов, нет KYC/AML промышленного уровня, нет расчётов с настоящими контрагентами",
+        basis: "design",
+        evidence: "по устройству",
+      },
+      {
+        text: "Антифрод, споры по транзакциям и поддержка 24/7 — у Stripe и Revolut это годы работы и штат",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict:
+      "Честно: как банк или эквайер мы с ними не конкурируем и не должны. Модули существуют как рабочая витрина контура и как офлайн-сценарий, которого у больших нет.",
+    surveyedAt: "2026-07-28",
+    sources: ["память project_aevion_fintech_status", "память reference_aevion_monetization_flow"],
+  },
 ];
 
 /**
@@ -397,8 +610,10 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "QSkyway — воздушные коридоры", likelyRivals: "AirMap, Altitude Angel, национальные UTM-провайдеры" },
-  { module: "HealthAI / QMelanin / Longevity", likelyRivals: "Ada Health, InsideTracker, Function Health" },
-  { module: "QTrade / Bank / QPayNet", likelyRivals: "Wise, Revolut Business, Stripe Treasury" },
-  { module: "QVenture", likelyRivals: "Carta, Visible.vc, Foundersuite" },
+  { module: "QLearn — курсы и проверка знаний", likelyRivals: "Coursera, Stepik, Khanmigo" },
+  { module: "Kids-AI — детский контент", likelyRivals: "Khanmigo Kids, Duolingo ABC, Lingokids" },
+  { module: "QStore — витрина и заказы", likelyRivals: "Shopify, Gumroad, Lemon Squeezy" },
+  { module: "QJobs — вакансии и отклики", likelyRivals: "HeadHunter, LinkedIn Jobs, Wellfound" },
+  { module: "QMedia — музыка и видео", likelyRivals: "Suno, Udio, ElevenLabs" },
+  { module: "Constitution — свод правил планеты", likelyRivals: "прямых аналогов не нашли; ближайшее — инструменты DAO-управления" },
 ];

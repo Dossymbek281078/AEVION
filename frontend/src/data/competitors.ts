@@ -292,6 +292,102 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-26",
     sources: ["память project_cyberchess_human_weak_bots"],
   },
+
+  {
+    moduleId: "ip-bureau",
+    module: "QRight / QSign / IP-бюро — доказательство авторства",
+    page: "/aevion-ip-bureau",
+    category: "фиксация авторства и доказательство существования файла на дату",
+    rivals: [
+      { name: "Copyright Office (US)", url: "https://copyright.gov", strength: "государственная регистрация: презумпция в суде и право на статутные убытки в США" },
+      { name: "OriginStamp", url: "https://originstamp.com", strength: "зрелый сервис привязки хеша к биткойн-блокчейну, публичный API" },
+      { name: "OpenTimestamps", url: "https://opentimestamps.org", strength: "открытый бесплатный стандарт привязки ко времени, без посредника" },
+      { name: "Vaultinum", url: "https://vaultinum.com", strength: "депонирование кода с юридическим сопровождением и аудитом" },
+    ],
+    weWin: [
+      {
+        text: "Доказательство собирается из трёх независимых частей сразу: что (SHA-256), кто (Ed25519 плюс со-подпись автора), когда (метка времени)",
+        basis: "design",
+        evidence: "правовой разбор 2026: Берн ст. 5(2) даёт право без регистрации, автору не хватает именно доказательства; цепочка опирается на FIPS 180-4, RFC 8032, eIDAS/ESIGN/Закон РК об ЭЦП",
+      },
+      {
+        text: "Работает как слой под остальными модулями: подпись и отпечаток доступны сделке, заявке на бирже и договору, а не только отдельному файлу",
+        basis: "design",
+        evidence: "QSign/QRight/QContract и биржа используют один контур; заявка на бирже несёт SHA-256 текста на дату подачи",
+      },
+      {
+        text: "Регистрация не требуется и денег за неё не берут — в отличие от госпошлины и депонирования",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это не государственная регистрация: в США регистрация в Copyright Office даёт презумпцию и статутные убытки, наш отпечаток — только доказательство",
+        basis: "public",
+        evidence: "правовой разбор: мы сознательно не называем это регистрацией; патентную экспертизу тоже не делаем",
+      },
+      {
+        text: "Метка времени слабее блокчейновой у OriginStamp и OpenTimestamps, пока якорь не публичный",
+        basis: "measured",
+        evidence: "живой /health отвечает preview/seed_unset по части подписи — до включения ключа обещать «GA» нельзя",
+      },
+      {
+        text: "Нет юридического сопровождения и депонирования кода уровня Vaultinum",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда доказательство нужно сегодня, дёшево и внутри рабочего процесса. Когда впереди суд в США — регистрация в Copyright Office сильнее, и мы это говорим прямо.",
+    surveyedAt: "2026-07-27",
+    sources: ["память reference_aevion_ip_bureau_legal", "память project_qsign_claim_vs_prod_gap"],
+  },
+
+  {
+    moduleId: "smeta-trainer",
+    module: "Смета РК — тренажёр сметного дела",
+    page: "/smeta-trainer",
+    category: "программы и курсы сметного дела Казахстана",
+    rivals: [
+      { name: "АВС-4", url: "https://abccenter.kz", strength: "промышленный стандарт: полный корпус СНБ РК, экспорт форм, признание в госзаказе" },
+      { name: "Смета РК", url: "https://smetark.kz", strength: "актуальная нормативная база по подписке, поддержка и обучение" },
+      { name: "Сана", url: "https://sana.kz", strength: "привычный сметчикам интерфейс и наработанные шаблоны" },
+    ],
+    weWin: [
+      {
+        text: "Учит методике, а не кнопкам: ловит типовые ошибки студента — не вычел проёмы, двойной счёт индекса, забытый коэффициент",
+        basis: "design",
+        evidence: "AI-советник построен на сценариях ошибок из учебного курса, привязан к сквозному кейсу (капремонт школы №47)",
+      },
+      {
+        text: "Порог входа нулевой: узкий учебный корпус вместо платной подписки на всю нормативную базу",
+        basis: "design",
+        evidence: "~200 расценок и ~500 материалов, замороженный «учебный квартал» индексов",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это не сметная программа: полного корпуса СНБ РК у нас нет и не будет — подписка на ИСТ Эталон платная",
+        basis: "design",
+        evidence: "сознательное ограничение: тренажёр не конкурирует с АВС-4 и не претендует на реальные сметы",
+      },
+      {
+        text: "Наши формы учебные — для бюджетного объекта нужна программа из реестра допущенных средств",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Импорта смет из коммерческих программ нет",
+        basis: "design",
+        evidence: "не делаем намеренно",
+      },
+    ],
+    verdict:
+      "Мы лучше для обучения и постановки руки. Для настоящей сметы на бюджетный объект нужна АВС-4 или Смета РК — тренажёр их не заменяет и не притворяется заменой.",
+    surveyedAt: "2026-07-27",
+    sources: ["CLAUDE.md тренажёра", "курс smeta-rk-kurs"],
+  },
 ];
 
 /**
@@ -302,9 +398,7 @@ export const COMPARISONS: ModuleComparison[] = [
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
   { module: "QSkyway — воздушные коридоры", likelyRivals: "AirMap, Altitude Angel, национальные UTM-провайдеры" },
-  { module: "QRight / QSign / IP Bureau", likelyRivals: "Copyright Office, OriginStamp, OpenTimestamps-сервисы, Vaultinum" },
   { module: "HealthAI / QMelanin / Longevity", likelyRivals: "Ada Health, InsideTracker, Function Health" },
-  { module: "Смета РК", likelyRivals: "АВС-4, Смета РК, Сана" },
   { module: "QTrade / Bank / QPayNet", likelyRivals: "Wise, Revolut Business, Stripe Treasury" },
   { module: "QVenture", likelyRivals: "Carta, Visible.vc, Foundersuite" },
 ];

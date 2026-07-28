@@ -402,6 +402,9 @@ function shouldTranslate(s: string, lang: Lang): boolean {
   return lat || cyr; // other targets: translate EN/RU sources
 }
 
+/** Digits and a brand token: any honest translator returns this untouched. */
+const CANARY = "AEVION 2026 · 12345";
+
 const WS_LEAD = /^\s*/;
 const WS_TRAIL = /\s*$/;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
@@ -463,6 +466,10 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // part of the page untranslated until a full reload. We now re-queue failed
     // strings up to MAX_ATTEMPTS so transient errors self-heal.
     const attempts = new Map<string, number>();
+    // Set once the canary has been answered; set `serviceLies` when it was
+    // answered wrongly, which stops every later flush.
+    let canaryChecked = false;
+    let serviceLies = false;
     // Serialize network flushes: only one /translate request in flight at a
     // time. Concurrent batches (observer + timer firing together) were
     // overwhelming the backend and causing the 502s in the first place.
@@ -563,19 +570,48 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       // inFlight guard: never run two /translate requests at once. Prevents the
       // observer and the debounce timer from firing overlapping batches that
       // overload the backend (the original cause of the 502s).
-      if (destroyed || inFlight || pending.size === 0) return;
+      if (destroyed || inFlight || pending.size === 0 || serviceLies) return;
       inFlight = true;
       const batch = Array.from(pending).slice(0, 100);
       batch.forEach((b) => pending.delete(b));
+      // A canary rides along with the first batch of the session: digits and a
+      // brand token, which any translator returns unchanged.
+      //
+      // It was written after prod appeared to answer "Сохранить изменения" with
+      // "Quantencomputer-Sicherheit". That turned out to be my own terminal
+      // mangling Cyrillic before it left the machine — the service is fine, and
+      // with a correctly encoded request it answers "Änderungen speichern".
+      // The guard stays anyway, because the failure it imagines is real in kind:
+      // a translator answering beside the point produces fluent text a visitor
+      // cannot tell is wrong, which is worse than leaving the source language
+      // in place. One bad canary stops the session from applying any of it.
+      const withCanary = canaryChecked ? batch : [CANARY, ...batch];
       try {
         const r = await fetch(apiUrl("/api/i18n/translate"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target: lang, texts: batch }),
+          body: JSON.stringify({ target: lang, texts: withCanary }),
         });
         if (r.ok) {
           const data = (await r.json()) as { translations?: string[] };
-          const trs = data.translations || [];
+          let trs = data.translations || [];
+          if (!canaryChecked) {
+            canaryChecked = true;
+            const echoed = trs[0];
+            trs = trs.slice(1);
+            if (echoed !== CANARY) {
+              serviceLies = true;
+              pending.clear();
+              // Say it once, in terms someone can act on.
+              console.warn(
+                `[AutoTranslate] live translation disabled: the service answered ` +
+                `${JSON.stringify(CANARY)} with ${JSON.stringify(echoed)}. It is returning ` +
+                `invented text, so nothing from it is applied. Check POST /api/i18n/translate ` +
+                `(DeepL key / Claude fallback).`,
+              );
+              return;
+            }
+          }
           let changed = false;
           for (let i = 0; i < batch.length; i++) {
             const raw = trs[i];

@@ -31,7 +31,13 @@ const DEDICATED_ROUTES: Record<string, string> = {
   qright: "/qright",
   qsign: "/qsign",
   "aevion-ip-bureau": "/bureau",
-  qtradeoffline: "/qtrade",
+  // Было "/qtrade" — это ДРУГОЙ продукт. /qtrade — торговый терминал,
+  // /qtradeoffline — офлайн-платежи P2P в AEV, у него своя страница. Канониклом
+  // на чужой продукт мы просили поисковик считать модуль дублем терминала.
+  qtradeoffline: "/qtradeoffline",
+  // Отсутствовал: у модуля выделенная страница /build, а каноникл по умолчанию
+  // указывал на /qbuild — адрес, который существует только через [id].
+  qbuild: "/build",
   qcoreai: "/qcoreai",
   "multichat-engine": "/multichat-engine",
   auth: "/auth",

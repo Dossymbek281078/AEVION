@@ -46,11 +46,18 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   __resetDevHubStore();
   fetchMock = vi.fn();
-  // Реализация ПО УМОЛЧАНИЮ: незаглушённый вызов обязан назвать себя.
-  // Без неё vi.fn() отдаёт undefined, маршрут разбирает пустое тело и падает
-  // как «SyntaxError: "undefined" is not valid JSON» → HTTP 500 → тест видит
-  // только «expected 500 to be 200». Диагноз 28.07: именно так выглядел
-  // нестабильный флак этого файла, и причина не читалась из падения.
+  // Реализация ПО УМОЛЧАНИЮ: незаглушённый вызов обязан назвать себя, а не
+  // отдавать undefined, из которого потом получается непрозрачный HTTP 500.
+  //
+  // ⚠️ Нестабильность ЭТОГО файла она не лечит — причина найдена 28.07 и она
+  // другая: в devhub есть операции «выстрелил и забыл» (devhub.ts:1968 и серия
+  // `debitCredit(...).catch(() => {})`), чей fetch не дожидается конца теста.
+  // Под нагрузкой он приземляется в СЛЕДУЮЩЕМ тесте и попадает в свежий
+  // fetchMock как calls[0] — после чего любое утверждение, адресующее вызовы ПО
+  // ИНДЕКСУ, читает чужой вызов. Здесь таких мест 74, из них 54 на calls[0].
+  // Прочное решение — искать вызов по URL:
+  //   fetchMock.mock.calls.find(([u]) => String(u).includes("/merge"))
+  // Подробности и план — память reference_paywall_test_state_leak.
   fetchMock.mockImplementation((...args: unknown[]) => {
     const url = typeof args[0] === "string" ? args[0] : String((args[0] as { url?: string })?.url ?? args[0]);
     throw new Error(`НЕЗАГЛУШЁННЫЙ fetch в тесте: ${url}`);

@@ -93,7 +93,13 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Расчётная единица + платёжная рельса + банковский UI для эпохи, когда «банк» = API.",
     modules: ["AEV", "QPayNet", "AEVION Bank", "Payments Rail", "QTrade", "QTradeOffline"],
-    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (27 Jul) · QPayNet SLA 99.5%",
+    // «SLA 99.5%» стояло в блоке proof, то есть подавалось как доказанное.
+    // Измерения доступности у нас нет: health отдаёт uptimeSec с последней
+    // перезагрузки, а не историю. Это ЦЕЛЬ, и называть её надо целью — тот же
+    // разбор уже был по «~99.5% prod» в другом месте (PR #1015).
+    // Смоук 12/12 оставлен: прогнан против прода повторно 28.07, все 12 шагов
+    // прошли — это измерение, а не намерение.
+    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (28 Jul) · QPayNet: цель SLA 99.5% (не измерено)",
     tamAnchor: "Digital payments flow → $20T к 2030",
     accent: "#10b981",
   },
@@ -115,8 +121,12 @@ const PILLARS: Pillar[] = [
     title: "Dev-слой / Planet DevHub",
     oneLine:
       "15 SaaS-вкладок → один agent-layer под единым AEV-биллингом.",
-    modules: ["DevHub (9 интеграций)", "QCoreAI (5+ AI-провайдеров)", "QBuild", "Bureau v2"],
-    proof: "9 integrations live · 23 vitest · QCoreAI 230 routes / 364 vitest · QBuild 60+ endpoints",
+    // 14 из 16, сверено 28.07 с /api/devhub/studio/capabilities: статус там
+    // считается по наличию ключа в окружении, то есть это измерение, а не
+    // декларация. Не живы две: Railway (пер-проектные сервисы не сделаны) и
+    // Vercel (нет токена). Прежняя цифра 9 устарела в меньшую сторону.
+    modules: ["DevHub (14 интеграций из 16)", "QCoreAI (5+ AI-провайдеров)", "QBuild", "Bureau v2"],
+    proof: "14 of 16 integrations live (checked 28 Jul) · 23 vitest · QCoreAI 230 routes / 364 vitest · QBuild 60+ endpoints",
     tamAnchor: "Dev-tools + IT-ops ≈ $200B → $400B",
     accent: "#8b5cf6",
   },
@@ -352,7 +362,8 @@ export default function AcquirePage() {
           <p style={{ fontSize: 18, color: "#cbd5e1", maxWidth: 800, lineHeight: 1.6, marginBottom: 36 }}>
             Чтобы запустить простой сайт с видео в 2026, инди-команда держит 15 вкладок и платит 15 биллингов.
             <strong style={{ color: "#f8fafc" }}> AEVION DevHub</strong> — одна вкладка, один логин AEVION,
-            один счёт в AEV. Девять интеграций в проде сегодня; ещё пять — в очереди.
+            один счёт в AEV. Четырнадцать интеграций из шестнадцати работают сегодня;
+            Railway и Vercel — нет (не сделаны пер-проектные сервисы и не задан токен).
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
             {FIFTEEN_TABS.map(t => (
@@ -442,7 +453,7 @@ export default function AcquirePage() {
           {[
             { t: "AEV в обращении", d: "Доверие к расчётной единице накапливается транзакциями, не маркетингом." },
             { t: "Constitution v1 + Planet", d: "Правовой режим, опубликованный через QSign envelope. Документ, не правила в Notion." },
-            { t: "9 интеграций DevHub", d: "36+ месяцев комплаенс-работы для нового игрока. Уже пройдено." },
+            { t: "14 интеграций DevHub", d: "Из 16 заявленных; две ждут токена и реализации. Сверено с API 28.07." },
             { t: "30+ модулей с health-pings", d: "Каждый отдельно — 6-18 мес инжиниринга. В сумме — 200+ человеко-лет." },
           ].map(item => (
             <div key={item.t} style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16 }}>

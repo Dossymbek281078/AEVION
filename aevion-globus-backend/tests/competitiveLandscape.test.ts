@@ -56,10 +56,25 @@ describe("the competitive table cannot make an unsourced claim", () => {
     expect(theirs).toBeGreaterThan(0);
   });
 
-  test("modules without research are listed, not compared", () => {
+  test("no module is both compared and listed as unresearched", () => {
+    // This replaces an assertion that counted PENDING and demanded more than
+    // four entries. It was written when eight modules were unresearched, so it
+    // quietly encoded "at least five must stay unresearched" and went red the
+    // moment the fourth one got done — a guard that punishes progress gets
+    // deleted rather than fixed, and takes its real coverage with it.
+    //
+    // The failure it should have been watching for: a module gets researched
+    // and added to LANDSCAPES while its old PENDING row stays behind, so the
+    // page tells the reader the same module both was and was not compared.
+    // That nearly happened on each of the four additions so far; catching it by
+    // hand four times in a row is luck, not a process.
     expect(src).toContain("export const PENDING");
-    const pending = (src.match(/\{\s*module:\s*"/g) ?? []).length;
-    expect(pending).toBeGreaterThan(4);
+    const compared = [...src.matchAll(/moduleId:\s*"[^"]+",\s*\n\s*module:\s*"([^"]+)"/g)].map((m) => m[1]);
+    const listed = [...src.matchAll(/\{\s*module:\s*"([^"]+)",\s*category:/g)].map((m) => m[1]);
+    expect(compared.length, "no landscapes parsed — the file shape changed").toBeGreaterThan(3);
+    expect(listed.length, "PENDING parsed as empty — the file shape changed").toBeGreaterThan(0);
+    const both = compared.filter((m) => listed.includes(m));
+    expect(both, `listed as both compared and unresearched: ${both.join(", ")}`).toEqual([]);
   });
 
   test("the researched date is present on every landscape", () => {

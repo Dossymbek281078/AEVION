@@ -513,7 +513,106 @@ const QREAL: Landscape = {
   ],
 };
 
-export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL];
+// ── QSkyway ────────────────────────────────────────────────────────────────
+
+/**
+ * Two competitors rather than three, on purpose.
+ *
+ * The research surfaced a strong claim about one company's solvency. It is not
+ * in the table: an unsourced negative claim about a live business is the single
+ * most damaging cell this file could carry, and being right about it would not
+ * make it safe. Everything below is what a company says about itself on its own
+ * pages, or what a regulator publishes.
+ */
+const QSKYWAY: Landscape = {
+  moduleId: "qskyway",
+  module: "QSkyway",
+  category: "Городские воздушные коридоры",
+  framing:
+    "Altitude Angel и Aloft обслуживают малые беспилотники: разрешение на полёт, данные о воздушном пространстве, охват сотен стран. Мы делаем другое и в трёх городах: прокладываем коридор для аэротакси поверх трёхмерного двойника города и выдаём подписанный документ-обоснование для регулятора. По охвату мы проигрываем на два порядка, и это первое, что надо сказать. Отдельно: мы не сертифицированное авиационное ПО и им не притворяемся.",
+  competitors: [
+    { id: "altitude", name: "Altitude Angel", url: "https://www.altitudeangel.com/" },
+    { id: "aloft", name: "Aloft", url: "https://www.aloft.ai/" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Охват воздушного пространства",
+      why: "Оператору нужен город, в котором он летает. Инструмент на три города бесполезен в четвёртом.",
+      ours: { value: "Три города: Астана, Нью-Йорк, Токио.", measured: "твины из OpenStreetMap, /api/qskyway" },
+      theirs: {
+        altitude: {
+          value: "Данные по воздушному пространству и наземным опасностям более чем в 155 странах через один интерфейс",
+          source: "https://www.altitudeangel.com/solutions/guardianutm-cloud",
+        },
+        aloft: { value: "Поставщик LAANC в США; авторизация полётов в контролируемом пространстве", unverified: true },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Для какого аппарата",
+      why: "Правила для малого дрона и для аэротакси с людьми на борту — разные документы и разные ведомства.",
+      ours: { value: "Аэротакси: коридоры с высотными полосами выше застройки, вертипорты, 4D-слоты." },
+      theirs: {
+        altitude: {
+          value: "Управление трафиком беспилотников (UTM)",
+          source: "https://www.altitudeangel.com/solutions/guardianutm-cloud",
+        },
+        aloft: { value: "Малые БВС по Part 107", unverified: true },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Откуда берётся ограничение полёта",
+      why: "Правило опубликовано в разной форме — фидом, растром, нормативным текстом. Инструмент, читающий только API, не увидит два из трёх.",
+      ours: {
+        value:
+          "Из того, в чём правило опубликовано: сетка потолков FAA UASFM для Нью-Йорка, режим разрешений MLIT/JCAB для Токио, зона UAP28 из AIP Казахстана для Астаны. По Астане модуль прямо говорит, что полёты запрещены, а не согласуются.",
+        measured: "три источника подписаны Ed25519, привязка к Bitcoin через OpenTimestamps, сверка с фидом каждые 12 ч",
+      },
+      theirs: {
+        altitude: {
+          value: "Более 100 категорий постоянных и временных ограничений, более 80 категорий наземных опасностей",
+          source: "https://www.altitudeangel.com/solutions/guardianutm-cloud",
+        },
+        aloft: { value: "Данные FAA для авторизации LAANC", unverified: true },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Что остаётся на руках после расчёта маршрута",
+      why: "Регулятору нужен документ, который можно проверить через год, а не картинка в интерфейсе.",
+      ours: {
+        value:
+          "Подписанный документ-обоснование маршрута: какое правило применено, из какого источника, с каким хешем и отметкой времени.",
+        measured: "Ed25519-подпись твина + SHA-256 receipt на слот QRight",
+      },
+      theirs: {
+        altitude: { value: "Одобрения и данные через API; отдельного подписанного обоснования не заявлено", unverified: true },
+        aloft: { value: "Подтверждение авторизации LAANC", unverified: true },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Сертификация",
+      why: "Летать по решению несертифицированного софта нельзя. Это граница между демонстрацией и продуктом.",
+      ours: {
+        value:
+          "Не сертифицированное авиационное ПО, доказательство концепции. Точечные запретные зоны и рост ветра с высотой пока иллюстративны — это записано в описании модуля, а не спрятано.",
+      },
+      theirs: {
+        altitude: { value: "Работает как поставщик услуг UTM в рамках национальных программ", unverified: true },
+        aloft: {
+          value: "Аэротакси регулируются FAA отдельным порядком — Advanced Air Mobility",
+          source: "https://www.faa.gov/air-taxis",
+        },
+      },
+      verdict: "theirs",
+    },
+  ],
+};
+
+export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL, QSKYWAY];
 
 /**
  * Modules with obvious analogues that have NOT been researched yet.
@@ -522,7 +621,6 @@ export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QRE
  * and this list is what stops the table quietly implying the rest were checked.
  */
 export const PENDING: Array<{ module: string; category: string; analogues: string[] }> = [
-  { module: "QSkyway", category: "Воздушное пространство дронов", analogues: ["AirMap", "Altitude Angel", "Aloft"] },
   { module: "QSign / IP Bureau", category: "Фиксация авторства", analogues: ["OriginStamp", "Bernstein", "OpenTimestamps"] },
   { module: "StartupX", category: "Биржа стартапов", analogues: ["AngelList", "Republic", "SeedInvest"] },
   { module: "QTrade", category: "Торговый симулятор", analogues: ["TradingView Paper", "Thinkorswim paperMoney"] },

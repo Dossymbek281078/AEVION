@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAdoptPreHydrationValues } from "@/lib/useAdoptPreHydrationValues";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -193,6 +194,23 @@ export default function DevHubPage() {
     tags: "",
   });
   const [snippetSubmitting, setSnippetSubmitting] = useState(false);
+
+  // Anything typed into either form before hydration lives only in the DOM;
+  // adopt it on mount so the first data-driven re-render does not wipe it.
+  const ideaFieldRef = useRef<HTMLDivElement>(null);
+  const snippetFormRef = useRef<HTMLDivElement>(null);
+  useAdoptPreHydrationValues(
+    ideaFieldRef,
+    useCallback((typed: Record<string, string>) => {
+      if (typed.ideaPrompt) setIdeaPrompt(typed.ideaPrompt);
+    }, []),
+  );
+  useAdoptPreHydrationValues(
+    snippetFormRef,
+    useCallback((typed: Record<string, string>) => {
+      setSnippetForm((f) => ({ ...f, ...typed }));
+    }, []),
+  );
   const [snippetError, setSnippetError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -312,8 +330,9 @@ export default function DevHubPage() {
             ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами
             (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <textarea
+              data-prehydration-field="ideaPrompt"
               value={ideaPrompt}
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
@@ -736,14 +755,15 @@ export default function DevHubPage() {
           )}
 
           {/* Share form */}
-          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div ref={snippetFormRef} className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-white mb-3">
               Share a snippet
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="text"
-                value={snippetForm.title}
+                data-prehydration-field="title"
+              value={snippetForm.title}
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
@@ -752,7 +772,8 @@ export default function DevHubPage() {
               />
               <input
                 type="text"
-                value={snippetForm.language}
+                data-prehydration-field="language"
+              value={snippetForm.language}
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, language: e.target.value }))
                 }
@@ -761,6 +782,7 @@ export default function DevHubPage() {
               />
             </div>
             <textarea
+              data-prehydration-field="content"
               value={snippetForm.content}
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, content: e.target.value }))
@@ -771,6 +793,7 @@ export default function DevHubPage() {
             />
             <input
               type="text"
+              data-prehydration-field="tags"
               value={snippetForm.tags}
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, tags: e.target.value }))

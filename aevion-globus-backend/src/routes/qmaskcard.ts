@@ -381,7 +381,33 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
       geoCountry: geoCountry ? String(geoCountry).slice(0, 4) : undefined,
     });
 
-    // For single-use masks: auto-revoke after first successful authorization.
+    // Списание ЗАНИМАЕТСЯ одним атомарным запросом, а не «проверили остаток выше —
+    // вычли здесь». Между проверкой `amount > remaining` и этим UPDATE стояла гонка:
+    // два одновременных платежа читали ОДИН остаток, оба проходили проверку и оба
+    // вычитали — остаток уходил в минус, то есть лимит маски, ради которого модуль
+    // и существует, не соблюдался. Одноразовая маска отзывалась ПОСЛЕ списания,
+    // поэтому два параллельных платежа проходили по ней оба.
+    //
+    // Условия проверяет сама база под блокировкой строки; одноразовость гасится
+    // тем же запросом, а не следующим.
+    const claim = await pool.query(
+      `UPDATE "QMaskCardMask"
+          SET "remainingCents" = "remainingCents" - $1,
+              "revokedAt" = CASE WHEN "kind" = 'single-use' THEN NOW() ELSE "revokedAt" END
+        WHERE "id" = $2
+          AND "revokedAt" IS NULL
+          AND "frozenAt" IS NULL
+          AND "remainingCents" >= $1
+        RETURNING "remainingCents"`,
+      [amount, maskId],
+    );
+    if (claim.rowCount === 0) {
+      // Средства забрал параллельный платёж, либо маску успели отозвать/заморозить.
+      // Отказ выдаём ДО записи charge: иначе в истории остался бы авторизованный
+      // платёж, которого не было.
+      return decline(res, maskId, auth.sub, amount, currency, merchantName, merchantCategory, geoCountry, "insufficient_balance");
+    }
+
     const chargeId = crypto.randomUUID();
     await pool.query(
       `INSERT INTO "QMaskCardCharge" ("id","maskId","userId","amountCents","currency","merchantName","merchantCategory","geoCountry","status","riskScore","paymentRef")
@@ -395,13 +421,6 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
         paymentRef ? String(paymentRef).slice(0, 100) : null,
       ],
     );
-    await pool.query(
-      `UPDATE "QMaskCardMask" SET "remainingCents" = "remainingCents" - $1 WHERE "id" = $2`,
-      [amount, maskId],
-    );
-    if (mask.kind === "single-use") {
-      await pool.query(`UPDATE "QMaskCardMask" SET "revokedAt" = NOW() WHERE "id" = $1`, [maskId]);
-    }
 
     // Fire-and-forget: record settlement on VeilNetX ledger.
     void emitVeilNetXEntry({

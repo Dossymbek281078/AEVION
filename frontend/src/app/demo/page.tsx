@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { MODULE_NODES } from "@/data/pitchFacts";
+import { COMPARISONS } from "@/data/competitors";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -658,6 +659,43 @@ export default function DemoShowcasePage() {
                   }}
                 >
                   ↻ {f.flywheel}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* Сравнение с аналогами прямо в демо, а не только по ссылке.
+            Первый вопрос смотрящего — «чем вы лучше X», и честный ответ на него
+            (включая строку «где они лучше») вызывает больше доверия, чем
+            страница, на которой мы выигрываем везде. Данные берутся из общего
+            источника /data/competitors.ts — второй копии текста нет. */}
+        <section style={{ marginTop: 56 }}>
+          <h2 style={{ fontSize: 26, fontWeight: 800, color: "#f1f5f9", marginBottom: 6 }}>
+            Us vs alternatives — including where they win
+          </h2>
+          <p style={{ color: "#94a3b8", fontSize: 14.5, lineHeight: 1.6, marginBottom: 18, maxWidth: 760 }}>
+            Каждый модуль сравнён с существующими продуктами, и у каждого есть строка «где они
+            лучше». Ниже — по одной паре на модуль; полная таблица с основаниями под каждым
+            утверждением на <Link href="/compare" style={{ color: "#7dd3fc", fontWeight: 700 }}>/compare</Link>.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+            {COMPARISONS.slice(0, 6).map((c) => (
+              <article
+                key={c.moduleId}
+                style={{
+                  background: "rgba(15,23,42,0.6)",
+                  border: "1px solid rgba(51,65,85,0.6)",
+                  borderRadius: 12,
+                  padding: 14,
+                }}
+              >
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: "#e2e8f0", marginBottom: 8 }}>{c.module}</div>
+                <div style={{ fontSize: 12.5, color: "#86efac", lineHeight: 1.5, marginBottom: 6 }}>
+                  + {c.weWin[0]?.text}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#fca5a5", lineHeight: 1.5 }}>
+                  − {c.weLose[0]?.text}
                 </div>
               </article>
             ))}

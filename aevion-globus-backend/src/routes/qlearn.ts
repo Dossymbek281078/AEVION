@@ -261,10 +261,14 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
       const rows = await pool.query(
-        `SELECT * FROM "QLearnCourse" ${where} ORDER BY "enrollmentCount" DESC LIMIT $${params.length}`,
+        // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+        // идентификатору. Иначе каталог поедет вслед за схемой.
+        `SELECT "id","authorId","title","description","category","level","price",
+                "isPublic","enrollmentCount","createdAt","updatedAt"
+           FROM "QLearnCourse" ${where} ORDER BY "enrollmentCount" DESC LIMIT $${params.length}`,
         params,
       );
-      res.json({ courses: rows.rows, total: rows.rowCount ?? rows.rows.length });
+      res.json({ courses: rows.rows.map(publicCourse), total: rows.rowCount ?? rows.rows.length });
       return;
     } catch {
       // fall through

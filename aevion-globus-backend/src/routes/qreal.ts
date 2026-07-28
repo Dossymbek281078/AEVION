@@ -742,10 +742,19 @@ qrealRouter.get("/projects/:id/characters", (req, res) => {
 /** Правка каста человеком. Автовывод хорош, но режиссёр знает лучше: «алабай»
  *  вместо «shepherd dog», конкретный возраст, порода, шрам. После правки промты
  *  ПЕРЕСОБИРАЮТСЯ — иначе canonical поменялся бы, а в движок ушёл старый текст. */
-qrealRouter.patch("/projects/:id/characters/:cid", (req, res) => {
+qrealRouter.patch("/projects/:id/characters/:cid", (req: Request, res: Response) => {
   try {
-    const p = memProjects.get(req.params.id);
+    const p = memProjects.get(String(req.params.id));
     if (!p) return res.status(404).json({ error: "not found" });
+    // Проверка владельца тут отсутствовала, хотя поле userId у проекта есть и
+    // соседние ручки его проверяют (см. список проектов). Идентификаторы —
+    // UUID, поэтому перебором чужой проект не найти, но узнавший id (например,
+    // из ссылки) мог править персонажей в чужом проекте. Демо-проект оставляем
+    // открытым намеренно: он для того и существует.
+    const auth = verifyBearerOptional(req);
+    if (p.userId !== "aevion-demo" && p.userId !== (auth?.sub || "anon")) {
+      return res.status(403).json({ error: "forbidden" });
+    }
     if (!p.characters?.length) p.characters = deriveCharacters(p.shots);
     const c = p.characters.find((x) => x.id === req.params.cid);
     if (!c) return res.status(404).json({ error: "character not found" });

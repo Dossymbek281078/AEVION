@@ -145,6 +145,13 @@ export function CompetitorMatrix({ set }: { set: CompetitorSet }) {
                 {set.todo.map((t) => <li key={t}>{t}</li>)}
               </ul>
             ) : null}
+            {/* Без этой ссылки /compare никак не достижима из интерфейса, а
+                страница, на которую нельзя попасть, всё равно что отсутствует. */}
+            <div style={{ marginTop: 10 }}>
+              <a href="/compare" style={{ color: "#2dd4bf", textDecoration: "underline dotted" }}>
+                Все сравнения AEVION с аналогами →
+              </a>
+            </div>
           </div>
         </div>
       )}

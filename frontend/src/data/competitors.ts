@@ -1784,6 +1784,96 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/shadownet.ts"],
   },
+
+  {
+    moduleId: "qfusionai",
+    module: "QFusionAI — маршрутизатор между ИИ-провайдерами",
+    page: "/qfusionai",
+    category: "выбор модели под задачу и запасной провайдер",
+    rivals: [
+      { name: "OpenRouter", url: "https://openrouter.ai", strength: "сотни моделей за одним ключом, прозрачные цены и мгновенный переход между ними" },
+      { name: "LiteLLM", url: "https://litellm.ai", strength: "де-факто стандарт прокси в коде: единый интерфейс, ретраи, учёт расходов" },
+      { name: "Portkey", url: "https://portkey.ai", strength: "шлюз с наблюдаемостью, кэшем и политиками на каждый запрос" },
+    ],
+    weWin: [
+      {
+        text: "Выбор провайдера объясняется вслух: в ответе лежит причина решения, а не только результат",
+        basis: "design",
+        evidence: "decisionReason в ответе /route — «speed strategy: selected first low-latency provider»",
+      },
+      {
+        text: "Стратегия задаётся запросом, а не конфигурацией: скорость, качество или автоматический выбор по категории задачи",
+        basis: "design",
+        evidence: "стратегии speed / quality / auto в /route",
+      },
+    ],
+    weLose: [
+      {
+        text: "Каталог моделей несопоставим: у OpenRouter сотни за одним ключом",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет учёта расходов и наблюдаемости уровня Portkey и LiteLLM — а именно за этим такие шлюзы и берут",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Это внутренний слой платформы, а не продукт для чужой интеграции: ни SDK, ни биллинга по ключу",
+        basis: "design",
+        evidence: "модуль обслуживает собственный флот провайдеров",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда важно понимать, ПОЧЕМУ запрос ушёл в эту модель. Как шлюз для своего кода — LiteLLM или OpenRouter, они для этого и сделаны.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qfusionai.ts"],
+  },
+
+  {
+    moduleId: "voice-of-earth",
+    module: "Voice of Earth — голосование за треки",
+    page: "/voice-of-earth",
+    category: "народные чарты и голосование за музыку",
+    rivals: [
+      { name: "SoundCloud", url: "https://soundcloud.com", strength: "миллионы авторов и слушателей — то, чего чарту нельзя подделать" },
+      { name: "Spotify-плейлисты", url: "https://spotify.com", strength: "попадание в плейлист реально меняет судьбу трека" },
+      { name: "Bandcamp", url: "https://bandcamp.com", strength: "деньги идут автору напрямую, а не через рекламу" },
+    ],
+    weWin: [
+      {
+        text: "Один голос от человека действительно один: повторный не проходит и счётчик не растёт",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: вставка голоса идёт через ON CONFLICT DO NOTHING RETURNING, и счётчик увеличивается только при реально созданной строке — то есть здесь сделано так, как я 28.07 доводил в других модулях",
+      },
+      {
+        text: "Голосовать можно по псевдониму, без регистрации и почты",
+        basis: "design",
+        evidence: "voter_alias вместо аккаунта",
+      },
+    ],
+    weLose: [
+      {
+        text: "Аудитории нет: чарт без слушателей ничего не измеряет и никому не нужен",
+        basis: "design",
+        evidence: "по природе продукта",
+      },
+      {
+        text: "Автор не получает ни денег, ни продвижения — у Bandcamp первое, у Spotify второе",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Голос по псевдониму защищён слабо: одному человеку ничто не мешает придумать десять псевдонимов",
+        basis: "design",
+        evidence: "проверка уникальности идёт по паре трек+псевдоним, а не по человеку",
+      },
+    ],
+    verdict:
+      "Мы лучше как честный механизм голосования внутри платформы. Как музыкальная площадка — нет: там нужны слушатели и деньги автору.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/voiceOfEarth.ts"],
+  },
 ];
 
 /**

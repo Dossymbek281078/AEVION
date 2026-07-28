@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders, getAuthToken } from "@/lib/auth";
 import { catalog } from "@/lib/aevionCatalog";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { CATEGORY_ICONS, CATEGORY_COLORS } from "./categories";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,17 +31,15 @@ interface QEvent {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Ключ входа один на платформу — `@/lib/auth`. Раньше здесь читался
+// `aevion_token`, которого не пишет никто: вход кладёт токен под
+// `aevion_auth_token_v1`, поэтому кнопка RSVP не появлялась даже у вошедшего.
 function bearerHeader(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return getAuthHeaders();
 }
 
 function getAuthSub(): string | null {
-  if (typeof window === "undefined") return null;
-  const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const token = getAuthToken();
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
@@ -54,27 +55,7 @@ function formatEventDate(iso: string): string {
     " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  tech: "💻",
-  business: "📊",
-  art: "🎨",
-  music: "🎵",
-  sports: "⚽",
-  education: "📚",
-  networking: "🤝",
-  other: "🎉",
-};
 
-const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
-  tech: { bg: "#eff6ff", fg: "#2563eb" },
-  business: { bg: "#f0fdf4", fg: "#15803d" },
-  art: { bg: "#fce7f3", fg: "#be185d" },
-  music: { bg: "#fff7ed", fg: "#c2410c" },
-  sports: { bg: "#ecfdf5", fg: "#059669" },
-  education: { bg: "#f5f3ff", fg: "#7c3aed" },
-  networking: { bg: "#fef2f2", fg: "#b91c1c" },
-  other: { bg: "#f1f5f9", fg: "#475569" },
-};
 
 function CategoryBadge({ category }: { category: string }) {
   const color = CATEGORY_COLORS[category] ?? { bg: "#f1f5f9", fg: "#475569" };
@@ -177,10 +158,13 @@ function EventCard({
           <span style={{ fontSize: 12, color: "#94a3b8" }}>{formatEventDate(event.startAt)}</span>
         </div>
 
-        {/* Title */}
-        <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.3, marginBottom: 8 }}>
+        {/* Title — ведёт на страницу события: там полное описание, RSVP и календарь */}
+        <Link
+          href={`/qevents/${event.id}`}
+          style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.3, marginBottom: 8, textDecoration: "none", display: "block" }}
+        >
           {event.title}
-        </div>
+        </Link>
 
         {/* Location + price */}
         <div style={{ display: "flex", gap: 12, fontSize: 13, color: "#64748b", marginBottom: 10, flexWrap: "wrap" }}>

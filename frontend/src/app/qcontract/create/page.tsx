@@ -73,7 +73,16 @@ export default function CreateDocument() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? t("qcontract.create.error.generic"));
+      if (!res.ok) {
+        // Сервер отвечает кодом (`expiresAt_must_be_future`), а показывать его
+        // человеку нельзя. Переводы под эти коды в словаре есть давно, но их
+        // никто не искал — наружу шёл сырой код. `t()` возвращает сам ключ,
+        // если перевода нет, поэтому проверяем совпадение и падаем на общий
+        // текст.
+        const key = `qcontract.create.error.${String(data.error ?? "generic")}`;
+        const human = t(key);
+        throw new Error(human === key ? t("qcontract.create.error.generic") : human);
+      }
       setResult({ shareUrl: data.shareUrl });
     } catch (e) {
       setError(e instanceof Error ? e.message : t("qcontract.create.error.generic"));

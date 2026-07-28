@@ -216,8 +216,17 @@ qchaingovRouter.get("/proposals/:id", readLimit, async (req, res) => {
     const id = String(req.params.id || "").trim();
     if (!id) return res.status(400).json({ error: "id required" });
     const pool = getPool();
+    // Поля перечислены поимённо, а не `SELECT *`. Ручка публичная (входа не
+    // требует), а «выбрать всё» опасно не тем, что отдаёт сегодня, а тем, что
+    // объём выдачи растёт сам: колонку добавили обычным обновлением базы — и
+    // она сразу уехала наружу, никто ничего не менял в коде. Соседний список
+    // предложений строкой выше поля как раз перечисляет — расходились.
     const p = await pool.query(
-      `SELECT * FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`, [id],
+      `SELECT "id","authorUserId","title","summary","body","category","voteMode","options",
+              "quorumPercent","passThreshold","status","votesOpenAt","votesCloseAt",
+              "executedAt","createdAt"
+       FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
+      [id],
     );
     if (p.rowCount === 0) return res.status(404).json({ error: "proposal_not_found" });
     const tallyR = await pool.query(
@@ -230,8 +239,19 @@ qchaingovRouter.get("/proposals/:id", readLimit, async (req, res) => {
        FROM "QChainGovVote" WHERE "proposalId" = $1`,
       [id],
     );
+    // Отдаём РАЗРЕШЁННОЕ списком, а не «строку из базы». Перечисления полей в
+    // запросе мало: оно держится на строке SQL, которую легко вернуть к
+    // `SELECT *` одной правкой, и тогда выдача снова поедет вслед за схемой.
+    const row = p.rows[0] as Record<string, unknown>;
+    const PUBLIC_PROPOSAL_FIELDS = [
+      "id", "authorUserId", "title", "summary", "body", "category", "voteMode", "options",
+      "quorumPercent", "passThreshold", "status", "votesOpenAt", "votesCloseAt", "executedAt", "createdAt",
+    ] as const;
+    const proposal: Record<string, unknown> = {};
+    for (const f of PUBLIC_PROPOSAL_FIELDS) proposal[f] = row[f];
+
     res.json({
-      proposal: p.rows[0],
+      proposal,
       tally: tallyR.rows,
       totals: totalR.rows[0],
     });

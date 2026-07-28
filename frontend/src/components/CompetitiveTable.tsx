@@ -108,8 +108,9 @@ export function CompetitiveTable() {
         {LANDSCAPE_STATS.rows} {plural(LANDSCAPE_STATS.rows, "строка", "строки", "строк")} сравнения · из них{" "}
         {LANDSCAPE_STATS.rowsWhereTheyWin} в пользу конкурента · {LANDSCAPE_STATS.sourcedClaims}{" "}
         {plural(LANDSCAPE_STATS.sourcedClaims, "утверждение", "утверждения", "утверждений")} со ссылкой ·{" "}
-        {LANDSCAPE_STATS.unverifiedClaims}{" "}
-        {plural(LANDSCAPE_STATS.unverifiedClaims, "помечено", "помечены", "помечены")} как непроверенные
+        {/* Phrased so no number agrees with anything: "41 помечено как
+            непроверенные" was grammatical for no value of 41. */}
+        {LANDSCAPE_STATS.unverifiedClaims} с пометкой «не проверено»
       </p>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>

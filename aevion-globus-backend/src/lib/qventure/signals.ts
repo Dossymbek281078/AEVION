@@ -480,7 +480,7 @@ const LINK = String.raw`${LINK_NO_DASH}|—|–`;
  * A plan writes "churn was 2.1%" more often than "churn of 2.1%", so this was
  * not an exotic gap. Kept as one constant rather than a sixth hand-spelling.
  */
-const COPULA = String.raw`is|are|was|were|totall?ed|stood at|came in at`;
+const COPULA = String.raw`is|are|was|were|totall?ed|reached|stood at|came in at`;
 
 // Number + money-unit patterns come from the platform metric primitives, which
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
@@ -1010,7 +1010,7 @@ export function parsePlanSignals(text: string): PlanSignals {
    * a later one.
    */
   const REV_QUALIFIER = String.raw`\s*,?\s*(?:for|in|during)\s+[^.;%$€£₸₽¥₹]{0,30}?\s*,?\s*`;
-  const REV_VERB = String.raw`(?:${LINK}|were|was|totall?ed|${TO_LEVEL})`;
+  const REV_VERB = String.raw`(?:${LINK}|${COPULA}|${TO_LEVEL})`;
   const candidates = [
     ...statedCandidates(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(${REV_NOUN})`),
     ...statedCandidates(String.raw`(?:net\s*|total\s*)?(${REV_NOUN})\s*${REV_VERB}?\s*${CUR}${NUM}\s*${UNIT}`),
@@ -1356,8 +1356,8 @@ export function parsePlanSignals(text: string): PlanSignals {
    */
   const PERIOD_OF = String.raw`(?:\s*,?\s*(?:for|in|during)\s+(?:the\s+)?[a-z ]{0,20}?(?:quarter|year|period|months?|half)\b(?:\s+ended\b[^.;%\d]{0,32}?)?\s*,?)?`;
   const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
+    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|(?:${COPULA})(?:\s+an?)?|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|(?:${COPULA})(?:\s+an?)?|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".

@@ -6611,6 +6611,32 @@ describe("five readers now accept 'was', and one still does not", () => {
     expect(p("Take rate was not reported. Margin was 40%.").takeRatePct).toBeNull();
   });
 
+  test("the margin and the top line use the same constant as the rest", () => {
+    // Both readers were spelling their own connector list, which is how the
+    // class survived the first pass: eighteen sites moved to COPULA and these
+    // two drifted on regardless. "Gross margin came in at 62.3%" and "Revenue
+    // reached $412.6 million" are both ordinary release English.
+    expect(p("Gross margin came in at 62.3%.").grossMarginPct).toBe(62.3);
+    expect(p("Revenue reached $412.6 million.").revenueUsd).toBe(412_600_000);
+    // And the bound still holds on the noun.
+    expect(p("Operating margin came in at 54.0%.").grossMarginPct).toBeNull();
+  });
+
+  test("STILL A MISS: contracted revenue and TAM in their filing forms", () => {
+    // Same class, different readers — these two spell their own connector too.
+    // Left for the next pass rather than widened at the end of a session; each
+    // has a working control beside it, so this is the pattern, not the figure.
+    expect(p("Contracted revenue stood at $55 billion.").contractedRevenueUsd).toBeNull();
+    expect(p("Contracted revenue of $55 billion.").contractedRevenueUsd).toBe(55_000_000_000);
+    expect(p("The addressable market is estimated at $4 billion.").bottomUpTamUsd).toBeNull();
+    expect(p("TAM of $4 billion.").bottomUpTamUsd).toBe(4_000_000_000);
+  });
+
+  test("STILL A MISS: growth stated as a noun with a period", () => {
+    expect(p("Revenue growth for the year was 40%.").growthPct).toBeNull();
+    expect(p("Revenue grew 40% year over year.").growthPct).toBe(40);
+  });
+
   test("STILL A MISS: the customer count with a period clause", () => {
     // Same shape as the top-line miss closed this session, on a different noun.
     expect(p("Customers for the quarter totaled 12,500.").customers).toBeNull();

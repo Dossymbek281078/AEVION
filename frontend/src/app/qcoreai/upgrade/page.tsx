@@ -5,14 +5,17 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 
+// Список того, что даёт покупка. Количественные обещания подтягиваются из
+// реестра (tierFeatures): 28.07.2026 здесь стояло «Unlimited AI
+// sessions», тогда как тариф даёт 2 000 000 токенов в месяц. Кнопка на этой
+// странице ведёт в реальный чекаут, поэтому строка рядом с ней — обещание,
+// а не украшение.
 const PRO_BENEFITS = [
-  "Unlimited AI sessions & history",
   "Access to GPT-4o, Claude Sonnet, Gemini 2.5 Flash",
   "Multi-agent pipeline builder",
   "Prompt optimizer & A/B testing",
   "Notebook collections & export",
   "Custom personas & memory",
-  "Priority response — < 1s P99",
   "API access + SDK (v0.9+)",
   "Webhook integrations",
   "50 MB file uploads per session",
@@ -43,6 +46,8 @@ export default function QCoreUpgradePage() {
   // просила у покупателя сумму, которой в реестре уже не было. Число на
   // денежном пути имеет право быть только из источника истины.
   const [tierPrice, setTierPrice] = useState<{ monthly: number; annual: number } | null>(null);
+  // Что тариф даёт на самом деле — строками из реестра, без пересказа.
+  const [tierFeatures, setTierFeatures] = useState<string[]>([]);
   // Локальный канал показываем, только когда он настроен на проде.
   const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
 
@@ -54,6 +59,7 @@ export default function QCoreUpgradePage() {
         const lite = (j?.tiers ?? []).find((x: { id: string }) => x.id === "lite");
         if (!cancelled && lite) {
           setTierPrice({ monthly: lite.priceMonthly, annual: lite.priceAnnualTotal });
+          if (Array.isArray(lite.features)) setTierFeatures(lite.features);
         }
       })
       .catch(() => {});
@@ -256,7 +262,7 @@ export default function QCoreUpgradePage() {
                 )}
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                {PRO_BENEFITS.map((b) => (
+                {[...tierFeatures, ...PRO_BENEFITS].map((b) => (
                   <li key={b} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#374151" }}>
                     <span style={{ color: "#0d9488", fontWeight: 700, flexShrink: 0 }}>✓</span>
                     {b}

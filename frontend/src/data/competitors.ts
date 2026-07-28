@@ -134,8 +134,8 @@ export const COMPARE_ROWS: CompareRow[] = [
       ),
     ],
     measured: t(
-      "Наша сторона — прод-ответ `/api/qsign/keys` и реестр ключей, сверено 27.07.2026. Ограничение по конвертам и цены DocuSign — по публичным тарифам, сверено 28.07.2026.",
-      "Our side — production response of `/api/qsign/keys` and the key registry, checked 2026-07-27. DocuSign envelope caps and prices — published plans, checked 2026-07-28.",
+      "Наша сторона — прод-ответ `/api/qsign/v2/keys` и реестр ключей, сверено 27.07.2026. Ограничение по конвертам и цены DocuSign — по публичным тарифам, сверено 28.07.2026.",
+      "Our side — production response of `/api/qsign/v2/keys` and the key registry, checked 2026-07-27. DocuSign envelope caps and prices — published plans, checked 2026-07-28.",
     ),
     sources: [
       { label: t("Разбор тарифов DocuSign 2026 (PandaDoc)", "DocuSign 2026 pricing breakdown (PandaDoc)"), url: "https://www.pandadoc.com/blog/docusign-pricing/" },

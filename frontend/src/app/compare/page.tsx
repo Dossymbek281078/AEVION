@@ -144,6 +144,48 @@ const WEAKNESSES = [
   "Экосистема и узнаваемость — наша самая слабая позиция, и быстро это не чинится.",
 ];
 
+
+/**
+ * The rest of the ecosystem. The founder asked for every module with an
+ * analogue — and the honest answer is that only three besides DevHub have
+ * facts behind them. Listing the others with invented advantages would turn a
+ * checkable page into a brochure, so they are named with what is missing.
+ */
+type EcoRow = { module: string; rivals: string; ours: Cell; missing: string };
+
+const ECOSYSTEM: EcoRow[] = [
+  {
+    module: "CyberChess",
+    rivals: "Chess.com, Lichess",
+    ours: { text: "500 000 задач из открытого дампа; ИИ-разбор партии; бот, играющий по-человечески — 0 зевков на 476 ходов (26.07)", origin: "measured" },
+    missing: "силу движка против Lichess не сравнивали",
+  },
+  {
+    module: "Smeta Trainer",
+    rivals: "АВС-4, «Смета РК», «Сана»",
+    ours: { text: "Тренажёр на реальном корпусе расценок РК — учит методике, а не заменяет сметную программу", origin: "measured" },
+    missing: "долю рынка и скорость обучения не мерили",
+  },
+  {
+    module: "QSkyway",
+    rivals: "сервисы полётных зон для дронов",
+    ours: { text: "Правила трёх регуляторов (США, Япония, Казахстан) с доказуемой свежестью и подписью источника", origin: "measured" },
+    missing: "покрытие против конкурентов не считали",
+  },
+  {
+    module: "QReal Studio",
+    rivals: "Higgsfield, Runway, Kling",
+    ours: { text: "Директивы реализма добавляются к каждому видеопромту из общего модуля", origin: "measured" },
+    missing: "сравнение качества не проводилось — и публиковать его нельзя, пока нет слепого бенчмарка",
+  },
+  {
+    module: "Остальные модули экосистемы",
+    rivals: "у части аналоги есть",
+    ours: { text: "", origin: "unmeasured" },
+    missing: "нужен замер: строка в таблице без него — обещание, а не факт",
+  },
+];
+
 function OriginDot({ origin }: { origin: Origin }) {
   const s = ORIGIN_STYLE[origin];
   return (
@@ -261,7 +303,41 @@ export default function ComparePage() {
           </section>
         )}
 
-        <section style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
+
+        <section style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginTop: 24 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+            Остальная экосистема — и почему таблица здесь короче, чем модулей
+          </h2>
+          <p style={{ fontSize: 13.5, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
+            В AEVION 38 модулей, у части есть аналоги. Но сравнивать по фактам можно
+            только те, где мы что-то измерили. Остальные названы честно — с тем, чего
+            не хватает.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12.5, color: "#475569" }}>Модуль</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12.5, color: "#475569" }}>С чем сравнивают</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12.5, color: "#0d9488" }}>Что у нас проверено</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12.5, color: "#92400e" }}>Чего не хватает для сравнения</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ECOSYSTEM.map((row) => (
+                  <tr key={row.module} style={{ borderTop: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{row.module}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12.5, color: "#64748b" }}>{row.rivals}</td>
+                    <td style={{ padding: "10px 12px" }}><CellView cell={row.ours} /></td>
+                    <td style={{ padding: "10px 12px", fontSize: 12.5, color: "#92400e" }}>{row.missing}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginTop: 24 }}>
           <h2 style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>Про экономию — честно</h2>
           <p style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.65, margin: 0 }}>
             Набор из семи сервисов, которые обычно собирают вручную (билдер, видео,

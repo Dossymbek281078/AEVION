@@ -176,6 +176,28 @@ function computeStreak(days: Set<string>): { current: number; longest: number; t
   return { current, longest, totalDays: days.size };
 }
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_COURSE_TITLE_LEN = 200;
+const MAX_COURSE_DESCRIPTION_LEN = 5000;
+const MAX_COURSE_PRICE = 1_000_000;
+const COURSE_LEVELS = ["beginner", "intermediate", "advanced"];
+
+/**
+ * Цена курса. Ноль допустим — бесплатный курс это нормально; отрицательная и
+ * бесконечная — нет.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+function parseCoursePrice(value: unknown): number | string {
+  if (value === undefined || value === null || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "price must be a finite number";
+  if (n < 0) return "price must not be negative";
+  if (n > MAX_COURSE_PRICE) return `price must not exceed ${MAX_COURSE_PRICE}`;
+  if (Math.abs(Math.round(n * 100) - n * 100) > 1e-6) return "price must have at most 2 decimal places";
+  return n;
+}
+
 const CATEGORIES = [
   { id: "tech", name: "Technology" },
   { id: "business", name: "Business" },
@@ -309,6 +331,28 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
   };
   if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
   if (!category) { res.status(400).json({ error: "category is required" }); return; }
+  if (title.trim().length > MAX_COURSE_TITLE_LEN) { res.status(400).json({ error: "title too long" }); return; }
+  if ((description ?? "").length > MAX_COURSE_DESCRIPTION_LEN) {
+    res.status(400).json({ error: "description too long" }); return;
+  }
+
+  // Категория не сверялась со списком: курс мог получить категорию, которой нет
+  // ни в одном фильтре, и пропасть из каталога.
+  if (!CATEGORIES.some((c) => c.id === category)) {
+    res.status(400).json({ error: "unknown category", allowed: CATEGORIES.map((c) => c.id) });
+    return;
+  }
+  // Уровень тоже уходил в базу любой строкой, хотя в интерфейсе их три.
+  if (level !== undefined && level !== null && !COURSE_LEVELS.includes(String(level))) {
+    res.status(400).json({ error: "unknown level", allowed: COURSE_LEVELS });
+    return;
+  }
+
+  // Цена принималась как `Number(price) || 0` — без проверки диапазона:
+  // отрицательная сохранялась как есть, `1e400` (в JSON это Infinity) — как
+  // бесконечность. Тот же дефект был в QStore, и он тут дословно повторён.
+  const priceCheck = parseCoursePrice(price);
+  if (typeof priceCheck === "string") { res.status(400).json({ error: priceCheck }); return; }
 
   const newId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -319,7 +363,7 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
     description: description?.trim() || "",
     category,
     level: level || "beginner",
-    price: Number(price) || 0,
+    price: priceCheck,
     isPublic: true,
     enrollmentCount: 0,
     createdAt: now,

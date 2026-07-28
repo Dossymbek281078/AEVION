@@ -70,4 +70,14 @@ test.describe("DevHub shelf — the strip tells the truth on the way in", () => 
     await expect(page.getByRole("button", { name: /New Project/ }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/Сейчас работает:/)).toHaveCount(0);
   });
+
+  test("the comparison is reachable from where the live state is shown", async ({ page }) => {
+    // The table is only worth anything next to the thing that proves it: the
+    // live count. Burying it on a marketing page would separate the two.
+    await mockShelf(page, CAPS);
+    await page.goto("/devhub");
+    const link = page.getByRole("link", { name: /рядом с Bolt, Lovable, v0 и Replit/ });
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await expect(link).toHaveAttribute("href", "/compare");
+  });
 });

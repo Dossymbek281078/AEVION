@@ -143,7 +143,7 @@ function pgnResultOf(over: string | null | undefined, playerColor: "w" | "b", ho
   return (r === "W") === (playerColor === "w") ? "1-0" : "0-1";
 }
 
-import { HUMAN_PROFILES, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
+import { HUMAN_PROFILES, describeBot, pickBookMove, pickHumanMove, scoreMoves } from "./humanBot";
 import { ev, mm } from "./minimax";
 import { getBookContinuations, resolveBookMove } from "./localOpeningBook";
 import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
@@ -6351,6 +6351,23 @@ export default function CyberChessPage(){
                     style={{flex:1,accentColor:lv.color}}/>
                   <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
+                {/* Паспорт соперника. У конкурентов уровень бота — просто число, и чем
+                    он отличается от соседнего, игроку не объясняют. У нас модель ошибок
+                    задана явными коэффициентами, поэтому её можно честно показать —
+                    числа берутся из самого профиля, ничего не сочиняется. */}
+                {(()=>{
+                  const bp=describeBot(aiI);
+                  return <details style={{marginTop:6}}>
+                    <summary style={{cursor:"pointer",fontSize:10,fontWeight:800,color:CC.textDim,letterSpacing:0.3,listStyle:"none"}}>
+                      {bp.human?"🧠 Как играет этот соперник":"⚙ Как играет этот соперник"}
+                    </summary>
+                    <ul style={{margin:"6px 0 0",padding:"0 0 0 16px",display:"flex",flexDirection:"column",gap:3}}>
+                      {bp.lines.map((l,i)=>(
+                        <li key={i} style={{fontSize:11,color:CC.textDim,lineHeight:1.45}}>{l}</li>
+                      ))}
+                    </ul>
+                  </details>;
+                })()}
                 {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
                   style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,

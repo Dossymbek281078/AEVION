@@ -300,7 +300,7 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
             onPointerMove={onResizeMove}
             onPointerUp={onResizeUp}
             onPointerCancel={onResizeUp}
-            title="Drag to resize"
+            title="Потяни, чтобы изменить размер"
             style={{
               position: "absolute", right: 0, bottom: 0,
               width: 16, height: 16, cursor: "nwse-resize",

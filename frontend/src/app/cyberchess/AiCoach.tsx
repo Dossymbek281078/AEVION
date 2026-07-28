@@ -523,7 +523,7 @@ export default function AiCoach({
         const data = await res.json();
         const reply =
           data.content?.filter((c: any) => c.type === "text" || c.text)
-            .map((c: any) => c.text || "").join("") || "No response";
+            .map((c: any) => c.text || "").join("") || "Ответ не получен";
         sMsgs([...newMsgs, { role: "assistant", content: reply }]);
       } catch (e: any) {
         if (e?.name === "AbortError") {

@@ -168,21 +168,59 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
 });
 
 // GET /api/qstore/products/:id
+/**
+ * Поля товара, которые допустимо отдавать наружу.
+ *
+ * Перечисления колонок в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список стоит и здесь,
+ * при сборке ответа.
+ */
+const PUBLIC_PRODUCT_FIELDS = [
+  "id", "sellerId", "title", "description", "category", "price", "currency",
+  "previewUrl", "tags", "salesCount", "isPublic", "createdAt", "updatedAt",
+] as const;
+
+function publicProduct(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_PRODUCT_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  const auth = verifyBearerOptional(req);
   if (isQStoreDbReady()) {
     try {
-      const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
-      if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
-      res.json({ product: row.rows[0] });
+      // Список товаров отдаёт только `"isPublic" = TRUE` (и так же фильтрует
+      // путь через память), а выдача по идентификатору не смотрела на признак
+      // вовсе: снятый с витрины товар открывался по прямой ссылке. Своё
+      // непубличное продавец видит; остальным 404, а не 403 — 403 подтвердил
+      // бы, что товар существует.
+      const row = await pool.query(
+        `SELECT "id","sellerId","title","description","category","price","currency",
+                "previewUrl","tags","salesCount","isPublic","createdAt","updatedAt"
+           FROM "QStoreProduct" WHERE "id" = $1`,
+        [id],
+      );
+      const product = row.rows[0];
+      if (!product || (product.isPublic !== true && auth?.sub !== product.sellerId)) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+      }
+      res.json({ product: publicProduct(product) });
       return;
     } catch {
       // fall through
     }
   }
+  // То же правило на пути через память — иначе признак соблюдался бы только при
+  // поднятой базе, а при откате на память тихо переставал.
   const product = memProducts.get(id);
-  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-  res.json({ product });
+  if (!product || (product.isPublic !== true && auth?.sub !== product.sellerId)) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+  res.json({ product: publicProduct(product as unknown as Record<string, unknown>) });
 });
 
 // POST /api/qstore/me/products — create product

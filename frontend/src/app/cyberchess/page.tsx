@@ -3346,7 +3346,17 @@ export default function CyberChessPage(){
             // (PR #613) was added.
             bumpClock(bonus,rushKind==="survival"?600:rushDuration);
             sRushScore(s=>s+1);
-            sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+            /* adjustTarget здесь не вызывался вовсе — а он есть в ветке многоходовых
+               пазлов (+25) и в ветке ошибки (-70). То есть цель сложности опускалась
+               при КАЖДОЙ ошибке, но поднималась только за многоходовые. Одноходовых
+               в пуле на 500 тысяч большинство (маты в один ход и простая тактика),
+               поэтому у игрока, решающего верно, цель всё равно ползла вниз и
+               тренажёр молча становился легче. */
+            adjustTarget(25);
+            /* sRushBestStreak убран отсюда: рекорд серии теперь ведёт эффект на
+               значение rushStreak (см. рядом с rushLivesRef). Два владельца у одного
+               числа — это как раз то, из-за чего ветки и расходятся. */
+            sRushStreak(st=>st+1);
             showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
             // Auto-advance handled by the single pzAttempt==="correct" effect
           }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){

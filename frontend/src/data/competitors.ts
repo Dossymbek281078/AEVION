@@ -419,7 +419,7 @@ export const COMPARISONS: ModuleComparison[] = [
     id: "qcontract",
     name: "QContract",
     what: "Документы с ограниченным доступом и самоуничтожением после срока.",
-    rivals: ["Digify", "DocSend", "Vera by HelpSystems"],
+    rivals: ["Digify", "DocSend", "Vera"],
     stronger: [
       "Срок жизни документа и правила доступа задаются в один экран, без администратора",
       "Работает вместе с подписью и депонированием на той же платформе",

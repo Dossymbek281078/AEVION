@@ -103,21 +103,36 @@ function parseNumber(value: unknown): number | null {
 // ─── GET /api/mapreality/health ───────────────────────────────────────────────
 mapRealityRouter.get("/health", async (_req: Request, res: Response) => {
   let totalSignals = 0;
+  // Откуда взято число. Раньше при сбое запроса ручка отдавала ok: true,
+  // dbReady: true и счётчик из памяти — причём молча, без единой строки в
+  // логах. Монитор видел зелёный ответ с осмысленной цифрой ровно тогда,
+  // когда база не отвечала. Тот же дефект был в kids-ai; здесь он был хуже
+  // на одну деталь — там хотя бы писали предупреждение.
+  let totalSignalsSource: "postgres" | "memory" = "memory";
+  let dbQueryFailed = false;
   try {
     if (isMapRealityDbReady()) {
       const { rows } = await pool.query(`SELECT COUNT(*)::int AS total FROM mapreality_signals`);
       totalSignals = rows[0]?.total ?? 0;
+      totalSignalsSource = "postgres";
     } else {
       totalSignals = memSignals.length;
     }
-  } catch {
+  } catch (err) {
+    dbQueryFailed = true;
     totalSignals = memSignals.length;
+    console.error(
+      "[MapReality] GET /health: запрос счётчика не удался, число взято из памяти:",
+      err instanceof Error ? err.message : err,
+    );
   }
   res.json({
-    ok: true,
+    ok: !dbQueryFailed,
     service: "mapreality",
     dbReady: isMapRealityDbReady(),
+    dbQueryFailed,
     totalSignals,
+    totalSignalsSource,
   });
 });
 

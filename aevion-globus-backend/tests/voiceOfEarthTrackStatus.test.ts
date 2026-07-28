@@ -78,6 +78,26 @@ describe("VoiceOfEarth: по ссылке открывается только о
     expect(res.body.track.title).toBe("Песня");
   });
 
+  test("служебные поля наружу не уходят", async () => {
+    mockQuery.mockReset();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("FROM voe_tracks") && String(sql).includes("WHERE id =")) {
+        return {
+          rows: [{
+            id: 1, title: "Песня", artist_alias: "Автор", language: "ru", lyrics: "текст",
+            mood: "hopeful", audio_url: null, votes: 0, status: "published",
+            created_at: new Date().toISOString(),
+            moderator_note: "служебное",   // колонка «завтрашней» схемы
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const res = await get();
+    expect(res.body.track).not.toHaveProperty("moderator_note");
+  });
+
   test("снятый модерацией не отдаётся", async () => {
     serveTrack("flagged");
     expect((await get()).status).toBe(404);

@@ -176,11 +176,20 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       if (q) { params.push(`%${q}%`); conditions.push(`("title" ILIKE $${params.length} OR "description" ILIKE $${params.length})`); }
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
+      // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+      // идентификатору. Иначе витрина поедет вслед за схемой.
       const rows = await pool.query(
-        `SELECT * FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
+        `SELECT "id","sellerId","title","description","category","price","currency",
+                "previewUrl","tags","salesCount","avgRating","reviewCount",
+                "isPublic","createdAt","updatedAt"
+           FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
         params,
       );
-      res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
+      res.json({
+        products: rows.rows.map(publicProduct),
+        total: rows.rowCount ?? rows.rows.length,
+        sort,
+      });
       return;
     } catch {
       // fall through to in-memory

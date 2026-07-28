@@ -237,24 +237,61 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
 });
 
 // GET /api/qlearn/courses/:id
+/**
+ * Поля курса, которые допустимо отдавать наружу.
+ *
+ * Перечисления колонок в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список стоит и здесь,
+ * при сборке ответа.
+ */
+const PUBLIC_COURSE_FIELDS = [
+  "id", "authorId", "title", "description", "category", "level", "price",
+  "isPublic", "enrollmentCount", "createdAt", "updatedAt",
+] as const;
+
+function publicCourse(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_COURSE_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qlearnRouter.get("/courses/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  // Список курсов отдаёт только `"isPublic" = TRUE` (и так же фильтрует путь
+  // через память), а выдача по идентификатору не смотрела на признак вовсе:
+  // неопубликованный курс открывался по прямой ссылке. Свой черновик автор
+  // видит; остальным 404, а не 403 — 403 подтвердил бы, что курс существует.
+  const auth = verifyBearerOptional(req);
   if (isQLearnDbReady()) {
     try {
-      const row = await pool.query(`SELECT * FROM "QLearnCourse" WHERE "id" = $1`, [id]);
-      if (row.rows.length === 0) { res.status(404).json({ error: "Course not found" }); return; }
+      const row = await pool.query(
+        `SELECT "id","authorId","title","description","category","level","price",
+                "isPublic","enrollmentCount","createdAt","updatedAt"
+           FROM "QLearnCourse" WHERE "id" = $1`,
+        [id],
+      );
+      const courseRow = row.rows[0];
+      if (!courseRow || (courseRow.isPublic !== true && auth?.sub !== courseRow.authorId)) {
+        res.status(404).json({ error: "Course not found" });
+        return;
+      }
       const lessons = await pool.query(
         `SELECT "id","title","order","duration" FROM "QLearnLesson" WHERE "courseId" = $1 ORDER BY "order"`,
         [id],
       );
-      res.json({ course: row.rows[0], lessons: lessons.rows });
+      res.json({ course: publicCourse(courseRow), lessons: lessons.rows });
       return;
     } catch {
       // fall through
     }
   }
+  // То же правило на пути через память — иначе признак соблюдался бы только при
+  // поднятой базе и тихо переставал при откате.
   const course = memCourses.get(id);
-  if (!course) { res.status(404).json({ error: "Course not found" }); return; }
+  if (!course || (course.isPublic !== true && auth?.sub !== course.authorId)) {
+    res.status(404).json({ error: "Course not found" });
+    return;
+  }
   const lessons = Array.from(memLessons.values())
     .filter((l) => l.courseId === id)
     .map(({ id: lid, title, order, duration }) => ({ id: lid, title, order, duration }))

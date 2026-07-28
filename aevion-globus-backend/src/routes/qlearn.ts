@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 import { Router, Request, Response } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
@@ -832,7 +833,7 @@ qlearnRouter.get("/me/progress", (req: Request, res: Response) => {
 });
 
 // POST /api/qlearn/me/courses/:courseId/ai-generate-lesson — AI lesson generator
-qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", async (req: Request, res: Response) => {
+qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", generationLimit("qlearn_ai_generate_lesson"), async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const courseId = param(req, "courseId");

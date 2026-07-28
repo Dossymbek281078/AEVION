@@ -81,7 +81,7 @@ export function publicItems<T>(items: T[]): Array<Record<string, unknown>> {
   });
 }
 
-import { rateLimit } from "../lib/rateLimit";
+import { rateLimit, generationLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
   fetchQRightAttachments,
@@ -447,7 +447,7 @@ export { clampTemperature, publicErrorCategory };
                                               data: { kind: "error", message }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat-stream", async (req, res) => {
+qcoreaiRouter.post("/chat-stream", generationLimit("qcoreai_chat_stream"), async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);
@@ -4443,7 +4443,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
    POST /sessions/:id/suggest
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
+qcoreaiRouter.post("/sessions/:id/suggest", generationLimit("qcoreai_sessions_id_suggest"), async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -4744,7 +4744,7 @@ qcoreaiRouter.post("/notebook/qa", async (req, res) => {
    Returns: { runId, sessionId, finalContent }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/widget/run", async (req, res) => {
+qcoreaiRouter.post("/widget/run", generationLimit("qcoreai_widget_run"), async (req, res) => {
   // CORS headers for cross-origin embeds
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -5413,7 +5413,7 @@ qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** POST /sessions/:id/ai-summary — generate and cache an AI summary of last 5 runs. */
-qcoreaiRouter.post("/sessions/:id/ai-summary", async (req, res) => {
+qcoreaiRouter.post("/sessions/:id/ai-summary", generationLimit("qcoreai_sessions_id_ai_summary"), async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -5713,7 +5713,7 @@ qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
    POST /notebook/collections/:id/export
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
+qcoreaiRouter.post("/notebook/auto-tag", generationLimit("qcoreai_notebook_auto_tag"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   const { content } = req.body || {};
@@ -6033,7 +6033,7 @@ qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 // Suggest must come before :id routes
-qcoreaiRouter.post("/templates/suggest", async (req, res) => {
+qcoreaiRouter.post("/templates/suggest", generationLimit("qcoreai_templates_suggest"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
 

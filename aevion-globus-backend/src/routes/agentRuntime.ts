@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 /**
  * agentRuntime route — POST /api/agent-runtime/run.
  *
@@ -73,7 +74,7 @@ agentRuntimeRouter.get("/health", async (_req, res) => {
   });
 });
 
-agentRuntimeRouter.post("/run", async (req, res) => {
+agentRuntimeRouter.post("/run", generationLimit("agentruntime_run"), async (req, res) => {
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!message) return res.status(400).json({ error: "message required" });
 

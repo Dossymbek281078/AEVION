@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 import { Router, Request, Response } from "express";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
@@ -352,7 +353,7 @@ qmelaninRouter.post("/track", (req: Request, res: Response) => {
  *   foods across meals — it must not add supplements or invent doses. Falls back
  *   to a deterministic day-plan when no AI provider is configured.
  */
-qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
+qmelaninRouter.post("/ai-plan", generationLimit("qmelanin_ai_plan"), async (req: Request, res: Response) => {
   const b = req.body || {};
   let deficientKeys: BiomarkerKey[] = [];
   if (Array.isArray(b.deficientKeys)) {

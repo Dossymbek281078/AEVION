@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 // AEVION CyberChess — AI Coach proxy + session/goal tracking (v37)
 //
 // v35:
@@ -106,7 +107,7 @@ function trimStore<T>(store: Map<string, T>, max: number) {
 // Not auth-gated: stateless proxy with no owner-keyed state to protect.
 // CyberChess board UI consumes this without a JWT (separate auth surface).
 // Abuse / cost mitigation belongs in a rate-limiter, not here.
-coachRouter.post("/chat", async (req: Request, res: Response) => {
+coachRouter.post("/chat", generationLimit("coach_chat"), async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {

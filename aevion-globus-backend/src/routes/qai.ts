@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import {
@@ -197,7 +198,7 @@ function delay(ms: number): Promise<void> {
 }
 
 // POST /api/qai/chat
-qaiRouter.post("/chat", async (req: Request, res: Response) => {
+qaiRouter.post("/chat", generationLimit("qai_chat"), async (req: Request, res: Response) => {
   const { message, sessionId, personaId, model: reqModel, provider: reqProvider } = req.body as {
     message?: string;
     sessionId?: string;
@@ -274,7 +275,7 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
 });
 
 // POST /api/qai/chat/stream — SSE streaming chat (word-by-word, 40ms cadence)
-qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
+qaiRouter.post("/chat/stream", generationLimit("qai_chat_stream"), async (req: Request, res: Response) => {
   const { message, sessionId, personaId } = req.body as {
     message?: string;
     sessionId?: string;

@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -1003,7 +1004,7 @@ async function callLlmGemini(
   return { advice: reply, model };
 }
 
-healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
+healthaiRouter.post("/check-llm", generationLimit("healthai_check_llm"), async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });

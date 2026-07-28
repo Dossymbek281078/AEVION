@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 ﻿import { Router } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
@@ -271,7 +272,7 @@ qmediaRouter.get("/me/likes", async (req, res) => {
 
 /* ── AI Tools ── */
 
-qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
+qmediaRouter.post("/ai/generate-lyrics", generationLimit("qmedia_ai_generate_lyrics"), async (req, res) => {
   try {
     const { genre, mood, theme, lines } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -288,7 +289,7 @@ qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate lyrics failed" }); }
 });
 
-qmediaRouter.post("/ai/generate-title", async (req, res) => {
+qmediaRouter.post("/ai/generate-title", generationLimit("qmedia_ai_generate_title"), async (req, res) => {
   try {
     const { genre, mood } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -327,7 +328,7 @@ qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate palette failed" }); }
 });
 
-qmediaRouter.post("/ai/describe-video", async (req, res) => {
+qmediaRouter.post("/ai/describe-video", generationLimit("qmedia_ai_describe_video"), async (req, res) => {
   try {
     const { title, category } = req.body || {};
     const provider = getProviders().find(p => p.configured);

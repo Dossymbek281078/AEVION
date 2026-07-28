@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 import { Router, Request, Response } from "express";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
@@ -280,7 +281,7 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
  *   The AI only sequences the SAME items across the week — it must not add
  *   supplements, drugs or doses. Falls back to a deterministic week when no AI.
  */
-longevityRouter.post("/ai-plan", async (req: Request, res: Response) => {
+longevityRouter.post("/ai-plan", generationLimit("longevity_ai_plan"), async (req: Request, res: Response) => {
   const b = req.body || {};
   const flags = (b.flags || {}) as Record<string, unknown>;
   const activeFlags = Object.keys(flags).filter((k) => Boolean(flags[k]));

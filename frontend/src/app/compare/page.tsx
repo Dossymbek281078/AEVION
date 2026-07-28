@@ -86,8 +86,11 @@ export default function ComparePage() {
   return (
     <main style={styles.page}>
       <div style={styles.wrap}>
+        {/* Своего бренд-заголовка здесь нет сознательно: /compare не входит ни
+            в APP_PREFIXES, ни в BARE_PREFIXES (ClientProviders), то есть сверху
+            уже стоит глобальный SiteHeader. Второе «AEVION» подряд читалось бы
+            как ошибка вёрстки. */}
         <header style={styles.head}>
-          <div style={styles.brand}>AEVION</div>
           <h1 style={styles.h1}>Чем это отличается от того, чем вы уже пользуетесь</h1>
           <p style={styles.lede}>
             У каждого модуля здесь названо не только то, в чём сильнее мы, но и то, в чём сильнее
@@ -156,12 +159,11 @@ const styles: Record<string, React.CSSProperties> = {
   wrap: { maxWidth: 860, margin: "0 auto" },
 
   head: { borderBottom: `2px solid ${INK}`, paddingBottom: 18 },
-  brand: { fontFamily: "monospace", fontSize: 13, letterSpacing: "0.3em", fontWeight: 700, color: GOLD },
   h1: {
     fontFamily: "Georgia, 'Times New Roman', serif",
     fontSize: 30,
     lineHeight: 1.15,
-    margin: "12px 0 0",
+    margin: 0,
     fontWeight: 700,
   },
   lede: { color: MUTED, fontSize: 15, lineHeight: 1.6, margin: "10px 0 0" },

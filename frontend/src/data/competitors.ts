@@ -1057,6 +1057,96 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/qai.ts", "scripts/qcore-eval.js"],
   },
+
+  {
+    moduleId: "qreal",
+    module: "QReal Studio — видео по брифу без съёмки",
+    page: "/qreal",
+    category: "генерация видео по текстовому описанию",
+    rivals: [
+      { name: "Higgsfield", url: "https://higgsfield.ai", strength: "рендер с нативным звуком и богатый каталог моделей — именно им мы сейчас и рендерим" },
+      { name: "Runway", url: "https://runwayml.com", strength: "зрелый монтажный инструмент вокруг генерации, контроль камеры" },
+      { name: "Sora", url: "https://openai.com/sora", strength: "качество сцены и физики движения" },
+    ],
+    weWin: [
+      {
+        text: "Из брифа получается не один промт, а раскадровка с директивами реализма — работа сценариста сделана до рендера",
+        basis: "design",
+        evidence: "конвейер бриф → сцены → рендер-промты с REALISM_DIRECTIVES",
+      },
+      {
+        text: "Подготовительная часть бесплатна: сцены и промты собирает флот платформы",
+        basis: "design",
+        evidence: "qcoreai providers с фолбэком на заглушку",
+      },
+    ],
+    weLose: [
+      {
+        text: "Своего рендера у нас нет: видео делает Higgsfield, мы только готовим задание",
+        basis: "measured",
+        evidence: "P2 подтверждён вручную 2026-07-21: demo-shot отрендерен через их MCP; пока рендер идёт через чужой сервис, называть себя генератором видео нельзя",
+      },
+      {
+        text: "Нет монтажного стола, контроля камеры и таймлайна, как у Runway",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Качество сцены определяется чужой моделью — наш вклад в него косвенный",
+        basis: "design",
+        evidence: "по устройству конвейера",
+      },
+    ],
+    verdict:
+      "Мы лучше на подготовке: превратить бриф в раскадровку и промты, которые дают предсказуемый результат. Сам ролик рендерит Higgsfield, и мы этого не скрываем.",
+    surveyedAt: "2026-07-28",
+    sources: ["память project_qreal_studio"],
+  },
+
+  {
+    moduleId: "quantum-shield",
+    module: "Quantum Shield — разделение секрета и подпись",
+    page: "/quantum-shield",
+    category: "хранение секретов и разделение доступа",
+    rivals: [
+      { name: "HashiCorp Vault", url: "https://vaultproject.io", strength: "промышленный стандарт: динамические секреты, аудит, интеграции, unseal по Шамиру из коробки" },
+      { name: "1Password", url: "https://1password.com", strength: "секреты для команды с восстановлением доступа и понятным интерфейсом" },
+      { name: "AWS KMS / Cloud HSM", url: "https://aws.amazon.com/kms/", strength: "ключи в аппаратном модуле с сертификацией и управлением правами" },
+    ],
+    weWin: [
+      {
+        text: "Разделение секрета по Шамиру и подпись Ed25519 доступны как обычная ручка API, без разворачивания инфраструктуры",
+        basis: "design",
+        evidence: "порог 2 из 3 по умолчанию, ключ и подпись хранятся с объектом",
+      },
+      {
+        text: "Живёт рядом с авторством: тот же контур, что подписывает произведения и договоры",
+        basis: "design",
+        evidence: "общая связка с QSign и QRight",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это не хранилище секретов уровня Vault: нет динамических секретов, политик доступа и аудита",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Ключи лежат не в аппаратном модуле — у KMS и HSM сертификация, которой у нас нет",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Абсолютной неудаляемости не существует, и мы говорим это прямо: криптография доказывает авторство, но не мешает удалить файл",
+        basis: "design",
+        evidence: "честная рамка системы защиты, зафиксирована при её создании",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда разделение доступа нужно быстро и рядом с подписью. Для секретов продакшена — Vault или KMS, и это не близко.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/quantum-shield.ts", "память project_aevion_protection"],
+  },
 ];
 
 /**
@@ -1066,8 +1156,6 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "QReal Studio — AI-видео", likelyRivals: "Higgsfield, Runway, Sora" },
-  { module: "Quantum Shield — разделение секрета", likelyRivals: "HashiCorp Vault, 1Password, Shamir-утилиты" },
   { module: "QEvents — события и записи", likelyRivals: "Eventbrite, Timepad, Luma" },
   { module: "QSocial — публикации", likelyRivals: "Buffer, Hootsuite, Later" },
   { module: "QBuild — стройка и подряд", likelyRivals: "Procore, PlanRadar, локальные тендерные площадки" },

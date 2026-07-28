@@ -79,7 +79,20 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
-  return s in TIER_VARIANT_ENV;
+  // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, и
+  // isReference("constructor") возвращал true.
+  //
+  // ПРОВЕРЕНО 28.07.2026: прямо сейчас это НЕ дефект — дальше идёт
+  // process.env[TIER_VARIANT_ENV[ref]], а TIER_VARIANT_ENV["constructor"] — это
+  // функция, поэтому поиск в env даёт undefined и результат null, тот же, что у
+  // неизвестной ссылки. Замерено: constructor/__proto__/toString/hasOwnProperty
+  // → null, настоящая ссылка → свой id.
+  //
+  // Защита стоит здесь не от сегодняшнего поведения, а от завтрашнего: она
+  // держится ТОЛЬКО на том, что значения словаря — имена переменных окружения.
+  // Начни он хранить сами идентификаторы вариантов — и ключ прототипа поехал бы
+  // дальше по платёжному пути как настоящая ссылка.
+  return Object.prototype.hasOwnProperty.call(TIER_VARIANT_ENV, s);
 }
 
 /**

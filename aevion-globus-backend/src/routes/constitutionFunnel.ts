@@ -168,6 +168,7 @@ constitutionFunnelTrackRouter.post(
         createdAt: new Date().toISOString(),
       };
       await ensureEventsTable();
+      let stored: "postgres" | "memory" = "memory";
       if (dbAvailable) {
         try {
           const pool = getPool();
@@ -176,10 +177,27 @@ constitutionFunnelTrackRouter.post(
              VALUES ($1,$2,$3,$4,$5::jsonb,$6)`,
             [row.id, row.event, row.fpHash, row.userId, JSON.stringify(row.props), row.createdAt],
           );
-        } catch { /* fall through to memory */ }
+          stored = "postgres";
+        } catch (dbErr) {
+          // Раньше провал записи был полностью молчаливым: событие оставалось
+          // только в кольцевом буфере, ответ был ok: true, и никто не узнавал,
+          // что аналитика теряется. А по этим событиям потом считается воронка
+          // (см. GET ниже) — то есть тихая потеря здесь превращается в тихо
+          // неверные проценты там.
+          capture(dbErr, {
+            route: "constitution/track",
+            note: "событие не записано в Postgres — осталось только в памяти, аналитика теряется",
+          });
+          console.error(
+            "[Constitution] СОБЫТИЕ НЕ ЗАПИСАНО В БАЗУ — только в памяти:",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
       pushMem(row);
-      res.json({ ok: true });
+      // Клиенту тоже говорим правду — так же, как это сделано в записи в лист
+      // ожидания (там поле storage).
+      res.json({ ok: true, stored });
     } catch (err) {
       capture(err);
       res.status(500).json({

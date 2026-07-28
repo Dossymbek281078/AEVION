@@ -103,10 +103,54 @@ export default function ComparePage() {
           </div>
         </header>
 
+        {/* Оглавление. Тридцать с лишним карточек — это простыня, в которой
+            человек не найдёт свой модуль, а пришёл он почти всегда за одним
+            конкретным. Ссылки ведут на якоря на этой же странице. */}
+        <nav
+          aria-label="Модули в сравнении"
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: 14,
+            padding: "14px 16px",
+            marginBottom: 22,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b", marginBottom: 10 }}>
+            Найти модуль
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {COMPARISONS.map((c) => (
+              <a
+                key={c.moduleId}
+                href={`#${c.moduleId}`}
+                title={c.category}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: 30,
+                  padding: "5px 11px",
+                  borderRadius: 999,
+                  background: "#f1f5f9",
+                  border: "1px solid #e2e8f0",
+                  color: "#0f172a",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                {c.module.split(" — ")[0]}
+              </a>
+            ))}
+          </div>
+        </nav>
+
         {COMPARISONS.map((c) => (
           <section
             key={c.moduleId}
+            id={c.moduleId}
             style={{
+              scrollMarginTop: 16,
               background: "#fff",
               border: "1px solid #e2e8f0",
               borderRadius: 14,

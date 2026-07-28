@@ -50,9 +50,24 @@ type Resolution = "global" | "cyberchess" | "local" | "unknown";
 /** Из какого словаря берётся `t` в этом файле. */
 export function resolveDict(source: string): Resolution {
   if (/useCcI18n/.test(source)) return "cyberchess";
-  // Своя функция t в файле — свой набор строк, глобальным словарём не проверяется.
-  if (/^\s*function t\(/m.test(source) || /const t = \(/.test(source)) return "local";
-  if (/useI18n|from "@\/lib\/i18n"/.test(source)) return "global";
+  // Признак должен отвечать на вопрос «откуда берётся ИМЕННО вызываемый t»,
+  // а не «упоминается ли i18n в файле». Два промаха, оба проверены фактом:
+  //
+  // 1. `const t = (` — слишком широко: в `planet/page.tsx` так объявлена обычная
+  //    переменная (`const t = (sp.get("type") || …)`), и файл ошибочно считался
+  //    «локальным», из-за чего 46 его ключей не сверялись НИ С ЧЕМ. Ложный
+  //    пропуск у сторожа опаснее ложного срабатывания: он не мешает, он молчит.
+  // 2. «сначала глобальный, если есть импорт i18n» — тоже неверно:
+  //    `healthai/_client.tsx` импортирует `useI18n` (для языка) И объявляет свою
+  //    `function t(key, lang, vars)` со своим набором строк. При таком порядке он
+  //    попал в глобальную проверку и дал 182 ложных нарушения.
+  //
+  // Верный признак — деструктуризация `const { t } = useI18n()`: именно она
+  // вводит в файл глобальный `t`.
+  if (/\{\s*[^}]*t[^}]*\}\s*=\s*useI18n\(/.test(source)) return "global";
+  // Своя функция t с собственным набором строк.
+  if (/^\s*function t\(/m.test(source)) return "local";
+  if (/from "@\/lib\/i18n"/.test(source)) return "global";
   return "unknown";
 }
 

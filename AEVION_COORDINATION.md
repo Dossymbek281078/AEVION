@@ -709,3 +709,28 @@ git не тронут, порты свободны. Фронтенды (`next de
 ---
 
 *Этот файл намеренно короткий; детали истории — в worklog, стратегия — в roadmap.*
+
+---
+
+## BROADCAST 2026-07-28 — находка в devhub, зона занята, НЕ правил
+
+Вкладка `aevion-free-fleet` (ветка `feat/free-fleet-keys`) прочёсывала роутеры
+на молчащие дефекты и наткнулась на нарушение правила из
+`aevion-globus-backend/CLAUDE.md` §10 в **чужой зоне**. `session-claim.mjs devhub`
+говорит CLAIMED другим worktree, поэтому правку не делал — передаю владельцу.
+
+**Где:** `aevion-globus-backend/src/routes/devhub.ts`, около строки 2085 —
+ветка «Simulate build asynchronously — no Railway token».
+
+**Что не так:** симуляция ставит `deployment.status = "live"` и пишет buildLog
+`Build started... Installing dependencies... Building... Deployment complete`.
+Правило §10 п.2 требует, чтобы buildLog симуляции **говорил, что это симуляция**.
+Сейчас лог неотличим от настоящей сборки: человек (и любой отчёт по логам)
+прочитает его как реальный деплой.
+
+Остальные четыре места с `status = "live"` в этом файле проверены и **в порядке** —
+стоят под `if (serves)` после `verifyDeploymentServes()`, как и предписано.
+
+**Что предлагаю владельцу зоны:** одну строку в buildLog вида
+`СИМУЛЯЦИЯ: токена Railway нет, сборка не выполнялась` — и статус, отличный от
+`live`, если этот путь вообще должен доживать до прода.

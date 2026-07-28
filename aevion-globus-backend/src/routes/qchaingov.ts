@@ -410,6 +410,11 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
     let passed = false;
     let achievedPct = 0;
     let winningChoice: string | null = null;
+    // Ничья — это НЕ победа одной из сторон. Раньше она молча превращалась в
+    // ответ: в режиме «да/нет» равенство отдавало «no», а в остальных режимах
+    // побеждал тот вариант, который база вернула первым, — то есть исход
+    // зависел от порядка строк в `GROUP BY`, не определённого стандартом.
+    let tie = false;
 
     if (proposal.voteMode === "yes-no-abstain") {
       const yesWeight = tally.find(r => r.choice === "yes")?.weight ?? 0;
@@ -417,16 +422,36 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
       const denom = yesWeight + noWeight;
       achievedPct = denom > 0 ? (yesWeight / denom) * 100 : 0;
       passed = quorumMet && achievedPct >= proposal.passThreshold;
-      winningChoice = passed ? "yes" : (yesWeight > noWeight ? "yes" : (noWeight > 0 ? "no" : null));
-    } else {
-      // weighted or ranked-choice — winner = highest weight bucket
-      let topWeight = -1;
-      for (const row of tally) {
-        if (row.weight > topWeight) {
-          topWeight = row.weight;
-          winningChoice = row.choice;
-        }
+      if (passed) {
+        winningChoice = "yes";
+      } else if (yesWeight > noWeight) {
+        winningChoice = "yes";
+      } else if (noWeight > yesWeight) {
+        winningChoice = "no";
+      } else {
+        // равенство (в том числе 0:0) — победителя нет
+        winningChoice = null;
+        tie = denom > 0;
       }
+    } else {
+      // weighted или ranked-choice — побеждает вариант с наибольшим весом.
+      // При равенстве весов порядок определяем ЯВНО: сначала порядок вариантов,
+      // объявленный автором предложения, затем алфавит. Иначе один и тот же
+      // расклад голосов даёт разный результат от прогона к прогону.
+      const order = new Map(
+        (Array.isArray(proposal.options) ? proposal.options : []).map((o, i) => [o, i] as const),
+      );
+      const ranked = [...tally].sort((a, b) => {
+        if (b.weight !== a.weight) return b.weight - a.weight;
+        const ia = order.get(a.choice) ?? Number.MAX_SAFE_INTEGER;
+        const ib = order.get(b.choice) ?? Number.MAX_SAFE_INTEGER;
+        if (ia !== ib) return ia - ib;
+        return a.choice.localeCompare(b.choice);
+      });
+      const top = ranked[0];
+      const topWeight = top?.weight ?? 0;
+      tie = ranked.length > 1 && ranked[1].weight === topWeight && topWeight > 0;
+      winningChoice = top && topWeight > 0 ? top.choice : null;
       achievedPct = totalWeight > 0 ? (Math.max(topWeight, 0) / totalWeight) * 100 : 0;
       passed = quorumMet && achievedPct >= proposal.passThreshold;
     }
@@ -454,6 +479,9 @@ qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
       quorumMet,
       threshold: { required: proposal.passThreshold, achieved: Number(achievedPct.toFixed(2)) },
       winningChoice,
+      // Отдаём наружу, а не прячем: человек должен видеть, что расклад ничейный,
+      // а не получить «победителя», выбранного правилом разрешения ничьих.
+      tie,
       totalVotes,
       totalWeight,
       executedAt,

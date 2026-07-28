@@ -467,6 +467,21 @@ function latestMatch(text: string, re: RegExp, s: PlanSignals, label: string): R
 const LINK_NO_DASH = String.raw`of|=|:|\||at`;
 const LINK = String.raw`${LINK_NO_DASH}|—|–`;
 
+/**
+ * The verb that predicates a figure of a metric noun.
+ *
+ * Every metric reader had been spelling this out for itself and most of them
+ * stopped at "is". The result was one defect class across five fields: "CAC of
+ * $1,200" read, "CAC was $1,200" did not, and the same pair held for LTV,
+ * payback, churn and take rate. Retention worked only because someone had
+ * added "was" to that one reader by hand — the fix was already in the file,
+ * applied once, where it happened to be noticed.
+ *
+ * A plan writes "churn was 2.1%" more often than "churn of 2.1%", so this was
+ * not an exotic gap. Kept as one constant rather than a sixth hand-spelling.
+ */
+const COPULA = String.raw`is|are|was|were|totall?ed|stood at|came in at`;
+
 // Number + money-unit patterns come from the platform metric primitives, which
 // carry the `(?![a-z])` guard that stops "LTV $2, monthly" reading as $2 million.
 const NUM = NUMBER_PATTERN;
@@ -1399,7 +1414,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const ratio = s.ltvCacRatio !== null ? null
-    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:${LINK}|is|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
+    : firstMatch(t, new RegExp(String.raw`ltv[:/ ]*cac\s*(?:${LINK}|${COPULA}|${TO_LEVEL})?\s*${NUM}\s*(?::\s*1)?`, "i"));
   // Five fields reached their assignment without this gate — a stated target
   // was scored as an achieved result on LTV/CAC, CAC, LTV, payback and TAM.
   // Seven others had it. Applied per site, missed at five.
@@ -1420,25 +1435,25 @@ export function parsePlanSignals(text: string): PlanSignals {
   // metric nouns: the list was built from how we say it, not how they do.
   const CAC_NAME = String.raw`(?<!ltv[:/ ]{0,4})(?:cac|customer acquisition costs?)`;
   const LTV_NAME = String.raw`(?:ltv|lifetime values?|customer lifetime values?)`;
-  const cacRange = firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const cacRange = firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (cacRange) {
     const ends = moneyRangeEnds(t, cacRange, planCurrency);
     if (ends) { s.cacUsd = ends.high; s.parseNotes.push(`CAC was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the higher, conservative end.`); }
   }
   const cac = s.cacUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    : firstMatch(t, new RegExp(String.raw`${CAC_NAME}\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     // "$500 CAC" is how a deck writes it, and revenue, GMV and backlog all
     // read their suffix form already.
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${CAC_NAME}`, "i"));
   if (cac && statedAsAchieved(t, cac.index ?? 0, cac[0].length)) { const v = moneyUsd(t, cac, cac[1], cac[2], planCurrency, s); if (v && v > 0) s.cacUsd = v; }
 
-  const ltvRange = firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const ltvRange = firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (ltvRange) {
     const ends = moneyRangeEnds(t, ltvRange, planCurrency);
     if (ends) { s.ltvUsd = ends.low; s.parseNotes.push(`LTV was disclosed as a range (${fmtUsdShort(ends.low)}–${fmtUsdShort(ends.high)}); the score uses the lower, conservative end.`); }
   }
   const ltv = s.ltvUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    : firstMatch(t, new RegExp(String.raw`${LTV_NAME}\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*${LTV_NAME}`, "i"));
   if (ltv && statedAsAchieved(t, ltv.index ?? 0, ltv[0].length)) { const v = moneyUsd(t, ltv, ltv[1], ltv[2], planCurrency, s); if (v && v > 0) s.ltvUsd = v; }
   if (s.ltvCacRatio === null && s.cacUsd && s.ltvUsd && s.cacUsd > 0) {
@@ -1448,7 +1463,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // ── Payback: "payback of 8 months" / "8-month payback" ──
   // A payback band takes the LONGER end — the conservative reading of a range is
   // the one that is worse for the plan, and "9-12 months" promises 12.
-  const pbRange = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:${LINK}|is|between)?\s*${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?`, "i"))
+  const pbRange = firstMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:${LINK}|${COPULA}|between)?\s*${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?`, "i"))
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*(?:-|–|—|to|and)\s*${NUM}\s*[- ]?months?\s*payback`, "i"));
   if (pbRange) {
     const a = parseLocaleNumber(pbRange[1]);
@@ -1464,7 +1479,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // figure written in years would turn 2 years into an excellent 2-month
   // payback: the same class of error the churn period exists to prevent.
   const pb = s.paybackMonths !== null ? null
-    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:${LINK}|is|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
+    : latestMatch(t, new RegExp(String.raw`payback\s*(?:period)?\s*(?:${LINK}|${COPULA}|${TO_LEVEL})?\s*${NUM}\s*[- ]?(months?|years?)`, "i"), s, "payback")
     || latestMatch(t, new RegExp(String.raw`${NUM}\s*[- ]?(months?|years?)\s*payback`, "i"), s, "payback");
   if (pb && statedAsAchieved(t, pb.index ?? 0, pb[0].length)) {
     const v = parseLocaleNumber(pb[1]);
@@ -1483,7 +1498,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // longer one: "2-3% monthly churn" promises 3%, and reading 2% would score a
   // company on the best month it ever had.
   const churnRange = firstMatch(t, new RegExp(String.raw`${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn`, "i"))
-    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:${LINK}|${COPULA}|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   if (churnRange) {
     const groups = churnRange.slice(1).filter((g): g is string => typeof g === "string");
     const nums = groups.filter((g) => /^\d/.test(g)).map(parseLocaleNumber);
@@ -1509,7 +1524,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     // ordinary number, was scored as 24% a month and charged as a company
     // bleeding out. Exactly the confusion the churn-period machinery exists to
     // prevent, left open on the most natural phrasing of all.
-    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:${LINK}|is|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
+    || latestMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:${LINK}|${COPULA}|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%\s*(?:per\s+|a\s+|\/\s*)?\s*(month(?:ly)?|quarter(?:ly)?|year(?:ly)?|annual(?:ly|ised|ized)?|week(?:ly)?)?`, "i"), s, "churn");
   if (churn && statedAsAchieved(t, churn.index ?? 0, churn[0].length)) {
     const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
     const value = groups.find((g) => /^\d/.test(g));
@@ -1530,7 +1545,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // rule the revenue and margin bands already follow. Without this the whole
   // disclosure was dropped, so a plan stating 110–130% scored as if it had said
   // nothing about retention at all.
-  const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  const retRange = firstMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|${COPULA}|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   // 500, not 100: net revenue retention above 100% is the point of the metric.
   const retBand = percentBandLowEnd(retRange, s, "Retention", 500);
   /** Which of the three retentions the surrounding words name. */
@@ -1544,7 +1559,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (retBand !== null) { s.retentionPct = retBand; s.retentionKind = retentionKindAt(retRange?.index ?? 0); }
   const ret = s.retentionPct !== null ? null
     : latestMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:${RET_NAME})`, "i"), s, "retention")
-    || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|is|was|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
+    || latestMatch(t, new RegExp(String.raw`(?:${RET_NAME})\s*(?:rate)?\s*(?:${LINK}|${COPULA}|${TO_LEVEL})?\s*\(?\s*${NUM}\s*%`, "i"), s, "retention");
   if (ret && statedAsAchieved(t, ret.index ?? 0, ret[0].length)) {
     const headPct = parseLocaleNumber(ret[1]);
     const tail = lastInSeries(t, (ret.index ?? 0) + ret[0].length, "percent", headPct, "");
@@ -1619,7 +1634,7 @@ export function parsePlanSignals(text: string): PlanSignals {
   // elsewhere: the market factor is log-scaled and an inflated TAM is one of the
   // engine's red flags, so quietly taking the ceiling would flatter the plan on
   // the one number founders are most tempted to stretch.
-  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+  const tamRange = firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA}|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     // Numbers first, keyword after ("€2B to €4B TAM") — without this the
     // single-figure pattern matched the SECOND figure and took the ceiling.
     || firstMatch(t, new RegExp(String.raw`(?:between\s*)?${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
@@ -1640,7 +1655,7 @@ export function parsePlanSignals(text: string): PlanSignals {
     }
   }
   const tam = s.bottomUpTamUsd !== null ? null
-    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|is)?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
+    : firstMatch(t, new RegExp(String.raw`(?:tam|total addressable market|addressable market)\s*(?:${LINK}|${COPULA})?\s*${CUR}${NUM}\s*${UNIT}`, "i"))
     || firstMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:tam|addressable market)`, "i"));
   if (tam && statedAsAchieved(t, tam.index ?? 0, tam[0].length)) {
     // detect group layout
@@ -1660,7 +1675,7 @@ export function parsePlanSignals(text: string): PlanSignals {
 
   // Contradictions on the metrics that never had the check revenue has had.
   detectMetricConflict(t, s, "gross margin", String.raw`gross\s*margins?\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
-  detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:${LINK}|is)?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
+  detectMetricConflict(t, s, "churn rate", String.raw`churn\s*(?:rate)?\s*(?:${LINK}|${COPULA})?\s*(\d[\d.,]*)\s*%`, (m) => parseLocaleNumber(m[1]));
   detectMetricConflict(t, s, "customer count", String.raw`(?<![$€£₽₸¥])(\d[\d.,]*)\s*${UNIT}\s*(?:paying\s*|active\s*)?(?:${"customers|users|subscribers|members|memberships|merchants|policyholders"})`, (m) => parseMoney(m[1], m[2]));
 
   s.fieldsFound = countFields(s);
@@ -1795,7 +1810,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
   // the single pattern on "$100" with the "M" still attached to 150, so the
   // engine recorded a GMV of one hundred dollars. A magnitude error of six
   // orders, silent, on the headline number of a marketplace plan.
-  const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|is|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
+  const gmvRange = firstMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|${COPULA}|between)?\s*${CUR}${NUM}\s*${UNIT}\s*(?:-|–|—|to|and)\s*${CUR}${NUM}\s*${UNIT}`, "i"));
   if (gmvRange) {
     const ends = moneyRangeEnds(t, gmvRange, s.currency);
     if (ends) {
@@ -1804,7 +1819,7 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     }
   }
   const gmv = s.gmvUsd !== null ? null
-    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|is|reached|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
+    : latestMatch(t, new RegExp(String.raw`(?:${GMV_NOUN})\s*(?:${LINK}|${COPULA}|reached|${TO_LEVEL})?\s*${CUR}${NUM}\s*${UNIT}`, "i"), s, "GMV")
     // "GMV of our Marketplace segment including Turkiye was X" — a filing names
     // the segment between the metric and its figure. The span carries no digit
     // and no clause break, so it cannot reach across to another metric's number,
@@ -1814,11 +1829,11 @@ function parseNonSaasEvidence(t: string, s: PlanSignals): void {
     || latestMatch(t, new RegExp(String.raw`${CUR}${NUM}\s*${UNIT}\s*(?:in\s*)?(?:${GMV_NOUN})`, "i"), s, "GMV");
   if (gmv && statedAsAchieved(t, gmv.index ?? 0, gmv[0].length)) { const v = moneyUsd(t, gmv, gmv[1], gmv[2], s.currency, s); if (v && v > 0) s.gmvUsd = v; }
 
-  const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|is|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
+  const takeRange = firstMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|${COPULA}|between)?\s*${NUM}\s*%?\s*(?:-|–|—|to|and)\s*${NUM}\s*%`, "i"));
   const takeBand = percentBandLowEnd(takeRange, s, "Take rate", 100);
   if (takeBand !== null) s.takeRatePct = takeBand;
   const take = s.takeRatePct !== null ? null
-    : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|is|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
+    : latestMatch(t, new RegExp(String.raw`(?:${TAKE_NOUN})\s*(?:${LINK}|${COPULA}|${TO_LEVEL})?\s*${NUM}\s*%`, "i"), s, "take rate")
     || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:take[- ]rate|commission)`, "i"));
   if (take && statedAsAchieved(t, take.index ?? 0, take[0].length)) { const v = parseLocaleNumber(take[1]); if (isFinite(v) && v > 0 && v <= 100) s.takeRatePct = v; }
 

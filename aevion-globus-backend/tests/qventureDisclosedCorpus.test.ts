@@ -6555,7 +6555,7 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
-describe("KNOWN MISSES: five readers do not accept 'was'", () => {
+describe("five readers now accept 'was', and one still does not", () => {
   /**
    * One defect class across five metrics, found by probing each in isolation
    * after the same probe closed the margin and top-line misses today.
@@ -6579,31 +6579,39 @@ describe("KNOWN MISSES: five readers do not accept 'was'", () => {
   const p = (t: string) => parsePlanSignals(t);
 
   test("churn", () => {
-    expect(p("Churn was 2.1%.").churnPct).toBeNull();
-    expect(p("Our churn rate was 2.1%.").churnPct).toBeNull();
-    expect(p("Monthly churn of 2.1%.").churnPct).toBe(2.1); // the working twin
+    expect(p("Churn was 2.1%.").churnPct).toBe(2.1);
+    expect(p("Our churn rate was 2.1%.").churnPct).toBe(2.1);
+    expect(p("Monthly churn of 2.1%.").churnPct).toBe(2.1);
   });
 
   test("customer acquisition cost", () => {
-    expect(p("CAC was $1,200.").cacUsd).toBeNull();
+    expect(p("CAC was $1,200.").cacUsd).toBe(1200);
     expect(p("Customer acquisition cost of $1,200.").cacUsd).toBe(1200);
   });
 
   test("lifetime value", () => {
-    expect(p("LTV was $9,600.").ltvUsd).toBeNull();
+    expect(p("LTV was $9,600.").ltvUsd).toBe(9600);
   });
 
   test("payback", () => {
-    expect(p("CAC payback was 14 months.").paybackMonths).toBeNull();
+    expect(p("CAC payback was 14 months.").paybackMonths).toBe(14);
     expect(p("Payback period of 14 months.").paybackMonths).toBe(14);
   });
 
   test("take rate", () => {
-    expect(p("Take rate was 11.4%.").takeRatePct).toBeNull();
+    expect(p("Take rate was 11.4%.").takeRatePct).toBe(11.4);
     expect(p("Our take rate is 11.4%.").takeRatePct).toBe(11.4);
   });
 
-  test("the customer count with a period clause", () => {
+  test("a copula does not let a metric grab a neighbouring figure", () => {
+    // The bound that matters: "was" is a common word, and these readers sit in
+    // text full of other numbers.
+    expect(p("Churn is not disclosed. Gross margin was 62.3%.").churnPct).toBeNull();
+    expect(p("CAC is unknown. Revenue was $5 million.").cacUsd).toBeNull();
+    expect(p("Take rate was not reported. Margin was 40%.").takeRatePct).toBeNull();
+  });
+
+  test("STILL A MISS: the customer count with a period clause", () => {
     // Same shape as the top-line miss closed this session, on a different noun.
     expect(p("Customers for the quarter totaled 12,500.").customers).toBeNull();
     expect(p("We had 12,500 customers.").customers).toBe(12_500);

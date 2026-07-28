@@ -3161,6 +3161,24 @@ export default function CyberChessPage(){
   const p2p=useP2P({onMessage:(msg)=>p2pMsgRef.current?.(msg)});
   const p2pRef=useRef({mode:false,send:p2p.send});
   p2pRef.current={mode:p2pMode,send:p2p.send};
+  /* Один владелец у вопроса «в каком мы режиме».
+   *
+   * Режимов пять и они взаимоисключающие, но включались набором ручных сбросов —
+   * у каждой точки входа свой. Итог был несимметричным: вход в p2p гасил остальные,
+   * а вход в любой другой режим p2p НЕ гасил. То есть запуск дуэли с призраком
+   * посреди сетевой партии оставлял соединение живым: ходы продолжали уходить
+   * сопернику, а его ходы — применяться к чужой уже партии. Hotseat вдобавок не
+   * гасил клона и призрака.
+   *
+   * Теперь выход из всех режимов — одна функция, и она же рвёт p2p-соединение.
+   * Точка входа обязана сначала позвать её, потом включить свой режим. */
+  const leaveAllModes=useCallback(()=>{
+    if(p2pRef.current.mode){try{p2p.disconnect()}catch{}}
+    sP2pMode(false);sP2pRoomId("");
+    sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[p2p]);
+
   // Auto-join via URL param: /cyberchess?room=ABC123&color=w
   useEffect(()=>{
     const params=new URLSearchParams(window.location.search);
@@ -3173,7 +3191,7 @@ export default function CyberChessPage(){
        включённым «Соперником» на партию по сети вдобавок навешивалось обучение
        профиля Rival. Ветка создания комнаты гасила эти режимы с самого начала,
        ветка входа — нет. */
-    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
+    leaveAllModes();sP2pMode(true);sP2pRoomId(room);
     p2p.join(room);
     // Take opposite color of host
     const myColor:ChessColor=hostColor==="w"?"b":"w";
@@ -5092,7 +5110,7 @@ export default function CyberChessPage(){
   const discardResume=()=>{clearResume();sResumeOffer(null)};
   // Tournament: start the next match (player vs current opponent)
   const startTournamentMatch=useCallback((opp:Persona)=>{
-    sTab("play");sShowTournament(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
+    sTab("play");sShowTournament(false);leaveAllModes();
     sTournamentOpponent(opp);
     // Switch to tournament's variant
     if(tournament?.variant){sVariant(tournament.variant)}
@@ -6434,7 +6452,7 @@ export default function CyberChessPage(){
             <div style={{marginTop:SPACE[3],display:"flex",flexDirection:"column",gap:SPACE[2]}}>
               {/* Primary CTA «ИГРАТЬ» — доминирует: полная ширина, крупнее вторичных режимов.
                   (Раньше был одной ячейкой grid 2fr/1fr/1fr — не выигрывал по вниманию.) */}
-                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
+                <button onClick={()=>{leaveAllModes();newG()}} className="cc-focus-ring cc-touch"
                   style={{width:"100%",padding:"22px 26px",borderRadius:RADIUS.lg,border:"none",
                     background:`linear-gradient(135deg,${CC.brand},#10b981 55%,#14b8a6)`,color:"#fff",
                     fontWeight:900,fontSize:20,cursor:"pointer",
@@ -6452,7 +6470,7 @@ export default function CyberChessPage(){
                 <Btn size="lg" variant="secondary" onClick={()=>{
                   const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
                   const capped=(chessy.owned.master_ai||isPro)?targetIdx:Math.min(targetIdx,4);
-                  sAiI(capped);sHotseat(false);sRivalMode(false);
+                  sAiI(capped);leaveAllModes();
                   setTimeout(()=>newG(),50);
                 }}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -6460,7 +6478,7 @@ export default function CyberChessPage(){
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat}</span>
                   </div>
                 </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
+                <Btn size="lg" variant="secondary" onClick={()=>{leaveAllModes();sHotseat(true);setTimeout(()=>newG(),50)}}
                   style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
                     border:"1px solid #bfdbfe",color:CC.info}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -6720,8 +6738,7 @@ export default function CyberChessPage(){
                   {/* P2P — play with friend online via WebRTC */}
                   <button onClick={()=>{
                     const room=genRoomId();const myColor:ChessColor="w";
-                    // тот же набор, что и при входе по ссылке: все четыре конфликтующих режима
-                    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
+                    leaveAllModes();sP2pMode(true);sP2pRoomId(room);
                     p2p.host(room);
                     sPCol(myColor);sFlip(false);
                     const url=typeof window!=="undefined"?`${window.location.origin}/cyberchess?room=${room}&color=${myColor}`:`/cyberchess?room=${room}&color=${myColor}`;
@@ -7158,7 +7175,7 @@ export default function CyberChessPage(){
                       const src:GhostSourceGame={id:g.id,date:g.date,moves:g.moves,playerColor:g.playerColor as "w"|"b",result:g.result,rating:g.rating,aiLevel:g.aiLevel,opening:g.opening};
                       const cfg=makeDuelConfig(src,"rematch");
                       sGhostDuelMode(true);sGhostDuelConfig(cfg);sGhostDuelDivergePly(null);
-                      sTab("play");sSetup(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sP2pMode(false);
+                      sTab("play");sSetup(false);leaveAllModes();
                       const myCol=cfg.userPlaysAs;sPCol(myCol);sFlip(myCol==="b");
                       const ng=new Chess();setGame(ng);sBk(k=>k+1);
                       sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sOn(true);sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
@@ -12478,7 +12495,7 @@ ${question.trim()}`;
             // Start a Rival match: rating-matched AI
             const targetIdx=rivalProfile.rating<900?1:rivalProfile.rating<1300?2:rivalProfile.rating<1700?3:rivalProfile.rating<2100?4:5;
             const capped=(chessy.owned.master_ai||isPro)?targetIdx:Math.min(targetIdx,4);
-            sAiI(capped);sHotseat(false);sRivalMode(true);
+            sAiI(capped);leaveAllModes();sRivalMode(true);
             sShowRivalGreet(false);
             setTimeout(()=>newG(),60);
           }}>⚔ Играть</Btn>
@@ -12934,7 +12951,7 @@ ${question.trim()}`;
               if(!built){showToast("Армии должны иметь ровно 7 фигур по 39pt каждая","error");return}
               sManualArmyFen(built.fen);
               sVariant("asymmetric");
-              sShowArmyBuilder(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+              sShowArmyBuilder(false);leaveAllModes();sTab("play");
               setTimeout(()=>newG(),50);
               showToast(`⚔ Партия запущена с твоей асимметрией`,"success");
             }}>▶ Запустить с этими армиями</Btn>
@@ -13064,7 +13081,7 @@ ${question.trim()}`;
           <Btn variant="secondary" size="md" onClick={()=>{sShowVariants(false);setTimeout(()=>sShowVariantStats(true),100)}}>📊 Статы</Btn>
           <Btn variant="secondary" size="md" full onClick={()=>sShowVariants(false)}>Закрыть</Btn>
           <Btn variant="primary" size="md" full onClick={()=>{
-            sShowVariants(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+            sShowVariants(false);leaveAllModes();sTab("play");
             if(variant==="asymmetric")sManualArmyFen("");
             setTimeout(()=>newG(),50);
           }}>▶ Сыграть</Btn>
@@ -13098,7 +13115,7 @@ ${question.trim()}`;
                 }}>🎲 Выбрать режим</Btn>
                 <Btn variant="secondary" size="md" onClick={()=>{
                   const r=randomVariant();
-                  sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+                  sVariant(r);leaveAllModes();sTab("play");
                   if(r==="asymmetric")sManualArmyFen("");
                   sShowVariantStats(false);
                   setTimeout(()=>newG(),50);
@@ -13281,7 +13298,7 @@ ${question.trim()}`;
           {GHOSTS.map(g=>{
             const isActive=ghostMode&&activeGhost?.id===g.id;
             return <button key={g.id} onClick={()=>{
-              sActiveGhost(g);sGhostMode(true);sShowGhost(false);sTab("play");sHotseat(false);sRivalMode(false);sCloneMode(false);
+              leaveAllModes();sActiveGhost(g);sGhostMode(true);sShowGhost(false);sTab("play");
               const lvl=(chessy.owned.master_ai||isPro)?g.aiLevel:Math.min(4,g.aiLevel);
               sAiI(lvl);
               setTimeout(()=>newG(),50);
@@ -13394,7 +13411,7 @@ ${question.trim()}`;
               </div>
               <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3],flexWrap:"wrap"}}>
                 <Btn variant="primary" size="sm" onClick={()=>{
-                  sActiveCloneId(i);sCloneMode(true);sShowCloner(false);sTab("play");sHotseat(false);sRivalMode(false);
+                  leaveAllModes();sActiveCloneId(i);sCloneMode(true);sShowCloner(false);sTab("play");
                   // Set AI level to clone's rating-matched level
                   const lvl=(chessy.owned.master_ai||isPro)?cl.aiLevel:Math.min(4,cl.aiLevel);
                   sAiI(lvl);
@@ -15177,8 +15194,8 @@ ${question.trim()}`;
     <CommandPalette open={palOpen} onClose={()=>sPalOpen(false)} commands={(()=>{
       const cmds:PaletteCommand[]=[
         // ── PLAY ──
-        {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Quick start с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
-        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Quick start с текущими настройками",       hotkey:"N", run:()=>{leaveAllModes();sTab("play");newG()}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);leaveAllModes();sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-hotseat", icon:"👥", group:"Play", label:"Vs Человек (Hotseat)", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},

@@ -161,15 +161,21 @@ qsocialRouter.get("/health", (_req: Request, res: Response) => {
 qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
   try {
     if (isQSocialDbReady()) {
+      // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+      // идентификатору. Иначе лента поедет вслед за схемой: колонку добавили
+      // обновлением базы, и она уехала наружу без единой правки кода.
       const { rows } = await pool.query(
-        `SELECT * FROM "QSocialPost" WHERE "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
       );
-      return res.json({ posts: rows });
+      return res.json({ posts: rows.map(publicPost) });
     }
     const posts = Array.from(memPosts.values())
       .filter((p) => p.isPublic)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((p) => publicPost(p as unknown as Record<string, unknown>));
     return res.json({ posts });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
@@ -178,17 +184,52 @@ qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qsocial/posts/:id ──────────────────────────────────────────────
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const POST_TYPES = ["text", "image", "video"];
+const MAX_MEDIA_URL_LEN = 2000;
+const MAX_POST_TAGS = 20;
+const MAX_POST_TAG_LEN = 40;
+
+/** Поля поста, которые допустимо отдавать наружу. */
+const PUBLIC_POST_FIELDS = [
+  "id", "userId", "content", "mediaUrl", "type", "likesCount", "commentsCount",
+  "isPublic", "tags", "createdAt",
+] as const;
+
+function publicPost(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_POST_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qsocialRouter.get("/posts/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  // Пост читает кто угодно, поэтому автора определяем мягко: он и только он
+  // вправе открыть собственный НЕпубличный пост.
+  const auth = verifyBearerOptional(req);
   try {
     if (isQSocialDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QSocialPost" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ post: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      // Лента отдаёт только `isPublic = TRUE`, а выдача по идентификатору не
+      // проверяла флаг вовсе — ни здесь, ни на пути через память. То есть автор
+      // прятал пост из ленты, а по прямой ссылке его читал любой. Отвечаем 404,
+      // а не 403: 403 подтвердил бы, что пост существует.
+      if (!row || (row.isPublic !== true && auth?.sub !== row.userId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ post: publicPost(row) });
     }
     const post = memPosts.get(id);
-    if (!post) return res.status(404).json({ error: "not_found" });
-    return res.json({ post });
+    if (!post || (post.isPublic !== true && auth?.sub !== post.userId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    return res.json({ post: publicPost(post as unknown as Record<string, unknown>) });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -213,6 +254,31 @@ qsocialRouter.post("/posts", async (req: Request, res: Response) => {
   }
   if (content.length > 2000) {
     return res.status(400).json({ error: "content exceeds 2000 chars" });
+  }
+
+  // Тип поста уходил в базу любой строкой, хотя интерфейс знает три вида и
+  // ветвится по ним: неизвестный тип показывался как обычный текст, а данные
+  // при этом хранили что-то другое.
+  if (type !== undefined && type !== null && !POST_TYPES.includes(String(type))) {
+    return res.status(400).json({ error: "unknown type", allowed: POST_TYPES });
+  }
+
+  // `mediaUrl` уходит в разметку (`<img src={...}>`), а проверки схемы не было.
+  if (mediaUrl !== undefined && mediaUrl !== null && String(mediaUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(mediaUrl)) || String(mediaUrl).length > MAX_MEDIA_URL_LEN) {
+      return res.status(400).json({ error: "mediaUrl must be an absolute http(s) URL" });
+    }
+  }
+
+  // Метки: короткие строки и разумное количество, а не список любой длины.
+  if (tags !== undefined && tags !== null) {
+    if (!Array.isArray(tags)) return res.status(400).json({ error: "tags must be an array of strings" });
+    if (tags.length > MAX_POST_TAGS) {
+      return res.status(400).json({ error: `tags must not exceed ${MAX_POST_TAGS} items` });
+    }
+    if (tags.some((t) => typeof t === "string" && t.length > MAX_POST_TAG_LEN)) {
+      return res.status(400).json({ error: `tag must not exceed ${MAX_POST_TAG_LEN} chars` });
+    }
   }
 
   const post: QPost = {
@@ -452,15 +518,18 @@ qsocialRouter.get("/users/:userId/posts", async (req: Request, res: Response) =>
   try {
     if (isQSocialDbReady()) {
       const { rows } = await pool.query(
-        `SELECT * FROM "QSocialPost" WHERE "userId"=$1 AND "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
+        `SELECT "id","userId","content","mediaUrl","type","likesCount","commentsCount",
+                "isPublic","tags","createdAt"
+           FROM "QSocialPost" WHERE "userId"=$1 AND "isPublic"=TRUE ORDER BY "createdAt" DESC LIMIT 50`,
         [userId],
       );
-      return res.json({ posts: rows });
+      return res.json({ posts: rows.map(publicPost) });
     }
     const posts = Array.from(memPosts.values())
       .filter((p) => p.userId === userId && p.isPublic)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((p) => publicPost(p as unknown as Record<string, unknown>));
     return res.json({ posts });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });

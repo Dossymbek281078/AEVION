@@ -1,0 +1,171 @@
+import { describe, test, expect, beforeEach, vi } from "vitest";
+import crypto from "crypto";
+import request from "supertest";
+import express from "express";
+
+/**
+ * Пароль на документ хранился голым SHA-256 без соли. Два следствия:
+ * одинаковые пароли давали одинаковый хеш (радужные таблицы), а перебор по
+ * утёкшей базе упирался только в скорость железа — SHA-256 считается
+ * миллиардами в секунду.
+ *
+ * Теперь scrypt с солью. Старый формат обязан продолжать открываться — иначе
+ * правка «безопасности» ломает уже созданные документы, — и молча
+ * переписываться на новый при первом верном вводе.
+ */
+
+function signJwt(payload: Record<string, unknown>, secret = "dev-auth-secret"): string {
+  const b64 = (s: string) =>
+    Buffer.from(s).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const header = b64(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const body = b64(JSON.stringify({ ...payload, iat: Math.floor(Date.now() / 1000) }));
+  const sig = crypto
+    .createHmac("sha256", secret)
+    .update(`${header}.${body}`)
+    .digest("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+  return `${header}.${body}.${sig}`;
+}
+
+const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
+vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: mockQuery }) }));
+
+// eslint-disable-next-line import/first
+import { qcontractRouter } from "../src/routes/qcontract";
+
+function makeApp() {
+  const app = express();
+  app.use(express.json());
+  app.use("/api/qcontract", qcontractRouter);
+  return app;
+}
+
+const AUTH = `Bearer ${signJwt({ sub: "u1", email: "u1@test.aev", role: "USER" })}`;
+const TOKEN = "tok_test_document";
+
+/** Документ, который вернёт SELECT в обработчике просмотра. */
+function docRow(passwordHash: string) {
+  return {
+    id: "doc-1",
+    title: "Договор",
+    content: "Текст",
+    content_type: "text",
+    password_hash: passwordHash,
+    max_views: null,
+    view_count: 0,
+    expires_at: null,
+    revoked_at: null,
+    require_signature: false,
+    qright_id: null,
+  };
+}
+
+/** Ответы пула: SELECT документа, затем атомарное списание, затем аудит. */
+function wirePool(row: ReturnType<typeof docRow>) {
+  mockQuery.mockReset();
+  mockQuery.mockImplementation(async (sql: string) => {
+    const q = String(sql);
+    if (q.includes("SELECT") && q.includes("password_hash")) return { rows: [row], rowCount: 1 };
+    if (q.startsWith("UPDATE qcontract_documents")) return { rows: [{ view_count: 1 }], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
+  });
+}
+
+function open(password?: string) {
+  return request(makeApp())
+    .post(`/api/qcontract/view/${TOKEN}`)
+    .send(password === undefined ? {} : { password });
+}
+
+const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+describe("QContract: пароль документа", () => {
+  beforeEach(() => mockQuery.mockReset());
+
+  test("новый документ получает солёный хеш, а не SHA-256", async () => {
+    mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+    const res = await request(makeApp())
+      .post("/api/qcontract/documents")
+      .set("Authorization", AUTH)
+      .send({ title: "Договор", content: "Текст", contentType: "text", password: "secret" });
+
+    expect(res.status).toBe(201);
+    const insert = mockQuery.mock.calls.find((c) => String(c[0]).includes("INSERT INTO qcontract_documents"));
+    const stored = String(insert?.[1]?.[6]);
+    expect(stored.startsWith("scrypt$")).toBe(true);
+    expect(stored).not.toBe(sha256("secret"));
+  });
+
+  test("два документа с ОДНИМ паролем дают разные хеши", async () => {
+    const hashes: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      mockQuery.mockReset();
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+      await request(makeApp())
+        .post("/api/qcontract/documents")
+        .set("Authorization", AUTH)
+        .send({ title: "T", content: "C", contentType: "text", password: "one-and-the-same" });
+      const insert = mockQuery.mock.calls.find((c) => String(c[0]).includes("INSERT INTO qcontract_documents"));
+      hashes.push(String(insert?.[1]?.[6]));
+    }
+    expect(hashes[0]).not.toBe(hashes[1]); // соль работает
+  });
+
+  test("верный пароль открывает документ", async () => {
+    // хеш берём тем же путём, что и продукт: создаём документ и читаем вставку
+    mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+    await request(makeApp())
+      .post("/api/qcontract/documents")
+      .set("Authorization", AUTH)
+      .send({ title: "T", content: "C", contentType: "text", password: "letmein" });
+    const insert = mockQuery.mock.calls.find((c) => String(c[0]).includes("INSERT INTO qcontract_documents"));
+    const fresh = String(insert?.[1]?.[6]);
+
+    wirePool(docRow(fresh));
+    expect((await open("letmein")).status).toBe(200);
+  });
+
+  test("неверный пароль не открывает", async () => {
+    mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+    await request(makeApp())
+      .post("/api/qcontract/documents")
+      .set("Authorization", AUTH)
+      .send({ title: "T", content: "C", contentType: "text", password: "letmein" });
+    const insert = mockQuery.mock.calls.find((c) => String(c[0]).includes("INSERT INTO qcontract_documents"));
+    const fresh = String(insert?.[1]?.[6]);
+
+    wirePool(docRow(fresh));
+    expect((await open("wrong")).status).toBe(403);
+  });
+
+  test("документ со СТАРЫМ хешем продолжает открываться", async () => {
+    wirePool(docRow(sha256("old-secret")));
+    expect((await open("old-secret")).status).toBe(200);
+  });
+
+  test("старый хеш молча переписывается на новый при верном вводе", async () => {
+    wirePool(docRow(sha256("old-secret")));
+    await open("old-secret");
+    await new Promise((r) => setTimeout(r, 150)); // перенос идёт вдогонку ответу
+
+    const upgrade = mockQuery.mock.calls.find(
+      (c) => String(c[0]).includes("SET password_hash") && String(c[1]?.[0]).startsWith("scrypt$"),
+    );
+    expect(upgrade, "перенос на scrypt не выполнен").toBeTruthy();
+  });
+
+  test("неверный пароль к старому хешу не открывает и не переписывает", async () => {
+    wirePool(docRow(sha256("old-secret")));
+    expect((await open("nope")).status).toBe(403);
+    await new Promise((r) => setTimeout(r, 100));
+    const upgrade = mockQuery.mock.calls.find((c) => String(c[0]).includes("SET password_hash"));
+    expect(upgrade).toBeFalsy();
+  });
+
+  test("битый scrypt-хеш не открывает документ", async () => {
+    wirePool(docRow("scrypt$оборванный"));
+    expect((await open("anything")).status).toBe(403);
+  });
+});

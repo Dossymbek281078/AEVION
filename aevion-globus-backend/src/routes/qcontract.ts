@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -73,8 +74,52 @@ async function ensureTables(): Promise<void> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function hashPassword(pw: string): string {
-  return createHash("sha256").update(pw).digest("hex");
+const scryptAsync = promisify(scrypt) as (
+  pw: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+) => Promise<Buffer>;
+
+/**
+ * Пароль на документ — то, чем модуль отличается от аналогов, и хранился он
+ * голым SHA-256 без соли: одинаковые пароли давали одинаковые хеши, а перебор
+ * по утёкшей базе упирался только в скорость железа.
+ *
+ * Теперь scrypt с солью. Старый формат (64 hex-символа) продолжает
+ * проверяться, чтобы уже созданные документы не перестали открываться, и
+ * молча переписывается на новый при первом же верном вводе — владельцу ничего
+ * делать не надо.
+ */
+const SCRYPT_PREFIX = "scrypt$";
+const SCRYPT_KEYLEN = 32;
+
+async function hashPassword(pw: string): Promise<string> {
+  const salt = randomBytes(16);
+  const key = await scryptAsync(pw, salt, SCRYPT_KEYLEN);
+  return `${SCRYPT_PREFIX}${salt.toString("hex")}$${key.toString("hex")}`;
+}
+
+/** Сравнение постоянного времени: длины могут не совпасть, это не ошибка. */
+function safeEqualHex(a: string, b: string): boolean {
+  const ba = Buffer.from(a, "hex");
+  const bb = Buffer.from(b, "hex");
+  if (ba.length === 0 || ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+async function verifyPassword(
+  pw: string,
+  stored: string,
+): Promise<{ ok: boolean; needsUpgrade: boolean }> {
+  if (stored.startsWith(SCRYPT_PREFIX)) {
+    const [, saltHex, keyHex] = stored.split("$");
+    if (!saltHex || !keyHex) return { ok: false, needsUpgrade: false };
+    const key = await scryptAsync(pw, Buffer.from(saltHex, "hex"), SCRYPT_KEYLEN);
+    return { ok: safeEqualHex(key.toString("hex"), keyHex), needsUpgrade: false };
+  }
+  // Наследие: голый SHA-256. Проверяем, но помечаем на перенос.
+  const legacy = createHash("sha256").update(pw).digest("hex");
+  return { ok: safeEqualHex(legacy, stored), needsUpgrade: true };
 }
 
 function isExpired(row: {
@@ -354,7 +399,7 @@ qcontractRouter.post("/documents", async (req, res) => {
 
   const id = randomUUID();
   const accessToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
-  const passwordHash = password ? hashPassword(password) : null;
+  const passwordHash = password ? await hashPassword(password) : null;
   const pool = getPool();
 
   await pool.query(
@@ -605,7 +650,17 @@ qcontractRouter.post("/view/:token", async (req, res) => {
 
   if (doc.password_hash) {
     if (!password) return res.status(401).json({ error: "password_required", title: doc.title });
-    if (hashPassword(password) !== doc.password_hash) return res.status(403).json({ error: "wrong_password" });
+    const check = await verifyPassword(password, doc.password_hash);
+    if (!check.ok) return res.status(403).json({ error: "wrong_password" });
+    if (check.needsUpgrade) {
+      // Перенос со старого формата — молча и не задерживая ответ. Не удался —
+      // документ продолжит открываться по старому хешу, ничего не ломается.
+      void hashPassword(password)
+        .then((fresh) =>
+          pool.query(`UPDATE qcontract_documents SET password_hash = $1 WHERE id = $2`, [fresh, doc.id]),
+        )
+        .catch((err) => capture(err));
+    }
   }
 
   if (doc.require_signature && !viewerEmail?.trim()) {

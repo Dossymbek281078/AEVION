@@ -46,6 +46,15 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   __resetDevHubStore();
   fetchMock = vi.fn();
+  // Реализация ПО УМОЛЧАНИЮ: незаглушённый вызов обязан назвать себя.
+  // Без неё vi.fn() отдаёт undefined, маршрут разбирает пустое тело и падает
+  // как «SyntaxError: "undefined" is not valid JSON» → HTTP 500 → тест видит
+  // только «expected 500 to be 200». Диагноз 28.07: именно так выглядел
+  // нестабильный флак этого файла, и причина не читалась из падения.
+  fetchMock.mockImplementation((...args: unknown[]) => {
+    const url = typeof args[0] === "string" ? args[0] : String((args[0] as { url?: string })?.url ?? args[0]);
+    throw new Error(`НЕЗАГЛУШЁННЫЙ fetch в тесте: ${url}`);
+  });
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   mockDeployViaWrangler.mockReset();
 });

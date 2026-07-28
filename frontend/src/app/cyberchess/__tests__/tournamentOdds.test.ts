@@ -6,9 +6,26 @@ import { eloP, rollBotMatch, createTournament, finalPlace } from "../tournament"
 
 const N = 60_000;
 
-function distribution(eloA: number, eloB: number) {
+/* Детерминированный генератор вместо Math.random.
+   На Math.random проверка «перекоса нет» падала примерно раз в 84 прогона просто
+   по случайности: SD разницы долей на 60 000 бросков 0.00398, а порог 0.01 — это
+   2.51 сигмы. Один раз она и упала в полном прогоне, пройдя 12/12 в трёх повторах.
+   Различающая сила от зерна не страдает: перекос, ради которого тест писался,
+   составлял 4.9 п.п. — это 12 сигм. */
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function distribution(eloA: number, eloB: number, seed = 20260728) {
+  const rng = mulberry32(seed);
   const c = { a: 0, b: 0, draw: 0 };
-  for (let i = 0; i < N; i++) c[rollBotMatch(eloA, eloB)]++;
+  for (let i = 0; i < N; i++) c[rollBotMatch(eloA, eloB, rng)]++;
   return { a: c.a / N, b: c.b / N, draw: c.draw / N };
 }
 
@@ -30,8 +47,12 @@ describe("rollBotMatch", () => {
      rating with the favourite always in slot "a", so the favourite was the one
      being shortchanged and upsets came up more often than the ratings imply. */
   it("does not favour either side when the ratings are equal", () => {
-    const d = distribution(1500, 1500);
-    expect(Math.abs(d.a - d.b)).toBeLessThan(0.01);
+    // несколько зёрен вместо одного: одно зерно — это одна выборка, и удачное
+    // зерно скрыло бы небольшой перекос ровно так же, как раньше его скрывал случай
+    for (const seed of [20260728, 7, 424242, 999983]) {
+      const d = distribution(1500, 1500, seed);
+      expect(Math.abs(d.a - d.b)).toBeLessThan(0.01);
+    }
   });
 
   it("keeps the draw rate near 5% in close matches", () => {

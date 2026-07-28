@@ -147,10 +147,21 @@ export function eloP(eloA: number, eloB: number): number {
 
 // Roll a deterministic-ish result for a bot vs bot match using Elo.
 // 5% draws built in. Returns "a" or "b" or "draw".
-export function rollBotMatch(eloA: number, eloB: number): "a" | "b" | "draw" {
+/* Генератор случайных чисел параметром — так же, как у pickHumanMove в humanBot.
+   Нужен тесту: он оценивает распределение на 60 000 бросков, и на Math.random
+   проверка «перекоса нет» стоит на 2.51 сигмы, то есть падает примерно раз в 84
+   прогона просто по случайности (посчитано, не прикинуто: SD разницы 0.00398 при
+   пороге 0.01). Тест, который иногда краснеет без причины, хуже отсутствующего:
+   он приучает не верить красному. С зерном проверка становится детерминированной
+   и не теряет различающей силы — прежний перекос был 4.9 п.п., это 12 сигм. */
+export function rollBotMatch(
+  eloA: number,
+  eloB: number,
+  rng: () => number = Math.random,
+): "a" | "b" | "draw" {
   const p = eloP(eloA, eloB);
   const drawZone = 0.05;
-  const r = Math.random();
+  const r = rng();
   // Полоса ничьих вокруг САМОГО p, а не вокруг нуля. Раньше условие было
   // `r < drawZone`, то есть все 5% вырезались из диапазона [0, p) — доли "a".
   // Замер на 200k бросков при равных рейтингах: a 45.1%, b 50.0%, перекос 4.9 п.п.

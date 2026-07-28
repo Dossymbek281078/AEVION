@@ -851,3 +851,47 @@ i18nRouter.post("/translate", translateLimit, async (req, res) => {
 **Дополнительно стоит обсудить (это уже не дырка, а решение):** пускать платный
 Haiku только для запросов со своего домена по `Origin`/`Referer`, либо вообще
 отключать платный фолбэк для анонимных вызовов и оставлять его для внутренних.
+
+---
+
+## ⚠️ BROADCAST 2026-07-28 — QMedia: три ИИ-ручки без лимита берут ПЛАТНОГО провайдера
+
+Зона `qmedia` занята другой сессией — кода не касался.
+
+**Суть.** В `qmedia.ts` три ручки (`/ai/generate-lyrics` стр. 277,
+`/ai/generate-title` стр. 294, `/ai/describe-video` стр. 333) выбирают провайдера
+так:
+
+```ts
+const provider = getProviders().find(p => p.configured);
+```
+
+Первым в списке провайдеров идёт **anthropic**, и он `free: false`. В проде ключ
+Anthropic задан, значит `find(configured)` возвращает именно его — платного.
+Авторизации и лимитера на этих ручках нет (middleware в файле только создаёт
+таблицы). Итог: любой человек из интернета генерирует тексты за наш счёт,
+без потолка.
+
+**Патч — ровно тот, что я применил у себя в `qjobs.ts` (коммит 36bd8e01):**
+
+```ts
+// импорт
+import { callProvider, getProviders, getFreeProviders } from "../services/qcoreai/providers";
+
+// выбор провайдера
+const provider =
+  getFreeProviders().find((p) => p.configured) ??
+  getProviders().find((p) => p.configured);
+
+// и лимитер на каждую ИИ-ручку
+const aiLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qmedia:ai", message: "rate_limited" });
+qmediaRouter.post("/ai/generate-lyrics", aiLimiter, async (req, res) => {
+```
+
+`getFreeProviders` уже есть и используется в `i18n.ts`; `rateLimit` — в десятках
+ручек. Ничего нового заводить не нужно.
+
+**Проверено, что это не системно:** шаблон `find(p => p.configured)` встречается
+только в `qmedia` (3 раза) и в `qjobs` (1 раз, уже исправлено). Остальные два
+десятка мест используют `find(p => p.id === providerId)` — то есть провайдер
+выбран осознанно, и претензий к ним нет.

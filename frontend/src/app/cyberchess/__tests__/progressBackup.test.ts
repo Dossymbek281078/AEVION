@@ -141,3 +141,37 @@ describe("перечисление наших ключей", () => {
     expect(ourKeys(s)).toContain("aevion_совершенно_новый");
   });
 });
+
+describe("оба префикса наших ключей", () => {
+  it("ключи cc_ тоже попадают в копию — под ними лежит репертуар и калибровка", () => {
+    // изначально брался только префикс aevion, и 28 ключей cc_ молча не сохранялись,
+    // хотя интерфейс обещал сохранить в том числе дебютный репертуар
+    const s = memStore({
+      aevion_chessy_v1: "{}",
+      cc_opening_repertoire_v1: "[]",
+      cc_fide_estimate_v1: "1750",
+      cc_login_streak_v1: "{}",
+      posторонний: "не наш",
+    });
+    const keys = Object.keys(collectProgress(s, NOW).keys).sort();
+    expect(keys).toEqual(["aevion_chessy_v1", "cc_fide_estimate_v1", "cc_login_streak_v1", "cc_opening_repertoire_v1"]);
+  });
+
+  it("replace чистит и cc_, иначе «сбросить ВСЁ» оставляет половину", () => {
+    const s = memStore({ cc_старое: "1", aevion_старое: "2" });
+    applyProgress(s, { v: 1, app: "cyberchess", exportedAt: NOW, keys: { aevion_новое: "3" } }, "replace");
+    expect(dump(s)).toEqual({ aevion_новое: "3" });
+  });
+
+  it("чужой ключ по-прежнему не трогается", () => {
+    const s = memStore({ other_app: "секрет", cc_наше: "1" });
+    applyProgress(s, { v: 1, app: "cyberchess", exportedAt: NOW, keys: {} }, "replace");
+    expect(s.getItem("other_app")).toBe("секрет");
+    expect(s.getItem("cc_наше")).toBeNull();
+  });
+
+  it("перечисление ключей видит оба префикса", () => {
+    const s = memStore({ aevion_a: "1", cc_b: "2", чужое: "3" });
+    expect(ourKeys(s).sort()).toEqual(["aevion_a", "cc_b"]);
+  });
+});

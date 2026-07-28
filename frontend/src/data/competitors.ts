@@ -694,6 +694,23 @@ export const COMPARISONS: ModuleComparison[] = [
 ];
 
 /**
+ * Путь к самому модулю. У большинства он совпадает с id, у двух — нет:
+ * IP Bureau живёт на /bureau, QBuild на /build.
+ *
+ * Карта отдельная, а не поле в каждой записи: 35 из 37 совпадений писать
+ * руками — значит рано или поздно опечататься в одном из них. Существование
+ * маршрута проверяется тестом по файловой системе.
+ */
+const HREF_OVERRIDES: Record<string, string> = {
+  "aevion-ip-bureau": "bureau",
+  qbuild: "build",
+};
+
+export function moduleHref(id: string): string {
+  return `/${HREF_OVERRIDES[id] ?? id}`;
+}
+
+/**
  * Аналоги, которые не являются продуктами: живые специалисты, офлайн-практики
  * и «просто делать это руками».
  *

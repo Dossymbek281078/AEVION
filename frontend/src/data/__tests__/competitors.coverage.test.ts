@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { COMPARISONS, NOT_COMPARED_NOTE } from "../competitors";
+import { COMPARISONS, moduleHref, NOT_COMPARED_NOTE } from "../competitors";
 
 /**
  * Новый модуль в реестре не должен молча выпадать из сравнения.
@@ -48,5 +48,17 @@ describe("сравнением покрыт весь реестр модулей
       silent,
       "Модуль есть в реестре, но ни сравнения, ни причины пропуска:\n" + silent.join(", "),
     ).toEqual([]);
+  });
+
+  it("ссылка «Открыть модуль» ведёт на существующий маршрут", () => {
+    // У 35 из 37 модулей путь совпадает с id, у двух нет (/bureau, /build).
+    // Ровно такие исключения и ломаются молча: ссылка ведёт на 404, а
+    // выглядит страница при этом целой.
+    const appDir = resolve(__dirname, "../../app");
+    const broken = COMPARISONS.filter(
+      (c) => !existsSync(resolve(appDir, moduleHref(c.id).slice(1), "page.tsx")),
+    ).map((c) => `${c.id} → ${moduleHref(c.id)}`);
+
+    expect(broken, "Ссылка ведёт на несуществующую страницу:\n" + broken.join("\n")).toEqual([]);
   });
 });

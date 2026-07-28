@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   COMPARISONS,
   NON_PRODUCT_RIVALS,
+  moduleHref,
   NOT_COMPARED_NOTE,
   type ModuleComparison,
 } from "@/data/competitors";
@@ -115,8 +116,15 @@ function Card({ c }: { c: ModuleComparison }) {
         </div>
       </div>
 
-      <div style={styles.basis} title={BASIS_NOTE[c.basis]}>
-        основание: {BASIS_LABEL[c.basis]}
+      <div style={styles.cardFoot}>
+        <span style={styles.basis} title={BASIS_NOTE[c.basis]}>
+          основание: {BASIS_LABEL[c.basis]}
+        </span>
+        {/* Без этой ссылки страница убеждает и упирается в тупик: человек
+            дочитал, согласился — и должен искать модуль сам. */}
+        <Link href={moduleHref(c.id)} style={styles.openLink}>
+          Открыть {c.name} →
+        </Link>
       </div>
     </article>
   );
@@ -305,14 +313,18 @@ const styles: Record<string, React.CSSProperties> = {
   list: { margin: 0, paddingLeft: 18 },
   item: { color: INK, fontSize: 14, lineHeight: 1.6, marginBottom: 6 },
 
-  basis: {
+  cardFoot: {
     marginTop: 12,
     paddingTop: 10,
     borderTop: `1px solid ${RULE}`,
-    fontFamily: "monospace",
-    fontSize: 11.5,
-    color: MUTED,
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 8,
   },
+  basis: { fontFamily: "monospace", fontSize: 11.5, color: MUTED },
+  openLink: { color: GOLD, fontWeight: 700, fontSize: 14, textDecoration: "none" },
 
   summary: { fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, cursor: "pointer" },
   rivalIndex: { listStyle: "none", margin: "12px 0 0", padding: 0 },

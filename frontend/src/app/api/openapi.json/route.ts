@@ -76,8 +76,8 @@ const SPEC = {
         properties: {
           id: { type: "string", example: "pl_q9w2k47abc" },
           amount: {
-            type: "integer",
-            description: "Minor units of the chosen currency.",
+            type: "number",
+            description: "Major units of the chosen currency (99.00 = ninety-nine dollars). Up to 2 decimal places.",
             example: 9900,
           },
           currency: { $ref: "#/components/schemas/Currency" },
@@ -95,7 +95,7 @@ const SPEC = {
         type: "object",
         required: ["amount", "currency", "title"],
         properties: {
-          amount: { type: "integer", minimum: 1, example: 9900 },
+          amount: { type: "number", minimum: 0.01, example: 99.0 },
           currency: { $ref: "#/components/schemas/Currency" },
           title: { type: "string" },
           description: { type: "string" },
@@ -108,7 +108,7 @@ const SPEC = {
         required: ["id", "amount", "currency", "url", "client_secret", "status", "created"],
         properties: {
           id: { type: "string", example: "co_a3f7m1xyz" },
-          amount: { type: "integer" },
+          amount: { type: "number" },
           currency: { $ref: "#/components/schemas/Currency" },
           settlement: { type: "string" },
           methods: { type: "array", items: { type: "string" } },
@@ -123,7 +123,7 @@ const SPEC = {
         type: "object",
         required: ["amount", "currency"],
         properties: {
-          amount: { type: "integer", minimum: 1 },
+          amount: { type: "number", minimum: 0.01 },
           currency: { $ref: "#/components/schemas/Currency" },
           settlement: { type: "string", default: "aevion-bank" },
           methods: { type: "array", items: { type: "string" } },
@@ -146,7 +146,7 @@ const SPEC = {
           id: { type: "string", example: "sub_abc123" },
           customer: { type: "string" },
           plan_name: { type: "string" },
-          amount: { type: "integer" },
+          amount: { type: "number" },
           currency: { $ref: "#/components/schemas/Currency" },
           interval: { $ref: "#/components/schemas/Interval" },
           trial_days: { type: "integer", default: 0 },
@@ -162,7 +162,7 @@ const SPEC = {
         properties: {
           customer: { type: "string" },
           plan_name: { type: "string" },
-          amount: { type: "integer", minimum: 1 },
+          amount: { type: "number", minimum: 0.01 },
           currency: { $ref: "#/components/schemas/Currency" },
           interval: { $ref: "#/components/schemas/Interval" },
           trial_days: { type: "integer", minimum: 0 },
@@ -201,7 +201,7 @@ const SPEC = {
         required: ["id", "amount", "currency", "status", "scheduled_for"],
         properties: {
           id: { type: "string" },
-          amount: { type: "integer" },
+          amount: { type: "number" },
           currency: { $ref: "#/components/schemas/Currency" },
           status: {
             type: "string",

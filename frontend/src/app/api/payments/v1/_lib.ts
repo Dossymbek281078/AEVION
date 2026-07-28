@@ -74,7 +74,7 @@ type Store = {
   subscriptions: Map<string, ApiSubscription>;
   webhooks: Map<string, ApiWebhook>;
   settlements: Map<string, ApiSettlement>;
-  idempotency: Map<string, { at: number; body: string }>;
+  idempotency: Map<string, { at: number; body: string | null; fingerprint: string; done: boolean }>;
 };
 
 const globalAny = globalThis as unknown as { __aevionPayStore?: Store };
@@ -191,6 +191,105 @@ export function signHmac(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
+/**
+ * Верхняя граница суммы — миллиард в валюте счёта. Не «сколько бывает», а
+ * «дальше начинается мусор».
+ */
+export const MAX_AMOUNT = 1_000_000_000;
+
+/**
+ * Сумма в КРУПНЫХ единицах валюты (99.00 — это девяносто девять долларов).
+ *
+ * Единицы выяснены по факту, а не по спеке: форма создания ссылки шлёт
+ * `parseFloat` от поля со значением по умолчанию «99.00», страница оплаты и
+ * письмо-чек печатают число как есть, а пересчёт в дашборде делит тенге на 470.
+ * То есть весь продукт считает в крупных единицах. Опубликованная схема
+ * `/api/openapi.json` при этом писала «Minor units» и пример 9900 — врала она,
+ * и приведена в соответствие тем же коммитом.
+ *
+ * Отбиваем то, что суммой быть не может: `JSON.parse('{"amount":1e400}')` даёт
+ * **Infinity**, а `Infinity > 0` — истина, то есть тело без единого нечислового
+ * символа проходило старую проверку и создавало ссылку на оплату с бесконечной
+ * суммой (после чего возврат «в пределах остатка» разрешал любую сумму).
+ * Больше двух знаков после запятой — тоже мусор: трети цента не существует.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+export function parseAmount(value: unknown): number | string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "amount must be a finite number.";
+  }
+  if (value <= 0) return "amount must be a positive number.";
+  if (value > MAX_AMOUNT) return `amount must not exceed ${MAX_AMOUNT}.`;
+  // Math.round против плавающей точки: 49.5 * 100 может дать 4949.999999999999
+  if (Math.abs(Math.round(value * 100) - value * 100) > 1e-6) {
+    return "amount must have at most 2 decimal places.";
+  }
+  return value;
+}
+
+/**
+ * `?limit=` из строки запроса: целое от 1 до `max`, иначе — причина отказа.
+ *
+ * Было `Math.min(100, Number(searchParams.get("limit") ?? 25))`. На `?limit=abc`
+ * это даёт **NaN**, а `array.slice(0, NaN)` возвращает пустой массив: ответ
+ * приходил `{count: 0, has_more: false}` — то есть «у вас нет данных» вместо
+ * «вы прислали мусор». Разработчик, интегрирующий API, читает это как пустой
+ * аккаунт. `?limit=-5` был не лучше: `slice(0, -5)` молча отрезает С КОНЦА.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+export function parseLimit(raw: string | null, def: number, max: number): number | string {
+  if (raw === null || raw === "") return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    return "limit must be a whole number.";
+  }
+  if (n < 1) return "limit must be at least 1.";
+  return Math.min(max, n);
+}
+
+/**
+ * Адрес вебхука, по которому СЕРВЕР потом сам пойдёт запросом
+ * (`_webhook_queue.ts` делает `fetch(att.webhook_url)`).
+ *
+ * Проверки `/^https?:\/\//` мало: она пропускает `http://127.0.0.1:4001/…`,
+ * `http://10.0.0.5/…`, `http://169.254.169.254/…` (метаданные облака) и
+ * `http://[::1]/…`. Это классический SSRF — чужой человек с тестовым ключом
+ * заставляет наш сервер стучаться во внутреннюю сеть и приносить ему ответ.
+ *
+ * @returns null, если адрес допустим; строку с причиной — если нет.
+ */
+export function webhookUrlError(value: unknown): string | null {
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) {
+    return "url must be an absolute http(s) URL.";
+  }
+  let host: string;
+  try {
+    host = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return "url must be a valid absolute http(s) URL.";
+  }
+  const isPrivate =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".local") ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^(fc|fd)[0-9a-f]{2}:/.test(host) ||
+    /^fe80:/.test(host);
+  if (isPrivate) {
+    return "url must point to a public host (private, loopback and link-local addresses are not allowed).";
+  }
+  return null;
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },
@@ -214,19 +313,69 @@ export function getOrigin(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
-export function checkIdempotency(req: NextRequest, body: string):
-  | { hit: true; cachedBody: string }
-  | { hit: false; cleanup: () => void } {
+/**
+ * Идемпотентность по заголовку `Idempotency-Key`.
+ *
+ * Прежняя редакция давала три разных неверных исхода, и все — тихо:
+ *
+ * 1. **Повтор не защищал от повтора.** Запись в хранилище делалась в самом
+ *    конце (`cleanup()`), поэтому два ОДНОВРЕМЕННЫХ запроса с одним ключом оба
+ *    не находили записи и оба выполняли операцию целиком. Именно от этого
+ *    заголовок и существует: сеть моргнула, клиент повторил — списать должно
+ *    один раз.
+ * 2. **Возврат и спор кэшировали ТЕЛО ЗАПРОСА, а не ответа** — вызов был
+ *    `checkIdempotency(req, raw)`, где `raw = await req.text()`. Повторный
+ *    запрос получал обратно собственное тело с кодом 200 и читал его как
+ *    созданный ресурс: вместо объекта возврата приходило
+ *    `{"link_id":"pl_x","amount":50}`.
+ * 3. **Один ключ на разные тела** молча отдавал старый ответ: повторив ключ с
+ *    суммой 500 вместо 5, клиент получал успешный ответ на пятёрку и считал,
+ *    что вернул пятьсот.
+ *
+ * Теперь ключ резервируется СРАЗУ (до работы), вместе с отпечатком тела
+ * запроса; ответ дописывается в `commit()`. Параллельный второй запрос и
+ * несовпадение отпечатка — честный 409, а не тихий неверный успех.
+ */
+export type IdempotencyOutcome =
+  | { status: "replay"; body: string }
+  | { status: "conflict"; message: string }
+  | { status: "fresh"; commit: (responseBody: string) => void };
+
+export function beginIdempotency(req: NextRequest, requestBody: string): IdempotencyOutcome {
   const key = req.headers.get("idempotency-key");
   if (!key) {
-    return { hit: false, cleanup: () => undefined };
+    // Без заголовка гарантии нет и не обещается — работаем как обычно.
+    return { status: "fresh", commit: () => undefined };
   }
+
+  const fingerprint = createHmac("sha256", "idem").update(requestBody).digest("hex");
   const prior = store.idempotency.get(key);
-  if (prior) return { hit: true, cachedBody: prior.body };
+
+  if (prior) {
+    if (prior.fingerprint !== fingerprint) {
+      return {
+        status: "conflict",
+        message:
+          "This Idempotency-Key was already used with a different request body.",
+      };
+    }
+    if (!prior.done || prior.body === null) {
+      return {
+        status: "conflict",
+        message: "A request with this Idempotency-Key is still in flight; retry shortly.",
+      };
+    }
+    return { status: "replay", body: prior.body };
+  }
+
+  // Резервируем ключ ДО работы — иначе одновременный второй запрос тоже сочтёт
+  // себя первым. Это и есть весь смысл заголовка.
+  store.idempotency.set(key, { at: Date.now(), body: null, fingerprint, done: false });
+
   return {
-    hit: false,
-    cleanup: () => {
-      store.idempotency.set(key, { at: Date.now(), body });
+    status: "fresh",
+    commit: (responseBody: string) => {
+      store.idempotency.set(key, { at: Date.now(), body: responseBody, fingerprint, done: true });
       if (store.idempotency.size > 5000) {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         for (const [k, v] of store.idempotency.entries()) {

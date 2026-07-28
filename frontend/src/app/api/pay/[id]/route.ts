@@ -65,9 +65,33 @@ export async function POST(
     last4?: string;
     payer_email?: string;
   } | null;
-  const method = body?.method ?? "card";
+  // `method` попадает и в ответ, и в ТЕЛО ПИСЬМА, поэтому не произвольная строка:
+  // берём известный способ оплаты, иначе короткое безопасное значение.
+  const ALLOWED_METHODS = ["card", "apple-pay", "google-pay", "aec-credit", "bank-transfer"];
+  const rawMethod = typeof body?.method === "string" ? body.method.trim().toLowerCase() : "";
+  const method = ALLOWED_METHODS.includes(rawMethod) ? rawMethod : "card";
+
   const last4 = body?.last4 && /^\d{4}$/.test(body.last4) ? body.last4 : undefined;
-  const email = body?.payer_email?.trim();
+
+  // Адрес получателя чека приходит извне, а письмо уходит через реальный Resend
+  // от `receipts@aevion.app`. Раньше сюда годилась любая строка — то есть ручка
+  // без ключа рассылала письма куда угодно. Теперь только правдоподобный адрес
+  // разумной длины; всё остальное — 400, а не тихий пропуск.
+  const rawEmail = typeof body?.payer_email === "string" ? body.payer_email.trim() : "";
+  if (rawEmail && (rawEmail.length > 254 || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(rawEmail))) {
+    return withCors(
+      Response.json(
+        {
+          error: {
+            type: "invalid_request_error",
+            message: "payer_email must be a valid email address.",
+          },
+        },
+        { status: 400 }
+      )
+    );
+  }
+  const email = rawEmail || undefined;
 
   link.status = "paid";
   link.paid_at = Math.floor(Date.now() / 1000);

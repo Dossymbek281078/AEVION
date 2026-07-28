@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   getOrigin,
@@ -11,7 +11,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvPush } from "../_persist";
+import { kvList, kvPush, withKeyLock } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -55,17 +55,20 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return gate.response;
 
   const raw = await req.text();
-  const idem = checkIdempotency(req, raw);
-  if (idem.hit) {
+  const idem = beginIdempotency(req, raw);
+  if (idem.status === "replay") {
     return attachRateHeaders(
       withCors(
-        new Response(idem.cachedBody, {
+        new Response(idem.body, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
         })
       ),
       gate.rateHeaders
     );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
   }
 
   let body: { link_id?: string; amount?: number; reason?: string } | null = null;
@@ -95,42 +98,59 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const prior = await kvList<ApiRefund>(REFUNDS_KEY);
-  const refundedSoFar = prior
-    .filter((r) => r.link_id === link.id)
-    .reduce((acc, r) => acc + r.amount, 0);
-  const remaining = link.amount - refundedSoFar;
-  if (remaining <= 0) {
-    return attachRateHeaders(
-      withCors(badRequest("Link has already been fully refunded.", 409)),
-      gate.rateHeaders
-    );
-  }
+  // Чтение прошлых возвратов, проверка остатка и запись — одна неделимая
+  // операция. Без замка два одновременных запроса читают ОДИН И ТОТ ЖЕ список,
+  // оба видят полный остаток, оба проходят проверку — и ссылка возвращается
+  // дважды. Тот же класс, что чинился в QContract и QMaskCard; SQL здесь нет,
+  // поэтому сериализуем по ключу ссылки.
+  const outcome = await withKeyLock<
+    { ok: true; refund: ApiRefund } | { ok: false; message: string }
+  >(`refunds:${link.id}`, async () => {
+    const prior = await kvList<ApiRefund>(REFUNDS_KEY);
+    const refundedSoFar = prior
+      .filter((r) => r.link_id === link.id)
+      .reduce((acc, r) => acc + r.amount, 0);
+    const remaining = link.amount - refundedSoFar;
+    if (remaining <= 0) {
+      return { ok: false as const, message: "Link has already been fully refunded." };
+    }
 
-  const requested = body.amount && body.amount > 0 ? body.amount : remaining;
-  if (requested > remaining + 1e-9) {
+    const requested = body!.amount && body!.amount > 0 ? body!.amount : remaining;
+    if (requested > remaining + 1e-9) {
+      return {
+        ok: false as const,
+        message: `Requested amount ${requested} exceeds remaining refundable ${remaining}.`,
+      };
+    }
+
+    const created: ApiRefund = {
+      id: genId("rfd"),
+      link_id: link.id,
+      amount: requested,
+      currency: link.currency,
+      reason: (body!.reason || "requested_by_customer").slice(0, 120),
+      status: "succeeded",
+      created: Date.now(),
+    };
+    await kvPush(REFUNDS_KEY, created, REFUND_LIST_CAP);
+    return { ok: true as const, refund: created };
+  });
+
+  if (outcome === "locked") {
     return attachRateHeaders(
       withCors(
-        badRequest(
-          `Requested amount ${requested} exceeds remaining refundable ${remaining}.`,
-          409
-        )
+        badRequest("Another refund for this link is in progress; retry shortly.", 409)
       ),
       gate.rateHeaders
     );
   }
-
-  const refund: ApiRefund = {
-    id: genId("rfd"),
-    link_id: link.id,
-    amount: requested,
-    currency: link.currency,
-    reason: (body.reason || "requested_by_customer").slice(0, 120),
-    status: "succeeded",
-    created: Date.now(),
-  };
-
-  await kvPush(REFUNDS_KEY, refund, REFUND_LIST_CAP);
+  if (!outcome.ok) {
+    return attachRateHeaders(
+      withCors(badRequest(outcome.message, 409)),
+      gate.rateHeaders
+    );
+  }
+  const refund = outcome.refund;
 
   void logAudit(req, "refund.issued", refund.id, {
     link_id: refund.link_id,
@@ -143,7 +163,7 @@ export async function POST(req: NextRequest) {
   void fanoutRefundWebhook(refund, getOrigin(req));
 
   const responseBody = JSON.stringify(refund);
-  idem.cleanup?.();
+  idem.commit(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

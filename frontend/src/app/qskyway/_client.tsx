@@ -5,6 +5,8 @@ import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
 import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
+import { CompetitorMatrix } from "@/components/CompetitorMatrix";
+import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
 
@@ -945,6 +947,15 @@ export default function QSkywayClient() {
                 </div>
               </section>
             </aside>
+          </div>
+        )}
+
+        {/* Сравнение с аналогами — часть демо, а не отдельная страница: тот, кто
+            смотрит на маршруты, тут же видит, чем это отличается от UTM-провайдера
+            и где мы объективно слабее. */}
+        {competitorsFor("qskyway") && (
+          <div style={{ marginTop: 18 }}>
+            <CompetitorMatrix set={competitorsFor("qskyway")!} />
           </div>
         )}
       </div>

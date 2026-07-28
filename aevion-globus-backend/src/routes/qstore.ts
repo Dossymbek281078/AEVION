@@ -86,8 +86,14 @@ const MAX_TAGS = 20;
 const MAX_TAG_LEN = 40;
 
 /**
- * Цена товара. Ноль допустим — бесплатный товар это нормально; отрицательная и
- * бесконечная — нет.
+ * Цена товара В ЦЕНТАХ. Ноль допустим — бесплатный товар это нормально;
+ * отрицательная и бесконечная — нет.
+ *
+ * Поле несёт минорные единицы: форма считает `Number(input) * 100`. Из-за
+ * плавающей точки «19.99» превращается в 1998.9999999999998, поэтому целость
+ * проверяется с допуском и значение округляется. Первая редакция этой проверки
+ * требовала ровно двух знаков и ОТБИВАЛА бы обычную цену 19.99 — регрессия,
+ * найденная сверкой с тем, что реально шлёт форма.
  *
  * @returns число, если валидно; строку с причиной — если нет.
  */
@@ -97,8 +103,9 @@ function parseProductPrice(value: unknown): number | string {
   if (!Number.isFinite(n)) return "price must be a finite number";
   if (n < 0) return "price must not be negative";
   if (n > MAX_PRICE) return `price must not exceed ${MAX_PRICE}`;
-  if (Math.abs(Math.round(n * 100) - n * 100) > 1e-6) return "price must have at most 2 decimal places";
-  return n;
+  // Доли цента не бывает; микроскопический хвост от умножения на 100 — бывает.
+  if (Math.abs(n - Math.round(n)) > 1e-6) return "price must be a whole number of cents";
+  return Math.round(n);
 }
 
 /** Метки: массив коротких строк. @returns массив либо строку с причиной. */

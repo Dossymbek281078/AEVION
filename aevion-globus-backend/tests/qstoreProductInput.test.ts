@@ -78,12 +78,22 @@ describe("QStore: цена и остальной ввод товара пров�
     expect(res.status).toBe(400);
   });
 
-  test("цена дробнее копейки отбивается", async () => {
+  test("доля цента отбивается", async () => {
     expect((await post({ ...OK, price: 1.005 })).status).toBe(400);
+    expect((await post({ ...OK, price: 49.5 })).status).toBe(400);
+  });
+
+  test("хвост от умножения на 100 не мешает — форма шлёт именно такие числа", async () => {
+    // `Number("19.99") * 100` в JS даёт 1998.9999999999998, и первая редакция
+    // проверки это отбивала. Сверка с формой и поймала регрессию.
+    expect(Number("19.99") * 100).toBe(1998.9999999999998); // контроль предпосылки
+    const res = await post({ ...OK, price: Number("19.99") * 100 });
+    expect(res.status).toBe(201);
+    expect(res.body.product.price).toBe(1999);
   });
 
   test("нормальная цена и бесплатный товар проходят", async () => {
-    expect((await post({ ...OK, price: 49.5 })).status).toBe(201);
+    expect((await post({ ...OK, price: 4950 })).status).toBe(201);
     expect((await post({ ...OK, price: 0 })).status).toBe(201);
     expect((await post({ ...OK })).status).toBe(201);
   });

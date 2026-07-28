@@ -118,7 +118,7 @@ export default function DemoOg() {
           }}
         >
           <div style={{ display: "flex" }}>aevion.app/demo</div>
-          <div style={{ color: "#a78bfa", display: "flex" }}>12 feature-complete · 1 pipeline</div>
+          <div style={{ color: "#a78bfa", display: "flex" }}>~a dozen feature-complete · 1 pipeline</div>
         </div>
       </div>
     ),

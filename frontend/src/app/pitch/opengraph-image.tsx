@@ -53,7 +53,7 @@ export default function PitchOgImage() {
             <span style={{ color: "#5eead4" }}>for digital creation</span>
           </div>
           <div style={{ fontSize: 26, color: "#cbd5e1", maxWidth: 900, lineHeight: 1.4, display: "flex" }}>
-            {MODULE_NODES} modules deployed · 12 feature-complete · one Trust Graph
+            {MODULE_NODES} modules deployed · ~a dozen feature-complete · one Trust Graph
           </div>
         </div>
 

@@ -44,14 +44,37 @@ function isStandalone(): boolean {
   return Boolean(mq || iosStandalone);
 }
 
+/* Флаг отказа ПЛАТФОРМЕННОГО баннера установки (`components/InstallPrompt.tsx`).
+ *
+ * Баннеров установки на странице два: наш, шахматный, и общий аевионовский. Оба
+ * слушают один и тот же `beforeinstallprompt` и предлагают поставить одно и то же
+ * приложение, но помнят отказ каждый в своём ключе. На живом прогоне 28.07 они
+ * висели одновременно: человек закрывает одно предложение и продолжает видеть
+ * второе — про ту же установку.
+ *
+ * Отказ теперь общий в обе стороны: закрыл любой — не показываются оба. Шахматная
+ * часть этого компонента (офлайн-режим, напоминания о пазлах) не трогается, она
+ * не дублируется нигде. */
+const PLATFORM_DISMISS_KEY = 'aevion_install_dismissed_v1';
+
+function platformDismissed(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try { return localStorage.getItem(PLATFORM_DISMISS_KEY) === '1' } catch { return false }
+}
+
+/** Отказ, видимый обоим баннерам. Экспортирована ради теста. */
+export function isInstallDismissed(now: number, own: string | null, platform: string | null): boolean {
+  if (platform === '1') return true;
+  if (!own) return false;
+  const ts = Number(own);
+  if (!Number.isFinite(ts)) return false;
+  return (now - ts) / (1000 * 60 * 60 * 24) < DISMISS_TTL_DAYS;
+}
+
 function isDismissed(): boolean {
   if (typeof localStorage === 'undefined') return false;
-  const raw = localStorage.getItem(DISMISS_KEY);
-  if (!raw) return false;
-  const ts = Number(raw);
-  if (!Number.isFinite(ts)) return false;
-  const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
-  return ageDays < DISMISS_TTL_DAYS;
+  if (platformDismissed()) return true;
+  return isInstallDismissed(Date.now(), localStorage.getItem(DISMISS_KEY), null);
 }
 
 function markInstalled() {
@@ -327,6 +350,8 @@ export default function PwaInstall() {
       } else {
         try {
           localStorage.setItem(DISMISS_KEY, String(Date.now()));
+          // закрыл наш баннер — платформенный тоже больше не спрашивает про ту же установку
+          localStorage.setItem(PLATFORM_DISMISS_KEY, '1');
         } catch {}
         setDismissed(true);
       }
@@ -338,6 +363,8 @@ export default function PwaInstall() {
   const handleDismiss = useCallback(() => {
     try {
       localStorage.setItem(DISMISS_KEY, String(Date.now()));
+      // закрыл наш баннер — платформенный тоже больше не спрашивает про ту же установку
+      localStorage.setItem(PLATFORM_DISMISS_KEY, '1');
     } catch {}
     setDismissed(true);
     setShowIosHint(false);

@@ -16,10 +16,12 @@ export default function robots(): MetadataRoute.Robots {
           "/r/",
           "/account/",
           "/_next/",
-          "/qpaynet/admin/",
-          "/qpaynet/admin",
-          "/constitution/admin",
-          "/constitution/admin/",
+          // Раньше админки перечислялись поимённо, и каждый новый модуль со своей
+          // админкой приходилось дописывать руками. К 28.07.2026 в карте сайта
+          // оказались /pricing/admin и /smeta-trainer/admin, которых тут нет.
+          // Подстановка закрывает их разом — Google и Bing поддерживают * в пути.
+          "/*/admin",
+          "/*/admin/",
         ],
       },
     ],

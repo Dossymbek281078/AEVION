@@ -152,6 +152,9 @@ const DEFAULT_PRIORITY = 0.6;
  * during build). On edge/runtime where the FS isn't reachable, the caller
  * falls back to the manual `TOP_LEVEL_ROUTES` list.
  */
+/** Сегменты, которые не должны попадать в карту сайта из автосканирования. */
+const SERVICE_SEGMENTS = new Set(["admin", "account", "settings", "internal", "debug"]);
+
 async function scanAppRoutes(): Promise<string[]> {
   // Dynamic imports so the module graph doesn't drag node:fs into edge bundles.
   // Wrapped in try/catch so any failure (sandboxed runtime, missing dir,
@@ -194,6 +197,13 @@ async function scanAppRoutes(): Promise<string[]> {
           if (name.startsWith("(") && name.endsWith(")")) continue;
           // Skip the API tree — those aren't browseable URLs.
           if (segments.length === 0 && name === "api") continue;
+          // Служебные разделы в карте сайта — прямой вред: Google обходит их,
+          // упирается в вход или пустой экран и записывает в «не проиндексировано».
+          // 28.07.2026 таких набралось 41 из 775, включая /admin/*, /pricing/admin,
+          // /smeta-trainer/admin и /account. Пути, которые ДОЛЖНЫ быть в карте
+          // (например /cyberchess/cpi/dashboard), перечислены руками в
+          // TOP_LEVEL_ROUTES и этой фильтрацией не затрагиваются.
+          if (SERVICE_SEGMENTS.has(name)) continue;
 
           await walk(path.join(dir, name), [...segments, name]);
           continue;

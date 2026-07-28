@@ -1878,6 +1878,14 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
+  /* Одно условие показа баннера вместо трёх копий. Копий было именно три — рендер,
+     резерв ширины у строки контента и... больше нигде. В этом и была беда: баннер
+     это ФИКСИРОВАННАЯ накладка (right:0, width:240, zIndex 150), а шапка — sticky с
+     zIndex 50, то есть 150 > 50 и баннер рисуется поверх неё. Резерв в 244px стоял
+     только на `.cc-main-row`; шапка ему не потомок и резерва не получала. Значит
+     правые 240 пикселей шапки были закрыты, а там живёт кнопка «Настройки» — через
+     неё теперь открывается резервная копия прогресса. */
+  const bannerShown=showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100;
   const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
   const activePieceSet=useActivePieceSet();
   // Threat Heatmap (killer #12) — overlay контроля доски, нет ни у chess.com, ни у lichess
@@ -5807,7 +5815,11 @@ export default function CyberChessPage(){
       {/* Sticky glass header */}
       {!streamerMode&&<div style={{
         position:"sticky",top:0,zIndex:Z.sticky,
-        margin:"0 -12px 12px",padding:"10px 12px",
+        /* Тот же резерв, что у строки контента: баннер «Проекты» — фиксированная
+           накладка шириной 240 с zIndex 150, а шапка sticky с zIndex 50, то есть
+           баннер её перекрывает. Резерв стоял только на `.cc-main-row`, поэтому
+           правый край шапки уходил под баннер вместе с кнопкой «Настройки». */
+        margin:"0 -12px 12px",padding:`10px ${bannerShown?256:12}px 10px 12px`,
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
         display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
@@ -7237,8 +7249,8 @@ export default function CyberChessPage(){
         // paddingRight = резерв под правый WorkspaceDock (dockReserve: 56 на десктопе, 0 на
         // мобайле где док скрыт) + баннер «Проекты» (244, когда показан). Инлайн (надёжнее
         // CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:bannerShown?"244px":"0px",
+        paddingRight:(bannerShown?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -15154,7 +15166,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {bannerShown&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

@@ -331,7 +331,7 @@ export const COMPARISONS: ModuleComparison[] = [
   {
     moduleId: "ip-bureau",
     module: "QRight / QSign / IP-бюро — доказательство авторства",
-    page: "/aevion-ip-bureau",
+    page: "/bureau",
     category: "фиксация авторства и доказательство существования файла на дату",
     rivals: [
       { name: "Copyright Office (US)", url: "https://copyright.gov", strength: "государственная регистрация: презумпция в суде и право на статутные убытки в США" },

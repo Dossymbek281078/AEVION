@@ -1349,6 +1349,13 @@ export default function CyberChessPage(){
   const[bookmarks,sBookmarks]=useState<Bookmark[]>([]);
   useEffect(()=>{sBookmarks(loadBookmarks())},[]);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
+  /* Реальный размер пула приходит с бэкенда полем `poolSize`, и клиент его просто
+     не брал. Из-за этого на одном экране жили ТРИ разных числа про одно и то же:
+     в шапке «400 puzzles» (это загруженный слайс, а не пул), на карточке зашитая
+     строка «10 818 задач в банке» и настоящий пул на 500 000. Первое вводило в
+     заблуждение, второе было прямо выдумано. Здесь хранится то, что сказал сервер;
+     null — значит не знаем, и тогда показываем то, что реально загружено. */
+  const[poolSize,sPoolSize]=useState<number|null>(null);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
   const[pzCustomSec,sPzCustomSec]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_pz_custom_sec_v1")||"600");return isNaN(v)||v<30||v>3600?600:v}catch{return 600}});
@@ -2723,7 +2730,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){if(typeof d.poolSize==="number"&&d.poolSize>0)sPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
       try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(ingestPuzzles(d2 as Puzzle[]));}catch{}
@@ -2894,7 +2901,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){if(typeof d.poolSize==="number"&&d.poolSize>0)sPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
       // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул
@@ -5846,7 +5853,7 @@ export default function CyberChessPage(){
               </span>}
             </div>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
+              SF18 · {(poolSize??PUZZLES.length).toLocaleString("ru-RU")} puzzles{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -6948,7 +6955,7 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"10 818 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:`${(poolSize??PUZZLES.length).toLocaleString("ru-RU")} задач в банке.`}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];

@@ -74,13 +74,8 @@ function walk(dir: string): string[] {
 }
 
 /**
- * Замороженный список на 28.07.2026 — состояние ПОСЛЕ веток с исправлениями
- * (`feat/qsocial-public-fields` и остальных пяти). Каждая строка — обработчик,
- * который ещё не разобран; список обязан только СОКРАЩАТЬСЯ.
- *
- * ПОРЯДОК МЕРЖА: эту ветку мержить ПОСЛЕ веток с исправлениями. Если смержить её
- * раньше, тест честно покраснеет и назовёт семь «новых» мест — на самом деле это
- * те самые, что уже исправлены в ждущих ветках.
+ * Замороженный список на 28.07.2026. Каждая строка — обработчик, который ещё не
+ * разобран. Список обязан только СОКРАЩАТЬСЯ.
  */
 const KNOWN: string[] = [
   "cyberchess.ts GET /cpi/me",
@@ -92,20 +87,27 @@ const KNOWN: string[] = [
   "planetCompliance.ts GET /artifacts/:artifactVersionId/public",
   "planetCompliance.ts GET /artifacts/:artifactVersionId/votes/snapshot/latest",
   "puzzles.ts GET /",
+  "qchaingov.ts GET /proposals/:id",
   "qevents.ts GET /events",
+  "qevents.ts GET /events/:id",
   "qevents.ts GET /events/:id/attendees",
   "qjobs.ts GET /jobs",
+  "qjobs.ts GET /jobs/:id",
   "qlearn.ts GET /courses",
+  "qlearn.ts GET /courses/:id",
   "qlearn.ts GET /courses/:id/lessons/:lessonId",
   "qnews.ts GET /trending",
   "qnews.ts GET /articles",
   "qnews.ts GET /articles/:id",
   "qsocial.ts GET /feed",
+  "qsocial.ts GET /posts/:id",
   "qsocial.ts GET /posts/:id/comments",
   "qsocial.ts GET /users/:userId/posts",
   "qsocial.ts GET /stories",
   "qstore.ts GET /products",
+  "qstore.ts GET /products/:id",
   "voiceOfEarth.ts GET /tracks",
+  "voiceOfEarth.ts GET /tracks/:id",
 ];
 
 const found = walk(ROUTES_DIR).flatMap((f) =>

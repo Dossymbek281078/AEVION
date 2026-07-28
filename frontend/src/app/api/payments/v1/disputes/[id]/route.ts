@@ -6,7 +6,7 @@ import {
   store,
   withCors,
 } from "../../_lib";
-import { kvList, kvSet } from "../../_persist";
+import { kvList, kvSet, withKeyLock } from "../../_persist";
 import { logAudit } from "../../_audit";
 import { enqueueAttempt } from "../../_webhook_queue";
 
@@ -126,54 +126,92 @@ export async function POST(
     );
   }
 
-  const all = await loadAll();
-  const idx = all.findIndex((d) => d.id === id);
-  if (idx === -1) {
+  // Чтение спора, проверка допустимости перехода и запись — одна неделимая
+  // операция. Иначе два одновременных запроса читают ОДИН И ТОТ ЖЕ статус, оба
+  // проходят проверку переходов, побеждает записавший последним — а в журнал
+  // попадают ОБА исхода, и спор числится и выигранным, и проигранным.
+  const action = body.action;
+  const outcome = await withKeyLock<Response | { updated: ApiDispute; target: DisputeStatus }>(
+    DISPUTES_KEY,
+    async () => {
+    const all = await loadAll();
+    const idx = all.findIndex((d) => d.id === id);
+    if (idx === -1) {
+      return attachRateHeaders(
+        withCors(
+          Response.json(
+            { error: { type: "not_found", message: `No dispute with id ${id}.` } },
+            { status: 404 }
+          )
+        ),
+        gate.rateHeaders
+      );
+    }
+    const cur = all[idx];
+
+    // Раньше здесь был тернарный каскад с «иначе lost»: ЛЮБОЕ неизвестное
+    // значение — опечатка `resolve_wonn`, чужой клиент, старая версия SDK —
+    // молча помечало спор ПРОИГРАННЫМ, то есть худшим для продавца исходом.
+    // Сообщение об ошибке рядом перечисляет три действия, и читается это как
+    // «значение проверяется». Не проверялось.
+    const ACTION_TO_STATUS: Record<string, DisputeStatus> = {
+      respond: "under_review",
+      resolve_won: "won",
+      resolve_lost: "lost",
+    };
+    if (!Object.prototype.hasOwnProperty.call(ACTION_TO_STATUS, action)) {
+      return attachRateHeaders(
+        withCors(
+          badRequest(
+            "action must be one of: respond, resolve_won, resolve_lost."
+          )
+        ),
+        gate.rateHeaders
+      );
+    }
+    const target: DisputeStatus = ACTION_TO_STATUS[action];
+
+    const allowed = ALLOWED_TRANSITIONS[cur.status] as readonly DisputeStatus[];
+    if (!allowed.includes(target)) {
+      return attachRateHeaders(
+        withCors(
+          badRequest(
+            `Cannot transition from "${cur.status}" via "${body.action}".`,
+            409
+          )
+        ),
+        gate.rateHeaders
+      );
+    }
+
+    const updated: ApiDispute = {
+      ...cur,
+      status: target,
+      evidence_url: body.evidence_url
+        ? String(body.evidence_url).slice(0, 500)
+        : cur.evidence_url,
+      evidence_text: body.evidence_text
+        ? String(body.evidence_text).slice(0, 2000)
+        : cur.evidence_text,
+      updated: Date.now(),
+    };
+    all[idx] = updated;
+    await persistAll(all);
+      return { updated, target };
+    }
+  );
+
+  if (outcome === "locked") {
     return attachRateHeaders(
       withCors(
-        Response.json(
-          { error: { type: "not_found", message: `No dispute with id ${id}.` } },
-          { status: 404 }
-        )
+        badRequest("Another update for this dispute is in progress; retry shortly.", 409)
       ),
       gate.rateHeaders
     );
   }
-  const cur = all[idx];
-
-  const target: DisputeStatus =
-    body.action === "respond"
-      ? "under_review"
-      : body.action === "resolve_won"
-        ? "won"
-        : "lost";
-
-  const allowed = ALLOWED_TRANSITIONS[cur.status] as readonly DisputeStatus[];
-  if (!allowed.includes(target)) {
-    return attachRateHeaders(
-      withCors(
-        badRequest(
-          `Cannot transition from "${cur.status}" via "${body.action}".`,
-          409
-        )
-      ),
-      gate.rateHeaders
-    );
-  }
-
-  const updated: ApiDispute = {
-    ...cur,
-    status: target,
-    evidence_url: body.evidence_url
-      ? String(body.evidence_url).slice(0, 500)
-      : cur.evidence_url,
-    evidence_text: body.evidence_text
-      ? String(body.evidence_text).slice(0, 2000)
-      : cur.evidence_text,
-    updated: Date.now(),
-  };
-  all[idx] = updated;
-  await persistAll(all);
+  if (outcome instanceof Response) return outcome;
+  const updated = outcome.updated;
+  const target = outcome.target;
 
   void logAudit(req, `dispute.${target}`, updated.id, {
     link_id: updated.link_id,

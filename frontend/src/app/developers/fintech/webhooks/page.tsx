@@ -108,11 +108,13 @@ app.post(
     }
 
     const event = JSON.parse(raw.toString("utf8"));
-    // event.id      → idempotency key (deduplicate retries)
-    // event.type    → "transfer.completed" | "request.paid" | ...
-    // event.module  → "qpaynet" | "qgood" | "qmaskcard" | ...
-    // event.sentAt  → ISO timestamp
-    // event.data    → module-specific payload
+    // event.id      → idempotency key (stable across retries)
+    // event.type    → "payment.refunded" | "dispute.opened" | ...
+    // event.created → unix seconds
+    // event.data    → event-specific payload
+    //
+    // Retries also carry x-aevion-delivery (same id on every retry of one
+    // delivery) and x-aevion-attempt (1, 2, 3, ...).
 
     res.status(200).end();   // ack quickly; do heavy work async
   }

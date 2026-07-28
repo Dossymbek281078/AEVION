@@ -54,3 +54,28 @@ describe("stableCellId — ключ описывает ячейку, а не с�
     expect(stableCellId(undefined as unknown as { minLat: number })).toContain("nan");
   });
 });
+
+// Две копии функции существуют вынужденно: ингест живёт в scripts/ (вне области
+// сборки бэкенда), сторож свежести — в src/. Обычно такую развилку сторожит
+// комментарий «держите одинаковыми». Здесь вместо комментария — тест: пока
+// копии расходятся МОЛЧА, сторож и ингест говорят на разных языках ключей, и
+// расхождение станет стопроцентным при неизменных потолках.
+import { stableCellId as serverStableCellId } from "../src/lib/airspaceCellId";
+
+describe("серверная и скриптовая копии ключа обязаны совпадать", () => {
+  const cases = [
+    { minLat: 40.75, minLon: -74.0, airportIcao: "KJFK" },
+    { minLat: 40.7500002, minLon: -73.9999998, airportIcao: " kjfk " },
+    { minLat: 0, minLon: -0.00001, airportIcao: null },
+    { minLat: -33.8688, minLon: 151.2093, airportIcao: "YSSY" },
+    { minLat: 51.4775, minLon: -0.4614, airportIcao: null },
+  ];
+
+  it.each(cases)("совпадают на $minLat / $minLon", (c) => {
+    expect(serverStableCellId(c)).toBe(stableCellId(c));
+  });
+
+  it("совпадают и на мусоре — иначе разойдутся именно там, где никто не смотрит", () => {
+    expect(serverStableCellId({ minLat: NaN, minLon: 5 })).toBe(stableCellId({ minLat: NaN, minLon: 5 }));
+  });
+});

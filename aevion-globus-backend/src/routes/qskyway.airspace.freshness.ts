@@ -58,6 +58,8 @@ const blank = (src: CityAirspace): FreshnessVerdict => ({
   error: null,
 });
 
+import { stableCellId } from "../lib/airspaceCellId";
+
 export interface LiveCell { id: string; ceilingFt: number; effective: string | null }
 
 /**
@@ -96,15 +98,22 @@ async function checkCity(cityId: string, src: CityAirspace): Promise<void> {
       inSR: "4326",
       outSR: "4326",
       spatialRel: "esriSpatialRelIntersects",
-      outFields: "OBJECTID,CEILING,MAP_EFF",
-      returnGeometry: "false",
+      // Геометрия НУЖНА: ключ ячейки строится из её юго-западного угла. Пока
+      // сторож запрашивал returnGeometry:false и брал id из OBJECTID, он
+      // сравнивал номера строк в базе публикатора — они меняются при каждой
+      // перепубликации, отсюда и ложный «дрейф». Девять ячеек, объём ничтожен.
+      outFields: "CEILING,MAP_EFF,APT1_ICAO",
+      returnGeometry: "true",
       f: "json",
     });
     const res = await fetch(`${FEED_QUERY}?${params}`, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`http ${res.status}`);
     const data = (await res.json()) as {
       error?: unknown;
-      features?: Array<{ attributes: { OBJECTID: number; CEILING: number; MAP_EFF?: string } }>;
+      features?: Array<{
+        attributes: { CEILING: number; MAP_EFF?: string; APT1_ICAO?: string | null };
+        geometry?: { rings?: number[][][] };
+      }>;
     };
     if (data.error) throw new Error("feed error");
     const live = data.features ?? [];
@@ -112,7 +121,18 @@ async function checkCity(cityId: string, src: CityAirspace): Promise<void> {
 
     const diff = compareSnapshot(
       src,
-      live.map((f) => ({ id: `faa-${f.attributes.OBJECTID}`, ceilingFt: f.attributes.CEILING, effective: f.attributes.MAP_EFF ?? null })),
+      live.map((f) => {
+        const ring = f.geometry?.rings?.[0] ?? [];
+        return {
+          id: stableCellId({
+            minLat: Math.min(...ring.map((p) => p[1])),
+            minLon: Math.min(...ring.map((p) => p[0])),
+            airportIcao: f.attributes.APT1_ICAO ?? null,
+          }),
+          ceilingFt: f.attributes.CEILING,
+          effective: f.attributes.MAP_EFF ?? null,
+        };
+      }),
     );
 
     verdicts.set(cityId, {

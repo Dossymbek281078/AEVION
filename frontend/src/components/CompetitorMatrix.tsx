@@ -50,6 +50,9 @@ function Cell({ claim }: { claim: Claim }) {
         ) : (
           <span style={{ textDecoration: "underline dotted", cursor: "help" }}>{s.label}</span>
         )}
+        {/* Дата обязательна для чужого: тарифы и функции у этих продуктов
+            меняются помесячно, и факт без даты стареет незаметно. */}
+        {claim.asOf && <span style={{ color: "#5f7086" }}> · на {claim.asOf}</span>}
       </div>
     </div>
   );

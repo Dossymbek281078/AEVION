@@ -60,7 +60,7 @@ describe("QLearn: ввод при создании курса проверяет
   });
 
   test("нормальный курс создаётся", async () => {
-    expect((await post({ ...OK, price: 49.5, level: "advanced" })).status).toBe(201);
+    expect((await post({ ...OK, price: 4950, level: "advanced" })).status).toBe(201);
   });
 
   test("отрицательная цена отбивается", async () => {
@@ -75,8 +75,15 @@ describe("QLearn: ввод при создании курса проверяет
     expect(res.status).toBe(400);
   });
 
-  test("цена мельче копейки отбивается", async () => {
+  test("доля цента отбивается", async () => {
     expect((await post({ ...OK, price: 1.005 })).status).toBe(400);
+  });
+
+  test("хвост от умножения на 100 не мешает — форма шлёт именно такие числа", async () => {
+    expect(Number("19.99") * 100).toBe(1998.9999999999998); // контроль предпосылки
+    const res = await post({ ...OK, price: Number("19.99") * 100 });
+    expect(res.status).toBe(201);
+    expect(res.body.course.price).toBe(1999);
   });
 
   test("бесплатный курс проходит", async () => {

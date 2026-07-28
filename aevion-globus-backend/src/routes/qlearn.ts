@@ -212,8 +212,12 @@ function parseCoursePrice(value: unknown): number | string {
   if (!Number.isFinite(n)) return "price must be a finite number";
   if (n < 0) return "price must not be negative";
   if (n > MAX_COURSE_PRICE) return `price must not exceed ${MAX_COURSE_PRICE}`;
-  if (Math.abs(Math.round(n * 100) - n * 100) > 1e-6) return "price must have at most 2 decimal places";
-  return n;
+  // Поле несёт ЦЕНТЫ: форма считает `Number(input) * 100`, и из-за плавающей
+  // точки «19.99» превращается в 1998.9999999999998. Проверка «два знака после
+  // запятой» такие числа отбивала — регрессия, найденная сверкой с формой.
+  // Доли цента не бывает, микроскопический хвост от умножения — бывает.
+  if (Math.abs(n - Math.round(n)) > 1e-6) return "price must be a whole number of cents";
+  return Math.round(n);
 }
 
 const CATEGORIES = [

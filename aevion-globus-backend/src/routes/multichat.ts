@@ -959,6 +959,39 @@ multichatPublicRouter.post("/receipt/verify", receiptVerifyLimiter, async (req, 
   }
 });
 
+/**
+ * Поля хода разговора, которые допустимо показать по публичной ссылке.
+ *
+ * Список БЕЛЫЙ намеренно. До 28.07 здесь стоял чёрный: `const { usage, ...rest }`
+ * с комментарием «strip per-turn usage to avoid leaking cost/billing info».
+ * Поля `usage` у `ChatTurn` нет вообще — есть `userId`, `tokensIn`, `tokensOut`,
+ * — поэтому снятие не снимало ничего, и по публичной ссылке уходили внутренний
+ * идентификатор владельца и счётчики токенов. Компилятор молчал: массив
+ * приводился к `Record<string, unknown>`, а из такого типа законно выбирать
+ * любой ключ, включая несуществующий.
+ *
+ * Чёрный список ошибается молча каждый раз, когда в таблицу добавляют колонку.
+ * Белый по умолчанию не отдаёт ничего нового, пока его не расширят осознанно.
+ */
+export const publicTurnFields = [
+  "id",
+  "role",
+  "content",
+  "provider",
+  "model",
+  "createdAt",
+] as const;
+
+export function sanitizeSharedTurn(turn: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of publicTurnFields) {
+    // Именно `in`, а не проверка на undefined: отсутствующее поле не должно
+    // появляться в ответе ключом со значением undefined.
+    if (Object.prototype.hasOwnProperty.call(turn, field)) out[field] = turn[field];
+  }
+  return out;
+}
+
 multichatPublicRouter.get("/shared/:token", async (req, res) => {
   const token = String(req.params.token).trim();
   if (!token) return res.status(400).json({ error: "token_required" });
@@ -966,12 +999,7 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
     const conv = await findByShareToken(token);
     if (!conv) return res.status(404).json({ error: "not_found_or_revoked" });
     const turns = await listChatTurns({ userId: conv.userId, conversationId: conv.id, limit: 200 });
-    // Strip per-turn usage to avoid leaking cost/billing info publicly.
-    const safeTurns = (turns as Array<Record<string, unknown>>).map((t) => {
-      const { usage, ...rest } = t;
-      void usage;
-      return rest;
-    });
+    const safeTurns = (turns as unknown as Array<Record<string, unknown>>).map(sanitizeSharedTurn);
     res.json({
       conversation: { id: conv.id, title: conv.title, createdAt: conv.createdAt },
       turns: safeTurns,

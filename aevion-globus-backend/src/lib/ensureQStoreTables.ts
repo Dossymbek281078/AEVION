@@ -71,6 +71,21 @@ export async function ensureQStoreTables(pool: PgPoolInstance): Promise<void> {
       CREATE INDEX IF NOT EXISTS "QStorePurchase_buyer_idx"
         ON "QStorePurchase" ("buyerId");
     `);
+    // Один товар одному покупателю оплачивается один раз: цифровая покупка не
+    // имеет количества, а повторное нажатие «купить» создавало вторую
+    // оплаченную запись и второй раз увеличивало число продаж на витрине.
+    // Индекс частичный: незавершённых («pending») попыток может быть сколько
+    // угодно — человек мог начать оплату и не дойти до конца.
+    try {
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "QStorePurchase_paid_uniq"
+          ON "QStorePurchase" ("productId","buyerId") WHERE "status" = 'paid';
+      `);
+    } catch (err) {
+      // На базе, где дубли уже есть, индекс не создастся — ронять из-за этого
+      // модуль незачем, но и молчать нельзя.
+      console.error("[QStore] paid purchase unique index not created (duplicates in table?)", err);
+    }
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "QStoreReview" (
         "id"        TEXT PRIMARY KEY,

@@ -354,11 +354,33 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       }
 
       // Direct purchase (free items or Gumroad not configured)
-      await pool.query(
+      //
+      // Повторное нажатие «купить» не должно создавать вторую покупку и второй
+      // раз увеличивать число продаж на витрине: у цифрового товара нет
+      // количества, а число продаж видно всем. Решает база — при уже
+      // оплаченной покупке вставка возвращает ноль строк.
+      const purchased = await pool.query(
         `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","paidAt","createdAt")
-         VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())`,
+         VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())
+         ON CONFLICT ("productId","buyerId") WHERE "status" = 'paid' DO NOTHING
+         RETURNING "id"`,
         [purchaseId, pRow.id, auth.sub, pRow.price],
       );
+      if ((purchased.rowCount ?? 0) === 0) {
+        const prior = await pool.query(
+          `SELECT "id" FROM "QStorePurchase" WHERE "productId"=$1 AND "buyerId"=$2 AND "status"='paid' LIMIT 1`,
+          [pRow.id, auth.sub],
+        );
+        // Товар уже куплен — отвечаем успехом (человек им владеет), но ничего
+        // не начисляем.
+        res.status(200).json({
+          purchaseId: prior.rows[0]?.id ?? purchaseId,
+          mode: "direct",
+          status: "paid",
+          duplicate: true,
+        });
+        return;
+      }
       await pool.query(
         `UPDATE "QStoreProduct" SET "salesCount" = "salesCount" + 1 WHERE "id" = $1`,
         [pRow.id],

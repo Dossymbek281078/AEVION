@@ -389,24 +389,37 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
 
   try {
     if (isQSocialDbReady()) {
-      const { rows: existing } = await pool.query(
-        `SELECT 1 FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`,
+      // Раньше здесь сначала СПРАШИВАЛИ, есть ли отметка, а потом ставили её и
+      // увеличивали счётчик. Два быстрых нажатия (или два устройства) успевают
+      // пройти проверку оба: вторая вставка молча ничего не делает, а счётчик
+      // растёт дважды — и число под постом навсегда расходится с числом строк.
+      // Теперь решает сама база: считаем только то, что действительно вставилось
+      // или удалилось.
+      const removed = await pool.query(
+        `DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2 RETURNING "postId"`,
         [auth.sub, postId],
       );
       let liked: boolean;
-      if (existing.length > 0) {
-        await pool.query(`DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`, [auth.sub, postId]);
+      if ((removed.rowCount ?? 0) > 0) {
         await pool.query(`UPDATE "QSocialPost" SET "likesCount"=GREATEST(0,"likesCount"-1) WHERE "id"=$1`, [postId]);
         liked = false;
       } else {
-        await pool.query(`INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW()) ON CONFLICT DO NOTHING`, [auth.sub, postId]);
-        await pool.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
-        liked = true;
-        // Notify post owner (not self)
-        const { rows: ownerRows } = await pool.query(`SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
-        if (ownerRows[0] && ownerRows[0].userId !== auth.sub) {
-          addNotification(ownerRows[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+        const added = await pool.query(
+          `INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW())
+           ON CONFLICT DO NOTHING RETURNING "postId"`,
+          [auth.sub, postId],
+        );
+        if ((added.rowCount ?? 0) > 0) {
+          await pool.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
+          // Уведомление — тоже учёт: слать его на вставку, которой не было,
+          // значит дёргать автора поста дважды за одну отметку.
+          // Notify post owner (not self)
+          const { rows: ownerRows } = await pool.query(`SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
+          if (ownerRows[0] && ownerRows[0].userId !== auth.sub) {
+            addNotification(ownerRows[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+          }
         }
+        liked = true;
       }
       const { rows: postRows } = await pool.query(`SELECT "likesCount" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
       return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0 });

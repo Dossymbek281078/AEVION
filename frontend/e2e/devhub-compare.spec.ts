@@ -82,4 +82,33 @@ test.describe("Comparison page — a table that can be checked", () => {
     const rest = page.getByRole("row").filter({ hasText: "Остальные модули" });
     await expect(rest.getByText(/нужен замер/)).toBeVisible();
   });
+
+  test("on a phone the comparison is readable without sideways scrolling", async ({ page }) => {
+    // A five-column table 1270px wide, read through a 390px window, is not
+    // reading. The same rows render as stacked cards below 780px.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mock(page, CAPS);
+    await page.goto("/compare");
+
+    // The table is out of the way and the cards carry the same content.
+    await expect(page.locator(".cmp-wide")).toBeHidden({ timeout: 30_000 });
+    const cards = page.locator(".cmp-narrow");
+    await expect(cards).toBeVisible();
+    await expect(cards.getByText("Скриншот → код")).toBeVisible();
+    await expect(cards.getByText(/Медиа прямо в редакторе/)).toBeVisible();
+
+    // And the page itself still does not scroll sideways.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(overflow).toBe(false);
+  });
+
+  test("on a wide screen it is the table, not the cards", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await mock(page, CAPS);
+    await page.goto("/compare");
+    await expect(page.locator(".cmp-wide")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".cmp-narrow")).toBeHidden();
+  });
 });

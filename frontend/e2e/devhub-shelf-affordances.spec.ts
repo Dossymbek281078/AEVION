@@ -101,4 +101,24 @@ test.describe("DevHub shelf — controls that must not be decorative", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden({ timeout: 10_000 });
   });
+
+  test("what you type while the page is still loading is not thrown away", async ({ page }) => {
+    // It was: the projects and snippets sections switched branches when their
+    // fetches landed, and because those branches had no keys React reconciled
+    // them by position and remounted the form below — so anyone typing during
+    // load lost it. The snippet spec had been failing on exactly this.
+    await mockBackend(page);
+    await page.goto("/devhub", { waitUntil: "domcontentloaded" });
+
+    const title = page.getByPlaceholder("Title");
+    const body = page.getByPlaceholder(/paste your snippet here/i);
+    await title.fill("Typed during load");
+    await body.fill("const kept = true;");
+
+    // Give every late fetch time to land and re-render.
+    await page.waitForTimeout(2_500);
+
+    await expect(title).toHaveValue("Typed during load");
+    await expect(body).toHaveValue("const kept = true;");
+  });
 });

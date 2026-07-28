@@ -243,6 +243,32 @@ export async function handleDemoMcp(msg: JsonRpcMessage, ctx: ToolContext): Prom
 
 export const mcpDemoRouter = Router();
 
+// Открытие адреса в браузере — первое, что делает человек, получивший ссылку.
+// MCP говорит по POST, поэтому GET отдавал 404, и адрес из письма выглядел как
+// битый ровно у того, кого мы зовём проверить. Теперь GET отвечает визиткой:
+// кто это, по какому протоколу, какие инструменты и как позвать.
+mcpDemoRouter.get("/", (_req, res) => {
+  const allowWrites = /^(1|true|yes)$/i.test(process.env.MCP_DEMO_WRITES || "");
+  res.json({
+    name: "aevion-registry",
+    kind: "Model Context Protocol server",
+    protocolVersion: "2025-06-18",
+    transport: "streamable HTTP JSON-RPC (POST to this same URL)",
+    authentication: process.env.MCP_DEMO_TOKEN?.trim() ? "bearer token" : "none",
+    tools: toolsFor(allowWrites).map((t) => ({
+      name: t.name,
+      title: t.title,
+      readOnly: t.annotations.readOnlyHint === true,
+    })),
+    howToCall: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    },
+    docs: "https://aevion.app/explore",
+  });
+});
+
 mcpDemoRouter.post("/", async (req, res) => {
   const required = process.env.MCP_DEMO_TOKEN?.trim();
   if (required) {

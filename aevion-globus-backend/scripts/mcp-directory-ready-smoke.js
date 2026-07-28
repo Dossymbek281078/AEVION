@@ -89,6 +89,17 @@ async function rpc(method, params, id) {
     `MCP=${parsed?.count}, реестр=${stats?.total}`,
   );
 
+  // Человек, получивший ссылку, откроет её в браузере. До 28.07.2026 GET отдавал
+  // 404, и адрес из письма выглядел битым у того, кого мы зовём проверить.
+  const card = await fetch(MCP, { headers: { accept: "application/json" } });
+  let cardBody = null;
+  try { cardBody = await card.json(); } catch { /* ниже скажет понятнее */ }
+  check(
+    "GET по тому же адресу отдаёт визитку, а не 404",
+    card.status === 200 && cardBody?.protocolVersion === "2025-06-18" && Array.isArray(cardBody?.tools),
+    `HTTP ${card.status}, тело ${JSON.stringify(cardBody).slice(0, 90)}`,
+  );
+
   console.log(failures === 0
     ? `\nPASS — сервер готов к подаче: ${tools.length} инструментов, все аннотированы`
     : `\nFAIL — ${failures} несоответствий требованиям каталога`);

@@ -601,6 +601,206 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["память project_aevion_fintech_status", "память reference_aevion_monetization_flow"],
   },
+
+  {
+    moduleId: "qlearn",
+    module: "QLearn — курсы и проверка знаний",
+    page: "/qlearn",
+    category: "онлайн-обучение и генерация учебного материала",
+    rivals: [
+      { name: "Coursera", url: "https://coursera.org", strength: "программы университетов и признаваемые сертификаты" },
+      { name: "Stepik", url: "https://stepik.org", strength: "русскоязычная база курсов и сильный конструктор заданий" },
+      { name: "Khanmigo", url: "https://khanmigo.ai", strength: "ИИ-репетитор поверх выверенной методики Khan Academy" },
+    ],
+    weWin: [
+      {
+        text: "Урок и проверка знаний генерируются на месте, а не берутся из готового каталога",
+        basis: "design",
+        evidence: "маршруты /courses и /me/courses/:id/lessons с генерацией через общий AI-контур",
+      },
+      {
+        text: "Генерация идёт на бесплатном флоте платформы, а не на отдельной подписке модуля",
+        basis: "design",
+        evidence: "тот же контур провайдеров, что у остальных модулей",
+      },
+    ],
+    weLose: [
+      {
+        text: "Нет ни аккредитации, ни признаваемых сертификатов — у Coursera это основной продукт",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет выверенной методики и редакторов: у Khan Academy за материалом стоят годы педагогической работы",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет каталога и аудитории: учиться приходят туда, где уже учатся другие",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict: "Мы лучше, когда курс нужен под конкретную задачу и прямо сейчас. Для диплома и признаваемого сертификата — к большим платформам.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qlearn.ts"],
+  },
+
+  {
+    moduleId: "qstore",
+    module: "QStore — витрина и заказы",
+    page: "/qstore",
+    category: "продажа цифровых и физических товаров",
+    rivals: [
+      { name: "Shopify", url: "https://shopify.com", strength: "полноценный магазин: платежи, налоги, доставка, приложения" },
+      { name: "Gumroad", url: "https://gumroad.com", strength: "продажа цифрового за пять минут, выплаты и налоги на их стороне" },
+      { name: "Lemon Squeezy", url: "https://lemonsqueezy.com", strength: "merchant of record: НДС и отчётность берут на себя" },
+    ],
+    weWin: [
+      {
+        text: "Витрина живёт внутри той же экосистемы, где подпись, права и договор — товар не оторван от своего происхождения",
+        basis: "design",
+        evidence: "QStore соседствует с QSign/QRight в одном контуре",
+      },
+    ],
+    weLose: [
+      {
+        text: "Мы не merchant of record: НДС, отчётность и выплаты — не наша зона, у Lemon Squeezy это продукт",
+        basis: "design",
+        evidence: "наши собственные продажи идут через Gumroad и LemonSqueezy, а не через QStore",
+      },
+      {
+        text: "Нет доставки, налогов, возвратов и споров — у Shopify это годы работы",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет трафика: у Gumroad есть собственная аудитория покупателей, у витрины внутри платформы её нет",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict: "Честно: как магазин мы с ними не конкурируем. QStore имеет смысл как витрина внутри контура, а деньги мы и сами принимаем через Gumroad и LemonSqueezy.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qstore.ts", "память reference_aevion_monetization_flow"],
+  },
+
+  {
+    moduleId: "qjobs",
+    module: "QJobs — вакансии и отклики",
+    page: "/qjobs",
+    category: "площадки поиска работы",
+    rivals: [
+      { name: "HeadHunter", url: "https://hh.kz", strength: "главная база вакансий и резюме в регионе" },
+      { name: "LinkedIn Jobs", url: "https://linkedin.com/jobs", strength: "профессиональный граф связей и рекомендации" },
+      { name: "Wellfound", url: "https://wellfound.com", strength: "фокус на стартапах, зарплаты и доли указаны заранее" },
+    ],
+    weWin: [
+      {
+        text: "Отклик разбирается тем же контуром, что и остальные тексты платформы — кандидат получает разбор, а не только «спасибо»",
+        basis: "design",
+        evidence: "маршрут /jobs/:id/apply использует общий AI-контур",
+      },
+    ],
+    weLose: [
+      {
+        text: "На бирже труда всё решает аудитория: у hh и LinkedIn миллионы, у нас её нет",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет базы резюме, инструментов рекрутера и воронки найма",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict: "Модуль имеет смысл как внутренняя доска экосистемы, а не как замена hh или LinkedIn — двусторонняя площадка без людей не работает.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qjobs.ts"],
+  },
+
+  {
+    moduleId: "qmedia",
+    module: "QMedia — музыка, видео, плейлисты",
+    page: "/qmedia",
+    category: "генерация и хранение медиа",
+    rivals: [
+      { name: "Suno", url: "https://suno.com", strength: "генерирует готовый трек со звуком и вокалом по описанию" },
+      { name: "Udio", url: "https://udio.com", strength: "качество звука и контроль над структурой композиции" },
+      { name: "ElevenLabs", url: "https://elevenlabs.io", strength: "голос и озвучка индустриального уровня" },
+    ],
+    weWin: [
+      {
+        text: "Текстовая часть работы бесплатна: слова песни, названия и описания генерируются флотом платформы",
+        basis: "design",
+        evidence: "маршруты генерации текста песни и описаний видео через общий контур",
+      },
+    ],
+    weLose: [
+      {
+        text: "Звук мы не генерируем — Suno и Udio выдают готовый трек, у нас только текст и хранение",
+        basis: "design",
+        evidence: "по устройству модуля",
+      },
+      {
+        text: "Нет голосового синтеза уровня ElevenLabs",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет площадки и слушателей: плейлист без аудитории — это папка",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict: "Мы полезны на подготовительном этапе — слова, названия, описания. Сам трек делают Suno или Udio, и мы этого не скрываем.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qmedia.ts"],
+  },
+
+  {
+    moduleId: "kids-ai",
+    module: "Kids-AI — детский обучающий контент",
+    page: "/kids-ai-content",
+    category: "детское обучение с ИИ",
+    rivals: [
+      { name: "Khanmigo", url: "https://khanmigo.ai", strength: "ИИ-репетитор с методикой Khan Academy и школьными интеграциями" },
+      { name: "Duolingo ABC", url: "https://duolingo.com/abc", strength: "выверенная игровая механика и удержание внимания ребёнка" },
+      { name: "Lingokids", url: "https://lingokids.com", strength: "контент под возраст с родительским контролем и отчётами" },
+    ],
+    weWin: [
+      {
+        text: "Урок генерируется под конкретного ребёнка и тему, а не выбирается из фиксированного каталога",
+        basis: "design",
+        evidence: "маршруты /lessons и /progress с генерацией и пониженной температурой ради предсказуемости ответов",
+      },
+      {
+        text: "Тон ответов сознательно сдержаннее обычного: для детского продукта важнее предсказуемость, чем креатив",
+        basis: "design",
+        evidence: "температура 0.4 вместо 0.7 по умолчанию, с объяснением прямо в коде",
+      },
+    ],
+    weLose: [
+      {
+        text: "Нет истории соответствия детским нормам (COPPA/GDPR-K) и родительского контроля уровня Lingokids",
+        basis: "design",
+        evidence: "не реализовано",
+      },
+      {
+        text: "Нет педагогической валидации: у Khan Academy и Duolingo за механикой стоят исследования удержания и результата",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+      {
+        text: "Нет мобильного приложения — детский продукт живёт на планшете, а не в браузере ноутбука",
+        basis: "public",
+        evidence: "срез 2026-07",
+      },
+    ],
+    verdict: "Мы лучше, когда нужен урок под конкретный запрос ребёнка сегодня. Как основную обучающую среду выбирать пока нечего — нет ни валидации, ни приложения.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/kidsAiContent.ts"],
+  },
 ];
 
 /**
@@ -610,10 +810,5 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "QLearn — курсы и проверка знаний", likelyRivals: "Coursera, Stepik, Khanmigo" },
-  { module: "Kids-AI — детский контент", likelyRivals: "Khanmigo Kids, Duolingo ABC, Lingokids" },
-  { module: "QStore — витрина и заказы", likelyRivals: "Shopify, Gumroad, Lemon Squeezy" },
-  { module: "QJobs — вакансии и отклики", likelyRivals: "HeadHunter, LinkedIn Jobs, Wellfound" },
-  { module: "QMedia — музыка и видео", likelyRivals: "Suno, Udio, ElevenLabs" },
   { module: "Constitution — свод правил планеты", likelyRivals: "прямых аналогов не нашли; ближайшее — инструменты DAO-управления" },
 ];

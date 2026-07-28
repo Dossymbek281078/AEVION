@@ -145,6 +145,13 @@ constitutionWaitlistAdminRouter.get(
     try {
       await ensureWaitlistTable();
       let rows: WaitlistRow[] = [];
+      // Откуда список и не обрезан ли он. Без этого выгрузка при сбое базы
+      // отдавала почти пустой список из памяти КАК ПОЛНЫЙ: владелец видел три
+      // строки и делал вывод, что заявок нет. Решение принимается по этому
+      // файлу, значит он обязан говорить о себе правду.
+      const ROW_CAP = 5000;
+      let source: "postgres" | "memory" = "memory";
+      let dbQueryFailed = false;
       if (dbAvailable) {
         try {
           const pool = getPool();
@@ -152,7 +159,7 @@ constitutionWaitlistAdminRouter.get(
             `SELECT "email","source","createdAt"
              FROM constitution_waitlist
              ORDER BY "createdAt" DESC
-             LIMIT 5000`,
+             LIMIT ${ROW_CAP}`,
           );
           rows = r.rows.map((x: Record<string, unknown>) => ({
             email: String(x.email),
@@ -161,9 +168,28 @@ constitutionWaitlistAdminRouter.get(
               ? x.createdAt.toISOString()
               : String(x.createdAt),
           }));
-        } catch { /* fall through */ }
+          source = "postgres";
+        } catch (dbErr) {
+          dbQueryFailed = true;
+          capture(dbErr, {
+            route: "constitution/waitlist/list",
+            note: "список заявок не прочитан из Postgres — выгрузка идёт из памяти и полной не является",
+          });
+          console.error(
+            "[Constitution] ВЫГРУЗКА ЗАЯВОК ИЗ ПАМЯТИ, НЕ ИЗ БАЗЫ — список неполный:",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
-      if (rows.length === 0) rows = Array.from(memList.values());
+      if (rows.length === 0) {
+        rows = Array.from(memList.values());
+        source = "memory";
+      }
+      const truncated = source === "postgres" && rows.length >= ROW_CAP;
+      // Для CSV поля в тело не положить — поэтому признаки уходят заголовками:
+      // файл сам по себе выглядит одинаково полным в любом случае.
+      res.setHeader("X-Data-Source", source);
+      res.setHeader("X-Data-Truncated", String(truncated));
       const fmt = String(req.query.format ?? "json");
       if (fmt === "csv") {
         // Экранирования тут не было ВООБЩЕ: поля клеились в строку как есть.
@@ -182,6 +208,13 @@ constitutionWaitlistAdminRouter.get(
         total: rows.length,
         items: rows,
         bySource: aggregateBySource(rows),
+        // `total` — это столько, сколько отдали, а не сколько есть. При
+        // truncated=true или source="memory" по нему нельзя судить о размере
+        // списка заявок.
+        source,
+        dbQueryFailed,
+        truncated,
+        rowCap: ROW_CAP,
       });
     } catch (err) {
       capture(err);

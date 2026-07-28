@@ -664,6 +664,94 @@ export default function DemoShowcasePage() {
           </div>
         </section>
 
+        {/*
+          Сравнение с аналогами — с колонкой «где мы слабее» на видном месте.
+          Сюда вынесены только те цифры, которые измерены (запрос к проду,
+          счётчик по коду) или взяты из публикации аналога со ссылкой; полная
+          таблица с источниками — на /compare.
+        */}
+        <section
+          style={{
+            marginTop: 56,
+            paddingTop: 32,
+            borderTop: "1px solid rgba(51,65,85,0.5)",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: "0.2em",
+              color: "#94a3b8",
+              margin: "0 0 8px",
+              textTransform: "uppercase",
+            }}
+          >
+            Honest comparison with analogues
+          </h2>
+          <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 20px" }}>
+            Where we win, where we lose, and what each claim was measured against. Every row carries a
+            &laquo;we are weaker&raquo; column — a comparison you win on every line is advertising, not evidence.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {[
+              {
+                title: "CyberChess vs Lichess",
+                win: "AI post-game coaching tuned to player strength",
+                lose: "502,584 puzzles vs 6,057,356 — about 12× smaller",
+              },
+              {
+                title: "QSign vs DocuSign",
+                win: "No per-user fee, no cap on documents",
+                lose: "Not a qualified e-signature; no signer identity check",
+              },
+              {
+                title: "Payments API vs Stripe",
+                win: "Stripe-shaped sandbox, free, no legal entity needed",
+                lose: "No acquiring at all — money does not move",
+              },
+            ].map((c) => (
+              <article
+                key={c.title}
+                style={{
+                  padding: 20,
+                  borderRadius: 14,
+                  background: "rgba(15,23,42,0.7)",
+                  border: "1px solid rgba(148,163,184,0.28)",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0", marginBottom: 10 }}>{c.title}</div>
+                <div style={{ fontSize: 13.5, color: "#6ee7b7", lineHeight: 1.5, marginBottom: 8 }}>+ {c.win}</div>
+                <div style={{ fontSize: 13.5, color: "#fca5a5", lineHeight: 1.5 }}>− {c.lose}</div>
+              </article>
+            ))}
+          </div>
+          <div style={{ marginTop: 18 }}>
+            <Link
+              href="/compare"
+              style={{
+                display: "inline-block",
+                padding: "12px 22px",
+                borderRadius: 12,
+                background: "rgba(148,163,184,0.12)",
+                border: "1px solid rgba(148,163,184,0.35)",
+                color: "#e2e8f0",
+                fontWeight: 750,
+                textDecoration: "none",
+                fontSize: 15,
+              }}
+            >
+              Full comparison with sources →
+            </Link>
+          </div>
+        </section>
+
         <footer
           style={{
             marginTop: 56,

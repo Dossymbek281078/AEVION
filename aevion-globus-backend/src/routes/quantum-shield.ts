@@ -41,6 +41,28 @@ const createRateLimiter = createInMemoryRateLimiter({ max: 20 });
 const verifyRateLimiter = createInMemoryRateLimiter({ max: 60 });
 const reconstructRateLimiter = createInMemoryRateLimiter({ max: 30 });
 
+/**
+ * Заголовок кеша для публичной проекции щита.
+ *
+ * Решается по ФАКТУ «ответ персонализирован», а не по побочному признаку.
+ *
+ * До 28.07 условие смотрело на `auditSnippet === null`, а комментарий рядом
+ * обещал «cache only for anonymous responses — owner snippet must not leak».
+ * На одном пути это расходилось: запрос аудита обёрнут в `try/catch` (код сам
+ * предвидит, что на старом развёртывании таблицы `QuantumShieldAudit` может не
+ * быть), и при его падении `auditSnippet` оставался `null`, ТОГДА КАК в теле
+ * по-прежнему уходил `ownerUserId` владельца. То есть персонализированный ответ
+ * получал `Cache-Control: public, max-age=60` — и промежуточный кеш мог отдать
+ * его анонимному запросу.
+ *
+ * Урок тот же, что в feedback_bookkeeping_on_every_exit_path: признак, от
+ * которого зависит решение, должен быть ОДИН и вычисляться один раз, иначе
+ * ветки расходятся тихо. Здесь и тело, и заголовок читают `personalized`.
+ */
+export function publicCacheControl(personalized: boolean): string {
+  return personalized ? "private, no-store" : "public, max-age=60";
+}
+
 const RESERVED_IDS = new Set([
   "health",
   "stats",
@@ -1156,6 +1178,9 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
     const auth = verifyBearerOptional(req);
     const isOwner = !!auth?.sub && r.ownerUserId === auth.sub;
     const isAdmin = auth?.role === "admin";
+    // Признак «ответ персонализирован» считается ОДИН раз и управляет и телом,
+    // и заголовком кеша. Раньше они расходились — см. publicCacheControl.
+    const personalized = isOwner || isAdmin;
     let auditSnippet: Array<Record<string, unknown>> | null = null;
     if (isOwner || isAdmin) {
       try {
@@ -1171,13 +1196,8 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       }
     }
 
-    // Public projection: no shards, no ownerUserId for anon callers.
-    // Cache only for anonymous responses — owner snippet must not leak.
-    if (auditSnippet === null) {
-      res.setHeader("Cache-Control", "public, max-age=60");
-    } else {
-      res.setHeader("Cache-Control", "private, no-store");
-    }
+    // Публичная проекция: ни осколков, ни ownerUserId анонимным.
+    res.setHeader("Cache-Control", publicCacheControl(personalized));
     res.json({
       id: r.id,
       objectId: r.objectId,
@@ -1198,7 +1218,7 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       createdAt: r.createdAt,
       verifyUrl: `/quantum-shield/${r.id}`,
       // Owner-only fields:
-      ownerUserId: isOwner || isAdmin ? r.ownerUserId : undefined,
+      ownerUserId: personalized ? r.ownerUserId : undefined,
       auditSnippet: auditSnippet ?? undefined,
     });
   } catch (err) {

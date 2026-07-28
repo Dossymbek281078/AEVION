@@ -137,16 +137,52 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qjobs/jobs/:id ──────────────────────────────────────────────────
+/**
+ * Поля вакансии, которые допустимо отдавать наружу.
+ *
+ * Перечислить колонки в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Поэтому список полей
+ * стоит и здесь, при сборке ответа.
+ */
+const PUBLIC_JOB_FIELDS = [
+  "id", "employerId", "title", "description", "company", "location", "type",
+  "salary", "skills", "isActive", "applicantCount", "createdAt", "updatedAt",
+] as const;
+
+function publicJob(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_JOB_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qjobsRouter.get("/jobs/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
+    // Список вакансий отдаёт только `"isActive"=TRUE` (и так же фильтрует путь
+    // через память), а выдача по идентификатору не смотрела на признак вовсе:
+    // закрытая вакансия продолжала открываться по прямой ссылке. Пятый случай
+    // одного и того же перекоса за день — правило написано в списке и не
+    // написано здесь.
+    const auth = verifyBearerOptional(req);
     if (isQJobsDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QJobsPosting" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ job: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","employerId","title","description","company","location","type","salary",
+                "skills","isActive","applicantCount","createdAt","updatedAt"
+           FROM "QJobsPosting" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      // Свою закрытую вакансию работодатель видит; остальным 404, а не 403:
+      // 403 подтвердил бы, что вакансия существует.
+      if (!row || (row.isActive !== true && auth?.sub !== row.employerId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ job: publicJob(row) });
     }
     const job = memJobs.get(id);
-    if (!job) return res.status(404).json({ error: "not_found" });
+    if (!job || (job.isActive !== true && auth?.sub !== job.employerId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
     return res.json({ job });
   } catch (err) {
     captureQJobsError(err, { route: "qjobs" });

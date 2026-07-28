@@ -397,7 +397,123 @@ const SMETA: Landscape = {
   ],
 };
 
-export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA];
+// ── QReal Studio ───────────────────────────────────────────────────────────
+
+/**
+ * The awkward landscape, and the reason it is written last.
+ *
+ * Higgsfield is not our competitor — it is our engine. `projects.ts` says so:
+ * the pipeline ends in "движок (Higgsfield/Veo)". Everything we add sits above
+ * someone else's model, so any row about generation quality is a row about
+ * their model, not ours.
+ *
+ * There is also a standing instruction on this: no claim that QReal beats
+ * Higgsfield until a measurable benchmark exists (ten briefs, blind QC scoring).
+ * That benchmark has not been run. So the one row we would like to win says
+ * "замера нет" in the measured field, which is the only honest thing to put
+ * there, and the marking row goes to Google outright.
+ */
+const QREAL: Landscape = {
+  moduleId: "qreal",
+  module: "QReal Studio",
+  category: "ИИ-видео",
+  framing:
+    "Higgsfield и Veo — это наш движок, а не конкурент: генерирует кадр их модель. Наш слой — раскадровка по брифу, директивы реализма в промтах, QC-петля из 14 критериев с авто-перегенерацией и обязательная ИИ-маркировка каждого кадра. Поэтому строки про качество генерации выиграть нельзя — это чужая модель. Строку про маркировку мы тоже проигрываем Google, и ниже сказано почему. Цены конкурентов взяты из сторонних обзоров, а не с их собственных страниц, — они помечены соответственно.",
+  competitors: [
+    { id: "higgsfield", name: "Higgsfield", url: "https://higgsfield.ai" },
+    { id: "runway", name: "Runway", url: "https://runwayml.com" },
+    { id: "veo", name: "Google Veo", url: "https://deepmind.google/models/veo/" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Своя модель генерации",
+      why: "Кто владеет моделью, тот определяет качество, цену и доступность. Всё остальное — надстройка.",
+      ours: { value: "Своей модели нет. Кадр генерирует Higgsfield или Veo — мы их вызываем." },
+      theirs: {
+        higgsfield: {
+          value: "Агрегирует 15+ моделей под одной подпиской: Sora 2, Veo 3.1, Kling 3.0, Seedance 2.0",
+          source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026",
+        },
+        runway: {
+          value: "Собственные кинематографические модели плюс лицензированные интеграции",
+          source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026",
+        },
+        veo: { value: "Собственная модель Google DeepMind", source: "https://deepmind.google/models/veo/" },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Машиночитаемая ИИ-маркировка, переживающая перекодирование",
+      why: "Ст. 50 EU AI Act требует машиночитаемой пометки синтетического контента с 2 августа 2026; для систем, уже бывших на рынке, срок сдвинут на 2 декабря 2026.",
+      ours: {
+        value:
+          "Манифест в стиле C2PA плюс sha256 на каждом кадре. Честное ограничение: такие манифесты снимаются простым перекодированием и выгрузкой в соцсеть — против стойкого водяного знака это слабее.",
+        measured: "неотключаемая маркировка в пайплайне /api/qreal; стойкость к перекодированию не замерялась",
+      },
+      theirs: {
+        higgsfield: { value: "Собственной схемы маркировки не заявлено; наследует пометки моделей под капотом", unverified: true },
+        runway: { value: "Отдельные детекторы читают C2PA у Runway-видео; своей публичной схемы не нашли", source: "https://www.eyesift.com/video-analysis/", unverified: true },
+        veo: {
+          value: "SynthID — невидимый знак, встроенный в саму модель; переживает перекомпрессию и скриншот",
+          source: "https://internet-pros.com/blog/ai-content-provenance-watermarking-c2pa-2026/",
+        },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Автоматическая отбраковка неудачных кадров",
+      why: "В ИИ-видео брак — норма, а не исключение: руки, моргание, склейки. Вопрос в том, кто его ловит — машина или человек.",
+      ours: {
+        value:
+          "QC-петля из 14 взвешенных критериев реализма (микромимика, моргание, SSS кожи, руки, room tone) с авто-перегенерацией кадра.",
+        measured: "🔴 замера нет. Слепого сравнения с ручной отбраковкой не проводили, и до него утверждать превосходство нельзя.",
+      },
+      theirs: {
+        higgsfield: { value: "Слой консистентности по платформе; автоматической отбраковки по критериям не заявлено", source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026", unverified: true },
+        runway: { value: "Сильная среда монтажа — отбор кадров делает человек", source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026", unverified: true },
+        veo: { value: "Отбраковки на стороне модели не заявлено", unverified: true },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Цена входа",
+      why: "При покадровой оплате цена решает, сколько дублей можно себе позволить, — а дублей нужно много.",
+      ours: { value: "Внутри платформы AEVION; сверху ложится стоимость кадров у движка" },
+      theirs: {
+        higgsfield: {
+          value: "$15 / $39 / $99 в месяц при годовой оплате",
+          source: "https://www.gstory.ai/blog/higgsfield-ai/",
+          unverified: true,
+        },
+        runway: {
+          value: "Бесплатный тариф со 125 разовыми кредитами",
+          source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026",
+          unverified: true,
+        },
+        veo: { value: "Через подписку Google и API", unverified: true },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Путь от брифа до готового ролика",
+      why: "Одно дело — выдать красивый кадр, другое — собрать из брифа связную сцену со звуком.",
+      ours: {
+        value:
+          "Один бриф → ИИ-раскадровка → промты с директивами реализма (24 fps, 180° затвор, фоли, room tone) → движок → QC → сборка. Люди, дети, животные, природа и звук без съёмки и без референс-видео.",
+        measured: "демо «Утро в степи», /api/qreal",
+      },
+      theirs: {
+        higgsfield: { value: "Есть студийные воркфлоу под шортсы и рекламу", source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026" },
+        runway: { value: "Среда монтажа, сборку ведёт человек", source: "https://higgsfield.ai/blog/higgsfield-vs-runway-2026", unverified: true },
+        veo: { value: "Модель отдаёт клип; раскадровки и сборки нет", unverified: true },
+      },
+      verdict: "ours",
+    },
+  ],
+};
+
+export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL];
 
 /**
  * Modules with obvious analogues that have NOT been researched yet.
@@ -406,7 +522,6 @@ export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA];
  * and this list is what stops the table quietly implying the rest were checked.
  */
 export const PENDING: Array<{ module: string; category: string; analogues: string[] }> = [
-  { module: "QReal Studio", category: "ИИ-видео", analogues: ["Higgsfield", "Runway", "Kling", "Pika"] },
   { module: "QSkyway", category: "Воздушное пространство дронов", analogues: ["AirMap", "Altitude Angel", "Aloft"] },
   { module: "QSign / IP Bureau", category: "Фиксация авторства", analogues: ["OriginStamp", "Bernstein", "OpenTimestamps"] },
   { module: "StartupX", category: "Биржа стартапов", analogues: ["AngelList", "Republic", "SeedInvest"] },

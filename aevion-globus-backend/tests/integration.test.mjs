@@ -21,11 +21,20 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import express from "express";
 import jwt from "jsonwebtoken";
 
 process.env.AUTH_JWT_SECRET = "test-secret-please-rotate";
-process.env.AEVION_DATA_DIR = `${process.cwd()}/.aevion-data-test-${process.pid}`;
+// Каталог данных — во временной папке ОС, а не в рабочем дереве.
+// Раньше здесь стояло `${process.cwd()}/.aevion-data-test-${process.pid}`, и
+// каждый прогон оставлял в корне репозитория каталог с суффиксом-pid. Один такой
+// 28.07 обнаружился ОТСЛЕЖИВАЕМЫМ в git: его затянул 30-минутный автокоммит,
+// который забирает весь worktree целиком. Соседние `aevInternalMint.test.ts` и
+// `qtradeInternalCredit.test.ts` уже делают правильно — через mkdtempSync в tmpdir.
+process.env.AEVION_DATA_DIR = mkdtempSync(path.join(tmpdir(), "aevion-integration-"));
 process.env.QRIGHT_WEBHOOK_SECRET = "test-qright";
 process.env.CYBERCHESS_WEBHOOK_SECRET = "test-chess";
 process.env.PLANET_WEBHOOK_SECRET = "test-planet";
@@ -67,7 +76,7 @@ before(async () => {
 
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
-  // Best-effort cleanup of the per-pid data dir.
+  // Best-effort cleanup of the temp data dir created at the top of this file.
   const fs = await import("node:fs/promises");
   await fs.rm(process.env.AEVION_DATA_DIR, { recursive: true, force: true }).catch(() => {});
 });

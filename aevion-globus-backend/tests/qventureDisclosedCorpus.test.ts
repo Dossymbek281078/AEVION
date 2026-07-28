@@ -6646,6 +6646,21 @@ describe("five readers now accept 'was', and one still does not", () => {
     expect(p("Revenue is projected at $5 million.").revenueUsd).toBeNull();
   });
 
+  test("KNOWN DEFECT: a negative margin is read as positive", () => {
+    // The worst finding of the sweep and the reason it is written down rather
+    // than left for whoever notices next. "Negative gross margin of 20%" scores
+    // as +20: the strongest thing a plan can disclose against itself, flipped
+    // to a point in its favour. The sign handling covers "negative 20% gross
+    // margin" — the word before the FIGURE — and not before the NOUN.
+    //
+    // Not fixed in the closing minutes of a session. That reader has three
+    // alternatives and its own sign capture, and a sign error introduced while
+    // fixing a sign error would be indistinguishable from the one it replaced.
+    expect(p("Negative gross margin of 20%.").grossMarginPct).toBe(20);
+    // The form that works, for contrast.
+    expect(p("Negative 20% gross margin.").grossMarginPct).toBe(-20);
+  });
+
   test("STILL A MISS: growth stated as a noun with a period", () => {
     expect(p("Revenue growth for the year was 40%.").growthPct).toBeNull();
     expect(p("Revenue grew 40% year over year.").growthPct).toBe(40);
@@ -6732,6 +6747,11 @@ describe("the top line survives the words a filing puts around it", () => {
     expect(rev("Unearned revenue of $3 million.")).toBeNull();
     expect(rev("Cost of revenue was $3 million.")).toBeNull();
     expect(rev("Cost of revenues of $3 million.")).toBeNull();
+    // Added on a second probe: the first pass excluded "cost of revenue" and
+    // left "cost of sales", which is the same cost under the other noun. A
+    // fix aimed at a list is not done until the list is walked.
+    expect(rev("Cost of sales was $8 million.")).toBeNull();
+    expect(rev("Accrued revenue of $8 million.")).toBeNull();
 
     // The forms that ARE the top line are untouched.
     expect(rev("Net revenue was $10 million.")).toBe(10_000_000);

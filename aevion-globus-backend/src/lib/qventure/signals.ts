@@ -520,7 +520,7 @@ const NUM = NUMBER_PATTERN;
  * "revenues? from operations" and "recurring revenues?" sit earlier in the
  * alternation and are unaffected — those ARE the top line.
  */
-const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|(?<!deferred )(?<!unearned )(?<!cost of )(?<!costs of )revenues?|net sales|sales|in[- ]force premiums?|gross written premiums?|gwp`;
+const REV_NOUN = String.raw`arr|mrr|recurring revenues?|revenues? from operations|(?<!deferred )(?<!unearned )(?<!accrued )(?<!cost of )(?<!costs of )revenues?|net sales|(?<!cost of )(?<!costs of )sales|in[- ]force premiums?|gross written premiums?|gwp`;
 const CUST_NOUN = String.raw`customers|maus?|daus?|monthly active users|daily active users|users|clients|subscribers|merchants|seats|members|memberships|accounts|stores|buyers|sellers|tenants|policyholders|policies in force`;
 const GMV_NOUN = String.raw`gmv|gtv|gross merchandise (?:value|volume)|gross transaction value|processed volume|gross bookings|total payment volume|tpv|transaction volume|annualized volume`;
 const TAKE_NOUN = String.raw`take[- ]rate|commission(?: rate)?|net revenue margin`;

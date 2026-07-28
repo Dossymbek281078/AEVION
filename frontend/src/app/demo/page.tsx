@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { CompetitiveTable } from "@/components/CompetitiveTable";
 import {
   DEMO_MODULE_ORDER,
   ecosystemIntro,
@@ -338,6 +339,9 @@ export default function DemoShowcasePage() {
             ))}
           </ul>
         </article>
+
+        {/* ───────── HONEST COMPETITIVE COMPARISON ───────── */}
+        <CompetitiveTable />
 
         {/* ───────── LIVE ECOSYSTEM PULSE ───────── */}
         <section

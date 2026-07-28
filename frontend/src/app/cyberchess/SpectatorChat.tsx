@@ -140,8 +140,12 @@ export default function SpectatorChat(props: Props) {
 
     const onChat = (ev: MessageEvent) => {
       try {
-        const msg = JSON.parse(ev.data) as ChatMessage;
-        if (!msg || !msg.id) return;
+        /* Живой поток проходит ТУ ЖЕ проверку, что и первичная загрузка. Сначала
+           здесь стояло только `as ChatMessage` и проверка наличия id — то есть
+           сообщение с нестроковым text роняло панель ровно так же, а этот путь ещё
+           и основной: по нему приходят все сообщения после открытия чата. */
+        const [msg] = sanitizeChatMessages([JSON.parse(ev.data)]);
+        if (!msg) return;
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
           const next = [...prev, msg];

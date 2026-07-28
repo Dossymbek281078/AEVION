@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { paymentNoteKey, formatDisplayPrice } from "./paymentNote";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
@@ -187,6 +188,11 @@ export default function PricingPage() {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
+  // Живы ли локальные каналы оплаты. Обещание «Kaspi / карты КЗ» имеет право
+  // появиться на экране, только когда PayBox реально настроен на проде: 28.07.2026
+  // он был configured:false, а витрина всё равно обещала Kaspi, и чекаут молча
+  // уходил в LemonSqueezy с долларовым списанием. null = ещё не спросили.
+  const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
 
   // Калькулятор сметы
   // Lite = 1 продукт на выбор: выбранный модуль для чекаута Lite
@@ -291,6 +297,16 @@ export default function PricingPage() {
       }
     }
     load();
+    fetch(apiUrl("/api/pricing/checkout/healthz"))
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+      })
+      // Не ответил — считаем канал недоступным: обещать Kaspi «на всякий случай»
+      // хуже, чем не обещать.
+      .catch(() => {
+        if (!cancelled) setPayboxLive(false);
+      });
     fetch(apiUrl("/api/pricing/promo"))
       .then((r) => r.json())
       .then((j) => {
@@ -366,11 +382,14 @@ export default function PricingPage() {
   const symbol = data?.currencies[currency].symbol ?? "$";
   const rate = data?.currencies[currency].rate ?? 1;
 
+  // Списание идёт в USD (LemonSqueezy), а витрина умеет показывать цену в EUR,
+  // KZT и RUB по зашитому курсу. Без «≈» пересчёт читается как сумма, которую
+  // спишут, — а спишут доллары по курсу банка покупателя.
   const displayPrice = (usd: number | null): string => {
     if (usd === null) return t("pricing.home.price.onRequest");
     if (usd === 0) return t("pricing.home.price.free");
     const v = Math.round(usd * rate);
-    return `${symbol}${v.toLocaleString("ru-RU")}`;
+    return formatDisplayPrice(`${symbol}${v.toLocaleString("ru-RU")}`, currency);
   };
 
   async function recalc() {
@@ -485,7 +504,8 @@ export default function PricingPage() {
                 )}
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                {t("pricing.home.heroModule.paymentCard")} {currency === "KZT" ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.usdNote")}
+                {t("pricing.home.heroModule.paymentCard")}{" "}
+                {t(`pricing.home.heroModule.${paymentNoteKey(currency, payboxLive)}`, { symbol, rate })}
               </div>
             </div>
             <button

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { apiUrl } from "@/lib/apiBase";
 
 const PRO_BENEFITS = [
   "Unlimited AI sessions & history",
@@ -34,9 +35,86 @@ export default function QCoreUpgradePage() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [payMethod, setPayMethod] = useState<PayMethod>("card");
   const [plan, setPlan] = useState<"pro" | "enterprise">("pro");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; contactUrl?: string } | null>(null);
 
-  const proPrice = billing === "monthly" ? 19 : Math.round(19 * 0.8);
-  const enterprisePrice = billing === "monthly" ? 99 : Math.round(99 * 0.8);
+  // Цена берётся из живого прайса, а не из числа в компоненте. 28.07.2026 здесь
+  // стояло $19 — цена тарифа Lite ДО повышения 22.07.2026; страница отстала и
+  // просила у покупателя сумму, которой в реестре уже не было. Число на
+  // денежном пути имеет право быть только из источника истины.
+  const [tierPrice, setTierPrice] = useState<{ monthly: number; annual: number } | null>(null);
+  // Локальный канал показываем, только когда он настроен на проде.
+  const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/pricing"))
+      .then((r) => r.json())
+      .then((j) => {
+        const lite = (j?.tiers ?? []).find((x: { id: string }) => x.id === "lite");
+        if (!cancelled && lite) {
+          setTierPrice({ monthly: lite.priceMonthly, annual: lite.priceAnnualTotal });
+        }
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/pricing/checkout/healthz"))
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setPayboxLive(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // QCoreAI как отдельная покупка = тариф Lite с выбранным продуктом — тот же
+  // путь, что и кнопка модуля на /pricing. Второго способа купить один модуль
+  // в платформе нет, и заводить его здесь незачем.
+  const proPrice =
+    tierPrice === null ? null : billing === "monthly" ? tierPrice.monthly : Math.round(tierPrice.annual / 12);
+
+  async function upgrade() {
+    if (plan === "enterprise") {
+      window.location.href = "/pricing/contact?tier=enterprise";
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tierId: "lite",
+          period: billing,
+          seats: 1,
+          modules: ["qcoreai"],
+          currency: payMethod === "paybox" ? "KZT" : "USD",
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      // Отказ показываем словами покупателя, а не молчанием: раньше кнопка
+      // вообще не имела обработчика и на клик не отвечала ничем.
+      setNotice({
+        text: j.message ?? "Не удалось открыть оплату. Подписка не оформлена и деньги не списаны.",
+        contactUrl: j.contactUrl ?? "/pricing/contact",
+      });
+    } catch {
+      setNotice({
+        text: "Не удалось связаться с платёжным сервисом. Деньги не списаны — попробуйте ещё раз или напишите нам.",
+        contactUrl: "/pricing/contact",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
@@ -168,12 +246,12 @@ export default function QCoreUpgradePage() {
               </div>
               <div style={{ marginBottom: 20 }}>
                 <span style={{ fontSize: 36, fontWeight: 800, color: "#0d9488" }}>
-                  ${proPrice}
+                  {proPrice === null ? "…" : `$${proPrice}`}
                 </span>
                 <span style={{ color: "#64748b", fontSize: 14 }}>/mo</span>
-                {billing === "annual" && (
+                {billing === "annual" && proPrice !== null && (
                   <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                    Billed annually (${proPrice * 12}/yr)
+                    Billed annually (${tierPrice?.annual}/yr)
                   </div>
                 )}
               </div>
@@ -220,15 +298,16 @@ export default function QCoreUpgradePage() {
                 )}
               </div>
               <div style={{ marginBottom: 20 }}>
-                <span style={{ fontSize: 36, fontWeight: 800, color: "#7c3aed" }}>
-                  ${enterprisePrice}
+                {/* У Enterprise в реестре priceMonthly = null: цена договорная.
+                    До 28.07.2026 здесь стояло $99 — число, которого нет ни в
+                    одном источнике, и заплатить его было нельзя: чекаут
+                    Enterprise уводит на форму контакта. */}
+                <span style={{ fontSize: 28, fontWeight: 800, color: "#7c3aed" }}>
+                  On request
                 </span>
-                <span style={{ color: "#64748b", fontSize: 14 }}>/mo</span>
-                {billing === "annual" && (
-                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                    Billed annually (${enterprisePrice * 12}/yr)
-                  </div>
-                )}
+                <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                  Scope-based pricing — we quote after a call.
+                </div>
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
                 {ENTERPRISE_BENEFITS.map((b) => (
@@ -274,8 +353,9 @@ export default function QCoreUpgradePage() {
                 }}
               >
                 <span style={{ fontSize: 18 }}>💳</span>
-                Card via Stripe
+                Card
               </button>
+              {payboxLive === true && (
               <button
                 onClick={() => setPayMethod("paybox")}
                 style={{
@@ -297,46 +377,32 @@ export default function QCoreUpgradePage() {
                 <span style={{ fontSize: 18 }}>🇰🇿</span>
                 PayBox KZ
               </button>
+              )}
             </div>
 
             {payMethod === "card" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <input
-                  placeholder="Card number"
-                  style={{
-                    padding: "10px 14px",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 8,
-                    fontSize: 14,
-                    outline: "none",
-                  }}
-                />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <input
-                    placeholder="MM / YY"
-                    style={{
-                      padding: "10px 14px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      outline: "none",
-                    }}
-                  />
-                  <input
-                    placeholder="CVC"
-                    style={{
-                      padding: "10px 14px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      outline: "none",
-                    }}
-                  />
-                </div>
+              /* До 28.07.2026 здесь стояли поля «Card number / MM YY / CVC» —
+                 обычные input без состояния и без отправки. Кнопка оплаты при
+                 этом не имела обработчика вовсе, так что введённые данные не
+                 уходили никуда, но страница приглашала ввести номер карты и CVC
+                 в поле на нашем домене. Реквизиты собирает процессинг на своей
+                 стороне, поэтому здесь — только объяснение, что произойдёт. */
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  fontSize: 14,
+                  color: "#334155",
+                }}
+              >
+                Card details are entered on the processor&apos;s secure checkout page —
+                we never handle them. Clicking below opens that page.
               </div>
             )}
 
-            {payMethod === "paybox" && (
+            {payMethod === "paybox" && payboxLive === true && (
               <div
                 style={{
                   background: "#f0fdf4",
@@ -367,13 +433,40 @@ export default function QCoreUpgradePage() {
               color: "#fff",
               fontWeight: 700,
               fontSize: 16,
-              cursor: "pointer",
+              cursor: busy ? "wait" : "pointer",
               marginBottom: 16,
+              opacity: busy ? 0.7 : 1,
             }}
+            disabled={busy}
+            onClick={upgrade}
           >
-            Upgrade to {plan === "pro" ? "Pro" : "Enterprise"} — $
-            {plan === "pro" ? proPrice : enterprisePrice}/mo
+            {plan === "enterprise"
+              ? "Talk to sales"
+              : busy
+                ? "Opening checkout…"
+                : `Upgrade to Pro${proPrice === null ? "" : ` — $${proPrice}/mo`}`}
           </button>
+
+          {notice && (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 10,
+                padding: "12px 14px",
+                fontSize: 13,
+                color: "#991b1b",
+                marginBottom: 16,
+              }}
+            >
+              {notice.text}{" "}
+              {notice.contactUrl && (
+                <a href={notice.contactUrl} style={{ color: "#991b1b", fontWeight: 700 }}>
+                  Написать нам
+                </a>
+              )}
+            </div>
+          )}
 
           <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, margin: 0 }}>
             Cancel anytime. No hidden fees. Invoices available for KZ businesses.

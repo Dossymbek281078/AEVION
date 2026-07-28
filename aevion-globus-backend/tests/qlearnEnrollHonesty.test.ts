@@ -120,3 +120,25 @@ describe("сбой базы не выдаёт себя за отсутствие
     expect(res.status).not.toBe(404);
   });
 });
+
+describe("транзакция вокруг записи и счётчика", () => {
+  test("успешная запись коммитится", async () => {
+    stubDb({ duplicate: false });
+    await enroll();
+    expect(sqlLog.some((l) => /^BEGIN/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(true);
+  });
+
+  test("несуществующий курс откатывается и не коммитится", async () => {
+    stubDb({ courseExists: false });
+    await enroll();
+    expect(sqlLog.some((l) => /^ROLLBACK/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(false);
+  });
+
+  test("сбой базы откатывается", async () => {
+    stubDb({ blowUp: true });
+    await enroll();
+    expect(sqlLog.some((l) => /^ROLLBACK/i.test(l))).toBe(true);
+  });
+});

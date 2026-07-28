@@ -394,11 +394,23 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
   const courseId = param(req, "id");
 
   if (isQLearnDbReady()) {
+    const client = await pool.connect();
     try {
-      const courseRow = await pool.query(`SELECT "id" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
-      if (courseRow.rows.length === 0) { res.status(404).json({ error: "Course not found" }); return; }
+      // Запись на курс и счётчик записавшихся — в одной транзакции. До
+      // 28.07.2026 это были два отдельных запроса: запись создана, счётчик не
+      // обновлён (или наоборот) — и расхождение уже не отследить. Образец —
+      // qevents.ts. Клиент берётся внутри существующего try, поэтому сбой
+      // подключения по-прежнему уходит в ответ 503 ниже.
+      await client.query("BEGIN");
+
+      const courseRow = await client.query(`SELECT "id" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
+      if (courseRow.rows.length === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Course not found" });
+        return;
+      }
       const enrollmentId = crypto.randomUUID();
-      const inserted = await pool.query(
+      const inserted = await client.query(
         `INSERT INTO "QLearnEnrollment" ("id","courseId","userId","progress","enrolledAt")
          VALUES ($1,$2,$3,0,NOW())
          ON CONFLICT ("courseId","userId") DO NOTHING
@@ -406,10 +418,11 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
         [enrollmentId, courseId, auth.sub],
       );
       if (inserted.rowCount && inserted.rowCount > 0) {
-        await pool.query(
+        await client.query(
           `UPDATE "QLearnCourse" SET "enrollmentCount" = "enrollmentCount" + 1 WHERE "id" = $1`,
           [courseId],
         );
+        await client.query("COMMIT");
         res.status(201).json({ enrollmentId });
         return;
       }
@@ -417,13 +430,15 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
       // Запись уже была. Раньше сюда возвращался свежесгенерированный
       // enrollmentId, которого нет в базе: клиент получал 201 и идентификатор,
       // по которому ничего не найдётся. Отдаём настоящий.
-      const prior = await pool.query(
+      const prior = await client.query(
         `SELECT "id" FROM "QLearnEnrollment" WHERE "courseId" = $1 AND "userId" = $2 LIMIT 1`,
         [courseId, auth.sub],
       );
+      await client.query("COMMIT");
       res.status(200).json({ enrollmentId: prior.rows[0]?.id ?? null, alreadyEnrolled: true });
       return;
     } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
       // Раньше здесь стоял молчаливый провал в in-memory ветку. В проде
       // memCourses пуст, поэтому сбой базы превращался в «Course not found» —
       // ответ, по которому невозможно понять, что курс есть, а сломалось
@@ -431,6 +446,8 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
       captureQLearnError(err, { route: "qlearn/courses/:id/enroll" });
       res.status(503).json({ error: "database_unavailable" });
       return;
+    } finally {
+      client.release();
     }
   }
   const course = memCourses.get(courseId);

@@ -42,6 +42,45 @@ import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { getPool } from "../lib/dbPool";
 const pool = getPool();
+
+/**
+ * Снятие внутренних полей перед публичной выдачей общих ресурсов.
+ *
+ * Публичные списки (`/presets/public`, `/pipelines/public`, `/prompts/public`,
+ * `/templates/public`, `/eval/suites/public`, `/prompt-chains/public`) открыты
+ * без аутентификации и отдавали строки хранилища целиком: `listPublic*` читают
+ * их через `SELECT *`, а тип строки содержит `ownerUserId`. То есть публичный
+ * каталог раскрывал внутренний идентификатор автора каждого элемента.
+ *
+ * Найдено 28.07 при сплошном аудите публичных ручек — третий класс утечки за
+ * день, все одной формы: наружу уходит то, что вернула база, а не то, что
+ * решили показать. На проде эти списки пока пусты, поэтому утечка была скрытой:
+ * она включилась бы в тот момент, когда пользователь впервые что-то опубликует.
+ *
+ * `ownerUserId` нужен самому хранилищу — по нему проверяются права на закрытые
+ * элементы (`/presets/:id` сравнивает его с `auth.sub`). Поэтому снимаем на
+ * границе ответа, а не в запросе: слой доступа должен видеть владельца.
+ *
+ * Здесь чёрный список, а не белый, и это осознанно: содержимое элементов —
+ * пользовательское и меняется (новые поля пресета, шага конвейера), а белый
+ * список молча срезал бы их, ломая функциональность. Внутренних полей же
+ * ровно счётное число, и рост набора ловит тест
+ * `tests/qcoreaiPublicNoOwnerLeak.test.ts` прогоном по всем шести ручкам.
+ */
+const INTERNAL_FIELDS = ["ownerUserId", "ownerEmail", "userId", "createdBy"] as const;
+
+export function publicItems<T>(items: T[]): Array<Record<string, unknown>> {
+  return (items as unknown as Array<Record<string, unknown>>).map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(item)) {
+      if ((INTERNAL_FIELDS as readonly string[]).includes(k)) continue;
+      out[k] = v;
+    }
+    return out;
+  });
+}
+
 import { rateLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
@@ -918,7 +957,7 @@ qcoreaiRouter.get("/pipelines/public", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
-    res.json({ items: await listPublicPipelines(q, limit) });
+    res.json({ items: publicItems(await listPublicPipelines(q, limit)) });
   } catch (err: any) { captureQCoreAIError(err, { route: "pipelines-public" }); res.status(500).json({ error: "list public pipelines failed" }); }
 });
 
@@ -1716,7 +1755,7 @@ qcoreaiRouter.get("/presets/public", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim().slice(0, 80);
     const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
-    const items = await listPublicSharedPresets(q, limit);
+    const items = publicItems(await listPublicSharedPresets(q, limit));
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "presets-public" });
@@ -2947,7 +2986,7 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
 qcoreaiRouter.get("/eval/suites/public", async (req, res) => {
   try {
     const limit = Math.min(50, Number(req.query.limit) || 20);
-    const items = await listPublicEvalSuites(limit);
+    const items = publicItems(await listPublicEvalSuites(limit));
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "eval-suites-public" });
@@ -3121,7 +3160,7 @@ qcoreaiRouter.get("/prompts/public", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim().slice(0, 80);
     const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
-    const items = await listPublicPrompts(q, limit);
+    const items = publicItems(await listPublicPrompts(q, limit));
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "prompts-public" });
@@ -3320,7 +3359,7 @@ qcoreaiRouter.get("/templates/public", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     const limit = Math.min(50, parseInt(String(req.query.limit || "30"), 10) || 30);
-    const items = await listPublicTemplates(q, limit);
+    const items = publicItems(await listPublicTemplates(q, limit));
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "templates-public" });
@@ -5548,7 +5587,7 @@ qcoreaiRouter.post("/prompt-chains", async (req, res) => {
 qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
   try {
     const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
-    const items = await listPublicPromptChains(limit);
+    const items = publicItems(await listPublicPromptChains(limit));
     res.json({ items });
   } catch (err: any) { captureQCoreAIError(err, { route: "prompt-chains-public" }); res.status(500).json({ error: "list public chains failed" }); }
 });

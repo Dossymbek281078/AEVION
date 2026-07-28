@@ -55,6 +55,13 @@ const memWaitlist = new Map<string, string[]>(); // eventId -> userId[]
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_EVENT_TITLE_LEN = 200;
+const MAX_EVENT_DESCRIPTION_LEN = 5000;
+const MAX_EVENT_URL_LEN = 2000;
+const MAX_EVENT_CAPACITY = 1_000_000;
+const MAX_EVENT_PRICE = 1_000_000;
+
 const EVENT_CATEGORIES = ["tech", "business", "art", "music", "sports", "education", "networking", "other"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -241,6 +248,52 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
   }
 
+  if (title.trim().length > MAX_EVENT_TITLE_LEN) {
+    return res.status(400).json({ error: "title too long" });
+  }
+  if (typeof description === "string" && description.length > MAX_EVENT_DESCRIPTION_LEN) {
+    return res.status(400).json({ error: "description too long" });
+  }
+
+  // Конец события не сверялся с началом: «закончилось раньше, чем началось»
+  // спокойно сохранялось и потом показывалось в афише как есть.
+  let normalizedEndAt: string | null = null;
+  if (endAt !== undefined && endAt !== null && String(endAt).trim() !== "") {
+    const endTs = Date.parse(String(endAt));
+    if (!Number.isFinite(endTs)) {
+      return res.status(400).json({ error: "endAt must be a valid ISO-8601 date" });
+    }
+    if (endTs <= Date.parse(normalizedStartAt)) {
+      return res.status(400).json({ error: "endAt must be after startAt" });
+    }
+    normalizedEndAt = new Date(endTs).toISOString();
+  }
+
+  // `capacity > 0` и `price >= 0` пропускают Infinity: `1e400` в JSON именно им
+  // и становится, а колонка вместимости целочисленная — вставка падала бы
+  // пятисоткой. Дробные места и цена мельче копейки смысла тоже не имеют.
+  if (capacity !== undefined && capacity !== null) {
+    if (
+      typeof capacity !== "number" || !Number.isInteger(capacity) ||
+      capacity < 1 || capacity > MAX_EVENT_CAPACITY
+    ) {
+      return res.status(400).json({ error: `capacity must be a whole number 1..${MAX_EVENT_CAPACITY}` });
+    }
+  }
+  if (price !== undefined && price !== null) {
+    if (
+      typeof price !== "number" || !Number.isFinite(price) || price < 0 ||
+      price > MAX_EVENT_PRICE || Math.abs(Math.round(price * 100) - price * 100) > 1e-6
+    ) {
+      return res.status(400).json({ error: `price must be 0..${MAX_EVENT_PRICE} with at most 2 decimals` });
+    }
+  }
+  if (coverUrl !== undefined && coverUrl !== null && String(coverUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(coverUrl)) || String(coverUrl).length > MAX_EVENT_URL_LEN) {
+      return res.status(400).json({ error: "coverUrl must be an absolute http(s) URL" });
+    }
+  }
+
   const event: QEvent = {
     id: crypto.randomUUID(),
     organizerId: auth.sub,
@@ -249,7 +302,7 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     category: typeof category === "string" && EVENT_CATEGORIES.includes(category) ? category : "tech",
     location: typeof location === "string" ? location.trim() : "Online",
     startAt: normalizedStartAt,
-    endAt: typeof endAt === "string" ? endAt : null,
+    endAt: normalizedEndAt,
     capacity: typeof capacity === "number" && capacity > 0 ? capacity : 100,
     price: typeof price === "number" && price >= 0 ? price : 0,
     attendeeCount: 0,

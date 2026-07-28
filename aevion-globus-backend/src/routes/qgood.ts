@@ -102,6 +102,38 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodDonation_campaign_idx" ON "QGoodDonation" ("campaignId", "createdAt");`);
+
+  // Частичный уникальный индекс по ссылке на платёж — основа идемпотентности
+  // записи пожертвования (см. POST /campaigns/:id/donations). Частичный,
+  // потому что ручные и наличные записи идут без ссылки, и запрещать им
+  // повторяться нельзя.
+  //
+  // Создание может упасть на базе, где дубликаты уже накопились: индекс тогда
+  // не встанет, и это НЕ повод ронять модуль. Но и молчать нельзя — иначе
+  // защита будет считаться работающей, а её не будет. Поэтому громкий лог с
+  // числом дублей и запросом, которым их разобрать.
+  try {
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "QGoodDonation_paymentRef_key"
+       ON "QGoodDonation" ("paymentRef") WHERE "paymentRef" IS NOT NULL;`,
+    );
+  } catch (err) {
+    const dups = await pool
+      .query(
+        `SELECT COUNT(*)::int AS n FROM (
+           SELECT "paymentRef" FROM "QGoodDonation"
+           WHERE "paymentRef" IS NOT NULL
+           GROUP BY "paymentRef" HAVING COUNT(*) > 1
+         ) d`,
+      )
+      .catch(() => ({ rows: [{ n: -1 }] }));
+    console.error(
+      `[QGood] УНИКАЛЬНЫЙ ИНДЕКС ПО paymentRef НЕ СОЗДАН — защиты от двойной записи платежа НЕТ. ` +
+        `Дублирующихся ссылок в таблице: ${dups.rows[0]?.n}. ` +
+        `Разобрать: SELECT "paymentRef", COUNT(*) FROM "QGoodDonation" WHERE "paymentRef" IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1; ` +
+        `Причина: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QGoodMatchingPool" (
       "id"               TEXT PRIMARY KEY,
@@ -283,18 +315,50 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
     const emailHash = donorEmail
       ? crypto.createHash("sha256").update(String(donorEmail).toLowerCase().trim()).digest("hex").slice(0, 32)
       : null;
-    await pool.query(
+    // Идемпотентность по paymentRef. Один и тот же платёж приходит сюда не
+    // однажды: повтор вебхука, обновление страницы подтверждения, ретрай
+    // клиента. Без этого каждая повторная запись добавляла строку пожертвования
+    // И увеличивала raisedCents с donorCount — то есть публичная кампания
+    // показывала деньги, которых никто не давал, и матчинг-фонд списывался
+    // второй раз. Ссылки нет (наличные, ручная запись) — идемпотентности тоже
+    // нет, и это честно: сопоставлять такие записи не по чему.
+    const ref = paymentRef ? String(paymentRef).slice(0, 100) : null;
+    const inserted = await pool.query(
       `INSERT INTO "QGoodDonation" ("id","campaignId","amountCents","currency","donorName","donorEmailHash","messageText","anonymous","paymentRef")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT ("paymentRef") WHERE "paymentRef" IS NOT NULL DO NOTHING
+       RETURNING "id"`,
       [
         donationId, id, amount, String(currency).slice(0, 8).toUpperCase(),
         donorName ? String(donorName).slice(0, 100) : null,
         emailHash,
         messageText ? String(messageText).slice(0, 500) : null,
         Boolean(anonymous),
-        paymentRef ? String(paymentRef).slice(0, 100) : null,
+        ref,
       ],
     );
+
+    if (inserted.rows.length === 0) {
+      // Этот платёж уже записан. Отвечаем успехом с ИСХОДНЫМ идентификатором,
+      // ничего не начисляя: повтор вебхука не должен выглядеть ошибкой, но и
+      // деньги считать дважды нельзя.
+      const prior = await pool.query(
+        `SELECT "id" FROM "QGoodDonation" WHERE "paymentRef" = $1 LIMIT 1`,
+        [ref],
+      );
+      const totals = await pool.query(
+        `SELECT "raisedCents","donorCount" FROM "QGoodCampaign" WHERE "id" = $1`,
+        [id],
+      );
+      return res.json({
+        ok: true,
+        duplicate: true,
+        donationId: prior.rows[0]?.id ?? null,
+        raisedCents: Number(totals.rows[0]?.raisedCents ?? 0),
+        donorCount: Number(totals.rows[0]?.donorCount ?? 0),
+      });
+    }
+
     await pool.query(
       `UPDATE "QGoodCampaign"
        SET "raisedCents" = "raisedCents" + $1, "donorCount" = "donorCount" + 1

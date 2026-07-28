@@ -162,6 +162,25 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qevents/events/:id ─────────────────────────────────────────────
+/**
+ * Поля события, которые допустимо отдавать наружу.
+ *
+ * Перечислить колонки в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список полей стоит и
+ * здесь, при сборке ответа. Поймал это на соседнем модуле: тест с мок-базой,
+ * вернувшей лишнее поле, показал, что оно уходит наружу.
+ */
+const PUBLIC_EVENT_FIELDS = [
+  "id", "organizerId", "title", "description", "category", "location", "startAt",
+  "endAt", "capacity", "price", "attendeeCount", "isPublic", "coverUrl", "createdAt", "updatedAt",
+] as const;
+
+function publicEvent(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_EVENT_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qeventsRouter.get("/events/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
@@ -182,7 +201,7 @@ qeventsRouter.get("/events/:id", async (req: Request, res: Response) => {
       if (!row || (row.isPublic !== true && auth?.sub !== row.organizerId)) {
         return res.status(404).json({ error: "not_found" });
       }
-      return res.json({ event: row });
+      return res.json({ event: publicEvent(row) });
     }
     const event = memEvents.get(id);
     if (!event || (event.isPublic !== true && auth?.sub !== event.organizerId)) {

@@ -104,6 +104,14 @@ describe("QEvents: непубличное событие не открывает
     expect((await get()).status).toBe(200);
   });
 
+  test("служебные поля наружу не уходят", async () => {
+    // Проверка, которой мне не хватало сразу: перечисление в запросе не спасает,
+    // если ответ собирается из сырой строки. На соседнем модуле это и вылезло.
+    serveEvent(true);
+    const res = await get();
+    expect(res.body.event).not.toHaveProperty("internalNote");
+  });
+
   test("запрос перечисляет поля, а не берёт всё подряд", async () => {
     serveEvent(true);
     await get();

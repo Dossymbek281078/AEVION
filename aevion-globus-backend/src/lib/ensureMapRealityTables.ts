@@ -42,6 +42,22 @@ export async function ensureMapRealityTables(pool: PgPoolInstance): Promise<void
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // Секрет правки. Отдельным ALTER, а не в CREATE TABLE: таблица на проде уже
+    // существует, и CREATE TABLE IF NOT EXISTS её не тронет.
+    //
+    // ЗАЧЕМ. Правка и удаление сигнала сверяли `author_alias`, и замысел верный —
+    // но этот же псевдоним публичный список отдаёт наружу, а карточка на сайте
+    // печатает «by <псевдоним>». То есть ключ напечатан на том, что он защищает:
+    // прочитал автора на карте — правишь его сигнал.
+    //
+    // Псевдоним остаётся ОТОБРАЖАЕМЫМ ИМЕНЕМ (вид продукта не меняется), а права
+    // переезжают на секрет. NULL допустим: у сигналов, созданных до правки,
+    // секрета нет, и требовать его значило бы отобрать доступ у настоящих
+    // авторов — см. тот же приём в qpersona.
+    await pool.query(`
+      ALTER TABLE mapreality_signals
+        ADD COLUMN IF NOT EXISTS edit_secret TEXT;
+    `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_mapreality_signals_category
         ON mapreality_signals(category);

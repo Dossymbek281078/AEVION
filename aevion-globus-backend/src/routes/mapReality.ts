@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
@@ -37,6 +38,8 @@ interface Signal {
   lat: number | null;
   lng: number | null;
   author_alias: string;
+  /** Секрет правки. NULL у сигналов, созданных до 28.07 — см. ensureMapRealityTables. */
+  edit_secret?: string | null;
   support_count: number;
   status: Status;
   created_at: string;
@@ -147,6 +150,9 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
   if (!description) return res.status(400).json({ error: "description required (1..2000 chars)" });
   if (!country) return res.status(400).json({ error: "country required" });
   if (!authorAlias) return res.status(400).json({ error: "authorAlias required" });
+
+  // Секрет правки: права переезжают с публичного псевдонима на него.
+  const editSecret = crypto.randomBytes(18).toString("base64url");
   if (!CATEGORIES.includes(category as Category)) {
     return res.status(400).json({ error: `category must be one of ${CATEGORIES.join(", ")}` });
   }
@@ -157,13 +163,14 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
     if (isMapRealityDbReady()) {
       const { rows } = await pool.query(
         `INSERT INTO mapreality_signals
-           (title, description, category, country, city, lat, lng, author_alias)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (title, description, category, country, city, lat, lng, author_alias, edit_secret)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, support_count`,
-        [title, description, category, country, city, lat, lng, authorAlias],
+        [title, description, category, country, city, lat, lng, authorAlias, editSecret],
       );
       const row = rows[0] as { id: number; support_count: number };
-      return res.status(201).json({ id: row.id, supportCount: row.support_count });
+      // editSecret отдаётся РОВНО здесь и больше нигде: он и есть право на правку.
+      return res.status(201).json({ id: row.id, supportCount: row.support_count, editSecret });
     }
   } catch (e) { capture(e); console.error("[MapReality] POST /signals DB error", e); }
 
@@ -177,14 +184,54 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
     lat,
     lng,
     author_alias: authorAlias,
+    edit_secret: editSecret,
     support_count: 0,
     status: "active",
     created_at: nowIso(),
   };
   memSignals.push(signal);
   trimMemStore();
-  return res.status(201).json({ id: signal.id, supportCount: 0 });
+  return res.status(201).json({ id: signal.id, supportCount: 0, editSecret });
 });
+
+/**
+ * Право на изменение сигнала.
+ *
+ * Раньше сверялся ТОЛЬКО псевдоним автора — но он публичный: список отдаёт его,
+ * а карточка печатает «by <псевдоним>». Ключ был напечатан на замке.
+ *
+ * Теперь: есть секрет — решает он; нет (сигнал создан до 28.07) — прежнее
+ * поведение по псевдониму, чтобы не отобрать доступ у настоящих авторов. Случай
+ * виден в логе, по нему считается остаток.
+ */
+/**
+ * Сигнал БЕЗ секрета правки — для любой выдачи наружу.
+ *
+ * Обязателен на КАЖДОМ пути: в модуле четыре `SELECT *`, и без снятия новый
+ * секрет уехал бы в публичный список ровно так же, как до этого уезжал
+ * псевдоним. Это тот же класс, что чинился 28.07 в остальных публичных ручках
+ * (docs/PUBLIC-ENDPOINTS.md).
+ */
+function publicSignal<T extends { edit_secret?: string | null }>(row: T): Omit<T, "edit_secret"> {
+  const { edit_secret: _s, ...rest } = row;
+  void _s;
+  return rest;
+}
+
+function ownsSignal(
+  row: { author_alias: string; edit_secret?: string | null },
+  authorAlias: string,
+  req: Request,
+): boolean {
+  if (row.edit_secret) {
+    const given = String(req.header("x-edit-secret") ?? (req.body as { editSecret?: unknown })?.editSecret ?? "");
+    const a = Buffer.from(given);
+    const b = Buffer.from(row.edit_secret);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  console.warn(`[MapReality] правка сигнала без секрета (создан до 28.07), автор «${row.author_alias}»`);
+  return row.author_alias === authorAlias;
+}
 
 // ─── GET /api/mapreality/signals ──────────────────────────────────────────────
 mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
@@ -220,7 +267,7 @@ mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
         ),
         pool.query(`SELECT COUNT(*)::int AS total FROM mapreality_signals ${where}`, args),
       ]);
-      return res.json({ signals: rows, total: cnt[0]?.total ?? rows.length });
+      return res.json({ signals: rows.map(publicSignal), total: cnt[0]?.total ?? rows.length });
     }
   } catch (e) { capture(e); console.error("[MapReality] GET /signals DB error", e); }
 
@@ -235,7 +282,7 @@ mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
     return b.created_at.localeCompare(a.created_at);
   });
   const total = signals.length;
-  return res.json({ signals: signals.slice(offsetN, offsetN + limitN), total });
+  return res.json({ signals: signals.slice(offsetN, offsetN + limitN).map(publicSignal), total });
 });
 
 // ─── GET /api/mapreality/signals/nearby ───────────────────────────────────────
@@ -315,13 +362,13 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
     if (isMapRealityDbReady()) {
       const { rows } = await pool.query(`SELECT * FROM mapreality_signals WHERE id = $1`, [id]);
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ signal: rows[0] });
+      return res.json({ signal: publicSignal(rows[0]) });
     }
   } catch (e) { capture(e); console.error("[MapReality] GET /signals/:id DB error", e); }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
-  return res.json({ signal });
+  return res.json({ signal: publicSignal(signal) });
 });
 
 // ─── POST /api/mapreality/signals/:id/support ─────────────────────────────────
@@ -397,26 +444,26 @@ mapRealityRouter.patch("/signals/:id/status", async (req: Request, res: Response
   try {
     if (isMapRealityDbReady()) {
       const { rows } = await pool.query(
-        `SELECT id, author_alias FROM mapreality_signals WHERE id = $1`,
+        `SELECT id, author_alias, edit_secret FROM mapreality_signals WHERE id = $1`,
         [id],
       );
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      if (rows[0].author_alias !== authorAlias) {
+      if (!ownsSignal(rows[0], authorAlias, req)) {
         return res.status(403).json({ error: "forbidden" });
       }
       const { rows: updated } = await pool.query(
         `UPDATE mapreality_signals SET status = 'resolved' WHERE id = $1 RETURNING *`,
         [id],
       );
-      return res.json({ signal: updated[0] });
+      return res.json({ signal: publicSignal(updated[0]) });
     }
   } catch (e) { capture(e); console.error("[MapReality] PATCH /signals/:id/status DB error", e); }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
-  if (signal.author_alias !== authorAlias) return res.status(403).json({ error: "forbidden" });
+  if (!ownsSignal(signal, authorAlias, req)) return res.status(403).json({ error: "forbidden" });
   signal.status = "resolved";
-  return res.json({ signal });
+  return res.json({ signal: publicSignal(signal) });
 });
 
 // ─── GET /api/mapreality/stats ────────────────────────────────────────────────

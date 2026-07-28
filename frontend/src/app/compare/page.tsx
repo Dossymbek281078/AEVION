@@ -218,6 +218,68 @@ export default function ComparePage() {
           </p>
         </section>
 
+        {/* Разбор ниже честный, но длинный. Инвестору и партнёру нужен один
+            экран, который можно показать за полминуты и не соврать. Держим оба
+            формата на одной странице: короткий сверху, подробный ниже. */}
+        <section
+          style={{
+            border: `2px solid ${PALETTE.ink}`,
+            borderRadius: 16,
+            padding: "22px 22px 18px",
+            marginBottom: 30,
+            background: "#fff",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+              fontWeight: 800,
+              color: PALETTE.inkMute,
+              margin: "0 0 14px",
+            }}
+          >
+            Если у вас тридцать секунд
+          </p>
+
+          <div style={{ display: "grid", gap: 14 }}>
+            {[
+              {
+                q: "Где мы объективно первые",
+                a: "Два места. Предъявляемость ответа ИИ: чек с хешами, стоимостью и публичной проверкой без аккаунта — у Perplexity Model Council этого нет. И сведение правил трёх авиаюрисдикций (FAA, MLIT, AIP KZ) в один слой.",
+              },
+              {
+                q: "Где мы объективно слабее",
+                a: "Везде, где решает зрелость: нет продаж, поддержки, интеграций и внешнего аудита. В финтехе нет лицензий — сравнение со Stripe не в нашу пользу и не станет им без них. В здоровье у Ada и Woebot клинические исследования, у нас нет.",
+              },
+              {
+                q: "Тогда зачем мы",
+                a: "Поштучно против лидера категории — незачем. Смысл появляется, когда нужны несколько модулей сразу: один вход, один реестр прав, одна подпись между ними. Это то, чего у лидеров нет по построению — они делают один продукт.",
+              },
+            ].map((r) => (
+              <div key={r.q}>
+                <p style={{ margin: "0 0 3px", fontSize: 15.5, fontWeight: 800 }}>{r.q}</p>
+                <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: PALETTE.inkSoft }}>{r.a}</p>
+              </div>
+            ))}
+          </div>
+
+          <p
+            style={{
+              margin: "16px 0 0",
+              paddingTop: 14,
+              borderTop: `1px solid ${PALETTE.line}`,
+              fontSize: 14.5,
+              lineHeight: 1.55,
+              color: PALETTE.inkMute,
+            }}
+          >
+            Ниже — то же самое по каждому из 41 модуля, с названными аналогами и без
+            смягчений.
+          </p>
+        </section>
+
         <button
           onClick={() => setOpenAll((v) => !v)}
           style={{

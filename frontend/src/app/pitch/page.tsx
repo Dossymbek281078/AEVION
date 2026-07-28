@@ -511,6 +511,25 @@ export default function PitchPage() {
             >
               See the 41 modules
             </a>
+            {/* Инвестор задаёт этот вопрос третьим, после «что это» и «сколько
+                стоит»: чем вы лучше того, что уже есть. Ответ должен быть на
+                кнопке, а не в переписке — и он честный, включая то, где мы
+                слабее. Это вызывает больше доверия, чем страница без слабостей. */}
+            <a
+              href="/compare"
+              style={{
+                padding: "14px 26px",
+                borderRadius: 12,
+                background: "transparent",
+                border: "1px solid rgba(148,163,184,0.35)",
+                color: "#cbd5e1",
+                fontWeight: 700,
+                textDecoration: "none",
+                fontSize: 16,
+              }}
+            >
+              Honest comparison →
+            </a>
             <a
               href={ask.ctaPrimary.href}
               style={{

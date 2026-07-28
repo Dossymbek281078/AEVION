@@ -925,6 +925,67 @@ export const CASES: DisclosedCase[] = [
   },
 
   {
+    // The corpus had no plan stating two currencies inside ONE clause, and that
+    // absence is the whole reason a currency regression walked past four
+    // guards: every guard was asked about text where the question could not
+    // arise. TSMC's quarterly release is the real article — NT$ figures in a
+    // comma-separated series with a US$ restatement inside it, and the dollar
+    // equivalent given again in its own sentence so the conversion can be
+    // checked against the company's own arithmetic.
+    //
+    // Running the engine over this paragraph also found the margin defect fixed
+    // in the same session: "Gross margin for the quarter was 62.3%" read as
+    // null. Second entry in this file to be added for one reason and
+    // immediately earn its place for another.
+    input: {
+      name: "TSMC (quarterly release)",
+      sector: "hardware",
+      stage: "growth",
+      geography: "TW",
+      askUsd: 2_000_000_000,
+      description:
+        "The same manufacturer as the annual entry above, reporting a single quarter, with every figure stated in New Taiwan dollars and the dollar equivalent alongside.",
+      tractionNotes:
+        "TSMC today announced consolidated revenue of NT$1,046.09 billion, net income of NT$505.74 billion, and diluted earnings per share of NT$19.50 (US$3.14 per ADR unit) for the fourth quarter ended December 31, 2025. Year-over-year, fourth quarter revenue increased 20.5% while net income and diluted EPS both increased 35.0%. In US dollars, fourth quarter revenue was $33.73 billion, which increased 25.5% year-over-year. Gross margin for the quarter was 62.3%, operating margin was 54.0%, and net profit margin was 48.3%.",
+    },
+    outcome: "open",
+    round: "Form 6-K, fourth quarter 2025 results, filed 15 January 2026",
+    sources: [
+      "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/a4q25e_withguidancexfinal.htm",
+    ],
+    expect: [
+      {
+        label: "revenue NT$1,046.09bn read from the NT$ statement, not the US$ restatement",
+        read: (s) => s.revenueUsd,
+        ...num(toUsd(1_046_090_000_000, "TWD"), 0.02),
+      },
+      // The company states its own dollar equivalent, US$33.73bn, at a rate it
+      // chose on a date it chose. Ours differs by a few percent and that is the
+      // exchange rate, not the parse — worth pinning as a band rather than
+      // pretending the two must agree exactly.
+      {
+        label: "the reading lands within a few percent of the company's own US$33.73bn",
+        read: (s) => (s.revenueUsd !== null && Math.abs(s.revenueUsd - 33_730_000_000) / 33_730_000_000 < 0.06),
+        expected: true,
+      },
+      // The walk must not step from revenue to net income: they sit in one
+      // comma-separated series, and NT$505.74bn is within a factor of ten of
+      // NT$1,046.09bn, so the magnitude bound alone does not stop it.
+      {
+        label: "net income is not read as the top line",
+        read: (s) => s.revenueUsd !== null && Math.abs(s.revenueUsd - toUsd(505_740_000_000, "TWD")) / toUsd(505_740_000_000, "TWD") < 0.02,
+        expected: false,
+      },
+      { label: "growth 20.5% year-over-year", read: (s) => s.growthPct, ...num(20.5) },
+      // The defect this entry found: the period qualifier between the noun and
+      // its verb made the margin unreadable.
+      { label: "gross margin 62.3% stated for a named period", read: (s) => s.grossMarginPct, ...num(62.3) },
+      { label: "the operating margin is not read as the gross margin", read: (s) => s.grossMarginPct === 54.0, expected: false },
+      { label: "the 35.0% net-income growth does not win over the 20.5% revenue growth", read: (s) => s.growthPct === 35.0, expected: false },
+    ],
+  },
+
+  {
     outcome: "open",
     round: "Form S-1/A, March 2021",
     sources: ["https://www.sec.gov/Archives/edgar/data/1611052/000119312521065779/d564161ds1a.htm"],

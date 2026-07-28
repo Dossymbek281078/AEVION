@@ -77,9 +77,9 @@ outcome, so even that 6.6 is generous to the rubric, not conservative.
    largest number a pre-revenue hardware plan has and the one its customers can
    cancel, so it is shown to the reader rather than credited.
 
-5. **Measured on the disclosed-figures corpus (32 entries, 31 real companies,
-   rubric v6):** parse coverage **100/100**, mean success **71.2** vs mean failure
-   **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 15
+5. **Measured on the disclosed-figures corpus (33 entries, 31 real companies,
+   rubric v6):** parse coverage **107/107**, mean success **71.2** vs mean failure
+   **60.3**, gap **10.9 points**. The split is **7 failed, 10 succeeded, 16
    `open`**. Infosys appears twice on purpose — once as the dollar release and
    once as the rupee release of the same quarter — because the pair is the only
    way to check that both readings of one set of accounts agree. Open cases are

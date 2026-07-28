@@ -2390,7 +2390,7 @@ describe("the document's headline number is the harness's number", () => {
     // Infosys is in twice on purpose — the dollar and rupee releases of one
     // quarter — so entries and companies are deliberately different numbers,
     // and the doc states both.
-    const companies = new Set(CASES.map((c) => c.input.name.replace(/\s*\(rupee release\)\s*$/, ""))).size;
+    const companies = new Set(CASES.map((c) => c.input.name.replace(/\s*\((?:rupee|quarterly) release\)\s*$/, ""))).size;
     expect(Number(head![1]), "stated entry count").toBe(CASES.length);
     expect(Number(head![2]), "stated company count").toBe(companies);
 

@@ -424,8 +424,29 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
 
   try {
     if (isQEventsDbReady()) {
+      // Путь через память ниже проверяет вместимость и отвечает 409 «мест нет»,
+      // а этот путь не проверял её вовсе: на Postgres записаться можно было
+      // сверх вместимости, и лист ожидания (он требует «мест нет») терял смысл.
+      // Несуществующее событие тоже проходило — вставлялась строка в пустоту.
+      const { rows: eventRows } = await pool.query(`SELECT "id" FROM "QEvent" WHERE "id"=$1`, [eventId]);
+      if (!eventRows[0]) return res.status(404).json({ error: "not_found" });
+
+      /**
+       * Занять место. Проверка вместимости и увеличение счётчика — ОДИН
+       * запрос: раздельные «спросили — записали» пропускают двоих на последнее
+       * место, и это не теория, а обычные два нажатия подряд.
+       */
+      const claimSeat = async (): Promise<boolean> => {
+        const claimed = await pool.query(
+          `UPDATE "QEvent" SET "attendeeCount"="attendeeCount"+1
+            WHERE "id"=$1 AND "attendeeCount" < "capacity"`,
+          [eventId],
+        );
+        return (claimed.rowCount ?? 0) > 0;
+      };
+
       const { rows: existing } = await pool.query(
-        `SELECT * FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`,
+        `SELECT "status" FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`,
         [eventId, auth.sub],
       );
       let status: string;
@@ -434,27 +455,41 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
       if (existing[0]) {
         // Toggle: if going → not-going, else → going
         const newStatus = existing[0].status === "going" ? "not-going" : "going";
+        if (newStatus === "going") {
+          if (!(await claimSeat())) {
+            return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+          }
+        } else {
+          await pool.query(
+            `UPDATE "QEvent" SET "attendeeCount"=GREATEST(0,"attendeeCount"-1) WHERE "id"=$1`,
+            [eventId],
+          );
+        }
         await pool.query(
           `UPDATE "QEventRSVP" SET "status"=$1 WHERE "eventId"=$2 AND "userId"=$3`,
           [newStatus, eventId, auth.sub],
         );
-        const delta = newStatus === "going" ? 1 : -1;
-        await pool.query(
-          `UPDATE "QEvent" SET "attendeeCount"=GREATEST(0,"attendeeCount"+$1) WHERE "id"=$2`,
-          [delta, eventId],
-        );
         status = newStatus;
       } else {
         const rsvpId = crypto.randomUUID();
-        await pool.query(
-          `INSERT INTO "QEventRSVP" ("id","eventId","userId","status","createdAt") VALUES ($1,$2,$3,'going',NOW())`,
+        const inserted = await pool.query(
+          `INSERT INTO "QEventRSVP" ("id","eventId","userId","status","createdAt") VALUES ($1,$2,$3,'going',NOW())
+           ON CONFLICT ("eventId","userId") DO NOTHING RETURNING "id"`,
           [rsvpId, eventId, auth.sub],
         );
-        await pool.query(
-          `UPDATE "QEvent" SET "attendeeCount"="attendeeCount"+1 WHERE "id"=$1`,
-          [eventId],
-        );
-        status = "going";
+        if ((inserted.rowCount ?? 0) === 0) {
+          // Параллельный запрос успел записать этого же человека: место уже
+          // занято им, второй раз считать нельзя. Раньше здесь была вставка без
+          // `ON CONFLICT` — она падала на уникальном ключе и отдавала 500.
+          status = "going";
+        } else if (!(await claimSeat())) {
+          // Мест нет — снимаем только что созданную запись, иначе человек
+          // числился бы записанным, не занимая места.
+          await pool.query(`DELETE FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`, [eventId, auth.sub]);
+          return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+        } else {
+          status = "going";
+        }
       }
 
       const { rows: ev } = await pool.query(`SELECT "attendeeCount" FROM "QEvent" WHERE "id"=$1`, [eventId]);

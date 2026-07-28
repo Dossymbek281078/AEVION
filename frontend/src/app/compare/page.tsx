@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { channelFrom } from "@/lib/products";
 import {
   COMPARISONS,
   NON_PRODUCT_RIVALS,
@@ -76,7 +77,7 @@ export function buildRivalIndex(): Array<{ rival: string; modules: ModuleCompari
     .sort((a, b) => a.rival.localeCompare(b.rival, "ru"));
 }
 
-function Card({ c }: { c: ModuleComparison }) {
+function Card({ c, channel }: { c: ModuleComparison; channel?: string }) {
   return (
     <article id={c.id} style={styles.card}>
       <div style={styles.cardHead}>
@@ -122,7 +123,7 @@ function Card({ c }: { c: ModuleComparison }) {
         </span>
         {/* Без этой ссылки страница убеждает и упирается в тупик: человек
             дочитал, согласился — и должен искать модуль сам. */}
-        <Link href={moduleHref(c.id)} style={styles.openLink}>
+        <Link href={withChannel(moduleHref(c.id), channel)} style={styles.openLink}>
           Открыть {c.name} →
         </Link>
       </div>
@@ -130,7 +131,37 @@ function Card({ c }: { c: ModuleComparison }) {
   );
 }
 
-export default function ComparePage() {
+/**
+ * Метка рекламного канала едет дальше по цепочке.
+ *
+ * Человек приходит по /go?c=fb, заходит сюда убедиться — и уходит в модуль.
+ * Если метку не пробросить, обрывается она ровно на том шаге, ради которого
+ * страница и сделана, и «какая реклама довела до продукта» остаётся без
+ * ответа. Пробрасываем только метку из белого списка (channelFrom вернул не
+ * null), чтобы в адреса модулей не попадал произвольный ввод из запроса.
+ */
+function withChannel(path: string, channel?: string): string {
+  return channel ? `${path}?c=${encodeURIComponent(channel)}` : path;
+}
+
+export default async function ComparePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const raw = (await searchParams).c;
+  const rawFirst = Array.isArray(raw) ? raw[0] : raw;
+  // channelFrom — проверка по белому списку; в ссылку кладём исходную метку,
+  // как это делает /go, чтобы следующая страница нормализовала её так же.
+  const channel = channelFrom(raw) ? rawFirst : undefined;
+  return <CompareView channel={channel} />;
+}
+
+/**
+ * Разметка вынесена отдельно и синхронной: серверный компонент с await не
+ * отрисовать через renderToStaticMarkup, а именно так его проверяют тесты.
+ */
+export function CompareView({ channel }: { channel?: string }) {
   const measured = COMPARISONS.filter((c) => c.basis === "measured").length;
   const rivalIndex = buildRivalIndex();
 
@@ -205,7 +236,7 @@ export default function ComparePage() {
         </details>
 
         {COMPARISONS.map((c) => (
-          <Card key={c.id} c={c} />
+          <Card key={c.id} c={c} channel={channel} />
         ))}
 
         <section style={styles.tail}>

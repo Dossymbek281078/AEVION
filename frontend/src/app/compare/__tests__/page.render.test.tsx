@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import ComparePage, { buildRivalIndex } from "../page";
+import { CompareView, buildRivalIndex } from "../page";
 import { COMPARISONS, NON_PRODUCT_RIVALS } from "@/data/competitors";
 
 /**
@@ -16,7 +16,7 @@ import { COMPARISONS, NON_PRODUCT_RIVALS } from "@/data/competitors";
  */
 
 describe("страница сравнения показывает обе стороны", () => {
-  const html = renderToStaticMarkup(<ComparePage />);
+  const html = renderToStaticMarkup(<CompareView />);
 
   it("рендерится без падения и не пустая", () => {
     expect(html.length).toBeGreaterThan(2000);
@@ -68,6 +68,17 @@ describe("страница сравнения показывает обе сто
     const wrong = listed.filter((r) => NON_PRODUCT_RIVALS.has(r));
     expect(wrong, "В указателе замены оказался не продукт: " + wrong.join(", ")).toEqual([]);
     expect(listed.length, "Указатель опустел целиком").toBeGreaterThan(10);
+  });
+
+  it("метка канала доезжает до ссылок на модули, а мусор — нет", () => {
+    // Цепочка /go?c=fb → /compare?c=fb → /qsign?c=fb: если она рвётся здесь,
+    // «какая реклама довела до продукта» остаётся без ответа.
+    const withFb = renderToStaticMarkup(<CompareView channel="fb" />);
+    expect(withFb).toContain('href="/qsign?c=fb"');
+
+    // Без метки — чистые адреса, без хвоста «?c=undefined».
+    expect(html).toContain('href="/qsign"');
+    expect(html).not.toContain("?c=");
   });
 
   it("каждый названный аналог попал в указатель", () => {

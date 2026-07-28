@@ -73,16 +73,21 @@ export function findVariantDepViolations(files: string[]): string[] {
   return violations;
 }
 
-describe("A/B-вариант не стоит в зависимостях эффекта", () => {
-  const files = collectSourceFiles(APP_DIR);
+// Скан вынесен на загрузку модуля. Внутри it() он падал по таймауту в полном
+// прогоне, оставаясь зелёным в одиночку: 28.07.2026 в src/app добавилось 305
+// layout-файлов практикума, и 5 секунд перестало хватать. Красный от нагрузки
+// неотличим от настоящей находки — см. feedback_fs_scanning_test_timeout.
+const FILES = collectSourceFiles(APP_DIR);
+const VIOLATIONS = findVariantDepViolations(FILES);
 
+describe("A/B-вариант не стоит в зависимостях эффекта", () => {
   it("набор исходников непустой (сам сторож не должен молча проверять ноль файлов)", () => {
-    expect(files.length).toBeGreaterThan(50);
-    expect(files.some((f) => f.includes("pricing"))).toBe(true);
+    expect(FILES.length).toBeGreaterThan(50);
+    expect(FILES.some((f) => f.includes("pricing"))).toBe(true);
   });
 
   it("ни одна страница не ставит вариант в зависимости", () => {
-    expect(findVariantDepViolations(files)).toEqual([]);
+    expect(VIOLATIONS).toEqual([]);
   });
 
   it("сторож действительно ловит нарушение (негативный тест)", () => {

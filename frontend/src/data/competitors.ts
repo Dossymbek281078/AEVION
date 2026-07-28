@@ -862,6 +862,201 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["память project_aevion_constitution"],
   },
+
+  {
+    moduleId: "qcontract",
+    module: "QContract — договоры из шаблона со следом",
+    page: "/qcontract",
+    category: "подготовка, подписание и хранение договоров",
+    rivals: [
+      { name: "DocuSign", url: "https://docusign.com", strength: "стандарт подписи, признаваемый юридически по всему миру, интеграции с чем угодно" },
+      { name: "PandaDoc", url: "https://pandadoc.com", strength: "конструктор коммерческих документов с аналитикой просмотров и оплатой внутри" },
+      { name: "Ironclad", url: "https://ironcladapp.com", strength: "жизненный цикл договора для юротделов: согласования, репозиторий, аналитика рисков" },
+    ],
+    weWin: [
+      {
+        text: "У каждого документа есть журнал действий, который выгружается таблицей — не только «кто открыл», а весь след",
+        basis: "design",
+        evidence: "маршруты /documents/:id/log и /documents/:id/log.csv",
+      },
+      {
+        text: "Документ открывается контрагенту по одноразовой ссылке без регистрации",
+        basis: "design",
+        evidence: "публичный просмотр /view/:token",
+      },
+      {
+        text: "Договор живёт в одном контуре с подписью и отпечатком авторства",
+        basis: "design",
+        evidence: "QContract соседствует с QSign и QRight",
+      },
+    ],
+    weLose: [
+      {
+        text: "Юридической признаваемости уровня DocuSign у нас нет: там годы прецедентов и сертификаций",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет согласований, ролей и репозитория для юротдела — это продукт Ironclad",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет аналитики документа и оплаты внутри, как у PandaDoc",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда нужен договор с прозрачным следом и быстрой ссылкой. Для корпоративного документооборота и спора в суде — к признанным платформам.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qcontract.ts"],
+  },
+
+  {
+    moduleId: "qmaskcard",
+    module: "QMaskCard — маска вместо реквизитов",
+    page: "/qmaskcard",
+    category: "виртуальные и одноразовые карты",
+    rivals: [
+      { name: "Privacy.com", url: "https://privacy.com", strength: "настоящие одноразовые карты с лимитами, выпускаются банком-партнёром" },
+      { name: "Revolut", url: "https://revolut.com", strength: "виртуальные карты внутри полноценного банковского приложения" },
+      { name: "Apple Pay / токенизация сети", url: "https://apple.com/apple-pay/", strength: "токенизация на уровне платёжной сети — реквизиты не видит вообще никто" },
+    ],
+    weWin: [
+      {
+        text: "Маска живёт своей жизнью: её можно заморозить, разморозить и отозвать, не трогая настоящую карту",
+        basis: "design",
+        evidence: "маршруты /masks/:id/revoke, /freeze, /unfreeze плюс список списаний /charges",
+      },
+      {
+        text: "Слой поверх существующих рельсов, а не отдельный кошелёк: расчёт идёт через Stripe/QPayNet",
+        basis: "design",
+        evidence: "мета-токенизация поверх Stripe — прямо задокументировано в модуле",
+      },
+    ],
+    weLose: [
+      {
+        text: "Мы НЕ эмитент карт в регуляторном смысле — Privacy.com выпускает карты через банк-партнёр, мы нет",
+        basis: "design",
+        evidence: "в коде модуля прямо написано: «NOT a card issuer in the regulatory sense»",
+      },
+      {
+        text: "Нет банковского приложения вокруг: у Revolut счёт, обмен валют и поддержка",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Токенизация на уровне платёжной сети (Apple Pay) надёжнее любого прикладного слоя",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше как слой контроля поверх уже работающего приёма платежей. Нужна настоящая одноразовая карта — это Privacy.com или банк.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qmaskcard.ts"],
+  },
+
+  {
+    moduleId: "veilnetx",
+    module: "VeilNetX — что о вас видно любому сайту",
+    page: "/veilnetx",
+    category: "проверка цифрового следа браузера",
+    rivals: [
+      { name: "EFF Cover Your Tracks", url: "https://coveryourtracks.eff.org", strength: "эталон жанра от EFF: энтропия отпечатка на большой выборке" },
+      { name: "BrowserLeaks", url: "https://browserleaks.com", strength: "самый подробный набор отдельных тестов утечек" },
+      { name: "Mullvad Check", url: "https://mullvad.net/check", strength: "проверка утечек рядом с настоящим VPN, который эти утечки и закрывает" },
+    ],
+    weWin: [
+      {
+        text: "Ответ даётся оценкой и буквенным классом, а не простынёй параметров — человек понимает, что делать",
+        basis: "design",
+        evidence: "GET /inspect: цепочка IP, заголовки и cookie сводятся в категоризированную оценку раскрытия с буквой",
+      },
+      {
+        text: "Считается вклад каждого признака в биты идентификации, включая локальный IP через WebRTC",
+        basis: "design",
+        evidence: "POST /fingerprint — оценка энтропии по атрибутам и уникальности",
+      },
+    ],
+    weLose: [
+      {
+        text: "Мы ничего не скрываем: VPN и защиты у нас нет, Mullvad и утечку покажет, и закроет",
+        basis: "design",
+        evidence: "модуль измеряет, а не защищает",
+      },
+      {
+        text: "Выборка для сравнения уникальности несопоставима с EFF: их оценка опирается на миллионы посетителей",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Отдельных тестов меньше, чем у BrowserLeaks — там счёт идёт на десятки",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Часть продукта пока лист ожидания, а не работающая функция",
+        basis: "design",
+        evidence: "в модуле есть маршрут /waitlist",
+      },
+    ],
+    verdict:
+      "Мы лучше для быстрого понятного ответа «насколько я заметен». Для глубокой диагностики — BrowserLeaks, для реальной защиты — VPN.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/veilnetx.ts"],
+  },
+
+  {
+    moduleId: "qai",
+    module: "QAI — универсальный ассистент",
+    page: "/qai",
+    category: "чат-ассистенты общего назначения",
+    rivals: [
+      { name: "ChatGPT", url: "https://chatgpt.com", strength: "лучшие модели, память, инструменты, приложения и экосистема" },
+      { name: "Claude", url: "https://claude.ai", strength: "сильные длинные рассуждения и работа с большими документами" },
+      { name: "Gemini", url: "https://gemini.google.com", strength: "встроенность в Google-сервисы и бесплатный доступ к сильной модели" },
+    ],
+    weWin: [
+      {
+        text: "Разговор выгружается целиком: сессия принадлежит человеку, а не платформе",
+        basis: "design",
+        evidence: "маршрут /sessions/:id/export",
+      },
+      {
+        text: "Ассистент работает на бесплатном флоте платформы и переживает исчерпание лимита переключением модели",
+        basis: "design",
+        evidence: "общий контур провайдеров с авто-фолбэком при 429",
+      },
+      {
+        text: "Может работать офлайн на локальных моделях — данные не покидают контур",
+        basis: "design",
+        evidence: "платформенный тумблер localOnly",
+      },
+    ],
+    weLose: [
+      {
+        text: "Модели слабее: у ChatGPT и Claude флагманы, у нас в основном бесплатные участники",
+        basis: "measured",
+        evidence: "одиночная бесплатная модель проигрывает флагману 0 побед из 6 в нашем же парном замере",
+      },
+      {
+        text: "Нет инструментов, приложений и памяти уровня ChatGPT",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет мобильных приложений и голосового режима",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда важны бесплатность, выгрузка своих разговоров и работа без интернета. За максимальным качеством ответа — к флагманам, и мы это измеряли.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/qai.ts", "scripts/qcore-eval.js"],
+  },
 ];
 
 /**
@@ -871,8 +1066,9 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "QContract — договоры", likelyRivals: "DocuSign, PandaDoc, Ironclad" },
-  { module: "QMaskCard — одноразовые карты", likelyRivals: "Privacy.com, Revolut disposable, Wise" },
-  { module: "VeilNetX — приватность трафика", likelyRivals: "Mullvad, Tailscale, NordVPN" },
-  { module: "QAI — универсальный ассистент", likelyRivals: "ChatGPT, Claude, Gemini" },
+  { module: "QReal Studio — AI-видео", likelyRivals: "Higgsfield, Runway, Sora" },
+  { module: "Quantum Shield — разделение секрета", likelyRivals: "HashiCorp Vault, 1Password, Shamir-утилиты" },
+  { module: "QEvents — события и записи", likelyRivals: "Eventbrite, Timepad, Luma" },
+  { module: "QSocial — публикации", likelyRivals: "Buffer, Hootsuite, Later" },
+  { module: "QBuild — стройка и подряд", likelyRivals: "Procore, PlanRadar, локальные тендерные площадки" },
 ];

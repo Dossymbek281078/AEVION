@@ -161,6 +161,7 @@ export default function ComparePage() {
           </section>
         ))}
 
+        {UNANALYSED.length > 0 && (
         <section style={{ background: "#fff", border: "1px dashed #cbd5e1", borderRadius: 14, padding: 20, marginBottom: 28 }}>
           <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 800, color: "#0f172a" }}>Ещё не разобрано</h2>
           <p style={{ margin: "0 0 12px", fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
@@ -175,6 +176,7 @@ export default function ComparePage() {
             ))}
           </ul>
         </section>
+        )}
       </ProductPageShell>
     </>
   );

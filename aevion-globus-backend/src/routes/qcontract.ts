@@ -8,6 +8,14 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 
 const capture = makeServiceCapture("qcontract");
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const CONTENT_TYPES = ["text", "url", "html"] as const;
+type ContentType = (typeof CONTENT_TYPES)[number];
+const MAX_TITLE_LEN = 200;
+const MAX_CONTENT_LEN = 100_000;
+const MAX_VIEWS_CAP = 10_000;
+const MAX_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
 export const qcontractRouter = Router();
 
 // ── Table bootstrap ──────────────────────────────────────────────────────────
@@ -300,6 +308,38 @@ qcontractRouter.post("/documents", async (req, res) => {
 
   if (!title?.trim()) return res.status(400).json({ error: "title_required" });
   if (!content?.trim()) return res.status(400).json({ error: "content_required" });
+  if (title.trim().length > MAX_TITLE_LEN) return res.status(400).json({ error: "title_too_long" });
+  if (content.trim().length > MAX_CONTENT_LEN) return res.status(400).json({ error: "content_too_long" });
+
+  // Тип содержимого приходит извне и раньше не проверялся вовсе: значение
+  // «URL» с большой буквы проскакивало мимо проверки схемы ниже и ложилось в
+  // базу как есть.
+  if (!CONTENT_TYPES.includes(contentType as ContentType)) {
+    return res.status(400).json({ error: "invalid_content_type" });
+  }
+
+  // Лимит просмотров — обещание модуля («посмотрели трижды, доступ закрылся»),
+  // и он не проверялся никак. `maxViews: 0` или отрицательное создавало
+  // документ, который НИКОГДА не откроется: условие выдачи `view_count <
+  // max_views` ложно с первого раза. Владелец получал 201 и ссылку, которая
+  // молча отдаёт 410. Дробное и `1e400` (в JSON это Infinity) роняли вставку
+  // в целочисленную колонку пятисоткой.
+  if (maxViews !== undefined && maxViews !== null) {
+    if (typeof maxViews !== "number" || !Number.isInteger(maxViews) || maxViews < 1 || maxViews > MAX_VIEWS_CAP) {
+      return res.status(400).json({ error: "maxViews_1_to_" + MAX_VIEWS_CAP });
+    }
+  }
+
+  // Срок жизни: непарсимая строка уходила прямо в timestamptz и давала 500
+  // вместо внятного отказа, а дата в прошлом создавала документ, уже мёртвый.
+  let expiresAtIso: string | null = null;
+  if (expiresAt !== undefined && expiresAt !== null && String(expiresAt).trim() !== "") {
+    const ts = Date.parse(String(expiresAt));
+    if (!Number.isFinite(ts)) return res.status(400).json({ error: "invalid_expiresAt" });
+    if (ts <= Date.now()) return res.status(400).json({ error: "expiresAt_must_be_future" });
+    if (ts > Date.now() + MAX_TTL_MS) return res.status(400).json({ error: "expiresAt_too_far" });
+    expiresAtIso = new Date(ts).toISOString();
+  }
 
   if (contentType === "url") {
     try {
@@ -331,7 +371,7 @@ qcontractRouter.post("/documents", async (req, res) => {
       accessToken,
       passwordHash,
       maxViews ?? null,
-      expiresAt ?? null,
+      expiresAtIso,
       requireSignature,
       qrightId?.trim() || null,
     ],
@@ -355,7 +395,11 @@ qcontractRouter.get("/documents", async (req, res) => {
   const ownerId = auth.sub ?? auth.email ?? "unknown";
   const q = (req.query.q as string | undefined)?.trim();
   const status = req.query.status as string | undefined; // "active" | "expired" | "revoked"
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  // parseInt("abc") даёт NaN и падает в 50 — это верно; а вот отрицательное
+  // проходило насквозь и уходило в `LIMIT -5`, где Postgres отвечает ошибкой,
+  // то есть пятисоткой вместо пустого списка.
+  const rawLimit = parseInt(req.query.limit as string);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
 
   const params: unknown[] = [ownerId];
   let where = "owner_id = $1";

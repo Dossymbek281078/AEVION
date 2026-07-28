@@ -178,6 +178,12 @@ qsocialRouter.get("/feed", async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qsocial/posts/:id ──────────────────────────────────────────────
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const POST_TYPES = ["text", "image", "video"];
+const MAX_MEDIA_URL_LEN = 2000;
+const MAX_POST_TAGS = 20;
+const MAX_POST_TAG_LEN = 40;
+
 /** Поля поста, которые допустимо отдавать наружу. */
 const PUBLIC_POST_FIELDS = [
   "id", "userId", "content", "mediaUrl", "type", "likesCount", "commentsCount",
@@ -242,6 +248,31 @@ qsocialRouter.post("/posts", async (req: Request, res: Response) => {
   }
   if (content.length > 2000) {
     return res.status(400).json({ error: "content exceeds 2000 chars" });
+  }
+
+  // Тип поста уходил в базу любой строкой, хотя интерфейс знает три вида и
+  // ветвится по ним: неизвестный тип показывался как обычный текст, а данные
+  // при этом хранили что-то другое.
+  if (type !== undefined && type !== null && !POST_TYPES.includes(String(type))) {
+    return res.status(400).json({ error: "unknown type", allowed: POST_TYPES });
+  }
+
+  // `mediaUrl` уходит в разметку (`<img src={...}>`), а проверки схемы не было.
+  if (mediaUrl !== undefined && mediaUrl !== null && String(mediaUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(mediaUrl)) || String(mediaUrl).length > MAX_MEDIA_URL_LEN) {
+      return res.status(400).json({ error: "mediaUrl must be an absolute http(s) URL" });
+    }
+  }
+
+  // Метки: короткие строки и разумное количество, а не список любой длины.
+  if (tags !== undefined && tags !== null) {
+    if (!Array.isArray(tags)) return res.status(400).json({ error: "tags must be an array of strings" });
+    if (tags.length > MAX_POST_TAGS) {
+      return res.status(400).json({ error: `tags must not exceed ${MAX_POST_TAGS} items` });
+    }
+    if (tags.some((t) => typeof t === "string" && t.length > MAX_POST_TAG_LEN)) {
+      return res.status(400).json({ error: `tag must not exceed ${MAX_POST_TAG_LEN} chars` });
+    }
   }
 
   const post: QPost = {

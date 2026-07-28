@@ -176,6 +176,24 @@ function computeStreak(days: Set<string>): { current: number; longest: number; t
   return { current, longest, totalDays: days.size };
 }
 
+const MAX_LESSON_DURATION_MIN = 24 * 60;
+const MAX_LESSON_ORDER = 10_000;
+
+/**
+ * Длительность урока и его порядковый номер. Раньше оба брались как
+ * `Number(x) || 0`: отрицательное сохранялось как есть, `1e400` (в JSON это
+ * Infinity) уходило в целочисленную колонку. Тот же шаблон, что и с ценой.
+ *
+ * Здесь мусор не отбивается ошибкой, а приводится к нулю: это второстепенные
+ * поля, ради которых отклонять урок целиком незачем — но и записывать в базу
+ * минус двести минут тоже.
+ */
+function lessonNumber(value: unknown, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.round(n), max);
+}
+
 /** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
 const MAX_COURSE_TITLE_LEN = 200;
 const MAX_COURSE_DESCRIPTION_LEN = 5000;
@@ -422,8 +440,8 @@ qlearnRouter.post("/me/courses/:id/lessons", async (req: Request, res: Response)
     title: title.trim(),
     content: content || "",
     videoUrl: videoUrl || "",
-    duration: Number(duration) || 0,
-    order: Number(order) || 0,
+    duration: lessonNumber(duration, MAX_LESSON_DURATION_MIN),
+    order: lessonNumber(order, MAX_LESSON_ORDER),
     createdAt: now,
   };
 

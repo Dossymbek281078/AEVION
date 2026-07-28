@@ -99,4 +99,39 @@ describe("QLearn: ввод при создании курса проверяет
   test("слишком длинное название отбивается", async () => {
     expect((await post({ ...OK, title: "x".repeat(201) })).status).toBe(400);
   });
+
+  /**
+   * Длительность урока и порядковый номер брались тем же `Number(x) || 0`:
+   * отрицательное сохранялось как есть, `1e400` уходило в целочисленную
+   * колонку. Здесь мусор приводится к нулю, а не отклоняет урок целиком — это
+   * второстепенные поля.
+   */
+  test("длительность и номер урока приводятся к разумным границам", async () => {
+    mockQuery.mockReset();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('FROM "QLearnCourse"')) {
+        return { rows: [{ id: "course-1", authorId: "author-1", title: "Курс" }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const lesson = (body: unknown) =>
+      request(makeApp())
+        .post("/api/qlearn/me/courses/course-1/lessons")
+        .set("Authorization", AUTH)
+        .send(body as object);
+
+    const negative = await lesson({ title: "Урок", duration: -200, order: -5 });
+    expect(negative.status).toBe(201);
+    expect(negative.body.lesson.duration).toBe(0);
+    expect(negative.body.lesson.order).toBe(0);
+
+    const huge = await lesson({ title: "Урок", duration: 999999, order: 999999 });
+    expect(huge.body.lesson.duration).toBe(24 * 60);
+    expect(huge.body.lesson.order).toBe(10000);
+
+    const fractional = await lesson({ title: "Урок", duration: 12.7, order: 3.2 });
+    expect(fractional.body.lesson.duration).toBe(13);
+    expect(fractional.body.lesson.order).toBe(3);
+  });
 });

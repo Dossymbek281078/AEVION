@@ -7,6 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import {
   DEMO_MODULE_ORDER,
   ecosystemIntro,
+  painFirst,
   moduleBenefits,
   planetLayer,
 } from "@/data/demoNarrative";
@@ -290,6 +291,74 @@ export default function DemoShowcasePage() {
         {loadErr ? (
           <p style={{ color: "#fbbf24", fontSize: 14, marginBottom: 24 }}>{loadErr}</p>
         ) : null}
+
+        {/* Боль идёт первой. Инвентарь ниже — он отвечает на вопрос «что это»,
+            но человек приходит с вопросом «зачем мне это». */}
+        <section style={{ marginBottom: 48 }} aria-labelledby="why-this-exists">
+          <p style={{ fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: "#5eead4", margin: "0 0 8px" }}>
+            {painFirst.eyebrow}
+          </p>
+          <h2 id="why-this-exists" style={{ fontSize: 26, fontWeight: 900, margin: "0 0 24px", color: "#fff", lineHeight: 1.25 }}>
+            {painFirst.title}
+          </h2>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginBottom: 32 }}>
+            {painFirst.pains.map((p) => (
+              <div
+                key={p.title}
+                style={{
+                  padding: 18,
+                  borderRadius: 14,
+                  border: "1px solid rgba(248,113,113,0.25)",
+                  background: "rgba(127,29,29,0.12)",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "#fca5a5", marginBottom: 6, fontSize: 15 }}>{p.title}</div>
+                <div style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 1.6 }}>{p.body}</div>
+              </div>
+            ))}
+          </div>
+
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", margin: "0 0 12px" }}>
+            {painFirst.alternativesTitle}
+          </h3>
+          <div style={{ marginBottom: 32 }}>
+            {painFirst.alternatives.map((a) => (
+              <div
+                key={a.name}
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  padding: "10px 0",
+                  borderBottom: "1px solid rgba(148,163,184,0.15)",
+                  fontSize: 14,
+                }}
+              >
+                <span style={{ fontWeight: 700, color: "#fff", minWidth: 210 }}>{a.name}</span>
+                <span style={{ color: "#94a3b8", flex: 1, lineHeight: 1.55 }}>{a.gap}</span>
+              </div>
+            ))}
+          </div>
+
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", margin: "0 0 12px" }}>{painFirst.oursTitle}</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+            {painFirst.ours.map((o) => (
+              <div
+                key={o.label}
+                style={{
+                  padding: 18,
+                  borderRadius: 14,
+                  border: "1px solid rgba(94,234,212,0.25)",
+                  background: "rgba(13,148,136,0.10)",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "#5eead4", marginBottom: 6, fontSize: 15 }}>{o.label}</div>
+                <div style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 1.6 }}>{o.body}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <article
           style={{

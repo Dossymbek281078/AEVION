@@ -34,6 +34,79 @@ export const DEMO_MODULE_ORDER: string[] = [
   "qchaingov",
 ];
 
+/**
+ * Блок «боль → что уже есть → почему у нас объёмнее».
+ *
+ * Демо открывалось инвентарём: «экосистема, доверие, IP, ИИ и финансы на одной
+ * карте». Человек, который видит продукт впервые, не знает, зачем ему карта —
+ * он знает свою боль. Порядок задан основателем 28.07.2026 и совпадает со
+ * структурой писем: сначала боль, потом честный перечень чужих решений, потом
+ * чем наше объёмнее — и без обещания «в разы дешевле», которого мы не мерили.
+ */
+export const painFirst = {
+  eyebrow: "Why this exists",
+  title: "You made something. Now prove it is yours, license it, and get paid.",
+  pains: [
+    {
+      title: "Proving authorship",
+      body:
+        "A file says nothing about who made it. Metadata is stripped by the first re-upload, and a screenshot keeps none of it.",
+    },
+    {
+      title: "Licensing",
+      body:
+        "Agreeing terms means a document, a signature and a counterparty who accepts both. For one image, that is more work than making the image.",
+    },
+    {
+      title: "Getting paid",
+      body:
+        "A transfer is not a deal. Someone has to record what was sold, on what terms, and what happens if it is disputed.",
+    },
+  ],
+  alternativesTitle: "What already exists — and where each stops",
+  alternatives: [
+    {
+      name: "C2PA / Content Credentials",
+      gap: "A manifest inside the file. Survives until the first re-encode, and never touches money.",
+    },
+    {
+      name: "Blockchain timestamps",
+      gap: "Prove a moment. Do not prove a person, and issue nothing a counterparty will accept.",
+    },
+    {
+      name: "DocuSign and e-notaries",
+      gap: "Built for documents. A frame, a track or a prompt is not their object.",
+    },
+    {
+      name: "Copyright registries",
+      gap: "Real and respected — and weeks plus a lawyer per object. Unusable at three items a week.",
+    },
+  ],
+  oursTitle: "What is different here",
+  ours: [
+    {
+      label: "Bigger",
+      body:
+        "The whole path in one loop: fingerprint → authorship record → signature → certificate → licence → payout. Each step sees the previous one instead of receiving it through a clipboard.",
+    },
+    {
+      label: "Easier",
+      body:
+        "One login and one settlement unit. Not seven dashboards where one silently falls out of sync with the rest.",
+    },
+    {
+      label: "Cheaper — honestly",
+      body:
+        "A comparable stack is about seven subscriptions and roughly $162 a month at public July 2026 prices. We do not promise 'many times cheaper': the win is that the steps do not break, which is time rather than money.",
+    },
+    {
+      label: "The part nobody takes",
+      body:
+        "Banking, transfers and settlement are blocked by licences, not by code. That is not an obstacle — it is an unoccupied niche, and it is where we are heading.",
+    },
+  ],
+};
+
 export const ecosystemIntro = {
   title: "Why the entire AEVION platform matters for investors",
   lead:

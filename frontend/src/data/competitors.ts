@@ -801,6 +801,67 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/kidsAiContent.ts"],
   },
+
+  {
+    moduleId: "constitution",
+    module: "Constitution — симулятор устройства мира",
+    page: "/constitution",
+    category: "модели политических режимов: игровые симуляторы и научные индексы",
+    rivals: [
+      { name: "Democracy 4", url: "https://positech.co.uk/democracy4/", strength: "годы игрового дизайна: связи политик, избиратели, бюджет, последствия решений" },
+      { name: "V-Dem", url: "https://v-dem.net", strength: "рецензируемая методология и данные по сотням стран за столетия" },
+      { name: "Polity / Freedom House", url: "https://freedomhouse.org", strength: "признанные индексы, на которые ссылаются в исследованиях и прессе" },
+      { name: "NationStates", url: "https://nationstates.net", strength: "многолетнее сообщество и социальная часть симуляции" },
+    ],
+    weWin: [
+      {
+        text: "Восемь ползунков сразу дают тип режима и шесть индексов — от настройки до вывода одно движение",
+        basis: "design",
+        evidence: "10 режимов, 6 индексов (страх элит, внутренний конфликт, обида, инновации, стабильность, легитимность)",
+      },
+      {
+        text: "Модель проверяется реальностью на экране: рядом лежит рассеяние пятнадцати настоящих стран",
+        basis: "design",
+        evidence: "real-world scatter 15 стран в интерфейсе",
+      },
+      {
+        text: "Есть стресс-тест: война, пандемия, рецессия — видно, как пресет реагирует, а не только статичная картинка",
+        basis: "design",
+        evidence: "режим stress test поверх пресета",
+      },
+      {
+        text: "Встраивается в чужую страницу виджетом, а не требует прихода в игру",
+        basis: "design",
+        evidence: "ConstitutionEmbed — read-only мини-спайдер с режимом и двумя индексами",
+      },
+    ],
+    weLose: [
+      {
+        text: "Наша модель не рецензирована: V-Dem и Polity — это методология и десятилетия данных, у нас формулы автора",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Глубина игры несопоставима с Democracy 4: у них взаимосвязи политик, избиратели и бюджет",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет сообщества: у NationStates социальная часть и есть продукт",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Пятнадцать стран против сотен в научных наборах — рассеяние иллюстрирует, но не доказывает",
+        basis: "design",
+        evidence: "по объёму заложенных данных",
+      },
+    ],
+    verdict:
+      "Мы лучше как инструмент мышления: подвигать ползунки и увидеть, во что превращается конструкция. Для ссылки в работе или спора о фактах нужны V-Dem и Polity, для игры — Democracy 4.",
+    surveyedAt: "2026-07-28",
+    sources: ["память project_aevion_constitution"],
+  },
 ];
 
 /**
@@ -810,5 +871,8 @@ export const COMPARISONS: ModuleComparison[] = [
  * по тому, где сравнение раньше понадобится в разговоре с деньгами.
  */
 export const UNANALYSED: Array<{ module: string; likelyRivals: string }> = [
-  { module: "Constitution — свод правил планеты", likelyRivals: "прямых аналогов не нашли; ближайшее — инструменты DAO-управления" },
+  { module: "QContract — договоры", likelyRivals: "DocuSign, PandaDoc, Ironclad" },
+  { module: "QMaskCard — одноразовые карты", likelyRivals: "Privacy.com, Revolut disposable, Wise" },
+  { module: "VeilNetX — приватность трафика", likelyRivals: "Mullvad, Tailscale, NordVPN" },
+  { module: "QAI — универсальный ассистент", likelyRivals: "ChatGPT, Claude, Gemini" },
 ];

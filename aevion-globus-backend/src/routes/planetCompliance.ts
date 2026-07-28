@@ -2173,10 +2173,18 @@ planetComplianceRouter.get("/artifacts/:artifactVersionId/public", async (req, r
   // internals»). То есть правило в коде уже было — просто применялось в одном
   // месте из двух. Звёздочка опасна именно этим: она отдаёт и те колонки,
   // которых на момент написания запроса не существовало.
+  //
+  // Это не теория: замер живого прода 28.07 показал в ответе 17 полей, тогда
+  // как в CREATE TABLE их 12. Четыре — `revokedBy`, `revokeReasonCode`,
+  // `embedFetches`, `lastFetchedAt` — добавлены поздними миграциями, и
+  // звёздочка подхватила их молча. `revokeReasonCode` публичен по смыслу (его
+  // отдаёт и /embed), поэтому он в списке; `revokedBy` — внутренний
+  // идентификатор, а `embedFetches`/`lastFetchedAt` — наша аналитика, им в
+  // публичном ответе не место.
   const cert = await pool.query(
     `SELECT "id","artifactVersionId","status","publicPayloadJson",
             "policyManifestHash","evidenceRoot","signature",
-            "createdAt","revokedAt","revokeReason"
+            "createdAt","revokedAt","revokeReason","revokeReasonCode"
      FROM "PlanetCertificate" WHERE "id"=$1`,
     [row.certificateId],
   );

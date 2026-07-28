@@ -200,6 +200,13 @@ constitutionFunnelAdminRouter.get(
       const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
       let rows: EventRow[] = [];
+      // Потолок выборки. По этой воронке принимаются решения, поэтому обрезание
+      // нельзя оставлять незаметным: за 168 часов событий может быть больше, и
+      // тогда проценты считаются по САМЫМ СТАРЫМ 20 000 (сортировка по возрастанию),
+      // выглядя при этом как полная картина. Отдаём флаг наружу.
+      const ROW_CAP = 20_000;
+      let source: "postgres" | "memory" = "memory";
+      let dbQueryFailed = false;
       await ensureEventsTable();
       if (dbAvailable) {
         try {
@@ -209,7 +216,7 @@ constitutionFunnelAdminRouter.get(
              FROM constitution_events
              WHERE "createdAt" > $1
              ORDER BY "createdAt" ASC
-             LIMIT 20000`,
+             LIMIT ${ROW_CAP}`,
             [since],
           );
           rows = r.rows.map((x: Record<string, unknown>) => ({
@@ -220,10 +227,22 @@ constitutionFunnelAdminRouter.get(
             props: (x.props as Record<string, unknown>) ?? {},
             createdAt: x.createdAt instanceof Date ? x.createdAt.toISOString() : String(x.createdAt),
           }));
-        } catch { /* fall through */ }
+          source = "postgres";
+        } catch (dbErr) {
+          // Раньше сбой базы молча приводил к воронке по кольцевому буферу в
+          // памяти — и отдавался в том же виде, что настоящая. Числа, по которым
+          // принимают решения, обязаны говорить, откуда они взялись.
+          dbQueryFailed = true;
+          capture(dbErr, { route: "constitution/funnel", note: "события не прочитаны из Postgres — воронка считается по памяти" });
+          console.error(
+            "[Constitution] ВОРОНКА СЧИТАЕТСЯ ПО ПАМЯТИ: события не прочитаны из базы.",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
       if (rows.length === 0) {
         rows = memRing.filter((r) => r.createdAt > since).reverse();
+        source = "memory";
       }
 
       // Count per event
@@ -285,6 +304,12 @@ constitutionFunnelAdminRouter.get(
         windowHours: hours,
         totalEvents: rows.length,
         uniqueSessions: byFp.size,
+        source,
+        dbQueryFailed,
+        // true — событий в окне больше, чем взято: проценты ниже посчитаны по
+        // самым старым ROW_CAP записям и полной картиной не являются.
+        truncated: source === "postgres" && rows.length >= ROW_CAP,
+        rowCap: ROW_CAP,
         eventCounts: Array.from(counts.entries())
           .map(([event, count]) => ({ event, count }))
           .sort((a, b) => b.count - a.count),

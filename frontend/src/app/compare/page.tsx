@@ -324,7 +324,17 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
   },
   basis: { fontFamily: "monospace", fontSize: 11.5, color: MUTED },
-  openLink: { color: GOLD, fontWeight: 700, fontSize: 14, textDecoration: "none" },
+  openLink: {
+    color: GOLD,
+    fontWeight: 700,
+    fontSize: 14,
+    textDecoration: "none",
+    // Цель нажатия на телефоне: голая строка текста даёт ~14px высоты,
+    // в неё трудно попасть большим пальцем. Отступы поднимают её до ~34px
+    // без визуального утяжеления карточки.
+    display: "inline-block",
+    padding: "8px 0",
+  },
 
   summary: { fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, cursor: "pointer" },
   rivalIndex: { listStyle: "none", margin: "12px 0 0", padding: 0 },

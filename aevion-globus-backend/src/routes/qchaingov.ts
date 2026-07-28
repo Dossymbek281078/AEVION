@@ -249,22 +249,44 @@ qchaingovRouter.post("/proposals/:id/votes", voteLimit, async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
     const id = String(req.params.id || "").trim();
-    const { choice, weight = 1, rationale } = req.body || {};
+    const { choice, weight, rationale } = req.body || {};
     if (!choice || typeof choice !== "string") return res.status(400).json({ error: "choice required" });
-    const w = Number(weight);
-    if (!Number.isFinite(w) || w <= 0 || w > 1_000_000) return res.status(400).json({ error: "weight 0..1000000" });
     const pool = getPool();
     const p = await pool.query(
-      `SELECT "status","options" FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
+      `SELECT "status","options","voteMode" FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
       [id],
     );
     if (p.rowCount === 0) return res.status(404).json({ error: "proposal_not_found" });
-    const proposal = p.rows[0] as { status: string; options: string[] };
+    const proposal = p.rows[0] as { status: string; options: string[]; voteMode: string };
     if (proposal.status !== "open") return res.status(400).json({ error: "voting_not_open", status: proposal.status });
     const allowedOptions = Array.isArray(proposal.options) ? proposal.options : [];
     if (!allowedOptions.includes(choice)) {
       return res.status(400).json({ error: "invalid_choice", allowed: allowedOptions });
     }
+    // ПРАВО ГОЛОСА ОПРЕДЕЛЯЕТ СЕРВЕР. Раньше вес приходил телом запроса и
+    // принимался вплоть до миллиона, а итог считается `SUM("weight")` — то есть
+    // любой вошедший пользователь мог одним запросом перевесить всех
+    // остальных. Тот же класс, что «клиент заявил — сервер списал» на денежном
+    // пути, только решается им исход голосования.
+    //
+    // Пока источника силы голоса нет (AEV-взвешивание из описания модуля не
+    // подключено), правило простое и честное: одно лицо — один голос.
+    const votingPower = 1;
+    let w = votingPower;
+    if (proposal.voteMode === "weighted") {
+      // В режиме «weighted» тело задаёт ДОЛЮ собственного права, а не число
+      // из воздуха: 0 < доля ≤ 1.
+      const fraction = weight === undefined || weight === null ? 1 : Number(weight);
+      if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
+        return res.status(400).json({ error: "weight_must_be_fraction_0_to_1" });
+      }
+      w = votingPower * fraction;
+    } else if (weight !== undefined && weight !== null && Number(weight) !== 1) {
+      // Явный отказ вместо тихого игнорирования: клиент должен узнать, что его
+      // число не учтено, а не думать, что проголосовал с весом 1000.
+      return res.status(400).json({ error: "weight_not_accepted_in_this_mode", voteMode: proposal.voteMode });
+    }
+
     const voteId = crypto.randomUUID();
     try {
       await pool.query(

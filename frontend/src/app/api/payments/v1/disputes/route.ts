@@ -2,14 +2,14 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   store,
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvSet } from "../_persist";
+import { kvList, kvSet, withKeyLock } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -115,17 +115,20 @@ export async function POST(req: NextRequest) {
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const raw = await req.text();
-  const idem = checkIdempotency(req, raw);
-  if (idem.hit) {
+  const idem = beginIdempotency(req, raw);
+  if (idem.status === "replay") {
     return attachRateHeaders(
       withCors(
-        new Response(idem.cachedBody, {
+        new Response(idem.body, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
         })
       ),
       gate.rateHeaders
     );
+  }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
   }
 
   let body: {
@@ -190,17 +193,28 @@ export async function POST(req: NextRequest) {
     status: "warning_needs_response",
     evidence_url: body.evidence_url ? String(body.evidence_url).slice(0, 500) : null,
     evidence_text: body.evidence_text ? String(body.evidence_text).slice(0, 2000) : null,
+    // `Infinity > now` — истина, а `1e400` в JSON и есть Infinity: срок ответа
+    // по спору можно было выставить бесконечным, то есть отменить дедлайн.
+    // Потолок — год: спор с ответом «когда-нибудь» не спор.
     due_by:
-      typeof body.due_by === "number" && body.due_by > now
+      typeof body.due_by === "number" &&
+      Number.isFinite(body.due_by) &&
+      body.due_by > now &&
+      body.due_by <= now + 365 * 24 * 60 * 60 * 1000
         ? body.due_by
         : now + 7 * 24 * 60 * 60 * 1000,
     created: now,
     updated: now,
   };
 
-  const all = await loadAll();
-  all.unshift(dispute);
-  await persistAll(all);
+  // Под замком: `loadAll → изменить → persistAll` — чтение-изменение-запись, а
+  // не атомарная операция. Два одновременных спора иначе пишут по своему
+  // снимку, и один просто пропадает.
+  await withKeyLock(DISPUTES_KEY, async () => {
+    const all = await loadAll();
+    all.unshift(dispute);
+    await persistAll(all);
+  });
 
   void logAudit(req, "dispute.created", dispute.id, {
     link_id: dispute.link_id,
@@ -210,7 +224,7 @@ export async function POST(req: NextRequest) {
   void fanoutDisputeWebhook("dispute.created", dispute);
 
   const responseBody = JSON.stringify(dispute);
-  idem.cleanup?.();
+  idem.commit(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

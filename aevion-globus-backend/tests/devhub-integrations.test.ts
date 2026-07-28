@@ -40,7 +40,58 @@ function makeApp() {
 
 // ─── Fetch mock helper ───────────────────────────────────────────────────────
 
+// Проверка «задеплоенный URL реально отдаёт 2xx» вызывается из операции
+// «выстрелил и забыл» и по умолчанию опрашивает 5 раз с паузой 5 с — до 20
+// секунд ПОСЛЕ того, как тест закончился. Именно её запоздавшие запросы
+// (`GET https://stale.pages.dev`, `GET https://myapp.vercel.app`) приземлялись в
+// следующем тесте, попадали в свежий fetchMock первыми и сдвигали утверждения,
+// адресующие вызовы по индексу. Одна попытка без пауз укладывает проверку в свой
+// же тест. Ставится ДО импорта роутера не обязательно — значения читаются на
+// каждом вызове, — но пусть стоит рядом с остальной подготовкой окружения.
+// Фоновая проверка «задеплоенный URL отдаёт 2xx» в тестах ОТКЛЮЧЕНА целиком.
+// Сокращения попыток до одной не хватило: даже один невыжидаемый запрос садится
+// в следующий тест и съедает там заготовленный ответ из очереди, после чего
+// настоящий вызов получает не свой ответ. Тесты самой этой проверки задают число
+// попыток явным аргументом и флаг обходят.
+process.env.DEVHUB_SKIP_SERVE_CHECK = "1";
+process.env.DEVHUB_VERIFY_ATTEMPTS = "1";
+process.env.DEVHUB_VERIFY_DELAY_MS = "0";
+
 const originalFetch = globalThis.fetch;
+
+/**
+ * Запросы теста БЕЗ фоновых проверок деплоя.
+ *
+ * Маршруты деплоя проверяют, что задеплоенный URL реально отдаёт 2xx, и делают
+ * это в операции «выстрелил и забыл» — плюс у Pages есть отложенный шаг
+ * «mark live» через setTimeout. Эти запросы приземляются уже ПОСЛЕ конца своего
+ * теста и попадают в свежий `fetchMock` следующего, причём на произвольную
+ * позицию: замер 28.07 по семи прогонам подряд показал `[0] GET
+ * https://stale.pages.dev`, `[0] GET https://t-abc123.pages.dev`, до трёх
+ * `GET https://myapp.vercel.app` подряд, а один раз посторонний вызов встал
+ * третьим. Любое утверждение, адресующее вызовы по индексу (`calls[0]`,
+ * `calls[1]`…), читало чужой запрос — отсюда многодневный «мигающий» флак этого
+ * файла, выглядевший как `SyntaxError: "undefined" is not valid JSON`.
+ *
+ * Уменьшение числа попыток (DEVHUB_VERIFY_ATTEMPTS=1) объём утечки сократило, но
+ * НЕ убрало: даже один невыжидаемый запрос садится в следующий тест. Поэтому
+ * фильтруем по цели: GET на адрес развёртывания — не запрос теста.
+ *
+ * Тесты самой `verifyDeploymentServes` работают с `fetchMock` напрямую и через
+ * `toHaveBeenCalledTimes`, так что фильтр их не касается.
+ */
+const DEPLOY_PROBE = /^https:\/\/([\w-]+\.)*(pages\.dev|vercel\.app)\/?$/;
+
+function apiCalls(): unknown[][] {
+  return fetchMock.mock.calls.filter((c: unknown[]) => {
+    const first = c[0];
+    const url = typeof first === "string" ? first : String((first as { url?: string })?.url ?? first);
+    const method = ((c[1] as { method?: string } | undefined)?.method ?? "GET").toUpperCase();
+    // Только GET на КОРЕНЬ адреса развёртывания: настоящие вызовы к API
+    // провайдеров всегда идут с путём (или не GET), поэтому под фильтр не попадут.
+    return !(method === "GET" && DEPLOY_PROBE.test(url));
+  });
+}
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -66,7 +117,19 @@ beforeEach(() => {
   mockDeployViaWrangler.mockReset();
 });
 
-afterEach(() => {
+afterEach((ctx: { task?: { name?: string; result?: { state?: string } } }) => {
+  // ВРЕМЕННАЯ ДИАГНОСТИКА (снять после разбора флака): у упавшего теста печатаем
+  // все запросы, которые записала заглушка, — чтобы увидеть лишний.
+  if (ctx?.task?.result?.state === "fail") {
+    const lines = fetchMock.mock.calls.map((c: unknown[], i: number) => {
+      const first = c[0] as string | { url?: string };
+      const url = typeof first === "string" ? first : String(first?.url ?? first);
+      const method = (c[1] as { method?: string } | undefined)?.method ?? "GET";
+      return "    [" + i + "] " + method + " " + url.slice(0, 120);
+    });
+    const body = lines.length ? lines.join("\n") : "    (нет)";
+    console.error("[ЗАПРОСЫ УПАВШЕГО ТЕСТА] " + String(ctx.task?.name) + "\n" + body);
+  }
   globalThis.fetch = originalFetch;
   vi.mocked(getProviders).mockReturnValue([]);
   vi.mocked(callProvider).mockReset();
@@ -154,8 +217,8 @@ describe("POST /api/devhub/media/tts (ElevenLabs)", () => {
 
     expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, opts] = fetchMock.mock.calls[0];
+    expect(apiCalls()).toHaveLength(1);
+    const [url, opts] = apiCalls()[0];
     expect(url).toContain("21m00Tcm4TlvDq8ikWAM"); // Rachel voice ID
     expect((opts as any).headers["xi-api-key"]).toBe("fake-key");
     const body = JSON.parse((opts as any).body);
@@ -208,7 +271,7 @@ describe("POST /api/devhub/media/email (Brevo)", () => {
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
     expect(r.body.messageId).toBe("msg-123");
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = apiCalls()[0];
     expect(url).toContain("api.brevo.com/v3/smtp/email");
     expect((opts as any).headers["api-key"]).toBe("brevo-fake");
     const body = JSON.parse((opts as any).body);
@@ -276,9 +339,9 @@ describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
       checkoutId: "co_abc123",
       url: "https://store.lemonsqueezy.com/checkout/co_abc123",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/checkouts");
-    expect(fetchMock.mock.calls[0][0]).toContain("api.lemonsqueezy.com");
+    expect(apiCalls()).toHaveLength(1);
+    expect(apiCalls()[0][0]).toContain("/v1/checkouts");
+    expect(apiCalls()[0][0]).toContain("api.lemonsqueezy.com");
   });
 });
 
@@ -318,7 +381,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.ok).toBe(true);
     expect(r.body.url).toBe("https://oaidalleapi.example/img.png");
     expect(r.body.revisedPrompt).toBe("A cat sitting");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.model).toBe("gpt-image-1");
     // gpt-image-1 uses low/medium/high/auto; route maps "hd" → "high"
     expect(body.quality).toBe("high");
@@ -337,7 +400,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.status).toBe(200);
     expect(r.body.url).toMatch(/^data:image\/png;base64,/);
     expect(r.body.storage).toBe("inline");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no upload attempt without creds
+    expect(apiCalls()).toHaveLength(1); // no upload attempt without creds
   });
 
   test("b64 result with Cloudflare configured uploads the bytes and returns a permanent URL", async () => {
@@ -359,7 +422,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.status).toBe(200);
     expect(r.body.url).toBe("https://imagedelivery.example/acc/img-1/public");
     expect(r.body.storage).toBe("cloudflare");
-    const uploadCall = fetchMock.mock.calls[1];
+    const uploadCall = apiCalls()[1];
     expect(String(uploadCall[0])).toContain("/images/v1");
     // File upload (raw bytes), not the URL-import form used for hosted results
     expect(String(uploadCall[1].body)).toContain('name="file"');
@@ -400,8 +463,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.fallbackFrom).toEqual(["openai"]);
     expect(r.body.url).toBe("https://imagedelivery.example/acc/img-2/public");
     expect(r.body.storage).toBe("cloudflare");
-    expect(String(fetchMock.mock.calls[1][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
-    const fluxBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+    expect(String(apiCalls()[1][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
+    const fluxBody = JSON.parse((apiCalls()[1][1] as any).body);
     expect(fluxBody).toMatchObject({ prompt: "a cat", width: 1024, height: 1024 });
   });
 
@@ -418,8 +481,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.status).toBe(200);
     expect(r.body.provider).toBe("together");
     expect(r.body.storage).toBe("inline"); // no CF creds — honest data: URI fallback
-    expect(String(fetchMock.mock.calls[0][0])).toContain("api.together.xyz");
-    const tgBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(String(apiCalls()[0][0])).toContain("api.together.xyz");
+    const tgBody = JSON.parse((apiCalls()[0][1] as any).body);
     expect(tgBody.model).toBe("black-forest-labs/FLUX.1-schnell-Free");
   });
 
@@ -735,15 +798,48 @@ describe("verifyDeploymentServes — post-deploy serve check", () => {
     fetchMock
       .mockResolvedValueOnce({ ok: false, status: 500 })
       .mockResolvedValueOnce({ ok: true, status: 200 });
-    await expect(verifyDeploymentServes("https://x.pages.dev", 1)).resolves.toBe(true);
+    // Число попыток задаётся ЯВНО: эти два теста проверяют саму логику повторов,
+    // и завязывать её на DEVHUB_VERIFY_ATTEMPTS (в этом файле он равен 1, чтобы
+    // фоновая проверка деплоя не утекала в следующие тесты) означало бы проверять
+    // настройку окружения вместо поведения функции.
+    await expect(verifyDeploymentServes("https://x.pages.dev", 1, 5)).resolves.toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   test("reports false after 5 non-2xx attempts (assets never stored — the live CF bug)", async () => {
     const { verifyDeploymentServes } = await import("../src/routes/devhub");
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
-    await expect(verifyDeploymentServes("https://x.pages.dev", 1)).resolves.toBe(false);
+    await expect(verifyDeploymentServes("https://x.pages.dev", 1, 5)).resolves.toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  // Без этой проверки настройка, ради которой всё делалось, осталась бы
+  // недоказанной: файл ставит DEVHUB_VERIFY_ATTEMPTS=1, и именно это удерживает
+  // фоновую проверку деплоя внутри своего теста.
+  test("DEVHUB_VERIFY_ATTEMPTS ограничивает число попыток", async () => {
+    const { verifyDeploymentServes } = await import("../src/routes/devhub");
+    expect(process.env.DEVHUB_VERIFY_ATTEMPTS).toBe("1");
+    // Снимаем флаг полного отключения: здесь проверяется именно чтение числа
+    // попыток из окружения, а флаг замкнул бы функцию до этого чтения.
+    const saved = process.env.DEVHUB_SKIP_SERVE_CHECK;
+    delete process.env.DEVHUB_SKIP_SERVE_CHECK;
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    await expect(verifyDeploymentServes("https://x.pages.dev")).resolves.toBe(false);
+    if (saved !== undefined) process.env.DEVHUB_SKIP_SERVE_CHECK = saved;
+    expect(fetchMock, "при одной попытке запрос должен быть ровно один").toHaveBeenCalledTimes(1);
+  });
+
+  test("нулевая пауза из окружения не подменяется значением по умолчанию", async () => {
+    // `Number(raw) || fallback` превратил бы явный ноль в 5000 мс, и фоновая
+    // проверка снова растянулась бы на секунды после конца теста.
+    const { verifyDeploymentServes } = await import("../src/routes/devhub");
+    expect(process.env.DEVHUB_VERIFY_DELAY_MS).toBe("0");
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const started = Date.now();
+    await verifyDeploymentServes("https://x.pages.dev", undefined, 3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // Три попытки без пауз — это доли секунды, а не 10 с.
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
 
@@ -823,7 +919,7 @@ describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed s
 
     expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toContain("text/html");
-    expect(String(fetchMock.mock.calls[0][0])).toBe("https://myapp.example");
+    expect(String(apiCalls()[0][0])).toBe("https://myapp.example");
     expect(r.text).toContain('<base href="https://myapp.example/">');
     expect(r.text).toContain("devhub-visual-edit"); // overlay contract injected
     expect(r.text).toContain("setAttribute('data-vid'"); // runtime tagger
@@ -838,7 +934,7 @@ describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed s
     const r = await request(app).get(`/api/devhub/projects/${id}/preview-proxy?url=https://evil.example`);
 
     expect(r.status).toBe(200);
-    expect(String(fetchMock.mock.calls[0][0])).toBe("https://legacy.example");
+    expect(String(apiCalls()[0][0])).toBe("https://legacy.example");
   });
 });
 
@@ -862,8 +958,8 @@ describe("POST /api/devhub/media/sfx (ElevenLabs)", () => {
 
     expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/sound-generation");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(apiCalls()[0][0]).toContain("/v1/sound-generation");
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.text).toBe("heavy rain");
     expect(body.duration_seconds).toBe(5);
   });
@@ -880,8 +976,8 @@ describe("POST /api/devhub/media/music (ElevenLabs)", () => {
 
     expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/music/compose");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(apiCalls()[0][0]).toContain("/v1/music/compose");
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.prompt).toBe("lo-fi hip hop");
     expect(body.music_length_ms).toBe(30000);
   });
@@ -980,7 +1076,7 @@ describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
     const cr = await request(app).post("/api/devhub/projects").send({ name: "Legacy" });
     const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/deploy`).send({});
     expect(r.status).toBe(501);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(apiCalls()).toHaveLength(0);
     delete process.env.RAILWAY_API_TOKEN;
     delete process.env.RAILWAY_PROJECT_ID;
     delete process.env.RAILWAY_SERVICE_ID;
@@ -1602,9 +1698,9 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
       cname: "devhub.aevion.app",
       recordId: "rec-new-1",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][0]).toContain("/dns_records?type=CNAME");
-    expect(fetchMock.mock.calls[1][1].method).toBe("POST");
+    expect(apiCalls()).toHaveLength(2);
+    expect(apiCalls()[0][0]).toContain("/dns_records?type=CNAME");
+    expect(apiCalls()[1][1].method).toBe("POST");
   });
 
   test("reports already-configured when CNAME already points to devhub.aevion.app", async () => {
@@ -1621,7 +1717,7 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
     expect(r.status).toBe(200);
     expect(r.body.action).toBe("already-configured");
     expect(r.body.recordId).toBe("rec-existing");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // only list, no create/update
+    expect(apiCalls()).toHaveLength(1); // only list, no create/update
   });
 
   test("updates existing CNAME when pointing elsewhere", async () => {
@@ -1639,7 +1735,7 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
     const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
     expect(r.status).toBe(200);
     expect(r.body.action).toBe("updated");
-    expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+    expect(apiCalls()[1][1].method).toBe("PUT");
   });
 });
 
@@ -1701,8 +1797,8 @@ describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
     expect(r.body.ok).toBe(true);
     expect(r.body.voiceId).toBe("voice-abc-123");
     expect(r.body.requiresVerification).toBe(false);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
-    const headers = (fetchMock.mock.calls[0][1] as any).headers;
+    expect(apiCalls()[0][0]).toContain("/v1/voices/add");
+    const headers = (apiCalls()[0][1] as any).headers;
     expect(headers["xi-api-key"]).toBe("fake");
     expect(headers["Content-Type"]).toMatch(/multipart\/form-data; boundary=/);
   });
@@ -1737,14 +1833,14 @@ describe("POST /api/devhub/media/voice-clone/preview (ElevenLabs)", () => {
     expect(r.body.length).toBe(4096);
 
     // 1st call: clone
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
+    expect(apiCalls()[0][0]).toContain("/v1/voices/add");
     // 2nd: TTS with the temp voice
-    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-voice-xyz");
-    const ttsBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+    expect(apiCalls()[1][0]).toContain("/text-to-speech/temp-voice-xyz");
+    const ttsBody = JSON.parse((apiCalls()[1][1] as any).body);
     expect(ttsBody.text).toBe("Hi from AEVION");
     // 3rd: delete
-    expect(fetchMock.mock.calls[2][0]).toContain("/v1/voices/temp-voice-xyz");
-    expect((fetchMock.mock.calls[2][1] as any).method).toBe("DELETE");
+    expect(apiCalls()[2][0]).toContain("/v1/voices/temp-voice-xyz");
+    expect((apiCalls()[2][1] as any).method).toBe("DELETE");
   });
 
   test("cleans up temp voice when preview TTS fails", async () => {
@@ -1761,7 +1857,7 @@ describe("POST /api/devhub/media/voice-clone/preview (ElevenLabs)", () => {
     expect(r.body.error).toMatch(/Preview TTS failed/);
     // The DELETE cleanup is best-effort and fire-and-forget; just confirm we got at least the 2 calls
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-doomed");
+    expect(apiCalls()[1][0]).toContain("/text-to-speech/temp-doomed");
   });
 });
 
@@ -1804,7 +1900,7 @@ describe("POST /api/devhub/media/stt (ElevenLabs)", () => {
       language: "en",
       confidence: 0.99,
     });
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/speech-to-text");
+    expect(apiCalls()[0][0]).toContain("/v1/speech-to-text");
   });
 });
 
@@ -1833,7 +1929,7 @@ describe("POST /api/devhub/media/drive-search (Google Drive)", () => {
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
     expect(r.body.files).toHaveLength(2);
-    const url = fetchMock.mock.calls[0][0];
+    const url = apiCalls()[0][0];
     expect(url).toMatch(/name\+contains\+%27doc%27/);
     expect(url).toContain("pageSize=10");
   });
@@ -1874,7 +1970,7 @@ describe("POST /api/devhub/projects/:id/drive/import", () => {
     expect(r.body.path).toBe("spec.md");
     expect(r.body.mimeType).toBe("text/markdown");
     // alt=media endpoint for binary
-    expect(fetchMock.mock.calls[1][0]).toContain("alt=media");
+    expect(apiCalls()[1][0]).toContain("alt=media");
   });
 
   test("exports Google native doc as markdown", async () => {
@@ -1897,8 +1993,8 @@ describe("POST /api/devhub/projects/:id/drive/import", () => {
       .send({ fileId: "doc-1", targetPath: "docs/MyDoc.md" });
     expect(r.status).toBe(200);
     expect(r.body.path).toBe("docs/MyDoc.md");
-    expect(fetchMock.mock.calls[1][0]).toContain("/export");
-    expect(fetchMock.mock.calls[1][0]).toContain("text%2Fmarkdown");
+    expect(apiCalls()[1][0]).toContain("/export");
+    expect(apiCalls()[1][0]).toContain("text%2Fmarkdown");
   });
 });
 
@@ -2117,7 +2213,7 @@ describe("Per-project GitHub token override", () => {
     expect(r.status).toBe(200);
     expect(r.body.stars).toBe(42);
     // Verify it used the PER-PROJECT token, not the env one
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer user-personal-pat");
+    expect((apiCalls()[0][1] as any).headers.Authorization).toBe("Bearer user-personal-pat");
   });
 
   test("/github/branches falls back to env token when no project token", async () => {
@@ -2133,7 +2229,7 @@ describe("Per-project GitHub token override", () => {
     expect(r.status).toBe(200);
     expect(r.body.connected).toBe(true);
     expect(r.body.branches).toHaveLength(1);
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer fallback-server-token");
+    expect((apiCalls()[0][1] as any).headers.Authorization).toBe("Bearer fallback-server-token");
   });
 });
 
@@ -2195,9 +2291,9 @@ describe("POST /api/devhub/projects/:id/github/pull-request", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, prUrl: "https://github.com/owner/repo/pull/7", prNumber: 7, branch: "feat/login", pushedFiles: 0 });
 
-    const createRefBody = JSON.parse((fetchMock.mock.calls[2][1] as any).body);
+    const createRefBody = JSON.parse((apiCalls()[2][1] as any).body);
     expect(createRefBody).toEqual({ ref: "refs/heads/feat/login", sha: "base-sha-123" });
-    const prBody = JSON.parse((fetchMock.mock.calls[3][1] as any).body);
+    const prBody = JSON.parse((apiCalls()[3][1] as any).body);
     expect(prBody).toEqual({ title: "Add login page", head: "feat/login", base: "main", body: "Adds a login form + API route" });
   });
 
@@ -2240,7 +2336,7 @@ describe("POST /api/devhub/projects/:id/github/pull-request", () => {
 
     expect(r.status).toBe(200);
     expect(r.body.pushedFiles).toBe(1);
-    const putBody = JSON.parse((fetchMock.mock.calls[4][1] as any).body);
+    const putBody = JSON.parse((apiCalls()[4][1] as any).body);
     expect(putBody.sha).toBe("existing-file-sha");
     expect(putBody.branch).toBeTruthy();
   });
@@ -2298,8 +2394,8 @@ describe("POST /api/devhub/projects/:id/github/pull-request/:number/merge", () =
 
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, merged: true, sha: "abc123" });
-    expect(fetchMock.mock.calls[0][0]).toContain("/repos/owner/repo/pulls/7/merge");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(apiCalls()[0][0]).toContain("/repos/owner/repo/pulls/7/merge");
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.merge_method).toBe("rebase");
   });
 
@@ -2312,7 +2408,7 @@ describe("POST /api/devhub/projects/:id/github/pull-request/:number/merge", () =
 
     await request(app).post(`/api/devhub/projects/${id}/github/pull-request/3/merge`).send({});
 
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.merge_method).toBe("squash");
   });
 
@@ -2499,7 +2595,7 @@ describe("POST /api/devhub/media/sms (Brevo)", () => {
       .send({ recipient: "+14155552671", content: "Test SMS", sender: "MyApp" });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, reference: "ref-123", smsCount: 1 });
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.sender).toBe("MyApp");
     expect(body.recipient).toBe("+14155552671");
     expect(body.type).toBe("transactional");
@@ -2559,7 +2655,7 @@ describe("POST /api/devhub/media/whatsapp (Brevo)", () => {
       .send({ contactNumber: "+14155552671", templateId: 42, params: { name: "Alice" } });
     expect(r.status).toBe(200);
     expect(r.body.messageId).toBe("wa-msg-1");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.senderNumberId).toBe("sender-abc");
     expect(body.contactNumbers).toEqual(["14155552671"]); // no +
     expect(body.templateId).toBe(42);
@@ -2619,8 +2715,8 @@ describe("POST /api/devhub/media/upload-image (Cloudflare Images)", () => {
       imageId: "cf-img-123",
       url: "https://imagedelivery.net/abc/cf-img-123/public",
     });
-    expect(fetchMock.mock.calls[0][0]).toContain("acc-fake/images/v1");
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer cf-fake");
+    expect(apiCalls()[0][0]).toContain("acc-fake/images/v1");
+    expect((apiCalls()[0][1] as any).headers.Authorization).toBe("Bearer cf-fake");
   });
 
   test("uploads from base64", async () => {
@@ -2678,7 +2774,7 @@ describe("POST /api/devhub/media/translate (DeepL)", () => {
     expect(r.body.text).toBe("привет");
     expect(r.body.detectedSource).toBe("EN");
     expect(r.body.targetLang).toBe("RU");
-    expect(fetchMock.mock.calls[0][0]).toContain("api-free.deepl.com");
+    expect(apiCalls()[0][0]).toContain("api-free.deepl.com");
   });
 
   test("uses pro endpoint for non-:fx key", async () => {
@@ -2691,7 +2787,7 @@ describe("POST /api/devhub/media/translate (DeepL)", () => {
       .post("/api/devhub/media/translate")
       .send({ text: "Hello", targetLang: "FR" });
     expect(r.status).toBe(200);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.deepl.com/v2/translate");
+    expect(apiCalls()[0][0]).toBe("https://api.deepl.com/v2/translate");
   });
 });
 
@@ -2774,7 +2870,7 @@ describe("GET /api/devhub/media/email-templates (Brevo)", () => {
     expect(r.body.total).toBe(3);
     expect(r.body.templates).toHaveLength(2);
     expect(r.body.templates[0]).toMatchObject({ id: 1, name: "Welcome", subject: "Welcome!" });
-    expect(fetchMock.mock.calls[0][0]).toContain("/v3/smtp/templates?limit=10&offset=0");
+    expect(apiCalls()[0][0]).toContain("/v3/smtp/templates?limit=10&offset=0");
   });
 });
 
@@ -2803,7 +2899,7 @@ describe("POST /api/devhub/media/email-template-send (Brevo)", () => {
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
     expect(r.body.messageId).toBe("mid-456");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.templateId).toBe(7);
     expect(body.to[0].email).toBe("user@example.com");
     expect(body.params).toEqual({ name: "Alice", code: "1234" });
@@ -2855,7 +2951,7 @@ describe("Agent workflow image step → auto-upload to Cloudflare", () => {
       .send({ steps: [{ type: "image", prompt: "hero" }] });
     expect(r.status).toBe(200);
     expect(r.body.results[0].output.url).toBe("https://oai.example/temp.png");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no CF call
+    expect(apiCalls()).toHaveLength(1); // no CF call
   });
 });
 
@@ -2897,10 +2993,10 @@ describe("POST /api/devhub/media/upload-audio (Cloudflare R2)", () => {
     expect(r.body.key).toBe("audio/test.mp3");
     expect(r.body.url).toBe("https://cdn.aevion.test/audio/test.mp3");
 
-    const callUrl = fetchMock.mock.calls[0][0] as string;
+    const callUrl = apiCalls()[0][0] as string;
     expect(callUrl).toContain("acc-r2.r2.cloudflarestorage.com");
     expect(callUrl).toContain("/aevion-media/audio/test.mp3");
-    const init = fetchMock.mock.calls[0][1] as any;
+    const init = apiCalls()[0][1] as any;
     expect(init.method).toBe("PUT");
     expect(init.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
     expect(init.headers["x-amz-date"]).toMatch(/^\d{8}T\d{6}Z$/);
@@ -2926,7 +3022,7 @@ describe("POST /api/devhub/media/upload-audio (Cloudflare R2)", () => {
     expect(r.status).toBe(200);
     expect(r.body.url).toContain("acc-r2.r2.cloudflarestorage.com/aevion-media/audio/");
     expect(r.body.bytes).toBe(srcBytes.length);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(apiCalls()).toHaveLength(2);
   });
 
   test("502 when R2 PUT fails", async () => {
@@ -3060,11 +3156,11 @@ describe("POST /api/devhub/media/email-template-create (Brevo)", () => {
       .send({ name: "Hello", subject: "Hi", htmlContent: "<p>Body</p>", senderEmail: "noreply@aevion.io", senderName: "AEVION" });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, id: 99, name: "Hello", subject: "Hi" });
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.templateName).toBe("Hello");
     expect(body.sender).toEqual({ email: "noreply@aevion.io", name: "AEVION" });
     expect(body.isActive).toBe(true);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.brevo.com/v3/smtp/templates");
+    expect(apiCalls()[0][0]).toBe("https://api.brevo.com/v3/smtp/templates");
   });
 
   test("falls back to BREVO_SENDER_EMAIL env", async () => {
@@ -3077,7 +3173,7 @@ describe("POST /api/devhub/media/email-template-create (Brevo)", () => {
       .post("/api/devhub/media/email-template-create")
       .send({ name: "N", subject: "S", htmlContent: "<p>X</p>" });
     expect(r.status).toBe(200);
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const body = JSON.parse((apiCalls()[0][1] as any).body);
     expect(body.sender).toEqual({ email: "default@aevion.io", name: "AEVION Bot" });
   });
 });
@@ -3264,7 +3360,7 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(step0.output.bytes).toBe(4096);
 
     // R2 PUT was the 2nd fetch — check signature headers exist
-    const r2Init = fetchMock.mock.calls[1][1] as any;
+    const r2Init = apiCalls()[1][1] as any;
     expect(r2Init.method).toBe("PUT");
     expect(r2Init.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
   });
@@ -3284,7 +3380,7 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(step0.ok).toBe(true);
     expect(step0.savedAs).toBe("public/voice-0.mp3.b64");
     expect(step0.output.url).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
+    expect(apiCalls()).toHaveLength(1); // no R2 call
   });
 
   test("sfx step: R2 set → permanent CDN URL", async () => {
@@ -3325,10 +3421,10 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(r.body.results[0].savedAs).toBe("public/bg.url.txt"); // suffix rewritten
     expect(r.body.results[0].output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\/.*\/music-0-/);
     // ElevenLabs music endpoint called with body.music_length_ms = 30000
-    const elBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const elBody = JSON.parse((apiCalls()[0][1] as any).body);
     expect(elBody.prompt).toBe("Ambient synth pads");
     expect(elBody.music_length_ms).toBe(30_000);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
+    expect(apiCalls()[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
   });
 
   test("music step: R2 missing → falls back to .mp3.b64 storage", async () => {
@@ -3345,7 +3441,7 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(r.body.results[0].ok).toBe(true);
     expect(r.body.results[0].savedAs).toBe("public/music-0.mp3.b64");
     expect(r.body.results[0].output.url).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
+    expect(apiCalls()).toHaveLength(1); // no R2 call
   });
 });
 
@@ -3409,9 +3505,9 @@ describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
     expect(done.ok).toBe(true);
     expect(done.savedAs).toBe("public/bg.url.txt");
     expect(done.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\/.*\/music-0-/);
-    const elBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const elBody = JSON.parse((apiCalls()[0][1] as any).body);
     expect(elBody.music_length_ms).toBe(60_000);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
+    expect(apiCalls()[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
   });
 
   test("music in stream: R2 missing → step-done emits bytes only (no url)", async () => {
@@ -3430,7 +3526,7 @@ describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
     expect(done.ok).toBe(true);
     expect(done.savedAs).toBe("public/music-0.mp3.b64");
     expect(done.output.url).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(apiCalls()).toHaveLength(1);
   });
 });
 
@@ -3712,7 +3808,7 @@ describe("Railway deploy no longer restarts our own backend", () => {
     expect(r.body.error).toMatch(/not available yet/i);
     expect(r.body.alternative).toMatch(/Cloudflare Pages/);
     // Nothing was sent to Railway at all — that is the whole point.
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(apiCalls()).toHaveLength(0);
 
     // And the attempt is recorded as failed rather than left "pending".
     const list = await request(app).get(`/api/devhub/projects/${id}/deployments`);
@@ -3840,7 +3936,7 @@ describe("provider realities: retired TTS model, empty video balance", () => {
     const app = makeApp();
     const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
     expect(r.status).toBe(200);
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(apiCalls()[0][1].body as string);
     expect(body.model_id).toBe("eleven_multilingual_v2"); // multilingual: our prompts are Russian
     expect(body.model_id).not.toBe("eleven_monolingual_v1");
     delete process.env.ELEVENLABS_API_KEY;
@@ -3881,7 +3977,7 @@ describe("realism pass shared with QReal", () => {
     const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a barista pours milk" });
     expect(r.status).toBe(200);
     expect(r.body.realism).toBe(true);
-    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const sent = JSON.parse(apiCalls()[0][1].body as string);
     // Same text QReal renders with — imported, not duplicated.
     const { REALISM_DIRECTIVES } = await import("../src/services/qreal/directives");
     expect(sent.input.prompt).toContain("a barista pours milk");
@@ -3895,7 +3991,7 @@ describe("realism pass shared with QReal", () => {
     const app = makeApp();
     const r = await request(app).post("/api/devhub/media/video").send({ prompt: "flat 2d cartoon fox", realism: false });
     expect(r.body.realism).toBe(false);
-    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const sent = JSON.parse(apiCalls()[0][1].body as string);
     expect(sent.input.prompt).toBe("flat 2d cartoon fox");
     expect(sent.input.prompt).not.toMatch(/ARRI Alexa/);
     delete process.env.REPLICATE_API_TOKEN;

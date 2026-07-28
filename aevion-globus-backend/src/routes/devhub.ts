@@ -4597,13 +4597,58 @@ devhubRouter.post("/media/upload-image", async (req, res) => {
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
 /** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
  * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
-export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+/**
+ * Число попыток и пауза между ними настраиваются окружением.
+ *
+ * Прод-поведение не меняется: по умолчанию те же 5 попыток × 5 с, о которых
+ * говорит конвенция деплоя («deploy = uploaded + serves»).
+ *
+ * Зачем настройка. Эта функция вызывается из операции «выстрелил и забыл»
+ * (`})().catch(() => {})` в маршруте деплоя), то есть опрос продолжается уже
+ * после ответа клиенту — до 20 секунд. В тестах это оказалось причиной
+ * многодневного «мигающего» падения `devhub-integrations`: запоздавшие
+ * `GET https://stale.pages.dev` и `GET https://myapp.vercel.app` приземлялись в
+ * СЛЕДУЮЩЕМ тесте, попадали в свежий `fetchMock` первыми и сдвигали 74
+ * утверждения, адресующие вызовы по индексу (`mock.calls[0]`). Падение
+ * выглядело как `SyntaxError: "undefined" is not valid JSON` в самом тесте, и
+ * причина из него не читалась — поймал только печатью списка запросов у
+ * упавшего теста.
+ *
+ * Поэтому тесты ставят `DEVHUB_VERIFY_ATTEMPTS=1` и `DEVHUB_VERIFY_DELAY_MS=0`:
+ * проверка укладывается в свой же тест и никуда не утекает.
+ */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  // Именно так, а не `Number(raw) || fallback`: иначе явный ноль (нужный тестам)
+  // молча превращался бы в значение по умолчанию.
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export async function verifyDeploymentServes(
+  url: string,
+  attemptDelayMs?: number,
+  attemptsOverride?: number,
+): Promise<boolean> {
+  // Полное отключение проверки — только для тестов, и только когда число попыток
+  // НЕ задано явно. Сокращения попыток до одной оказалось недостаточно: даже один
+  // невыжидаемый запрос садится в следующий тест и, что хуже, СЪЕДАЕТ там
+  // заготовленный ответ из очереди `mockResolvedValueOnce` — после чего
+  // настоящий вызов получает не свой ответ и маршрут отвечает 500. Фильтрация
+  // записанных вызовов от этого не спасает: вред наносится в момент вызова.
+  if (attemptsOverride === undefined && process.env.DEVHUB_SKIP_SERVE_CHECK === "1") return true;
+
+  // Явный аргумент важнее окружения: тесты, проверяющие САМУ логику повторов,
+  // должны задавать их число прямо, а не зависеть от того, что стоит в env.
+  const attempts = Math.max(1, attemptsOverride ?? envInt("DEVHUB_VERIFY_ATTEMPTS", 5));
+  const delayMs = attemptDelayMs ?? envInt("DEVHUB_VERIFY_DELAY_MS", 5000);
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const check = await fetch(url, { method: "GET", redirect: "follow" });
       if (check.ok) return true;
     } catch { /* network — retry */ }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, attemptDelayMs));
+    if (attempt < attempts - 1 && delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
   }
   return false;
 }

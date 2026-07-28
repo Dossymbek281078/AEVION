@@ -83,6 +83,12 @@ export function findVariantDepViolations(files: string[]): string[] {
   const violations: string[] = [];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
+    // Дешёвый отсев ДО регулярок: строковый поиск по 27 МБ дерева на порядок
+    // быстрее, чем regex-разбор каждого файла, а результат тот же — без
+    // useABVariant имён переменных быть не может по определению. Дорогой
+    // dependencyArrays с балансировкой скобок теперь запускается для одного
+    // файла вместо 1827.
+    if (!text.includes("useABVariant")) continue;
     const names = variantVarNames(text);
     if (names.length === 0) continue;
     for (const deps of dependencyArrays(text)) {

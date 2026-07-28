@@ -42,8 +42,19 @@ interface JsonRpcResponse {
 
 interface McpToolDef {
   name: string;
+  /** Человекочитаемое имя. Каталог коннекторов Anthropic требует его у каждого
+   *  инструмента — без него заявка отклоняется на этапе проверки инструментов. */
+  title: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Подсказки о характере инструмента. readOnlyHint обязателен для читающих,
+   *  destructiveHint — для тех, кто меняет состояние. Оба задаются явно: значение
+   *  по умолчанию у разных клиентов разное, и «не указано» читается как «опасно». */
+  annotations: {
+    title: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+  };
 }
 
 export interface ToolContext {
@@ -55,7 +66,9 @@ export interface ToolContext {
 const READ_TOOLS: McpToolDef[] = [
   {
     name: "list_modules",
+    title: "List AEVION modules",
     description: "List AEVION product modules with their id, code and status.",
+    annotations: { title: "List AEVION modules", readOnlyHint: true },
     inputSchema: {
       type: "object",
       properties: { status: { type: "string", description: "Optional filter, e.g. 'live', 'mvp', 'idea'." } },
@@ -63,7 +76,9 @@ const READ_TOOLS: McpToolDef[] = [
   },
   {
     name: "module_info",
+    title: "Look up one AEVION module",
     description: "Get one AEVION module's code, name, status, kind and description by id.",
+    annotations: { title: "Look up one AEVION module", readOnlyHint: true },
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", description: "Module id, e.g. 'qright'." } },
@@ -72,7 +87,12 @@ const READ_TOOLS: McpToolDef[] = [
   },
   {
     name: "qsign_sign",
+    title: "Sign a payload with QSign",
+    // Не readOnly: это настоящая криптографическая операция. Но и не
+    // destructive — ничего не сохраняется и не меняется, поэтому обе подсказки
+    // заданы явно, чтобы каталог Anthropic не гадал по умолчанию.
     description: "Sign a JSON payload with AEVION QSign (HMAC-SHA256, no persistence). Real cryptographic operation.",
+    annotations: { title: "Sign a payload with QSign", readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: "object",
       properties: { payload: { type: "object", description: "Any JSON object to sign." } },
@@ -84,7 +104,10 @@ const READ_TOOLS: McpToolDef[] = [
 const WRITE_TOOLS: McpToolDef[] = [
   {
     name: "create_qright_object",
+    title: "Register an IP object in QRight",
     description: "Register an intellectual-property object in AEVION QRight (creates a real record).",
+    // Создаёт запись в проде — обязана быть помечена как пишущая.
+    annotations: { title: "Register an IP object in QRight", readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: "object",
       properties: {

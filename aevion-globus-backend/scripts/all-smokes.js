@@ -90,6 +90,11 @@ const SMOKES = [
   // Фильтр в computeLiveTotals чинит это только для тех каналов, что были в коде
   // в тот день; новый канал мимо фильтра сломает именно равенство, а не функцию.
   { name: "revenue-internal", script: "revenue-internal-consistency-smoke.js", readOnly: true },
+  // Наш MCP-сервер — это заявка в каталог коннекторов Anthropic, витрина перед
+  // каждым пользователем Claude. Каталог машинно требует title и readOnly/
+  // destructive-подсказку у КАЖДОГО инструмента, иначе отклоняет на шаге Tools.
+  // До 28.07.2026 сервер жил на проде без единой проверки.
+  { name: "mcp-directory", script: "mcp-directory-ready-smoke.js", readOnly: true },
   // Сверяет ПУБЛИЧНЫЕ УТВЕРЖДЕНИЯ на страницах с живым health. 26.07 нашлось,
   // что /acquire, /partner и /investor обещают «ML-DSA-65 in prod / GA /
   // Completed», пока health отвечал preview/seed_unset — и это прожило

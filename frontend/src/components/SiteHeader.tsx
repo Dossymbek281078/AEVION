@@ -40,6 +40,14 @@ export function SiteHeader() {
         </Link>
 
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          <Link
+            href="/search"
+            aria-label="Поиск по AEVION"
+            style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 12, color: "#334155", background: "#fff", border: "1px solid rgba(15,23,42,0.14)", display: "flex", alignItems: "center", gap: 5 }}
+          >
+            <span aria-hidden="true">🔍</span>
+            <span>Поиск</span>
+          </Link>
           <Link href="/demo" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #0d9488, #0ea5e9)" }}>
             Demo
           </Link>

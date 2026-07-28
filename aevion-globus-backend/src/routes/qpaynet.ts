@@ -52,6 +52,7 @@ import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption, ope
 import { csvNeutralizeFormula } from "../lib/csv";
 import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
 import { safeErrorText } from "../lib/safeError";
+import { stubBlocked } from "../lib/stubGuard";
 
 export const qpaynetRouter = Router();
 
@@ -2434,6 +2435,7 @@ qpaynetRouter.post("/deposit/checkout", async (req, res) => {
 
 // POST /api/qpaynet/deposit/confirm-stub — dev-only: simulate webhook for stub flow
 qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
+  if (stubBlocked(res)) return;
   if (stripe) return res.status(400).json({ error: "stripe_configured_use_real_webhook" });
   await ensureTables();
   await ensureDepositCheckoutsTable();

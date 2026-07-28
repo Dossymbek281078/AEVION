@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "build": "prisma generate && tsc && node scripts/copy-cjs-shims.js",
     "start": "node dist/index.js",
+    "verify:sql-guards": "node scripts/verify-qgood-idempotency-sql.mjs && node scripts/verify-qevents-capacity-sql.mjs",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:qskyway": "node scripts/qskyway-smoke.js",
     "smoke:airspace-freshness": "tsx scripts/airspace-freshness-smoke.ts",

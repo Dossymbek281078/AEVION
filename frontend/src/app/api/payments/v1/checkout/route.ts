@@ -2,10 +2,11 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  beginIdempotency,
   gateRequest,
   genId,
   getOrigin,
+  parseAmount,
   readJson,
   store,
   withCors,
@@ -29,9 +30,26 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  if (typeof body.amount !== "number" || body.amount <= 0) {
-    return withCors(badRequest("amount must be a positive number (minor units)."));
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй чек.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
   }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
+
+  const amount = parseAmount(body.amount);
+  if (typeof amount === "string") return withCors(badRequest(amount));
   if (
     typeof body.currency !== "string" ||
     !ALLOWED_CURRENCIES.includes(body.currency as Currency)
@@ -49,7 +67,7 @@ export async function POST(req: NextRequest) {
   const secret = `${id}_secret_${Math.random().toString(36).slice(2, 22)}`;
   const checkout: ApiCheckout = {
     id,
-    amount: body.amount,
+    amount,
     currency: body.currency as Currency,
     settlement:
       typeof body.settlement === "string" ? body.settlement : "aevion-bank",
@@ -65,20 +83,8 @@ export async function POST(req: NextRequest) {
   };
 
   const responseBody = JSON.stringify(checkout);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.checkouts.set(id, checkout);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "checkout.created", id, {
     amount: checkout.amount,
     currency: checkout.currency,

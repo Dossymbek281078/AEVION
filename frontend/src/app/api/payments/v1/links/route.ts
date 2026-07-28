@@ -2,7 +2,9 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
-  checkIdempotency,
+  parseAmount,
+  parseLimit,
+  beginIdempotency,
   gateRequest,
   genId,
   getOrigin,
@@ -20,7 +22,10 @@ export async function GET(req: NextRequest) {
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(100, Number(searchParams.get("limit") ?? 25));
+  const limit = parseLimit(searchParams.get("limit"), 25, 100);
+  if (typeof limit === "string") {
+    return attachRateHeaders(withCors(badRequest(limit)), gate.rateHeaders);
+  }
   const data = Array.from(store.links.values())
     .sort((a, b) => b.created - a.created)
     .slice(0, limit);
@@ -44,10 +49,27 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return withCors(badRequest("Body must be JSON."));
 
-  const { amount, currency, title } = body;
-  if (typeof amount !== "number" || amount <= 0) {
-    return withCors(badRequest("amount must be a positive number (minor units)."));
+  // Ключ резервируется до работы: иначе одновременный повтор тоже сочтёт себя
+  // первым и создаст второй объект.
+  const idem = beginIdempotency(req, JSON.stringify(body));
+  if (idem.status === "replay") {
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.body, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
+    );
   }
+  if (idem.status === "conflict") {
+    return attachRateHeaders(withCors(badRequest(idem.message, 409)), gate.rateHeaders);
+  }
+
+  const { currency, title } = body;
+  const amount = parseAmount(body.amount);
+  if (typeof amount === "string") return withCors(badRequest(amount));
   if (typeof currency !== "string" || !ALLOWED_CURRENCIES.includes(currency as Currency)) {
     return withCors(
       badRequest(`currency must be one of: ${ALLOWED_CURRENCIES.join(", ")}.`)
@@ -57,10 +79,19 @@ export async function POST(req: NextRequest) {
     return withCors(badRequest("title is required."));
   }
   const settlement = body.settlement === "aec" ? "aec" : "bank";
+  // Собственная спека (`/api/openapi.json`) обещает `integer, minimum: 1`, а код
+  // принимал `0.5` и `Infinity` (`1e400` в JSON — это Infinity, и `> 0` истинно).
+  // Расхождение кода с опубликованным контрактом — то же враньё, только тише.
+  if (body.expires_in_days !== undefined && body.expires_in_days !== null) {
+    const d = body.expires_in_days;
+    if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 3650) {
+      return withCors(
+        badRequest("expires_in_days must be a whole number of days between 1 and 3650.")
+      );
+    }
+  }
   const expDays =
-    typeof body.expires_in_days === "number" && body.expires_in_days > 0
-      ? body.expires_in_days
-      : null;
+    typeof body.expires_in_days === "number" ? body.expires_in_days : null;
 
   const id = genId("pl");
   const link: ApiLink = {
@@ -79,20 +110,8 @@ export async function POST(req: NextRequest) {
   };
 
   const responseBody = JSON.stringify(link);
-  const idem = checkIdempotency(req, responseBody);
-  if (idem.hit) {
-    return attachRateHeaders(
-      withCors(
-        new Response(idem.cachedBody, {
-          status: 200,
-          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-        })
-      ),
-      gate.rateHeaders
-    );
-  }
   store.links.set(id, link);
-  idem.cleanup();
+  idem.commit(responseBody);
   void logAudit(req, "link.created", id, {
     amount: link.amount,
     currency: link.currency,

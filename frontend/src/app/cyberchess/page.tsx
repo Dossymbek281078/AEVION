@@ -155,6 +155,7 @@ import WhatIfButton from "./WhatIfButton";
 import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from "./BoardArt";
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
+import { collectProgress, parseBackup, applyProgress, backupFilename, ourKeys } from "./progressBackup";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
@@ -14186,14 +14187,56 @@ ${question.trim()}`;
             </label>
           </div>
           <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>💾 Прогресс</div>
+            {/* Аккаунтов нет: весь прогресс живёт в localStorage ОДНОГО браузера. Очистка
+                данных сайта, инкогнито или переход на другой компьютер стирают всё без следа.
+                Резервная копия — единственная защита, поэтому она на видном месте. */}
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>Рейтинг, Chessy, достижения, серии, решённые пазлы, репертуар и база знаний тренера хранятся только в этом браузере. Сохрани копию — она переносится на другой компьютер.</div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap" as const}}>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                try{
+                  const now=new Date().toISOString();
+                  const data=collectProgress(localStorage,now);
+                  const n=Object.keys(data.keys).length;
+                  if(n===0){showToast("Сохранять пока нечего","info");return}
+                  downloadFile(new Blob([JSON.stringify(data)],{type:"application/json"}),backupFilename(now));
+                  showToast(`Копия сохранена · ${n} записей`,"success");
+                }catch{showToast("Не удалось сохранить копию","error")}
+              }}>⬇ Сохранить копию</Btn>
+              <label className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:CC.text,border:`1px solid ${CC.border}`,borderRadius:8,padding:"6px 10px",cursor:"pointer",background:CC.surface2}}>
+                ⬆ Восстановить из файла
+                <input type="file" accept="application/json,.json" style={{display:"none"}} onChange={async(e)=>{
+                  const f=e.target.files?.[0];e.target.value="";
+                  if(!f)return;
+                  try{
+                    const parsed=parseBackup(await f.text());
+                    if(!parsed.ok){showToast(`Не подходит: ${parsed.reason}`,"error");return}
+                    const n=Object.keys(parsed.backup.keys).length;
+                    /* Режим спрашивается ЯВНО: «заменить» удаляет то, чего нет в копии,
+                       и это необратимо. Молча выбирать за игрока здесь нельзя. */
+                    const replace=confirm(`В копии ${n} записей от ${parsed.backup.exportedAt.slice(0,10)||"неизвестной даты"}.
+
+ОК — ЗАМЕНИТЬ текущий прогресс копией (лишнее удалится).
+Отмена — только ДОБАВИТЬ недостающее, ничего не затирая.`);
+                    const rep=applyProgress(localStorage,parsed.backup,replace?"replace":"merge");
+                    showToast(`Восстановлено: записано ${rep.written}, сохранено ${rep.kept}, удалено ${rep.removed} — обнови страницу`,"success");
+                  }catch{showToast("Не удалось прочитать файл","error")}
+                }}/>
+              </label>
+            </div>
+          </div>
+          <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.danger,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>⚠ Сброс данных</div>
-            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>Удалить локальные данные: партии, рейтинг, Chessy, достижения, прогресс мастер-партий. Это действие необратимо.</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>Удалить ВСЕ локальные данные CyberChess. Это необратимо — сначала сохрани копию выше.</div>
             <Btn size="sm" variant="danger" onClick={()=>{
               if(!confirm("Точно сбросить ВСЁ? Партии, рейтинг, Chessy и прогресс будут удалены."))return;
               try{
-                const keys=["aevion_chess_games_v1","aevion_chess_rating_v2","aevion_chess_stats_v2","aevion_chessy_v1","aevion_chessy_log_v1","aevion_chess_master_progress_v1","aevion_chess_coord_lb_v1","aevion_chess_personality_v1","aevion_chess_daily_v1","aevion_variant_stats_v1","aevion_chess_clones_v1","aevion_chess_rival_v1","aevion_chess_tournament_v1","aevion_chess_trophies_v1"];
+                /* Ключи ПЕРЕЧИСЛЯЮТСЯ, а не берутся из списка в коде. Раньше здесь стоял
+                   список из 14 имён при 85 реально используемых ключах: кнопка обещала
+                   «сбросить ВСЁ», а оставляла большую часть данных на месте. */
+                const keys=ourKeys(localStorage);
                 for(const k of keys)try{localStorage.removeItem(k)}catch{}
-                showToast("Локальные данные сброшены — обнови страницу","success");
+                showToast(`Сброшено ${keys.length} записей — обнови страницу`,"success");
               }catch{showToast("Не удалось сбросить","error")}
             }}>🗑 Сбросить локальные данные</Btn>
           </div>

@@ -612,7 +612,19 @@ function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){
     },[]),
   };
 }
-function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`}
+/* Часы «М:СС». Округление ВНУТРИ, а не у вызывающих.
+ *
+ * Раньше функция брала число как есть, а секунды приходят из
+ * `(deadline - Date.now())/1000` — дробными. Все нынешние вызывающие округляют
+ * сами, поэтому сегодня всё в порядке, но защита, которую надо помнить на каждом
+ * вызове, однажды не сработает: `fmt(157.4159)` даёт `2:37.41589999999999` прямо
+ * на циферблате. NaN тоже отсекается — иначе на экране появлялось бы `NaN:NaN`.
+ */
+export function fmt(s:number){
+  if(!Number.isFinite(s)||s<=0)return "0:00";
+  const t=Math.round(s);
+  return `${Math.floor(t/60)}:${String(t%60).padStart(2,"0")}`;
+}
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
 /* ═══ Theme ═══ */

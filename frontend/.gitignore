@@ -42,3 +42,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+# Дописано Vercel CLI при link. Шаблон .env* накрывает и .env.example —
+# а их в репозитории четыре и они ДОЛЖНЫ быть в git: это образцы конфигов,
+# без них новый разработчик не знает, какие переменные нужны.
+!.env.example
+!**/.env.example

@@ -78,7 +78,10 @@ export function findSharedTitles(pageDirs: string[], limit: number): string[] {
 }
 
 /**
- * Известный долг на 28.07.2026, зафиксированный числом.
+ * Известный долг, зафиксированный числом. Пересчитан 28.07.2026 ПОСЛЕ починки
+ * корневого раздела и QBuild: там стояли 84 и 70 — числа до правок. Завышенный
+ * долг делает сторож слабее, чем он есть: раздел мог бы вырасти обратно и не
+ * покраснеть. Числа ниже — фактический замер.
  *
  * Сторож нашёл больше, чем было починено в тот день: четыре раздела всё ещё
  * живут под одним заголовком. Чинить их наспех — значит выдумывать заголовки
@@ -90,8 +93,8 @@ export function findSharedTitles(pageDirs: string[], limit: number): string[] {
  * Убирать строки отсюда по мере починки, а не поднимать числа.
  */
 const KNOWN_DEBT: Record<string, number> = {
-  "AEVION — Trust infrastructure & Globus": 84,
-  "AEVION QBuild — Construction & Recruiting": 70,
+  "AEVION — Trust infrastructure & Globus": 12,
+  "AEVION QBuild — Construction & Recruiting": 30,
   "CyberChess — AI-тренер и пазлы": 14,
   "AEVION Bureau — public verified registry for creators and orgs": 11,
   "Payments Rail": 14,

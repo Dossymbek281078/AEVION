@@ -19,7 +19,7 @@
 //   POST /api/qreal/projects/:id/shots/:sid/render ← собрать промт, job
 //   POST /api/qreal/projects/:id/shots/:sid/qc     ← отчёт реализма
 //   GET  /api/qreal/projects/:id/provenance        ← подписанный манифест
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,7 +27,8 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
-import { callProvider, pickConfiguredProvider, getProviders } from "../services/qcoreai/providers";
+import { rateLimit } from "../lib/rateLimit";
+import { callProvider, pickConfiguredProvider, getProviders, getFreeProviders } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
 import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
 import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
@@ -40,6 +41,10 @@ import { getPool } from "../lib/dbPool";
 const captureQRealError = makeServiceCapture("qreal");
 
 export const qrealRouter = Router();
+
+// Раскадровка дёргает модель, поэтому ограничена: публичная ИИ-ручка без лимита —
+// это чужой счёт за наши вызовы. Идиом тот же, что в соседних модулях.
+const storyboardLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qreal:storyboard", message: "rate_limited" });
 
 /* ── Типы ── */
 
@@ -395,7 +400,11 @@ async function aiStoryboard(p: Project, variation: number): Promise<{ shots: Sho
       memStoryboardCache.set(cacheKey, dbShots as Shot[]);
       return { shots: cloneShotsForProject(dbShots as Shot[]), fromCache: true };
     }
-    const provider = pickConfiguredProvider();
+    // Бесплатные провайдеры вперёд. pickConfiguredProvider() без предпочтения
+    // уходит в resolveProvider → «первый настроенный», а первым в списке стоит
+    // anthropic, который платный. Раскадровка — публичная ручка, и платить за
+    // каждый её вызов незачем: во флоте 13 бесплатных провайдеров.
+    const provider = getFreeProviders().find((x) => x.configured)?.id ?? pickConfiguredProvider();
     if (!provider || provider === "stub") return null;
     // Пустая модель давала 400 у Anthropic → тихий stub-фолбэк на проде
     // (найдено смоуком storyboardMethod 2026-07-22). Берём defaultModel провайдера.
@@ -652,9 +661,10 @@ qrealRouter.get("/projects/:id", (req, res) => {
   res.json({ project: p });
 });
 
-qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
+qrealRouter.post("/projects/:id/storyboard", storyboardLimiter, async (req: Request, res: Response) => {
   try {
-    const p = memProjects.get(req.params.id);
+    // String(): с middleware в сигнатуре Express выводит params как string|string[]
+    const p = memProjects.get(String(req.params.id));
     if (!p) return res.status(404).json({ error: "not found" });
     const variation = Math.min(5, Math.max(1, Number(req.body?.variation) || 1));
     const viaAi = await aiStoryboard(p, variation);

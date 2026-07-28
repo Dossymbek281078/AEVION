@@ -178,6 +178,23 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/voice-of-earth/tracks/:id ──────────────────────────────────────
+/**
+ * Поля трека, которые допустимо отдавать наружу.
+ *
+ * Перечисления колонок в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список полей стоит и
+ * здесь, при сборке ответа.
+ */
+const PUBLIC_TRACK_FIELDS = [
+  "id", "title", "artist_alias", "language", "lyrics", "mood", "audio_url", "votes", "status", "created_at",
+] as const;
+
+function publicTrack(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_TRACK_FIELDS) out[f] = row[f];
+  return out;
+}
+
 voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
@@ -185,17 +202,24 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
   }
   if (isVoiceOfEarthDbReady()) {
     try {
+      // Список отдаёт только `status = 'published'`, а выдача по идентификатору
+      // не смотрела на статус вовсе: трек, снятый модерацией («flagged») или
+      // ещё не прошедший её («pending»), спокойно читался по прямой ссылке.
+      // Решение модерации соблюдалось в одном месте и игнорировалось в другом.
       const { rows } = await pool.query(
-        `SELECT * FROM voe_tracks WHERE id = $1`,
+        `SELECT id, title, artist_alias, language, lyrics, mood, audio_url, votes, status, created_at
+           FROM voe_tracks WHERE id = $1 AND status = 'published'`,
         [id],
       );
-      if (rows[0]) return res.json({ track: rows[0] });
+      if (rows[0]) return res.json({ track: publicTrack(rows[0]) });
       return res.status(404).json({ error: "not_found" });
     } catch (e) {
       console.error("[VoiceOfEarth] GET /tracks/:id DB error", e);
     }
   }
-  const track = memTracks.find((t) => t.id === id);
+  // То же правило на пути через память — иначе признак соблюдался бы только
+  // при поднятой базе.
+  const track = memTracks.find((t) => t.id === id && t.status === "published");
   if (!track) return res.status(404).json({ error: "not_found" });
   res.json({ track });
 });

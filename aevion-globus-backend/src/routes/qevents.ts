@@ -165,13 +165,29 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
 qeventsRouter.get("/events/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
+    // Список событий отдаёт только `"isPublic"=TRUE`, а выдача по идентификатору
+    // не смотрела на флаг вовсе — ни через базу, ни через память. Организатор
+    // прятал событие из афиши, а по прямой ссылке его открывал кто угодно.
+    // Своё непубличное событие видит только организатор; остальным 404, а не
+    // 403: 403 подтвердил бы, что событие существует.
+    const auth = verifyBearerOptional(req);
     if (isQEventsDbReady()) {
-      const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
-      if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ event: rows[0] });
+      const { rows } = await pool.query(
+        `SELECT "id","organizerId","title","description","category","location","startAt","endAt",
+                "capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt"
+           FROM "QEvent" WHERE "id"=$1`,
+        [id],
+      );
+      const row = rows[0];
+      if (!row || (row.isPublic !== true && auth?.sub !== row.organizerId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+      return res.json({ event: row });
     }
     const event = memEvents.get(id);
-    if (!event) return res.status(404).json({ error: "not_found" });
+    if (!event || (event.isPublic !== true && auth?.sub !== event.organizerId)) {
+      return res.status(404).json({ error: "not_found" });
+    }
     return res.json({ event });
   } catch (err) {
     capture(err);

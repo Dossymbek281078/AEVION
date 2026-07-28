@@ -7,10 +7,13 @@ import { ensureQJobsTables, isQJobsDbReady } from "../lib/ensureQJobsTables";
 
 const captureQJobsError = makeServiceCapture("qjobs");
 import { rateLimit } from "../lib/rateLimit";
-import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { callProvider, getProviders, getFreeProviders } from "../services/qcoreai/providers";
 
 const postLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:post", message: "rate_limited" });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:apply", message: "rate_limited" });
+// Подбор вакансий дёргает модель, поэтому ограничен строже обычных чтений:
+// без лимита публичная ИИ-ручка — это чужой счёт за наши вызовы.
+const aiMatchLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:ai-match", message: "rate_limited" });
 
 export const qjobsRouter = Router();
 
@@ -409,7 +412,7 @@ qjobsRouter.get("/me/jobs/:id/applicants", async (req: Request, res: Response) =
 });
 
 // ─── POST /api/qjobs/ai/match ─────────────────────────────────────────────────
-qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
+qjobsRouter.post("/ai/match", aiMatchLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -450,7 +453,14 @@ qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
   if (activeJobs.length === 0) activeJobs = Array.from(memJobs.values()).filter((j) => j.isActive);
 
   try {
-    const provider = getProviders().find((p) => p.configured);
+    // Бесплатные провайдеры ВПЕРЁД. Раньше здесь стоял
+    // getProviders().find(p => p.configured) — «первый настроенный», а первым в
+    // списке идёт anthropic, который платный. То есть публичная ручка подбора
+    // вакансий тратила деньги на каждом вызове, хотя во флоте есть 13
+    // бесплатных провайдеров ровно для таких задач.
+    const provider =
+      getFreeProviders().find((p) => p.configured) ??
+      getProviders().find((p) => p.configured);
     if (provider) {
       const jobSummaries = activeJobs.slice(0, 15).map((j) => ({
         id: j.id, title: j.title, company: j.company, skills: j.skills, type: j.type,

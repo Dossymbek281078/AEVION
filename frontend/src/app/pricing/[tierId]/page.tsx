@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
@@ -50,6 +50,9 @@ interface PricingPayload {
 
 // Values below are i18n keys under "pricing.tierDetail.faq.*", resolved via
 // t() at render time (this object is module-level, outside the component).
+/** Полный набор тарифов. Всё остальное под /pricing/* — не страница. */
+const KNOWN_TIER_IDS: readonly string[] = ["free", "lite", "medium", "full", "pro", "enterprise"];
+
 const TIER_FAQ: Record<TierId, { q: string; a: string }[]> = {
   free: [
     { q: "pricing.tierDetail.faq.free.q1", a: "pricing.tierDetail.faq.free.a1" },
@@ -253,6 +256,16 @@ export default function TierDetailPage() {
     if (!data || !tier) return [];
     return data.modules.filter((m) => m.includedIn.includes(tier.id));
   }, [data, tier]);
+
+  // 28.07.2026: /pricing/zzzz123 отдавал HTTP 200 со страницей «тариф не
+  // найден» — мягкий 404. Список тарифов грузится с клиента, поэтому на
+  // сервере страница всегда выглядела валидной, и поисковик получал 200 на
+  // любой мусорный адрес: краулинговый бюджет тратился на несуществующие
+  // страницы (Search Console, 662 «не проиндексировано»). Набор тарифов
+  // фиксирован, проверить его можно без API — тогда статус честный.
+  if (tierId && !KNOWN_TIER_IDS.includes(tierId)) {
+    notFound();
+  }
 
   if (loading) {
     return (

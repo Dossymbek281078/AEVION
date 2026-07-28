@@ -1,5 +1,6 @@
 "use client";
 
+import { shortNum } from "./openingExplorer";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   BookReply,
@@ -1362,11 +1363,9 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
   );
 }
 
-function shortNum(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-  return String(n);
-}
+/* shortNum жил здесь копией, побайтово совпадающей с openingExplorer.
+   Сегодня совпадали, завтра разошлись бы — и одно и то же число рисовалось бы
+   в двух местах по-разному. */
 
 // ===== GM Games Tab =====
 function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {

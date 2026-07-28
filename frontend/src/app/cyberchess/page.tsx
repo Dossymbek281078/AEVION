@@ -14140,7 +14140,13 @@ ${question.trim()}`;
                     {items.map(p=>{
                       const selected=soundPresetId===p.id;
                       return <button key={p.id}
-                        onClick={()=>{sSoundPresetId(p.id);playChessSound(p.id,"move");showToast(`${p.emoji} ${p.name}`,"info")}}
+                        onClick={()=>{sSoundPresetId(p.id);
+                      /* Превью шло мимо snd(), а проверка выключенного звука стоит именно
+                         там — поэтому при выключенном звуке пресет всё равно звучал.
+                         Молча не играть тоже плохо: человек кликает и не понимает,
+                         почему тихо, — поэтому говорим причину. */
+                      if(muted)showToast("Звук выключен — включи, чтобы услышать","info");
+                      else{playChessSound(p.id,"move");showToast(`${p.emoji} ${p.name}`,"info")}}}
                         title={p.desc}
                         style={{
                           padding:"4px 8px",borderRadius:RADIUS.full,

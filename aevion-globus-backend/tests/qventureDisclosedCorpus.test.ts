@@ -6646,19 +6646,45 @@ describe("five readers now accept 'was', and one still does not", () => {
     expect(p("Revenue is projected at $5 million.").revenueUsd).toBeNull();
   });
 
-  test("KNOWN DEFECT: a negative margin is read as positive", () => {
-    // The worst finding of the sweep and the reason it is written down rather
-    // than left for whoever notices next. "Negative gross margin of 20%" scores
-    // as +20: the strongest thing a plan can disclose against itself, flipped
-    // to a point in its favour. The sign handling covers "negative 20% gross
-    // margin" — the word before the FIGURE — and not before the NOUN.
-    //
-    // Not fixed in the closing minutes of a session. That reader has three
-    // alternatives and its own sign capture, and a sign error introduced while
-    // fixing a sign error would be indistinguishable from the one it replaced.
+  test("KNOWN DEFECT: 'negative' before the NOUN is dropped", () => {
+    /**
+     * The worst finding of the sweep: an inverted signal, not a missing one.
+     * "Negative gross margin of 20%" scores as +20 — the strongest thing a plan
+     * can disclose against itself, turned into a point in its favour.
+     *
+     * A follow-up sweep across ten ways of writing a negative pinned the shape
+     * exactly, and the precision is the useful part. EIGHT of the ten are
+     * correct. The defect is one shape and it appears in two readers:
+     *
+     *   "Negative gross margin of 20%"     → +20   (should be -20)
+     *   "Negative revenue growth of 15%"   → +15   (should be -15)
+     *
+     * Both put "negative" before the NOUN. Every form that puts it before the
+     * FIGURE, or uses a sign, a bracket or a direction verb, is handled:
+     * "negative 20% gross margin", "gross margin of negative 20%", "-20%",
+     * "(20)%", "revenue declined 15%", "revenue decreased by 15%" all give the
+     * right sign. So the fix is a leading-"negative" check on the noun, not
+     * surgery on the sign capture.
+     *
+     * Left for a clean pass anyway. A sign error introduced while fixing a sign
+     * error is indistinguishable from the one it replaced, and the ten probes
+     * above are the regression set it should be verified against.
+     */
     expect(p("Negative gross margin of 20%.").grossMarginPct).toBe(20);
-    // The form that works, for contrast.
+    expect(p("Negative revenue growth of 15%.").growthPct).toBe(15);
+
+    // The eight that already work — the guard rail for the fix.
     expect(p("Negative 20% gross margin.").grossMarginPct).toBe(-20);
+    expect(p("Gross margin of negative 20%.").grossMarginPct).toBe(-20);
+    expect(p("Gross margin was -20%.").grossMarginPct).toBe(-20);
+    expect(p("Gross margin of (20)%.").grossMarginPct).toBe(-20);
+    expect(p("Revenue declined 15% year over year.").growthPct).toBe(-15);
+    expect(p("Revenue fell 15%.").growthPct).toBe(-15);
+    expect(p("Revenue decreased by 15%.").growthPct).toBe(-15);
+  });
+
+  test("STILL A MISS: growth stated with a sign", () => {
+    expect(p("Revenue growth was -15%.").growthPct).toBeNull();
   });
 
   test("STILL A MISS: growth stated as a noun with a period", () => {

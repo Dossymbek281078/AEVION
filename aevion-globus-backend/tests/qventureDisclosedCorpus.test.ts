@@ -6555,6 +6555,58 @@ describe("the series rules are order-independent, which is why they are rules", 
   });
 });
 
+describe("a margin survives the words a filing puts around it", () => {
+  /**
+   * Found by probing ordinary earnings-release English against the engine
+   * rather than by imagining new fixtures. Five shapes came back null; these
+   * are the margin ones. Each reads correctly without the period clause, which
+   * is precisely why the suite was green: every existing fixture was written by
+   * someone who already knew which shape the pattern accepted.
+   *
+   * The phrasings here are constructed in the standard form filings use, not
+   * quoted from a named company — the one that IS quoted, TSMC's "Gross margin
+   * for the quarter was 62.3%", is in the disclosed corpus with its source.
+   */
+  const gm = (t: string) => parsePlanSignals(t).grossMarginPct;
+
+  test("the period named after the noun", () => {
+    expect(gm("Gross margin for the quarter was 62.3%.")).toBe(62.3);
+    expect(gm("Gross margin for the full year was 62.3%.")).toBe(62.3);
+    expect(gm("Gross margin in the period was 62.3%.")).toBe(62.3);
+  });
+
+  test("the period set off by commas", () => {
+    expect(gm("Gross margin, for the quarter ended March 31, 2025, was 38.9%.")).toBe(38.9);
+  });
+
+  test("a date inside the period clause is not mistaken for the figure", () => {
+    // The bug the first fix introduced: dates are masked to spaces, and a
+    // greedy tail ran through them and through "was 6", returning 2.3.
+    expect(gm("Gross margin for the quarter ended December 31, 2025 was 62.3%.")).toBe(62.3);
+  });
+
+  test("'gross profit margin' is the same metric", () => {
+    expect(gm("Gross profit margin for the quarter was 44.1%.")).toBe(44.1);
+    expect(gm("Gross profit margin was 44.1%.")).toBe(44.1);
+  });
+
+  test("the shapes that already worked still do", () => {
+    expect(gm("Gross margin was 62.3%.")).toBe(62.3);
+    expect(gm("Gross margin of 72%.")).toBe(72);
+    expect(gm("80% gross margin.")).toBe(80);
+    expect(gm("Our gross margin increased to 59.9% of net revenue from 56.1% in 2024.")).toBe(59.9);
+    expect(gm("Gross profit of $17.6 million, or 20% of net revenue.")).toBe(20);
+  });
+
+  test("a widened noun does not swallow a neighbouring metric", () => {
+    // Each of these is a way the widening could have gone wrong.
+    expect(gm("Operating margin for the quarter was 54.0%.")).toBeNull();
+    expect(gm("Gross margin for the quarter is not disclosed. Churn was 7%.")).toBeNull();
+    expect(gm("Gross margin improved for the year. Retention was 118%.")).toBeNull();
+    expect(gm("Gross margin for the quarter was 62.3%, operating margin was 54.0%.")).toBe(62.3);
+  });
+});
+
 describe("the series walker stops at a currency change", () => {
   // Was pinned here as the current WRONG behaviour: a regression I introduced
   // with the walk itself. It took the tail figure while the currency still came

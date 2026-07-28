@@ -1319,10 +1319,10 @@ export function parsePlanSignals(text: string): PlanSignals {
    * silently, from a bound written to be safe. Caught by a trap in the same
    * batch as the fix; digits after "ended" are the figure, never the period.
    */
-  const PERIOD_OF = String.raw`(?:\s+(?:for|in|during)\s+(?:the\s+)?[a-z ]{0,20}?(?:quarter|year|period|months?|half)\b(?:\s+ended\b[^.;%\d]{0,32}?)?)?`;
+  const PERIOD_OF = String.raw`(?:\s*,?\s*(?:for|in|during)\s+(?:the\s+)?[a-z ]{0,20}?(?:quarter|year|period|months?|half)\b(?:\s+ended\b[^.;%\d]{0,32}?)?\s*,?)?`;
   const gm = latestMatch(t, new RegExp(String.raw`${NOT_RANGE}${NEG}${NUM}\s*%\s*gross\s*margin`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
-    || latestMatch(t, new RegExp(String.raw`gross\s*margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
+    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*${NEG}${NUM}\s*%`, "i"), s, "gross margin")
+    || latestMatch(t, new RegExp(String.raw`gross\s*(?:profit\s*)?margins?${PERIOD_OF}\s*(?:${LINK_NO_DASH}|are|is|was(?:\s+an?)?|were|${TO_LEVEL})?\s*(\()\s*${NUM}\s*\)\s*%`, "i"), s, "gross margin");
   // "Gross profit of $17.6 million, or 20% of net revenue" — a margin stated as
   // a share of revenue, which is how a filing writes it when it never uses the
   // words "gross margin".

@@ -1,5 +1,5 @@
 // Smoke: AEVION Trust Score Ed25519 attestation.
-// Run: npx tsx scripts/trust-signature-smoke.ts   (from aevion-globus-backend/)
+// Run: npm run smoke:trust-signature   (from aevion-globus-backend/)
 //
 // Uses a fixed key via QSKYWAY_SIGN_SK so isPlatformKey / stable-key assertions
 // are deterministic (otherwise the lib generates an ephemeral per-run key).

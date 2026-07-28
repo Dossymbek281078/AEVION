@@ -79,3 +79,32 @@ describe("серверная и скриптовая копии ключа об�
     expect(serverStableCellId({ minLat: NaN, minLon: 5 })).toBe(stableCellId({ minLat: NaN, minLon: 5 }));
   });
 });
+
+// Отгруженный слой всё ещё несёт СТАРЫЕ id вида `faa-<OBJECTID>`: пересобрать его
+// нельзя дёшево — `id` входит в подписываемое содержимое, и пересборка потребовала
+// бы переякорения в Bitcoin. Но геометрия у отгруженной ячейки лежит тут же, в её
+// собственных minLat/minLon, поэтому сверка выводит ключ из геометрии с ОБЕИХ
+// сторон и работает уже сейчас, не трогая подпись.
+import { compareSnapshot } from "../src/routes/qskyway.airspace.freshness";
+
+describe("сверка не зависит от того, какой id записан в отгруженном слое", () => {
+  const cell = { id: "faa-118", minLat: 40.75, minLon: -73.9917, airportIcao: "KLGA", ceilingFt: 200 };
+  const live = [{ id: stableCellId(cell), ceilingFt: 200, effective: "2026-07-09" }];
+
+  it("старый OBJECTID-ключ в слое не считается расхождением", () => {
+    const r = compareSnapshot({ cells: [cell] } as never, live);
+    expect({ a: r.cellsAdded, d: r.cellsRemoved, c: r.cellsChanged }).toEqual({ a: 0, d: 0, c: 0 });
+    expect(r.upToDate).toBe(true);
+  });
+
+  it("а настоящее изменение потолка по-прежнему видно", () => {
+    const r = compareSnapshot({ cells: [cell] } as never, [{ ...live[0], ceilingFt: 400 }]);
+    expect(r.cellsChanged).toBe(1);
+  });
+
+  it("и настоящая новая ячейка тоже", () => {
+    const r = compareSnapshot({ cells: [cell] } as never,
+      [...live, { id: stableCellId({ ...cell, minLat: 41 }), ceilingFt: 100, effective: null }]);
+    expect(r.cellsAdded).toBe(1);
+  });
+});

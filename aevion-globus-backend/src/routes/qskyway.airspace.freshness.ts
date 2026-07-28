@@ -69,8 +69,19 @@ export interface LiveCell { id: string; ceilingFt: number; effective: string | n
  * (see the smoke's freshness check); this covers the branches it cannot reach.
  */
 export function compareSnapshot(src: CityAirspace, live: LiveCell[]) {
-  const liveById = new Map(live.map((c) => [c.id, c.ceilingFt]));
-  const snapById = new Map(src.cells.map((c) => [c.id, c.ceilingFt]));
+  // Сверяем по ключу, выведенному из ГЕОМЕТРИИ, а не по полю `id`.
+  //
+  // У отгруженных ячеек id исторически был `faa-<OBJECTID>` — номером строки в
+  // базе публикатора, который меняется при каждой перепубликации. Пока сверка
+  // шла по этому полю, сторож кричал «дрейф» на неизменных потолках. Но
+  // геометрия у отгруженной ячейки лежит тут же, в её собственных minLat/minLon,
+  // поэтому устойчивый ключ можно вывести для ОБЕИХ сторон прямо сейчас — не
+  // пересобирая слой и не трогая подписанное содержимое, которому иначе
+  // потребовалось бы переякорение в Bitcoin.
+  const keyOf = (c: { minLat: number; minLon: number; airportIcao?: string | null }) =>
+    stableCellId({ minLat: c.minLat, minLon: c.minLon, airportIcao: c.airportIcao ?? null });
+  const liveById = new Map(live.map((c) => [c.id, c.ceilingFt])); // живой id уже устойчивый
+  const snapById = new Map(src.cells.map((c) => [keyOf(c), c.ceilingFt]));
   let cellsAdded = 0, cellsRemoved = 0, cellsChanged = 0;
   for (const [id, ceil] of liveById) {
     if (!snapById.has(id)) cellsAdded++;

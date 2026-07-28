@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -7,6 +8,14 @@ import { csvNeutralizeFormula } from "../lib/csv";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const capture = makeServiceCapture("qcontract");
+
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const CONTENT_TYPES = ["text", "url", "html"] as const;
+type ContentType = (typeof CONTENT_TYPES)[number];
+const MAX_TITLE_LEN = 200;
+const MAX_CONTENT_LEN = 100_000;
+const MAX_VIEWS_CAP = 10_000;
+const MAX_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 export const qcontractRouter = Router();
 
@@ -65,9 +74,108 @@ async function ensureTables(): Promise<void> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function hashPassword(pw: string): string {
-  return createHash("sha256").update(pw).digest("hex");
+const scryptAsync = promisify(scrypt) as (
+  pw: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+) => Promise<Buffer>;
+
+/**
+ * Пароль на документ — то, чем модуль отличается от аналогов, и хранился он
+ * голым SHA-256 без соли: одинаковые пароли давали одинаковые хеши, а перебор
+ * по утёкшей базе упирался только в скорость железа.
+ *
+ * Теперь scrypt с солью. Старый формат (64 hex-символа) продолжает
+ * проверяться, чтобы уже созданные документы не перестали открываться, и
+ * молча переписывается на новый при первом же верном вводе — владельцу ничего
+ * делать не надо.
+ */
+const SCRYPT_PREFIX = "scrypt$";
+const SCRYPT_KEYLEN = 32;
+
+async function hashPassword(pw: string): Promise<string> {
+  const salt = randomBytes(16);
+  const key = await scryptAsync(pw, salt, SCRYPT_KEYLEN);
+  return `${SCRYPT_PREFIX}${salt.toString("hex")}$${key.toString("hex")}`;
 }
+
+/** Сравнение постоянного времени: длины могут не совпасть, это не ошибка. */
+function safeEqualHex(a: string, b: string): boolean {
+  const ba = Buffer.from(a, "hex");
+  const bb = Buffer.from(b, "hex");
+  if (ba.length === 0 || ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+async function verifyPassword(
+  pw: string,
+  stored: string,
+): Promise<{ ok: boolean; needsUpgrade: boolean }> {
+  if (stored.startsWith(SCRYPT_PREFIX)) {
+    const [, saltHex, keyHex] = stored.split("$");
+    if (!saltHex || !keyHex) return { ok: false, needsUpgrade: false };
+    const key = await scryptAsync(pw, Buffer.from(saltHex, "hex"), SCRYPT_KEYLEN);
+    return { ok: safeEqualHex(key.toString("hex"), keyHex), needsUpgrade: false };
+  }
+  // Наследие: голый SHA-256. Проверяем, но помечаем на перенос.
+  const legacy = createHash("sha256").update(pw).digest("hex");
+  return { ok: safeEqualHex(legacy, stored), needsUpgrade: true };
+}
+
+// ── Ограничение попыток пароля ────────────────────────────────────────────────
+//
+// Проверка пароля документа не ограничивалась ничем: ни здесь, ни глобальным
+// лимитером (в index.ts его нет — там только trust proxy с комментарием про
+// express-rate-limit). Хеш при этом голый sha256 без соли, то есть онлайн-подбор
+// был единственным барьером и барьером не был. Документы продаются за $19/мес.
+//
+// Два ключа сразу, потому что каждый по отдельности плох: по (token+IP) —
+// обходится сменой адреса; по одному token — посторонний запирает чужой документ
+// пятью неверными вводами. Поэтому по IP порог низкий, а по документу целиком —
+// высокий: он ловит распределённый перебор, но не даёт устроить блокировку.
+//
+// Состояние в памяти процесса: правка обратима и не требует миграции. Цена —
+// рестарт обнуляет счётчики, инстансы считают раздельно. Для порога «5 за
+// 15 минут» это приемлемо: подбор перестаёт быть дешёвым. Соль и медленный хеш —
+// отдельный шаг, он требует миграции существующих хешей.
+const PW_FAILS_PER_IP = 5;
+const PW_WINDOW_IP_MS = 15 * 60_000;
+const PW_FAILS_PER_DOC = 50;
+const PW_WINDOW_DOC_MS = 60 * 60_000;
+
+const pwFailures = new Map<string, { count: number; firstAt: number }>();
+
+/** Секунды до разблокировки, если ключ заблокирован, иначе null. */
+function pwLockedFor(key: string, limit: number, windowMs: number, now: number): number | null {
+  const rec = pwFailures.get(key);
+  if (!rec) return null;
+  if (now - rec.firstAt >= windowMs) {
+    pwFailures.delete(key);
+    return null;
+  }
+  if (rec.count < limit) return null;
+  return Math.ceil((rec.firstAt + windowMs - now) / 1000);
+}
+
+function pwRegisterFailure(key: string, windowMs: number, now: number): void {
+  const rec = pwFailures.get(key);
+  if (!rec || now - rec.firstAt >= windowMs) {
+    pwFailures.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  rec.count++;
+}
+
+// Карта не должна расти бесконечно на долгоживущем процессе: раз в 10 минут
+// выбрасываем записи, чьё окно давно закрыто. Берём самое длинное из двух окон.
+// unref(), чтобы таймер не держал процесс живым (иначе тесты и graceful shutdown
+// зависают — этот класс ошибок уже стоил сессии).
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, rec] of pwFailures) {
+    if (now - rec.firstAt >= PW_WINDOW_DOC_MS) pwFailures.delete(k);
+  }
+}, 10 * 60_000).unref();
 
 function isExpired(row: {
   expires_at?: Date | null;
@@ -300,6 +408,38 @@ qcontractRouter.post("/documents", async (req, res) => {
 
   if (!title?.trim()) return res.status(400).json({ error: "title_required" });
   if (!content?.trim()) return res.status(400).json({ error: "content_required" });
+  if (title.trim().length > MAX_TITLE_LEN) return res.status(400).json({ error: "title_too_long" });
+  if (content.trim().length > MAX_CONTENT_LEN) return res.status(400).json({ error: "content_too_long" });
+
+  // Тип содержимого приходит извне и раньше не проверялся вовсе: значение
+  // «URL» с большой буквы проскакивало мимо проверки схемы ниже и ложилось в
+  // базу как есть.
+  if (!CONTENT_TYPES.includes(contentType as ContentType)) {
+    return res.status(400).json({ error: "invalid_content_type" });
+  }
+
+  // Лимит просмотров — обещание модуля («посмотрели трижды, доступ закрылся»),
+  // и он не проверялся никак. `maxViews: 0` или отрицательное создавало
+  // документ, который НИКОГДА не откроется: условие выдачи `view_count <
+  // max_views` ложно с первого раза. Владелец получал 201 и ссылку, которая
+  // молча отдаёт 410. Дробное и `1e400` (в JSON это Infinity) роняли вставку
+  // в целочисленную колонку пятисоткой.
+  if (maxViews !== undefined && maxViews !== null) {
+    if (typeof maxViews !== "number" || !Number.isInteger(maxViews) || maxViews < 1 || maxViews > MAX_VIEWS_CAP) {
+      return res.status(400).json({ error: "maxViews_1_to_" + MAX_VIEWS_CAP });
+    }
+  }
+
+  // Срок жизни: непарсимая строка уходила прямо в timestamptz и давала 500
+  // вместо внятного отказа, а дата в прошлом создавала документ, уже мёртвый.
+  let expiresAtIso: string | null = null;
+  if (expiresAt !== undefined && expiresAt !== null && String(expiresAt).trim() !== "") {
+    const ts = Date.parse(String(expiresAt));
+    if (!Number.isFinite(ts)) return res.status(400).json({ error: "invalid_expiresAt" });
+    if (ts <= Date.now()) return res.status(400).json({ error: "expiresAt_must_be_future" });
+    if (ts > Date.now() + MAX_TTL_MS) return res.status(400).json({ error: "expiresAt_too_far" });
+    expiresAtIso = new Date(ts).toISOString();
+  }
 
   if (contentType === "url") {
     try {
@@ -314,7 +454,7 @@ qcontractRouter.post("/documents", async (req, res) => {
 
   const id = randomUUID();
   const accessToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
-  const passwordHash = password ? hashPassword(password) : null;
+  const passwordHash = password ? await hashPassword(password) : null;
   const pool = getPool();
 
   await pool.query(
@@ -331,7 +471,7 @@ qcontractRouter.post("/documents", async (req, res) => {
       accessToken,
       passwordHash,
       maxViews ?? null,
-      expiresAt ?? null,
+      expiresAtIso,
       requireSignature,
       qrightId?.trim() || null,
     ],
@@ -355,7 +495,11 @@ qcontractRouter.get("/documents", async (req, res) => {
   const ownerId = auth.sub ?? auth.email ?? "unknown";
   const q = (req.query.q as string | undefined)?.trim();
   const status = req.query.status as string | undefined; // "active" | "expired" | "revoked"
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  // parseInt("abc") даёт NaN и падает в 50 — это верно; а вот отрицательное
+  // проходило насквозь и уходило в `LIMIT -5`, где Postgres отвечает ошибкой,
+  // то есть пятисоткой вместо пустого списка.
+  const rawLimit = parseInt(req.query.limit as string);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
 
   const params: unknown[] = [ownerId];
   let where = "owner_id = $1";
@@ -561,7 +705,53 @@ qcontractRouter.post("/view/:token", async (req, res) => {
 
   if (doc.password_hash) {
     if (!password) return res.status(401).json({ error: "password_required", title: doc.title });
-    if (hashPassword(password) !== doc.password_hash) return res.status(403).json({ error: "wrong_password" });
+
+    const now = Date.now();
+    // req.ip, а НЕ сырой x-forwarded-for: заголовок пишет сам клиент, и на нём
+    // защита от подбора обходилась бы одной лишней строкой в запросе. При
+    // `trust proxy = 1` (стоит в index.ts) Express берёт адрес, добавленный нашим
+    // прокси, и игнорирует то, что клиент приписал слева. Строкой ниже, в записи
+    // просмотра, заголовок читается напрямую — там это журнал, а не барьер.
+    // Полностью подмену это не исключает: у кого есть пул адресов, тот размажет
+    // попытки по ним — ровно для этого и существует второй, документный порог.
+    const clientIp = req.ip ?? req.socket.remoteAddress ?? "unknown";
+    const ipKey = `ip:${req.params.token}:${clientIp}`;
+    const docKey = `doc:${req.params.token}`;
+
+    const lockedFor =
+      pwLockedFor(ipKey, PW_FAILS_PER_IP, PW_WINDOW_IP_MS, now) ??
+      pwLockedFor(docKey, PW_FAILS_PER_DOC, PW_WINDOW_DOC_MS, now);
+    if (lockedFor !== null) {
+      res.setHeader("Retry-After", String(lockedFor));
+      return res.status(429).json({
+        error: "too_many_password_attempts",
+        retryAfterSeconds: lockedFor,
+        title: doc.title,
+      });
+    }
+
+    // Порог проверяется ДО сверки пароля, а сама сверка теперь идёт через
+    // scrypt: он намеренно медленный, и без порога это стало бы способом
+    // нагрузить сервер чужими запросами.
+    const check = await verifyPassword(password, doc.password_hash);
+    if (!check.ok) {
+      pwRegisterFailure(ipKey, PW_WINDOW_IP_MS, now);
+      pwRegisterFailure(docKey, PW_WINDOW_DOC_MS, now);
+      return res.status(403).json({ error: "wrong_password" });
+    }
+    if (check.needsUpgrade) {
+      // Перенос со старого формата — молча и не задерживая ответ. Не удался —
+      // документ продолжит открываться по старому хешу, ничего не ломается.
+      void hashPassword(password)
+        .then((fresh) =>
+          pool.query(`UPDATE qcontract_documents SET password_hash = $1 WHERE id = $2`, [fresh, doc.id]),
+        )
+        .catch((err) => capture(err));
+    }
+
+    // Верный пароль снимает накопленные неудачи по этому адресу: иначе человек,
+    // вспомнивший пароль с шестой попытки, остался бы заперт на 15 минут.
+    pwFailures.delete(ipKey);
   }
 
   if (doc.require_signature && !viewerEmail?.trim()) {
@@ -572,17 +762,40 @@ qcontractRouter.post("/view/:token", async (req, res) => {
   const ua = req.headers["user-agent"] ?? null;
   const signedAt = doc.require_signature && viewerEmail ? new Date().toISOString() : null;
 
+  // Прочтение ЗАНИМАЕТСЯ одним атомарным запросом, а не «проверили выше — увеличили
+  // здесь». Между SELECT и UPDATE стояла гонка: два одновременных запроса читали
+  // одинаковый view_count, оба проходили проверку isExpired и оба инкрементировали.
+  // Для продукта, чья главная функция — «сгорает после N прочтений», это означало,
+  // что документ с max_views=1 открывается сколько угодно раз, если запросы идут
+  // параллельно. Условие в WHERE выполняется самой базой под блокировкой строки,
+  // поэтому лишний читатель не получит строку и, значит, не получит содержимое.
+  const claim = await pool.query(
+    `UPDATE qcontract_documents
+        SET view_count = view_count + 1, updated_at = NOW()
+      WHERE id = $1
+        AND revoked_at IS NULL
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND (max_views IS NULL OR view_count < max_views)
+      RETURNING view_count`,
+    [doc.id],
+  );
+  if (claim.rowCount === 0) {
+    // Кто-то забрал последнее прочтение (или документ истёк) между проверкой и
+    // этим запросом. Содержимое НЕ отдаём — иначе гонка так и осталась бы лазейкой.
+    return res.status(410).json({ error: "document_expired", title: doc.title });
+  }
+
+  // Журнал просмотра пишем ТОЛЬКО после успешного занятия: раньше запись
+  // добавлялась до инкремента, и в аудите оставались просмотры, которых не было.
   await pool.query(
     `INSERT INTO qcontract_views (id, document_id, viewer_ip, viewer_ua, viewer_email, signed_at)
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [randomUUID(), doc.id, ip, ua, viewerEmail?.trim() ?? null, signedAt],
   );
-  await pool.query(
-    `UPDATE qcontract_documents SET view_count = view_count + 1, updated_at = NOW() WHERE id = $1`,
-    [doc.id],
-  );
 
-  const newCount = doc.view_count + 1;
+  // Счётчик берём из RETURNING, а не из doc.view_count + 1: последнее тоже
+  // устаревает под параллельной нагрузкой и показало бы читателю неверный номер.
+  const newCount = Number(claim.rows[0].view_count);
   const isLastView = doc.max_views != null && newCount >= doc.max_views;
 
   res.json({

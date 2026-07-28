@@ -297,11 +297,23 @@ qjobsRouter.post("/jobs/:id/apply", applyLimiter, async (req: Request, res: Resp
     if (isQJobsDbReady()) {
       const { rows: job } = await pool.query(`SELECT "id" FROM "QJobsPosting" WHERE "id"=$1 AND "isActive"=TRUE`, [jobId]);
       if (!job[0]) return res.status(404).json({ error: "job not found" });
-      await pool.query(
+
+      // ON CONFLICT DO NOTHING без RETURNING молчит одинаково и когда заявка
+      // создана, и когда отброшена как дубль. До 28.07.2026 из-за этого
+      // повторный отклик в проде: (а) накручивал applicantCount, хотя заявки
+      // не прибавлялось — работодатель видел вымышленное число откликов;
+      // (б) возвращал 201 с идентификатором записи, которой не существует.
+      // В in-memory ветке дубль честно давал 409 — то есть dev и прод вели
+      // себя по-разному, и расходились они молча.
+      const inserted = await pool.query(
         `INSERT INTO "QJobsApplication" ("id","jobId","applicantId","coverLetter","status","createdAt")
-         VALUES ($1,$2,$3,$4,'pending',NOW()) ON CONFLICT ("jobId","applicantId") DO NOTHING`,
+         VALUES ($1,$2,$3,$4,'pending',NOW()) ON CONFLICT ("jobId","applicantId") DO NOTHING RETURNING "id"`,
         [application.id, application.jobId, application.applicantId, application.coverLetter],
       );
+      if (inserted.rows.length === 0) {
+        return res.status(409).json({ error: "already applied" });
+      }
+
       await pool.query(`UPDATE "QJobsPosting" SET "applicantCount"="applicantCount"+1 WHERE "id"=$1`, [jobId]);
       return res.status(201).json({ applicationId: application.id });
     }

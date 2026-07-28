@@ -1874,6 +1874,101 @@ export const COMPARISONS: ModuleComparison[] = [
     surveyedAt: "2026-07-28",
     sources: ["src/routes/voiceOfEarth.ts"],
   },
+
+  {
+    moduleId: "deepsan",
+    module: "DeepSan — задачи и сессии фокуса",
+    page: "/deepsan",
+    category: "трекеры задач и глубокой работы",
+    rivals: [
+      { name: "Todoist", url: "https://todoist.com", strength: "зрелый менеджер задач: проекты, повторы, естественный ввод дат, приложения везде" },
+      { name: "Forest / Focusmate", url: "https://forestapp.cc", strength: "сессии фокуса как отдельный продукт — с мотивацией и живым партнёром" },
+      { name: "Toggl Track", url: "https://toggl.com", strength: "учёт времени, из которого получаются отчёты и счета клиенту" },
+    ],
+    weWin: [
+      {
+        text: "Задача и сессия фокуса — в одном модуле: не нужен второй сервис, чтобы засечь время на конкретной задаче",
+        basis: "design",
+        evidence: "/tasks рядом с /focus, /focus/active и /focus/:id/done",
+      },
+      {
+        text: "Активная сессия спрашивается одной ручкой — состояние не приходится держать на клиенте",
+        basis: "design",
+        evidence: "GET /focus/active",
+      },
+    ],
+    weLose: [
+      {
+        text: "Это не менеджер задач: ни проектов, ни повторов, ни напоминаний, ни мобильного приложения",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Нет мотивационной части, ради которой берут Forest, и живого партнёра, ради которого берут Focusmate",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "Учёт времени есть, а отчётов и счетов из него нет — у Toggl это и есть продукт",
+        basis: "design",
+        evidence: "в модуле нет ни отчётов, ни выгрузки для выставления счетов",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда фокус-сессии нужны рядом с задачами внутри платформы. Как ежедневный менеджер задач или учёт времени для клиента — специализированные инструменты сильнее.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/deepsan.ts"],
+  },
+
+  {
+    moduleId: "ventures",
+    module: "AEVION Ventures — рынок идей",
+    page: "/ventures",
+    category: "площадки для голосования за идеи и сбора заявок",
+    rivals: [
+      { name: "Product Hunt", url: "https://producthunt.com", strength: "аудитория, которая голосует и приносит первых пользователей в день запуска" },
+      { name: "Y Combinator RFS", url: "https://ycombinator.com/rfs", strength: "список идей от тех, кто готов их профинансировать — вес запроса другой" },
+      { name: "r/SomebodyMakeThis", url: "https://reddit.com/r/SomebodyMakeThis", strength: "живое сообщество и бесконечный поток идей от реальных людей с болью" },
+    ],
+    weWin: [
+      {
+        text: "Голос за идею нельзя накрутить с одного адреса, и при этом адрес НЕ хранится: в базе только солёный хеш",
+        basis: "measured",
+        evidence: "проверено по коду 2026-07-28: voter_hash с UNIQUE (idea_id, voter_hash), сырой IP не сохраняется нигде",
+      },
+      {
+        text: "Голосование по идеям и приём чужих заявок — в одном месте, а не в двух сервисах",
+        basis: "design",
+        evidence: "/ideas/:id/interest рядом с /submit",
+      },
+      {
+        text: "Чужая заявка не появляется публично до проверки — площадка не превращается в свалку",
+        basis: "design",
+        evidence: "submissions хранятся pending и отдаются только после вычитки",
+      },
+    ],
+    weLose: [
+      {
+        text: "Идей два десятка против бесконечного потока у Reddit, и все они наши, а не от людей с реальной болью",
+        basis: "design",
+        evidence: "курируемый список из 20 идей",
+      },
+      {
+        text: "Голос здесь ничего не приносит автору: у Product Hunt голоса конвертируются в первых пользователей",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+      {
+        text: "За нашим списком идей не стоят деньги — у YC RFS стоят",
+        basis: "public",
+        evidence: "срез 2026-07-28",
+      },
+    ],
+    verdict:
+      "Мы лучше, когда нужно честно померить интерес к идее без слежки за голосующим. Чтобы идея нашла пользователей или деньги — Product Hunt и YC.",
+    surveyedAt: "2026-07-28",
+    sources: ["src/routes/ventures.ts"],
+  },
 ];
 
 /**

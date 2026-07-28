@@ -88,6 +88,24 @@ function open(password?: string) {
     .send(password === undefined ? {} : { password });
 }
 
+/**
+ * Ждём условие опросом, а не фиксированной паузой.
+ *
+ * Перенос хеша идёт вдогонку ответу и включает scrypt — намеренно медленную
+ * функцию. Пауза в 150 мс проходила в одиночном прогоне и НЕ проходила под
+ * нагрузкой общего: тест падал примерно раз на шесть прогонов с «перенос не
+ * выполнен». Фиксированная пауза в тесте асинхронной работы — это не проверка,
+ * а ставка на скорость машины.
+ */
+async function waitFor(cond: () => boolean, timeoutMs = 5000): Promise<boolean> {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    if (cond()) return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return cond();
+}
+
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 describe("QContract: пароль документа", () => {
@@ -157,7 +175,15 @@ describe("QContract: пароль документа", () => {
   test("старый хеш молча переписывается на новый при верном вводе", async () => {
     wirePool(docRow(sha256("old-secret"), "doc-legacy-upgrade"));
     await open("old-secret");
-    await new Promise((r) => setTimeout(r, 150)); // перенос идёт вдогонку ответу
+
+    const found = () =>
+      mockQuery.mock.calls.some(
+        (c) =>
+          String(c[0]).includes("SET password_hash") &&
+          String(c[1]?.[0]).startsWith("scrypt$") &&
+          c[1]?.[1] === "doc-legacy-upgrade",
+      );
+    await waitFor(found);
 
     const upgrade = mockQuery.mock.calls.find(
       (c) =>
@@ -171,7 +197,10 @@ describe("QContract: пароль документа", () => {
   test("неверный пароль к старому хешу не открывает и не переписывает", async () => {
     wirePool(docRow(sha256("old-secret"), "doc-legacy-wrong"));
     expect((await open("nope")).status).toBe(403);
-    await new Promise((r) => setTimeout(r, 100));
+    // Здесь ждём наоборот: переноса быть НЕ должно. Даём заведомо больше
+    // времени, чем нужно положительному случаю, иначе проверка проходила бы
+    // просто потому, что не дождалась.
+    await new Promise((r) => setTimeout(r, 300));
     // Ищем перенос ИМЕННО этого документа: поздний вызов от соседнего теста
     // сюда попасть может, и раньше он ронял проверку через раз.
     const upgrade = mockQuery.mock.calls.find(

@@ -410,11 +410,27 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
           `UPDATE "QLearnCourse" SET "enrollmentCount" = "enrollmentCount" + 1 WHERE "id" = $1`,
           [courseId],
         );
+        res.status(201).json({ enrollmentId });
+        return;
       }
-      res.status(201).json({ enrollmentId });
+
+      // Запись уже была. Раньше сюда возвращался свежесгенерированный
+      // enrollmentId, которого нет в базе: клиент получал 201 и идентификатор,
+      // по которому ничего не найдётся. Отдаём настоящий.
+      const prior = await pool.query(
+        `SELECT "id" FROM "QLearnEnrollment" WHERE "courseId" = $1 AND "userId" = $2 LIMIT 1`,
+        [courseId, auth.sub],
+      );
+      res.status(200).json({ enrollmentId: prior.rows[0]?.id ?? null, alreadyEnrolled: true });
       return;
-    } catch {
-      // fall through
+    } catch (err) {
+      // Раньше здесь стоял молчаливый провал в in-memory ветку. В проде
+      // memCourses пуст, поэтому сбой базы превращался в «Course not found» —
+      // ответ, по которому невозможно понять, что курс есть, а сломалось
+      // хранилище.
+      captureQLearnError(err, { route: "qlearn/courses/:id/enroll" });
+      res.status(503).json({ error: "database_unavailable" });
+      return;
     }
   }
   const course = memCourses.get(courseId);

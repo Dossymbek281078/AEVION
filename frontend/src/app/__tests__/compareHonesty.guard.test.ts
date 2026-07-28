@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMPARE_ROWS, NOT_COMPARED } from "@/data/competitors";
+import { COMPARE_ROWS, NOT_COMPARED, type Txt } from "@/data/competitors";
+
+/** Оба языка обязаны быть непустыми: демо на английском ведёт прямо сюда. */
+const both = (x: Txt) => [x.ru, x.en];
 
 /**
  * Страница сравнения с аналогами — самое соблазнительное место в проекте для
@@ -42,9 +45,22 @@ describe("таблица сравнения остаётся проверяем�
         expect(registryIds.has(row.module), `${row.module} нет в projects.ts`).toBe(true);
       });
 
-      it("заполнено «где мы слабее»", () => {
+      it("заполнено «где мы слабее» — на обоих языках", () => {
         expect(row.weaknesses.length).toBeGreaterThan(0);
-        for (const w of row.weaknesses) expect(w.trim().length).toBeGreaterThan(15);
+        for (const w of row.weaknesses) {
+          for (const text of both(w)) expect(text.trim().length).toBeGreaterThan(15);
+        }
+      });
+
+      it("ни одна строка не осталась без перевода", () => {
+        const fields: Txt[] = [row.title, row.headline, row.measured, ...row.strengths, ...row.weaknesses, ...row.sources.map((s) => s.label)];
+        for (const f of fields) {
+          expect(f.ru.trim().length, `${row.module}: пустой русский`).toBeGreaterThan(0);
+          expect(f.en.trim().length, `${row.module}: пустой английский`).toBeGreaterThan(0);
+          // «перевод» копипастой ловим на длинных полях: одинаковый текст в
+          // обоих языках почти всегда значит, что переводить забыли
+          if (f.ru.length > 40) expect(f.en, `${row.module}: английский совпал с русским`).not.toBe(f.ru);
+        }
       });
 
       it("заполнено «где мы сильнее» и названы конкуренты", () => {
@@ -53,7 +69,7 @@ describe("таблица сравнения остаётся проверяем�
       });
 
       it("сказано, чем проверено", () => {
-        expect(row.measured.trim().length).toBeGreaterThan(30);
+        for (const text of both(row.measured)) expect(text.trim().length).toBeGreaterThan(30);
       });
 
       it("утверждения про аналог подкреплены ссылкой", () => {

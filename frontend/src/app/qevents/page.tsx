@@ -114,6 +114,8 @@ function EventCard({
   const [rsvping, setRsvping] = useState(false);
   const [rsvpStatus, setRsvpStatus] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [rsvpError, setRsvpError] = useState<string | null>(null);
+  const [waitlisted, setWaitlisted] = useState(false);
 
   function handleIcsDownload() {
     // Trigger native browser download via direct navigation.
@@ -121,20 +123,61 @@ function EventCard({
     window.location.href = catalog.qevents.icsUrl(event.id);
   }
 
+  /**
+   * Раньше здесь стояли `if (!resp.ok) return;` и пустой `catch` — любая
+   * неудача просто возвращала кнопку в исходное состояние. Человек видел
+   * «RSVP», нажимал ещё раз и снова ничего. Хуже всего это работало на
+   * полном событии: сервер отвечает 409 и предлагает лист ожидания, а в
+   * интерфейсе не появлялось ни отказа, ни предложения встать в очередь.
+   */
   async function handleRSVP() {
     if (!currentUserId) return;
     setRsvping(true);
+    setRsvpError(null);
     try {
       const resp = await fetch(apiUrl(`/api/qevents/events/${event.id}/rsvp`), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
       });
-      if (!resp.ok) return;
+
+      if (resp.status === 409) {
+        setRsvpError("Мест не осталось. Можно встать в лист ожидания — освободится место, придёт очередь.");
+        return;
+      }
+      if (resp.status === 401) {
+        setRsvpError("Сессия истекла — войдите заново.");
+        return;
+      }
+      if (!resp.ok) {
+        setRsvpError("Записаться не удалось. Попробуйте ещё раз.");
+        return;
+      }
+
       const { status, attendeeCount } = await resp.json() as { status: string; attendeeCount: number };
       setRsvpStatus(status);
       onRSVP(event.id, status, attendeeCount);
     } catch {
-      // ignore
+      setRsvpError("Нет связи с сервером. Запись не сохранена.");
+    } finally {
+      setRsvping(false);
+    }
+  }
+
+  async function handleJoinWaitlist() {
+    setRsvping(true);
+    try {
+      const resp = await fetch(apiUrl(`/api/qevents/events/${event.id}/waitlist`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+      });
+      if (!resp.ok) {
+        setRsvpError("В лист ожидания встать не удалось. Попробуйте ещё раз.");
+        return;
+      }
+      setWaitlisted(true);
+      setRsvpError(null);
+    } catch {
+      setRsvpError("Нет связи с сервером. В лист ожидания не встали.");
     } finally {
       setRsvping(false);
     }
@@ -185,7 +228,14 @@ function EventCard({
         {/* Location + price */}
         <div style={{ display: "flex", gap: 12, fontSize: 13, color: "#64748b", marginBottom: 10, flexWrap: "wrap" }}>
           <span>📍 {event.location}</span>
-          <span>{event.price === 0 ? "Free" : `$${event.price}`}</span>
+          {/*
+            Оплаты в модуле нет ни одной ручки — цена здесь означает только
+            «сколько возьмёт организатор». Пока это так, писать голое «$50»
+            рядом с кнопкой записи нельзя: человек решает, что заплатил.
+          */}
+          <span title={event.price === 0 ? undefined : "AEVION оплату не принимает — расчёт напрямую с организатором"}>
+            {event.price === 0 ? "Бесплатно" : `$${event.price} — у организатора`}
+          </span>
           <span>👥 {event.attendeeCount}/{event.capacity}</span>
         </div>
 
@@ -226,6 +276,30 @@ function EventCard({
             >
               {rsvping ? "..." : isGoing ? "Going ✓" : "RSVP"}
             </button>
+          )}
+          {isGoing && event.price > 0 && (
+            <div style={{ fontSize: 11.5, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "7px 9px", lineHeight: 1.45 }}>
+              Место забронировано, но не оплачено: ${event.price} организатор берёт сам.
+            </div>
+          )}
+          {rsvpError && (
+            <div role="alert" style={{ fontSize: 11.5, color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "7px 9px", lineHeight: 1.45 }}>
+              {rsvpError}
+              {rsvpError.startsWith("Мест не осталось") && !waitlisted && (
+                <button
+                  onClick={handleJoinWaitlist}
+                  disabled={rsvping}
+                  style={{ display: "block", marginTop: 6, background: "#0f172a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 10px", fontWeight: 700, fontSize: 11.5, cursor: rsvping ? "not-allowed" : "pointer" }}
+                >
+                  Встать в лист ожидания
+                </button>
+              )}
+            </div>
+          )}
+          {waitlisted && (
+            <div style={{ fontSize: 11.5, color: "#065f46", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 8, padding: "7px 9px", lineHeight: 1.45 }}>
+              Вы в листе ожидания — освободится место, придёт очередь.
+            </div>
           )}
           {!isPast && !currentUserId && (
             <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
@@ -381,7 +455,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
           <label style={{ fontSize: 13, color: "#64748b", display: "block", marginBottom: 4 }}>End date & time</label>
           <input type="datetime-local" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} style={inputStyle} />
           <input placeholder="Capacity (default: 100)" type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} style={inputStyle} />
-          <input placeholder="Price in USD (0 = free)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} style={inputStyle} />
+          <input placeholder="Цена в USD (0 = бесплатно) — оплату собираете вы сами" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} style={inputStyle} />
           {error && <p style={{ color: "#ef4444", margin: "0 0 12px", fontSize: 13 }}>{error}</p>}
           <div style={{ display: "flex", gap: 10 }}>
             <button

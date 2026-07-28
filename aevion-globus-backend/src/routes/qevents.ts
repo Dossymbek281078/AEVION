@@ -332,42 +332,66 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
 
   try {
     if (isQEventsDbReady()) {
-      const { rows: existing } = await pool.query(
-        `SELECT * FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`,
-        [eventId, auth.sub],
-      );
-      let status: string;
-      let attendeeCount: number;
+      // Вместимость проверяется ВНУТРИ транзакции со строкой события под
+      // FOR UPDATE. Без этого запись шла мимо лимита: до 28.07.2026 ветка
+      // Postgres вставляла RSVP безусловно, и лист ожидания — заявленное
+      // свойство модуля — в проде не срабатывал никогда, а attendeeCount
+      // спокойно уходил за capacity. Проверка «прочитал, потом записал» без
+      // блокировки строки тоже не годится: два одновременных RSVP на
+      // последнее место оба увидят свободное место.
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      if (existing[0]) {
-        // Toggle: if going → not-going, else → going
-        const newStatus = existing[0].status === "going" ? "not-going" : "going";
-        await pool.query(
-          `UPDATE "QEventRSVP" SET "status"=$1 WHERE "eventId"=$2 AND "userId"=$3`,
-          [newStatus, eventId, auth.sub],
-        );
-        const delta = newStatus === "going" ? 1 : -1;
-        await pool.query(
-          `UPDATE "QEvent" SET "attendeeCount"=GREATEST(0,"attendeeCount"+$1) WHERE "id"=$2`,
-          [delta, eventId],
-        );
-        status = newStatus;
-      } else {
-        const rsvpId = crypto.randomUUID();
-        await pool.query(
-          `INSERT INTO "QEventRSVP" ("id","eventId","userId","status","createdAt") VALUES ($1,$2,$3,'going',NOW())`,
-          [rsvpId, eventId, auth.sub],
-        );
-        await pool.query(
-          `UPDATE "QEvent" SET "attendeeCount"="attendeeCount"+1 WHERE "id"=$1`,
+        const { rows: evRows } = await client.query(
+          `SELECT "attendeeCount","capacity" FROM "QEvent" WHERE "id"=$1 FOR UPDATE`,
           [eventId],
         );
-        status = "going";
-      }
+        if (!evRows[0]) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "not_found" });
+        }
+        const capacity = Number(evRows[0].capacity);
+        const current = Number(evRows[0].attendeeCount);
 
-      const { rows: ev } = await pool.query(`SELECT "attendeeCount" FROM "QEvent" WHERE "id"=$1`, [eventId]);
-      attendeeCount = ev[0]?.attendeeCount ?? 0;
-      return res.json({ status, attendeeCount });
+        const { rows: existing } = await client.query(
+          `SELECT "status" FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`,
+          [eventId, auth.sub],
+        );
+
+        const status: string = existing[0]?.status === "going" ? "not-going" : "going";
+
+        if (status === "going" && current >= capacity) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+        }
+
+        if (existing[0]) {
+          await client.query(
+            `UPDATE "QEventRSVP" SET "status"=$1 WHERE "eventId"=$2 AND "userId"=$3`,
+            [status, eventId, auth.sub],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO "QEventRSVP" ("id","eventId","userId","status","createdAt") VALUES ($1,$2,$3,'going',NOW())`,
+            [crypto.randomUUID(), eventId, auth.sub],
+          );
+        }
+
+        const delta = status === "going" ? 1 : -1;
+        const { rows: updated } = await client.query(
+          `UPDATE "QEvent" SET "attendeeCount"=GREATEST(0,"attendeeCount"+$1) WHERE "id"=$2 RETURNING "attendeeCount"`,
+          [delta, eventId],
+        );
+
+        await client.query("COMMIT");
+        return res.json({ status, attendeeCount: Number(updated[0]?.attendeeCount ?? 0) });
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
     }
 
     const event = memEvents.get(eventId);

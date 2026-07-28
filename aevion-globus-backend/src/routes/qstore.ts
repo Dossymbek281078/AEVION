@@ -77,6 +77,53 @@ const memPurchases = new Map<string, Purchase>();
 // key: `${productId}:${userId}`
 const memReviews = new Map<string, Review>();
 
+/** Границы пользовательского ввода. Не «сколько бывает», а «дальше мусор». */
+const MAX_TITLE_LEN = 200;
+const MAX_DESCRIPTION_LEN = 5000;
+const MAX_URL_LEN = 2000;
+const MAX_PRICE = 1_000_000;
+const MAX_TAGS = 20;
+const MAX_TAG_LEN = 40;
+
+/**
+ * Цена товара В ЦЕНТАХ. Ноль допустим — бесплатный товар это нормально;
+ * отрицательная и бесконечная — нет.
+ *
+ * Поле несёт минорные единицы: форма считает `Number(input) * 100`. Из-за
+ * плавающей точки «19.99» превращается в 1998.9999999999998, поэтому целость
+ * проверяется с допуском и значение округляется. Первая редакция этой проверки
+ * требовала ровно двух знаков и ОТБИВАЛА бы обычную цену 19.99 — регрессия,
+ * найденная сверкой с тем, что реально шлёт форма.
+ *
+ * @returns число, если валидно; строку с причиной — если нет.
+ */
+function parseProductPrice(value: unknown): number | string {
+  if (value === undefined || value === null || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "price must be a finite number";
+  if (n < 0) return "price must not be negative";
+  if (n > MAX_PRICE) return `price must not exceed ${MAX_PRICE}`;
+  // Доли цента не бывает; микроскопический хвост от умножения на 100 — бывает.
+  if (Math.abs(n - Math.round(n)) > 1e-6) return "price must be a whole number of cents";
+  return Math.round(n);
+}
+
+/** Метки: массив коротких строк. @returns массив либо строку с причиной. */
+function normaliseTags(value: unknown): string[] | string {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return "tags must be an array of strings";
+  if (value.length > MAX_TAGS) return `tags must not exceed ${MAX_TAGS} items`;
+  const out: string[] = [];
+  for (const t of value) {
+    if (typeof t !== "string") return "tags must be an array of strings";
+    const trimmed = t.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > MAX_TAG_LEN) return `tag must not exceed ${MAX_TAG_LEN} chars`;
+    out.push(trimmed);
+  }
+  return out;
+}
+
 const CATEGORIES = [
   { id: "template", name: "Templates" },
   { id: "preset", name: "Presets" },
@@ -129,11 +176,20 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       if (q) { params.push(`%${q}%`); conditions.push(`("title" ILIKE $${params.length} OR "description" ILIKE $${params.length})`); }
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
+      // Поля перечислены и в запросе, и при сборке ответа — как в выдаче по
+      // идентификатору. Иначе витрина поедет вслед за схемой.
       const rows = await pool.query(
-        `SELECT * FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
+        `SELECT "id","sellerId","title","description","category","price","currency",
+                "previewUrl","tags","salesCount","avgRating","reviewCount",
+                "isPublic","createdAt","updatedAt"
+           FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
         params,
       );
-      res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
+      res.json({
+        products: rows.rows.map(publicProduct),
+        total: rows.rowCount ?? rows.rows.length,
+        sort,
+      });
       return;
     } catch {
       // fall through to in-memory
@@ -168,21 +224,61 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
 });
 
 // GET /api/qstore/products/:id
+/**
+ * Поля товара, которые допустимо отдавать наружу.
+ *
+ * Перечисления колонок в запросе мало: строку SQL легко вернуть к `SELECT *`
+ * одной правкой, и выдача снова поедет вслед за схемой. Список стоит и здесь,
+ * при сборке ответа.
+ */
+const PUBLIC_PRODUCT_FIELDS = [
+  "id", "sellerId", "title", "description", "category", "price", "currency",
+  "previewUrl", "tags", "salesCount", "avgRating", "reviewCount",
+  "isPublic", "createdAt", "updatedAt",
+] as const;
+
+function publicProduct(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PUBLIC_PRODUCT_FIELDS) out[f] = row[f];
+  return out;
+}
+
 qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  const auth = verifyBearerOptional(req);
   if (isQStoreDbReady()) {
     try {
-      const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
-      if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
-      res.json({ product: row.rows[0] });
+      // Список товаров отдаёт только `"isPublic" = TRUE` (и так же фильтрует
+      // путь через память), а выдача по идентификатору не смотрела на признак
+      // вовсе: снятый с витрины товар открывался по прямой ссылке. Своё
+      // непубличное продавец видит; остальным 404, а не 403 — 403 подтвердил
+      // бы, что товар существует.
+      const row = await pool.query(
+        `SELECT "id","sellerId","title","description","category","price","currency",
+                "previewUrl","tags","salesCount","avgRating","reviewCount",
+                "isPublic","createdAt","updatedAt"
+           FROM "QStoreProduct" WHERE "id" = $1`,
+        [id],
+      );
+      const product = row.rows[0];
+      if (!product || (product.isPublic !== true && auth?.sub !== product.sellerId)) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+      }
+      res.json({ product: publicProduct(product) });
       return;
     } catch {
       // fall through
     }
   }
+  // То же правило на пути через память — иначе признак соблюдался бы только при
+  // поднятой базе, а при откате на память тихо переставал.
   const product = memProducts.get(id);
-  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-  res.json({ product });
+  if (!product || (product.isPublic !== true && auth?.sub !== product.sellerId)) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+  res.json({ product: publicProduct(product as unknown as Record<string, unknown>) });
 });
 
 // POST /api/qstore/me/products — create product
@@ -201,6 +297,38 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
 
   if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
   if (!category) { res.status(400).json({ error: "category is required" }); return; }
+  if (title.trim().length > MAX_TITLE_LEN) { res.status(400).json({ error: "title too long" }); return; }
+  if ((description ?? "").length > MAX_DESCRIPTION_LEN) {
+    res.status(400).json({ error: "description too long" }); return;
+  }
+
+  // Категория не сверялась со списком: товар мог получить категорию, которой
+  // нет ни в одном фильтре, и пропасть из витрины насовсем.
+  if (!CATEGORIES.some((c) => c.id === category)) {
+    res.status(400).json({ error: "unknown category", allowed: CATEGORIES.map((c) => c.id) });
+    return;
+  }
+
+  // Цена принималась как `Number(price) || 0`, то есть без единой проверки
+  // диапазона: `-500` сохранялось как минус пятьсот, `1e400` (в JSON это
+  // Infinity) — как бесконечность. Товар с отрицательной ценой на витрине —
+  // это не «странное число», а прямой путь к разбирательству с покупателем.
+  const priceCheck = parseProductPrice(price);
+  if (typeof priceCheck === "string") { res.status(400).json({ error: priceCheck }); return; }
+
+  // Метки приходят массивом строк — или чем угодно: строка вместо массива
+  // ложилась в колонку `text[]` и роняла вставку пятисоткой.
+  const cleanTags = normaliseTags(tags);
+  if (typeof cleanTags === "string") { res.status(400).json({ error: cleanTags }); return; }
+
+  if (previewUrl !== undefined && previewUrl !== null && String(previewUrl).trim() !== "") {
+    if (!/^https?:\/\//i.test(String(previewUrl))) {
+      res.status(400).json({ error: "previewUrl must be an absolute http(s) URL" }); return;
+    }
+    if (String(previewUrl).length > MAX_URL_LEN) {
+      res.status(400).json({ error: "previewUrl too long" }); return;
+    }
+  }
 
   const newId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -210,10 +338,10 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
     title: title.trim(),
     description: description?.trim() || "",
     category,
-    price: Number(price) || 0,
+    price: priceCheck,
     currency: "usd",
     previewUrl: previewUrl || "",
-    tags: tags || [],
+    tags: cleanTags,
     salesCount: 0,
     avgRating: 0,
     reviewCount: 0,

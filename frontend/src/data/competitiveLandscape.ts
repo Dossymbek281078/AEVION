@@ -261,7 +261,143 @@ const DEVHUB: Landscape = {
   ],
 };
 
-export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB];
+// ── CyberChess ─────────────────────────────────────────────────────────────
+
+const CYBERCHESS: Landscape = {
+  moduleId: "cyberchess",
+  module: "CyberChess",
+  category: "Шахматная платформа",
+  framing:
+    "Здесь мы уступаем по всему, что измеряется масштабом, и это надо говорить первым. У Chess.com 150 млн аккаунтов, у Lichess 4 млн пазлов против наших 500 тысяч и полностью бесплатный движок без ограничений. Единственное, где мы можем отличаться, — разбор партии тренером-ИИ, который у Chess.com платный, а у Lichess его нет.",
+  competitors: [
+    { id: "chesscom", name: "Chess.com", url: "https://www.chess.com" },
+    { id: "lichess", name: "Lichess", url: "https://lichess.org" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Размер аудитории",
+      why: "Определяет, найдётся ли соперник вашего уровня в любую минуту.",
+      ours: { value: "Малая, внутри платформы" },
+      theirs: {
+        chesscom: { value: "150+ млн аккаунтов", source: "https://cassandrachess.com/learn/chess-com-alternatives" },
+        lichess: { value: "Крупная, открытая", source: "https://chess.lc/blog/lichess-vs-chess-com" },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Пул задач",
+      why: "Основа ежедневной тренировки.",
+      ours: {
+        value: "500 000 позиций из открытого дампа Lichess (CC0)",
+        measured: "PR #636, прод",
+      },
+      theirs: {
+        lichess: { value: "4+ млн позиций, крупнейшая открытая база", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+        chesscom: { value: "Бесплатно около 5 задач в день", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Анализ движком",
+      why: "Без разбора партии тренировка не превращается в рост.",
+      ours: { value: "Есть, без платной стены" },
+      theirs: {
+        lichess: { value: "Stockfish на полную глубину, бесплатно и без лимита", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+        chesscom: { value: "Глубокий анализ — в Diamond, $29/мес или $119/год", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Разбор партии тренером-ИИ",
+      why: "Движок говорит, где ошибка. Тренер объясняет, почему вы её сделали.",
+      ours: {
+        value: "Пост-матчевый разбор, адаптирующийся под уровень игрока; в бесплатном доступе",
+        measured: "PR #643, #657, #664",
+      },
+      theirs: {
+        chesscom: { value: "Обучающий контент в основном за платной подпиской", source: "https://cassandrachess.com/learn/chess-com-alternatives" },
+        lichess: { value: "Тренера на языковой модели не заявлено", unverified: true },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Цена",
+      why: "",
+      ours: { value: "Внутри платформы AEVION" },
+      theirs: {
+        lichess: { value: "Всё бесплатно, без рекламы", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+        chesscom: { value: "Diamond $29/мес", source: "https://oldschoolchess.com/compare/chess-com-vs-lichess" },
+      },
+      verdict: "theirs",
+    },
+  ],
+};
+
+// ── Смета-тренажёр ─────────────────────────────────────────────────────────
+
+const SMETA: Landscape = {
+  moduleId: "smeta-trainer",
+  module: "Смета-тренажёр РК",
+  category: "Обучение сметному делу",
+  framing:
+    "АВС-4, Смета РК и Сана — это рабочие программы для составления смет, и мы с ними не конкурируем. Наш модуль учит методике на узком учебном корпусе: студент тренирует руку на типовых ошибках, а не сдаёт по нему реальную смету на бюджетный объект. Ближайший аналог — не программа, а курс сметчика.",
+  competitors: [
+    { id: "kursy", name: "Курсы сметчиков РК", url: "https://upgrade-uk.kz/kursy/kursy-po-tekhnicheskim-napravleniyam/polzovatel-programmy-abc-4" },
+    { id: "abc4", name: "АВС-4 / АВС-KZ", url: "https://cad.kz/catalog/avs/the_software_package_avs_4/" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Что это вообще",
+      why: "Половина сравнений в этой нише — категориальная ошибка.",
+      ours: { value: "Тренажёр: учебные объекты, ВОР, дефектные акты, разбор ошибок" },
+      theirs: {
+        abc4: {
+          value: "Рабочая программа для сметной и ресурсной документации",
+          source: "https://cad.kz/catalog/avs/the_software_package_avs_4/",
+        },
+        kursy: { value: "Очные и онлайн-курсы по АВС-4, SANA, ресурсному методу", source: "https://upgrade-uk.kz/kursy/kursy-po-tekhnicheskim-napravleniyam/polzovatel-programmy-abc-4" },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Цена обучения одного человека",
+      why: "Определяет, кому доступно войти в профессию.",
+      ours: { value: "Внутри платформы AEVION" },
+      theirs: {
+        kursy: {
+          value: "Курсы 90 000–130 000 ₸; индивидуально по АВС-4 — 70 000 ₸; онлайн 30 000–60 000 ₸",
+          source: "https://upgrade-uk.kz/kursy/kursy-po-tekhnicheskim-napravleniyam/polzovatel-programmy-abc-4",
+        },
+        abc4: { value: "Лицензия + сопровождение 12 месяцев", source: "https://pro.cad.kz/abc4" },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Обратная связь по ошибке",
+      why: "Курс объясняет один раз; тренажёр ловит ошибку в момент, когда её делают.",
+      ours: { value: "ИИ-советник на типовых ошибках: непосчитанные проёмы, двойной счёт, забытый коэффициент" },
+      theirs: {
+        kursy: { value: "Разбор преподавателем в рамках курса", unverified: true },
+        abc4: { value: "Программа считает, но не учит", unverified: true },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Пригодность для реальной сметы на бюджетный объект",
+      why: "Здесь важно не обещать лишнего: допуск к бюджетным объектам — вопрос реестра, а не качества.",
+      ours: { value: "Не предназначен. В реестр допущенных средств не входит и не подаётся." },
+      theirs: {
+        abc4: { value: "Профессиональный комплекс для участников инвестиционного процесса", source: "https://cad.kz/catalog/avs/the_software_package_avs_4/" },
+        kursy: { value: "—", unverified: true },
+      },
+      verdict: "theirs",
+    },
+  ],
+};
+
+export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA];
 
 /**
  * Modules with obvious analogues that have NOT been researched yet.
@@ -270,10 +406,8 @@ export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB];
  * and this list is what stops the table quietly implying the rest were checked.
  */
 export const PENDING: Array<{ module: string; category: string; analogues: string[] }> = [
-  { module: "CyberChess", category: "Шахматная платформа", analogues: ["Chess.com", "Lichess", "Chessable"] },
   { module: "QReal Studio", category: "ИИ-видео", analogues: ["Higgsfield", "Runway", "Kling", "Pika"] },
   { module: "QSkyway", category: "Воздушное пространство дронов", analogues: ["AirMap", "Altitude Angel", "Aloft"] },
-  { module: "Смета-тренажёр", category: "Сметное дело РК", analogues: ["АВС-4", "Смета РК", "Сана"] },
   { module: "QSign / IP Bureau", category: "Фиксация авторства", analogues: ["OriginStamp", "Bernstein", "OpenTimestamps"] },
   { module: "StartupX", category: "Биржа стартапов", analogues: ["AngelList", "Republic", "SeedInvest"] },
   { module: "QTrade", category: "Торговый симулятор", analogues: ["TradingView Paper", "Thinkorswim paperMoney"] },

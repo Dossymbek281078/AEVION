@@ -204,3 +204,28 @@ describe("уведомление автору", () => {
     expect(sqlLog).toEqual([]);
   });
 });
+
+describe("транзакция вокруг лайка и счётчика", () => {
+  test("успешный лайк коммитится", async () => {
+    stubDb({ alreadyLiked: false, insertWins: true });
+    await like();
+    expect(sqlLog.some((l) => /^BEGIN/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(true);
+  });
+
+  test("несуществующий пост откатывается и не коммитится", async () => {
+    stubDb({ postExists: false });
+    await like();
+    expect(sqlLog.some((l) => /^ROLLBACK/i.test(l))).toBe(true);
+    expect(sqlLog.some((l) => /^COMMIT/i.test(l))).toBe(false);
+  });
+
+  test("счётчик меняется ВНУТРИ транзакции, а не после коммита", async () => {
+    stubDb({ alreadyLiked: false, insertWins: true });
+    await like();
+    const commit = sqlLog.findIndex((l) => /^COMMIT/i.test(l));
+    const bump = sqlLog.findIndex((l) => l.includes('"likesCount"="likesCount"+1'));
+    expect(bump).toBeGreaterThanOrEqual(0);
+    expect(bump).toBeLessThan(commit);
+  });
+});

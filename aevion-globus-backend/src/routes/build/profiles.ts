@@ -18,6 +18,7 @@ import {
   AVAILABILITY_TYPES,
   WORK_MODES,
   EDUCATION_LEVELS,
+  DEFAULT_SALARY_CURRENCY,
 } from "../../lib/build";
 
 export const profilesRouter = Router();
@@ -109,7 +110,7 @@ profilesRouter.post("/profiles", async (req, res) => {
     if (salaryMin != null && (!Number.isFinite(salaryMin) || salaryMin < 0)) return fail(res, 400, "salaryMin_invalid");
     if (salaryMax != null && (!Number.isFinite(salaryMax) || salaryMax < 0)) return fail(res, 400, "salaryMax_invalid");
     const salaryCurrency = typeof req.body?.salaryCurrency === "string"
-      ? req.body.salaryCurrency.trim().slice(0, 8) || "RUB" : "RUB";
+      ? req.body.salaryCurrency.trim().slice(0, 8) || DEFAULT_SALARY_CURRENCY : DEFAULT_SALARY_CURRENCY;
     const availability = req.body?.availability == null
       ? null : String(req.body.availability).trim().slice(0, 100) || null;
     const experienceYears = req.body?.experienceYears == null
@@ -622,7 +623,7 @@ profilesRouter.get("/profiles/:id/resume.pdf", async (req, res) => {
     if (p.verifiedAt) doc.fontSize(10).fillColor("#0284c7").text(`✓ Verified${p.verifiedReason ? ` (${p.verifiedReason})` : ""}`);
     doc.moveDown(0.3);
     const metaLine = [p.email, p.phone, p.city, p.experienceYears ? `${p.experienceYears}y experience` : null, p.buildRole, p.openToWork ? "Open to work" : null,
-      p.salaryMin || p.salaryMax ? `${p.salaryMin || "—"}–${p.salaryMax || "—"} ${p.salaryCurrency || "RUB"}` : null].filter(Boolean).join("  ·  ");
+      p.salaryMin || p.salaryMax ? `${p.salaryMin || "—"}–${p.salaryMax || "—"} ${p.salaryCurrency || DEFAULT_SALARY_CURRENCY}` : null].filter(Boolean).join("  ·  ");
     if (metaLine) doc.fontSize(10).fillColor("#334155").text(metaLine);
 
     const hr = () => { doc.moveDown(0.6); doc.strokeColor("#cbd5e1").moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).stroke(); doc.moveDown(0.6); };

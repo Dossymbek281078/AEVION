@@ -11,6 +11,7 @@ import {
   WORK_MODES,
   EDUCATION_LEVELS,
   WORK_REGIONS_KZ,
+  DEFAULT_SALARY_CURRENCY,
 } from "../../lib/build";
 
 export const aiRouter = Router();
@@ -881,7 +882,7 @@ aiRouter.post("/cover-letter", aiRateLimiter, async (req, res) => {
 Title: ${v.title}
 Project: ${v.projectTitle || "—"}
 City: ${v.city || v.projectCity || "—"}
-Salary: ${v.salary > 0 ? `${v.salary} ${v.salaryCurrency || "USD"}` : "не указано"}
+Salary: ${v.salary > 0 ? `${v.salary} ${v.salaryCurrency || DEFAULT_SALARY_CURRENCY}` : "не указано"}
 Description:
 ${v.description}
 Required skills: ${vacancySkills.join(", ") || "—"}
@@ -1059,7 +1060,7 @@ aiRouter.post("/vacancy-feedback", aiRateLimiter, async (req, res) => {
     const lines = [
       `Title: ${row.title}`,
       `City: ${row.city || "—"}`,
-      `Salary: ${row.salary > 0 ? `${row.salary} ${row.salaryCurrency || "USD"}` : "not posted"}`,
+      `Salary: ${row.salary > 0 ? `${row.salary} ${row.salaryCurrency || DEFAULT_SALARY_CURRENCY}` : "not posted"}`,
       `Skills tags: ${skills.length ? skills.join(", ") : "none"}`,
       "",
       `Description:`,

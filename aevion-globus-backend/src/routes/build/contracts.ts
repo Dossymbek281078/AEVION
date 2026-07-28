@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
+import { buildPool as pool, ok, fail, requireBuildAuth, DEFAULT_SALARY_CURRENCY } from "../../lib/build";
 
 export const contractsRouter = Router();
 
@@ -62,7 +62,7 @@ contractsRouter.post("/:id/contract", async (req, res) => {
       vacancy: {
         title: d.vacancyTitle,
         salary: d.salary,
-        currency: d.salaryCurrency || "RUB",
+        currency: d.salaryCurrency || DEFAULT_SALARY_CURRENCY,
         project: d.projectTitle,
       },
       generatedAt: new Date().toISOString(),

@@ -1089,6 +1089,28 @@ export const PROJECT_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
 // to OPEN and resets expiry.
 export const VACANCY_STATUSES = ["OPEN", "CLOSED", "ARCHIVED"] as const;
 export const APPLICATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
+
+/**
+ * Валюта по умолчанию, когда у вакансии или профиля она не указана.
+ *
+ * ОДНА на весь модуль — и это не стилистика. 28.07 замер показал в build
+ * ДВА разных допущения об одном и том же пустом поле: пути записи подставляли
+ * `"RUB"` (создание вакансии и профиля, договор, начисления, заявки — 8 мест), а
+ * пути чтения `"USD"` (партнёрское API v1 `/public/v1/vacancies` и промты ИИ —
+ * 4 места). То есть вакансия без валюты сохранялась как рубли, а партнёру-
+ * интегратору и модели показывалась как доллары: то же число, разница почти в
+ * 90 раз, и это ЗАРПЛАТА — по ней человек принимает решение, а `contracts.ts`
+ * оформляет договор.
+ *
+ * На проде расхождение пока скрытое: путь записи всегда что-то подставляет,
+ * поэтому NULL в колонке нет (лента отдаёт RUB, проверено живым запросом).
+ * Сработало бы на строках, созданных до появления колонки, — и молча.
+ *
+ * Само значение (рубли или что-то другое) — продуктовое решение основателя, оно
+ * у него в списке. Задача константы в другом: чтобы решение менялось в ОДНОМ
+ * месте и не могло разойтись между чтением и записью.
+ */
+export const DEFAULT_SALARY_CURRENCY = "RUB";
 export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
 export const SHIFT_PREFERENCES = ["DAY", "NIGHT", "FLEX", "ANY"] as const;
 export const AVAILABILITY_TYPES = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"] as const;

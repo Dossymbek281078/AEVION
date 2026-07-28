@@ -10,6 +10,7 @@ import {
   safeParseJson,
   APPLICATION_STATUSES,
   getRecruiterTier,
+  DEFAULT_SALARY_CURRENCY,
 } from "../../lib/build";
 import { sendToUser } from "./push";
 
@@ -431,7 +432,7 @@ applicationsRouter.patch("/:id", async (req, res) => {
     if (status.value === "ACCEPTED") {
       const app = row.rows[0];
       const salary = Number(app.salary) || 0;
-      const currency = String(app.salaryCurrency || "RUB");
+      const currency = String(app.salaryCurrency || DEFAULT_SALARY_CURRENCY);
 
       // Idempotent: skip if a HIRE_FEE order already exists for this application.
       const existing = await pool.query(

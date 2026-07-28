@@ -19,6 +19,7 @@ import {
   WORK_MODES,
   EDUCATION_LEVELS,
   excludeTestUsers,
+  DEFAULT_SALARY_CURRENCY,
 } from "../../lib/build";
 
 export const vacanciesRouter = Router();
@@ -69,7 +70,7 @@ vacanciesRouter.post("/", async (req, res) => {
       ? req.body.skills.map((s: unknown) => String(s).trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 30)
       : [];
     const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100) || null;
-    const salaryCurrency = typeof req.body?.salaryCurrency === "string" ? req.body.salaryCurrency.trim().slice(0, 8) || "RUB" : "RUB";
+    const salaryCurrency = typeof req.body?.salaryCurrency === "string" ? req.body.salaryCurrency.trim().slice(0, 8) || DEFAULT_SALARY_CURRENCY : DEFAULT_SALARY_CURRENCY;
     const questions = Array.isArray(req.body?.questions)
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
@@ -735,7 +736,7 @@ vacanciesRouter.post("/bulk", async (req, res) => {
           : [];
       const city = r?.city == null ? null : String(r.city).trim().slice(0, 100) || null;
       const salaryCurrency = typeof r?.salaryCurrency === "string"
-        ? r.salaryCurrency.trim().slice(0, 8) || "RUB"
+        ? r.salaryCurrency.trim().slice(0, 8) || DEFAULT_SALARY_CURRENCY
         : "RUB";
       const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
 

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { buildPool as pool, ok, fail, safeParseJson } from "../../lib/build";
+import { buildPool as pool, ok, fail, safeParseJson, DEFAULT_SALARY_CURRENCY } from "../../lib/build";
 
 export const publicRouter = Router();
 
@@ -118,7 +118,7 @@ publicRouter.get("/v1/vacancies", publicRateLimiter, requirePartnerKey, async (r
       title: row.title,
       description: row.description,
       salary: row.salary,
-      salaryCurrency: row.salaryCurrency ?? "USD",
+      salaryCurrency: row.salaryCurrency ?? DEFAULT_SALARY_CURRENCY,
       skills: safeParseJson(row.skillsJson, [] as string[]),
       city: row.city ?? row.projectCity ?? null,
       project: row.projectTitle ?? null,
@@ -154,7 +154,7 @@ publicRouter.get("/v1/vacancies/:id", publicRateLimiter, requirePartnerKey, asyn
       title: row.title,
       description: row.description,
       salary: row.salary,
-      salaryCurrency: row.salaryCurrency ?? "USD",
+      salaryCurrency: row.salaryCurrency ?? DEFAULT_SALARY_CURRENCY,
       status: row.status,
       skills: safeParseJson(row.skillsJson, [] as string[]),
       city: row.city ?? row.projectCity ?? null,
@@ -219,7 +219,7 @@ publicRouter.get("/rss/vacancies.xml", async (req, res) => {
     }[]).map((v) => {
       const link = `https://aevion.app/build/vacancy/${encodeURIComponent(v.id)}`;
       const cityStr = v.city || v.projectCity || "";
-      const salaryStr = v.salary > 0 ? `${v.salary.toLocaleString()} ${v.salaryCurrency || "USD"}` : "—";
+      const salaryStr = v.salary > 0 ? `${v.salary.toLocaleString()} ${v.salaryCurrency || DEFAULT_SALARY_CURRENCY}` : "—";
       const descSummary = `${cityStr ? `📍 ${cityStr} · ` : ""}💰 ${salaryStr}\n\n${(v.description || "").slice(0, 600)}`;
       return `    <item>
       <title>${xmlEscape(v.title)}</title>
@@ -279,7 +279,19 @@ publicRouter.get("/widget.js", (_req, res) => {
     return "https://aevion.app";
   })();
   function esc(s){ return String(s == null ? "" : s).replace(/[&<>\"']/g, function(c){ return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]; }); }
-  function fmtSalary(v){ if(!v||v.salary<=0) return ""; var n=v.salary.toLocaleString("en-US"); return "$"+n+" "+(v.salaryCurrency||"USD"); }
+  // Знак валюты подбирается ПО валюте. До 28.07 здесь был приклеен доллар и
+  // код валюты рядом, поэтому рублёвая вакансия выводилась как "$4,500 RUB" —
+  // на ЧУЖОМ сайте, где стоит виджет. Для суммы в рублях это читается как
+  // доллары, то есть завышение примерно в 90 раз, и это зарплата.
+  var SYM = { RUB: "\\u20BD", USD: "$", EUR: "\\u20AC", KZT: "\\u20B8", GBP: "\\u00A3" };
+  function fmtSalary(v){
+    if(!v||v.salary<=0) return "";
+    var cur = String(v.salaryCurrency||"${DEFAULT_SALARY_CURRENCY}").toUpperCase();
+    var n = v.salary.toLocaleString("en-US");
+    // Известную валюту показываем знаком, неизвестную — кодом после суммы.
+    // Молча подставить чужой знак хуже, чем показать код.
+    return SYM[cur] ? SYM[cur] + n : n + " " + cur;
+  }
   function render(host, items){
     var limit = parseInt(host.getAttribute("data-limit") || "6", 10);
     items = items.slice(0, isFinite(limit) && limit > 0 ? limit : 6);

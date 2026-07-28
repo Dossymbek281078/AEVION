@@ -612,7 +612,112 @@ const QSKYWAY: Landscape = {
   ],
 };
 
-export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL, QSKYWAY];
+// ── QSign / IP Bureau ──────────────────────────────────────────────────────
+
+/**
+ * Written off `projects.ts`, deliberately, and not off the marketing copy.
+ *
+ * The registry says Ed25519 + HMAC-SHA256. That is what the rows claim. Any
+ * stronger algorithm belongs here only once the registry and the active key set
+ * say it, because this table is the one document a reader will check.
+ *
+ * OpenTimestamps is the second landscape in a row where the "competitor" is
+ * actually underneath us — it is the Bitcoin anchor the bureau relies on. Rows
+ * about anchoring are therefore rows about their work, and the cost row goes to
+ * them outright: theirs is free and needs no account.
+ */
+const QSIGN: Landscape = {
+  moduleId: "qsign",
+  module: "QSign / IP Bureau",
+  category: "Фиксация авторства",
+  framing:
+    "OpenTimestamps — не конкурент, а фундамент: именно он привязывает хеши к биткоину, и он бесплатный, открытый и не требует регистрации. Тягаться с ним по цене нельзя и не нужно. Разница в том, что остаётся у человека на руках: у OpenTimestamps — файл-доказательство, у нас — сертификат, портал проверки и разбор по шести правовым рамкам. И главное ограничение: мы не государственный регистратор, права мы не выдаём и не подтверждаем — мы фиксируем момент.",
+  competitors: [
+    { id: "ots", name: "OpenTimestamps", url: "https://opentimestamps.org/" },
+    { id: "originstamp", name: "OriginStamp", url: "https://originstamp.com/en/timestamp" },
+  ],
+  researchedAt: "2026-07-28",
+  rows: [
+    {
+      axis: "Стоимость фиксации",
+      why: "Если бесплатный инструмент решает задачу, платный обязан объяснить, за что берёт деньги.",
+      ours: { value: "Внутри платформы AEVION; поверх бесплатного якоря OpenTimestamps." },
+      theirs: {
+        ots: {
+          value: "Бесплатно. Публичные календарные серверы без регистрации и API-ключа, запросы агрегируются в общую транзакцию",
+          source: "https://opentimestamps.org/",
+        },
+        originstamp: {
+          value: "Коммерческий сервис: API, дашборд, привязка к нескольким сетям",
+          source: "https://originstamp.com/en/timestamp",
+        },
+      },
+      verdict: "theirs",
+    },
+    {
+      axis: "Что остаётся у человека на руках",
+      why: "Файл-доказательство понимает разработчик. Юристу и суду нужен документ, который читается без консоли.",
+      ours: {
+        value:
+          "PDF-сертификат, портал проверки со ссылкой-бейджем и разбор по шести правовым рамкам: Бернская конвенция, WIPO, TRIPS, eIDAS, ESIGN, законодательство РК.",
+        measured: "описание модуля в src/data/projects.ts; статус live",
+      },
+      theirs: {
+        ots: {
+          value: "Файл доказательства .ots, проверяемый клиентом; открытый исходный код",
+          source: "https://github.com/opentimestamps/opentimestamps-client",
+        },
+        originstamp: { value: "Дашборд и сертификаты через API", source: "https://originstamp.com/en/timestamp", unverified: true },
+      },
+      verdict: "ours",
+    },
+    {
+      axis: "Алгоритм подписи",
+      why: "Здесь принято обещать постквантовую стойкость раньше, чем она включена.",
+      ours: {
+        value:
+          "Ed25519 и HMAC-SHA256, ротация ключей, пакетная подпись, журнал аудита. Постквантовых схем в активном наборе ключей нет, и мы их не заявляем.",
+        measured: "src/data/projects.ts — реестр модулей, а не текст продающей страницы",
+      },
+      theirs: {
+        ots: { value: "Схема опирается на хеш SHA-256 и стойкость биткоина, не на подпись сервиса", source: "https://en.wikipedia.org/wiki/OpenTimestamps" },
+        originstamp: { value: "Подписи личности и привязка к нескольким сетям", source: "https://originstamp.com/en/timestamp", unverified: true },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Юридический статус",
+      why: "Самый частый вопрос и самое частое место, где такие сервисы преувеличивают.",
+      ours: {
+        value:
+          "Мы не государственный регистратор и не выдаём прав. Авторство по Бернской конвенции возникает в момент создания — мы фиксируем момент и целостность файла, а не подтверждаем право. Лицензии на регистрацию у нас нет.",
+      },
+      theirs: {
+        ots: { value: "Доказательство существования файла на момент времени; правового статуса не заявляет", source: "https://opentimestamps.org/" },
+        originstamp: {
+          value: "Позиционируется как доказательство для авторского права, коммерческой тайны и аудита",
+          source: "https://originstamp.com/en/blog/reader/blockchain-timestamp",
+        },
+      },
+      verdict: "different-jobs",
+    },
+    {
+      axis: "Восстановление доступа к ключу",
+      why: "Потерянный ключ обесценивает всю цепочку доказательств, собранную за годы.",
+      ours: {
+        value: "Разделение секрета по схеме Шамира: ключ восстанавливается по части долей, без единой точки потери.",
+        measured: "модель QuantumShield в prisma/schema.prisma, порог 2 из 3 по умолчанию",
+      },
+      theirs: {
+        ots: { value: "Ключей нет по устройству схемы — восстанавливать нечего", source: "https://opentimestamps.org/" },
+        originstamp: { value: "Восстановление ключа не заявлено", unverified: true },
+      },
+      verdict: "ours",
+    },
+  ],
+};
+
+export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QREAL, QSKYWAY, QSIGN];
 
 /**
  * Modules with obvious analogues that have NOT been researched yet.
@@ -621,7 +726,6 @@ export const LANDSCAPES: Landscape[] = [QVENTURE, DEVHUB, CYBERCHESS, SMETA, QRE
  * and this list is what stops the table quietly implying the rest were checked.
  */
 export const PENDING: Array<{ module: string; category: string; analogues: string[] }> = [
-  { module: "QSign / IP Bureau", category: "Фиксация авторства", analogues: ["OriginStamp", "Bernstein", "OpenTimestamps"] },
   { module: "StartupX", category: "Биржа стартапов", analogues: ["AngelList", "Republic", "SeedInvest"] },
   { module: "QTrade", category: "Торговый симулятор", analogues: ["TradingView Paper", "Thinkorswim paperMoney"] },
   { module: "QCoreAI", category: "Мультиагентный совет", analogues: ["CrewAI", "AutoGen", "LangGraph"] },
